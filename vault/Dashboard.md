@@ -4,12 +4,12 @@ tags: [tool, dashboard]
 
 # Project Dashboard
 
-A standalone local web app that visualises this vault as an interactive flowchart. Lives at `claude-projects/project-dashboard/`.
+A standalone local web app that visualises this vault as an interactive flowchart. Lives at `georgian-saas/dashboard/`. GitHub repo: [Max-MGv/georgian-saas](https://github.com/Max-MGv/georgian-saas)
 
-## How to run
+## How to run locally
 
 ```bash
-cd C:\Users\Max\Desktop\claude-projects\project-dashboard
+cd C:\Users\Max\Desktop\claude-projects\georgian-saas\dashboard
 npm run dev
 ```
 

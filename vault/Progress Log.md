@@ -8,6 +8,18 @@ Most recent entry at the top.
 
 ---
 
+## 2026-05-17 — Repo restructure + GitHub
+
+- Reorganised into `georgian-saas/` as the single project root
+  - `vault/` — all Obsidian `.md` files (point Obsidian here)
+  - `dashboard/` — Next.js app (moved from standalone `project-dashboard/`)
+- Updated `VAULT_PATH` in dashboard: absolute for local dev, falls back to `../vault` relative path for production
+- Initialised git, created private GitHub repo: [Max-MGv/georgian-saas](https://github.com/Max-MGv/georgian-saas)
+- **Next:** connect repo to Vercel for hosted deployment of the dashboard
+- **After that:** scaffold the main Georgian SaaS product (Next.js + Supabase + Prisma)
+
+---
+
 ## 2026-05-16 — Project dashboard built + click bug fixed
 
 - Built standalone Next.js 16 (Turbopack) app at `claude-projects/project-dashboard/`
