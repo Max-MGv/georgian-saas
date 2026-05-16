@@ -8,6 +8,16 @@ Most recent entry at the top.
 
 ---
 
+## 2026-05-17 — GitHub Pages live
+
+- Converted dashboard to static export (`output: 'export'` in next.config.ts)
+- Added GitHub Actions workflow (`.github/workflows/deploy.yml`) — auto-deploys on every push to master
+- Made repo public, enabled GitHub Pages
+- **Dashboard live at:** https://max-mgv.github.io/georgian-saas/
+- Workflow: edit vault in Obsidian → `git push` → site updates in ~1 min
+
+---
+
 ## 2026-05-17 — Repo restructure + GitHub
 
 - Reorganised into `georgian-saas/` as the single project root
