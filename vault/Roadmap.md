@@ -4,6 +4,42 @@ tags: [roadmap]
 
 # Roadmap
 
+## Phase 0 — Discovery & Decisions
+
+Complete this before writing a single line of product code.
+
+### Product Analysis
+- [x] Identify reference product (nikalasmarani.ge)
+- [x] Audit all visible features on the reference site
+- [ ] Walk through the full booking flow as a customer — note every step, field, and confirmation
+- [ ] Document what the reference site is missing (no admin panel visible, no order management, no multi-language working end-to-end)
+- [ ] Decide: what do we clone exactly vs. what do we improve?
+
+### Feature Scope
+- [x] Define MVP feature list (booking form + orders + companies + prices + statistics)
+- [ ] Confirm visit types in scope: tasting only (50₾/person) + tasting+meal (100₾/person)
+- [ ] Confirm booking form fields: name, surname, phone, email, date, time slot, guest count, visit type, company (optional)
+- [ ] Confirm admin panel scope: orders list, order detail, companies, prices, statistics
+- [ ] Decide: is wine product catalogue (6 wines shown on site) in or out of MVP?
+- [ ] Decide: is gallery/media management in or out of MVP?
+- [ ] Decide: is the public-facing winery page (about, gallery, contact) in or out of MVP, or is it only the booking widget?
+
+### Business Model
+- [x] Chosen architecture: per-client instances (separate Vercel + Supabase per client)
+- [x] Draft pricing: 150–200 GEL setup + 50 GEL/month
+- [ ] Confirm pricing with partner
+- [ ] Define what "setup" includes (domain config, branding, DB seed, onboarding call?)
+- [ ] Identify first 3 target clients beyond Nikalas Marani
+- [ ] Draft a one-paragraph sales pitch in Georgian
+
+### Operations
+- [ ] Define client onboarding checklist (what steps to deploy a new client instance)
+- [ ] Decide: who handles client support? (you, partner, shared?)
+- [ ] Decide: what SLA / uptime expectation do you offer?
+- [ ] Decide: domain setup — do clients bring their own domain or use a subdomain of yours?
+
+---
+
 ## v1 — Core Booking & Admin (MVP)
 
 Estimated: 3–5 focused weekends with AI assistance.
