@@ -96,14 +96,14 @@ export function parseVault(): VaultData {
   }
 
   for (const line of roadmapContent.split('\n')) {
-    // Phase heading: ## v1 — ... or ## v1.1 — ...
-    const phaseMatch = line.match(/^## (v[\d.]+\s*[—–-].+)/)
+    // Phase heading: ## Phase 0 — ... or ## v1 — ... or ## v1.1 — ...
+    const phaseMatch = line.match(/^## ((?:Phase\s+\d+|v[\d.]+)\s*[—–-].+)/)
     if (phaseMatch) {
       flushPhase()
       const label = phaseMatch[1].trim()
-      const versionPart = label.match(/v[\d.]+/)?.[0] ?? label
+      const versionPart = label.match(/(?:Phase\s+\d+|v[\d.]+)/)?.[0] ?? label
       currentPhase = {
-        id: versionPart.replace(/\./g, '_'),
+        id: versionPart.toLowerCase().replace(/[\s.]+/g, '_'),
         label,
         sections: [],
         totalTasks: 0,

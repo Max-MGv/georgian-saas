@@ -22,7 +22,7 @@ Complete this before writing a single line of product code.
 - [ ] Confirm admin panel scope: orders list, order detail, companies, prices, statistics
 - [ ] Decide: is wine product catalogue (6 wines shown on site) in or out of MVP?
 - [ ] Decide: is gallery/media management in or out of MVP?
-- [ ] Decide: is the public-facing winery page (about, gallery, contact) in or out of MVP, or is it only the booking widget?
+- [x] Decide: full site replacement vs. booking widget only → **Full site, but MVP = booking widget + admin only. Public site (home, about, gallery, wine catalogue) comes after.**
 
 ### Business Model
 - [x] Chosen architecture: per-client instances (separate Vercel + Supabase per client)

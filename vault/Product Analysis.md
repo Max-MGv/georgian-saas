@@ -66,9 +66,8 @@ Time slots: 11:00–18:00 (selector on form)
 
 ## Decisions needed
 
-- [ ] Do we clone the public-facing winery site (home, about, gallery) or only build the booking widget + admin panel?
-  - *Option A:* Full site replacement (more value, more work)
-  - *Option B:* Booking widget only, client keeps existing site and embeds our form (faster MVP)
+- [x] Do we clone the public-facing winery site (home, about, gallery) or only build the booking widget + admin panel?
+  - **Decision: Full site replacement** — we will eventually replace the entire site (home, about, gallery, contact, wine catalogue). MVP starts with booking widget + admin only, full public site comes after.
 - [ ] Is the wine catalogue (product listings) part of our scope?
 - [ ] Do we replicate the minimum order logic (e.g. 200₾ min for basic)?
 
