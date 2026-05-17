@@ -10,7 +10,7 @@ This file drives the Architecture view in the project dashboard. Each `##` headi
 
 ## Browser
 - type: client
-- connects-to: Next.js
+- connects-to: Supabase Auth
 
 The user's web browser — Chrome, Safari, etc. Both the customer booking page and the admin panel run here. No setup needed.
 
@@ -22,7 +22,7 @@ The user's web browser — Chrome, Safari, etc. Both the customer booking page a
 
 ## Next.js
 - type: framework
-- connects-to: Prisma, Supabase Auth
+- connects-to: Prisma
 
 The main application framework. Holds all the pages and the backend logic.
 
@@ -65,7 +65,7 @@ The translator between the app and the database. You write TypeScript, Prisma tu
 ---
 
 ## Supabase Auth
-- type: service
+- type: auth
 - connects-to: Next.js
 
 Handles the admin login system. Stores admin user accounts, manages sessions (who is logged in), and protects the `/admin` routes.

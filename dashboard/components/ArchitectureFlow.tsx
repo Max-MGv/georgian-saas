@@ -12,10 +12,11 @@ const nodeTypes = { arch: ArchNodeComponent }
 
 const LAYER_ORDER: Record<ArchNode['type'], number> = {
   client: 0,
-  framework: 1,
-  page: 2,
-  service: 3,
-  database: 4,
+  auth: 1,
+  framework: 2,
+  page: 3,
+  service: 4,
+  database: 5,
 }
 
 const NODE_W = 176

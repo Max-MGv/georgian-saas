@@ -5,6 +5,7 @@ import type { ArchNode } from '@/lib/parseVault'
 
 const typeStyles: Record<ArchNode['type'], { bg: string; border: string; label: string; dot: string }> = {
   client:    { bg: 'bg-blue-950',   border: 'border-blue-700',  label: 'text-blue-300',  dot: 'bg-blue-400' },
+  auth:      { bg: 'bg-rose-950',   border: 'border-rose-700',  label: 'text-rose-300',  dot: 'bg-rose-400' },
   framework: { bg: 'bg-violet-950', border: 'border-violet-600',label: 'text-violet-300',dot: 'bg-violet-400' },
   page:      { bg: 'bg-indigo-950', border: 'border-indigo-600',label: 'text-indigo-300',dot: 'bg-indigo-400' },
   service:   { bg: 'bg-amber-950',  border: 'border-amber-700', label: 'text-amber-300', dot: 'bg-amber-400' },
@@ -13,6 +14,7 @@ const typeStyles: Record<ArchNode['type'], { bg: string; border: string; label: 
 
 const typeLabel: Record<ArchNode['type'], string> = {
   client: 'Client',
+  auth: 'Auth',
   framework: 'Framework',
   page: 'Page',
   service: 'Service',
