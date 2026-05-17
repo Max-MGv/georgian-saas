@@ -33,7 +33,13 @@ Complete this before writing a single line of product code.
 - [ ] Draft a one-paragraph sales pitch in Georgian
 
 ### Operations
-- [ ] Define client onboarding checklist (what steps to deploy a new client instance)
+- [x] Define client onboarding checklist (what steps to deploy a new client instance):
+  1. Client creates free Supabase account (supabase.com)
+  2. Client creates a new Supabase project, shares connection string with us
+  3. We deploy a new Vercel project from the same GitHub repo
+  4. We add the client's env vars (Supabase keys) to Vercel
+  5. We run `prisma migrate deploy` to set up their DB tables
+  6. Done — their instance is live
 - [ ] Decide: who handles client support? (you, partner, shared?)
 - [ ] Decide: what SLA / uptime expectation do you offer?
 - [x] Hosting path: localhost for development → Vercel when ready for first client. GitHub Pages is static-only and cannot host the main app (needs API routes + DB). Decision on hosting deferred until acceptable draft exists.
