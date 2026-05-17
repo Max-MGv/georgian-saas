@@ -29,6 +29,18 @@ export type VaultData = {
   lastUpdated: string
 }
 
+export type ArchNode = {
+  id: string
+  label: string
+  type: 'client' | 'framework' | 'page' | 'service' | 'database'
+  connectsTo: string[]
+  detailMarkdown: string
+}
+
+export type ArchData = {
+  nodes: ArchNode[]
+}
+
 function readVaultFile(filename: string): string {
   try {
     return fs.readFileSync(path.join(VAULT_PATH, filename), 'utf-8')
@@ -163,4 +175,52 @@ export function parseVault(): VaultData {
   flushPhase()
 
   return { phases, lastUpdated: getLastProgressDate(progressContent) }
+}
+
+export function parseArchitecture(): ArchData {
+  const content = readVaultFile('Architecture.md')
+  const nodes: ArchNode[] = []
+
+  // Split on --- separators (ignore frontmatter block)
+  const sections = content.split(/\n---\n/)
+
+  for (const section of sections) {
+    const lines = section.trim().split('\n')
+    const headingLine = lines.find(l => /^## .+/.test(l) && !l.startsWith('# '))
+    if (!headingLine) continue
+
+    const label = headingLine.replace(/^## /, '').trim()
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+
+    let type: ArchNode['type'] = 'service'
+    let connectsTo: string[] = []
+    const detailLines: string[] = []
+    let pastProperties = false
+
+    for (const line of lines) {
+      if (line === headingLine) continue
+      const typeMatch = line.match(/^- type:\s*(.+)/)
+      const connectsMatch = line.match(/^- connects-to:\s*(.*)/)
+
+      if (typeMatch) {
+        type = typeMatch[1].trim() as ArchNode['type']
+        continue
+      }
+      if (connectsMatch) {
+        const val = connectsMatch[1].trim()
+        connectsTo = val ? val.split(',').map(s => s.trim()).filter(Boolean) : []
+        continue
+      }
+      if (line.startsWith('- ')) continue // skip other bullet props
+      if (!pastProperties && line.trim() === '') { pastProperties = true; continue }
+      if (pastProperties || (!line.startsWith('-') && !line.startsWith('#'))) {
+        pastProperties = true
+        detailLines.push(line)
+      }
+    }
+
+    nodes.push({ id, label, type, connectsTo, detailMarkdown: detailLines.join('\n').trim() })
+  }
+
+  return { nodes }
 }

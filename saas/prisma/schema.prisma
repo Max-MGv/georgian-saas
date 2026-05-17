@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  orders    Order[]
+  prices    Price[]
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  bookingType BookingType @default(INDIVIDUAL)
+  visitType   VisitType
+  date        DateTime
+  timeSlot    String
+  guestCount  Int
+  name        String
+  surname     String
+  email       String?
+  phone       String?
+  notes       String?
+  totalPrice  Float?
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id])
+  createdAt   DateTime    @default(now())
+}
+
+model Price {
+  id                String  @id @default(cuid())
+  companyId         String
+  company           Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  minGuests         Int
+  maxGuests         Int
+  pricePerPerson    Float
+  registrationPrice Float    @default(0)
+}
+
+enum BookingType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum VisitType {
+  TASTING
+  TASTING_LUNCH
+}
