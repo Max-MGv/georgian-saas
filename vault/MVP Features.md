@@ -10,9 +10,13 @@ Goal: a winery owner can manage their entire booking operation through this app.
 
 ## Public Side (customer-facing)
 
+- [ ] Landing page with hero + "Book a Visit" CTA + "View Wine Catalogue" button (catalogue button goes nowhere for now)
 - [ ] Booking form
-  - Visit type selector: Wine Tasting / Tasting + Lunch
-  - Fields: Name, Surname, Email, Phone, Date, Time, Number of guests
+  - Booking type selector: Individual / Tour Company
+  - If Tour Company: dropdown of known companies (pulled from admin)
+  - Visit type selector: Wine Tasting (50₾/person, min 4 guests) / Tasting + Lunch (100₾/person, min 4 guests)
+  - Fields: Name, Surname, Email, Phone, Date, Time slot, Number of guests
+  - Price preview shown dynamically before submit
   - Submit button → confirmation message shown
 - [ ] No login required for customers
 
@@ -54,6 +58,8 @@ Goal: a winery owner can manage their entire booking operation through this app.
 
 | Feature | When |
 |---|---|
+| Wine catalogue pages | After MVP (public site phase) |
+| Gallery / photo management | After MVP (public site phase) |
 | Georgian ↔ English toggle | v1.1 |
 | Online payments (card/bank) | v2 |
 | Customer accounts | v2 |

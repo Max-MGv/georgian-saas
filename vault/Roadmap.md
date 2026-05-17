@@ -17,11 +17,11 @@ Complete this before writing a single line of product code.
 
 ### Feature Scope
 - [x] Define MVP feature list (booking form + orders + companies + prices + statistics)
-- [ ] Confirm visit types in scope: tasting only (50₾/person) + tasting+meal (100₾/person)
-- [ ] Confirm booking form fields: name, surname, phone, email, date, time slot, guest count, visit type, company (optional)
-- [ ] Confirm admin panel scope: orders list, order detail, companies, prices, statistics
-- [ ] Decide: is wine product catalogue (6 wines shown on site) in or out of MVP?
-- [ ] Decide: is gallery/media management in or out of MVP?
+- [x] Confirm visit types in scope: tasting only (50₾/person) + tasting+meal (100₾/person)
+- [x] Confirm booking form fields: name, surname, phone, email, date, time slot, guest count, visit type, company selector (individual vs. tour company)
+- [x] Confirm admin panel scope: orders list, order detail, companies, prices, statistics
+- [x] Decide: wine product catalogue → **Out of MVP.** Landing page has a "View Catalogue" button that goes nowhere for now.
+- [x] Decide: gallery/media management → **Out of MVP.** Photos hardcoded in the site; no upload UI needed yet.
 - [x] Decide: full site replacement vs. booking widget only → **Full site, but MVP = booking widget + admin only. Public site (home, about, gallery, wine catalogue) comes after.**
 
 ### Business Model
@@ -29,14 +29,14 @@ Complete this before writing a single line of product code.
 - [x] Draft pricing: 150–200 GEL setup + 50 GEL/month
 - [ ] Confirm pricing with partner
 - [ ] Define what "setup" includes (domain config, branding, DB seed, onboarding call?)
-- [ ] Identify first 3 target clients beyond Nikalas Marani
+- [x] First client: Nikalas Marani only for now — no other targets yet
 - [ ] Draft a one-paragraph sales pitch in Georgian
 
 ### Operations
 - [ ] Define client onboarding checklist (what steps to deploy a new client instance)
 - [ ] Decide: who handles client support? (you, partner, shared?)
 - [ ] Decide: what SLA / uptime expectation do you offer?
-- [ ] Decide: domain setup — do clients bring their own domain or use a subdomain of yours?
+- [x] Hosting path: localhost for development → Vercel when ready for first client. GitHub Pages is static-only and cannot host the main app (needs API routes + DB). Decision on hosting deferred until acceptable draft exists.
 
 ---
 
