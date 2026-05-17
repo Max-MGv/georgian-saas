@@ -1,65 +1,96 @@
-import Image from "next/image";
+import { db } from '@/lib/db'
+import BookingForm from '@/components/BookingForm'
 
-export default function Home() {
+export default async function Home() {
+  const companies = await db.company.findMany({ orderBy: { name: 'asc' } })
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+    <main className="min-h-screen" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
+
+      {/* Hero */}
+      <section className="px-6 pt-20 pb-16 text-center max-w-2xl mx-auto">
+        <p className="text-sm font-medium tracking-widest uppercase mb-4" style={{ color: '#8b4513' }}>
+          Kakheti, Georgia
+        </p>
+        <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight" style={{ color: '#1c1008' }}>
+          Nikalas Marani
+        </h1>
+        <p className="text-lg mb-10" style={{ color: '#6b5a47' }}>
+          Family winery in the heart of Kakheti. Wine tastings, traditional meals,
+          and the stories behind every bottle.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#book"
+            className="btn-wine font-semibold px-8 py-3 rounded-lg"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
+            Book a Visit
           </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            disabled
+            title="Coming soon"
+            className="border font-semibold px-8 py-3 rounded-lg cursor-not-allowed"
+            style={{ borderColor: '#c9b99a', color: '#a89070' }}
           >
-            Documentation
-          </a>
+            View Wine Catalogue
+          </button>
         </div>
-      </main>
-    </div>
-  );
+      </section>
+
+      {/* Divider */}
+      <div className="max-w-2xl mx-auto px-6">
+        <div className="h-px" style={{ backgroundColor: '#e0d4c0' }} />
+      </div>
+
+      {/* Packages */}
+      <section className="px-6 py-14 max-w-2xl mx-auto grid sm:grid-cols-2 gap-4">
+        {[
+          {
+            title: 'Wine Tasting',
+            desc: '2 red wines, 1 white, chacha — guided by the winemaker',
+            price: 50,
+          },
+          {
+            title: 'Tasting + Lunch',
+            desc: '3 wines, chacha brandy, and a full traditional Georgian meal',
+            price: 100,
+          },
+        ].map(pkg => (
+          <div
+            key={pkg.title}
+            className="rounded-xl p-6 border"
+            style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}
+          >
+            <h3 className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }}>{pkg.title}</h3>
+            <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>{pkg.desc}</p>
+            <p className="font-bold text-2xl" style={{ color: '#7c1d23' }}>
+              {pkg.price}₾{' '}
+              <span className="font-normal text-sm" style={{ color: '#a89070' }}>/ person</span>
+            </p>
+            <p className="text-xs mt-1" style={{ color: '#a89070' }}>Minimum 4 guests</p>
+          </div>
+        ))}
+      </section>
+
+      {/* Divider */}
+      <div className="max-w-2xl mx-auto px-6">
+        <div className="h-px" style={{ backgroundColor: '#e0d4c0' }} />
+      </div>
+
+      {/* Booking form */}
+      <section id="book" className="px-6 py-16 max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold mb-2" style={{ color: '#1c1008' }}>Book a Visit</h2>
+        <p className="text-sm mb-8" style={{ color: '#6b5a47' }}>
+          Fill in the form and we will confirm your booking shortly.
+        </p>
+        <BookingForm companies={companies} />
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t px-6 py-8 text-center text-sm" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>
+        <p>Kardanakhi, Gurjaani · +995 599 96 33 17 · nikalasmarani@gmail.com</p>
+        <p className="mt-1">48-hour cancellation policy applies.</p>
+      </footer>
+    </main>
+  )
 }

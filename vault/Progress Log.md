@@ -8,6 +8,21 @@ Most recent entry at the top.
 
 ---
 
+## 2026-05-17 — Main app scaffolded + booking form + admin auth live
+
+- Scaffolded main SaaS app at `georgian-saas/saas/` (Next.js 16, TypeScript, Tailwind, shadcn/ui)
+- Connected Supabase: session pooler URL (port 5432 was blocked), DB password in `credentials.txt`
+- Pushed Prisma schema → 3 tables live in Supabase: `Company`, `Order`, `Price`
+- Architecture: each client creates their own free Supabase account — stays free forever per client
+- Built public booking form (`localhost:3000`): visit type, individual vs. company, date/time, guests, live price preview, saves to DB — confirmed working end-to-end
+- Colour scheme: warm parchment (`#f5efe6`), wine red (`#7c1d23`), dark brown text
+- Built admin auth: login/logout, middleware protecting `/admin`, admin layout with nav
+- Admin panel at `localhost:3000/admin` — login works, Orders/Companies/Prices/Statistics tabs visible
+- Dashboard upgraded: Architecture tab added (tab switcher in top bar), nodes colour-coded by layer type, click any node for plain-language explanation
+- **Next:** Orders list (real data from DB, filters, revenue total)
+
+---
+
 ## 2026-05-17 — GitHub Pages live
 
 - Converted dashboard to static export (`output: 'export'` in next.config.ts)

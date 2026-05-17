@@ -98,3 +98,34 @@ The actual database where all data is stored. PostgreSQL running on Supabase's s
 - Connection error → check the session pooler URL in credentials.txt, paste into `.env`
 - Data looks wrong → check Table Editor in Supabase dashboard
 - Accidental deletion → Supabase free tier keeps 24h of backups (Pro plan has daily backups)
+
+---
+
+## Booking Form
+- type: page
+- connects-to: Next.js
+
+The public-facing page at `localhost:3000`. Customers use it to request a booking — no login needed.
+
+**What it does:** Collects name, date, time, guest count, visit type, and contact info. Calculates price live. On submit, saves a row to the Order table in Supabase and shows a confirmation message.
+
+**To verify it works:** Submit a test booking → check Supabase Table Editor → Order table should have a new row.
+
+**If it breaks:** Check the browser console for errors. Most likely cause is a lost DB connection — restart the dev server.
+
+---
+
+## Admin Panel
+- type: page
+- connects-to: Next.js
+
+The password-protected management interface at `localhost:3000/admin`. Only accessible after logging in.
+
+**What's built:**
+- Login / logout (Supabase Auth)
+- Navigation: Orders, Companies, Prices, Statistics
+- Orders page (stub — real data coming next)
+
+**What's not built yet:** Orders list with real data, Companies, Prices, Statistics.
+
+**If you get locked out:** Go to supabase.com → Authentication → Users → reset your password.

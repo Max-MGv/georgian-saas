@@ -51,15 +51,15 @@ Complete this before writing a single line of product code.
 Estimated: 3–5 focused weekends with AI assistance.
 
 ### Setup
-- [ ] Create GitHub repo
-- [ ] `npx create-next-app@latest` with TypeScript + Tailwind
-- [ ] Create Supabase project, copy keys to `.env.local`
-- [ ] Install Prisma, define schema, push to DB
-- [ ] Install shadcn/ui
+- [x] Create GitHub repo
+- [x] `npx create-next-app@latest` with TypeScript + Tailwind
+- [x] Create Supabase project, copy keys to `.env.local`
+- [x] Install Prisma, define schema, push to DB
+- [x] Install shadcn/ui
 
 ### Build Order
-1. [ ] **Booking form** (public page) — good confidence boost, simplest thing
-2. [ ] **Admin auth** — protect `/admin` routes with Supabase Auth
+1. [x] **Booking form** (public page) — live at localhost:3000, saves to Supabase, confirmed working
+2. [x] **Admin auth** — login/logout working, `/admin` routes protected by middleware
 3. [ ] **Orders list** — table with filters, the core feature
 4. [ ] **Order edit/delete** — modal or separate page
 5. [ ] **Companies CRUD** — simple list + add/edit/delete

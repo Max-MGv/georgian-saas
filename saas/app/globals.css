@@ -128,3 +128,12 @@
     @apply font-sans;
   }
 }
+
+.btn-wine {
+  background-color: #7c1d23;
+  color: white;
+  transition: background-color 0.15s;
+}
+.btn-wine:hover {
+  background-color: #9b2429;
+}
