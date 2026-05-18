@@ -32,7 +32,7 @@ export type VaultData = {
 export type ArchNode = {
   id: string
   label: string
-  type: 'client' | 'auth' | 'framework' | 'page' | 'service' | 'database'
+  type: 'client' | 'auth' | 'framework' | 'page' | 'tool' | 'subpage' | 'service' | 'database'
   connectsTo: string[]
   detailMarkdown: string
 }

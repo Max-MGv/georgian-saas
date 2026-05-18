@@ -15,8 +15,10 @@ const LAYER_ORDER: Record<ArchNode['type'], number> = {
   auth: 1,
   framework: 2,
   page: 3,
-  service: 4,
-  database: 5,
+  tool: 3,
+  subpage: 4,
+  service: 5,
+  database: 6,
 }
 
 const NODE_W = 176

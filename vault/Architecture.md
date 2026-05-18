@@ -159,7 +159,7 @@ If you skip `createBooking()` and write rows directly, you have to manually repl
 ---
 
 ## Companies Admin
-- type: page
+- type: subpage
 - connects-to: Prisma
 
 Manages the list of tour companies and their per-group pricing tiers.
@@ -175,7 +175,7 @@ Manages the list of tour companies and their per-group pricing tiers.
 ---
 
 ## Statistics
-- type: page
+- type: subpage
 - connects-to: Prisma
 
 Admin page at `/admin/statistics`. Gives the winery owner a revenue and booking overview at a glance.
@@ -195,7 +195,7 @@ Admin page at `/admin/statistics`. Gives the winery owner a revenue and booking 
 ---
 
 ## Orders Admin
-- type: page
+- type: subpage
 - connects-to: Prisma
 
 Shows every booking submitted through the public form.
