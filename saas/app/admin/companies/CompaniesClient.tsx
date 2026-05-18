@@ -101,7 +101,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   async function handleAdd() {
     setLoading(true); setError('')
     const result = await createCompany(newName)
-    if ('error' in result) { setError(result.error) }
+    if ('error' in result) { setError(result.error ?? '') }
     else { setNewName(''); setAdding(false); window.location.reload() }
     setLoading(false)
   }
@@ -109,7 +109,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   async function handleUpdate(id: string) {
     setLoading(true); setError('')
     const result = await updateCompany(id, editName)
-    if ('error' in result) { setError(result.error) }
+    if ('error' in result) { setError(result.error ?? '') }
     else { setCompanies(prev => prev.map(c => c.id === id ? { ...c, name: editName.trim() } : c)); setEditingId(null) }
     setLoading(false)
   }
@@ -124,7 +124,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   async function handleAddPrice(companyId: string, data: Omit<Price, 'id'>) {
     setLoading(true)
     const result = await createPrice({ companyId, ...data })
-    if ('error' in result) { setError(result.error); setLoading(false); return }
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     setAddingPriceFor(null)
     window.location.reload()
   }
@@ -132,7 +132,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   async function handleUpdatePrice(companyId: string, priceId: string, data: Omit<Price, 'id'>) {
     setLoading(true)
     const result = await updatePrice(priceId, data, companyId)
-    if ('error' in result) { setError(result.error); setLoading(false); return }
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     const company = companies.find(c => c.id === companyId)!
     updateCompanyPrices(companyId, company.prices.map(p => p.id === priceId ? { id: priceId, ...data } : p))
     setEditingPriceId(null); setLoading(false)

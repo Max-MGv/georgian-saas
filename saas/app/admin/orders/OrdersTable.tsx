@@ -111,7 +111,7 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
       notes: editNotes,
     })
     if ('error' in result) {
-      setError(result.error)
+      setError(result.error ?? '')
       setLoading(false)
       return
     }
