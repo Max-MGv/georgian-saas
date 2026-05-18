@@ -6,7 +6,8 @@ import '@xyflow/react/dist/style.css'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ArchNodeComponent from './ArchNode'
-import type { ArchData, ArchNode } from '@/lib/parseVault'
+import OverviewFlow from './OverviewFlow'
+import type { ArchData, ArchNode, OverviewData } from '@/lib/parseVault'
 
 const nodeTypes = { arch: ArchNodeComponent }
 
@@ -52,7 +53,28 @@ function layoutNodes(archNodes: ArchNode[]): Node[] {
   return result
 }
 
-export default function ArchitectureFlow({ data }: { data: ArchData }) {
+function SubTabs({ view, onChange }: { view: 'overview' | 'detailed'; onChange: (v: 'overview' | 'detailed') => void }) {
+  return (
+    <div className="flex items-center gap-1 px-4 pt-3 pb-0 flex-shrink-0">
+      <div className="flex items-center gap-1 bg-gray-800 rounded-md p-0.5">
+        {(['overview', 'detailed'] as const).map(v => (
+          <button
+            key={v}
+            onClick={() => onChange(v)}
+            className={`px-3 py-1 rounded text-xs font-medium capitalize transition-colors ${
+              view === v ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function ArchitectureFlow({ data, overview }: { data: ArchData; overview: OverviewData }) {
+  const [archView, setArchView] = useState<'overview' | 'detailed'>('overview')
   const [selected, setSelected] = useState<ArchNode | null>(null)
 
   const { nodes, edges } = useMemo((): { nodes: Node[]; edges: Edge[] } => {
@@ -87,69 +109,79 @@ export default function ArchitectureFlow({ data }: { data: ArchData }) {
     setSelected(prev => prev?.id === archNode?.id ? null : (archNode ?? null))
   }
 
-  return (
-    <div className="flex-1 relative flex">
-      <div className="flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodeClick={handleNodeClick}
-          fitView
-          fitViewOptions={{ padding: 0.3 }}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          panOnScroll
-          zoomOnScroll
-          minZoom={0.3}
-          maxZoom={2}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#1f2937" />
-          <Controls className="[&>button]:bg-gray-800 [&>button]:border-gray-700 [&>button]:text-gray-300 [&>button:hover]:bg-gray-700" />
-        </ReactFlow>
+  if (archView === 'overview') {
+    return (
+      <div className="flex-1 flex flex-col">
+        <SubTabs view={archView} onChange={setArchView} />
+        <OverviewFlow data={overview} />
       </div>
+    )
+  }
 
-      {/* Detail panel */}
-      <div
-        className={`
+  return (
+    <div className="flex-1 flex flex-col">
+      <SubTabs view={archView} onChange={(v) => { setArchView(v); setSelected(null) }} />
+      <div className="flex-1 relative flex">
+        <div className="flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            onNodeClick={handleNodeClick}
+            fitView
+            fitViewOptions={{ padding: 0.3 }}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            panOnScroll
+            zoomOnScroll
+            minZoom={0.3}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#1f2937" />
+            <Controls className="[&>button]:bg-gray-800 [&>button]:border-gray-700 [&>button]:text-gray-300 [&>button:hover]:bg-gray-700" />
+          </ReactFlow>
+        </div>
+
+        {/* Detail panel */}
+        <div className={`
           absolute top-0 right-0 h-full w-96 bg-gray-900 border-l border-gray-800
           transform transition-transform duration-200 overflow-y-auto
           ${selected ? 'translate-x-0' : 'translate-x-full'}
-        `}
-      >
-        {selected && (
-          <div className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{selected.type}</p>
-                <h2 className="text-white text-xl font-bold">{selected.label}</h2>
+        `}>
+          {selected && (
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{selected.type}</p>
+                  <h2 className="text-white text-xl font-bold">{selected.label}</h2>
+                </div>
+                <button
+                  onClick={() => setSelected(null)}
+                  className="text-gray-500 hover:text-white transition-colors mt-1"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 20 20">
+                    <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="text-gray-500 hover:text-white transition-colors mt-1"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 20 20">
-                  <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
 
-            {selected.connectsTo.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {selected.connectsTo.map(t => (
-                  <span key={t} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
-                    → {t}
-                  </span>
-                ))}
+              {selected.connectsTo.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {selected.connectsTo.map(t => (
+                    <span key={t} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
+                      → {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="prose prose-sm prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{selected.detailMarkdown}</ReactMarkdown>
               </div>
-            )}
-
-            <div className="prose prose-sm prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{selected.detailMarkdown}</ReactMarkdown>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

@@ -41,6 +41,18 @@ export type ArchData = {
   nodes: ArchNode[]
 }
 
+export type OverviewNode = {
+  id: string
+  label: string
+  type: 'user' | 'repo' | 'host' | 'backend'
+  connectsTo: string[]
+  detailMarkdown: string
+}
+
+export type OverviewData = {
+  nodes: OverviewNode[]
+}
+
 function readVaultFile(filename: string): string {
   try {
     return fs.readFileSync(path.join(VAULT_PATH, filename), 'utf-8')
@@ -212,6 +224,50 @@ export function parseArchitecture(): ArchData {
         continue
       }
       if (line.startsWith('- ')) continue // skip other bullet props
+      if (!pastProperties && line.trim() === '') { pastProperties = true; continue }
+      if (pastProperties || (!line.startsWith('-') && !line.startsWith('#'))) {
+        pastProperties = true
+        detailLines.push(line)
+      }
+    }
+
+    nodes.push({ id, label, type, connectsTo, detailMarkdown: detailLines.join('\n').trim() })
+  }
+
+  return { nodes }
+}
+
+export function parseSystemOverview(): OverviewData {
+  const content = readVaultFile('SystemOverview.md')
+  const nodes: OverviewNode[] = []
+
+  const sections = content.split(/\n---\n/)
+
+  for (const section of sections) {
+    const lines = section.trim().split('\n')
+    const headingLine = lines.find(l => /^## .+/.test(l))
+    if (!headingLine) continue
+
+    const label = headingLine.replace(/^## /, '').trim()
+    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+
+    let type: OverviewNode['type'] = 'host'
+    let connectsTo: string[] = []
+    const detailLines: string[] = []
+    let pastProperties = false
+
+    for (const line of lines) {
+      if (line === headingLine) continue
+      const typeMatch = line.match(/^- type:\s*(.+)/)
+      const connectsMatch = line.match(/^- connects-to:\s*(.*)/)
+
+      if (typeMatch) { type = typeMatch[1].trim() as OverviewNode['type']; continue }
+      if (connectsMatch) {
+        const val = connectsMatch[1].trim()
+        connectsTo = val ? val.split(',').map(s => s.trim()).filter(Boolean) : []
+        continue
+      }
+      if (line.startsWith('- ')) continue
       if (!pastProperties && line.trim() === '') { pastProperties = true; continue }
       if (pastProperties || (!line.startsWith('-') && !line.startsWith('#'))) {
         pastProperties = true

@@ -7,7 +7,7 @@ import PhaseNode from './PhaseNode'
 import FeatureNode from './FeatureNode'
 import DetailPanel from './DetailPanel'
 import ArchitectureFlow from './ArchitectureFlow'
-import type { VaultData, Phase, Section, ArchData } from '@/lib/parseVault'
+import type { VaultData, Phase, Section, ArchData, OverviewData } from '@/lib/parseVault'
 
 const nodeTypes = {
   phase: PhaseNode,
@@ -19,7 +19,7 @@ const PHASE_GAP = 80 // gap between phase nodes
 const SECTION_W = 176
 const SECTION_GAP = 50
 
-export default function FlowChart({ data, arch }: { data: VaultData; arch: ArchData }) {
+export default function FlowChart({ data, arch, overview }: { data: VaultData; arch: ArchData; overview: OverviewData }) {
   const [tab, setTab] = useState<'roadmap' | 'architecture'>('roadmap')
   const [view, setView] = useState<'overview' | 'phase'>('overview')
   const [activePhase, setActivePhase] = useState<Phase | null>(null)
@@ -156,7 +156,7 @@ export default function FlowChart({ data, arch }: { data: VaultData; arch: ArchD
       {/* Canvas area */}
       <div className="flex-1 relative flex flex-col">
         {tab === 'architecture' ? (
-          <ArchitectureFlow data={arch} />
+          <ArchitectureFlow data={arch} overview={overview} />
         ) : (
           <>
             <ReactFlow
