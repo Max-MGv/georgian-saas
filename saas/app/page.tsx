@@ -2,7 +2,10 @@ import { db } from '@/lib/db'
 import BookingForm from '@/components/BookingForm'
 
 export default async function Home() {
-  const companies = await db.company.findMany({ orderBy: { name: 'asc' } })
+  const companies = await db.company.findMany({
+    orderBy: { name: 'asc' },
+    include: { prices: { orderBy: { minGuests: 'asc' } } },
+  })
 
   return (
     <main className="min-h-screen" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>

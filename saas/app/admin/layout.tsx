@@ -15,9 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <span className="font-bold text-sm" style={{ color: '#1c1008' }}>Nikalas Marani — Admin</span>
         <div className="flex gap-4 ml-4">
           {[
-            { href: '/admin', label: 'Orders' },
+            { href: '/admin/orders', label: 'Orders' },
             { href: '/admin/companies', label: 'Companies' },
-            { href: '/admin/prices', label: 'Prices' },
             { href: '/admin/statistics', label: 'Statistics' },
           ].map(link => (
             <a

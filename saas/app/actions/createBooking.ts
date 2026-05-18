@@ -41,6 +41,11 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       })
       if (price) {
         totalPrice = price.pricePerPerson * guestCount + price.registrationPrice
+      } else {
+        const tierCount = await db.price.count({ where: { companyId: data.companyId } })
+        if (tierCount > 0) {
+          return { success: false, error: `No pricing tier covers ${guestCount} guests for this company. Please contact us directly.` }
+        }
       }
     }
 

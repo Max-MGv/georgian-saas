@@ -117,15 +117,93 @@ The public-facing page at `localhost:3000`. Customers use it to request a bookin
 
 ## Admin Panel
 - type: page
-- connects-to: Next.js
+- connects-to: Next.js, Companies Admin, Orders Admin, Statistics
 
-The password-protected management interface at `localhost:3000/admin`. Only accessible after logging in.
+The password-protected management interface at `localhost:3000/admin`. Only accessible after logging in via Supabase Auth.
 
 **What's built:**
 - Login / logout (Supabase Auth)
-- Navigation: Orders, Companies, Prices, Statistics
-- Orders page (stub — real data coming next)
+- Navigation: Orders, Companies, Statistics
+- Orders list with date + company filters and revenue total
+- Companies CRUD with inline add / edit / delete
+- Price tiers per company — expandable rows, overlap and min/max validation
 
-**What's not built yet:** Orders list with real data, Companies, Prices, Statistics.
+**What's not built yet:** Statistics page, order edit/delete, deploy to Vercel.
 
 **If you get locked out:** Go to supabase.com → Authentication → Users → reset your password.
+
+---
+
+## Seed Script
+- type: tool
+- connects-to: Next.js
+
+A developer-only script at `scripts/seed.ts`. Run with `npx tsx scripts/seed.ts` to populate the database with realistic test orders.
+
+**How it fits the pipeline:**
+
+Normal customer flow: Browser → Booking Form → HTTP → `createBooking()` → Prisma → DB
+
+Seed script flow: Seed Script → `createBooking()` → Prisma → DB
+
+It enters the pipeline at the same point as a real submission — skipping only the browser and HTTP layer (which are just delivery mechanisms). Every validation, price calculation, and tier lookup runs identically. The data that lands in the DB is indistinguishable from real bookings.
+
+**Why not write directly to Prisma in the seed?**
+If you skip `createBooking()` and write rows directly, you have to manually replicate the pricing logic. If the logic changes later, the seed silently produces wrong data. Calling `createBooking()` keeps the seed permanently in sync with the real app.
+
+**When to run it:**
+- Before building the Statistics page, to have realistic data to chart
+- After wiping the DB during development
+- When onboarding a new client instance (with client-specific data)
+
+---
+
+## Companies Admin
+- type: page
+- connects-to: Prisma
+
+Manages the list of tour companies and their per-group pricing tiers.
+
+**What it does:**
+- Add, edit, delete companies
+- Each company has one or more price tiers: guest range + price per person + optional flat fee
+- Tiers are validated: no overlapping ranges, min cannot exceed max
+- If a company has no tiers, individual rates (50₾ / 100₾) apply automatically
+
+**To verify:** Go to `/admin/companies`, expand a company row to see its tiers.
+
+---
+
+## Statistics
+- type: page
+- connects-to: Prisma
+
+Admin page at `/admin/statistics`. Gives the winery owner a revenue and booking overview at a glance.
+
+**What it shows:**
+- 4 summary cards: total orders, total revenue, this month's orders + revenue, average order value
+- Bar chart: bookings per month (last 6 months)
+- Bar chart: revenue ₾ per month (last 6 months)
+- Split bars: tasting vs tasting+lunch (orders + revenue)
+- Split bars: individual vs company bookings (orders + revenue)
+- Top companies table ranked by revenue with mini bar per row
+
+**Data flow:** server component fetches all orders + company names from Supabase, computes all aggregates in TypeScript, passes clean typed data to a client component (Recharts needs the browser). No raw DB data reaches the client.
+
+**To verify:** Run `npm run seed` first for test data, then open `/admin/statistics`.
+
+---
+
+## Orders Admin
+- type: page
+- connects-to: Prisma
+
+Shows every booking submitted through the public form.
+
+**What it does:**
+- Table of all orders: name, date, time, guests, type, company, total price
+- Filter by date range, "Upcoming" quick button, individuals only, or by company
+- Inline delete with confirm; slide-over edit panel (date, time, guests, name, contact, notes)
+- Revenue total updates with active filters
+
+**To verify:** Submit a test booking on the public page, then check `/admin/orders`.

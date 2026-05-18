@@ -8,6 +8,65 @@ Most recent entry at the top.
 
 ---
 
+## 2026-05-18 — Order edit/delete, filter fixes, deduplication
+
+- Order edit: slide-over panel from the right — editable fields: date, time, guests, name, phone, email, internal notes. Visit type and price locked (delete + rebook to change those)
+- Order delete: inline confirm same pattern as Companies
+- Fixed Prisma enum import bug — `BookingType`/`VisitType` imported as values in a client component pulled Node.js runtime into browser bundle; replaced with plain string literals
+- Fixed orders filter: was not re-rendering table on filter change (useState didn't update from props). Fixed with `key` prop on OrdersTable tied to filter params
+- Added "Individuals only" option to the booking type filter dropdown
+- Added "Upcoming" quick button — sets dateFrom to today, highlights when active
+- Removed dead "Prices" nav link (pricing lives inside Companies)
+- Ran deduplication script — removed 22 duplicate orders left from running seed twice; 23 clean orders remain
+- `scripts/cleanup-duplicates.ts` added for future use
+
+**Next:** Deploy to Vercel → v1 ships
+
+---
+
+## 2026-05-17 — Orders list, Companies CRUD, Prices, Seed script, Statistics page
+
+### Orders list (`/admin/orders`)
+- Table with all bookings: name, date, time, guests, visit type, company, total price
+- Filter by date range and by company — URL-based so filters are shareable/bookmarkable
+- Live revenue total updates with filters
+
+### Companies CRUD + Price tiers (`/admin/companies`)
+- Inline add/edit/delete for companies
+- Expandable rows per company showing price tiers
+- Price tier form: guest range, price/person, optional flat fee
+- Validation on save: no overlapping ranges, min cannot exceed max, errors shown inline
+
+### Validations added across the app
+- Price tier overlap detection (server-side, company-scoped)
+- Company booking with no matching tier → clear error, booking blocked
+- Booking form: at least phone or email required
+- Price preview on booking form now shows actual company tier rate (not just individual rate)
+- Red warning + disabled submit button when guest count falls in a tier gap
+- Past dates already blocked by `min` on date input
+
+### Seed script (`npm run seed`)
+- `scripts/seed.ts` — calls `createBooking()` directly (same pipeline as real customers)
+- Generates 20 individual bookings (realistic Georgian names) + 1 booking per company tier
+- Dates spread across 6 months, mix of visit types — 22 orders seeded, 0 failures
+- Safe to run multiple times (adds more rows each time)
+
+### Statistics page (`/admin/statistics`)
+- 4 summary cards: total orders, total revenue, this month, avg order value
+- Two bar charts (Recharts): bookings per month + revenue per month, last 6 months
+- Split breakdowns: tasting vs tasting+lunch, individual vs company
+- Top companies table ranked by revenue with proportional mini-bars
+
+### Other
+- Removed dead `/admin/prices` nav link (pricing lives inside Companies)
+- Fixed Orders nav link (was pointing to `/admin`, now `/admin/orders`)
+- `tsx` installed as dev dep for running seed scripts
+- `recharts` installed for statistics charts
+
+**Next session:** Order edit/delete → Deploy to Vercel
+
+---
+
 ## 2026-05-17 — Main app scaffolded + booking form + admin auth live
 
 - Scaffolded main SaaS app at `georgian-saas/saas/` (Next.js 16, TypeScript, Tailwind, shadcn/ui)

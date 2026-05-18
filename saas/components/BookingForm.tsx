@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
-import type { Company } from '@/app/generated/prisma/client'
+
+type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; registrationPrice: number }
+type Company = { id: string; name: string; prices: Price[] }
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 const MIN_GUESTS = 4
@@ -30,25 +32,38 @@ export default function BookingForm({ companies }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const pricePerPerson = visitType === 'TASTING' ? 50 : 100
-  const estimatedTotal = pricePerPerson * Math.max(guestCount, MIN_GUESTS)
+  const basePrice = visitType === 'TASTING' ? 50 : 100
+  const guests = Math.max(guestCount, MIN_GUESTS)
+
+  const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
+  const matchedTier = selectedCompany?.prices.find(p => guests >= p.minGuests && guests <= p.maxGuests) ?? null
+  const tierGap = selectedCompany && selectedCompany.prices.length > 0 && !matchedTier
+
+  const estimatedTotal = matchedTier
+    ? matchedTier.pricePerPerson * guests + matchedTier.registrationPrice
+    : basePrice * guests
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const fd0 = new FormData(e.currentTarget)
+    if (!fd0.get('phone') && !fd0.get('email')) {
+      setStatus('error')
+      setErrorMsg('Please provide at least a phone number or email so we can confirm your booking.')
+      return
+    }
     setStatus('loading')
     setErrorMsg('')
-    const fd = new FormData(e.currentTarget)
     const result = await createBooking({
       bookingType,
       visitType,
       companyId: bookingType === 'COMPANY' ? companyId : undefined,
-      date: fd.get('date') as string,
+      date: fd0.get('date') as string,
       timeSlot,
       guestCount,
-      name: fd.get('name') as string,
-      surname: fd.get('surname') as string,
-      email: fd.get('email') as string,
-      phone: fd.get('phone') as string,
+      name: fd0.get('name') as string,
+      surname: fd0.get('surname') as string,
+      email: fd0.get('email') as string,
+      phone: fd0.get('phone') as string,
     })
     if (result.success) {
       setStatus('success')
@@ -233,19 +248,29 @@ export default function BookingForm({ companies }: Props) {
       </div>
 
       {/* Price preview */}
-      <div
-        className="rounded-lg border p-4 flex items-center justify-between"
-        style={{ backgroundColor: C.bg, borderColor: C.border }}
-      >
-        <div>
-          <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            {pricePerPerson}₾ × {Math.max(guestCount, MIN_GUESTS)} guests
-            {bookingType === 'COMPANY' && companyId ? ' · company rate may apply' : ''}
+      {tierGap ? (
+        <div className="rounded-lg border p-4" style={{ backgroundColor: '#fff8f0', borderColor: '#fca5a5' }}>
+          <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>No rate for {guests} guests</p>
+          <p className="text-xs mt-0.5" style={{ color: C.muted }}>
+            This company has no pricing tier that covers {guests} guests. Please contact us directly.
           </p>
         </div>
-        <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
-      </div>
+      ) : (
+        <div
+          className="rounded-lg border p-4 flex items-center justify-between"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}
+        >
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+              {matchedTier
+                ? `${matchedTier.pricePerPerson}₾ × ${guests} guests${matchedTier.registrationPrice > 0 ? ` + ${matchedTier.registrationPrice}₾ flat fee` : ''} · company rate`
+                : `${basePrice}₾ × ${guests} guests`}
+            </p>
+          </div>
+          <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
+        </div>
+      )}
 
       {status === 'error' && (
         <p className="text-sm" style={{ color: '#b91c1c' }}>{errorMsg}</p>
@@ -253,9 +278,9 @@ export default function BookingForm({ companies }: Props) {
 
       <button
         type="submit"
-        disabled={status === 'loading'}
+        disabled={status === 'loading' || !!tierGap}
         className="w-full font-semibold py-3 rounded-lg transition-colors text-white"
-        style={{ backgroundColor: status === 'loading' ? '#a0392a' : C.wine }}
+        style={{ backgroundColor: (status === 'loading' || tierGap) ? '#a0392a' : C.wine }}
       >
         {status === 'loading' ? 'Submitting…' : 'Request Booking'}
       </button>

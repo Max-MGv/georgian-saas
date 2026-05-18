@@ -60,12 +60,13 @@ Estimated: 3–5 focused weekends with AI assistance.
 ### Build Order
 1. [x] **Booking form** (public page) — live at localhost:3000, saves to Supabase, confirmed working
 2. [x] **Admin auth** — login/logout working, `/admin` routes protected by middleware
-3. [ ] **Orders list** — table with filters, the core feature
-4. [ ] **Order edit/delete** — modal or separate page
-5. [ ] **Companies CRUD** — simple list + add/edit/delete
-6. [ ] **Prices CRUD** — per-company tiers
-7. [ ] **Statistics page** — summary cards + Recharts bar charts
-8. [ ] **Deploy to Vercel** — connect repo, add env vars
+3. [x] **Orders list** — table with filters (date range, individuals only, per company, upcoming button), revenue total
+4. [x] **Order edit/delete** — slide-over edit panel (date, time, guests, name, contact, notes) + inline delete confirm
+5. [x] **Companies CRUD** — inline add/edit/delete with expandable price tier rows
+6. [x] **Prices CRUD** — per-company tiers with overlap/min-max validation, flat fee support
+7. [x] **Seed script** — `scripts/seed.ts`, run via `npm run seed`; calls `createBooking` directly through the real pipeline
+8. [x] **Statistics page** — 4 summary cards, 2 bar charts (bookings + revenue per month), visit type & booking type breakdown bars, top companies table
+9. [ ] **Deploy to Vercel** — connect repo, add env vars
 
 ### Polish before first client
 - [ ] Responsive design (mobile-friendly)
