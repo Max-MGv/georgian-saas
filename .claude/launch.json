@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "saas",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "./saas", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "./dashboard", "run", "dev", "--", "--port", "3001"],
+      "port": 3001
+    }
+  ]
+}
