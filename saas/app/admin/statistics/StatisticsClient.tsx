@@ -91,7 +91,7 @@ export default function StatisticsClient({
               <CartesianGrid vertical={false} stroke={C.border} />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={28} />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [v, 'bookings']} />
+              <Tooltip {...tooltipStyle} formatter={(v) => [v ?? 0, 'bookings']} />
               <Bar dataKey="orders" fill={C.wine} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -105,7 +105,7 @@ export default function StatisticsClient({
               <CartesianGrid vertical={false} stroke={C.border} />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={48} />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [`${v.toLocaleString()}₾`, 'revenue']} />
+              <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v ?? 0).toLocaleString()}₾`, 'revenue']} />
               <Bar dataKey="revenue" fill="#a0392a" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
