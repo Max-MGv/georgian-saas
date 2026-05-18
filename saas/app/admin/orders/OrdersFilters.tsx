@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import type { Company } from '@/app/generated/prisma/client'
+import type { Company } from '@prisma/client'
 
 const C = {
   border: '#e0d4c0',

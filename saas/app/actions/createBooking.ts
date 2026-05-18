@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/lib/db'
-import { BookingType, VisitType } from '@/app/generated/prisma/client'
+import { BookingType, VisitType } from '@prisma/client'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
