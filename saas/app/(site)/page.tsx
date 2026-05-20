@@ -33,7 +33,7 @@ export default async function Home() {
             className="border font-semibold px-8 py-3 rounded-lg transition-opacity hover:opacity-70"
             style={{ borderColor: '#c9b99a', color: '#6b5a47' }}
           >
-            Wine Catalogue
+            Order Wine
           </a>
         </div>
       </section>

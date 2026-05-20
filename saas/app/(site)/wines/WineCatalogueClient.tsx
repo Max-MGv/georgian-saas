@@ -86,7 +86,7 @@ export default function WineCatalogueClient() {
     <div className="max-w-4xl mx-auto px-6 py-16">
 
       {/* Heading */}
-      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Wine Catalogue</p>
+      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Order Wine</p>
       <div className="flex items-end justify-between mb-10">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: '#1c1008' }}>Nikalas Marani</h1>

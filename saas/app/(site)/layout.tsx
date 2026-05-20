@@ -11,11 +11,14 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
             Nikalas Marani
           </Link>
           <nav className="flex items-center gap-6">
+            <Link href="/" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
+              Home
+            </Link>
             <Link href="/about" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
               About
             </Link>
             <Link href="/wines" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
-              Wine Catalogue
+              Order Wine
             </Link>
             <Link href="/contact" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
               Contact

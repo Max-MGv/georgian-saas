@@ -1,8 +1,8 @@
 import WineCatalogueClient from './WineCatalogueClient'
 
 export const metadata = {
-  title: 'ღვინის კატალოგი — Nikalas Marani',
-  description: 'შეუკვეთეთ ნიკალას მარანის ღვინო. საფერავი, რქაწითელი, მწვანე და ჭაჭა.',
+  title: 'Order Wine — Nikalas Marani',
+  description: 'Order wine from Nikalas Marani winery. Saperavi, Rkatsiteli, Mtsvane, Chacha and more.',
 }
 
 export default function WinesPage() {
