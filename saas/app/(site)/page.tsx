@@ -28,14 +28,13 @@ export default async function Home() {
           >
             Book a Visit
           </a>
-          <button
-            disabled
-            title="Coming soon"
-            className="border font-semibold px-8 py-3 rounded-lg cursor-not-allowed"
-            style={{ borderColor: '#c9b99a', color: '#a89070' }}
+          <a
+            href="/wines"
+            className="border font-semibold px-8 py-3 rounded-lg transition-opacity hover:opacity-70"
+            style={{ borderColor: '#c9b99a', color: '#6b5a47' }}
           >
-            View Wine Catalogue
-          </button>
+            ღვინის კატალოგი
+          </a>
         </div>
       </section>
 

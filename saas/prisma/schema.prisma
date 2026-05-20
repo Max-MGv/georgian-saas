@@ -43,6 +43,20 @@ model Price {
   registrationPrice Float    @default(0)
 }
 
+model WineOrder {
+  id           String   @id @default(cuid())
+  businessName String
+  llcName      String?
+  llcId        String?
+  address      String
+  workingHours String?
+  contactName  String
+  contactPhone String
+  wines        Json
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+}
+
 enum BookingType {
   INDIVIDUAL
   COMPANY
