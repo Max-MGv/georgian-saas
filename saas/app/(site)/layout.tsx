@@ -7,8 +7,8 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       {/* Navigation */}
       <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: '#f5efe6', borderColor: '#e0d4c0' }}>
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="font-bold text-lg tracking-tight" style={{ color: '#1c1008' }}>
-            Nikalas Marani
+          <Link href="/">
+            <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '48px', width: 'auto' }} />
           </Link>
           <nav className="flex items-center gap-6">
             <Link href="/" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
