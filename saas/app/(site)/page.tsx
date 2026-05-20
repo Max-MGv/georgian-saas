@@ -8,8 +8,7 @@ export default async function Home() {
   })
 
   return (
-    <main className="min-h-screen" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
-
+    <>
       {/* Hero */}
       <section className="px-6 pt-20 pb-16 text-center max-w-2xl mx-auto">
         <p className="text-sm font-medium tracking-widest uppercase mb-4" style={{ color: '#8b4513' }}>
@@ -88,12 +87,6 @@ export default async function Home() {
         </p>
         <BookingForm companies={companies} />
       </section>
-
-      {/* Footer */}
-      <footer className="border-t px-6 py-8 text-center text-sm" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>
-        <p>Kardanakhi, Gurjaani · +995 599 96 33 17 · nikalasmarani@gmail.com</p>
-        <p className="mt-1">48-hour cancellation policy applies.</p>
-      </footer>
-    </main>
+    </>
   )
 }
