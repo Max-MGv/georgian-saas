@@ -4,12 +4,12 @@ import { useState, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 
 const WINES = [
-  { id: 'saperavi_2022', name: 'Saperavi 2022', type: 'წითელი მშრალი', desc: 'კლასიკური კახური საფერავი, მუხის კასრში დავარგებული. ბროწეულის, შავი მოცვის და სანელებლების არომატი.', price: '18₾ / ბოთლი', color: '#7c1d23' },
-  { id: 'rkatsiteli_2023', name: 'Rkatsiteli 2023', type: 'თეთრი მშრალი', desc: 'სუფთა, სასიამოვნო მჟავიანობით. ვაშლის, ატმის და ციტრუსის ნოტები. კარგად ერევა ზღვის პროდუქტებს.', price: '15₾ / ბოთლი', color: '#8b6914' },
-  { id: 'rkatsiteli_amber_2022', name: 'Rkatsiteli Amber 2022', type: 'ქარვისფერი', desc: 'ტრადიციული ქვევრის მეთოდი. კანზე დაყენება 6 თვე. თხილის, გამხმარი ხილის და თეთრი ყვავილის არომატი.', price: '22₾ / ბოთლი', color: '#c27c2a' },
-  { id: 'mtsvane_2023', name: 'Mtsvane 2023', type: 'თეთრი მშრალი', desc: 'მოხდენილი, ყვავილოვანი ბუკეტით. კარგი სიმჟავე და სიგრძე. გოგრის, ლიმონის და ყვავილების ნოტები.', price: '16₾ / ბოთლი', color: '#5a7c14' },
-  { id: 'rose_2023', name: 'Rosé 2023', type: 'როზე მშრალი', desc: 'მსუბუქი, გამაგრილებელი. გამხმარი ვარდის, ჟოლოს და ატმის ნოტებით. საზაფხულო ტიპი.', price: '17₾ / ბოთლი', color: '#c45a6e' },
-  { id: 'chacha', name: 'ჭაჭა', type: 'სასმელი, 55%', desc: 'სახლის ტრადიციული ჭაჭა. სუფთა, ძლიერი, ყოველ ჯამში ახლადგამოხდილი.', price: '25₾ / ბოთლი', color: '#6b5a47' },
+  { id: 'saperavi_2022',       name: 'Saperavi 2022',        type: 'Red Dry',    price: '18₾ / bottle', color: '#7c1d23', gradient: 'from-[#7c1d23] to-[#4a0f13]' },
+  { id: 'rkatsiteli_2023',     name: 'Rkatsiteli 2023',      type: 'White Dry',  price: '15₾ / bottle', color: '#8b6914', gradient: 'from-[#8b6914] to-[#5a430c]' },
+  { id: 'rkatsiteli_amber_2022', name: 'Rkatsiteli Amber 2022', type: 'Amber',   price: '22₾ / bottle', color: '#c27c2a', gradient: 'from-[#c27c2a] to-[#8b5510]' },
+  { id: 'mtsvane_2023',        name: 'Mtsvane 2023',          type: 'White Dry', price: '16₾ / bottle', color: '#5a7c14', gradient: 'from-[#5a7c14] to-[#384e0c]' },
+  { id: 'rose_2023',           name: 'Rosé 2023',             type: 'Rosé Dry',  price: '17₾ / bottle', color: '#c45a6e', gradient: 'from-[#c45a6e] to-[#8b3347]' },
+  { id: 'chacha',              name: 'Chacha',                type: 'Spirit 55%', price: '25₾ / bottle', color: '#6b5a47', gradient: 'from-[#6b5a47] to-[#3d3328]' },
 ]
 
 type WineQty = Record<string, number>
@@ -54,67 +54,78 @@ export default function WineCatalogueClient() {
     return (
       <div className="max-w-2xl mx-auto px-6 py-24 text-center">
         <div className="text-5xl mb-6">🍷</div>
-        <h2 className="text-2xl font-bold mb-3" style={{ color: '#1c1008' }}>ჯავშანი მიღებულია!</h2>
+        <h2 className="text-2xl font-bold mb-3" style={{ color: '#1c1008' }}>Order received!</h2>
         <p className="text-base mb-8" style={{ color: '#6b5a47' }}>
-          გმადლობთ. ჩვენი გუნდი დაგიკავშირდებათ მალე დეტალების დასადასტურებლად.
+          Thank you. We will contact you shortly to confirm the details.
         </p>
         <button
           onClick={() => setSubmitted(false)}
           className="btn-wine font-semibold px-8 py-3 rounded-lg"
         >
-          ახალი ჯავშანი
+          Place another order
         </button>
       </div>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-16">
+    <div className="max-w-4xl mx-auto px-6 py-16">
 
       {/* Heading */}
       <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>
-        ღვინის კატალოგი
+        Wine Catalogue
       </p>
       <h1 className="text-3xl sm:text-4xl font-bold mb-3" style={{ color: '#1c1008' }}>
-        ნიკალას მარანი
+        Nikalas Marani
       </h1>
       <p className="text-base mb-10" style={{ color: '#6b5a47' }}>
-        შეარჩიეთ ღვინო, მიუთითეთ რაოდენობა და გაფორმდეთ ჯავშანი. დაგიკავშირდებით დასადასტურებლად.
+        Select wines, set quantities, and place a reservation. We will call you to confirm.
       </p>
 
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       {/* Wine grid */}
-      <div className="grid sm:grid-cols-2 gap-5 mb-12">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
         {WINES.map(wine => {
           const qty = quantities[wine.id] ?? 0
           return (
-            <div key={wine.id} className="rounded-xl border p-5 flex flex-col gap-3" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-              {/* Colour strip */}
-              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: wine.color }} />
-              <div>
-                <p className="font-bold text-base" style={{ color: '#1c1008' }}>{wine.name}</p>
-                <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: wine.color }}>{wine.type}</p>
-                <p className="text-sm leading-relaxed" style={{ color: '#6b5a47' }}>{wine.desc}</p>
+            <div key={wine.id} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+              {/* Image placeholder */}
+              <div
+                className={`h-44 bg-gradient-to-b ${wine.gradient} flex items-center justify-center`}
+              >
+                <svg width="32" height="64" viewBox="0 0 32 64" fill="none" opacity="0.25">
+                  <path d="M8 2h16l-4 24a8 8 0 1 1-8 0L8 2z" fill="white" />
+                  <rect x="14" y="50" width="4" height="12" fill="white" />
+                  <rect x="8" y="60" width="16" height="2" rx="1" fill="white" />
+                </svg>
               </div>
-              <div className="flex items-center justify-between mt-auto pt-2">
-                <span className="font-semibold text-sm" style={{ color: '#1c1008' }}>{wine.price}</span>
-                {/* Quantity control */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setQty(wine.id, -1)}
-                    disabled={qty === 0}
-                    className="w-8 h-8 rounded-lg border font-bold text-lg flex items-center justify-center transition-opacity disabled:opacity-30"
-                    style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}
-                  >−</button>
-                  <span className="w-6 text-center font-semibold text-sm" style={{ color: '#1c1008' }}>{qty}</span>
-                  <button
-                    type="button"
-                    onClick={() => setQty(wine.id, 1)}
-                    className="w-8 h-8 rounded-lg border font-bold text-lg flex items-center justify-center transition-colors"
-                    style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}
-                  >+</button>
+
+              {/* Info + controls */}
+              <div className="p-4 flex flex-col gap-3 flex-1">
+                <div>
+                  <p className="font-bold text-sm" style={{ color: '#1c1008' }}>{wine.name}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wine.type}</p>
+                </div>
+
+                <div className="flex items-center justify-between mt-auto">
+                  <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQty(wine.id, -1)}
+                      disabled={qty === 0}
+                      className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center transition-opacity disabled:opacity-30"
+                      style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}
+                    >−</button>
+                    <span className="w-5 text-center font-semibold text-sm" style={{ color: '#1c1008' }}>{qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQty(wine.id, 1)}
+                      className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
+                      style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}
+                    >+</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -135,29 +146,25 @@ export default function WineCatalogueClient() {
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       {/* Reservation form */}
-      <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>ჯავშნის გაფორმება:</h2>
+      <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>Place a Reservation</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {[
-          { name: 'businessName', placeholder: 'ბარის ან რესტორნის ან ფიზიკური პირის დასახელება', required: true },
-          { name: 'llcName',      placeholder: 'შპს დასახელება', required: false },
-          { name: 'llcId',        placeholder: 'შპს საიდნეფიკაციო', required: false },
-          { name: 'address',      placeholder: 'ბარის/რესტორნის ფაქტიური მისამართი', required: true },
-          { name: 'workingHours', placeholder: 'სამუშაო საათები', required: false },
-          { name: 'contactName',  placeholder: 'საკონტაქტო პირის სახელი გვარი', required: true },
-          { name: 'contactPhone', placeholder: 'საკონტაქტო პირის ტელ. ნომერი', required: true },
+          { name: 'businessName', placeholder: 'Bar, restaurant, or individual name', required: true },
+          { name: 'llcName',      placeholder: 'LLC name (if applicable)',             required: false },
+          { name: 'llcId',        placeholder: 'LLC identification number',            required: false },
+          { name: 'address',      placeholder: 'Actual address of bar / restaurant',   required: true },
+          { name: 'workingHours', placeholder: 'Working hours',                        required: false },
+          { name: 'contactName',  placeholder: 'Contact person full name',             required: true },
+          { name: 'contactPhone', placeholder: 'Contact person phone number',          required: true },
         ].map(field => (
           <input
             key={field.name}
             name={field.name}
             required={field.required}
             placeholder={field.placeholder}
-            className="w-full px-4 py-3 rounded-lg border text-sm outline-none transition-colors"
-            style={{
-              backgroundColor: '#fff9f3',
-              borderColor: '#e0d4c0',
-              color: '#1c1008',
-            }}
+            className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
+            style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0', color: '#1c1008' }}
           />
         ))}
 
@@ -170,7 +177,7 @@ export default function WineCatalogueClient() {
           disabled={isPending}
           className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity"
         >
-          {isPending ? 'იგზავნება...' : 'ჯავშნის გაფორმება'}
+          {isPending ? 'Sending...' : 'Place Reservation'}
         </button>
       </form>
 

@@ -15,7 +15,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
               About
             </Link>
             <Link href="/wines" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
-              ღვინის კატალოგი
+              Wine Catalogue
             </Link>
             <Link href="/contact" className="text-sm font-medium transition-colors hover:opacity-70" style={{ color: '#6b5a47' }}>
               Contact
