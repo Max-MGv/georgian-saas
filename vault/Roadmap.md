@@ -66,12 +66,21 @@ Estimated: 3–5 focused weekends with AI assistance.
 6. [x] **Prices CRUD** — per-company tiers with overlap/min-max validation, flat fee support
 7. [x] **Seed script** — `scripts/seed.ts`, run via `npm run seed`; calls `createBooking` directly through the real pipeline
 8. [x] **Statistics page** — 4 summary cards, 2 bar charts (bookings + revenue per month), visit type & booking type breakdown bars, top companies table
-9. [ ] **Deploy to Vercel** — connect repo, add env vars
+9. [x] **Deploy to Vercel** — live at georgian-saas-mg-productions-projects.vercel.app
 
 ### Polish before first client
 - [ ] Responsive design (mobile-friendly)
 - [ ] Error states and loading indicators
 - [ ] Confirm dialogs before delete
+
+### Public site (built ahead of schedule)
+- [x] Route group `(site)` with shared nav + footer
+- [x] Home page — hero, packages, booking form
+- [x] About page — winery story, what to expect
+- [x] Contact page — phone, email, location
+- [x] Order Wine page — wine catalogue with grid/list toggle, reservation form
+- [x] Brand assets — SVG logo, phone/email/Facebook/Instagram icons in nav
+- [x] Wine orders saved to DB, visible in admin under Wine Orders tab
 
 ---
 
