@@ -36,7 +36,7 @@ export default function AboutPage() {
       {/* What to expect */}
       <section className="mb-12">
         <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>What to Expect</h2>
-        <div className="grid sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             {
               label: 'Wine Tasting',

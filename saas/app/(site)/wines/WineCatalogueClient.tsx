@@ -87,7 +87,7 @@ export default function WineCatalogueClient() {
 
       {/* Heading */}
       <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Order Wine</p>
-      <div className="flex items-end justify-between mb-10">
+      <div className="flex items-start justify-between gap-4 mb-10">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: '#1c1008' }}>Nikalas Marani</h1>
           <p className="text-base" style={{ color: '#6b5a47' }}>Select wines, set quantities, and place a reservation.</p>
@@ -161,7 +161,7 @@ export default function WineCatalogueClient() {
 
       {/* ── LIST VIEW ── */}
       {view === 'list' && (
-        <div className="mb-10 rounded-xl border overflow-hidden" style={{ borderColor: '#e0d4c0' }}>
+        <div className="mb-10 rounded-xl border overflow-x-auto" style={{ borderColor: '#e0d4c0' }}>
           {/* Header */}
           <div className="grid items-center text-xs font-medium uppercase tracking-wider px-4 py-3 border-b"
             style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', backgroundColor: '#f5efe6', borderColor: '#e0d4c0', color: '#a89070' }}>

@@ -13,7 +13,7 @@ export default function ContactPage() {
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       {/* Contact details */}
-      <div className="grid sm:grid-cols-2 gap-6 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
         {[
           {
             label: 'Phone',
