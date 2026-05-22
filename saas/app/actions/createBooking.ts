@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { BookingType, VisitType } from '@prisma/client'
+import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -64,6 +65,24 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
       },
     })
+
+    // Send confirmation email if customer provided an email address
+    if (data.email) {
+      const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      })
+      // Fire and forget — don't fail the booking if email fails
+      sendBookingConfirmation({
+        name: data.name,
+        surname: data.surname,
+        email: data.email,
+        date: formattedDate,
+        timeSlot: data.timeSlot,
+        guestCount,
+        visitType: data.visitType,
+        totalPrice,
+      }).catch(err => console.error('Email send failed:', err))
+    }
 
     return { success: true }
   } catch {
