@@ -21,9 +21,9 @@ const C = {
   inputBg: '#fffdf9',
 }
 
-type Props = { companies: Company[] }
+type Props = { companies: Company[]; showCompanyPrice: boolean }
 
-export default function BookingForm({ companies }: Props) {
+export default function BookingForm({ companies, showCompanyPrice }: Props) {
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')   // string so typing works naturally
@@ -33,6 +33,8 @@ export default function BookingForm({ companies }: Props) {
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const [confirmedPrice, setConfirmedPrice] = useState<number | null>(null)
+  const [confirmedType, setConfirmedType] = useState<'INDIVIDUAL' | 'COMPANY' | null>(null)
 
   const guestCount = Math.max(parseInt(guestInput) || MIN_GUESTS, MIN_GUESTS)
   const basePrice = visitType === 'TASTING' ? 50 : 100
@@ -87,6 +89,8 @@ export default function BookingForm({ companies }: Props) {
       phone: fd0.get('phone') as string,
     })
     if (result.success) {
+      setConfirmedPrice(result.totalPrice)
+      setConfirmedType(result.bookingType)
       setStatus('success')
     } else {
       setStatus('error')
@@ -95,6 +99,7 @@ export default function BookingForm({ companies }: Props) {
   }
 
   if (status === 'success') {
+    const showPrice = confirmedType === 'INDIVIDUAL' || (confirmedType === 'COMPANY' && showCompanyPrice)
     return (
       <div
         className="rounded-xl border p-10 text-center"
@@ -105,6 +110,13 @@ export default function BookingForm({ companies }: Props) {
         <p style={{ color: C.muted }}>
           Thank you. We will contact you shortly to confirm your visit.
         </p>
+        {showPrice && confirmedPrice != null && (
+          <div className="mt-6 inline-block rounded-lg px-6 py-3 border"
+            style={{ backgroundColor: '#fdf6ee', borderColor: C.border }}>
+            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>Estimated total</p>
+            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}₾</p>
+          </div>
+        )}
       </div>
     )
   }
@@ -291,7 +303,16 @@ export default function BookingForm({ companies }: Props) {
       </div>
 
       {/* Price preview */}
-      {tierGap ? (
+      {bookingType === 'INDIVIDUAL' ? (
+        <div className="rounded-lg border p-4 flex items-center justify-between"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guests} guests</p>
+          </div>
+          <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
+        </div>
+      ) : tierGap ? (
         <div className="rounded-lg border p-4" style={{ backgroundColor: '#fff8f0', borderColor: '#fca5a5' }}>
           <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>No rate for {guests} guests</p>
           <p className="text-xs mt-0.5" style={{ color: C.muted }}>
@@ -299,19 +320,11 @@ export default function BookingForm({ companies }: Props) {
           </p>
         </div>
       ) : (
-        <div
-          className="rounded-lg border p-4 flex items-center justify-between"
-          style={{ backgroundColor: C.bg, borderColor: C.border }}
-        >
-          <div>
-            <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
-            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              {matchedTier
-                ? `${matchedTier.pricePerPerson}₾ × ${guests} guests${matchedTier.registrationPrice > 0 ? ` + ${matchedTier.registrationPrice}₾ flat fee` : ''} · company rate`
-                : `${basePrice}₾ × ${guests} guests`}
-            </p>
-          </div>
-          <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
+        <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
+          <p className="text-sm font-medium" style={{ color: C.muted }}>Your company rate applies</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+            Price will be confirmed after submission.
+          </p>
         </div>
       )}
 

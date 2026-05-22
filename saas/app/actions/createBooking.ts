@@ -18,7 +18,7 @@ export type BookingFormData = {
 }
 
 export type BookingResult =
-  | { success: true }
+  | { success: true; totalPrice: number; bookingType: 'INDIVIDUAL' | 'COMPANY' }
   | { success: false; error: string }
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
@@ -68,6 +68,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
 
     // Send confirmation email if customer provided an email address
     if (data.email) {
+
       const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
       })
@@ -84,7 +85,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }).catch(err => console.error('Email send failed:', err))
     }
 
-    return { success: true }
+    return { success: true, totalPrice, bookingType: data.bookingType }
   } catch {
     return { success: false, error: 'Something went wrong. Please try again.' }
   }
