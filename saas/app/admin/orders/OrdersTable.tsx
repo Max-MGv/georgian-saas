@@ -132,8 +132,8 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
 
   return (
     <>
-      <div className="rounded-xl border overflow-hidden mt-4" style={{ borderColor: C.border }}>
-        <table className="w-full text-sm border-collapse">
+      <div className="rounded-xl border overflow-x-auto mt-4" style={{ borderColor: C.border }}>
+        <table className="w-full text-sm border-collapse min-w-[700px]">
           <thead>
             <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
               {['Date', 'Time', 'Guest', 'Type', 'Company', 'Guests', 'Visit', 'Total', ''].map(h => (
@@ -200,9 +200,8 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
 
       {/* Edit slide-over panel */}
       <div
-        className="fixed top-0 right-0 h-full z-50 overflow-y-auto"
+        className="fixed top-0 right-0 h-full z-50 overflow-y-auto w-full sm:w-[400px]"
         style={{
-          width: 400,
           backgroundColor: '#fff9f3',
           borderLeft: `1px solid ${C.border}`,
           transform: editingOrder ? 'translateX(0)' : 'translateX(100%)',
