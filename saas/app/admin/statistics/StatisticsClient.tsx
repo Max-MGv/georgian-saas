@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
+import StatisticsV2 from './StatisticsV2'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -11,6 +13,8 @@ const C = {
 }
 
 type MonthData = { month: string; orders: number; revenue: number }
+type Order = { id: string; date: string; totalPrice: number; companyId: string | null; companyName: string | null }
+type Company = { id: string; name: string }
 type Props = {
   totalOrders: number
   totalRevenue: number
@@ -26,6 +30,8 @@ type Props = {
     companyOrders: number; companyRevenue: number
   }
   topCompanies: { name: string; orders: number; revenue: number }[]
+  orders: Order[]
+  companies: Company[]
 }
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -66,11 +72,40 @@ const tooltipStyle = {
 export default function StatisticsClient({
   totalOrders, totalRevenue, monthOrders, monthRevenue,
   byMonth, byVisitType, byBookingType, topCompanies,
+  orders, companies,
 }: Props) {
+  const [showV1, setShowV1] = useState(false)
   const avgRevenue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+
+  if (!showV1) {
+    return (
+      <div className="space-y-6">
+        <StatisticsV2 orders={orders} companies={companies} />
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={() => setShowV1(true)}
+            className="text-sm px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
+            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+          >
+            Show historical breakdown →
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setShowV1(false)}
+          className="text-sm px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
+          style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+        >
+          ← Back to overview
+        </button>
+        <p className="text-sm" style={{ color: C.faint }}>Historical breakdown — all time</p>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
