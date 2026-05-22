@@ -4,6 +4,8 @@ tags: [log]
 
 # Progress Log
 
+> **Archived as of 2026-05-22.** Superseded by [[SessionLog]], which is now the active session log. This file is kept for historical reference (sessions up to 2026-05-18).
+
 Most recent entry at the top.
 
 ---

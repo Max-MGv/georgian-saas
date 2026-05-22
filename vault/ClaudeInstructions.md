@@ -57,7 +57,19 @@ This is part of the definition of "done." Never skip it.
 
 ---
 
-## 5. Handoff preparation
+## 5. Always use full absolute paths
+
+When referencing files (in chat, in code, anywhere), always use the full Windows absolute path — never relative paths. They don't resolve correctly in Claude Code.
+
+Base path: `C:\Users\Max\Desktop\claude-projects\georgian-saas\`
+
+Examples:
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\app\admin\orders\page.tsx`
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\Roadmap.md`
+
+---
+
+## 6. Handoff preparation
 
 When Max says "prepare for handoff," update:
 1. `vault/SessionLog.md` — full detail of what was done, pending user tests, what's next
