@@ -69,9 +69,9 @@ Estimated: 3–5 focused weekends with AI assistance.
 9. [x] **Deploy to Vercel** — live at georgian-saas-mg-productions-projects.vercel.app
 
 ### Polish before first client
-- [ ] Responsive design (mobile-friendly)
-- [ ] Error states and loading indicators
-- [ ] Confirm dialogs before delete
+- [x] Responsive design (mobile-friendly) — public site + admin panel; iOS Safari zoom fixed; orders table scrollable; edit panel full-width on mobile; admin nav two-row scrollable
+- [x] Error states and loading indicators — loading skeleton on admin nav, Saving…/Deleting… button text, error messages on all forms
+- [x] Confirm dialogs before delete (admin) — inline Yes/No confirm already in orders, companies, and price tiers
 
 ### Public site (built ahead of schedule)
 - [x] Route group `(site)` with shared nav + footer

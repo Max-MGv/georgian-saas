@@ -25,4 +25,4 @@ tags: [features]
 | 17 | Mobile nav (hamburger menu) | Public site | ✅ Done | ✅ Yes | ✅ Yes |
 | 18 | iOS Safari zoom fix | Public site | ✅ Done | ✅ Yes | ✅ Yes |
 | 19 | Admin mobile responsiveness | Admin | ✅ Done | ✅ Yes | ❌ No |
-| 20 | Error states & loading indicators | Admin + Public | 🚧 In progress | ❌ No | ❌ No |
+| 20 | Error states & loading indicators | Admin + Public | ✅ Done | ✅ Yes | ❌ No |
