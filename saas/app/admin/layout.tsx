@@ -14,7 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       >
         {/* Top row: brand + logout */}
         <div className="px-4 py-3 flex items-center justify-between gap-4">
-          <span className="font-bold text-sm" style={{ color: '#1c1008' }}>Nikalas Marani — Admin</span>
+          <div className="flex items-center gap-2">
+            <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '28px', width: 'auto' }} />
+            <span className="text-xs font-medium" style={{ color: '#a89070' }}>Admin</span>
+          </div>
           <div className="flex items-center gap-3">
             <span className="hidden sm:block text-xs" style={{ color: '#a89070' }}>{user?.email}</span>
             <LogoutButton />

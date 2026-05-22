@@ -89,7 +89,7 @@ export default function WineCatalogueClient() {
       <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Order Wine</p>
       <div className="flex items-start justify-between gap-4 mb-10">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: '#1c1008' }}>Nikalas Marani</h1>
+          <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '56px', width: 'auto' }} />
           <p className="text-base" style={{ color: '#6b5a47' }}>Select wines, set quantities, and place a reservation.</p>
         </div>
         {/* View toggle */}

@@ -18,9 +18,9 @@ export default async function Home() {
         <p className="text-sm font-medium tracking-widest uppercase mb-4" style={{ color: '#8b4513' }}>
           Kakheti, Georgia
         </p>
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight" style={{ color: '#1c1008' }}>
-          Nikalas Marani
-        </h1>
+        <div className="flex justify-center mb-4">
+          <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '80px', width: 'auto' }} />
+        </div>
         <p className="text-lg mb-10" style={{ color: '#6b5a47' }}>
           Family winery in the heart of Kakheti. Wine tastings, traditional meals,
           and the stories behind every bottle.
