@@ -26,14 +26,16 @@ type Props = { companies: Company[] }
 export default function BookingForm({ companies }: Props) {
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
-  const [guestCount, setGuestCount] = useState(4)
+  const [guestInput, setGuestInput] = useState('4')   // string so typing works naturally
+  const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
+  const guestCount = Math.max(parseInt(guestInput) || MIN_GUESTS, MIN_GUESTS)
   const basePrice = visitType === 'TASTING' ? 50 : 100
-  const guests = Math.max(guestCount, MIN_GUESTS)
+  const guests = guestCount
 
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
   const matchedTier = selectedCompany?.prices.find(p => guests >= p.minGuests && guests <= p.maxGuests) ?? null
@@ -215,12 +217,28 @@ export default function BookingForm({ companies }: Props) {
           type="number"
           min={MIN_GUESTS}
           max={50}
-          value={guestCount}
-          onChange={e => setGuestCount(Number(e.target.value))}
+          value={guestInput}
+          onChange={e => {
+            setGuestInput(e.target.value)
+            setGuestWarning('')
+          }}
+          onBlur={() => {
+            const val = parseInt(guestInput) || 0
+            if (val < MIN_GUESTS) {
+              setGuestInput(String(MIN_GUESTS))
+              setGuestWarning(`Minimum is ${MIN_GUESTS} guests — reset to ${MIN_GUESTS}.`)
+            } else {
+              setGuestInput(String(val))
+              setGuestWarning('')
+            }
+          }}
           required
-          className="rounded-lg border px-3 py-2.5 text-sm w-28"
+          className="rounded-lg border px-3 py-2.5 w-28"
           style={inputStyle}
         />
+        {guestWarning && (
+          <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{guestWarning}</p>
+        )}
       </div>
 
       {/* Name & surname */}

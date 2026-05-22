@@ -1,7 +1,5 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 type BookingEmailData = {
   name: string
   surname: string
@@ -77,6 +75,8 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
       </div>
     </div>
   `
+
+  const resend = new Resend(process.env.RESEND_API_KEY)
 
   return resend.emails.send({
     from: 'onboarding@resend.dev',
