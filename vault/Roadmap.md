@@ -86,9 +86,13 @@ Estimated: 3–5 focused weekends with AI assistance.
 
 ## v1.1 — Quality of Life
 
-- [x] Email confirmation to customer on booking (Resend) — sandbox mode, sends to max.mghvdliashvili@gmail.com only; upgrade to full by verifying nikalasmarani.ge in Resend dashboard
-- [ ] Time slot picker blocks past hours on today's date (KnownBugs #3)
+- [x] Email confirmation to customer on booking (Resend) — sandbox mode, sends to max.mghvdliashvili@gmail.com only; upgrade by verifying nikalasmarani.ge in Resend
+- [x] Time slot picker blocks past hours on today's date
+- [x] Guest count input bug fixed — backspace/typing now works correctly, clamps to min 4
+- [x] Admin settings panel (`/admin/settings`) — extensible key-value settings, first setting: show/hide company price after booking
+- [x] Company rate privacy — visit type cards show "Company rate" not price; price shown on success screen only (togglable)
 - [ ] Date filters on admin orders panel (KnownBugs #1)
+- [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
 - [ ] Georgian / English language toggle
 - [ ] Calendar view for bookings
 - [ ] Export orders to CSV / Excel
