@@ -8,37 +8,52 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-05-22 — Latest session (full detail, continued)
+## 2026-05-22 — Previous session (compressed)
+
+- Email confirmation (Resend sandbox), guest count bug fix, time slot past-hours fix, admin settings panel, company rate privacy, Statistics V2 (upcoming cards + filters + horizontal bar charts), vault reorganised as single source of truth
+
+---
+
+## 2026-05-22 — Latest session (full detail)
 
 ### Completed
-- **KnownBugs.md** created in vault — tracks open/resolved bugs with status column; first entry: date filters broken on admin orders panel
-- **Admin mobile responsiveness** — nav restructured to two-row layout (brand+logout top, scrollable links bottom); orders table wrapped in `overflow-x-auto` with `min-w-[700px]`; edit slide-over changed from fixed 400px to `w-full sm:w-[400px]`
-- **Error states & loading indicators** — `saas/app/admin/loading.tsx` skeleton added for server-side page transitions; CompaniesClient buttons now show "Saving…" / "Deleting…" and Cancel disabled during async ops
-- **FeatureLog.md** created in vault — tracks every feature with Status / Claude tested / User tested columns (20 entries backfilled)
-- **iOS Safari zoom fix** — `input, select, textarea { font-size: 16px }` added to `globals.css`; pushed to Vercel
-- **Confirm dialogs** — discovered already done in a prior session (inline Yes/No in orders, companies, price tiers); roadmap updated
+- **Statistics V2 wired up** — `StatisticsClient.tsx` updated to default to V2 view; "Show historical breakdown →" button at bottom switches to V1; "← Back to overview" returns; `orders` and `companies` props threaded through from page
+- **Logo replaces text** — `Nikalas Marani` text replaced with `logo-dark.svg` in: home page hero (80px), wine catalogue heading (56px), admin login (56px), admin nav bar (28px + "Admin" label)
+- **Winery images downloaded** — 11 images pulled from nikalasmarani.ge via PowerShell `Invoke-WebRequest`; saved to `saas/public/images/slider/` (3 hero photos), `gallery/` (2), `products/` (6 wine bottles)
+- **Wine image assignment** — new `/admin/images` page; admin sees all 6 product photo thumbnails, clicks to assign each to a wine listing; mapping stored in `Setting` table as JSON (key: `wine_images`); `updateWineImages` server action added to `settings.ts`; wine catalogue at `/wines` reads mapping and shows real photos, falls back to gradient SVG placeholder if unassigned; Images link added to admin nav
 
-### Instructions added
-- Feature tracking rule: after every feature, update `vault/FeatureLog.md`
-- Handoff files: move from Claude memory to vault (this file)
-
-### Also completed (continuation)
-- **Email confirmation** — Resend installed, `lib/emails/bookingConfirmation.ts` sends branded HTML email on booking; fires after DB save (fire-and-forget, never blocks booking); sandbox mode confirmed working (email received by Max); full delivery to any customer requires verifying nikalasmarani.ge domain in Resend
-- **Guest count bug fixed** — was using `Number(e.target.value)` which snapped to 0 on backspace; now uses string state, converts on blur; clamps to min 4 with warning message
-- **KnownBugs #3 added** — time slot picker allows past hours on today's date
-- **Vault fully reorganised** — all Claude instructions, session log, feature log moved to vault; Claude memory files are now pointers only
+### Key files changed
+- `saas/app/admin/statistics/StatisticsClient.tsx` — toggle between V2 (default) and V1
+- `saas/app/admin/statistics/StatisticsV2.tsx` — NEW: full V2 component
+- `saas/app/admin/statistics/page.tsx` — passes `orders` + `companies` to client
+- `saas/app/(site)/page.tsx` — logo in hero
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — logo + `wineImages` prop + real photos
+- `saas/app/(site)/wines/page.tsx` — fetches `wine_images` setting, passes to client
+- `saas/app/admin/login/page.tsx` — logo
+- `saas/app/admin/layout.tsx` — logo in nav + Images link
+- `saas/app/admin/images/page.tsx` — NEW: image assignment page (server)
+- `saas/app/admin/images/ImageAssignClient.tsx` — NEW: image assignment UI (client)
+- `saas/app/actions/settings.ts` — `wine_images` default + `updateWineImages` action
+- `saas/public/images/` — 11 images added
 
 ### Pending user tests
 - Order delete confirm (feature #5)
 - Wine Orders admin tab (feature #15)
 - Admin mobile responsiveness (feature #19)
 - Error states & loading indicators (feature #20)
+- Time slot fix (feature #23)
+- Admin settings panel (feature #24)
+- Company rate privacy (feature #25)
+- Statistics V2 (feature #26)
+- Logo replacements (feature #27)
+- Wine image assignment (feature #29)
 
 ### Next up (priority order)
-1. Fix time slot picker — block past hours on today's date (KnownBugs #3)
+1. Assign wine images in admin panel (go to `/admin/images` on Vercel, save assignments)
 2. Fix date filters on admin orders (KnownBugs #1)
 3. Verify nikalasmarani.ge domain in Resend → emails go to any customer
-4. Georgian/English language toggle (v1.1)
+4. Gallery page — wire up the 3 slider photos and 2 gallery photos on the About/Gallery page
+5. Georgian/English language toggle (v1.1)
 
 ---
 

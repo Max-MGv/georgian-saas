@@ -28,3 +28,10 @@ tags: [features]
 | 20 | Error states & loading indicators | Admin + Public | ✅ Done | ✅ Yes | ❌ No |
 | 21 | Email confirmation on booking (Resend sandbox) | Public site | ✅ Done | ✅ Yes | ✅ Yes |
 | 22 | Guest count input fix (string state + min clamp) | Public site | ✅ Done | ✅ Yes | ❌ No |
+| 23 | Time slot fix (block past hours on today) | Public site | ✅ Done | ✅ Yes | ❌ No |
+| 24 | Admin settings panel (`/admin/settings`) | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 25 | Company rate privacy (hide on form, show post-submission toggle) | Public site + Admin | ✅ Done | ✅ Yes | ❌ No |
+| 26 | Statistics V2 (upcoming cards, year/month/company filters, horizontal bar charts) | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 27 | Logo replaces text in hero, wine catalogue, admin login, admin nav | Public site + Admin | ✅ Done | ✅ Yes | ❌ No |
+| 28 | Winery images downloaded from nikalasmarani.ge → `public/images/` | Assets | ✅ Done | ✅ Yes | ❌ No |
+| 29 | Wine image assignment (`/admin/images`) — pick photo per wine, stored in Settings | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |

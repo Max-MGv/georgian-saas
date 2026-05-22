@@ -91,6 +91,10 @@ Estimated: 3–5 focused weekends with AI assistance.
 - [x] Guest count input bug fixed — backspace/typing now works correctly, clamps to min 4
 - [x] Admin settings panel (`/admin/settings`) — extensible key-value settings, first setting: show/hide company price after booking
 - [x] Company rate privacy — visit type cards show "Company rate" not price; price shown on success screen only (togglable)
+- [x] Statistics V2 — default view: upcoming orders cards + year/month/company filters + horizontal bar charts; "Show historical breakdown" toggle reveals V1
+- [x] Logo replaces "Nikalas Marani" text in hero, wine catalogue, admin login, admin nav bar
+- [x] Winery images downloaded from nikalasmarani.ge → `saas/public/images/` (slider, gallery, products)
+- [x] Wine image assignment — `/admin/images` lets admin pick which photo goes with which wine listing; mapping stored in Settings table; catalogue shows real photos with SVG fallback
 - [ ] Date filters on admin orders panel (KnownBugs #1)
 - [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
 - [ ] Georgian / English language toggle
