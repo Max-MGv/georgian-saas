@@ -202,7 +202,9 @@ export default function BookingForm({ companies, showCompanyPrice }: Props) {
               }}
             >
               <div className="font-medium text-sm">{opt.label}</div>
-              <div className="text-sm mt-0.5" style={{ color: C.wine }}>{opt.price}₾ / person</div>
+              <div className="text-sm mt-0.5" style={{ color: C.wine }}>
+                {bookingType === 'COMPANY' ? 'Company rate' : `${opt.price}₾ / person`}
+              </div>
             </button>
           ))}
         </div>
