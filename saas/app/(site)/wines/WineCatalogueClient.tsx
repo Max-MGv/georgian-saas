@@ -25,7 +25,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient() {
+export default function WineCatalogueClient({ wineImages = {} }: { wineImages?: Record<string, string> }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)
@@ -128,12 +128,17 @@ export default function WineCatalogueClient() {
             const qty = quantities[wine.id] ?? 0
             return (
               <div key={wine.id} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-                <div className={`h-44 bg-gradient-to-b ${wine.gradient} flex items-center justify-center`}>
-                  <svg width="32" height="64" viewBox="0 0 32 64" fill="none" opacity="0.25">
-                    <path d="M8 2h16l-4 24a8 8 0 1 1-8 0L8 2z" fill="white" />
-                    <rect x="14" y="50" width="4" height="12" fill="white" />
-                    <rect x="8" y="60" width="16" height="2" rx="1" fill="white" />
-                  </svg>
+                <div className={`h-44 flex items-center justify-center ${wineImages[wine.id] ? '' : `bg-gradient-to-b ${wine.gradient}`}`}
+                  style={wineImages[wine.id] ? { backgroundColor: '#faf6f0' } : {}}>
+                  {wineImages[wine.id] ? (
+                    <img src={wineImages[wine.id]} alt={wine.name} className="h-full w-full object-contain p-3" />
+                  ) : (
+                    <svg width="32" height="64" viewBox="0 0 32 64" fill="none" opacity="0.25">
+                      <path d="M8 2h16l-4 24a8 8 0 1 1-8 0L8 2z" fill="white" />
+                      <rect x="14" y="50" width="4" height="12" fill="white" />
+                      <rect x="8" y="60" width="16" height="2" rx="1" fill="white" />
+                    </svg>
+                  )}
                 </div>
                 <div className="p-4 flex flex-col gap-3 flex-1">
                   <div>
@@ -182,8 +187,12 @@ export default function WineCatalogueClient() {
               >
                 {/* Wine name + colour dot */}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-10 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#f5efe6' }}>
-                    <WineBottlePlaceholder color={wine.color} />
+                  <div className="w-8 h-10 rounded flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: '#f5efe6' }}>
+                    {wineImages[wine.id] ? (
+                      <img src={wineImages[wine.id]} alt={wine.name} className="w-full h-full object-contain" />
+                    ) : (
+                      <WineBottlePlaceholder color={wine.color} />
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.name}</p>
