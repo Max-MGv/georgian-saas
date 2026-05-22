@@ -26,3 +26,5 @@ tags: [features]
 | 18 | iOS Safari zoom fix | Public site | ✅ Done | ✅ Yes | ✅ Yes |
 | 19 | Admin mobile responsiveness | Admin | ✅ Done | ✅ Yes | ❌ No |
 | 20 | Error states & loading indicators | Admin + Public | ✅ Done | ✅ Yes | ❌ No |
+| 21 | Email confirmation on booking (Resend sandbox) | Public site | ✅ Done | ✅ Yes | ✅ Yes |
+| 22 | Guest count input fix (string state + min clamp) | Public site | ✅ Done | ✅ Yes | ❌ No |

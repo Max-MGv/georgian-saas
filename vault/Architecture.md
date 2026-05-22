@@ -22,22 +22,24 @@ The user's web browser — Chrome, Safari, etc. Both the customer booking page a
 
 ## Next.js
 - type: framework
-- connects-to: Prisma
+- connects-to: Prisma, Resend
 
 The main application framework. Holds all the pages and the backend logic.
 
 **What it does:**
-- Serves the public booking page (customer-facing)
+- Serves the public winery website (home, about, contact, order wine)
+- Serves the public booking form
 - Serves the admin panel (password-protected)
-- Handles form submissions and data queries via API routes
+- Handles form submissions via server actions
 
 **If it breaks locally:** restart with `npm run dev` in the `saas/` folder.
 
 **Key folders inside Next.js:**
-- `app/(public)/` — customer-facing pages
+- `app/(site)/` — public winery pages (home, about, contact, wines)
 - `app/admin/` — admin panel pages
-- `app/api/` — backend logic (form submissions, data fetching)
-- `components/` — reusable UI pieces
+- `app/actions/` — server actions (createBooking, submitWineOrder, etc.)
+- `components/` — reusable UI pieces (BookingForm, etc.)
+- `lib/emails/` — email templates (Resend)
 
 ---
 
@@ -91,6 +93,7 @@ The actual database where all data is stored. PostgreSQL running on Supabase's s
 - `Company` — partner tour operators and agencies
 - `Order` — every booking (name, date, guests, visit type, price, company)
 - `Price` — per-company pricing tiers based on group size
+- `WineOrder` — B2B wine reservation requests from the Order Wine page
 
 **To browse data visually:** go to supabase.com → your project → Table Editor.
 
@@ -105,11 +108,11 @@ The actual database where all data is stored. PostgreSQL running on Supabase's s
 - type: page
 - connects-to: Next.js
 
-The public-facing page at `localhost:3000`. Customers use it to request a booking — no login needed.
+The public-facing page at `/` (home page). Customers use it to request a booking — no login needed.
 
-**What it does:** Collects name, date, time, guest count, visit type, and contact info. Calculates price live. On submit, saves a row to the Order table in Supabase and shows a confirmation message.
+**What it does:** Collects name, date, time, guest count, visit type, and contact info. Calculates price live. On submit, saves a row to the Order table in Supabase and sends a confirmation email via Resend (if customer provided an email).
 
-**To verify it works:** Submit a test booking → check Supabase Table Editor → Order table should have a new row.
+**To verify it works:** Submit a test booking → check Supabase Table Editor → Order table should have a new row. Check inbox for confirmation email.
 
 **If it breaks:** Check the browser console for errors. Most likely cause is a lost DB connection — restart the dev server.
 
@@ -119,16 +122,16 @@ The public-facing page at `localhost:3000`. Customers use it to request a bookin
 - type: page
 - connects-to: Next.js, Companies Admin, Orders Admin, Statistics
 
-The password-protected management interface at `localhost:3000/admin`. Only accessible after logging in via Supabase Auth.
+The password-protected management interface at `/admin`. Only accessible after logging in via Supabase Auth.
 
 **What's built:**
 - Login / logout (Supabase Auth)
-- Navigation: Orders, Companies, Statistics
-- Orders list with date + company filters and revenue total
-- Companies CRUD with inline add / edit / delete
-- Price tiers per company — expandable rows, overlap and min/max validation
-
-**What's not built yet:** Statistics page, order edit/delete, deploy to Vercel.
+- Navigation: Orders, Companies, Statistics, Wine Orders
+- Orders list with filters + inline edit/delete (slide-over panel)
+- Companies CRUD with expandable price tier rows
+- Price tiers per company — overlap and min/max validation
+- Statistics page — summary cards, bar charts, breakdowns, top companies
+- Wine Orders — B2B wine reservation requests
 
 **If you get locked out:** Go to supabase.com → Authentication → Users → reset your password.
 
@@ -207,3 +210,22 @@ Shows every booking submitted through the public form.
 - Revenue total updates with active filters
 
 **To verify:** Submit a test booking on the public page, then check `/admin/orders`.
+
+---
+
+## Resend
+- type: service
+- connects-to: Next.js
+
+Third-party transactional email service. Sends booking confirmation emails to customers automatically after a booking is saved to the DB.
+
+**How it works:**
+- `createBooking` server action fires `sendBookingConfirmation()` after DB save
+- Fire-and-forget — email failure never blocks or fails the booking
+- Template lives in `lib/emails/bookingConfirmation.ts`
+
+**Current mode:** Sandbox — emails only deliver to max.mghvdliashvili@gmail.com
+**To go live:** Verify nikalasmarani.ge domain in Resend dashboard → change `from` address to `bookings@nikalasmarani.ge`
+
+**API key:** stored in `credentials.txt` and `.env` (never committed to git)
+**Dashboard:** resend.com

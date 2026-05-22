@@ -8,7 +8,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-05-22 — Latest session (full detail)
+## 2026-05-22 — Latest session (full detail, continued)
 
 ### Completed
 - **KnownBugs.md** created in vault — tracks open/resolved bugs with status column; first entry: date filters broken on admin orders panel
@@ -22,6 +22,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - Feature tracking rule: after every feature, update `vault/FeatureLog.md`
 - Handoff files: move from Claude memory to vault (this file)
 
+### Also completed (continuation)
+- **Email confirmation** — Resend installed, `lib/emails/bookingConfirmation.ts` sends branded HTML email on booking; fires after DB save (fire-and-forget, never blocks booking); sandbox mode confirmed working (email received by Max); full delivery to any customer requires verifying nikalasmarani.ge domain in Resend
+- **Guest count bug fixed** — was using `Number(e.target.value)` which snapped to 0 on backspace; now uses string state, converts on blur; clamps to min 4 with warning message
+- **KnownBugs #3 added** — time slot picker allows past hours on today's date
+- **Vault fully reorganised** — all Claude instructions, session log, feature log moved to vault; Claude memory files are now pointers only
+
 ### Pending user tests
 - Order delete confirm (feature #5)
 - Wine Orders admin tab (feature #15)
@@ -29,9 +35,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - Error states & loading indicators (feature #20)
 
 ### Next up (priority order)
-1. Fix date filters bug on admin orders (KnownBugs #1)
-2. Email confirmation on booking (v1.1 — Resend)
-3. Georgian/English language toggle (v1.1)
+1. Fix time slot picker — block past hours on today's date (KnownBugs #3)
+2. Fix date filters on admin orders (KnownBugs #1)
+3. Verify nikalasmarani.ge domain in Resend → emails go to any customer
+4. Georgian/English language toggle (v1.1)
 
 ---
 

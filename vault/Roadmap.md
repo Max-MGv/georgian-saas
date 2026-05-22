@@ -86,7 +86,9 @@ Estimated: 3–5 focused weekends with AI assistance.
 
 ## v1.1 — Quality of Life
 
-- [ ] Email confirmation to customer on booking (Resend)
+- [x] Email confirmation to customer on booking (Resend) — sandbox mode, sends to max.mghvdliashvili@gmail.com only; upgrade to full by verifying nikalasmarani.ge in Resend dashboard
+- [ ] Time slot picker blocks past hours on today's date (KnownBugs #3)
+- [ ] Date filters on admin orders panel (KnownBugs #1)
 - [ ] Georgian / English language toggle
 - [ ] Calendar view for bookings
 - [ ] Export orders to CSV / Excel
