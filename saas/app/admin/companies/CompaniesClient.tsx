@@ -160,7 +160,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }}
             placeholder="Company name…" style={{ ...inputStyle, width: 280, padding: '8px 12px' }}
           />
-          <button onClick={handleAdd} disabled={loading} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium">Save</button>
+          <button onClick={handleAdd} disabled={loading} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium">{loading ? 'Saving…' : 'Save'}</button>
           <button onClick={() => { setAdding(false); setNewName('') }} className="text-sm px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
         </div>
       )}
@@ -201,13 +201,13 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                   {deletingId === company.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: C.muted }}>Delete?</span>
-                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>Yes, delete</button>
-                      <button onClick={() => setDeletingId(null)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes, delete'}</button>
+                      <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
                     </div>
                   ) : editingId === company.id ? (
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleUpdate(company.id)} disabled={loading} className="btn-wine text-sm px-3 py-1.5 rounded-lg font-medium">Save</button>
-                      <button onClick={() => setEditingId(null)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                      <button onClick={() => handleUpdate(company.id)} disabled={loading} className="btn-wine text-sm px-3 py-1.5 rounded-lg font-medium">{loading ? 'Saving…' : 'Save'}</button>
+                      <button onClick={() => setEditingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -238,8 +238,8 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                         ) : deletingPriceId === price.id ? (
                           <div className="flex items-center gap-3 text-sm">
                             <span style={{ color: C.muted }}>Delete this tier?</span>
-                            <button onClick={() => handleDeletePrice(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>Yes</button>
-                            <button onClick={() => setDeletingPriceId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                            <button onClick={() => handleDeletePrice(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes'}</button>
+                            <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-4">
