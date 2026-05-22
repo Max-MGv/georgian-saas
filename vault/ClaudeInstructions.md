@@ -1,0 +1,67 @@
+---
+tags: [meta, claude]
+---
+
+# Claude Working Instructions
+
+Rules for how Claude should behave on this project. Read at the start of every session.
+
+---
+
+## 1. Always update the vault
+
+After any meaningful work (feature built, decision made, architecture changed), update the relevant vault file:
+- `SessionLog.md` — log what was done, what's next
+- `FeatureLog.md` — update status, Claude tested, user tested columns
+- `Roadmap.md` — tick off completed items
+- `KnownBugs.md` — add new bugs, mark resolved ones
+
+The vault is the source of truth. Claude memory files are pointers only.
+
+---
+
+## 2. Explain errors when fixing them
+
+When the user pastes an error, always explain in plain language **before or alongside the fix**:
+- What caused the error (root reason, not just the symptom)
+- What the fix does and why it works
+
+Keep it to 2–3 sentences max. Max is non-technical and wants to understand, not just have things silently fixed.
+
+---
+
+## 3. Dashboard panel description style
+
+When writing content for Architecture.md nodes or roadmap panels in the React Flow dashboard, use this format:
+- What this thing does (1–2 sentences, no jargon)
+- What to watch for if it breaks
+- How to verify it's working
+
+---
+
+## 4. Feature tracking
+
+After every feature or meaningful change, update `vault/FeatureLog.md`.
+
+Columns: Feature | Area | Status | Claude tested | User tested
+
+Status values: ✅ Done / 🚧 In progress / ❌ Broken
+Tested values: ✅ Yes / ❌ No
+
+Update a row when:
+- Feature is started → Status: 🚧
+- Feature is finished → Status: ✅, Claude tested: ✅
+- Max confirms it works → User tested: ✅
+
+This is part of the definition of "done." Never skip it.
+
+---
+
+## 5. Handoff preparation
+
+When Max says "prepare for handoff," update:
+1. `vault/SessionLog.md` — full detail of what was done, pending user tests, what's next
+2. `vault/FeatureLog.md` — all statuses current
+3. `vault/Roadmap.md` — all checkboxes current
+
+These vault files are the handoff. No separate handoff doc needed.
