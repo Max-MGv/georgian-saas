@@ -29,6 +29,7 @@ export default function BookingForm({ companies }: Props) {
   const [guestInput, setGuestInput] = useState('4')   // string so typing works naturally
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
+  const [selectedDate, setSelectedDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -36,6 +37,24 @@ export default function BookingForm({ companies }: Props) {
   const guestCount = Math.max(parseInt(guestInput) || MIN_GUESTS, MIN_GUESTS)
   const basePrice = visitType === 'TASTING' ? 50 : 100
   const guests = guestCount
+
+  // Filter out past time slots when today is selected
+  const today = new Date().toISOString().split('T')[0]
+  const currentHour = new Date().getHours()
+  const availableSlots = selectedDate === today
+    ? TIME_SLOTS.filter(t => parseInt(t) > currentHour)
+    : TIME_SLOTS
+
+  function handleDateChange(date: string) {
+    setSelectedDate(date)
+    // If current time slot is no longer available, jump to first available
+    const slots = date === today
+      ? TIME_SLOTS.filter(t => parseInt(t) > currentHour)
+      : TIME_SLOTS
+    if (slots.length > 0 && !slots.includes(timeSlot)) {
+      setTimeSlot(slots[0])
+    }
+  }
 
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
   const matchedTier = selectedCompany?.prices.find(p => guests >= p.minGuests && guests <= p.maxGuests) ?? null
@@ -186,7 +205,9 @@ export default function BookingForm({ companies }: Props) {
             name="date"
             type="date"
             required
-            min={new Date().toISOString().split('T')[0]}
+            min={today}
+            value={selectedDate}
+            onChange={e => handleDateChange(e.target.value)}
             className="w-full rounded-lg border px-3 py-2.5 text-sm"
             style={inputStyle}
           />
@@ -199,9 +220,13 @@ export default function BookingForm({ companies }: Props) {
             className="w-full rounded-lg border px-3 py-2.5 text-sm"
             style={inputStyle}
           >
-            {TIME_SLOTS.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            {availableSlots.length > 0 ? (
+              availableSlots.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))
+            ) : (
+              <option value="">No slots available today</option>
+            )}
           </select>
         </div>
       </div>
