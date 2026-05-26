@@ -143,8 +143,12 @@ input, select, textarea {
   background-color: #9b2429;
 }
 
+@media screen {
+  .invoice-print-wrapper { display: none; }
+}
 @media print {
   body * { visibility: hidden; }
-  .invoice-print, .invoice-print * { visibility: visible; }
-  .invoice-print { position: fixed !important; top: 0; left: 0; width: 100%; }
+  body { overflow: hidden; }
+  .invoice-print-wrapper { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
+  .invoice-print-wrapper * { visibility: visible; }
 }

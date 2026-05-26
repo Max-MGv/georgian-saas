@@ -104,19 +104,17 @@ export default function InvoicePrint({ order, payment }: Props) {
         </div>
       </Section>
 
-      {/* Payment details */}
-      {(payment.recipientName || payment.iban) && (
-        <div style={{ border: '1px solid #e8e0d0', borderRadius: 8, padding: 16, marginTop: 8 }}>
-          <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 10 }}>
-            <strong style={{ fontSize: 14 }}>გადახდის რეკვიზიტები</strong>
-          </div>
-          {payment.recipientName  && <Row label="მიმღების სახელი"   value={payment.recipientName} />}
-          {payment.personalNumber && <Row label="პირადი ნომერი"      value={payment.personalNumber} />}
-          {payment.bankName       && <Row label="მიმღები ბანქი"      value={payment.bankName} />}
-          {payment.bankCode       && <Row label="ბანქის კოდი"        value={payment.bankCode} />}
-          {payment.iban           && <Row label="მიმღების ანგარიში"  value={payment.iban} />}
+      {/* Payment details — always shown */}
+      <div style={{ border: '1px solid #e8e0d0', borderRadius: 8, padding: 16, marginTop: 8 }}>
+        <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 10 }}>
+          <strong style={{ fontSize: 14 }}>გადახდის რეკვიზიტები</strong>
         </div>
-      )}
+        <Row label="მიმღების სახელი"   value={payment.recipientName  || '—'} />
+        <Row label="პირადი ნომერი"      value={payment.personalNumber || '—'} />
+        <Row label="მიმღები ბანქი"      value={payment.bankName       || '—'} />
+        <Row label="ბანქის კოდი"        value={payment.bankCode       || '—'} />
+        <Row label="მიმღების ანგარიში"  value={payment.iban           || '—'} />
+      </div>
 
     </div>
   )
