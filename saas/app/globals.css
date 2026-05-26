@@ -144,6 +144,7 @@ input, select, textarea {
 }
 
 @media print {
-  body > * { display: none !important; }
-  .invoice-print { display: block !important; position: static !important; opacity: 1 !important; }
+  body * { visibility: hidden; }
+  .invoice-print, .invoice-print * { visibility: visible; }
+  .invoice-print { position: fixed !important; top: 0; left: 0; width: 100%; }
 }
