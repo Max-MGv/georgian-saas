@@ -142,3 +142,8 @@ input, select, textarea {
 .btn-wine:hover {
   background-color: #9b2429;
 }
+
+@media print {
+  body > * { display: none !important; }
+  .invoice-print { display: block !important; position: static !important; opacity: 1 !important; }
+}

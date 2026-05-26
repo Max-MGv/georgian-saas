@@ -10,7 +10,7 @@ const C = {
 }
 
 type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number }
-type Company = { id: string; name: string; orderCount: number; prices: Price[] }
+type Company = { id: string; name: string; identificationCode: string | null; orderCount: number; prices: Price[] }
 
 const inputStyle = {
   backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
@@ -90,6 +90,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editIdCode, setEditIdCode] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [addingPriceFor, setAddingPriceFor] = useState<string | null>(null)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
@@ -111,9 +112,9 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
 
   async function handleUpdate(id: string) {
     setLoading(true); setError('')
-    const result = await updateCompany(id, editName)
+    const result = await updateCompany(id, editName, editIdCode)
     if ('error' in result) { setError(result.error ?? '') }
-    else { setCompanies(prev => prev.map(c => c.id === id ? { ...c, name: editName.trim() } : c)); setEditingId(null) }
+    else { setCompanies(prev => prev.map(c => c.id === id ? { ...c, name: editName.trim(), identificationCode: editIdCode.trim() || null } : c)); setEditingId(null) }
     setLoading(false)
   }
 
@@ -183,9 +184,14 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                 {/* Company row */}
                 <div className="flex items-center px-5 py-4 gap-4">
                   {editingId === company.id ? (
-                    <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleUpdate(company.id); if (e.key === 'Escape') setEditingId(null) }}
-                      style={{ ...inputStyle, flex: 1, maxWidth: 300, padding: '8px 12px' }} />
+                    <div className="flex gap-2 flex-1">
+                      <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleUpdate(company.id); if (e.key === 'Escape') setEditingId(null) }}
+                        placeholder="Company name" style={{ ...inputStyle, flex: 1, maxWidth: 240, padding: '8px 12px' }} />
+                      <input value={editIdCode} onChange={e => setEditIdCode(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleUpdate(company.id); if (e.key === 'Escape') setEditingId(null) }}
+                        placeholder="ID code (optional)" style={{ ...inputStyle, width: 160, padding: '8px 12px' }} />
+                    </div>
                   ) : (
                     <button
                       onClick={() => setExpandedId(expanded ? null : company.id)}
@@ -195,6 +201,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                         <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                       <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
+                      {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>ID: {company.identificationCode}</span>}
                       <span className="text-xs" style={{ color: C.faint }}>
                         {company.prices.length} tier{company.prices.length !== 1 ? 's' : ''} · {company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
                       </span>
@@ -214,7 +221,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditingId(company.id); setEditName(company.name) }} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
+                      <button onClick={() => { setEditingId(company.id); setEditName(company.name); setEditIdCode(company.identificationCode ?? '') }} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
                       <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
                     </div>
                   )}

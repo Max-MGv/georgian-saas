@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { getSetting } from '@/app/actions/settings'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 
@@ -12,7 +13,16 @@ type SearchParams = {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
-  const companies = await db.company.findMany({ orderBy: { name: 'asc' } })
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban] = await Promise.all([
+    db.company.findMany({ orderBy: { name: 'asc' } }),
+    getSetting('payment_recipient_name'),
+    getSetting('payment_personal_number'),
+    getSetting('payment_bank_name'),
+    getSetting('payment_bank_code'),
+    getSetting('payment_iban'),
+  ])
+
+  const payment = { recipientName, personalNumber, bankName, bankCode, iban }
 
   const orders = await db.order.findMany({
     where: {
@@ -62,8 +72,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             phone: o.phone,
             notes: o.notes,
             totalPrice: o.totalPrice,
-            company: o.company ? { name: o.company.name } : null,
-          }))} />
+            company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
+          }))} payment={payment} />
 
           <div className="mt-4 flex justify-end">
             <div className="rounded-lg border px-6 py-3 flex items-center gap-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>

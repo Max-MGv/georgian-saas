@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { deleteOrder, updateOrder } from '@/app/actions/orders'
+import InvoicePrint from './InvoicePrint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -29,7 +30,15 @@ type Order = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
-  company: { name: string } | null
+  company: { name: string; identificationCode: string | null } | null
+}
+
+type Payment = {
+  recipientName: string
+  personalNumber: string
+  bankName: string
+  bankCode: string
+  iban: string
 }
 
 function visitLabel(v: string) {
@@ -53,12 +62,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
+export default function OrdersTable({ orders: initial, payment }: { orders: Order[]; payment: Payment }) {
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [printOrder, setPrintOrder] = useState<Order | null>(null)
+  const printPending = useRef(false)
 
   // Edit form state
   const [editDate, setEditDate] = useState('')
@@ -69,6 +80,21 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
+
+  useEffect(() => {
+    if (printOrder && printPending.current) {
+      printPending.current = false
+      setTimeout(() => {
+        window.print()
+        setPrintOrder(null)
+      }, 100)
+    }
+  }, [printOrder])
+
+  function handlePrint(order: Order) {
+    printPending.current = true
+    setPrintOrder(order)
+  }
 
   function openEdit(order: Order) {
     setEditingOrder(order)
@@ -174,6 +200,18 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handlePrint(order)}
+                        title="Print invoice"
+                        className="p-1 rounded border"
+                        style={{ borderColor: C.border, color: C.muted }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 6 2 18 2 18 9"/>
+                          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                          <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                      </button>
                       <button onClick={() => openEdit(order)}
                         className="text-xs px-2 py-1 rounded border"
                         style={{ borderColor: C.border, color: C.muted }}>Edit</button>
@@ -188,6 +226,13 @@ export default function OrdersTable({ orders: initial }: { orders: Order[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* Hidden invoice for printing */}
+      {printOrder && (
+        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+          <InvoicePrint order={printOrder} payment={payment} />
+        </div>
+      )}
 
       {/* Edit panel backdrop */}
       {editingOrder && (

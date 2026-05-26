@@ -6,6 +6,11 @@ import { revalidatePath } from 'next/cache'
 // Default values for all settings
 const DEFAULTS: Record<string, string> = {
   show_company_price_after_booking: 'true',
+  payment_recipient_name: '',
+  payment_personal_number: '',
+  payment_bank_name: '',
+  payment_bank_code: '',
+  payment_iban: '',
 }
 
 export async function getSetting(key: string): Promise<string> {

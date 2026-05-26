@@ -8,11 +8,12 @@ datasource db {
 }
 
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  orders    Order[]
-  prices    Price[]
+  id                 String   @id @default(cuid())
+  name               String
+  identificationCode String?
+  createdAt          DateTime @default(now())
+  orders             Order[]
+  prices             Price[]
 }
 
 model Order {
