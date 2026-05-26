@@ -34,13 +34,14 @@ model Order {
 }
 
 model Price {
-  id                String  @id @default(cuid())
-  companyId         String
-  company           Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  minGuests         Int
-  maxGuests         Int
-  pricePerPerson    Float
-  registrationPrice Float    @default(0)
+  id                          String  @id @default(cuid())
+  companyId                   String
+  company                     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  minGuests                   Int
+  maxGuests                   Int
+  pricePerPerson              Float
+  tastingLunchPricePerPerson  Float   @default(0)
+  registrationPrice           Float   @default(0)
 }
 
 model WineOrder {

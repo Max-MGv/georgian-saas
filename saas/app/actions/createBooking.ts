@@ -41,7 +41,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         },
       })
       if (price) {
-        totalPrice = price.pricePerPerson * guestCount + price.registrationPrice
+        const ratePerPerson = data.visitType === 'TASTING'
+          ? price.pricePerPerson
+          : price.tastingLunchPricePerPerson || price.pricePerPerson
+        totalPrice = ratePerPerson * guestCount + price.registrationPrice
       } else {
         const tierCount = await db.price.count({ where: { companyId: data.companyId } })
         if (tierCount > 0) {

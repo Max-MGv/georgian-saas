@@ -9,7 +9,7 @@ const C = {
   border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
 }
 
-type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; registrationPrice: number }
+type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number }
 type Company = { id: string; name: string; orderCount: number; prices: Price[] }
 
 const inputStyle = {
@@ -47,13 +47,15 @@ function PriceForm({
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
   const [pricePerPerson, setPricePerPerson] = useState(String(initial?.pricePerPerson ?? ''))
+  const [tastingLunchPrice, setTastingLunchPrice] = useState(String(initial?.tastingLunchPricePerPerson ?? ''))
   const [registrationPrice, setRegistrationPrice] = useState(String(initial?.registrationPrice ?? 0))
 
   return (
     <div className="flex flex-wrap items-end gap-3 mt-3">
       <SmallInput label="Min guests" value={minGuests} onChange={setMinGuests} type="number" width={72} />
       <SmallInput label="Max guests" value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
-      <SmallInput label="₾ / person" value={pricePerPerson} onChange={setPricePerPerson} type="number" width={88} />
+      <SmallInput label="Tasting ₾/person" value={pricePerPerson} onChange={setPricePerPerson} type="number" width={110} />
+      <SmallInput label="Tasting+Lunch ₾/person" value={tastingLunchPrice} onChange={setTastingLunchPrice} type="number" width={140} />
       <SmallInput label="Flat fee ₾ (optional)" value={registrationPrice} onChange={setRegistrationPrice} type="number" width={120} />
       <div className="flex gap-2 pb-0.5">
         <button
@@ -61,6 +63,7 @@ function PriceForm({
             minGuests: Number(minGuests),
             maxGuests: Number(maxGuests),
             pricePerPerson: Number(pricePerPerson),
+            tastingLunchPricePerPerson: tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice),
             registrationPrice: registrationPrice === '' ? 0 : Number(registrationPrice),
           })}
           disabled={loading}
@@ -242,11 +245,16 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                             <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 flex-wrap">
                             <span className="text-sm" style={{ color: C.text }}>
                               {price.minGuests}–{price.maxGuests} guests
                             </span>
-                            <span className="font-semibold text-sm" style={{ color: C.wine }}>{price.pricePerPerson}₾/person</span>
+                            <span className="text-xs" style={{ color: C.faint }}>
+                              Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span>
+                            </span>
+                            <span className="text-xs" style={{ color: C.faint }}>
+                              +Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span>
+                            </span>
                             {price.registrationPrice > 0 && (
                               <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>
                             )}

@@ -29,6 +29,7 @@ export async function createPrice(data: {
   minGuests: number
   maxGuests: number
   pricePerPerson: number
+  tastingLunchPricePerPerson: number
   registrationPrice: number
 }) {
   const err = await validateTier(data.companyId, data.minGuests, data.maxGuests)
@@ -42,6 +43,7 @@ export async function updatePrice(id: string, data: {
   minGuests: number
   maxGuests: number
   pricePerPerson: number
+  tastingLunchPricePerPerson: number
   registrationPrice: number
 }, companyId: string) {
   const err = await validateTier(companyId, data.minGuests, data.maxGuests, id)
