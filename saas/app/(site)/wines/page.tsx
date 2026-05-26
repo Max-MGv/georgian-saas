@@ -1,4 +1,4 @@
-import { getSetting } from '@/app/actions/settings'
+import { db } from '@/lib/db'
 import WineCatalogueClient from './WineCatalogueClient'
 
 export const metadata = {
@@ -7,7 +7,9 @@ export const metadata = {
 }
 
 export default async function WinesPage() {
-  const raw = await getSetting('wine_images')
-  const wineImages: Record<string, string> = JSON.parse(raw || '{}')
-  return <WineCatalogueClient wineImages={wineImages} />
+  const wines = await db.wine.findMany({
+    where: { active: true },
+    orderBy: { sortOrder: 'asc' },
+  })
+  return <WineCatalogueClient wines={wines} />
 }

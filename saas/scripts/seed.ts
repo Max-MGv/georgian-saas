@@ -6,6 +6,23 @@ async function main() {
   const { db } = await import('../lib/db')
   const { createBooking } = await import('../app/actions/createBooking')
 
+  // Seed wines (skip if already exist)
+  const wineCount = await db.wine.count()
+  if (wineCount === 0) {
+    const wines = [
+      { name: 'Saperavi 2022',         type: 'Red Dry',    price: 18, color: '#7c1d23', sortOrder: 0 },
+      { name: 'Rkatsiteli 2023',       type: 'White Dry',  price: 15, color: '#8b6914', sortOrder: 1 },
+      { name: 'Rkatsiteli Amber 2022', type: 'Amber',      price: 22, color: '#c27c2a', sortOrder: 2 },
+      { name: 'Mtsvane 2023',          type: 'White Dry',  price: 16, color: '#5a7c14', sortOrder: 3 },
+      { name: 'Rosé 2023',             type: 'Rosé Dry',   price: 17, color: '#c45a6e', sortOrder: 4 },
+      { name: 'Chacha',                type: 'Spirit 55%', price: 25, color: '#6b5a47', sortOrder: 5 },
+    ]
+    await db.wine.createMany({ data: wines })
+    console.log(`  ✓ Seeded ${wines.length} wines`)
+  } else {
+    console.log(`  — Wines already seeded (${wineCount} found), skipping`)
+  }
+
   // Fetch companies and their tiers so we can make valid company bookings
   const companies = await db.company.findMany({ include: { prices: { orderBy: { minGuests: 'asc' } } } })
   const companiesWithTiers = companies.filter(c => c.prices.length > 0)

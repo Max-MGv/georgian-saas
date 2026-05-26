@@ -3,15 +3,7 @@
 import { useState, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 
-const WINES = [
-  { id: 'saperavi_2022',         name: 'Saperavi 2022',          type: 'Red Dry',    price: 18, color: '#7c1d23', gradient: 'from-[#7c1d23] to-[#4a0f13]' },
-  { id: 'rkatsiteli_2023',       name: 'Rkatsiteli 2023',        type: 'White Dry',  price: 15, color: '#8b6914', gradient: 'from-[#8b6914] to-[#5a430c]' },
-  { id: 'rkatsiteli_amber_2022', name: 'Rkatsiteli Amber 2022',  type: 'Amber',      price: 22, color: '#c27c2a', gradient: 'from-[#c27c2a] to-[#8b5510]' },
-  { id: 'mtsvane_2023',          name: 'Mtsvane 2023',           type: 'White Dry',  price: 16, color: '#5a7c14', gradient: 'from-[#5a7c14] to-[#384e0c]' },
-  { id: 'rose_2023',             name: 'Rosé 2023',              type: 'Rosé Dry',   price: 17, color: '#c45a6e', gradient: 'from-[#c45a6e] to-[#8b3347]' },
-  { id: 'chacha',                name: 'Chacha',                 type: 'Spirit 55%', price: 25, color: '#6b5a47', gradient: 'from-[#6b5a47] to-[#3d3328]' },
-]
-
+type DbWine = { id: string; name: string; type: string; price: number; color: string; imagePath: string | null }
 type WineQty = Record<string, number>
 type ViewMode = 'grid' | 'list'
 
@@ -25,7 +17,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient({ wineImages = {} }: { wineImages?: Record<string, string> }) {
+export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)
@@ -128,10 +120,10 @@ export default function WineCatalogueClient({ wineImages = {} }: { wineImages?: 
             const qty = quantities[wine.id] ?? 0
             return (
               <div key={wine.id} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-                <div className={`h-44 flex items-center justify-center ${wineImages[wine.id] ? '' : `bg-gradient-to-b ${wine.gradient}`}`}
-                  style={wineImages[wine.id] ? { backgroundColor: '#faf6f0' } : {}}>
-                  {wineImages[wine.id] ? (
-                    <img src={wineImages[wine.id]} alt={wine.name} className="h-full w-full object-contain p-3" />
+                <div className={`h-44 flex items-center justify-center ${wine.imagePath ? '' : `bg-gradient-to-b ${wine.gradient}`}`}
+                  style={wine.imagePath ? { backgroundColor: '#faf6f0' } : {}}>
+                  {wine.imagePath ? (
+                    <img src={wine.imagePath} alt={wine.name} className="h-full w-full object-contain p-3" />
                   ) : (
                     <svg width="32" height="64" viewBox="0 0 32 64" fill="none" opacity="0.25">
                       <path d="M8 2h16l-4 24a8 8 0 1 1-8 0L8 2z" fill="white" />
@@ -188,8 +180,8 @@ export default function WineCatalogueClient({ wineImages = {} }: { wineImages?: 
                 {/* Wine name + colour dot */}
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-10 rounded flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: '#f5efe6' }}>
-                    {wineImages[wine.id] ? (
-                      <img src={wineImages[wine.id]} alt={wine.name} className="w-full h-full object-contain" />
+                    {wine.imagePath ? (
+                      <img src={wine.imagePath} alt={wine.name} className="w-full h-full object-contain" />
                     ) : (
                       <WineBottlePlaceholder color={wine.color} />
                     )}

@@ -1,0 +1,32 @@
+'use server'
+
+import { db } from '@/lib/db'
+import { revalidatePath } from 'next/cache'
+
+export async function createWine(data: {
+  name: string; type: string; price: number; color: string
+}) {
+  const maxOrder = await db.wine.aggregate({ _max: { sortOrder: true } })
+  await db.wine.create({
+    data: {
+      ...data,
+      sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
+    },
+  })
+  revalidatePath('/admin/wines')
+  revalidatePath('/wines')
+}
+
+export async function updateWine(id: string, data: {
+  name?: string; type?: string; price?: number; color?: string; active?: boolean; sortOrder?: number
+}) {
+  await db.wine.update({ where: { id }, data })
+  revalidatePath('/admin/wines')
+  revalidatePath('/wines')
+}
+
+export async function deleteWine(id: string) {
+  await db.wine.delete({ where: { id } })
+  revalidatePath('/admin/wines')
+  revalidatePath('/wines')
+}

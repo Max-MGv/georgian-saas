@@ -63,6 +63,18 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+model Wine {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  price     Float
+  color     String   @default("#7c1d23")
+  imagePath String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 enum BookingType {
   INDIVIDUAL
   COMPANY
