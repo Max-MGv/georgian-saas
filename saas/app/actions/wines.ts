@@ -18,7 +18,7 @@ export async function createWine(data: {
 }
 
 export async function updateWine(id: string, data: {
-  name?: string; type?: string; price?: number; color?: string; active?: boolean; sortOrder?: number
+  name?: string; type?: string; price?: number; color?: string; imagePath?: string | null; active?: boolean; sortOrder?: number
 }) {
   await db.wine.update({ where: { id }, data })
   revalidatePath('/admin/wines')
