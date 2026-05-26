@@ -111,8 +111,8 @@ export default function InvoicePrint({ order, payment }: Props) {
         </div>
         <Row label="მიმღების სახელი"   value={payment.recipientName  || '—'} />
         <Row label="პირადი ნომერი"      value={payment.personalNumber || '—'} />
-        <Row label="მიმღები ბანქი"      value={payment.bankName       || '—'} />
-        <Row label="ბანქის კოდი"        value={payment.bankCode       || '—'} />
+        <Row label="მიმღები ბანკი"      value={payment.bankName       || '—'} />
+        <Row label="ბანკის კოდი"        value={payment.bankCode       || '—'} />
         <Row label="მიმღების ანგარიში"  value={payment.iban           || '—'} />
       </div>
 

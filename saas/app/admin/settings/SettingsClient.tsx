@@ -72,8 +72,8 @@ export default function SettingsClient({ settings, payment }: Props) {
   const paymentRows: { key: keyof typeof paymentFields; label: string; placeholder: string }[] = [
     { key: 'payment_recipient_name',   label: 'მიმღების სახელი',    placeholder: 'e.g. ი/მ ელენე ხუნდაძე' },
     { key: 'payment_personal_number',  label: 'პირადი ნომერი',      placeholder: 'e.g. 01001040828' },
-    { key: 'payment_bank_name',        label: 'მიმღები ბანქი',      placeholder: 'e.g. ს.ბ "თიბისი ბანკი"' },
-    { key: 'payment_bank_code',        label: 'ბანქის კოდი',        placeholder: 'e.g. TBCBGE22' },
+    { key: 'payment_bank_name',        label: 'მიმღები ბანკი',      placeholder: 'e.g. ს.ბ "თიბისი ბანკი"' },
+    { key: 'payment_bank_code',        label: 'ბანკის კოდი',        placeholder: 'e.g. TBCBGE22' },
     { key: 'payment_iban',             label: 'მიმღების ანგარიში',  placeholder: 'e.g. GE65TB7183445064300079' },
   ]
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { deleteOrder, updateOrder } from '@/app/actions/orders'
 import InvoicePrint from './InvoicePrint'
 
@@ -227,11 +228,12 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
         </table>
       </div>
 
-      {/* Invoice — hidden on screen via CSS, shown only on print */}
-      {printOrder && (
-        <div className="invoice-print-wrapper">
+      {/* Invoice portal — renders directly into <body> so print CSS can isolate it */}
+      {printOrder && typeof document !== 'undefined' && createPortal(
+        <div id="invoice-portal">
           <InvoicePrint order={printOrder} payment={payment} />
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit panel backdrop */}

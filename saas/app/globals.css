@@ -144,11 +144,9 @@ input, select, textarea {
 }
 
 @media screen {
-  .invoice-print-wrapper { display: none; }
+  #invoice-portal { display: none; }
 }
 @media print {
-  body * { visibility: hidden; }
-  body { overflow: hidden; }
-  .invoice-print-wrapper { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
-  .invoice-print-wrapper * { visibility: visible; }
+  body > * { display: none !important; }
+  #invoice-portal { display: block !important; }
 }
