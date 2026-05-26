@@ -22,6 +22,7 @@ export default async function CompaniesPage() {
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,
+          identificationCode: c.identificationCode,
           orderCount: c._count.orders,
           prices: c.prices,
         }))}

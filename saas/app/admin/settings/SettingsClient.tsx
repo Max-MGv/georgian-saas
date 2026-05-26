@@ -105,7 +105,7 @@ export default function SettingsClient({ settings, payment }: Props) {
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>გადახდის რეკვიზიტები — Payment Details</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>Shown on printed invoices. Changes apply to all future prints.</p>
         </div>
-        <div className="divide-y" style={{ divideColor: C.border }}>
+        <div className="divide-y" style={{ borderColor: C.border }}>
           {paymentRows.map(({ key, label, placeholder }) => (
             <div key={key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
               <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{label}</label>
