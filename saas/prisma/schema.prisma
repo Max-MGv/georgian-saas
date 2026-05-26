@@ -17,32 +17,80 @@ model Company {
 }
 
 model Order {
-  id          String      @id @default(cuid())
-  bookingType BookingType @default(INDIVIDUAL)
-  visitType   VisitType
-  date        DateTime
-  timeSlot    String
-  guestCount  Int
-  name        String
-  surname     String
-  email       String?
-  phone       String?
-  notes       String?
-  totalPrice  Float?
-  companyId   String?
-  company     Company?    @relation(fields: [companyId], references: [id])
-  createdAt   DateTime    @default(now())
+  id                String             @id @default(cuid())
+  bookingType       BookingType        @default(INDIVIDUAL)
+  visitType         VisitType
+  date              DateTime
+  timeSlot          String
+  guestCount        Int
+  // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
+  lunchGuestCount   Int                @default(0)
+  tastingGuestCount Int                @default(0)
+  freeGuestCount    Int                @default(0)
+  // Hot dish selections (v1.2)
+  hotDishVegetable  String?
+  hotDishMeat       String?
+  foodNotes         String?
+  name              String
+  surname           String
+  email             String?
+  phone             String?
+  notes             String?
+  totalPrice        Float?
+  companyId         String?
+  company           Company?           @relation(fields: [companyId], references: [id])
+  createdAt         DateTime           @default(now())
+  masterclassLines  OrderMasterclass[]
+  extras            OrderExtra[]
 }
 
 model Price {
-  id                          String  @id @default(cuid())
-  companyId                   String
-  company                     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  minGuests                   Int
-  maxGuests                   Int
-  pricePerPerson              Float
-  tastingLunchPricePerPerson  Float   @default(0)
-  registrationPrice           Float   @default(0)
+  id                         String  @id @default(cuid())
+  companyId                  String
+  company                    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  minGuests                  Int
+  maxGuests                  Int
+  pricePerPerson             Float
+  tastingLunchPricePerPerson Float   @default(0)
+  registrationPrice          Float   @default(0)
+}
+
+model MenuItem {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   // "VEGETABLE" | "MEAT"
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model MasterclassItem {
+  id           String             @id @default(cuid())
+  name         String
+  unit         String             // e.g. "person", "piece"
+  pricePerUnit Float
+  active       Boolean            @default(true)
+  sortOrder    Int                @default(0)
+  createdAt    DateTime           @default(now())
+  orderLines   OrderMasterclass[]
+}
+
+model OrderMasterclass {
+  id                String          @id @default(cuid())
+  orderId           String
+  masterclassItemId String
+  quantity          Int
+  pricePerUnit      Float           // price snapshot at time of booking
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
+}
+
+model OrderExtra {
+  id      String @id @default(cuid())
+  orderId String
+  label   String
+  amount  Float
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model WineOrder {
