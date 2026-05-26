@@ -120,8 +120,8 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
             const qty = quantities[wine.id] ?? 0
             return (
               <div key={wine.id} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-                <div className={`h-44 flex items-center justify-center ${wine.imagePath ? '' : `bg-gradient-to-b ${wine.gradient}`}`}
-                  style={wine.imagePath ? { backgroundColor: '#faf6f0' } : {}}>
+                <div className="h-44 flex items-center justify-center"
+                  style={wine.imagePath ? { backgroundColor: '#faf6f0' } : { background: `linear-gradient(to bottom, ${wine.color}, ${wine.color}99)` }}>
                   {wine.imagePath ? (
                     <img src={wine.imagePath} alt={wine.name} className="h-full w-full object-contain p-3" />
                   ) : (
