@@ -227,9 +227,9 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
         </table>
       </div>
 
-      {/* Hidden invoice for printing */}
+      {/* Hidden invoice for printing — positioned off-screen, not opacity:0 */}
       {printOrder && (
-        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+        <div style={{ position: 'fixed', top: 0, left: '-9999px', width: '100vw', pointerEvents: 'none' }}>
           <InvoicePrint order={printOrder} payment={payment} />
         </div>
       )}
