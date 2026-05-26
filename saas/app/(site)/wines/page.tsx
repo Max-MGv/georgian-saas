@@ -1,6 +1,8 @@
 import { db } from '@/lib/db'
 import WineCatalogueClient from './WineCatalogueClient'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
   title: 'Order Wine — Nikalas Marani',
   description: 'Order wine from Nikalas Marani winery. Saperavi, Rkatsiteli, Mtsvane, Chacha and more.',
