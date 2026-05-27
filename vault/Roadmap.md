@@ -42,13 +42,11 @@ Complete this before writing a single line of product code.
   6. Done — their instance is live
 - [ ] Decide: who handles client support? (you, partner, shared?)
 - [ ] Decide: what SLA / uptime expectation do you offer?
-- [x] Hosting path: localhost for development → Vercel when ready for first client. GitHub Pages is static-only and cannot host the main app (needs API routes + DB). Decision on hosting deferred until acceptable draft exists.
+- [x] Hosting path: localhost for development → Vercel when ready for first client.
 
 ---
 
 ## v1 — Core Booking & Admin (MVP)
-
-Estimated: 3–5 focused weekends with AI assistance.
 
 ### Setup
 - [x] Create GitHub repo
@@ -58,20 +56,20 @@ Estimated: 3–5 focused weekends with AI assistance.
 - [x] Install shadcn/ui
 
 ### Build Order
-1. [x] **Booking form** (public page) — live at localhost:3000, saves to Supabase, confirmed working
+1. [x] **Booking form** (public page) — saves to Supabase, confirmed working
 2. [x] **Admin auth** — login/logout working, `/admin` routes protected by middleware
 3. [x] **Orders list** — table with filters (date range, individuals only, per company, upcoming button), revenue total
-4. [x] **Order edit/delete** — slide-over edit panel (date, time, guests, name, contact, notes) + inline delete confirm
+4. [x] **Order edit/delete** — slide-over edit panel + inline delete confirm
 5. [x] **Companies CRUD** — inline add/edit/delete with expandable price tier rows
 6. [x] **Prices CRUD** — per-company tiers with overlap/min-max validation, flat fee support
-7. [x] **Seed script** — `scripts/seed.ts`, run via `npm run seed`; calls `createBooking` directly through the real pipeline
-8. [x] **Statistics page** — 4 summary cards, 2 bar charts (bookings + revenue per month), visit type & booking type breakdown bars, top companies table
+7. [x] **Seed script** — `scripts/seed.ts`, run via `npm run seed`
+8. [x] **Statistics page** — 4 summary cards, 2 bar charts, visit type & booking type breakdown, top companies table
 9. [x] **Deploy to Vercel** — live at georgian-saas-mg-productions-projects.vercel.app
 
 ### Polish before first client
-- [x] Responsive design (mobile-friendly) — public site + admin panel; iOS Safari zoom fixed; orders table scrollable; edit panel full-width on mobile; admin nav two-row scrollable
-- [x] Error states and loading indicators — loading skeleton on admin nav, Saving…/Deleting… button text, error messages on all forms
-- [x] Confirm dialogs before delete (admin) — inline Yes/No confirm already in orders, companies, and price tiers
+- [x] Responsive design (mobile-friendly) — public site + admin panel; iOS Safari zoom fixed
+- [x] Error states and loading indicators — loading skeleton, Saving…/Deleting… button text, error messages on forms
+- [x] Confirm dialogs before delete (admin) — inline Yes/No in orders, companies, price tiers
 
 ### Public site (built ahead of schedule)
 - [x] Route group `(site)` with shared nav + footer
@@ -86,20 +84,44 @@ Estimated: 3–5 focused weekends with AI assistance.
 
 ## v1.1 — Quality of Life
 
-- [x] Email confirmation to customer on booking (Resend) — sandbox mode, sends to max.mghvdliashvili@gmail.com only; upgrade by verifying nikalasmarani.ge in Resend
+- [x] Email confirmation to customer on booking (Resend) — sandbox mode only; upgrade by verifying nikalasmarani.ge in Resend
 - [x] Time slot picker blocks past hours on today's date
-- [x] Guest count input bug fixed — backspace/typing now works correctly, clamps to min 4
-- [x] Admin settings panel (`/admin/settings`) — extensible key-value settings, first setting: show/hide company price after booking
+- [x] Guest count input bug fixed — backspace/typing works correctly, clamps to min 4
+- [x] Admin settings panel (`/admin/settings`) — extensible key-value settings store
 - [x] Company rate privacy — visit type cards show "Company rate" not price; price shown on success screen only (togglable)
-- [x] Statistics V2 — default view: upcoming orders cards + year/month/company filters + horizontal bar charts; "Show historical breakdown" toggle reveals V1
+- [x] Statistics V2 — upcoming orders cards + filters + horizontal bar charts; toggle to V1 historical breakdown
 - [x] Logo replaces "Nikalas Marani" text in hero, wine catalogue, admin login, admin nav bar
 - [x] Winery images downloaded from nikalasmarani.ge → `saas/public/images/` (slider, gallery, products)
-- [x] Wine image assignment — `/admin/images` lets admin pick which photo goes with which wine listing; mapping stored in Settings table; catalogue shows real photos with SVG fallback
-- [ ] Date filters on admin orders panel (KnownBugs #1)
+- [x] Wine DB model + admin CRUD (`/admin/wines`) — create/edit/delete wines, active toggle, sort order, `force-dynamic` on public page
+- [x] Wine image assignment — inline in wine edit row; `imagePath` on Wine model; catalogue shows real photos with color-gradient fallback
+- [x] Split company pricing — separate tasting vs tasting+lunch ₾/person per price tier; booking auto-picks correct rate
+- [x] Company identification code field — optional field on Company, shown in CRUD and on printed invoices
+- [x] Payment details in admin settings — 5 bank fields (recipient name, personal number, bank name, bank code, IBAN), editable on `/admin/settings`, shown on invoices
+- [x] Print invoice — printer icon on each order row; Georgian-language invoice (ინვოისი) rendered and printed via browser; `@media print` CSS isolates the invoice layout
+- [ ] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
 - [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
+- [ ] Gallery page — wire up slider photos and gallery photos on public site (images already in `public/images/`)
 - [ ] Georgian / English language toggle
 - [ ] Calendar view for bookings
 - [ ] Export orders to CSV / Excel
+
+---
+
+## v1.2 — Enhanced Company Booking (Active Plan)
+
+Full plan: `vault/Plan-EnhancedCompanyBooking.md`
+
+- [ ] **Step 1 — DB schema**: split guest counts (lunch/tasting/free), MenuItem, MasterclassItem, OrderMasterclass, OrderExtra models
+- [ ] **Step 2 — Menu Items admin**: admin manages hot dish options (vegetable/meat) at `/admin/menu-items`
+- [ ] **Step 3 — Masterclass admin**: admin manages masterclass types + unit prices at `/admin/masterclass`
+- [ ] **Step 4 — Clickable order detail**: `/admin/orders/[id]` — view + edit all enhanced fields, recalculate total
+- [ ] **Step 5 — Admin create order**: `/admin/orders/new` — create full company order from scratch
+- [ ] **Step 6 — Public form toggle**: settings toggle enables enhanced form for company bookings on public site
+- [ ] **Step 7 — Invoice updates**: reflect split counts + masterclass/extras as line items (optional)
+
+Other planned improvements:
+- [ ] Minimum guest count configurable per visit type in admin settings
+- [ ] Block dates (e.g. winery closed days) configurable in admin
 
 ---
 

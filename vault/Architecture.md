@@ -15,8 +15,8 @@ This file drives the Architecture view in the project dashboard. Each `##` headi
 The user's web browser — Chrome, Safari, etc. Both the customer booking page and the admin panel run here. No setup needed.
 
 **There are two types of users:**
-- **Customer** — visits the public booking page, fills in the form, submits. No login required.
-- **Admin** — logs into `/admin` with email + password to manage orders, companies, prices, and statistics.
+- **Customer** — visits the public winery site, fills in the booking form. No login required.
+- **Admin** — logs into `/admin` with email + password to manage orders, companies, wines, settings, and statistics.
 
 ---
 
@@ -24,22 +24,42 @@ The user's web browser — Chrome, Safari, etc. Both the customer booking page a
 - type: framework
 - connects-to: Prisma, Resend
 
-The main application framework. Holds all the pages and the backend logic.
+The main application framework. Holds all pages, server actions, and backend logic.
 
-**What it does:**
-- Serves the public winery website (home, about, contact, order wine)
-- Serves the public booking form
-- Serves the admin panel (password-protected)
-- Handles form submissions via server actions
+**Public site (`app/(site)/`):**
+- `/` — Home: hero, packages, booking form
+- `/about` — Winery story
+- `/contact` — Phone, email, location
+- `/wines` — Wine catalogue (dynamic, reads from DB)
+
+**Admin panel (`app/admin/`):**
+- `/admin/orders` — All bookings with filters; print invoice; edit/delete
+- `/admin/orders/[id]` — *(planned v1.2)* Order detail with enhanced fields
+- `/admin/orders/new` — *(planned v1.2)* Create full company order
+- `/admin/companies` — Company CRUD + price tiers per company
+- `/admin/wines` — Wine catalogue CRUD + image assignment
+- `/admin/menu-items` — *(planned v1.2)* Hot dish options for booking form
+- `/admin/masterclass` — *(planned v1.2)* Masterclass types + pricing
+- `/admin/wine-orders` — B2B wine reservation requests
+- `/admin/statistics` — Revenue + booking analytics (V2 default, V1 toggle)
+- `/admin/settings` — App settings: price visibility, payment details, booking form toggle
+
+**Server actions (`app/actions/`):**
+- `createBooking.ts` — public booking submission + price calc
+- `orders.ts` — edit, delete, update order
+- `companies.ts` — company CRUD
+- `prices.ts` — price tier CRUD
+- `wines.ts` — wine CRUD
+- `settings.ts` — read/write settings (key-value)
+- `menuItems.ts` — *(planned)* hot dish CRUD
+- `masterclassItems.ts` — *(planned)* masterclass CRUD
+- `orderExtras.ts` — *(planned)* order extra charges
+
+**Key files:**
+- `app/globals.css` — global styles including `@media print` for invoice
+- `app/admin/orders/InvoicePrint.tsx` — Georgian invoice layout component
 
 **If it breaks locally:** restart with `npm run dev` in the `saas/` folder.
-
-**Key folders inside Next.js:**
-- `app/(site)/` — public winery pages (home, about, contact, wines)
-- `app/admin/` — admin panel pages
-- `app/actions/` — server actions (createBooking, submitWineOrder, etc.)
-- `components/` — reusable UI pieces (BookingForm, etc.)
-- `lib/emails/` — email templates (Resend)
 
 ---
 
@@ -47,22 +67,21 @@ The main application framework. Holds all the pages and the backend logic.
 - type: service
 - connects-to: Supabase DB
 
-The translator between the app and the database. You write TypeScript, Prisma turns it into SQL and talks to Supabase.
+The translator between the app and the database.
 
 **Key files:**
-- `prisma/schema.prisma` — defines all tables and columns. Edit this to change DB structure.
-- `prisma/migrations/` — history of every DB change ever made. Like git for the database.
-- `app/generated/prisma/` — auto-generated code. Never edit manually.
+- `prisma/schema.prisma` — defines all tables and columns
+- `app/generated/prisma/` — auto-generated types, never edit manually
 
-**Common commands:**
-- `npx prisma migrate dev --name description` — apply schema changes to the DB
-- `npx prisma generate` — regenerate TypeScript types after schema change
-- `npx prisma studio` — open a visual browser of your database data
+**Common commands (Windows — stop dev server first for `generate`):**
+- `npx prisma db push --skip-generate` — apply schema changes to DB
+- `npx prisma generate` — regenerate TypeScript types
+- `npx prisma studio` — visual DB browser
 
 **If it breaks:**
-- Can't reach DB → check `DATABASE_URL` in `.env`, make sure you're using the session pooler URL
+- EPERM on Windows → dev server is holding the DLL — stop it first, generate, restart
 - Types wrong → run `npx prisma generate`
-- Schema out of sync → run `npx prisma migrate dev`
+- Schema out of sync → run `npx prisma db push`
 
 ---
 
@@ -70,16 +89,9 @@ The translator between the app and the database. You write TypeScript, Prisma tu
 - type: auth
 - connects-to: Next.js
 
-Handles the admin login system. Stores admin user accounts, manages sessions (who is logged in), and protects the `/admin` routes.
+Handles the admin login system. Admin visits `/admin/login`, enters email + password; middleware protects all `/admin` routes.
 
-**How it works:**
-- Admin visits `/admin/login`, enters email + password
-- Supabase Auth verifies credentials and returns a session token
-- Next.js checks for this token on every `/admin` page — if missing, redirects to login
-
-**If it breaks:**
-- Admin can't log in → check Supabase Auth settings in the Supabase dashboard → Authentication tab
-- Session expiring too fast → adjust JWT expiry in Supabase Auth settings
+**If locked out:** supabase.com → Authentication → Users → reset password.
 
 ---
 
@@ -87,20 +99,23 @@ Handles the admin login system. Stores admin user accounts, manages sessions (wh
 - type: database
 - connects-to:
 
-The actual database where all data is stored. PostgreSQL running on Supabase's servers.
+PostgreSQL database. All application data lives here.
 
-**Tables:**
-- `Company` — partner tour operators and agencies
-- `Order` — every booking (name, date, guests, visit type, price, company)
-- `Price` — per-company pricing tiers based on group size
-- `WineOrder` — B2B wine reservation requests from the Order Wine page
+**Live tables:**
+- `Company` — partner tour operators; has identificationCode for invoices
+- `Order` — every booking (date, time, guests, visit type, price, company)
+- `Price` — per-company pricing tiers; has both tasting and tasting+lunch rates
+- `Wine` — wine catalogue items with image path + active/sort flags
+- `WineOrder` — B2B wine reservation requests
+- `Setting` — key-value config store (payment details, toggles)
 
-**To browse data visually:** go to supabase.com → your project → Table Editor.
+**Planned tables (v1.2):**
+- `MenuItem` — hot dish options (vegetable / meat)
+- `MasterclassItem` — masterclass types with unit prices
+- `OrderMasterclass` — junction: masterclass lines per order
+- `OrderExtra` — admin-entered extra charges per order
 
-**If it breaks:**
-- Connection error → check the session pooler URL in credentials.txt, paste into `.env`
-- Data looks wrong → check Table Editor in Supabase dashboard
-- Accidental deletion → Supabase free tier keeps 24h of backups (Pro plan has daily backups)
+**To browse data:** supabase.com → Table Editor.
 
 ---
 
@@ -108,13 +123,17 @@ The actual database where all data is stored. PostgreSQL running on Supabase's s
 - type: page
 - connects-to: Next.js
 
-The public-facing page at `/` (home page). Customers use it to request a booking — no login needed.
+Public page at `/`. Customers book a winery visit — no login needed.
 
-**What it does:** Collects name, date, time, guest count, visit type, and contact info. Calculates price live. On submit, saves a row to the Order table in Supabase and sends a confirmation email via Resend (if customer provided an email).
+**Current flow:**
+- Select booking type (Individual / Company), visit type (Tasting / Tasting+Lunch), date, time, guests, contact info
+- Price calculated live from company price tiers
+- On submit: saves to `Order` table, sends confirmation email via Resend
+- Company rate shown after booking only if admin has enabled that setting
 
-**To verify it works:** Submit a test booking → check Supabase Table Editor → Order table should have a new row. Check inbox for confirmation email.
-
-**If it breaks:** Check the browser console for errors. Most likely cause is a lost DB connection — restart the dev server.
+**Planned (v1.2, Step 6):**
+- Admin toggle `enable_enhanced_company_booking` → company bookings get enhanced form with split guest counts, hot dish selection, masterclass add-ons
+- Individual bookings always use simple form
 
 ---
 
@@ -122,18 +141,21 @@ The public-facing page at `/` (home page). Customers use it to request a booking
 - type: page
 - connects-to: Next.js, Companies Admin, Orders Admin, Statistics
 
-The password-protected management interface at `/admin`. Only accessible after logging in via Supabase Auth.
+Password-protected management interface at `/admin`.
 
-**What's built:**
-- Login / logout (Supabase Auth)
-- Navigation: Orders, Companies, Statistics, Wine Orders
-- Orders list with filters + inline edit/delete (slide-over panel)
-- Companies CRUD with expandable price tier rows
-- Price tiers per company — overlap and min/max validation
-- Statistics page — summary cards, bar charts, breakdowns, top companies
-- Wine Orders — B2B wine reservation requests
+**What's live:**
+- Orders: table with filters (date range, company, individuals, upcoming), printer icon per row → Georgian invoice, edit slide-over, delete confirm
+- Companies: inline CRUD + expandable price tiers (tasting + tasting+lunch rates per tier) + identification code field
+- Wines: full CRUD at `/admin/wines` with inline image picker; active toggle, sort order
+- Wine Orders: B2B reservation requests table
+- Statistics: V2 default (upcoming cards + filters + bar charts), toggle to V1 historical breakdown
+- Settings: price visibility toggle, 5 payment/bank detail fields for invoices
 
-**If you get locked out:** Go to supabase.com → Authentication → Users → reset your password.
+**Planned (v1.2):**
+- Menu Items: admin manages hot dish dropdown options
+- Masterclass: admin manages masterclass types + unit prices
+- Order detail page: click any order → full view + edit enhanced fields (guest split, hot dishes, masterclass, extras)
+- Create order: full company order from scratch
 
 ---
 
@@ -141,23 +163,9 @@ The password-protected management interface at `/admin`. Only accessible after l
 - type: tool
 - connects-to: Next.js
 
-A developer-only script at `scripts/seed.ts`. Run with `npx tsx scripts/seed.ts` to populate the database with realistic test orders.
+`scripts/seed.ts` — run with `npm run seed`. Populates DB with realistic test orders and wines.
 
-**How it fits the pipeline:**
-
-Normal customer flow: Browser → Booking Form → HTTP → `createBooking()` → Prisma → DB
-
-Seed script flow: Seed Script → `createBooking()` → Prisma → DB
-
-It enters the pipeline at the same point as a real submission — skipping only the browser and HTTP layer (which are just delivery mechanisms). Every validation, price calculation, and tier lookup runs identically. The data that lands in the DB is indistinguishable from real bookings.
-
-**Why not write directly to Prisma in the seed?**
-If you skip `createBooking()` and write rows directly, you have to manually replicate the pricing logic. If the logic changes later, the seed silently produces wrong data. Calling `createBooking()` keeps the seed permanently in sync with the real app.
-
-**When to run it:**
-- Before building the Statistics page, to have realistic data to chart
-- After wiping the DB during development
-- When onboarding a new client instance (with client-specific data)
+Enters the pipeline at `createBooking()` — same pricing logic, validations, and DB writes as real submissions. Data is indistinguishable from real bookings.
 
 ---
 
@@ -165,15 +173,13 @@ If you skip `createBooking()` and write rows directly, you have to manually repl
 - type: subpage
 - connects-to: Prisma
 
-Manages the list of tour companies and their per-group pricing tiers.
+`/admin/companies` — manage tour companies and their pricing.
 
-**What it does:**
-- Add, edit, delete companies
-- Each company has one or more price tiers: guest range + price per person + optional flat fee
-- Tiers are validated: no overlapping ranges, min cannot exceed max
-- If a company has no tiers, individual rates (50₾ / 100₾) apply automatically
-
-**To verify:** Go to `/admin/companies`, expand a company row to see its tiers.
+**Features:**
+- Inline add/edit/delete
+- Identification code field (shown on printed invoices)
+- Price tiers per company: guest range + tasting price/person + tasting+lunch price/person + registration fee
+- Tier validation: no overlapping ranges
 
 ---
 
@@ -181,19 +187,10 @@ Manages the list of tour companies and their per-group pricing tiers.
 - type: subpage
 - connects-to: Prisma
 
-Admin page at `/admin/statistics`. Gives the winery owner a revenue and booking overview at a glance.
+`/admin/statistics` — revenue and booking overview.
 
-**What it shows:**
-- 4 summary cards: total orders, total revenue, this month's orders + revenue, average order value
-- Bar chart: bookings per month (last 6 months)
-- Bar chart: revenue ₾ per month (last 6 months)
-- Split bars: tasting vs tasting+lunch (orders + revenue)
-- Split bars: individual vs company bookings (orders + revenue)
-- Top companies table ranked by revenue with mini bar per row
-
-**Data flow:** server component fetches all orders + company names from Supabase, computes all aggregates in TypeScript, passes clean typed data to a client component (Recharts needs the browser). No raw DB data reaches the client.
-
-**To verify:** Run `npm run seed` first for test data, then open `/admin/statistics`.
+**V2 (default):** Upcoming bookings cards, filters (year/month/company), horizontal bar charts for revenue by company.
+**V1 (toggle):** Summary cards, monthly bar charts, visit type + booking type breakdowns, top companies table.
 
 ---
 
@@ -201,15 +198,14 @@ Admin page at `/admin/statistics`. Gives the winery owner a revenue and booking 
 - type: subpage
 - connects-to: Prisma
 
-Shows every booking submitted through the public form.
+`/admin/orders` — all bookings.
 
-**What it does:**
-- Table of all orders: name, date, time, guests, type, company, total price
-- Filter by date range, "Upcoming" quick button, individuals only, or by company
-- Inline delete with confirm; slide-over edit panel (date, time, guests, name, contact, notes)
+**Features:**
+- Table: date, time, name, type, company, guests, visit, total
+- Filters: date range, company, individuals only, upcoming
+- Per row: printer icon (Georgian invoice), edit (slide-over), delete (confirm)
 - Revenue total updates with active filters
-
-**To verify:** Submit a test booking on the public page, then check `/admin/orders`.
+- *(planned)* Click row → `/admin/orders/[id]` detail page
 
 ---
 
@@ -217,15 +213,22 @@ Shows every booking submitted through the public form.
 - type: service
 - connects-to: Next.js
 
-Third-party transactional email service. Sends booking confirmation emails to customers automatically after a booking is saved to the DB.
-
-**How it works:**
-- `createBooking` server action fires `sendBookingConfirmation()` after DB save
-- Fire-and-forget — email failure never blocks or fails the booking
-- Template lives in `lib/emails/bookingConfirmation.ts`
+Transactional email. Sends booking confirmation after DB save. Fire-and-forget — email failure never blocks the booking.
 
 **Current mode:** Sandbox — emails only deliver to max.mghvdliashvili@gmail.com
-**To go live:** Verify nikalasmarani.ge domain in Resend dashboard → change `from` address to `bookings@nikalasmarani.ge`
+**To go live:** verify nikalasmarani.ge in Resend dashboard → update `from` address to `bookings@nikalasmarani.ge`
 
-**API key:** stored in `credentials.txt` and `.env` (never committed to git)
-**Dashboard:** resend.com
+---
+
+## Vercel CLI
+- type: tool
+- connects-to: Vercel
+
+Installed globally (`npx vercel`). Linked to `mg-productions-projects/georgian-saas`.
+
+**Useful commands:**
+- `npx vercel ls` — list deployments + status (Ready / Error)
+- `npx vercel logs <url>` — pull build or runtime logs
+- `npx vercel inspect <url>` — full deployment details
+
+Logged in as `max-mgv`. Run from `saas/` directory.

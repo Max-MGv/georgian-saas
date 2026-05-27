@@ -32,6 +32,15 @@ tags: [features]
 | 24 | Admin settings panel (`/admin/settings`) | Admin | ✅ Done | ✅ Yes | ❌ No |
 | 25 | Company rate privacy (hide on form, show post-submission toggle) | Public site + Admin | ✅ Done | ✅ Yes | ❌ No |
 | 26 | Statistics V2 (upcoming cards, year/month/company filters, horizontal bar charts) | Admin | ✅ Done | ✅ Yes | ❌ No |
-| 27 | Logo replaces text in hero, wine catalogue, admin login, admin nav | Public site + Admin | ✅ Done | ✅ Yes | ❌ No |
+| 27 | Logo replaces "Nikalas Marani" text in hero, wine catalogue, admin login, admin nav | Public site + Admin | ✅ Done | ✅ Yes | ❌ No |
 | 28 | Winery images downloaded from nikalasmarani.ge → `public/images/` | Assets | ✅ Done | ✅ Yes | ❌ No |
-| 29 | Wine image assignment (`/admin/images`) — pick photo per wine, stored in Settings | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 29 | Wine image assignment — inline in wine edit row; `imagePath` on Wine model; catalogue shows real photos with color-gradient fallback | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 30 | Company identification code field — `identificationCode` on Company model, editable in CRUD, shown on invoices | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 31 | Payment details in settings — 5 bank fields editable in `/admin/settings` (saves on blur), shown on printed invoices | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 32 | Print invoice — printer icon on each order row; Georgian-language invoice via browser print dialog; `@media print` isolates invoice | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 33 | Split company pricing — separate tasting vs tasting+lunch price per tier; booking picks correct rate by `visitType` | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 34 | Wine DB model + admin CRUD (`/admin/wines`) — create/edit/delete wines, inline image picker, sort order, active toggle | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 35 | Menu Items admin (`/admin/menu-items`) — CRUD for vegetable/meat hot dish options with active toggle and sort order | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 36 | Masterclass admin (`/admin/masterclass`) — CRUD for masterclass types with MasterclassUnit enum (PER_PERSON/PER_PIECE/FLAT) and price per unit | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 37 | Vercel CLI connected — `npx vercel ls` and `npx vercel logs` available for build/runtime debugging | Dev | ✅ Done | ✅ Yes | ✅ Yes |
+| 38 | Supabase RLS enabled on all 10 tables | Security | ✅ Done | ✅ Yes | ✅ Yes |
