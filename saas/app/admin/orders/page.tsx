@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { getSetting } from '@/app/actions/settings'
+import Link from 'next/link'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 
@@ -48,7 +49,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: C.text }}>Orders</h1>
-        <span className="text-sm" style={{ color: C.faint }}>{orders.length} booking{orders.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm" style={{ color: C.faint }}>{orders.length} booking{orders.length !== 1 ? 's' : ''}</span>
+          <Link
+            href="/admin/orders/new"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-white"
+            style={{ backgroundColor: C.wine }}
+          >
+            + New Order
+          </Link>
+        </div>
       </div>
 
       <OrdersFilters companies={companies} params={params} />
