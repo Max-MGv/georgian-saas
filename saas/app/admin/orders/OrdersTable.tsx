@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder } from '@/app/actions/orders'
 import InvoicePrint from './InvoicePrint'
 
@@ -64,6 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function OrdersTable({ orders: initial, payment }: { orders: Order[]; payment: Payment }) {
+  const router = useRouter()
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
@@ -170,7 +172,15 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
           </thead>
           <tbody style={{ backgroundColor: '#ffffff' }}>
             {orders.map((order, i) => (
-              <tr key={order.id} style={{ borderBottom: i < orders.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              <tr
+                key={order.id}
+                onClick={() => router.push(`/admin/orders/${order.id}`)}
+                style={{
+                  borderBottom: i < orders.length - 1 ? `1px solid ${C.border}` : 'none',
+                  cursor: 'pointer',
+                }}
+                className="hover:bg-amber-50 transition-colors"
+              >
                 <td className="px-4 py-3" style={{ color: C.text }}>{formatDate(order.date)}</td>
                 <td className="px-4 py-3" style={{ color: C.muted }}>{order.timeSlot}</td>
                 <td className="px-4 py-3 font-medium" style={{ color: C.text }}>{order.name} {order.surname}</td>
@@ -188,7 +198,7 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
                 <td className="px-4 py-3 font-semibold" style={{ color: C.wine }}>
                   {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   {deletingId === order.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: C.muted }}>Delete?</span>
