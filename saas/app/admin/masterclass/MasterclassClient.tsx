@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem, UNIT_LABELS } from '@/app/actions/masterclassItems'
-import type { MasterclassUnit } from '@/app/actions/masterclassItems'
+import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem } from '@/app/actions/masterclassItems'
+import { UNIT_LABELS, UNIT_DESCRIPTIONS, MASTERCLASS_UNITS } from '@/lib/masterclass'
+import type { MasterclassUnit } from '@/lib/masterclass'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -19,13 +20,6 @@ const inputStyle = {
   outline: 'none',
 }
 
-const UNITS: MasterclassUnit[] = ['PER_PERSON', 'PER_PIECE', 'FLAT']
-
-const UNIT_DESCRIPTIONS: Record<MasterclassUnit, string> = {
-  PER_PERSON: 'Multiplied by number of guests automatically',
-  PER_PIECE:  'Admin enters quantity manually per order',
-  FLAT:       'Fixed charge, added once regardless of guests',
-}
 
 type MasterclassItem = {
   id: string
@@ -110,7 +104,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
       <div className="rounded-xl border p-4 mb-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
         <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b4513' }}>Unit types</p>
         <div className="space-y-1">
-          {UNITS.map(u => (
+          {MASTERCLASS_UNITS.map(u => (
             <div key={u} className="flex items-baseline gap-2">
               <span className="text-xs font-medium w-24 flex-shrink-0" style={{ color: C.wine }}>{UNIT_LABELS[u]}</span>
               <span className="text-xs" style={{ color: C.faint }}>{UNIT_DESCRIPTIONS[u]}</span>
@@ -146,7 +140,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
                 style={{ gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
                 <input style={inputStyle} value={editName} onChange={e => setEditName(e.target.value)} autoFocus />
                 <select style={inputStyle} value={editUnit} onChange={e => setEditUnit(e.target.value as MasterclassUnit)}>
-                  {UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
+                  {MASTERCLASS_UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
                 </select>
                 <input style={inputStyle} type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="0" />
                 <input style={inputStyle} type="number" value={editSort} onChange={e => setEditSort(e.target.value)} placeholder="0" />
@@ -203,7 +197,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
               placeholder="e.g. Churchkhela" autoFocus
               onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }} />
             <select style={inputStyle} value={newUnit} onChange={e => setNewUnit(e.target.value as MasterclassUnit)}>
-              {UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
+              {MASTERCLASS_UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
             </select>
             <input style={inputStyle} type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0" />
             <span />

@@ -2,14 +2,7 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
-
-export type MasterclassUnit = 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
-
-export const UNIT_LABELS: Record<MasterclassUnit, string> = {
-  PER_PERSON: 'per person',
-  PER_PIECE:  'per piece',
-  FLAT:       'flat fee',
-}
+import type { MasterclassUnit } from '@/lib/masterclass'
 
 export async function createMasterclassItem(data: {
   name: string
