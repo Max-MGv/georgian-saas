@@ -37,7 +37,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newUnit, setNewUnit] = useState('')
+  const [newUnit, setNewUnit] = useState('person')
   const [newPrice, setNewPrice] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -89,7 +89,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
       pricePerUnit: parseFloat(newPrice) || 0,
     })
     setNewName('')
-    setNewUnit('')
+    setNewUnit('person')
     setNewPrice('')
     setAdding(false)
     setLoading(false)
@@ -188,7 +188,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
             <div className="flex gap-1">
               <button onClick={handleAdd} disabled={loading || !newName.trim() || !newUnit.trim()}
                 className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>Add</button>
-              <button onClick={() => { setAdding(false); setNewName(''); setNewUnit(''); setNewPrice('') }}
+              <button onClick={() => { setAdding(false); setNewName(''); setNewUnit('person'); setNewPrice('') }}
                 className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
             </div>
           </div>
