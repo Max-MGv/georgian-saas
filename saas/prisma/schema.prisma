@@ -67,7 +67,7 @@ model MenuItem {
 model MasterclassItem {
   id           String             @id @default(cuid())
   name         String
-  unit         String             // e.g. "person", "piece"
+  unitType     MasterclassUnit    @default(PER_PIECE)
   pricePerUnit Float
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
@@ -133,4 +133,10 @@ enum BookingType {
 enum VisitType {
   TASTING
   TASTING_LUNCH
+}
+
+enum MasterclassUnit {
+  PER_PERSON  // multiplied by paying guest count automatically
+  PER_PIECE   // admin enters quantity manually
+  FLAT        // fixed price, no quantity
 }

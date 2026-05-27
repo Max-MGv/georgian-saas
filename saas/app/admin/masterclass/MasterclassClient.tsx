@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem } from '@/app/actions/masterclassItems'
+import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem, UNIT_LABELS } from '@/app/actions/masterclassItems'
+import type { MasterclassUnit } from '@/app/actions/masterclassItems'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -14,14 +15,22 @@ const inputStyle = {
   borderRadius: 8,
   padding: '6px 10px',
   fontSize: '0.875rem',
-  color: C.text,
+  color: '#1c1008',
   outline: 'none',
+}
+
+const UNITS: MasterclassUnit[] = ['PER_PERSON', 'PER_PIECE', 'FLAT']
+
+const UNIT_DESCRIPTIONS: Record<MasterclassUnit, string> = {
+  PER_PERSON: 'Multiplied by number of guests automatically',
+  PER_PIECE:  'Admin enters quantity manually per order',
+  FLAT:       'Fixed charge, added once regardless of guests',
 }
 
 type MasterclassItem = {
   id: string
   name: string
-  unit: string
+  unitType: string
   pricePerUnit: number
   active: boolean
   sortOrder: number
@@ -31,35 +40,35 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
   const [items, setItems] = useState(initial)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [editUnit, setEditUnit] = useState('')
+  const [editUnit, setEditUnit] = useState<MasterclassUnit>('PER_PIECE')
   const [editPrice, setEditPrice] = useState('')
   const [editSort, setEditSort] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newUnit, setNewUnit] = useState('person')
+  const [newUnit, setNewUnit] = useState<MasterclassUnit>('PER_PIECE')
   const [newPrice, setNewPrice] = useState('')
   const [loading, setLoading] = useState(false)
 
   function openEdit(item: MasterclassItem) {
     setEditingId(item.id)
     setEditName(item.name)
-    setEditUnit(item.unit)
+    setEditUnit(item.unitType as MasterclassUnit)
     setEditPrice(String(item.pricePerUnit))
     setEditSort(String(item.sortOrder))
   }
 
   async function handleSave(id: string) {
-    if (!editName.trim() || !editUnit.trim()) return
+    if (!editName.trim()) return
     setLoading(true)
     await updateMasterclassItem(id, {
       name: editName,
-      unit: editUnit,
+      unitType: editUnit,
       pricePerUnit: parseFloat(editPrice) || 0,
       sortOrder: parseInt(editSort) || 0,
     })
     setItems(prev => prev.map(i => i.id === id ? {
-      ...i, name: editName, unit: editUnit,
+      ...i, name: editName, unitType: editUnit,
       pricePerUnit: parseFloat(editPrice) || 0,
       sortOrder: parseInt(editSort) || 0,
     } : i))
@@ -81,15 +90,11 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
   }
 
   async function handleAdd() {
-    if (!newName.trim() || !newUnit.trim()) return
+    if (!newName.trim()) return
     setLoading(true)
-    await createMasterclassItem({
-      name: newName,
-      unit: newUnit,
-      pricePerUnit: parseFloat(newPrice) || 0,
-    })
+    await createMasterclassItem({ name: newName, unitType: newUnit, pricePerUnit: parseFloat(newPrice) || 0 })
     setNewName('')
-    setNewUnit('person')
+    setNewUnit('PER_PIECE')
     setNewPrice('')
     setAdding(false)
     setLoading(false)
@@ -97,16 +102,29 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
 
   return (
     <div>
-      <p className="text-sm mb-6" style={{ color: C.muted }}>
-        Manage masterclass options available for company bookings. Each item has a unit (e.g. "person", "piece") and a price per unit.
+      <p className="text-sm mb-4" style={{ color: C.muted }}>
+        Manage masterclass options for company bookings. The unit type controls how pricing is calculated on each order.
       </p>
 
+      {/* Unit type legend */}
+      <div className="rounded-xl border p-4 mb-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b4513' }}>Unit types</p>
+        <div className="space-y-1">
+          {UNITS.map(u => (
+            <div key={u} className="flex items-baseline gap-2">
+              <span className="text-xs font-medium w-24 flex-shrink-0" style={{ color: C.wine }}>{UNIT_LABELS[u]}</span>
+              <span className="text-xs" style={{ color: C.faint }}>{UNIT_DESCRIPTIONS[u]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        {/* Header */}
+        {/* Column headers */}
         <div className="grid px-5 py-2 border-b text-xs font-semibold uppercase tracking-wider"
-          style={{ backgroundColor: '#f5efe6', borderColor: C.border, color: '#8b4513', gridTemplateColumns: '1fr 100px 80px 80px 120px' }}>
+          style={{ backgroundColor: '#f5efe6', borderColor: C.border, color: '#8b4513', gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
           <span>Name</span>
-          <span>Unit</span>
+          <span>Unit type</span>
           <span>Price</span>
           <span>Order</span>
           <span></span>
@@ -125,9 +143,11 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
           }}>
             {editingId === item.id ? (
               <div className="grid items-center gap-2 px-5 py-3"
-                style={{ gridTemplateColumns: '1fr 100px 80px 80px 120px' }}>
+                style={{ gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
                 <input style={inputStyle} value={editName} onChange={e => setEditName(e.target.value)} autoFocus />
-                <input style={inputStyle} value={editUnit} onChange={e => setEditUnit(e.target.value)} placeholder="person" />
+                <select style={inputStyle} value={editUnit} onChange={e => setEditUnit(e.target.value as MasterclassUnit)}>
+                  {UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
+                </select>
                 <input style={inputStyle} type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} placeholder="0" />
                 <input style={inputStyle} type="number" value={editSort} onChange={e => setEditSort(e.target.value)} placeholder="0" />
                 <div className="flex gap-1">
@@ -139,20 +159,19 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
               </div>
             ) : (
               <div className="grid items-center gap-2 px-5 py-3"
-                style={{ gridTemplateColumns: '1fr 100px 80px 80px 120px' }}>
+                style={{ gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleActive(item)}
-                    title={item.active ? 'Active' : 'Inactive'}
+                  <button onClick={() => handleToggleActive(item)} title={item.active ? 'Active' : 'Inactive'}
                     className="flex-shrink-0 w-2 h-2 rounded-full"
-                    style={{ backgroundColor: item.active ? '#16a34a' : '#d1c4b0' }}
-                  />
+                    style={{ backgroundColor: item.active ? '#16a34a' : '#d1c4b0' }} />
                   <span className="text-sm" style={{
                     color: item.active ? C.text : C.faint,
                     textDecoration: item.active ? 'none' : 'line-through',
                   }}>{item.name}</span>
                 </div>
-                <span className="text-sm" style={{ color: C.muted }}>per {item.unit}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                  {UNIT_LABELS[item.unitType as MasterclassUnit] ?? item.unitType}
+                </span>
                 <span className="text-sm font-medium" style={{ color: C.wine }}>{item.pricePerUnit}₾</span>
                 <span className="text-xs" style={{ color: C.faint }}>#{item.sortOrder}</span>
                 {deletingId === item.id ? (
@@ -178,17 +197,20 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
 
         {/* Add row */}
         {adding ? (
-          <div className="grid items-center gap-2 px-5 py-3" style={{ backgroundColor: C.bg, gridTemplateColumns: '1fr 100px 80px 80px 120px' }}>
+          <div className="grid items-center gap-2 px-5 py-3"
+            style={{ backgroundColor: C.bg, gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
             <input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)}
               placeholder="e.g. Churchkhela" autoFocus
-              onKeyDown={e => e.key === 'Escape' && setAdding(false)} />
-            <input style={inputStyle} value={newUnit} onChange={e => setNewUnit(e.target.value)} placeholder="person" />
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }} />
+            <select style={inputStyle} value={newUnit} onChange={e => setNewUnit(e.target.value as MasterclassUnit)}>
+              {UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
+            </select>
             <input style={inputStyle} type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0" />
             <span />
             <div className="flex gap-1">
-              <button onClick={handleAdd} disabled={loading || !newName.trim() || !newUnit.trim()}
+              <button onClick={handleAdd} disabled={loading || !newName.trim()}
                 className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>Add</button>
-              <button onClick={() => { setAdding(false); setNewName(''); setNewUnit('person'); setNewPrice('') }}
+              <button onClick={() => { setAdding(false); setNewName(''); setNewUnit('PER_PIECE'); setNewPrice('') }}
                 className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
             </div>
           </div>
