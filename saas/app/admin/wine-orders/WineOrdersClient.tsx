@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
 
 const C = {
@@ -190,6 +191,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
   const [orders, setOrders] = useState<WineOrder[]>(initial)
   const [filter, setFilter] = useState<Filter>('all')
   const [recentlyInactive, setRecentlyInactive] = useState<Set<string>>(new Set())
+  const [listRef] = useAutoAnimate({ duration: 400 })
   const [, startTransition] = useTransition()
 
   function handleUpdate(id: string, status: string) {
@@ -225,7 +227,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" ref={listRef}>
       {/* Status filter */}
       <div className="flex gap-2 flex-wrap">
         {FILTER_OPTIONS.map(f => {
