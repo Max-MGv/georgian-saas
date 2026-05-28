@@ -24,8 +24,8 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: str
 
 const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
-function isDetailsComplete(order: { totalPrice: number | null; guestCount: number }) {
-  return order.totalPrice != null && order.totalPrice > 0 && order.guestCount > 0
+function isDetailsComplete(order: { tastingGuestCount: number; lunchGuestCount: number }) {
+  return order.tastingGuestCount > 0 || order.lunchGuestCount > 0
 }
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
@@ -270,17 +270,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <td className="px-4 py-3" style={{ color: C.muted }}>{order.company?.name ?? '—'}</td>
                 <td className="px-4 py-3" style={{ color: C.text }}>{order.guestCount}</td>
                 <td className="px-4 py-3" style={{ color: C.muted }}>{visitLabel(order.visitType)}</td>
-                <td className="px-4 py-3" style={{ color: C.wine }}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">{order.totalPrice != null ? `${order.totalPrice}₾` : '—'}</span>
-                    {isDetailsComplete(order)
-                      ? <span className="text-xs" style={{ color: '#16a34a' }}>✓ details</span>
-                      : <span className="text-xs" style={{ color: C.faint }}>· details</span>
-                    }
-                  </div>
+                <td className="px-4 py-3 font-semibold" style={{ color: C.wine }}>
+                  {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
                 </td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <div className="relative">
+                  <div className="relative flex flex-col gap-1 items-start">
                     {/* Status badge — click to open dropdown */}
                     <button
                       onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
@@ -293,6 +287,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     >
                       {STATUS_CONFIG[order.status].label} ▾
                     </button>
+                    {/* Details indicator */}
+                    {isDetailsComplete(order)
+                      ? <span className="text-xs" style={{ color: '#16a34a' }}>✓ details</span>
+                      : <span className="text-xs" style={{ color: C.faint }}>no details</span>
+                    }
                     {statusMenuId === order.id && (
                       <div
                         className="absolute z-30 rounded-lg shadow-lg border py-1"
