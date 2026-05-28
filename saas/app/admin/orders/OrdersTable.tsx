@@ -24,9 +24,6 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: str
 
 const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
-function isDetailsComplete(order: { tastingGuestCount: number; lunchGuestCount: number }) {
-  return order.tastingGuestCount > 0 || order.lunchGuestCount > 0
-}
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
@@ -274,24 +271,24 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
                 </td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <div className="relative flex flex-col gap-1 items-start">
+                  <div className="relative">
                     {/* Status badge — click to open dropdown */}
-                    <button
-                      onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
-                      className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
-                      style={{
-                        backgroundColor: STATUS_CONFIG[order.status].bg,
-                        color: STATUS_CONFIG[order.status].color,
-                        border: `1px solid ${STATUS_CONFIG[order.status].color}22`,
-                      }}
-                    >
-                      {STATUS_CONFIG[order.status].label} ▾
-                    </button>
-                    {/* Details indicator */}
-                    {isDetailsComplete(order)
-                      ? <span className="text-xs" style={{ color: '#16a34a' }}>✓ details</span>
-                      : <span className="text-xs" style={{ color: C.faint }}>no details</span>
-                    }
+                    {(() => {
+                      const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+                      return (
+                        <button
+                          onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
+                          className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                          style={{
+                            backgroundColor: cfg.bg,
+                            color: cfg.color,
+                            border: `1px solid ${cfg.color}22`,
+                          }}
+                        >
+                          {cfg.label} ▾
+                        </button>
+                      )
+                    })()}
                     {statusMenuId === order.id && (
                       <div
                         className="absolute z-30 rounded-lg shadow-lg border py-1"
