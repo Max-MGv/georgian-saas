@@ -273,8 +273,28 @@ export async function sendOrderInvoice(
       customMessage,
     })
 
+    // Auto-advance status to INVOICE_SENT (only if not already further along)
+    const advanceStatuses = ['NEW', 'CONFIRMED']
+    if (advanceStatuses.includes(order.status)) {
+      await db.order.update({ where: { id: orderId }, data: { status: 'INVOICE_SENT' } })
+    }
+
+    revalidatePath('/admin/orders')
     return { success: true }
   } catch {
     return { error: 'Failed to send email. Please try again.' }
+  }
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  status: 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+): Promise<{ success: true } | { error: string }> {
+  try {
+    await db.order.update({ where: { id: orderId }, data: { status } })
+    revalidatePath('/admin/orders')
+    return { success: true }
+  } catch {
+    return { error: 'Failed to update status.' }
   }
 }

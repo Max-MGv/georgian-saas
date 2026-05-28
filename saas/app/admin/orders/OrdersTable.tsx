@@ -3,12 +3,29 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { deleteOrder, updateOrder, sendOrderInvoice } from '@/app/actions/orders'
+import { deleteOrder, updateOrder, sendOrderInvoice, updateOrderStatus } from '@/app/actions/orders'
 import InvoicePrint from './InvoicePrint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+}
+
+type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+
+const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: string }> = {
+  NEW:          { label: 'New',          bg: '#f1f5f9', color: '#475569' },
+  CONFIRMED:    { label: 'Confirmed',    bg: '#dbeafe', color: '#1d4ed8' },
+  INVOICE_SENT: { label: 'Invoice Sent', bg: '#fef3c7', color: '#92400e' },
+  PAID:         { label: 'Paid',         bg: '#dcfce7', color: '#166534' },
+  COMPLETED:    { label: 'Completed',    bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED:    { label: 'Cancelled',    bg: '#fee2e2', color: '#b91c1c' },
+}
+
+const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+
+function isDetailsComplete(order: { totalPrice: number | null; guestCount: number }) {
+  return order.totalPrice != null && order.totalPrice > 0 && order.guestCount > 0
 }
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
@@ -21,6 +38,7 @@ const inputStyle = {
 
 type Order = {
   id: string
+  status: OrderStatus
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -79,6 +97,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
 
+  // Status menu
+  const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
+
   // Email invoice state
   const [emailOrder, setEmailOrder] = useState<Order | null>(null)
   const [emailMessage, setEmailMessage] = useState('')
@@ -94,6 +115,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
+
+  // Close status menu on outside click
+  useEffect(() => {
+    if (!statusMenuId) return
+    function handleClick() { setStatusMenuId(null) }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [statusMenuId])
 
   useEffect(() => {
     if (printOrder && printPending.current) {
@@ -130,7 +159,19 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       setEmailStatus('error')
     } else {
       setEmailStatus('sent')
+      // Reflect auto-advance in local state
+      const advanceStatuses: OrderStatus[] = ['NEW', 'CONFIRMED']
+      if (advanceStatuses.includes(emailOrder.status)) {
+        setOrders(prev => prev.map(o => o.id === emailOrder.id ? { ...o, status: 'INVOICE_SENT' } : o))
+        setEmailOrder(prev => prev ? { ...prev, status: 'INVOICE_SENT' } : prev)
+      }
     }
+  }
+
+  async function handleStatusChange(orderId: string, newStatus: OrderStatus) {
+    setStatusMenuId(null)
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
+    await updateOrderStatus(orderId, newStatus)
   }
 
   function openEdit(order: Order) {
@@ -199,7 +240,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         <table className="w-full text-sm border-collapse min-w-[700px]">
           <thead>
             <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
-              {['Date', 'Time', 'Guest', 'Type', 'Company', 'Guests', 'Visit', 'Total', ''].map(h => (
+              {['Date', 'Time', 'Guest', 'Type', 'Company', 'Guests', 'Visit', 'Total', 'Status', ''].map(h => (
                 <th key={h} className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>{h}</th>
               ))}
             </tr>
@@ -229,8 +270,48 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <td className="px-4 py-3" style={{ color: C.muted }}>{order.company?.name ?? '—'}</td>
                 <td className="px-4 py-3" style={{ color: C.text }}>{order.guestCount}</td>
                 <td className="px-4 py-3" style={{ color: C.muted }}>{visitLabel(order.visitType)}</td>
-                <td className="px-4 py-3 font-semibold" style={{ color: C.wine }}>
-                  {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                <td className="px-4 py-3" style={{ color: C.wine }}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-semibold">{order.totalPrice != null ? `${order.totalPrice}₾` : '—'}</span>
+                    {isDetailsComplete(order)
+                      ? <span className="text-xs" style={{ color: '#16a34a' }}>✓ details</span>
+                      : <span className="text-xs" style={{ color: C.faint }}>· details</span>
+                    }
+                  </div>
+                </td>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                  <div className="relative">
+                    {/* Status badge — click to open dropdown */}
+                    <button
+                      onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
+                      className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                      style={{
+                        backgroundColor: STATUS_CONFIG[order.status].bg,
+                        color: STATUS_CONFIG[order.status].color,
+                        border: `1px solid ${STATUS_CONFIG[order.status].color}22`,
+                      }}
+                    >
+                      {STATUS_CONFIG[order.status].label} ▾
+                    </button>
+                    {statusMenuId === order.id && (
+                      <div
+                        className="absolute z-30 rounded-lg shadow-lg border py-1"
+                        style={{ top: '110%', left: 0, minWidth: 140, backgroundColor: '#fff9f3', borderColor: C.border }}
+                      >
+                        {ALL_STATUSES.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => handleStatusChange(order.id, s)}
+                            className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
+                            style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                          >
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
+                            {STATUS_CONFIG[s].label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   {deletingId === order.id ? (

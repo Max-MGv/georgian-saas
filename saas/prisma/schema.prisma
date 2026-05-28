@@ -18,6 +18,7 @@ model Company {
 
 model Order {
   id                String             @id @default(cuid())
+  status            OrderStatus        @default(NEW)
   bookingType       BookingType        @default(INDIVIDUAL)
   visitType         VisitType
   date              DateTime
@@ -123,6 +124,15 @@ model Wine {
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  INVOICE_SENT
+  PAID
+  COMPLETED
+  CANCELLED
 }
 
 enum BookingType {

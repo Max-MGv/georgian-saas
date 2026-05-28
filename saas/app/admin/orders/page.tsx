@@ -78,6 +78,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <>
           <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} orders={orders.map(o => ({
             id: o.id,
+            status: o.status,
             date: o.date,
             timeSlot: o.timeSlot,
             bookingType: o.bookingType,
