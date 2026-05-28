@@ -198,7 +198,12 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
     })
   }
 
-  const visible = filter === 'all' ? orders : orders.filter(o => o.status === filter)
+  const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter)
+  const visible = [...filtered].sort((a, b) => {
+    const aInactive = a.status === 'delivered' || a.status === 'cancelled'
+    const bInactive = b.status === 'delivered' || b.status === 'cancelled'
+    return Number(aInactive) - Number(bInactive)
+  })
 
   if (orders.length === 0) {
     return (
@@ -244,6 +249,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
       {visible.map(order => {
         const wines = order.wines as WineSelection[]
         const isCancelled = order.status === 'cancelled'
+        const isInactive = isCancelled || order.status === 'delivered'
         const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
 
         return (
@@ -253,7 +259,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
             style={{
               backgroundColor: C.bg,
               borderColor: C.border,
-              opacity: isCancelled ? 0.75 : 1,
+              opacity: isInactive ? 0.55 : 1,
               borderRightWidth: 4,
               borderRightColor: sc.border,
             }}
