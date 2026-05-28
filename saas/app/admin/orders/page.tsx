@@ -93,6 +93,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             phone: o.phone,
             notes: o.notes,
             totalPrice: o.totalPrice,
+            hotDishVegetable: o.hotDishVegetable,
+            hotDishMeat: o.hotDishMeat,
+            foodNotes: o.foodNotes,
             company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
             masterclassLines: o.masterclassLines.map(l => ({
               name: l.masterclassItem.name,

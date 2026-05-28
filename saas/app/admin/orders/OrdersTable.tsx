@@ -50,6 +50,9 @@ type Order = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  hotDishVegetable: string | null
+  hotDishMeat: string | null
+  foodNotes: string | null
   company: { name: string; identificationCode: string | null } | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
@@ -96,6 +99,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   // Status menu
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
+
+  // Hover preview
+  const [hoverOrder, setHoverOrder] = useState<Order | null>(null)
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 })
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Email invoice state
   const [emailOrder, setEmailOrder] = useState<Order | null>(null)
@@ -163,6 +171,25 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         setEmailOrder(prev => prev ? { ...prev, status: 'INVOICE_SENT' } : prev)
       }
     }
+  }
+
+  function handleRowMouseEnter(order: Order, e: React.MouseEvent) {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    const x = e.clientX
+    const y = e.clientY
+    hoverTimer.current = setTimeout(() => {
+      setHoverPos({ x, y })
+      setHoverOrder(order)
+    }, 380)
+  }
+
+  function handleRowMouseMove(e: React.MouseEvent) {
+    setHoverPos({ x: e.clientX, y: e.clientY })
+  }
+
+  function handleRowMouseLeave() {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    setHoverOrder(null)
   }
 
   async function handleStatusChange(orderId: string, newStatus: OrderStatus) {
@@ -247,6 +274,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               <tr
                 key={order.id}
                 onClick={() => router.push(`/admin/orders/${order.id}`)}
+                onMouseEnter={e => handleRowMouseEnter(order, e)}
+                onMouseMove={handleRowMouseMove}
+                onMouseLeave={handleRowMouseLeave}
                 style={{
                   borderBottom: i < orders.length - 1 ? `1px solid ${C.border}` : 'none',
                   cursor: 'pointer',
@@ -557,6 +587,125 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           </>
         )}
       </div>
+
+      {/* Hover preview card */}
+      {hoverOrder && (() => {
+        const o = hoverOrder
+        const cardW = 300
+        const cardH = 420
+        const pad = 16
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+        const left = hoverPos.x + 20 + cardW > vw - pad ? hoverPos.x - cardW - 12 : hoverPos.x + 20
+        const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
+        const cfg = STATUS_CONFIG[o.status] ?? STATUS_CONFIG.NEW
+        const hasSplit = o.tastingGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
+        const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+        const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
+        const bookingAmt = (o.totalPrice ?? 0) - mcAmt - extrasAmt
+        return (
+          <div
+            style={{
+              position: 'fixed', left, top, width: cardW, zIndex: 9999,
+              backgroundColor: '#fff9f3', border: `1px solid ${C.border}`,
+              borderRadius: 12, boxShadow: '0 8px 32px rgba(28,16,8,0.18)',
+              fontFamily: 'Georgia, serif', fontSize: 13, color: C.text,
+              pointerEvents: 'none', overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div style={{ backgroundColor: C.wine, padding: '10px 14px' }}>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>
+                {o.company?.name ?? `${o.name} ${o.surname}`}
+              </div>
+              <div style={{ color: '#f5c6c8', fontSize: 11, marginTop: 2 }}>
+                {o.name} {o.surname}
+              </div>
+            </div>
+
+            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Date / time / visit */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: C.muted }}>{formatDate(o.date)} · {o.timeSlot}</span>
+                <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{cfg.label}</span>
+              </div>
+              <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(o.visitType)}</div>
+
+              <div style={{ height: 1, backgroundColor: C.border }} />
+
+              {/* Guests */}
+              <div>
+                <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>GUESTS</div>
+                {hasSplit ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {o.tastingGuestCount > 0 && <PRow label="Tasting" value={`${o.tastingGuestCount}`} />}
+                    {o.lunchGuestCount > 0 && <PRow label="Lunch" value={`${o.lunchGuestCount}`} />}
+                    {o.freeGuestCount > 0 && <PRow label="Guide / Driver" value={`${o.freeGuestCount}`} />}
+                    <PRow label="Total" value={`${o.guestCount}`} bold />
+                  </div>
+                ) : (
+                  <PRow label="Total" value={`${o.guestCount}`} bold />
+                )}
+              </div>
+
+              <div style={{ height: 1, backgroundColor: C.border }} />
+
+              {/* Amounts */}
+              <div>
+                <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>AMOUNT</div>
+                <PRow label={o.visitType === 'TASTING_LUNCH' ? 'Tasting + Lunch' : 'Tasting'} value={`${bookingAmt}₾`} />
+                {o.masterclassLines.map((l, i) => (
+                  <PRow key={i} label={`${l.name} ×${l.quantity}`} value={`${l.quantity * l.pricePerUnit}₾`} />
+                ))}
+                {o.extras.map((e, i) => (
+                  <PRow key={i} label={e.label} value={`${e.amount}₾`} />
+                ))}
+                <PRow label="Total" value={`${o.totalPrice ?? '—'}₾`} bold wine />
+              </div>
+
+              {/* Contact */}
+              {(o.phone || o.email) && (
+                <>
+                  <div style={{ height: 1, backgroundColor: C.border }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {o.phone && <span style={{ color: C.muted, fontSize: 12 }}>📞 {o.phone}</span>}
+                    {o.email && <span style={{ color: C.muted, fontSize: 12 }}>✉ {o.email}</span>}
+                  </div>
+                </>
+              )}
+
+              {/* Hot dishes */}
+              {(o.hotDishVegetable || o.hotDishMeat) && (
+                <>
+                  <div style={{ height: 1, backgroundColor: C.border }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {o.hotDishVegetable && <PRow label="Vegetable" value={o.hotDishVegetable} />}
+                    {o.hotDishMeat && <PRow label="Meat" value={o.hotDishMeat} />}
+                    {o.foodNotes && <span style={{ color: C.faint, fontSize: 11, marginTop: 2 }}>{o.foodNotes}</span>}
+                  </div>
+                </>
+              )}
+
+              {/* Notes */}
+              {o.notes && (
+                <>
+                  <div style={{ height: 1, backgroundColor: C.border }} />
+                  <span style={{ color: C.faint, fontSize: 12, fontStyle: 'italic' }}>{o.notes}</span>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </>
+  )
+}
+
+function PRow({ label, value, bold, wine }: { label: string; value: string; bold?: boolean; wine?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '1px 0' }}>
+      <span style={{ color: '#6b5a47' }}>{label}</span>
+      <span style={{ fontWeight: bold ? 700 : 400, color: wine ? '#7c1d23' : '#1c1008' }}>{value}</span>
+    </div>
   )
 }
