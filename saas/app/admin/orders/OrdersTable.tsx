@@ -352,7 +352,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {COLUMN_DEFS.filter(c => visibleCols.has(c.id)).map(c => (
                 <th key={c.id} className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{c.label}</th>
               ))}
-              <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}></th>
+              <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted, position: 'sticky', right: 0, backgroundColor: C.bg, boxShadow: '-1px 0 0 ' + C.border }}></th>
             </tr>
           </thead>
           <tbody style={{ backgroundColor: '#ffffff' }}>
@@ -529,7 +529,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     }
                   </td>
                 )}
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()} style={{ position: 'sticky', right: 0, backgroundColor: 'inherit', boxShadow: '-1px 0 0 ' + C.border }}>
                   {deletingId === order.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: C.muted }}>Delete?</span>
