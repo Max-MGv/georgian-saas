@@ -81,14 +81,6 @@ function VerticalStepper({ orderId, status, onUpdate }: {
         {sc.label}
       </span>
 
-      {/* Hint — fades in when panel is hovered */}
-      <span
-        className="text-xs mb-2 transition-all duration-200"
-        style={{ color: C.faint, opacity: panelHovered && !isCancelled ? 1 : 0, fontSize: '0.65rem' }}
-      >
-        Click to change
-      </span>
-
       {isCancelled ? (
         <>
           {STAGES.map((stage, i) => (
@@ -143,13 +135,13 @@ function VerticalStepper({ orderId, status, onUpdate }: {
             )
           })}
 
-          {/* Cancel — prominent red on hover */}
+          {/* Cancel — red text, no fill */}
           <button
             onClick={() => onUpdate(orderId, 'cancelled')}
-            className="mt-4 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium border transition-all duration-150 group hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-            style={{ borderColor: C.border, color: C.faint }}
+            className="mt-3 flex items-center gap-1.5 text-xs font-medium transition-opacity duration-150 hover:opacity-70"
+            style={{ color: '#dc2626' }}
           >
-            <TrashIcon /> Cancel
+            <TrashIcon /> Cancel order
           </button>
         </>
       )}
@@ -250,31 +242,22 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
           >
             {/* Left — order info */}
             <div className="flex-1 min-w-0 p-5">
-              {/* Header */}
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
-                  {order.llcName && (
-                    <p className="text-sm" style={{ color: C.muted }}>{order.llcName}{order.llcId ? ` · ${order.llcId}` : ''}</p>
-                  )}
-                </div>
-
-                {/* Top-right: total (prominent) + ID + date */}
-                <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
-                  {order.displayTotal != null ? (
-                    <p className="font-bold text-base leading-tight" style={{ color: C.wine }}>
-                      {order.totalEstimated ? '~' : ''}{order.displayTotal}₾
-                    </p>
-                  ) : (
-                    <p className="text-sm font-medium" style={{ color: C.faint }}>—</p>
-                  )}
-                  <p className="text-xs font-mono px-2 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>
-                    #{order.id.slice(0, 8)}
-                  </p>
-                  <p className="text-xs" style={{ color: C.faint }}>
-                    {new Date(order.createdAt).toLocaleDateString('en-GB')}
-                  </p>
-                </div>
+              {/* Header — 2×2 feel: name|total on row 1, details|id·date on row 2 */}
+              <div className="flex items-baseline justify-between gap-3 mb-1">
+                <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
+                <p className="font-bold text-base flex-shrink-0" style={{ color: C.wine }}>
+                  {order.displayTotal != null
+                    ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                    : <span style={{ color: C.faint, fontWeight: 400, fontSize: '0.875rem' }}>—</span>}
+                </p>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 mb-3">
+                <p className="text-sm" style={{ color: C.muted }}>
+                  {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ' '}
+                </p>
+                <p className="text-xs font-mono flex-shrink-0" style={{ color: C.faint }}>
+                  #{order.id.slice(0, 8)} · {new Date(order.createdAt).toLocaleDateString('en-GB')}
+                </p>
               </div>
 
               {/* Wines */}
