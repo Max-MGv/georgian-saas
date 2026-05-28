@@ -38,6 +38,9 @@ const STAGES = ['pending', 'confirmed', 'paid'] as const
 type Stage = typeof STAGES[number]
 const STAGE_LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', paid: 'Paid' }
 
+const FILTER_OPTIONS = ['all', 'pending', 'confirmed', 'paid', 'cancelled'] as const
+type Filter = typeof FILTER_OPTIONS[number]
+
 function TrashIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -162,10 +165,10 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
       <div
         className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150"
         style={{
-          borderColor: isDone ? C.wine : panelHovered && isClickable ? '#b08060' : C.border,
-          backgroundColor: isDone ? C.wine : '#fff9f3',
-          transform: hovered && isClickable ? 'scale(1.2)' : 'scale(1)',
-          boxShadow: isActive ? `0 0 0 4px ${C.wine}22` : hovered && isClickable ? `0 0 0 3px ${C.wine}18` : undefined,
+          borderColor: isDone ? C.wine : panelHovered && isClickable ? '#8a4a30' : C.border,
+          backgroundColor: isDone ? C.wine : hovered && isClickable ? '#fdf0e8' : '#fff9f3',
+          transform: hovered && isClickable ? 'scale(1.45)' : 'scale(1)',
+          boxShadow: isActive ? `0 0 0 5px ${C.wine}30` : hovered && isClickable ? `0 0 0 6px ${C.wine}35` : undefined,
         }}
       >
         {isDone && !isActive ? (
@@ -180,8 +183,8 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
         className="transition-all duration-150"
         style={{
           color: hovered && isClickable ? C.wine : isActive ? C.wine : isDone ? C.muted : C.faint,
-          fontSize: isActive ? '0.8rem' : '0.75rem',
-          fontWeight: isActive ? 700 : 400,
+          fontSize: hovered && isClickable ? '0.85rem' : isActive ? '0.8rem' : '0.75rem',
+          fontWeight: hovered && isClickable ? 700 : isActive ? 700 : 400,
         }}
       >
         {label}
@@ -192,6 +195,7 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
 
 export default function WineOrdersClient({ orders: initial }: { orders: WineOrder[] }) {
   const [orders, setOrders] = useState<WineOrder[]>(initial)
+  const [filter, setFilter] = useState<Filter>('all')
   const [, startTransition] = useTransition()
 
   function handleUpdate(id: string, status: string) {
@@ -200,6 +204,8 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
       await updateWineOrderStatus(id, status)
     })
   }
+
+  const visible = filter === 'all' ? orders : orders.filter(o => o.status === filter)
 
   if (orders.length === 0) {
     return (
@@ -211,7 +217,35 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
 
   return (
     <div className="flex flex-col gap-4">
-      {orders.map(order => {
+      {/* Status filter */}
+      <div className="flex gap-2 flex-wrap">
+        {FILTER_OPTIONS.map(f => {
+          const isActive = filter === f
+          const sc = f === 'all' ? null : STATUS_COLOR[f]
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className="text-xs font-medium px-3 py-1 rounded-full transition-all duration-150"
+              style={{
+                backgroundColor: isActive ? (sc ? sc.pill : '#f5ede0') : '#fff',
+                color: isActive ? (sc ? sc.pillText : '#8b4513') : C.faint,
+                border: `1px solid ${isActive ? (sc ? sc.border : '#c8a882') : C.border}`,
+              }}
+            >
+              {f === 'all' ? 'All' : STATUS_COLOR[f].label}
+            </button>
+          )
+        })}
+      </div>
+
+      {visible.length === 0 && (
+        <div className="text-center py-12 text-sm" style={{ color: '#a89070' }}>
+          No {filter} orders.
+        </div>
+      )}
+
+      {visible.map(order => {
         const wines = order.wines as WineSelection[]
         const isCancelled = order.status === 'cancelled'
         const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
@@ -224,56 +258,45 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
               backgroundColor: C.bg,
               borderColor: C.border,
               opacity: isCancelled ? 0.75 : 1,
-              borderLeftWidth: 4,
-              borderLeftColor: sc.border,
+              borderRightWidth: 4,
+              borderRightColor: sc.border,
             }}
           >
-            {/* Left — order info (col 1 + col 2) */}
-            <div className="flex-1 min-w-0 p-5 flex flex-col">
-
-              {/* Top row: name left, id/date right */}
-              <div className="flex items-baseline justify-between gap-3 mb-1">
-                <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
-                <p className="text-xs font-mono flex-shrink-0" style={{ color: C.faint }}>
-                  #{order.id.slice(0, 8)} &middot; {new Date(order.createdAt).toLocaleDateString('en-GB')}
+            {/* Col 1 — name, company, tags, address, contact */}
+            <div className="flex-1 min-w-0 p-5 flex flex-col justify-between">
+              <div>
+                <p className="font-bold mb-1" style={{ color: C.text }}>{order.businessName}</p>
+                <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
+                  {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
                 </p>
-              </div>
-              <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
-                {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
-              </p>
-
-              {/* Wines */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {wines.map(w => (
-                  <span key={w.id} className="text-xs px-2 py-1 rounded border"
-                    style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                    {w.name} &times; {w.quantity}
-                  </span>
-                ))}
-              </div>
-
-              {/* Two-column bottom: col 1 = address/contact, col 2 = price/hours/phone */}
-              <div className="flex gap-6 flex-1 items-center">
-                {/* Col 1 */}
-                <div className="flex flex-col gap-1 text-sm flex-1 min-w-0" style={{ color: C.muted }}>
-                  <p>&#128205; {order.address}</p>
-                  <p>&#128100; {order.contactName}</p>
+                <div className="flex flex-wrap gap-2">
+                  {wines.map(w => (
+                    <span key={w.id} className="text-xs px-2 py-1 rounded border"
+                      style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
+                      {w.name} &times; {w.quantity}
+                    </span>
+                  ))}
                 </div>
-
-                {/* Col 2 */}
-                <div className="flex flex-col gap-1 text-sm flex-shrink-0" style={{ color: C.muted, minWidth: 140 }}>
-                  <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
-                    {order.displayTotal != null
-                      ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
-                      : '—'}
-                  </p>
-                  {order.workingHours && <p>&#128336; {order.workingHours}</p>}
-                  <p>&#128222; {order.contactPhone}</p>
-                </div>
+              </div>
+              <div className="flex flex-col gap-1 text-sm mt-3" style={{ color: C.muted }}>
+                <p>&#128205; {order.address}</p>
+                <p>&#128100; {order.contactName}</p>
               </div>
             </div>
 
-            {/* Right — vertical stepper */}
+            {/* Col 2 — amount, hours, phone */}
+            <div className="flex-shrink-0 flex flex-col justify-center items-center gap-1 px-6 text-sm border-l"
+              style={{ color: C.muted, borderColor: C.border, minWidth: 160 }}>
+              <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
+                {order.displayTotal != null
+                  ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                  : '—'}
+              </p>
+              {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+              <p>&#128222; {order.contactPhone}</p>
+            </div>
+
+            {/* Col 3 — vertical stepper */}
             <div
               className="flex-shrink-0 p-5 pl-4 border-l"
               style={{ borderColor: C.border, backgroundColor: '#fdf8f2' }}
