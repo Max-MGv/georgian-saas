@@ -32,10 +32,26 @@ const STAGE_LABELS: Record<string, string> = {
   pending: 'Pending',
   confirmed: 'Confirmed',
   paid: 'Paid',
-  cancelled: 'Cancelled',
 }
 
-function StatusStepper({ orderId, status, onUpdate }: {
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2 3.5h10M5.5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M11 3.5l-.7 7.3a.5.5 0 0 1-.5.45H4.2a.5.5 0 0 1-.5-.45L3 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function UndoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2 5h5a4 4 0 1 1 0 8H4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 5l2.5-2.5M2 5l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function VerticalStepper({ orderId, status, onUpdate }: {
   orderId: string
   status: string
   onUpdate: (id: string, status: string) => void
@@ -44,84 +60,96 @@ function StatusStepper({ orderId, status, onUpdate }: {
   const currentIdx = STAGES.indexOf(status as Stage)
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* 3-step stepper */}
-      <div className="flex items-center gap-0">
-        {STAGES.map((stage, i) => {
-          const isDone = !isCancelled && currentIdx >= i
-          const isActive = !isCancelled && currentIdx === i
-          return (
-            <div key={stage} className="flex items-center">
-              <button
-                onClick={() => !isDone && onUpdate(orderId, stage)}
-                disabled={isCancelled || isDone}
-                title={isDone ? undefined : `Move to ${STAGE_LABELS[stage]}`}
-                className="flex flex-col items-center gap-1 group"
-                style={{ cursor: isCancelled || isDone ? 'default' : 'pointer' }}
-              >
+    <div className="flex flex-col items-center gap-0" style={{ minWidth: 90 }}>
+      {isCancelled ? (
+        /* Cancelled state — faded stepper + undo */
+        <>
+          {STAGES.map((stage, i) => (
+            <div key={stage} className="flex flex-col items-center">
+              <div className="flex items-center gap-2">
                 <div
-                  className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all"
-                  style={{
-                    borderColor: isDone ? C.wine : isCancelled ? '#d1b9a0' : C.border,
-                    backgroundColor: isDone ? C.wine : '#fff9f3',
-                    color: isDone ? 'white' : isCancelled ? '#d1b9a0' : C.faint,
-                  }}
+                  className="w-6 h-6 rounded-full border-2 flex items-center justify-center"
+                  style={{ borderColor: '#d1b9a0', backgroundColor: '#f5efe6' }}
                 >
-                  {isDone && !isActive ? (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  ) : (
-                    i + 1
-                  )}
+                  <span className="text-xs" style={{ color: '#d1b9a0' }}>{i + 1}</span>
                 </div>
-                <span
-                  className="text-xs font-medium whitespace-nowrap"
-                  style={{ color: isActive ? C.wine : isDone ? C.muted : isCancelled ? '#d1b9a0' : C.faint }}
-                >
-                  {STAGE_LABELS[stage]}
-                </span>
-              </button>
+                <span className="text-xs w-16" style={{ color: '#d1b9a0' }}>{STAGE_LABELS[stage]}</span>
+              </div>
               {i < STAGES.length - 1 && (
-                <div
-                  className="h-0.5 w-8 mx-1 mb-4 flex-shrink-0 transition-colors"
-                  style={{ backgroundColor: !isCancelled && currentIdx > i ? C.wine : '#e0d4c0' }}
-                />
+                <div className="w-0.5 h-5 ml-[-46px]" style={{ backgroundColor: '#e8ddd0' }} />
               )}
             </div>
-          )
-        })}
-      </div>
-
-      {/* Advance / Cancel controls */}
-      <div className="flex gap-2 flex-wrap">
-        {!isCancelled && currentIdx < STAGES.length - 1 && (
-          <button
-            onClick={() => onUpdate(orderId, STAGES[currentIdx + 1])}
-            className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
-            style={{ backgroundColor: C.wine }}
-          >
-            Mark as {STAGE_LABELS[STAGES[currentIdx + 1]]}
-          </button>
-        )}
-        {!isCancelled ? (
-          <button
-            onClick={() => onUpdate(orderId, 'cancelled')}
-            className="text-xs px-3 py-1.5 rounded-lg border font-medium"
-            style={{ borderColor: '#e53e3e', color: '#e53e3e' }}
-          >
-            Cancel order
-          </button>
-        ) : (
+          ))}
           <button
             onClick={() => onUpdate(orderId, 'pending')}
-            className="text-xs px-3 py-1.5 rounded-lg border font-medium"
+            title="Undo cancellation — restore to Pending"
+            className="mt-4 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-opacity hover:opacity-70"
             style={{ borderColor: C.border, color: C.muted }}
           >
-            Restore to Pending
+            <UndoIcon /> Undo
           </button>
-        )}
-      </div>
+        </>
+      ) : (
+        /* Normal stepper — all stages clickable */
+        <>
+          {STAGES.map((stage, i) => {
+            const isDone = currentIdx >= i
+            const isActive = currentIdx === i
+            const isClickable = i !== currentIdx
+            return (
+              <div key={stage} className="flex flex-col items-center">
+                <button
+                  onClick={() => isClickable && onUpdate(orderId, stage)}
+                  title={isClickable ? (i < currentIdx ? `Revert to ${STAGE_LABELS[stage]}` : `Advance to ${STAGE_LABELS[stage]}`) : undefined}
+                  className="flex items-center gap-2 group"
+                  style={{ cursor: isClickable ? 'pointer' : 'default' }}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
+                    style={{
+                      borderColor: isDone ? C.wine : C.border,
+                      backgroundColor: isDone ? C.wine : '#fff9f3',
+                    }}
+                  >
+                    {isDone && !isActive ? (
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path d="M1.5 5l2.5 2.5 4.5-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <span className="text-xs font-semibold" style={{ color: isDone ? 'white' : C.faint }}>{i + 1}</span>
+                    )}
+                  </div>
+                  <span
+                    className="text-xs font-medium w-16 text-left transition-colors"
+                    style={{ color: isActive ? C.wine : isDone ? C.muted : C.faint }}
+                  >
+                    {STAGE_LABELS[stage]}
+                  </span>
+                </button>
+                {i < STAGES.length - 1 && (
+                  <div
+                    className="w-0.5 h-5 transition-colors"
+                    style={{
+                      marginLeft: '-46px',
+                      backgroundColor: currentIdx > i ? C.wine : '#e0d4c0',
+                    }}
+                  />
+                )}
+              </div>
+            )
+          })}
+
+          {/* Trash — cancel order */}
+          <button
+            onClick={() => onUpdate(orderId, 'cancelled')}
+            title="Cancel order"
+            className="mt-4 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-opacity hover:opacity-70"
+            style={{ borderColor: '#e0d4c0', color: C.faint }}
+          >
+            <TrashIcon /> Cancel
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -154,61 +182,64 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         return (
           <div
             key={order.id}
-            className="rounded-xl border p-5"
+            className="rounded-xl border p-5 flex gap-5"
             style={{
               backgroundColor: C.bg,
               borderColor: isCancelled ? '#f0d8d8' : C.border,
               opacity: isCancelled ? 0.75 : 1,
             }}
           >
-            {/* Header row */}
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
-                  {isCancelled && (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Cancelled</span>
+            {/* Left — order info */}
+            <div className="flex-1 min-w-0">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
+                    {isCancelled && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#fde8e8', color: '#c53030' }}>Cancelled</span>
+                    )}
+                  </div>
+                  {order.llcName && (
+                    <p className="text-sm" style={{ color: C.muted }}>{order.llcName}{order.llcId ? ` · ${order.llcId}` : ''}</p>
                   )}
                 </div>
-                {order.llcName && (
-                  <p className="text-sm" style={{ color: C.muted }}>{order.llcName}{order.llcId ? ` · ${order.llcId}` : ''}</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-mono px-2 py-1 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>
+                    #{order.id.slice(0, 8)}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: C.faint }}>
+                    {new Date(order.createdAt).toLocaleDateString('en-GB')}
+                  </p>
+                </div>
+              </div>
+
+              {/* Wines + total */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {wines.map(w => (
+                  <span key={w.id} className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
+                    {w.name} × {w.quantity}
+                  </span>
+                ))}
+                {order.totalAmount != null && (
+                  <span className="text-xs px-2 py-1 rounded border font-semibold" style={{ borderColor: '#c9b99a', color: C.wine, backgroundColor: '#fdf7ef' }}>
+                    Total: {order.totalAmount}₾
+                  </span>
                 )}
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-xs font-mono px-2 py-1 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>
-                  #{order.id.slice(0, 8)}
-                </p>
-                <p className="text-xs mt-1" style={{ color: C.faint }}>
-                  {new Date(order.createdAt).toLocaleDateString('en-GB')}
-                </p>
+
+              {/* Contact info */}
+              <div className="grid sm:grid-cols-2 gap-1 text-sm" style={{ color: C.muted }}>
+                <p>📍 {order.address}</p>
+                {order.workingHours && <p>🕐 {order.workingHours}</p>}
+                <p>👤 {order.contactName}</p>
+                <p>📞 {order.contactPhone}</p>
               </div>
             </div>
 
-            {/* Wines + total */}
-            <div className="flex flex-wrap gap-2 mb-3">
-              {wines.map(w => (
-                <span key={w.id} className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                  {w.name} × {w.quantity}
-                </span>
-              ))}
-              {order.totalAmount != null && (
-                <span className="text-xs px-2 py-1 rounded border font-semibold" style={{ borderColor: '#c9b99a', color: C.wine, backgroundColor: '#fdf7ef' }}>
-                  Total: {order.totalAmount}₾
-                </span>
-              )}
-            </div>
-
-            {/* Contact info */}
-            <div className="grid sm:grid-cols-2 gap-1 text-sm mb-4" style={{ color: C.muted }}>
-              <p>📍 {order.address}</p>
-              {order.workingHours && <p>🕐 {order.workingHours}</p>}
-              <p>👤 {order.contactName}</p>
-              <p>📞 {order.contactPhone}</p>
-            </div>
-
-            {/* Status stepper */}
-            <div className="pt-3 border-t" style={{ borderColor: C.border }}>
-              <StatusStepper orderId={order.id} status={order.status} onUpdate={handleUpdate} />
+            {/* Right — vertical stepper */}
+            <div className="flex-shrink-0 flex items-start pt-1 pl-4 border-l" style={{ borderColor: C.border }}>
+              <VerticalStepper orderId={order.id} status={order.status} onUpdate={handleUpdate} />
             </div>
           </div>
         )
