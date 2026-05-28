@@ -71,9 +71,9 @@ tags: [features, mvp]
 
 Full plan + steps: [[Plan-EnhancedCompanyBooking]]
 
-- [ ] Step 1: DB schema — split guest counts, MenuItem, MasterclassItem, OrderMasterclass, OrderExtra
-- [ ] Step 2: Menu Items admin (`/admin/menu-items`) — manage hot dish dropdown options
-- [ ] Step 3: Masterclass admin (`/admin/masterclass`) — manage masterclass types + unit prices
+- [x] Step 1: DB schema — split guest counts, MenuItem, MasterclassItem, OrderMasterclass, OrderExtra
+- [x] Step 2: Menu Items admin (`/admin/menu-items`) — manage hot dish dropdown options (vegetable / meat sections)
+- [x] Step 3: Masterclass admin (`/admin/masterclass`) — manage masterclass types + unit prices (MasterclassUnit enum: PER_PERSON/PER_PIECE/FLAT)
 - [ ] Step 4: Order detail page (`/admin/orders/[id]`) — view + edit enhanced fields, recalculate total
 - [ ] Step 5: Admin create order (`/admin/orders/new`) — full company order from scratch
 - [ ] Step 6: Public form toggle — settings switch enables enhanced form for company bookings

@@ -38,8 +38,8 @@ The main application framework. Holds all pages, server actions, and backend log
 - `/admin/orders/new` — *(planned v1.2)* Create full company order
 - `/admin/companies` — Company CRUD + price tiers per company
 - `/admin/wines` — Wine catalogue CRUD + image assignment
-- `/admin/menu-items` — *(planned v1.2)* Hot dish options for booking form
-- `/admin/masterclass` — *(planned v1.2)* Masterclass types + pricing
+- `/admin/menu-items` — Hot dish options CRUD (vegetable / meat sections)
+- `/admin/masterclass` — Masterclass types + unit pricing (PER_PERSON / PER_PIECE / FLAT)
 - `/admin/wine-orders` — B2B wine reservation requests
 - `/admin/statistics` — Revenue + booking analytics (V2 default, V1 toggle)
 - `/admin/settings` — App settings: price visibility, payment details, booking form toggle
@@ -51,9 +51,10 @@ The main application framework. Holds all pages, server actions, and backend log
 - `prices.ts` — price tier CRUD
 - `wines.ts` — wine CRUD
 - `settings.ts` — read/write settings (key-value)
-- `menuItems.ts` — *(planned)* hot dish CRUD
-- `masterclassItems.ts` — *(planned)* masterclass CRUD
-- `orderExtras.ts` — *(planned)* order extra charges
+- `menuItems.ts` — hot dish CRUD (create/update/delete MenuItem)
+- `masterclassItems.ts` — masterclass CRUD (create/update/delete MasterclassItem)
+- `orderExtras.ts` — *(planned v1.2 Step 4)* order extra charges
+- `orderMasterclass.ts` — *(planned v1.2 Step 4)* add/remove masterclass lines per order
 
 **Key files:**
 - `app/globals.css` — global styles including `@media print` for invoice
@@ -103,17 +104,15 @@ PostgreSQL database. All application data lives here.
 
 **Live tables:**
 - `Company` — partner tour operators; has identificationCode for invoices
-- `Order` — every booking (date, time, guests, visit type, price, company)
+- `Order` — every booking; now includes split guest counts + hot dish + food notes fields
 - `Price` — per-company pricing tiers; has both tasting and tasting+lunch rates
 - `Wine` — wine catalogue items with image path + active/sort flags
 - `WineOrder` — B2B wine reservation requests
 - `Setting` — key-value config store (payment details, toggles)
-
-**Planned tables (v1.2):**
-- `MenuItem` — hot dish options (vegetable / meat)
-- `MasterclassItem` — masterclass types with unit prices
-- `OrderMasterclass` — junction: masterclass lines per order
-- `OrderExtra` — admin-entered extra charges per order
+- `MenuItem` — hot dish options (vegetable / meat), managed at `/admin/menu-items`
+- `MasterclassItem` — masterclass types with MasterclassUnit enum + unit prices, managed at `/admin/masterclass`
+- `OrderMasterclass` — junction: masterclass lines per order (quantity + price snapshot)
+- `OrderExtra` — admin-entered extra charges per order (label + amount)
 
 **To browse data:** supabase.com → Table Editor.
 
@@ -151,11 +150,14 @@ Password-protected management interface at `/admin`.
 - Statistics: V2 default (upcoming cards + filters + bar charts), toggle to V1 historical breakdown
 - Settings: price visibility toggle, 5 payment/bank detail fields for invoices
 
-**Planned (v1.2):**
-- Menu Items: admin manages hot dish dropdown options
-- Masterclass: admin manages masterclass types + unit prices
+**Live (v1.2 Steps 1–3):**
+- Menu Items (`/admin/menu-items`): CRUD for hot dish options (vegetable / meat sections)
+- Masterclass (`/admin/masterclass`): CRUD for masterclass types + unit pricing (PER_PERSON / PER_PIECE / FLAT)
+
+**Planned (v1.2 Steps 4–7):**
 - Order detail page: click any order → full view + edit enhanced fields (guest split, hot dishes, masterclass, extras)
-- Create order: full company order from scratch
+- Create order: full company order from scratch (`/admin/orders/new`)
+- Public form toggle: `enable_enhanced_company_booking` setting switches company booking to enhanced form
 
 ---
 
@@ -205,7 +207,7 @@ Enters the pipeline at `createBooking()` — same pricing logic, validations, an
 - Filters: date range, company, individuals only, upcoming
 - Per row: printer icon (Georgian invoice), edit (slide-over), delete (confirm)
 - Revenue total updates with active filters
-- *(planned)* Click row → `/admin/orders/[id]` detail page
+- *(planned v1.2 Step 4)* Click row → `/admin/orders/[id]` detail page with enhanced fields
 
 ---
 

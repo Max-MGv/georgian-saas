@@ -244,7 +244,7 @@ Step 1 (DB)
 | 1 — DB schema | ✅ Done | Pushed to Supabase, Prisma client generated |
 | 2 — Menu Items admin | ✅ Done | /admin/menu-items live |
 | 3 — Masterclass admin | ✅ Done | /admin/masterclass live — MasterclassUnit enum (PER_PERSON/PER_PIECE/FLAT) in DB and lib/masterclass.ts |
-| 4 — Order detail page | 🔴 Next | |
-| 5 — Admin create order | 🔴 Not started | needs Step 4 |
-| 6 — Public form toggle | 🔴 Not started | needs Step 5 |
-| 7 — Invoice updates | 🔴 Not started | optional, after Step 6 |
+| 4 — Order detail page | ✅ Done | /admin/orders/[id] live — rows clickable, guest counts, hot dish, masterclass, extras, live total |
+| 5 — Admin create order | ✅ Done | /admin/orders/new live — full form + createOrderAdmin action; TC2+TC7 bugs fixed |
+| 6 — Public form toggle | ✅ Done | enable_enhanced_company_booking setting; enhanced BookingForm with split counts, hot dishes, masterclass add-ons |
+| 7 — Invoice updates | ✅ Done | Simple/Detailed picker on print button; detailed: split counts, masterclass lines, extras, itemised breakdown |

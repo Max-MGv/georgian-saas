@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { BookingType, VisitType } from '@prisma/client'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
+import { findTier } from '@/lib/pricingUtils'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -15,6 +16,14 @@ export type BookingFormData = {
   surname: string
   email?: string
   phone?: string
+  // Enhanced company booking fields
+  tastingGuestCount?: number
+  lunchGuestCount?: number
+  freeGuestCount?: number
+  hotDishVegetable?: string | null
+  hotDishMeat?: string | null
+  foodNotes?: string | null
+  masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
 }
 
 export type BookingResult =
@@ -28,29 +37,47 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return { success: false, error: 'Minimum 4 guests required.' }
     }
 
-    const pricePerPerson = data.visitType === 'TASTING' ? 50 : 100
+    const isEnhanced = data.bookingType === 'COMPANY' &&
+      (data.tastingGuestCount != null || data.lunchGuestCount != null)
 
-    let totalPrice = pricePerPerson * guestCount
+    const masterclassAmt = (data.masterclassLines ?? []).reduce(
+      (s, l) => s + l.quantity * l.pricePerUnit, 0
+    )
+
+    const pricePerPerson = data.visitType === 'TASTING' ? 50 : 100
+    // Enhanced bookings: start at masterclassAmt so 0-paying-guest groups get correct total
+    let totalPrice = isEnhanced ? masterclassAmt : pricePerPerson * guestCount
 
     if (data.bookingType === 'COMPANY' && data.companyId) {
-      const price = await db.price.findFirst({
-        where: {
-          companyId: data.companyId,
-          minGuests: { lte: guestCount },
-          maxGuests: { gte: guestCount },
-        },
+      const company = await db.company.findUnique({
+        where: { id: data.companyId },
+        include: { prices: true },
       })
-      if (price) {
-        const ratePerPerson = data.visitType === 'TASTING'
-          ? price.pricePerPerson
-          : price.tastingLunchPricePerPerson || price.pricePerPerson
-        totalPrice = ratePerPerson * guestCount + price.registrationPrice
-      } else {
-        const tierCount = await db.price.count({ where: { companyId: data.companyId } })
-        if (tierCount > 0) {
+
+      if (company?.prices.length) {
+        const payingGuests = isEnhanced
+          ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
+          : guestCount
+        const tier = findTier(company.prices, payingGuests)
+        if (tier) {
+          if (isEnhanced) {
+            totalPrice =
+              (data.tastingGuestCount ?? 0) * tier.pricePerPerson +
+              (data.lunchGuestCount ?? 0) * tier.tastingLunchPricePerPerson +
+              tier.registrationPrice +
+              masterclassAmt
+          } else {
+            const ratePerPerson = data.visitType === 'TASTING'
+              ? tier.pricePerPerson
+              : tier.tastingLunchPricePerPerson || tier.pricePerPerson
+            totalPrice = ratePerPerson * guestCount + tier.registrationPrice
+          }
+        } else if (!isEnhanced) {
           return { success: false, error: `No pricing tier covers ${guestCount} guests for this company. Please contact us directly.` }
         }
       }
+    } else if (isEnhanced) {
+      totalPrice = masterclassAmt
     }
 
     await db.order.create({
@@ -60,12 +87,25 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         date: new Date(data.date),
         timeSlot: data.timeSlot,
         guestCount,
+        tastingGuestCount: isEnhanced ? (data.tastingGuestCount ?? 0) : 0,
+        lunchGuestCount: isEnhanced ? (data.lunchGuestCount ?? 0) : 0,
+        freeGuestCount: isEnhanced ? (data.freeGuestCount ?? 0) : 0,
+        hotDishVegetable: data.hotDishVegetable || null,
+        hotDishMeat: data.hotDishMeat || null,
+        foodNotes: data.foodNotes || null,
         name: data.name,
         surname: data.surname,
         email: data.email || null,
         phone: data.phone || null,
         totalPrice,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
+        masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
+          create: (data.masterclassLines ?? []).map(l => ({
+            masterclassItemId: l.masterclassItemId,
+            quantity: l.quantity,
+            pricePerUnit: l.pricePerUnit,
+          })),
+        } : undefined,
       },
     })
 

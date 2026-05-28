@@ -9,7 +9,7 @@ const C = {
 }
 
 type Props = {
-  settings: { show_company_price_after_booking: boolean }
+  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean }
   payment: {
     payment_recipient_name: string
     payment_personal_number: string
@@ -48,6 +48,8 @@ const inputStyle = {
 
 export default function SettingsClient({ settings, payment }: Props) {
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
+  const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
+  const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
   const [paymentFields, setPaymentFields] = useState(payment)
   const [isPending, startTransition] = useTransition()
   const [savedKey, setSavedKey] = useState<string | null>(null)
@@ -57,6 +59,24 @@ export default function SettingsClient({ settings, payment }: Props) {
     startTransition(async () => {
       await updateSetting('show_company_price_after_booking', value ? 'true' : 'false')
       setSavedKey('show_company_price_after_booking')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleEnhancedToggle(value: boolean) {
+    setEnhancedBooking(value)
+    startTransition(async () => {
+      await updateSetting('enable_enhanced_company_booking', value ? 'true' : 'false')
+      setSavedKey('enable_enhanced_company_booking')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleInvoiceDetailedToggle(value: boolean) {
+    setInvoiceDetailed(value)
+    startTransition(async () => {
+      await updateSetting('invoice_detailed', value ? 'true' : 'false')
+      setSavedKey('invoice_detailed')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -80,10 +100,10 @@ export default function SettingsClient({ settings, payment }: Props) {
   return (
     <div className="space-y-6">
 
-      {/* Booking toggle */}
+      {/* Booking toggles */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="flex items-center justify-between gap-6 px-5 py-4"
-          style={{ backgroundColor: C.bg }}>
+        <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
             <p className="text-sm font-medium" style={{ color: C.text }}>Show price after company booking</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
@@ -95,6 +115,36 @@ export default function SettingsClient({ settings, payment }: Props) {
               <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
             )}
             <Toggle enabled={showPrice} onChange={handleToggle} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>Enhanced company booking form</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+              When on, company bookings on the public site show split guest counts, hot dish selection, and masterclass add-ons.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'enable_enhanced_company_booking' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+            )}
+            <Toggle enabled={enhancedBooking} onChange={handleEnhancedToggle} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4"
+          style={{ backgroundColor: C.bg }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>Detailed invoice</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+              When on, printed invoices show split guest counts, masterclass lines, and extras. When off, invoices show the total only.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'invoice_detailed' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+            )}
+            <Toggle enabled={invoiceDetailed} onChange={handleInvoiceDetailedToggle} />
           </div>
         </div>
       </div>

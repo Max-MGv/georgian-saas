@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Architecture.md",
+                "file": "Decisions.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Architecture"
+              "title": "Decisions"
             }
           }
         ]
@@ -185,6 +185,12 @@
   },
   "active": "0eae5ecf8a741e4f",
   "lastOpenFiles": [
-    "Business Model.md"
+    "SessionLog.md.tmp.22004.d4c0cad753d7",
+    "Plan-EnhancedCompanyBooking.md.tmp.22004.d4c32c2cfd84",
+    "ClaudeInstructions.md",
+    "FeatureLog.md",
+    "Roadmap.md",
+    "Business Model.md",
+    "Architecture.md"
   ]
 }

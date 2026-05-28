@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 // Default values for all settings
 const DEFAULTS: Record<string, string> = {
   show_company_price_after_booking: 'true',
+  enable_enhanced_company_booking: 'false',
+  invoice_detailed: 'false',
   payment_recipient_name: '',
   payment_personal_number: '',
   payment_bank_name: '',

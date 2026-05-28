@@ -11,36 +11,40 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 ## 2026-05-27 — Latest session (full detail)
 
 ### Completed
-- **Print invoice fixes** — blank page fixed (React portal renders invoice as direct `<body>` child; `body > * { display: none }` hides Next.js root, `#invoice-portal { display: block }` shows only invoice); Georgian typos fixed (ბანქი→ბანკი); payment section always shown with `—` fallback; 2-page bug fixed
-- **Vercel CLI set up** — installed globally, logged in as `max-mgv`, linked to `mg-productions-projects/georgian-saas`; can now run `npx vercel ls` and `npx vercel logs <url>` to see build/runtime output
-- **Supabase RLS** — enabled Row Level Security on all 10 tables via SQL editor; blocks direct anon API access without breaking Prisma (service role bypasses RLS)
-- **Enhanced company booking — Steps 1–3 complete:**
-  - Step 1: DB schema — `Order` gets 6 new fields (lunchGuestCount, tastingGuestCount, freeGuestCount, hotDishVegetable, hotDishMeat, foodNotes); 4 new models (MenuItem, MasterclassItem, OrderMasterclass, OrderExtra)
-  - Step 2: `/admin/menu-items` — CRUD for vegetable/meat hot dish options (two sections, active toggle, sort order)
-  - Step 3: `/admin/masterclass` — CRUD for masterclass types; `unit String` replaced with `MasterclassUnit` enum (`PER_PERSON` / `PER_PIECE` / `FLAT`); shared types/constants in `lib/masterclass.ts` (fixes Next.js server/client boundary error)
+- **Print invoice fixes** — blank page fixed (React portal); Georgian typos fixed; payment section always shown; 2-page bug fixed
+- **Vercel CLI set up** — installed globally, logged in as `max-mgv`, linked to `mg-productions-projects/georgian-saas`
+- **Supabase RLS** — enabled Row Level Security on all 10 tables
+- **Enhanced company booking — Steps 1–3** — DB schema, Menu Items admin, Masterclass admin (all done prior)
+- **Enhanced company booking — Step 4** — `/admin/orders/[id]` detail page with editable guest counts, hot dish, masterclass, extras, live total, tier-in-use banner
+- **Enhanced company booking — Step 5** — `/admin/orders/new` + `createOrderAdmin` action; "New Order" button on orders list; TC2+TC7 bugs fixed (individual manual rate calc, zero-paying-guest fallback)
+- **Enhanced company booking — Step 6** — Public form toggle:
+  - `enable_enhanced_company_booking` setting added (default `false`)
+  - Toggle in `/admin/settings` under Booking section
+  - `BookingForm` extended: when toggle on + company selected → split guest counts (tasting/lunch/free), hot dish dropdowns (TASTING_LUNCH only), masterclass add-ons with quantity, food notes, live price breakdown
+  - `createBooking` extended: accepts enhanced fields, uses `findTier` for split-count pricing, creates `OrderMasterclass` lines
+  - Individual bookings always use the simple form regardless of toggle
 
-### Key files changed
-- `saas/app/admin/orders/InvoicePrint.tsx` — Georgian typos, payment section always shown
-- `saas/app/admin/orders/OrdersTable.tsx` — React portal for print
-- `saas/app/globals.css` — `@media print` portal approach
-- `saas/prisma/schema.prisma` — 4 new models, 6 new Order fields, MasterclassUnit enum
-- `saas/app/actions/menuItems.ts` — NEW
-- `saas/app/actions/masterclassItems.ts` — NEW (imports from lib/masterclass.ts)
-- `saas/app/admin/menu-items/` — NEW: page.tsx + MenuItemsClient.tsx
-- `saas/app/admin/masterclass/` — NEW: page.tsx + MasterclassClient.tsx
-- `saas/app/admin/layout.tsx` — Menu Items + Masterclass nav links
-- `saas/lib/masterclass.ts` — NEW: MasterclassUnit type, UNIT_LABELS, UNIT_DESCRIPTIONS, MASTERCLASS_UNITS
+### Key files changed this session
+- `saas/app/actions/settings.ts` — `enable_enhanced_company_booking` default added
+- `saas/app/admin/settings/page.tsx` — fetches + passes new setting
+- `saas/app/admin/settings/SettingsClient.tsx` — second booking toggle
+- `saas/app/(site)/page.tsx` — fetches menuItems + masterclassItems, passes to BookingForm
+- `saas/components/BookingForm.tsx` — enhanced company mode (split counts, hot dishes, masterclass, food notes, live price breakdown)
+- `saas/app/actions/createBooking.ts` — extended for enhanced fields + masterclass lines
+- `saas/app/admin/orders/new/page.tsx` — NEW (Step 5)
+- `saas/app/admin/orders/new/NewOrderForm.tsx` — NEW (Step 5)
+- `saas/app/actions/orders.ts` — createOrderAdmin added (Step 5); updateOrderEnhanced + manual rates (Step 4)
+- `saas/app/admin/orders/page.tsx` — "+ New Order" button (Step 5)
 
 ### Known local issue
-Prisma client stale on Windows (DLL lock prevented `prisma generate` after schema change). Fix: Ctrl+C dev server → `npx prisma generate` → restart `npm run dev`. Vercel builds correctly (generates fresh each time).
+Prisma client stale on Windows (DLL lock). Fix: Ctrl+C dev server → `npx prisma generate` → restart.
 
 ### Next up
-**Step 4 — Order detail page** (`/admin/orders/[id]`):
-- Make order rows clickable → navigate to detail page
-- Server component fetches order + company prices + menu items + masterclass items + existing order lines
-- Client component sections: base info (read-only), split guest counts (editable, recalculates total), hot dish dropdowns, masterclass lines (add/remove, quantity), extras (add/remove label+amount), food notes
-- `updateOrderEnhanced` server action
-- Pricing formula: `(tastingGuests × tastingRate) + (lunchGuests × lunchRate) + registrationPrice + Σ masterclass lines + Σ extras`
+- **Step 7 — Invoice updates**: split guest counts + masterclass/extras as line items on printed invoice
+- **Fix date filters** on admin orders (KnownBugs #1)
+- **Gallery page** — wire up slider/gallery photos on public site
+- **Send invoice by email** — Resend + PDF generation
+- Verify nikalasmarani.ge in Resend
 
 ---
 

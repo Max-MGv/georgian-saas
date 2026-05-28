@@ -28,21 +28,29 @@ model Company {
 Every booking submitted (public form or admin).
 ```prisma
 model Order {
-  id           String   @id @default(cuid())
-  date         DateTime
-  timeSlot     String
-  bookingType  String   // "INDIVIDUAL" | "COMPANY"
-  visitType    String   // "TASTING" | "TASTING_LUNCH"
-  guestCount   Int
-  name         String
-  surname      String
-  email        String?
-  phone        String?
-  notes        String?
-  totalPrice   Float?
-  companyId    String?
-  company      Company? @relation(fields: [companyId], references: [id])
-  createdAt    DateTime @default(now())
+  id                  String             @id @default(cuid())
+  date                DateTime
+  timeSlot            String
+  bookingType         String             // "INDIVIDUAL" | "COMPANY"
+  visitType           String             // "TASTING" | "TASTING_LUNCH"
+  guestCount          Int
+  lunchGuestCount     Int                @default(0)
+  tastingGuestCount   Int                @default(0)
+  freeGuestCount      Int                @default(0)   // guide, driver, under-12 — no charge
+  hotDishVegetable    String?            // snapshot of selected menu item name
+  hotDishMeat         String?            // snapshot of selected menu item name
+  foodNotes           String?            // free-text kitchen notes
+  name                String
+  surname             String
+  email               String?
+  phone               String?
+  notes               String?
+  totalPrice          Float?
+  companyId           String?
+  company             Company?           @relation(fields: [companyId], references: [id])
+  masterclassLines    OrderMasterclass[]
+  extras              OrderExtra[]
+  createdAt           DateTime           @default(now())
 }
 ```
 
@@ -109,26 +117,10 @@ model Setting {
 | `payment_bank_name` | `""` | Invoice: bank name |
 | `payment_bank_code` | `""` | Invoice: bank SWIFT code |
 | `payment_iban` | `""` | Invoice: IBAN |
-| `enable_enhanced_company_booking` | `false` | *(planned v1.2)* Toggle enhanced public form |
+| `enable_enhanced_company_booking` | `false` | *(planned v1.2 Step 6)* Toggle enhanced public form |
 
----
-
-## Planned Models (v1.2 — Enhanced Company Booking)
-
-Full plan: `vault/Plan-EnhancedCompanyBooking.md`
-
-### New fields on Order (Step 1)
-```prisma
-lunchGuestCount   Int     @default(0)
-tastingGuestCount Int     @default(0)
-freeGuestCount    Int     @default(0)  // guide, driver, under-12 — no charge
-hotDishVegetable  String?              // snapshot of selected menu item
-hotDishMeat       String?              // snapshot of selected menu item
-foodNotes         String?              // kitchen notes
-```
-
-### MenuItem (Step 1)
-Admin-managed hot dish options for booking form dropdowns.
+### MenuItem
+Admin-managed hot dish options for company booking form dropdowns. Live at `/admin/menu-items`.
 ```prisma
 model MenuItem {
   id        String   @id @default(cuid())
@@ -140,23 +132,30 @@ model MenuItem {
 }
 ```
 
-### MasterclassItem (Step 1)
-Masterclass types with per-unit pricing.
+### MasterclassItem
+Masterclass types with per-unit pricing. Live at `/admin/masterclass`.
 ```prisma
+enum MasterclassUnit {
+  PER_PERSON  // auto-multiplied by guest count
+  PER_PIECE   // admin enters quantity per order
+  FLAT        // fixed charge, added once
+}
+
 model MasterclassItem {
-  id           String             @id @default(cuid())
-  name         String             // e.g. "Churchkhela", "Khinkali", "Baklava"
-  unit         String             // e.g. "person", "piece"
+  id           String           @id @default(cuid())
+  name         String           // e.g. "Churchkhela", "Khinkali", "Baklava"
+  unitType     MasterclassUnit  @default(PER_PIECE)
   pricePerUnit Float
-  active       Boolean            @default(true)
-  sortOrder    Int                @default(0)
-  createdAt    DateTime           @default(now())
+  active       Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
   orderLines   OrderMasterclass[]
 }
 ```
+Shared types/labels live in `saas/lib/masterclass.ts` (neutral file, safe to import from server or client).
 
-### OrderMasterclass (Step 1)
-Which masterclass items appear on an order.
+### OrderMasterclass
+Junction table — which masterclass items are on an order.
 ```prisma
 model OrderMasterclass {
   id                String          @id @default(cuid())
@@ -164,12 +163,12 @@ model OrderMasterclass {
   masterclassItemId String
   quantity          Int
   pricePerUnit      Float           // price snapshot at time of booking
-  order             Order           @relation(...)
-  masterclassItem   MasterclassItem @relation(...)
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
 }
 ```
 
-### OrderExtra (Step 1)
+### OrderExtra
 Admin-entered extra charges on an order (additional wine, food, etc.)
 ```prisma
 model OrderExtra {
@@ -177,7 +176,7 @@ model OrderExtra {
   orderId String
   label   String  // e.g. "Additional wine", "Extra food"
   amount  Float   // total ₾ for this line
-  order   Order   @relation(...)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 ```
 
@@ -194,7 +193,7 @@ ratePerPerson = visitType === 'TASTING'
   : price.tastingLunchPricePerPerson || price.pricePerPerson
 ```
 
-### Planned (enhanced, Step 4+)
+### Enhanced (Step 4 — order detail UI, in progress)
 ```
 totalPrice =
   (tastingGuestCount × price.pricePerPerson) +
@@ -203,7 +202,7 @@ totalPrice =
   Σ(masterclassLines: quantity × pricePerUnit) +
   Σ(extras: amount)
 ```
-Falls back to current logic if split counts are all 0.
+Falls back to current logic if split counts are all 0. DB schema is ready; recalculation UI comes in Step 4.
 
 ---
 

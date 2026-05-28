@@ -98,6 +98,7 @@ Complete this before writing a single line of product code.
 - [x] Company identification code field — optional field on Company, shown in CRUD and on printed invoices
 - [x] Payment details in admin settings — 5 bank fields (recipient name, personal number, bank name, bank code, IBAN), editable on `/admin/settings`, shown on invoices
 - [x] Print invoice — printer icon on each order row; Georgian-language invoice (ინვოისი) rendered and printed via browser; `@media print` CSS isolates the invoice layout
+- [ ] **Send invoice by email** — "Send Invoice" button on order row/detail; auto-generates the invoice PDF and emails it to the customer in 1 click (Resend + PDF generation)
 - [ ] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
 - [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
 - [ ] Gallery page — wire up slider photos and gallery photos on public site (images already in `public/images/`)
@@ -111,13 +112,13 @@ Complete this before writing a single line of product code.
 
 Full plan: `vault/Plan-EnhancedCompanyBooking.md`
 
-- [ ] **Step 1 — DB schema**: split guest counts (lunch/tasting/free), MenuItem, MasterclassItem, OrderMasterclass, OrderExtra models
-- [ ] **Step 2 — Menu Items admin**: admin manages hot dish options (vegetable/meat) at `/admin/menu-items`
-- [ ] **Step 3 — Masterclass admin**: admin manages masterclass types + unit prices at `/admin/masterclass`
-- [ ] **Step 4 — Clickable order detail**: `/admin/orders/[id]` — view + edit all enhanced fields, recalculate total
-- [ ] **Step 5 — Admin create order**: `/admin/orders/new` — create full company order from scratch
-- [ ] **Step 6 — Public form toggle**: settings toggle enables enhanced form for company bookings on public site
-- [ ] **Step 7 — Invoice updates**: reflect split counts + masterclass/extras as line items (optional)
+- [x] **Step 1 — DB schema**: split guest counts (lunch/tasting/free), MenuItem, MasterclassItem, OrderMasterclass, OrderExtra models
+- [x] **Step 2 — Menu Items admin**: admin manages hot dish options (vegetable/meat) at `/admin/menu-items`
+- [x] **Step 3 — Masterclass admin**: admin manages masterclass types + unit prices at `/admin/masterclass` (MasterclassUnit enum: PER_PERSON/PER_PIECE/FLAT)
+- [x] **Step 4 — Clickable order detail**: `/admin/orders/[id]` — view + edit all enhanced fields, recalculate total
+- [x] **Step 5 — Admin create order**: `/admin/orders/new` — create full company order from scratch
+- [x] **Step 6 — Public form toggle**: settings toggle enables enhanced form for company bookings on public site
+- [x] **Step 7 — Invoice updates**: Simple/Detailed toggle on print picker; detailed shows split guest counts, masterclass lines, extras, itemised amount breakdown
 
 Other planned improvements:
 - [ ] Minimum guest count configurable per visit type in admin settings

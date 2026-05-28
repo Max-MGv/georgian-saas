@@ -14,16 +14,18 @@ type SearchParams = {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
     db.company.findMany({ orderBy: { name: 'asc' } }),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
     getSetting('payment_bank_name'),
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
+    getSetting('invoice_detailed'),
   ])
 
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
+  const detailed = invoiceDetailed === 'true'
 
   const orders = await db.order.findMany({
     where: {
@@ -39,7 +41,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           ? { companyId: params.companyId }
           : {}),
     },
-    include: { company: true },
+    include: {
+      company: true,
+      masterclassLines: { include: { masterclassItem: true } },
+      extras: true,
+    },
     orderBy: { date: 'desc' },
   })
 
@@ -69,13 +75,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <>
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} detailed={detailed} orders={orders.map(o => ({
             id: o.id,
             date: o.date,
             timeSlot: o.timeSlot,
             bookingType: o.bookingType,
             visitType: o.visitType,
             guestCount: o.guestCount,
+            tastingGuestCount: o.tastingGuestCount,
+            lunchGuestCount: o.lunchGuestCount,
+            freeGuestCount: o.freeGuestCount,
             name: o.name,
             surname: o.surname,
             email: o.email,
@@ -83,6 +92,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             notes: o.notes,
             totalPrice: o.totalPrice,
             company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
+            masterclassLines: o.masterclassLines.map(l => ({
+              name: l.masterclassItem.name,
+              quantity: l.quantity,
+              pricePerUnit: l.pricePerUnit,
+            })),
+            extras: o.extras.map(e => ({ label: e.label, amount: e.amount })),
           }))} payment={payment} />
 
           <div className="mt-4 flex justify-end">

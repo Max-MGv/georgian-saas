@@ -11,3 +11,5 @@ saas/.env*.local
 
 # Credentials — never commit
 credentials.txt
+
+.vercel

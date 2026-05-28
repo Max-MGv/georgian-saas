@@ -26,6 +26,9 @@ type Order = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   visitType: 'TASTING' | 'TASTING_LUNCH'
   guestCount: number
+  tastingGuestCount: number
+  lunchGuestCount: number
+  freeGuestCount: number
   name: string
   surname: string
   email: string | null
@@ -33,6 +36,8 @@ type Order = {
   notes: string | null
   totalPrice: number | null
   company: { name: string; identificationCode: string | null } | null
+  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  extras: { label: string; amount: number }[]
 }
 
 type Payment = {
@@ -64,7 +69,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment }: { orders: Order[]; payment: Payment }) {
+export default function OrdersTable({ orders: initial, payment, detailed }: { orders: Order[]; payment: Payment; detailed: boolean }) {
   const router = useRouter()
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -213,7 +218,7 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handlePrint(order)}
-                        title="Print invoice"
+                        title={detailed ? 'Print detailed invoice' : 'Print invoice'}
                         className="p-1 rounded border"
                         style={{ borderColor: C.border, color: C.muted }}
                       >
@@ -241,7 +246,7 @@ export default function OrdersTable({ orders: initial, payment }: { orders: Orde
       {/* Invoice portal — renders directly into <body> so print CSS can isolate it */}
       {printOrder && typeof document !== 'undefined' && createPortal(
         <div id="invoice-portal">
-          <InvoicePrint order={printOrder} payment={payment} />
+          <InvoicePrint order={printOrder} payment={payment} detailed={detailed} />
         </div>,
         document.body
       )}

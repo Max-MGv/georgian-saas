@@ -3,12 +3,15 @@ import { getSetting } from '@/app/actions/settings'
 import BookingForm from '@/components/BookingForm'
 
 export default async function Home() {
-  const [companies, showCompanyPrice] = await Promise.all([
+  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems] = await Promise.all([
     db.company.findMany({
       orderBy: { name: 'asc' },
       include: { prices: { orderBy: { minGuests: 'asc' } } },
     }),
     getSetting('show_company_price_after_booking'),
+    getSetting('enable_enhanced_company_booking'),
+    db.menuItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
+    db.masterclassItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
   ])
 
   return (
@@ -88,7 +91,13 @@ export default async function Home() {
         <p className="text-sm mb-8" style={{ color: '#6b5a47' }}>
           Fill in the form and we will confirm your booking shortly.
         </p>
-        <BookingForm companies={companies} showCompanyPrice={showCompanyPrice === 'true'} />
+        <BookingForm
+          companies={companies}
+          showCompanyPrice={showCompanyPrice === 'true'}
+          enhancedEnabled={enhancedBookingStr === 'true'}
+          menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
+          masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
+        />
       </section>
     </>
   )

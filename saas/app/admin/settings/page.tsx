@@ -4,6 +4,8 @@ import SettingsClient from './SettingsClient'
 export default async function SettingsPage() {
   const [
     showCompanyPrice,
+    enhancedBooking,
+    invoiceDetailed,
     recipientName,
     personalNumber,
     bankName,
@@ -11,6 +13,8 @@ export default async function SettingsPage() {
     iban,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
+    getSetting('enable_enhanced_company_booking'),
+    getSetting('invoice_detailed'),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
     getSetting('payment_bank_name'),
@@ -34,6 +38,8 @@ export default async function SettingsPage() {
           <SettingsClient
             settings={{
               show_company_price_after_booking: showCompanyPrice === 'true',
+              enable_enhanced_company_booking: enhancedBooking === 'true',
+              invoice_detailed: invoiceDetailed === 'true',
             }}
             payment={{
               payment_recipient_name: recipientName,

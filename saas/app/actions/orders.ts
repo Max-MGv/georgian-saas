@@ -168,8 +168,9 @@ export async function createOrderAdmin(data: {
   }
 
   if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
+    const tastingCount = data.companyId ? data.tastingGuestCount : data.guestCount
     totalPrice =
-      data.tastingGuestCount * data.manualTastingRate +
+      tastingCount * data.manualTastingRate +
       data.lunchGuestCount * data.manualLunchRate +
       masterclassAmt +
       extrasAmt
@@ -178,6 +179,8 @@ export async function createOrderAdmin(data: {
   if (totalPrice === null && masterclassAmt + extrasAmt > 0) {
     totalPrice = masterclassAmt + extrasAmt
   }
+
+  if (totalPrice === null) totalPrice = 0
 
   const order = await db.order.create({
     data: {
