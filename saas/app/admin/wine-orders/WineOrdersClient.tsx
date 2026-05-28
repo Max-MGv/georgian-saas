@@ -296,7 +296,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
               </div>
               <div className="flex flex-col gap-1 text-sm mt-3" style={{ color: C.muted }}>
                 <p>&#128205; {order.address}</p>
-                <p>&#128100; {order.contactName}</p>
+                {order.workingHours && <p>&#128336; {order.workingHours}</p>}
               </div>
             </div>
 
@@ -308,7 +308,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                   ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
                   : '—'}
               </p>
-              {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+              <p>&#128100; {order.contactName}</p>
               <p>&#128222; {order.contactPhone}</p>
             </div>
 
