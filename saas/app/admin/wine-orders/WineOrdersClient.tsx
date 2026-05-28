@@ -71,34 +71,29 @@ function VerticalStepper({ orderId, status, onUpdate }: {
 
   return (
     <div
-      className="flex flex-col items-start gap-0 h-full"
+      className="flex flex-col items-center gap-0"
       style={{ minWidth: 115 }}
       onMouseEnter={() => setPanelHovered(true)}
       onMouseLeave={() => setPanelHovered(false)}
     >
-      <span
-        className="text-xs font-semibold px-2.5 py-1 rounded-full mb-4 self-start"
-        style={{ backgroundColor: sc.pill, color: sc.pillText }}
-      >
-        {sc.label}
-      </span>
-
       {isCancelled ? (
         <>
-          {STAGES.map((stage, i) => (
-            <div key={stage} className="flex flex-col items-start">
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                  style={{ borderColor: '#d1b9a0', backgroundColor: '#f5efe6' }}>
-                  <span className="text-xs" style={{ color: '#d1b9a0' }}>{i + 1}</span>
+          <div className="flex flex-col items-start">
+            {STAGES.map((stage, i) => (
+              <div key={stage} className="flex flex-col items-start">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                    style={{ borderColor: '#d1b9a0', backgroundColor: '#f5efe6' }}>
+                    <span className="text-xs" style={{ color: '#d1b9a0' }}>{i + 1}</span>
+                  </div>
+                  <span className="text-xs" style={{ color: '#d1b9a0' }}>{STAGE_LABELS[stage]}</span>
                 </div>
-                <span className="text-xs" style={{ color: '#d1b9a0' }}>{STAGE_LABELS[stage]}</span>
+                {i < STAGES.length - 1 && (
+                  <div className="w-0.5 h-4 ml-3 my-0.5" style={{ backgroundColor: '#e8ddd0' }} />
+                )}
               </div>
-              {i < STAGES.length - 1 && (
-                <div className="w-0.5 h-4 ml-3 my-0.5" style={{ backgroundColor: '#e8ddd0' }} />
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
           <button
             onClick={() => onUpdate(orderId, 'pending')}
             className="mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
@@ -109,31 +104,33 @@ function VerticalStepper({ orderId, status, onUpdate }: {
         </>
       ) : (
         <>
-          {STAGES.map((stage, i) => {
-            const isDone = currentIdx >= i
-            const isActive = currentIdx === i
-            const isClickable = i !== currentIdx
-            return (
-              <div key={stage} className="flex flex-col items-start">
-                <StepButton
-                  label={STAGE_LABELS[stage]}
-                  index={i}
-                  isDone={isDone}
-                  isActive={isActive}
-                  isClickable={isClickable}
-                  panelHovered={panelHovered}
-                  onClick={() => isClickable && onUpdate(orderId, stage)}
-                  tooltip={isClickable ? (i < currentIdx ? `Revert to ${STAGE_LABELS[stage]}` : `Advance to ${STAGE_LABELS[stage]}`) : undefined}
-                />
-                {i < STAGES.length - 1 && (
-                  <div
-                    className="w-0.5 h-4 ml-3 my-0.5 transition-colors duration-150"
-                    style={{ backgroundColor: currentIdx > i ? C.wine : '#e0d4c0' }}
+          <div className="flex flex-col items-start">
+            {STAGES.map((stage, i) => {
+              const isDone = currentIdx >= i
+              const isActive = currentIdx === i
+              const isClickable = i !== currentIdx
+              return (
+                <div key={stage} className="flex flex-col items-start">
+                  <StepButton
+                    label={STAGE_LABELS[stage]}
+                    index={i}
+                    isDone={isDone}
+                    isActive={isActive}
+                    isClickable={isClickable}
+                    panelHovered={panelHovered}
+                    onClick={() => isClickable && onUpdate(orderId, stage)}
+                    tooltip={isClickable ? (i < currentIdx ? `Revert to ${STAGE_LABELS[stage]}` : `Advance to ${STAGE_LABELS[stage]}`) : undefined}
                   />
-                )}
-              </div>
-            )
-          })}
+                  {i < STAGES.length - 1 && (
+                    <div
+                      className="w-0.5 h-4 ml-3 my-0.5 transition-colors duration-150"
+                      style={{ backgroundColor: currentIdx > i ? C.wine : '#e0d4c0' }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
           <button
             onClick={() => onUpdate(orderId, 'cancelled')}
             className="mt-3 flex items-center gap-1.5 text-xs font-medium transition-opacity duration-150 hover:opacity-70"
@@ -168,7 +165,7 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
           borderColor: isDone ? C.wine : panelHovered && isClickable ? '#8a4a30' : C.border,
           backgroundColor: isDone ? C.wine : hovered && isClickable ? '#fdf0e8' : '#fff9f3',
           transform: hovered && isClickable ? 'scale(1.45)' : 'scale(1)',
-          boxShadow: isActive ? `0 0 0 5px ${C.wine}30` : hovered && isClickable ? `0 0 0 6px ${C.wine}35` : undefined,
+          boxShadow: isActive ? `0 0 0 4px ${C.wine}22, 0 0 0 7px ${C.wine}12` : hovered && isClickable ? `0 0 0 6px ${C.wine}35` : undefined,
         }}
       >
         {isDone && !isActive ? (
@@ -183,8 +180,10 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
         className="transition-all duration-150"
         style={{
           color: hovered && isClickable ? C.wine : isActive ? C.wine : isDone ? C.muted : C.faint,
-          fontSize: hovered && isClickable ? '0.85rem' : isActive ? '0.8rem' : '0.75rem',
-          fontWeight: hovered && isClickable ? 700 : isActive ? 700 : 400,
+          fontSize: isActive ? '0.875rem' : '0.72rem',
+          fontWeight: isActive ? 800 : hovered && isClickable ? 600 : 400,
+          opacity: !isActive && !hovered ? 0.55 : 1,
+          letterSpacing: isActive ? '0.01em' : undefined,
         }}
       >
         {label}
@@ -222,15 +221,18 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         {FILTER_OPTIONS.map(f => {
           const isActive = filter === f
           const sc = f === 'all' ? null : STATUS_COLOR[f]
+          const activeBg = sc ? sc.border : C.wine
           return (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className="text-xs font-medium px-3 py-1 rounded-full transition-all duration-150"
+              className="font-medium rounded-full transition-all duration-150"
               style={{
-                backgroundColor: isActive ? (sc ? sc.pill : '#f5ede0') : '#fff',
-                color: isActive ? (sc ? sc.pillText : '#8b4513') : C.faint,
-                border: `1px solid ${isActive ? (sc ? sc.border : '#c8a882') : C.border}`,
+                backgroundColor: isActive ? activeBg : '#fff',
+                color: isActive ? '#fff' : C.faint,
+                border: `1px solid ${isActive ? activeBg : C.border}`,
+                fontSize: isActive ? '0.8rem' : '0.72rem',
+                padding: isActive ? '0.3rem 0.85rem' : '0.2rem 0.7rem',
               }}
             >
               {f === 'all' ? 'All' : STATUS_COLOR[f].label}
@@ -298,7 +300,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
 
             {/* Col 3 — vertical stepper */}
             <div
-              className="flex-shrink-0 p-5 pl-4 border-l"
+              className="flex-shrink-0 flex items-center p-5 pl-4 border-l"
               style={{ borderColor: C.border, backgroundColor: '#fdf8f2' }}
             >
               <VerticalStepper orderId={order.id} status={order.status} onUpdate={handleUpdate} />
