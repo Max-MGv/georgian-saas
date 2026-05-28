@@ -249,6 +249,7 @@ export default function OrderDetail({
       setSaveMsg(result.error)
     } else {
       setSaveMsg('Saved ✓')
+      setCustomRates(false)
       setTimeout(() => setSaveMsg(''), 3000)
     }
   }
@@ -430,15 +431,14 @@ export default function OrderDetail({
                   className="text-xs px-2.5 py-1 rounded-full font-medium"
                   style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
                 >
-                  {manualTastingRate}₾/pp · Tasting
-                  {order.visitType === 'TASTING_LUNCH' && ` · ${manualLunchRate}₾/pp Lunch`}
+                  Tasting {manualTastingRate}₾/pp · Lunch {manualLunchRate}₾/pp
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
-                  className="text-xs"
-                  style={{ color: C.wine }}
+                  className="text-xs px-3 py-1 rounded-lg font-medium text-white"
+                  style={{ backgroundColor: C.wine }}
                 >
-                  Custom ✎
+                  Edit rates ✎
                 </button>
               </div>
             ) : (
@@ -472,8 +472,7 @@ export default function OrderDetail({
                       style={inputStyle}
                     />
                   </div>
-                  {order.visitType === 'TASTING_LUNCH' && (
-                    <div>
+                  <div>
                       <label className="text-xs block mb-1" style={{ color: C.faint }}>Lunch ₾/pp</label>
                       <input
                         type="text"
@@ -484,7 +483,6 @@ export default function OrderDetail({
                         style={inputStyle}
                       />
                     </div>
-                  )}
                 </div>
               </div>
             )}
