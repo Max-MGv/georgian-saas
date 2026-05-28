@@ -228,10 +228,10 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
               borderLeftColor: sc.border,
             }}
           >
-            {/* Left — order info */}
-            <div className="flex-1 min-w-0 p-5">
+            {/* Left — order info (col 1 + col 2) */}
+            <div className="flex-1 min-w-0 p-5 flex flex-col">
 
-              {/* Header: name left, id/date right */}
+              {/* Top row: name left, id/date right */}
               <div className="flex items-baseline justify-between gap-3 mb-1">
                 <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
                 <p className="text-xs font-mono flex-shrink-0" style={{ color: C.faint }}>
@@ -243,7 +243,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
               </p>
 
               {/* Wines */}
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-4">
                 {wines.map(w => (
                   <span key={w.id} className="text-xs px-2 py-1 rounded border"
                     style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
@@ -252,26 +252,24 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                 ))}
               </div>
 
-              {/* Contact grid — total heads the right column */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: C.muted }}>
-                <p>&#128205; {order.address}</p>
-                <p className="font-bold text-base leading-none" style={{ color: order.displayTotal != null ? C.wine : C.faint }}>
-                  {order.displayTotal != null
-                    ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
-                    : '—'}
-                </p>
+              {/* Two-column bottom: col 1 = address/contact, col 2 = price/hours/phone */}
+              <div className="flex gap-6 flex-1 items-center">
+                {/* Col 1 */}
+                <div className="flex flex-col gap-1 text-sm flex-1 min-w-0" style={{ color: C.muted }}>
+                  <p>&#128205; {order.address}</p>
+                  <p>&#128100; {order.contactName}</p>
+                </div>
 
-                <p>&#128100; {order.contactName}</p>
-                {order.workingHours
-                  ? <p>&#128336; {order.workingHours}</p>
-                  : <p>&#128222; {order.contactPhone}</p>}
-
-                {order.workingHours && (
-                  <>
-                    <span />
-                    <p>&#128222; {order.contactPhone}</p>
-                  </>
-                )}
+                {/* Col 2 */}
+                <div className="flex flex-col gap-1 text-sm flex-shrink-0" style={{ color: C.muted, minWidth: 140 }}>
+                  <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
+                    {order.displayTotal != null
+                      ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                      : '—'}
+                  </p>
+                  {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+                  <p>&#128222; {order.contactPhone}</p>
+                </div>
               </div>
             </div>
 
