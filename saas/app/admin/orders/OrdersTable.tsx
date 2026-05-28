@@ -24,29 +24,7 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: str
 
 const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
-const COLUMN_DEFS = [
-  { id: 'orderId',     label: 'Order ID',    defaultVisible: false },
-  { id: 'date',        label: 'Date',        defaultVisible: true  },
-  { id: 'time',        label: 'Time',        defaultVisible: true  },
-  { id: 'contact',     label: 'Contact',     defaultVisible: true  },
-  { id: 'type',        label: 'Type',        defaultVisible: true  },
-  { id: 'company',     label: 'Company',     defaultVisible: true  },
-  { id: 'tasting',     label: 'Tasting',     defaultVisible: true  },
-  { id: 'lunch',       label: 'Lunch',       defaultVisible: true  },
-  { id: 'guests',      label: 'Total guests',defaultVisible: false },
-  { id: 'visit',       label: 'Visit',       defaultVisible: true  },
-  { id: 'masterclass', label: 'Masterclass', defaultVisible: true  },
-  { id: 'food',        label: 'Food',        defaultVisible: true  },
-  { id: 'total',       label: 'Total',       defaultVisible: true  },
-  { id: 'status',      label: 'Status',      defaultVisible: true  },
-  { id: 'additional',  label: 'Additional',  defaultVisible: false },
-] as const
-
-type ColumnId = typeof COLUMN_DEFS[number]['id']
-
-const DEFAULT_VISIBLE = new Set<ColumnId>(
-  COLUMN_DEFS.filter(c => c.defaultVisible).map(c => c.id)
-)
+import { COLUMN_DEFS, DEFAULT_VISIBLE, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
@@ -120,28 +98,21 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
 
-  // Column visibility
+  // Column visibility — state lives in OrdersFilters (same row as filter bar)
+  // Table listens for changes via a custom event + re-reads localStorage
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
-  const [columnsOpen, setColumnsOpen] = useState(false)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('orders-columns')
-      if (saved) {
-        const parsed: ColumnId[] = JSON.parse(saved)
-        setVisibleCols(new Set(parsed))
-      }
-    } catch {}
+    function readCols() {
+      try {
+        const saved = localStorage.getItem(COLUMNS_STORAGE_KEY)
+        if (saved) setVisibleCols(new Set(JSON.parse(saved) as ColumnId[]))
+      } catch {}
+    }
+    readCols()
+    window.addEventListener('ordersColumnsChanged', readCols)
+    return () => window.removeEventListener('ordersColumnsChanged', readCols)
   }, [])
-
-  function toggleCol(id: ColumnId) {
-    setVisibleCols(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      try { localStorage.setItem('orders-columns', JSON.stringify([...next])) } catch {}
-      return next
-    })
-  }
 
   // Status menu
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
@@ -167,13 +138,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
 
-  // Close dropdowns on outside click
+  // Close status dropdown on outside click
   useEffect(() => {
-    if (!statusMenuId && !columnsOpen) return
-    function handleClick() { setStatusMenuId(null); setColumnsOpen(false) }
+    if (!statusMenuId) return
+    function handleClick() { setStatusMenuId(null) }
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
-  }, [statusMenuId, columnsOpen])
+  }, [statusMenuId])
 
   useEffect(() => {
     if (printOrder && printPending.current) {
@@ -308,44 +279,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   return (
     <>
-      {/* Toolbar */}
-      <div className="flex justify-end mt-4 mb-2">
-        <div className="relative">
-          <button
-            onClick={e => { e.stopPropagation(); setColumnsOpen(o => !o) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
-            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-            Columns ▾
-          </button>
-          {columnsOpen && (
-            <div
-              className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
-              style={{ backgroundColor: '#fff9f3', borderColor: C.border, minWidth: 180 }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
-                <span className="text-xs font-semibold" style={{ color: C.faint }}>SHOW / HIDE COLUMNS</span>
-              </div>
-              {COLUMN_DEFS.map(c => (
-                <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-amber-50">
-                  <input
-                    type="checkbox"
-                    checked={visibleCols.has(c.id)}
-                    onChange={() => toggleCol(c.id)}
-                    className="rounded"
-                    style={{ accentColor: C.wine }}
-                  />
-                  <span className="text-xs" style={{ color: C.text }}>{c.label}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: C.border }}>
+      <div className="rounded-xl border overflow-x-auto mt-4" style={{ borderColor: C.border }}>
         <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
             <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
@@ -529,7 +463,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     }
                   </td>
                 )}
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()} style={{ position: 'sticky', right: 0, backgroundColor: 'inherit', boxShadow: '-1px 0 0 ' + C.border }}>
+                <td className="px-4 py-3 sticky-actions" onClick={e => e.stopPropagation()} style={{ position: 'sticky', right: 0, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
                   {deletingId === order.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: C.muted }}>Delete?</span>

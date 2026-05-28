@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
+import { getSetting } from '@/app/actions/settings'
 
 const C = { wine: '#7c1d23', faint: '#a89070' }
 
@@ -12,7 +13,7 @@ export default async function OrderDetailPage({
 }) {
   const { id } = await params
 
-  const [order, menuItems, masterclassItems] = await Promise.all([
+  const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
     db.order.findUnique({
       where: { id },
       include: {
@@ -32,6 +33,12 @@ export default async function OrderDetailPage({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
     }),
+    getSetting('payment_recipient_name'),
+    getSetting('payment_personal_number'),
+    getSetting('payment_bank_name'),
+    getSetting('payment_bank_code'),
+    getSetting('payment_iban'),
+    getSetting('invoice_detailed'),
   ])
 
   if (!order) notFound()
@@ -48,8 +55,11 @@ export default async function OrderDetailPage({
       </Link>
 
       <OrderDetail
+        payment={{ recipientName, personalNumber, bankName, bankCode, iban }}
+        detailed={invoiceDetailed === 'true'}
         order={{
           id: order.id,
+          status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,

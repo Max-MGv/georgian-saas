@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { updateOrderEnhanced } from '@/app/actions/orders'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { updateOrderEnhanced, updateOrderStatus, sendOrderInvoice } from '@/app/actions/orders'
 import { findTier } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
+import InvoicePrint from '../InvoicePrint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -25,6 +27,21 @@ const inputStyle: React.CSSProperties = {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+
+const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: string }> = {
+  NEW:          { label: 'New',          bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED:    { label: 'Confirmed',    bg: '#dbeafe', color: '#1d4ed8' },
+  INVOICE_SENT: { label: 'Invoice Sent', bg: '#fef3c7', color: '#92400e' },
+  PAID:         { label: 'Paid',         bg: '#dcfce7', color: '#166534' },
+  COMPLETED:    { label: 'Completed',    bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED:    { label: 'Cancelled',    bg: '#fee2e2', color: '#b91c1c' },
+}
+
+const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+
+type Payment = { recipientName: string; personalNumber: string; bankName: string; bankCode: string; iban: string }
 
 type Price = {
   id: string
@@ -56,6 +73,7 @@ type MenuItemRow = { id: string; name: string; type: string }
 
 type OrderProp = {
   id: string
+  status: OrderStatus
   date: Date
   timeSlot: string
   bookingType: string
@@ -129,10 +147,14 @@ function formatDate(d: Date) {
 
 export default function OrderDetail({
   order,
+  payment,
+  detailed,
   menuItems,
   masterclassItems,
 }: {
   order: OrderProp
+  payment: Payment
+  detailed: boolean
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
 }) {
@@ -154,6 +176,48 @@ export default function OrderDetail({
   const [foodNotes, setFoodNotes] = useState(order.foodNotes ?? '')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+
+  // ── Top action bar state ───────────────────────────────────────────────────
+  const [status, setStatus] = useState<OrderStatus>(order.status)
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendMsg, setSendMsg] = useState('')
+  const [printReady, setPrintReady] = useState(false)
+  const printPending = useRef(false)
+
+  useEffect(() => {
+    if (!statusMenuOpen) return
+    function close() { setStatusMenuOpen(false) }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [statusMenuOpen])
+
+  useEffect(() => {
+    if (printReady && printPending.current) {
+      printPending.current = false
+      setTimeout(() => { window.print(); setPrintReady(false) }, 100)
+    }
+  }, [printReady])
+
+  async function handleStatusChange(s: OrderStatus) {
+    setStatusMenuOpen(false)
+    setStatus(s)
+    await updateOrderStatus(order.id, s)
+  }
+
+  async function handleSendInvoice() {
+    setSending(true)
+    setSendMsg('')
+    const result = await sendOrderInvoice(order.id, '')
+    setSending(false)
+    if ('error' in result) {
+      setSendMsg('Failed to send.')
+    } else {
+      setSendMsg('Sent ✓')
+      if (status === 'NEW' || status === 'CONFIRMED') setStatus('INVOICE_SENT')
+      setTimeout(() => setSendMsg(''), 3000)
+    }
+  }
 
   // ── Masterclass lines state ────────────────────────────────────────────────
   const [lines, setLines] = useState<MasterclassLine[]>(order.masterclassLines)
@@ -317,15 +381,118 @@ export default function OrderDetail({
   return (
     <div>
       {/* Page header */}
-      <div className="mb-5">
-        <h1 className="text-lg font-bold" style={{ color: C.text }}>
-          {order.name} {order.surname}
-        </h1>
-        <p className="text-sm" style={{ color: C.muted }}>
-          {formatDate(order.date)} · {order.timeSlot} ·{' '}
-          <span className="font-mono text-xs">#{order.id.slice(-8)}</span>
-        </p>
+      <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
+        <div>
+          <h1 className="text-lg font-bold" style={{ color: C.text }}>
+            {order.name} {order.surname}
+          </h1>
+          <p className="text-sm" style={{ color: C.muted }}>
+            {formatDate(order.date)} · {order.timeSlot} ·{' '}
+            <span className="font-mono text-xs">#{order.id.slice(-8)}</span>
+          </p>
+        </div>
+
+        {/* Action bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Status dropdown */}
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            {(() => {
+              const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.NEW
+              return (
+                <button
+                  onClick={() => setStatusMenuOpen(o => !o)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
+                  style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
+                >
+                  {cfg.label} ▾
+                </button>
+              )
+            })()}
+            {statusMenuOpen && (
+              <div
+                className="absolute left-0 z-30 rounded-lg shadow-lg border py-1 mt-1"
+                style={{ minWidth: 150, backgroundColor: '#fff9f3', borderColor: C.border }}
+                onClick={e => e.stopPropagation()}
+              >
+                {ALL_STATUSES.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => handleStatusChange(s)}
+                    className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
+                    style={{ color: s === status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === status ? 600 : 400 }}
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
+                    {STATUS_CONFIG[s].label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Print invoice */}
+          <button
+            onClick={() => { printPending.current = true; setPrintReady(true) }}
+            title="Print invoice"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
+            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print
+          </button>
+
+          {/* Send invoice */}
+          <button
+            onClick={handleSendInvoice}
+            disabled={sending || !order.email}
+            title={order.email ? 'Send invoice by email' : 'No email address on file'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+            style={{ backgroundColor: order.email ? C.wine : '#c8b89a', cursor: order.email ? 'pointer' : 'not-allowed' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+            </svg>
+            {sending ? 'Sending…' : 'Send Invoice'}
+          </button>
+
+          {sendMsg && (
+            <span className="text-xs font-medium" style={{ color: sendMsg.includes('✓') ? '#16a34a' : '#b91c1c' }}>
+              {sendMsg}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Print portal */}
+      {printReady && typeof document !== 'undefined' && createPortal(
+        <div id="invoice-portal">
+          <InvoicePrint
+            order={{
+              id: order.id,
+              date: order.date,
+              timeSlot: order.timeSlot,
+              visitType: order.visitType,
+              guestCount: order.guestCount,
+              tastingGuestCount: order.tastingGuestCount,
+              lunchGuestCount: order.lunchGuestCount,
+              freeGuestCount: order.freeGuestCount,
+              name: order.name,
+              surname: order.surname,
+              totalPrice: order.totalPrice,
+              company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
+              masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
+              extras: extras.map(e => ({ label: e.label, amount: e.amount })),
+            }}
+            payment={payment}
+            detailed={detailed}
+          />
+        </div>,
+        document.body
+      )}
 
       {/* ── Booking Info (read-only) ── */}
       <Card title="Booking Info">

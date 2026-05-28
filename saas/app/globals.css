@@ -169,3 +169,6 @@ input, select, textarea {
 
 /* Same fix for screen (print preview uses screen rendering) */
 .invoice-print a { color: inherit !important; text-decoration: none !important; -webkit-text-fill-color: inherit !important; }
+
+/* Keep sticky actions column background in sync with row hover */
+tr:hover .sticky-actions { background-color: #fffbeb !important; }
