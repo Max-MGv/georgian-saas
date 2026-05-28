@@ -162,4 +162,10 @@ input, select, textarea {
   .invoice-print h2 { font-size: 16px !important; }  /* ინვოისი title - not present but defensive */
   .invoice-section { margin-bottom: 12px !important; }
   .invoice-print div, .invoice-print span { page-break-inside: avoid; }
+  /* Prevent WebKit data-detector links (phone numbers, IBANs) from turning blue */
+  .invoice-print a { color: inherit !important; text-decoration: none !important; -webkit-text-fill-color: inherit !important; }
+  .invoice-print span { -webkit-text-fill-color: inherit !important; }
 }
+
+/* Same fix for screen (print preview uses screen rendering) */
+.invoice-print a { color: inherit !important; text-decoration: none !important; -webkit-text-fill-color: inherit !important; }

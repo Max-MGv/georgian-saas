@@ -29,7 +29,7 @@ function Row({ label, value, mono = false }: { label: string; value: string | nu
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '5px 0', borderBottom: '1px solid #e8e0d0' }}>
       <span style={{ color: '#6b5a47', fontSize: 13, fontWeight: 400 }}>{label}</span>
-      <span style={{ fontSize: 13, color: '#1c1008', fontWeight: 600, fontFamily: mono ? "'Courier New', Courier, monospace" : 'inherit' }}>{value}</span>
+      <span style={{ fontSize: 13, color: '#1c1008', WebkitTextFillColor: '#1c1008', fontWeight: 600, fontFamily: mono ? "'Courier New', Courier, monospace" : 'inherit', textDecoration: 'none' }}>{value}</span>
     </div>
   )
 }
