@@ -142,8 +142,9 @@ export default function OrderDetail({
   const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
   const [freeGuestsStr, setFreeGuestsStr] = useState(String(order.freeGuestCount))
   // Manual per-person rates for individual / no-tier orders
-  const [manualTastingRateStr, setManualTastingRateStr] = useState('0')
-  const [manualLunchRateStr, setManualLunchRateStr] = useState('0')
+  const [manualTastingRateStr, setManualTastingRateStr] = useState('50')
+  const [manualLunchRateStr, setManualLunchRateStr] = useState('50')
+  const [customRates, setCustomRates] = useState(false)
   // Parsed numbers for calculations
   const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
   const lunchGuests = Math.max(0, parseInt(lunchGuestsStr) || 0)
@@ -356,15 +357,6 @@ export default function OrderDetail({
 
       {/* ── Guest Breakdown & Dishes ── */}
       <Card title="Guest Breakdown & Dishes">
-        {order.bookingType !== 'COMPANY' && (
-          <div
-            className="text-xs rounded-lg p-3 mb-4"
-            style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
-          >
-            Split-count pricing applies to company bookings with price tiers. You can still
-            record guest counts and dishes here.
-          </div>
-        )}
         {order.bookingType === 'COMPANY' && prices.length === 0 && (
           <div
             className="text-xs rounded-lg p-3 mb-4"
@@ -427,6 +419,77 @@ export default function OrderDetail({
             </p>
           </div>
         </div>
+
+        {/* Per-person rate — only for individual / no-tier orders */}
+        {!order.company && (
+          <div className="mb-4 pt-1">
+            {!customRates ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: C.faint }}>Rate</span>
+                <span
+                  className="text-xs px-2.5 py-1 rounded-full font-medium"
+                  style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
+                >
+                  {manualTastingRate}₾/pp · Tasting
+                  {order.visitType === 'TASTING_LUNCH' && ` · ${manualLunchRate}₾/pp Lunch`}
+                </span>
+                <button
+                  onClick={() => setCustomRates(true)}
+                  className="text-xs"
+                  style={{ color: C.wine }}
+                >
+                  Custom ✎
+                </button>
+              </div>
+            ) : (
+              <div
+                className="rounded-lg border p-3"
+                style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium" style={{ color: C.muted }}>Custom rates</span>
+                  <button
+                    onClick={() => {
+                      setManualTastingRateStr('50')
+                      setManualLunchRateStr('50')
+                      setCustomRates(false)
+                    }}
+                    className="text-xs"
+                    style={{ color: C.faint }}
+                  >
+                    ← Standard (50₾)
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs block mb-1" style={{ color: C.faint }}>Tasting ₾/pp</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={manualTastingRateStr}
+                      onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
+                      onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
+                      style={inputStyle}
+                    />
+                  </div>
+                  {order.visitType === 'TASTING_LUNCH' && (
+                    <div>
+                      <label className="text-xs block mb-1" style={{ color: C.faint }}>Lunch ₾/pp</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manualLunchRateStr}
+                        onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
+                        onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
+                        style={inputStyle}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Hot dishes */}
         {vegItems.length > 0 && (
@@ -772,42 +835,6 @@ export default function OrderDetail({
             Lunch <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
             {' · '}
             Reg fee <strong>{tier.registrationPrice}₾</strong>
-          </div>
-        )}
-        {/* Manual rate inputs for individual / no-tier orders */}
-        {!tier && payingGuests > 0 && (
-          <div className="mb-3">
-            <p className="text-xs mb-2" style={{ color: C.muted }}>
-              No price tiers — enter rates manually:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                  Tasting ₾/pp
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={manualTastingRateStr}
-                  onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                  onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                  Lunch ₾/pp
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={manualLunchRateStr}
-                  onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                  onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
           </div>
         )}
         {/* Lunch rate = 0 warning */}
