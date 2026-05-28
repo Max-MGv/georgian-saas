@@ -73,9 +73,8 @@ function VerticalStepper({ orderId, status, onUpdate }: {
       onMouseEnter={() => setPanelHovered(true)}
       onMouseLeave={() => setPanelHovered(false)}
     >
-      {/* Status pill */}
       <span
-        className="text-xs font-semibold px-2.5 py-1 rounded-full mb-4 self-start transition-all duration-150"
+        className="text-xs font-semibold px-2.5 py-1 rounded-full mb-4 self-start"
         style={{ backgroundColor: sc.pill, color: sc.pillText }}
       >
         {sc.label}
@@ -97,11 +96,9 @@ function VerticalStepper({ orderId, status, onUpdate }: {
               )}
             </div>
           ))}
-
-          {/* Undo — prominent */}
           <button
             onClick={() => onUpdate(orderId, 'pending')}
-            className="mt-4 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
+            className="mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
             <UndoIcon /> Undo
@@ -123,7 +120,7 @@ function VerticalStepper({ orderId, status, onUpdate }: {
                   isClickable={isClickable}
                   panelHovered={panelHovered}
                   onClick={() => isClickable && onUpdate(orderId, stage)}
-                  tooltip={isClickable ? (i < currentIdx ? `↩ Revert to ${STAGE_LABELS[stage]}` : `→ Advance to ${STAGE_LABELS[stage]}`) : undefined}
+                  tooltip={isClickable ? (i < currentIdx ? `Revert to ${STAGE_LABELS[stage]}` : `Advance to ${STAGE_LABELS[stage]}`) : undefined}
                 />
                 {i < STAGES.length - 1 && (
                   <div
@@ -134,8 +131,6 @@ function VerticalStepper({ orderId, status, onUpdate }: {
               </div>
             )
           })}
-
-          {/* Cancel — red text, no fill */}
           <button
             onClick={() => onUpdate(orderId, 'cancelled')}
             className="mt-3 flex items-center gap-1.5 text-xs font-medium transition-opacity duration-150 hover:opacity-70"
@@ -155,20 +150,13 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
 }) {
   const [hovered, setHovered] = useState(false)
 
-  const dotScale = hovered && isClickable ? 'scale(1.2)' : 'scale(1)'
-  const dotShadow = isActive
-    ? `0 0 0 4px ${C.wine}22`
-    : hovered && isClickable
-      ? `0 0 0 3px ${C.wine}18`
-      : undefined
-
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={tooltip}
-      className="flex items-center gap-2.5 group"
+      className="flex items-center gap-2.5"
       style={{ cursor: isClickable ? 'pointer' : 'default' }}
     >
       <div
@@ -176,8 +164,8 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
         style={{
           borderColor: isDone ? C.wine : panelHovered && isClickable ? '#b08060' : C.border,
           backgroundColor: isDone ? C.wine : '#fff9f3',
-          transform: dotScale,
-          boxShadow: dotShadow,
+          transform: hovered && isClickable ? 'scale(1.2)' : 'scale(1)',
+          boxShadow: isActive ? `0 0 0 4px ${C.wine}22` : hovered && isClickable ? `0 0 0 3px ${C.wine}18` : undefined,
         }}
       >
         {isDone && !isActive ? (
@@ -242,46 +230,54 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
           >
             {/* Left — order info */}
             <div className="flex-1 min-w-0 p-5">
-              {/* Header — 2×2 feel: name|total on row 1, details|id·date on row 2 */}
+
+              {/* Header: name left, id/date right */}
               <div className="flex items-baseline justify-between gap-3 mb-1">
                 <p className="font-bold" style={{ color: C.text }}>{order.businessName}</p>
-                <p className="font-bold text-base flex-shrink-0" style={{ color: C.wine }}>
-                  {order.displayTotal != null
-                    ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
-                    : <span style={{ color: C.faint, fontWeight: 400, fontSize: '0.875rem' }}>—</span>}
-                </p>
-              </div>
-              <div className="flex items-baseline justify-between gap-3 mb-3">
-                <p className="text-sm" style={{ color: C.muted }}>
-                  {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ' '}
-                </p>
                 <p className="text-xs font-mono flex-shrink-0" style={{ color: C.faint }}>
-                  #{order.id.slice(0, 8)} · {new Date(order.createdAt).toLocaleDateString('en-GB')}
+                  #{order.id.slice(0, 8)} &middot; {new Date(order.createdAt).toLocaleDateString('en-GB')}
                 </p>
               </div>
+              <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
+                {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
+              </p>
 
               {/* Wines */}
               <div className="flex flex-wrap gap-2 mb-3">
                 {wines.map(w => (
                   <span key={w.id} className="text-xs px-2 py-1 rounded border"
                     style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                    {w.name} × {w.quantity}
+                    {w.name} &times; {w.quantity}
                   </span>
                 ))}
               </div>
 
-              {/* Contact info */}
-              <div className="grid sm:grid-cols-2 gap-1 text-sm" style={{ color: C.muted }}>
-                <p>📍 {order.address}</p>
-                {order.workingHours && <p>🕐 {order.workingHours}</p>}
-                <p>👤 {order.contactName}</p>
-                <p>📞 {order.contactPhone}</p>
+              {/* Contact grid — total heads the right column */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: C.muted }}>
+                <p>&#128205; {order.address}</p>
+                <p className="font-bold text-base leading-none" style={{ color: order.displayTotal != null ? C.wine : C.faint }}>
+                  {order.displayTotal != null
+                    ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                    : '—'}
+                </p>
+
+                <p>&#128100; {order.contactName}</p>
+                {order.workingHours
+                  ? <p>&#128336; {order.workingHours}</p>
+                  : <p>&#128222; {order.contactPhone}</p>}
+
+                {order.workingHours && (
+                  <>
+                    <span />
+                    <p>&#128222; {order.contactPhone}</p>
+                  </>
+                )}
               </div>
             </div>
 
             {/* Right — vertical stepper */}
             <div
-              className="flex-shrink-0 p-5 pl-4 border-l transition-colors duration-150"
+              className="flex-shrink-0 p-5 pl-4 border-l"
               style={{ borderColor: C.border, backgroundColor: '#fdf8f2' }}
             >
               <VerticalStepper orderId={order.id} status={order.status} onUpdate={handleUpdate} />
