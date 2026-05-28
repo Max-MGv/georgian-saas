@@ -24,6 +24,29 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: str
 
 const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
+const COLUMN_DEFS = [
+  { id: 'orderId',     label: 'Order ID',    defaultVisible: false },
+  { id: 'date',        label: 'Date',        defaultVisible: true  },
+  { id: 'time',        label: 'Time',        defaultVisible: true  },
+  { id: 'contact',     label: 'Contact',     defaultVisible: true  },
+  { id: 'type',        label: 'Type',        defaultVisible: true  },
+  { id: 'company',     label: 'Company',     defaultVisible: true  },
+  { id: 'tasting',     label: 'Tasting',     defaultVisible: true  },
+  { id: 'lunch',       label: 'Lunch',       defaultVisible: true  },
+  { id: 'guests',      label: 'Total guests',defaultVisible: false },
+  { id: 'visit',       label: 'Visit',       defaultVisible: true  },
+  { id: 'masterclass', label: 'Masterclass', defaultVisible: true  },
+  { id: 'food',        label: 'Food',        defaultVisible: true  },
+  { id: 'total',       label: 'Total',       defaultVisible: true  },
+  { id: 'status',      label: 'Status',      defaultVisible: true  },
+  { id: 'additional',  label: 'Additional',  defaultVisible: false },
+] as const
+
+type ColumnId = typeof COLUMN_DEFS[number]['id']
+
+const DEFAULT_VISIBLE = new Set<ColumnId>(
+  COLUMN_DEFS.filter(c => c.defaultVisible).map(c => c.id)
+)
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
@@ -97,6 +120,29 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
 
+  // Column visibility
+  const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('orders-columns')
+      if (saved) {
+        const parsed: ColumnId[] = JSON.parse(saved)
+        setVisibleCols(new Set(parsed))
+      }
+    } catch {}
+  }, [])
+
+  function toggleCol(id: ColumnId) {
+    setVisibleCols(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      try { localStorage.setItem('orders-columns', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
   // Status menu
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
 
@@ -121,13 +167,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
 
-  // Close status menu on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!statusMenuId) return
-    function handleClick() { setStatusMenuId(null) }
+    if (!statusMenuId && !columnsOpen) return
+    function handleClick() { setStatusMenuId(null); setColumnsOpen(false) }
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
-  }, [statusMenuId])
+  }, [statusMenuId, columnsOpen])
 
   useEffect(() => {
     if (printOrder && printPending.current) {
@@ -258,15 +304,54 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setLoading(false)
   }
 
+  const col = (id: ColumnId) => visibleCols.has(id)
+
   return (
     <>
-      <div className="rounded-xl border overflow-x-auto mt-4" style={{ borderColor: C.border }}>
-        <table className="w-full text-sm border-collapse min-w-[700px]">
+      {/* Toolbar */}
+      <div className="flex justify-end mt-4 mb-2">
+        <div className="relative">
+          <button
+            onClick={() => setColumnsOpen(o => !o)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
+            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+            Columns ▾
+          </button>
+          {columnsOpen && (
+            <div
+              className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
+              style={{ backgroundColor: '#fff9f3', borderColor: C.border, minWidth: 180 }}
+            >
+              <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
+                <span className="text-xs font-semibold" style={{ color: C.faint }}>SHOW / HIDE COLUMNS</span>
+              </div>
+              {COLUMN_DEFS.map(c => (
+                <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-amber-50">
+                  <input
+                    type="checkbox"
+                    checked={visibleCols.has(c.id)}
+                    onChange={() => toggleCol(c.id)}
+                    className="rounded"
+                    style={{ accentColor: C.wine }}
+                  />
+                  <span className="text-xs" style={{ color: C.text }}>{c.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: C.border }}>
+        <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
             <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
-              {['Date', 'Time', 'Guest', 'Type', 'Company', 'Guests', 'Visit', 'Total', 'Status', ''].map(h => (
-                <th key={h} className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>{h}</th>
+              {COLUMN_DEFS.filter(c => visibleCols.has(c.id)).map(c => (
+                <th key={c.id} className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{c.label}</th>
               ))}
+              <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}></th>
             </tr>
           </thead>
           <tbody style={{ backgroundColor: '#ffffff' }}>
@@ -283,62 +368,166 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 }}
                 className="hover:bg-amber-50 transition-colors"
               >
-                <td className="px-4 py-3" style={{ color: C.text }}>{formatDate(order.date)}</td>
-                <td className="px-4 py-3" style={{ color: C.muted }}>{order.timeSlot}</td>
-                <td className="px-4 py-3 font-medium" style={{ color: C.text }}>{order.name} {order.surname}</td>
-                <td className="px-4 py-3">
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                    backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
-                    color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
-                  }}>
-                    {order.bookingType === 'COMPANY' ? 'Company' : 'Individual'}
-                  </span>
-                </td>
-                <td className="px-4 py-3" style={{ color: C.muted }}>{order.company?.name ?? '—'}</td>
-                <td className="px-4 py-3" style={{ color: C.text }}>{order.guestCount}</td>
-                <td className="px-4 py-3" style={{ color: C.muted }}>{visitLabel(order.visitType)}</td>
-                <td className="px-4 py-3 font-semibold" style={{ color: C.wine }}>
-                  {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
-                </td>
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <div className="relative">
-                    {/* Status badge — click to open dropdown */}
-                    {(() => {
-                      const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
-                      return (
-                        <button
-                          onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
-                          className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
-                          style={{
-                            backgroundColor: cfg.bg,
-                            color: cfg.color,
-                            border: `1px solid ${cfg.color}22`,
-                          }}
-                        >
-                          {cfg.label} ▾
-                        </button>
-                      )
-                    })()}
-                    {statusMenuId === order.id && (
-                      <div
-                        className="absolute z-30 rounded-lg shadow-lg border py-1"
-                        style={{ top: '110%', left: 0, minWidth: 140, backgroundColor: '#fff9f3', borderColor: C.border }}
-                      >
-                        {ALL_STATUSES.map(s => (
+                {/* Order ID */}
+                {col('orderId') && (
+                  <td className="px-4 py-3" style={{ color: C.faint, fontFamily: 'monospace', fontSize: 11 }}>
+                    {order.id.slice(0, 8)}…
+                  </td>
+                )}
+
+                {/* Date */}
+                {col('date') && (
+                  <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.text }}>{formatDate(order.date)}</td>
+                )}
+
+                {/* Time */}
+                {col('time') && (
+                  <td className="px-4 py-3" style={{ color: C.muted }}>{order.timeSlot}</td>
+                )}
+
+                {/* Contact */}
+                {col('contact') && (
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium" style={{ color: C.text }}>{order.name} {order.surname}</span>
+                      {order.phone && <span style={{ color: C.faint, fontSize: 11 }}>{order.phone}</span>}
+                      {order.email && <span style={{ color: C.faint, fontSize: 11 }}>{order.email}</span>}
+                    </div>
+                  </td>
+                )}
+
+                {/* Type */}
+                {col('type') && (
+                  <td className="px-4 py-3">
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                      backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
+                      color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
+                    }}>
+                      {order.bookingType === 'COMPANY' ? 'Company' : 'Individual'}
+                    </span>
+                  </td>
+                )}
+
+                {/* Company */}
+                {col('company') && (
+                  <td className="px-4 py-3" style={{ color: C.muted }}>{order.company?.name ?? '—'}</td>
+                )}
+
+                {/* Tasting guests */}
+                {col('tasting') && (
+                  <td className="px-4 py-3 text-center" style={{ color: order.tastingGuestCount > 0 ? C.text : C.faint }}>
+                    {order.tastingGuestCount > 0 ? order.tastingGuestCount : '—'}
+                  </td>
+                )}
+
+                {/* Lunch guests */}
+                {col('lunch') && (
+                  <td className="px-4 py-3 text-center" style={{ color: order.lunchGuestCount > 0 ? C.text : C.faint }}>
+                    {order.lunchGuestCount > 0 ? order.lunchGuestCount : '—'}
+                  </td>
+                )}
+
+                {/* Total guests */}
+                {col('guests') && (
+                  <td className="px-4 py-3 text-center" style={{ color: C.text }}>{order.guestCount}</td>
+                )}
+
+                {/* Visit type */}
+                {col('visit') && (
+                  <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted }}>{visitLabel(order.visitType)}</td>
+                )}
+
+                {/* Masterclass */}
+                {col('masterclass') && (
+                  <td className="px-4 py-3" style={{ color: C.muted, fontSize: 12 }}>
+                    {order.masterclassLines.length > 0
+                      ? <div className="flex flex-col gap-0.5">
+                          {order.masterclassLines.map((l, idx) => (
+                            <span key={idx}>{l.name} <span style={{ color: C.faint }}>×{l.quantity}</span></span>
+                          ))}
+                        </div>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
+
+                {/* Food */}
+                {col('food') && (
+                  <td className="px-4 py-3" style={{ fontSize: 12 }}>
+                    {order.hotDishVegetable || order.hotDishMeat || order.foodNotes
+                      ? <div className="flex flex-col gap-0.5">
+                          {order.hotDishVegetable && <span style={{ color: C.muted }}><span style={{ color: C.faint }}>Veg:</span> {order.hotDishVegetable}</span>}
+                          {order.hotDishMeat && <span style={{ color: C.muted }}><span style={{ color: C.faint }}>Meat:</span> {order.hotDishMeat}</span>}
+                          {order.foodNotes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.foodNotes}</span>}
+                        </div>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
+
+                {/* Total */}
+                {col('total') && (
+                  <td className="px-4 py-3 font-semibold whitespace-nowrap" style={{ color: C.wine }}>
+                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                  </td>
+                )}
+
+                {/* Status */}
+                {col('status') && (
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <div className="relative">
+                      {(() => {
+                        const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+                        return (
                           <button
-                            key={s}
-                            onClick={() => handleStatusChange(order.id, s)}
-                            className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
-                            style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                            onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
+                            className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                            style={{
+                              backgroundColor: cfg.bg,
+                              color: cfg.color,
+                              border: `1px solid ${cfg.color}22`,
+                            }}
                           >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                            {STATUS_CONFIG[s].label}
+                            {cfg.label} ▾
                           </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </td>
+                        )
+                      })()}
+                      {statusMenuId === order.id && (
+                        <div
+                          className="absolute z-30 rounded-lg shadow-lg border py-1"
+                          style={{ top: '110%', left: 0, minWidth: 140, backgroundColor: '#fff9f3', borderColor: C.border }}
+                        >
+                          {ALL_STATUSES.map(s => (
+                            <button
+                              key={s}
+                              onClick={() => handleStatusChange(order.id, s)}
+                              className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
+                              style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                            >
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
+                              {STATUS_CONFIG[s].label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                )}
+
+                {/* Additional */}
+                {col('additional') && (
+                  <td className="px-4 py-3" style={{ fontSize: 12 }}>
+                    {(order.extras.length > 0 || order.notes)
+                      ? <div className="flex flex-col gap-0.5">
+                          {order.extras.map((e, idx) => (
+                            <span key={idx} style={{ color: C.muted }}>{e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span></span>
+                          ))}
+                          {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.notes}</span>}
+                        </div>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   {deletingId === order.id ? (
                     <div className="flex items-center gap-2">
