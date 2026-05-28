@@ -1,9 +1,12 @@
 import { db } from '@/lib/db'
 import { getSetting } from '@/app/actions/settings'
+import { getBlockedDates } from '@/app/actions/blockedDates'
 import BookingForm from '@/components/BookingForm'
 
+export const dynamic = 'force-dynamic'
+
 export default async function Home() {
-  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems] = await Promise.all([
+  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates] = await Promise.all([
     db.company.findMany({
       orderBy: { name: 'asc' },
       include: { prices: { orderBy: { minGuests: 'asc' } } },
@@ -12,6 +15,9 @@ export default async function Home() {
     getSetting('enable_enhanced_company_booking'),
     db.menuItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
     db.masterclassItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
+    getSetting('min_guests_tasting'),
+    getSetting('min_guests_tasting_lunch'),
+    getBlockedDates(),
   ])
 
   return (
@@ -57,11 +63,13 @@ export default async function Home() {
             title: 'Wine Tasting',
             desc: '2 red wines, 1 white, chacha — guided by the winemaker',
             price: 50,
+            min: parseInt(minGuestsTasting) || 4,
           },
           {
             title: 'Tasting + Lunch',
             desc: '3 wines, chacha brandy, and a full traditional Georgian meal',
             price: 100,
+            min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
           <div
@@ -75,7 +83,7 @@ export default async function Home() {
               {pkg.price}₾{' '}
               <span className="font-normal text-sm" style={{ color: '#a89070' }}>/ person</span>
             </p>
-            <p className="text-xs mt-1" style={{ color: '#a89070' }}>Minimum 4 guests</p>
+            <p className="text-xs mt-1" style={{ color: '#a89070' }}>Minimum {pkg.min} guests</p>
           </div>
         ))}
       </section>
@@ -97,6 +105,9 @@ export default async function Home() {
           enhancedEnabled={enhancedBookingStr === 'true'}
           menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
           masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
+          minGuestsTasting={parseInt(minGuestsTasting) || 4}
+          minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
+          blockedDates={blockedDates.map(d => d.date)}
         />
       </section>
     </>

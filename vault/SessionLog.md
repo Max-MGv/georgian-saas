@@ -8,119 +8,94 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-05-27 — Latest session (full detail)
+## 2026-05-28 — Session 3 (full detail)
 
 ### Completed
-- **Print invoice fixes** — blank page fixed (React portal); Georgian typos fixed; payment section always shown; 2-page bug fixed
-- **Vercel CLI set up** — installed globally, logged in as `max-mgv`, linked to `mg-productions-projects/georgian-saas`
-- **Supabase RLS** — enabled Row Level Security on all 10 tables
-- **Enhanced company booking — Steps 1–3** — DB schema, Menu Items admin, Masterclass admin (all done prior)
-- **Enhanced company booking — Step 4** — `/admin/orders/[id]` detail page with editable guest counts, hot dish, masterclass, extras, live total, tier-in-use banner
-- **Enhanced company booking — Step 5** — `/admin/orders/new` + `createOrderAdmin` action; "New Order" button on orders list; TC2+TC7 bugs fixed (individual manual rate calc, zero-paying-guest fallback)
-- **Enhanced company booking — Step 6** — Public form toggle:
-  - `enable_enhanced_company_booking` setting added (default `false`)
-  - Toggle in `/admin/settings` under Booking section
-  - `BookingForm` extended: when toggle on + company selected → split guest counts (tasting/lunch/free), hot dish dropdowns (TASTING_LUNCH only), masterclass add-ons with quantity, food notes, live price breakdown
-  - `createBooking` extended: accepts enhanced fields, uses `findTier` for split-count pricing, creates `OrderMasterclass` lines
-  - Individual bookings always use the simple form regardless of toggle
+- **Settings page — Georgian text replaced with English** — payment field labels, section header, and email placeholder were in Georgian; all switched to English. Translations saved to `vault/Features/Add Language/Georgian Translations.md` for future i18n work.
+- **Calendar view** — Table/Calendar toggle on orders page; custom month grid (no library); booking count badge per day (wine red); click day → switches to table filtered to that date; today highlighted.
+- **Calendar day hover preview** — Obsidian-style popover on day cells shows all orders for that day: name, time, guests, visit type, status (colour-coded), company, total. 200ms delay; right-aligns for cols 4–6 to avoid clipping; stays open when hovering onto the card.
+- **Export orders to CSV** — "Export CSV" button in filter bar; respects active filters; downloads `orders-YYYY-MM-DD.csv`; 13 columns.
+- **Configurable min guests per visit type** — Settings → Booking Rules section; two number inputs (Wine Tasting / Tasting + Lunch); saves on blur; enforced in BookingForm (dynamic min, inline warning) and createBooking (server guard); package cards on home page show dynamic minimum.
+- **Fix: home page min guests static** — added `export const dynamic = 'force-dynamic'` to `app/(site)/page.tsx`; home page now re-fetches settings on each request instead of baking values at build time.
+- **Block dates (closed days)** — new `BlockedDate` DB model (prisma db push); Settings → Closed Days section; date picker + optional reason + block button; list with × remove; public form shows inline error when blocked date selected; createBooking guards server-side.
+- **Shimmer loading skeleton** — `loading.tsx` in `/admin/orders` shows a warm brown shimmer skeleton (header + filter bar + 9 rows) during page navigation. `@keyframes shimmer` in globals.css.
+- **Smooth scroll on "Book a Visit"** — `scroll-behavior: smooth` added to `html` in globals.css.
+- **Status filter** — Status dropdown in orders filter bar; all 6 statuses (NEW/CONFIRMED/INVOICE_SENT/PAID/COMPLETED/CANCELLED); integrated into all filter queries; `OrderStatus` enum cast fixes TypeScript.
+- **Progress bar on filter change** — thin wine-red progress bar animates under filter bar while navigating (`@keyframes nav-progress`); filter bar dims to 60% opacity. Uses `useState` + `useEffect` watching params (not `useTransition` — more reliable for concurrent updates).
+- **Fix: status filter intermittent** — replaced `startTransition(router.push)` with direct `router.push` + `useState/useEffect` approach; navigation is no longer a low-priority concurrent update that could be dropped.
+- **Status counts in dropdown** — status dropdown shows live counts per status within the current date/company filter context: "New (12)", "Confirmed (3)" etc.; options with 0 orders are disabled (greyed out). Uses `db.order.groupBy` on a `baseWhere` that ignores the status filter itself.
 
 ### Key files changed this session
-- `saas/app/actions/settings.ts` — `enable_enhanced_company_booking` default added
-- `saas/app/admin/settings/page.tsx` — fetches + passes new setting
-- `saas/app/admin/settings/SettingsClient.tsx` — second booking toggle
-- `saas/app/(site)/page.tsx` — fetches menuItems + masterclassItems, passes to BookingForm
-- `saas/components/BookingForm.tsx` — enhanced company mode (split counts, hot dishes, masterclass, food notes, live price breakdown)
-- `saas/app/actions/createBooking.ts` — extended for enhanced fields + masterclass lines
-- `saas/app/admin/orders/new/page.tsx` — NEW (Step 5)
-- `saas/app/admin/orders/new/NewOrderForm.tsx` — NEW (Step 5)
-- `saas/app/actions/orders.ts` — createOrderAdmin added (Step 5); updateOrderEnhanced + manual rates (Step 4)
-- `saas/app/admin/orders/page.tsx` — "+ New Order" button (Step 5)
+- `saas/app/admin/orders/page.tsx` — view param, calendar data, baseWhere + groupBy for statusCounts, CalendarView + ViewToggle integration; `include` on orders query fixed with `OrderStatus` cast
+- `saas/app/admin/orders/CalendarView.tsx` — NEW: month grid + hover popover
+- `saas/app/admin/orders/ViewToggle.tsx` — NEW: Table/Calendar toggle (no useSearchParams — receives params as props)
+- `saas/app/admin/orders/OrdersFilters.tsx` — Export CSV button, status filter, progress bar, status counts, shimmer/loading state
+- `saas/app/admin/orders/loading.tsx` — NEW: shimmer skeleton
+- `saas/app/actions/orders.ts` — `exportOrdersCsv` action; `OrderStatus` cast on status filter
+- `saas/app/admin/settings/page.tsx` — min guest settings + blocked dates fetch
+- `saas/app/admin/settings/SettingsClient.tsx` — Booking section header, Booking Rules section, Closed Days section
+- `saas/app/actions/settings.ts` — two new defaults
+- `saas/app/actions/blockedDates.ts` — NEW: getBlockedDates, addBlockedDate, removeBlockedDate
+- `saas/prisma/schema.prisma` — BlockedDate model added
+- `saas/components/BookingForm.tsx` — dynamic minGuests props, blockedDates prop, inline blocked date error
+- `saas/app/(site)/page.tsx` — force-dynamic, min guest + blocked dates fetch + BookingForm props
+- `saas/app/actions/createBooking.ts` — server-side blocked date + min guest validation
+- `saas/app/globals.css` — smooth scroll, shimmer keyframes, nav-progress keyframes
 
-### Known local issue
-Prisma client stale on Windows (DLL lock). Fix: Ctrl+C dev server → `npx prisma generate` → restart.
+### Bugs fixed / lessons learned
+- `useSearchParams()` in client components without a `<Suspense>` boundary crashes the entire page in Next.js App Router production builds (passes build, fails at runtime). Fix: remove `useSearchParams`, receive params as props from the server component instead.
+- `startTransition(router.push)` makes navigation a low-priority concurrent update that can be interrupted. Fix: call `router.push` directly.
+- Prisma `where` clause with a union type spread causes cascading type errors on `include` results — fix with `as OrderStatus` cast on the string param.
+- Home page with settings-dependent content must have `export const dynamic = 'force-dynamic'` or values are baked in at build time.
+
+- **Fix: calendar hover preview** — `e.currentTarget` is nullified by React after the event handler returns, so calling `.getBoundingClientRect()` inside a `setTimeout` always failed silently. Fixed by capturing `const target = e.currentTarget` before the timeout.
+
+- **Wine description field** — `description String?` on Wine model; textarea in admin edit+add forms; shown on card below type/price
+- **Wine orders status stepper** — Pending → Confirmed → Paid + Cancel/Restore; optimistic UI update; `updateWineOrderStatus` server action in `app/actions/wineOrders.ts`
+- **Wine order ID on card** — `#xxxxxxxx` monospace badge (first 8 chars of cuid)
+- **Wine order total amount** — `totalAmount Float?` on WineOrder schema; price now stored per wine in JSON (`{id, name, quantity, price}`); total computed in `submitWineOrder`; displayed on admin card
+- **Schema**: `prisma db push` done — both Wine.description and WineOrder.totalAmount columns live in DB
+
+### Key files changed this session
+- `saas/prisma/schema.prisma` — Wine.description + WineOrder.totalAmount added
+- `saas/app/actions/wines.ts` — description param added to createWine/updateWine
+- `saas/app/actions/wineOrders.ts` — NEW: updateWineOrderStatus
+- `saas/app/actions/submitWineOrder.ts` — price per wine in JSON; totalAmount computed and saved
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — price included in wines JSON on submit
+- `saas/app/admin/wines/WinesClient.tsx` — description type, edit form textarea, display on card
+- `saas/app/admin/wine-orders/WineOrdersClient.tsx` — NEW: status stepper client component
+- `saas/app/admin/wine-orders/page.tsx` — now delegates to WineOrdersClient
+
+### Bugs fixed / lessons learned
+- Wine order JSON was missing `price` per bottle — amounts couldn't be computed without it. Fixed at submission time; old orders will show `—` for total (totalAmount is nullable).
 
 ### Next up
-- **Step 7 — Invoice updates**: split guest counts + masterclass/extras as line items on printed invoice
-- **Fix date filters** on admin orders (KnownBugs #1)
-- **Gallery page** — wire up slider/gallery photos on public site
-- **Send invoice by email** — Resend + PDF generation
-- Verify nikalasmarani.ge in Resend
+- **Fix date filters** on admin orders (KnownBugs #1) — date range filter doesn't work
+- **Verify nikalasmarani.ge in Resend** — until done, invoice emails only deliver to max.mghvdliashvili@gmail.com, not real customers
+- **Gallery page** — images already in `public/images/`, need to wire into public site
+- **Send invoice by email — PDF attachment** — follow-up to HTML email; attach a PDF so customers get a proper document
 
 ---
 
-## 2026-05-26 — Previous session (full detail)
+## 2026-05-28 — Session 1 (compressed)
 
-### Completed
-- **Split company pricing** — added `tastingLunchPricePerPerson` to `Price` model; companies CRUD shows two price inputs per tier (Tasting ₾/pp and +Lunch ₾/pp); `createBooking` picks the correct rate based on `visitType`
-- **Wine DB model + admin CRUD** — `Wine` model added to Prisma schema; full CRUD at `/admin/wines` with inline image picker in edit row; 6 product images assignable per wine; wine edit row images shown at 0.35 opacity if used by another wine
-- **`/wines` page fixed** — was pre-rendered as static (○) on Vercel; fixed with `export const dynamic = 'force-dynamic'`; new wines now appear immediately after adding
-- **Company identification code** — `identificationCode String?` added to `Company` model; shown as second input in companies edit row alongside name; displayed in list row if set; passed to invoice
-- **Payment details in settings** — 5 bank/payment fields (`payment_recipient_name`, `payment_personal_number`, `payment_bank_name`, `payment_bank_code`, `payment_iban`) added to Settings DEFAULTS; editable on `/admin/settings` in a new "გადახდის რეკვიზიტები" section; saves on blur
-- **Print invoice (complete)** — printer SVG icon on every order row; click sets `printOrder` state; `useEffect` fires `window.print()` after 100ms; `<InvoicePrint>` renders off-screen (position fixed, opacity 0); `@media print` in `globals.css` hides everything except `.invoice-print`; Georgian-language invoice layout: header (ნიკალას მარანი), ინვოისი title, კომპანია section, სადილი/დეგუსტაცია sections (unused shows 0), თანხა with total, გადახდის რეკვიზიტები at bottom
-
-### Key files changed
-- `saas/prisma/schema.prisma` — `Company.identificationCode String?`, `Price.tastingLunchPricePerPerson Float @default(0)`, `Wine` model (new)
-- `saas/app/actions/companies.ts` — `identificationCode` param in create/update
-- `saas/app/actions/prices.ts` — `tastingLunchPricePerPerson` in create/update
-- `saas/app/actions/createBooking.ts` — rate picker by `visitType`
-- `saas/app/actions/settings.ts` — 5 payment keys in DEFAULTS
-- `saas/app/actions/wines.ts` — NEW: `createWine`, `updateWine`, `deleteWine`
-- `saas/app/admin/companies/CompaniesClient.tsx` — ID code input, split price tiers display
-- `saas/app/admin/wines/page.tsx` — NEW: server component
-- `saas/app/admin/wines/WinesClient.tsx` — NEW: full CRUD with inline image picker
-- `saas/app/admin/settings/page.tsx` — fetches 5 payment settings
-- `saas/app/admin/settings/SettingsClient.tsx` — Payment Details section (5 inputs, save on blur)
-- `saas/app/admin/orders/page.tsx` — fetches 5 payment settings + `identificationCode`; passes both to OrdersTable
-- `saas/app/admin/orders/InvoicePrint.tsx` — NEW: Georgian invoice layout component
-- `saas/app/admin/orders/OrdersTable.tsx` — `payment` prop, `printOrder` state, printer icon button, hidden InvoicePrint div
-- `saas/app/(site)/wines/page.tsx` — `export const dynamic = 'force-dynamic'`
-- `saas/app/(site)/wines/WineCatalogueClient.tsx` — reads from DB (`DbWine` prop), uses `imagePath` with color-gradient fallback
-- `saas/app/globals.css` — `@media print` rules
-- `saas/app/admin/layout.tsx` — Wines link in nav (Images link removed)
-- `saas/scripts/seed.ts` — wine seeding (skips if wines exist)
-
-### Pending user tests
-- Print invoice on a real order (features #30–32)
-- Split company pricing on new booking (feature #33)
-- Wine CRUD + image assignment (feature #34)
-- Order delete confirm (feature #5)
-- Wine Orders admin tab (feature #15)
-- Admin mobile responsiveness (feature #19)
-- Statistics V2 (feature #26)
-
-### Next up (priority order)
-1. **Enhanced company booking — Step 1**: DB schema (new models + fields) → `prisma db push`
-2. **Enhanced company booking — Step 2**: Menu Items admin panel
-3. **Enhanced company booking — Step 3**: Masterclass admin panel
-4. **Enhanced company booking — Step 4**: Clickable order detail page
-5. **Enhanced company booking — Step 5**: Admin create order
-6. **Enhanced company booking — Step 6**: Public form toggle
-7. Fix date filters on admin orders (KnownBugs #1)
-8. Verify nikalasmarani.ge domain in Resend
-9. Gallery page — wire up downloaded photos on public site
+Settings text English; calendar view + hover preview; export CSV; configurable min guests; block dates; shimmer loading; smooth scroll; status filter + counts; progress bar on filter change.
 
 ---
 
-## 2026-05-22 — Previous session (full detail)
+## 2026-05-27 — Previous session (compressed)
 
-### Completed
-- **Statistics V2 wired up** — `StatisticsClient.tsx` defaults to V2 (upcoming cards, year/month/company filters, horizontal bar charts); "Show historical breakdown →" toggles V1; "← Back" returns
-- **Logo replaces text** — `Nikalas Marani` text → `logo-dark.svg` in: home page hero (80px), wine catalogue (56px), admin login (56px), admin nav bar (28px)
-- **Winery images downloaded** — 11 images from nikalasmarani.ge via PowerShell `Invoke-WebRequest`; saved to `saas/public/images/slider/` (3), `gallery/` (2), `products/` (6 wine bottles)
-- **Wine image assignment** — inline in wine edit row; admin clicks thumbnail → `updateWine` saves `imagePath` immediately; images used by other wines shown at 0.35 opacity
-- **Email confirmation** — Resend sandbox; sends to max.mghvdliashvili@gmail.com only until domain verified
+Print invoice fixes (blank page, Georgian typos, payment section, 2-page bug); Vercel CLI set up; Supabase RLS on all 10 tables; Enhanced company booking Steps 4–6 (order detail page, admin create order, public form toggle with split counts/hot dishes/masterclass/live price breakdown).
 
-### Key files changed
-- `saas/app/admin/statistics/StatisticsClient.tsx`, `StatisticsV2.tsx` (NEW), `statistics/page.tsx`
-- `saas/app/(site)/page.tsx` — logo in hero
-- `saas/app/(site)/wines/WineCatalogueClient.tsx` — logo + real photos
-- `saas/app/admin/login/page.tsx`, `saas/app/admin/layout.tsx` — logos
-- `saas/public/images/` — 11 images added
+---
+
+## 2026-05-26 — Split pricing, Wine CRUD, company ID code, payment settings, print invoice
 
 ---
 
 ## Older sessions (compressed)
 
+- 2026-05-22 — Statistics V2, logo rollout, 11 winery images downloaded, wine image assignment, email confirmation (Resend sandbox), admin mobile responsiveness, error states
 - 2026-05-19 — Built public site (About, Contact, Wines catalogue), SiteNav, hamburger menu, WineOrder DB model, admin Wine Orders tab, brand assets (SVG logo, icons), deployed to Vercel
 - 2026-05-18 — Order edit/delete slide-over, filter fixes (individuals only, upcoming), dedup script, preview server setup
 - 2026-05-17 — Orders list, companies CRUD, price tiers with validations, seed script, statistics page, nav fixes

@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 
 export async function createWine(data: {
-  name: string; type: string; price: number; color: string
+  name: string; type: string; description?: string; price: number; color: string
 }) {
   const maxOrder = await db.wine.aggregate({ _max: { sortOrder: true } })
   await db.wine.create({
@@ -18,7 +18,7 @@ export async function createWine(data: {
 }
 
 export async function updateWine(id: string, data: {
-  name?: string; type?: string; price?: number; color?: string; imagePath?: string | null; active?: boolean; sortOrder?: number
+  name?: string; type?: string; description?: string; price?: number; color?: string; imagePath?: string | null; active?: boolean; sortOrder?: number
 }) {
   await db.wine.update({ where: { id }, data })
   revalidatePath('/admin/wines')

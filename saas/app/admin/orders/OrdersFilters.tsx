@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { Company } from '@prisma/client'
 import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE, type ColumnId } from './columnDefs'
+import { exportOrdersCsv } from '@/app/actions/orders'
 
 const C = {
   border: '#e0d4c0',
@@ -15,14 +16,35 @@ const C = {
   bg: '#fff9f3',
 }
 
+const STATUSES = [
+  { value: 'NEW',          label: 'New' },
+  { value: 'CONFIRMED',    label: 'Confirmed' },
+  { value: 'INVOICE_SENT', label: 'Invoice sent' },
+  { value: 'PAID',         label: 'Paid' },
+  { value: 'COMPLETED',    label: 'Completed' },
+  { value: 'CANCELLED',    label: 'Cancelled' },
+]
+
 type Props = {
   companies: Company[]
-  params: { dateFrom?: string; dateTo?: string; companyId?: string }
+  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
+  statusCounts: Record<string, number>
 }
 
-export default function OrdersFilters({ companies, params }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts }: Props) {
   const router = useRouter()
   const pathname = usePathname()
+  const [isExporting, startExport] = useTransition()
+  const [isNavigating, setIsNavigating] = useState(false)
+  const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`
+  const prevNavKey = useRef(navKey)
+
+  useEffect(() => {
+    if (prevNavKey.current !== navKey) {
+      prevNavKey.current = navKey
+      setIsNavigating(false)
+    }
+  }, [navKey])
 
   // ── Column visibility (lives here so Columns button is in the filter bar) ──
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
@@ -59,6 +81,7 @@ export default function OrdersFilters({ companies, params }: Props) {
     if (params.dateFrom)  merged.dateFrom  = params.dateFrom
     if (params.dateTo)    merged.dateTo    = params.dateTo
     if (params.companyId) merged.companyId = params.companyId
+    if (params.status)    merged.status    = params.status
     for (const [k, v] of Object.entries(overrides)) {
       if (v) merged[k] = v
       else   delete merged[k]
@@ -68,17 +91,35 @@ export default function OrdersFilters({ companies, params }: Props) {
   }
 
   function update(key: string, value: string) {
+    setIsNavigating(true)
     router.push(buildQuery({ [key]: value || undefined }))
   }
 
   function setUpcoming() {
+    setIsNavigating(true)
     const today = new Date().toISOString().split('T')[0]
     router.push(buildQuery({ dateFrom: today, dateTo: undefined }))
   }
 
-  function clearFilters() { router.push(pathname) }
+  function clearFilters() {
+    setIsNavigating(true)
+    router.push(pathname)
+  }
 
-  const hasFilters = params.dateFrom || params.dateTo || params.companyId
+  function handleExport() {
+    startExport(async () => {
+      const csv = await exportOrdersCsv({ dateFrom: params.dateFrom, dateTo: params.dateTo, companyId: params.companyId, status: params.status })
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `orders-${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+
+  const hasFilters = params.dateFrom || params.dateTo || params.companyId || params.status
   const today = new Date().toISOString().split('T')[0]
   const isUpcoming = params.dateFrom === today && !params.dateTo
 
@@ -93,7 +134,8 @@ export default function OrdersFilters({ companies, params }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <>
+    <div className="flex flex-wrap items-end gap-3" style={{ opacity: isNavigating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
 
       {/* Quick */}
       <div>
@@ -139,6 +181,28 @@ export default function OrdersFilters({ companies, params }: Props) {
         </select>
       </div>
 
+      {/* Status */}
+      <div>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Status</label>
+        <select
+          value={params.status ?? ''}
+          onChange={e => update('status', e.target.value)}
+          style={{ ...inputStyle, minWidth: 160 }}
+        >
+          <option value="">
+            All statuses ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})
+          </option>
+          {STATUSES.map(s => {
+            const count = statusCounts[s.value] ?? 0
+            return (
+              <option key={s.value} value={s.value} disabled={count === 0}>
+                {s.label} ({count})
+              </option>
+            )
+          })}
+        </select>
+      </div>
+
       {/* Clear filters — same presence as Upcoming */}
       {hasFilters && (
         <div>
@@ -158,6 +222,26 @@ export default function OrdersFilters({ companies, params }: Props) {
           </button>
         </div>
       )}
+
+      {/* Export CSV */}
+      <div>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
+        <button
+          onClick={handleExport}
+          disabled={isExporting}
+          style={{
+            ...inputStyle,
+            cursor: isExporting ? 'default' : 'pointer',
+            opacity: isExporting ? 0.6 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          {isExporting ? 'Exporting…' : 'Export CSV'}
+        </button>
+      </div>
 
       {/* Columns picker — right-aligned in the same row */}
       <div className="relative ml-auto">
@@ -195,5 +279,18 @@ export default function OrdersFilters({ companies, params }: Props) {
       </div>
 
     </div>
+
+    {/* Progress bar */}
+    <div style={{ height: 2, backgroundColor: '#e0d4c0', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+      {isNavigating && (
+        <div style={{
+          height: '100%',
+          backgroundColor: '#7c1d23',
+          borderRadius: 2,
+          animation: 'nav-progress 1s ease-out forwards',
+        }} />
+      )}
+    </div>
+    </>
   )
 }

@@ -6,6 +6,7 @@ export type WineSelection = {
   id: string
   name: string
   quantity: number
+  price: number
 }
 
 export async function submitWineOrder(formData: FormData) {
@@ -29,6 +30,8 @@ export async function submitWineOrder(formData: FormData) {
     return { error: 'Please select at least one wine.' }
   }
 
+  const totalAmount = selectedWines.reduce((sum, w) => sum + w.quantity * w.price, 0)
+
   try {
     await db.wineOrder.create({
       data: {
@@ -40,6 +43,7 @@ export async function submitWineOrder(formData: FormData) {
         contactName,
         contactPhone,
         wines: selectedWines,
+        totalAmount,
       },
     })
     return { success: true }

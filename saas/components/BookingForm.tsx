@@ -13,7 +13,6 @@ type MenuItem = { id: string; name: string; type: string }
 type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
-const MIN_GUESTS = 4
 
 const C = {
   bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
@@ -26,9 +25,12 @@ type Props = {
   enhancedEnabled?: boolean
   menuItems?: MenuItem[]
   masterclassItems?: MasterclassItem[]
+  minGuestsTasting?: number
+  minGuestsTastingLunch?: number
+  blockedDates?: string[]
 }
 
-export default function BookingForm({ companies, showCompanyPrice, enhancedEnabled, menuItems = [], masterclassItems = [] }: Props) {
+export default function BookingForm({ companies, showCompanyPrice, enhancedEnabled, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [] }: Props) {
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
@@ -50,12 +52,15 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
   const [foodNotes, setFoodNotes] = useState('')
   const [mcSelections, setMcSelections] = useState<Record<string, { checked: boolean; qtyStr: string }>>({})
 
-  const guestCount = Math.max(parseInt(guestInput) || MIN_GUESTS, MIN_GUESTS)
+  const minGuests = visitType === 'TASTING' ? minGuestsTasting : minGuestsTastingLunch
+  const guestCount = Math.max(parseInt(guestInput) || minGuests, minGuests)
   const today = new Date().toISOString().split('T')[0]
   const currentHour = new Date().getHours()
   const availableSlots = selectedDate === today
     ? TIME_SLOTS.filter(t => parseInt(t) > currentHour)
     : TIME_SLOTS
+
+  const isDateBlocked = (date: string) => blockedDates.includes(date)
 
   function handleDateChange(date: string) {
     setSelectedDate(date)
@@ -129,9 +134,14 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       setErrorMsg('Please provide at least a phone number or email so we can confirm your booking.')
       return
     }
-    if (isEnhanced && totalGuests < MIN_GUESTS) {
+    if (isDateBlocked(selectedDate)) {
       setStatus('error')
-      setErrorMsg(`Minimum ${MIN_GUESTS} guests total required.`)
+      setErrorMsg('The winery is closed on this date. Please choose another date.')
+      return
+    }
+    if (isEnhanced && totalGuests < minGuests) {
+      setStatus('error')
+      setErrorMsg(`Minimum ${minGuests} guests total required.`)
       return
     }
     setStatus('loading')
@@ -252,6 +262,9 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
           <input id="date" name="date" type="date" required min={today}
             value={selectedDate} onChange={e => handleDateChange(e.target.value)}
             className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+          {selectedDate && isDateBlocked(selectedDate) && (
+            <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>The winery is closed on this date. Please choose another date.</p>
+          )}
         </div>
         <div>
           <label style={labelStyle}>Time Slot</label>
@@ -292,14 +305,14 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       ) : (
         <div>
           <label htmlFor="guestCount" style={labelStyle}>
-            Number of Guests <span style={{ color: C.faint }}>(minimum {MIN_GUESTS})</span>
+            Number of Guests <span style={{ color: C.faint }}>(minimum {minGuests})</span>
           </label>
-          <input id="guestCount" name="guestCount" type="number" min={MIN_GUESTS} max={50}
+          <input id="guestCount" name="guestCount" type="number" min={minGuests} max={200}
             value={guestInput}
             onChange={e => { setGuestInput(e.target.value); setGuestWarning('') }}
             onBlur={() => {
               const val = parseInt(guestInput) || 0
-              if (val < MIN_GUESTS) { setGuestInput(String(MIN_GUESTS)); setGuestWarning(`Minimum is ${MIN_GUESTS} guests — reset to ${MIN_GUESTS}.`) }
+              if (val < minGuests) { setGuestInput(String(minGuests)); setGuestWarning(`Minimum is ${minGuests} guests — reset to ${minGuests}.`) }
               else { setGuestInput(String(val)); setGuestWarning('') }
             }}
             required className="rounded-lg border px-3 py-2.5 w-28" style={inputStyle} />

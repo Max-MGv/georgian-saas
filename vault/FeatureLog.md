@@ -40,7 +40,32 @@ tags: [features]
 | 32 | Print invoice — printer icon on each order row; Georgian-language invoice via browser print dialog; `@media print` isolates invoice | Admin | ✅ Done | ✅ Yes | ❌ No |
 | 33 | Split company pricing — separate tasting vs tasting+lunch price per tier; booking picks correct rate by `visitType` | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
 | 34 | Wine DB model + admin CRUD (`/admin/wines`) — create/edit/delete wines, inline image picker, sort order, active toggle | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
-| 35 | Menu Items admin (`/admin/menu-items`) — CRUD for vegetable/meat hot dish options with active toggle and sort order | Admin | ✅ Done | ✅ Yes | ❌ No |
-| 36 | Masterclass admin (`/admin/masterclass`) — CRUD for masterclass types with MasterclassUnit enum (PER_PERSON/PER_PIECE/FLAT) and price per unit | Admin | ✅ Done | ✅ Yes | ❌ No |
-| 37 | Vercel CLI connected — `npx vercel ls` and `npx vercel logs` available for build/runtime debugging | Dev | ✅ Done | ✅ Yes | ✅ Yes |
-| 38 | Supabase RLS enabled on all 10 tables | Security | ✅ Done | ✅ Yes | ✅ Yes |
+| 35 | Enhanced booking DB schema (Step 1) — split guest counts (lunchGuests/tastingGuests/freeGuests), MenuItem, MasterclassItem, OrderMasterclass, OrderExtra models added to Prisma | DB | ✅ Done | ✅ Yes | ❌ No |
+| 36 | Menu Items admin (`/admin/menu-items`) — CRUD for vegetable/meat hot dish options with active toggle and sort order | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 37 | Masterclass admin (`/admin/masterclass`) — CRUD for masterclass types with MasterclassUnit enum (PER_PERSON/PER_PIECE/FLAT) and price per unit | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 38 | Enhanced booking order detail page (Step 4) — `/admin/orders/[id]` clickable detail; editable split guest counts, hot dish, masterclass add-ons, extras, live total recalc, tier-in-use banner | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 39 | Admin create order (Step 5) — `/admin/orders/new` + `createOrderAdmin` action; "New Order" button on orders list; individual manual rate calc; zero-paying-guest fallback | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 40 | Enhanced booking public form toggle (Step 6) — `enable_enhanced_company_booking` setting; when on + company selected → split guest counts, hot dish dropdowns, masterclass add-ons, food notes, live price breakdown | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 41 | Invoice simple/detailed print toggle (Step 7) — Simple/Detailed toggle on print picker; detailed shows split guest counts, masterclass lines, extras, itemised amount breakdown | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 42 | Vercel CLI connected — `npx vercel ls` and `npx vercel logs` available for build/runtime debugging | Dev | ✅ Done | ✅ Yes | ✅ Yes |
+| 43 | Supabase RLS enabled on all 10 tables | Security | ✅ Done | ✅ Yes | ✅ Yes |
+| 44 | Send invoice by email — envelope icon on each order row opens modal; admin edits/confirms message + recipient; sends HTML invoice via Resend; default message editable in Settings → Emails | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 45 | Invoice UI improvements — consistent brown palette; values bold 600 vs labels normal 400; WebKit data-detector color fix on monospace values (IBAN etc.) | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 46 | Order status tracking — pipeline statuses (NEW/CONFIRMED/COMPLETED/CANCELLED); yellow NEW badge; status editable on detail page; null-safe lookup | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 47 | Hover preview card — Obsidian-style floating popover on order row hover shows key order details without opening full detail page | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 48 | Configurable columns — hide/show toggle dropdown on orders table; sticky actions column on scroll; Edit/Delete replaced with pen + trash icons; dropdown stays open on click | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 49 | Rate UI improvements — individual rate inputs moved into Guest Breakdown section; both rates always visible; collapse after save; prominent save button; default 50₾/pp | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 50 | Calendar view — Table/Calendar toggle on orders page; month grid built from scratch; booking count badge per day; click day → filters table to that date | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 51 | Export orders to CSV — "Export CSV" button in orders filter bar; mirrors active filters; downloads dated .csv file | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 52 | Configurable min guests per visit type — `min_guests_tasting` and `min_guests_tasting_lunch` settings; editable in Settings → Booking Rules; enforced on public form and in createBooking action | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 53 | Block dates (closed days) — `BlockedDate` DB model; admin adds/removes dates in Settings → Closed Days; public booking form blocks selection and shows error; createBooking guards server-side | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |
+| 54 | Calendar day hover preview — popover on calendar day cells shows all orders for that day with status colours; 200ms delay; auto right-aligns on right-side columns to avoid clipping | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 55 | Shimmer loading skeleton — `loading.tsx` in `/admin/orders` shows warm brown shimmer skeleton during filter navigation (header + filter bar + 9 table rows) | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 56 | Progress bar on filter change — thin wine-red bar animates under filter row while navigation is in flight; filter bar dims to 60% opacity | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 57 | Smooth scroll on "Book a Visit" — `scroll-behavior: smooth` on `html` element | Public site | ✅ Done | ✅ Yes | ❌ No |
+| 58 | Status filter — Status dropdown in orders table filter bar; all 6 pipeline statuses; integrated into all server queries | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 59 | Status counts in dropdown — each status option shows live order count within current date/company context; options with 0 orders disabled; total shown in "All statuses" option | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 60 | Wine description field — `description String?` added to Wine model; editable textarea in admin wine edit+add forms; shown as body text on wine card in admin | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 61 | Wine orders — editable status stepper — 3-stage stepper (Pending → Confirmed → Paid) + Cancel/Restore; optimistic UI; `updateWineOrderStatus` server action | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 62 | Wine orders — order ID on card — first 8 chars of ID shown as monospace `#xxxxxxxx` badge | Admin | ✅ Done | ✅ Yes | ❌ No |
+| 63 | Wine orders — total amount — `totalAmount Float?` on WineOrder; price stored per wine in JSON; total computed on submission and displayed on admin card | Admin + Public site | ✅ Done | ✅ Yes | ❌ No |

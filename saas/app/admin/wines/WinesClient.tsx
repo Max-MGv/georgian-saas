@@ -18,11 +18,11 @@ const PRODUCT_IMAGES = [
 ]
 
 type Wine = {
-  id: string; name: string; type: string; price: number
+  id: string; name: string; type: string; description: string | null; price: number
   color: string; imagePath: string | null; active: boolean; sortOrder: number
 }
 
-const BLANK = { name: '', type: '', price: 0, color: '#7c1d23' }
+const BLANK = { name: '', type: '', description: '', price: 0, color: '#7c1d23' }
 
 const inputCls = 'w-full rounded-lg border px-3 py-2 text-sm outline-none'
 const inputStyle = { backgroundColor: '#fffdf9', borderColor: C.border, color: C.text }
@@ -36,7 +36,7 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
   const [editId, setEditId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [draft, setDraft] = useState(BLANK)
-  const [editDraft, setEditDraft] = useState<Partial<Wine>>({})
+  const [editDraft, setEditDraft] = useState<Partial<Wine & { description: string }>>({})
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [imgSaving, setImgSaving] = useState<string | null>(null)
@@ -47,7 +47,7 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
     if (!draft.name.trim() || !draft.type.trim() || !draft.price) return
     setSaving('new')
     startTransition(async () => {
-      await createWine({ name: draft.name.trim(), type: draft.type.trim(), price: Number(draft.price), color: draft.color })
+      await createWine({ name: draft.name.trim(), type: draft.type.trim(), description: draft.description.trim() || undefined, price: Number(draft.price), color: draft.color })
       setDraft(BLANK)
       setShowAdd(false)
       setSaving(null)
@@ -58,7 +58,7 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
   // ── EDIT ──
   function startEdit(wine: Wine) {
     setEditId(wine.id)
-    setEditDraft({ name: wine.name, type: wine.type, price: wine.price, color: wine.color, active: wine.active })
+    setEditDraft({ name: wine.name, type: wine.type, description: wine.description ?? '', price: wine.price, color: wine.color, active: wine.active })
     setDeleteConfirm(null)
   }
 
@@ -68,6 +68,7 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
       await updateWine(id, {
         name: editDraft.name,
         type: editDraft.type,
+        description: editDraft.description || undefined,
         price: Number(editDraft.price),
         color: editDraft.color,
         active: editDraft.active,
@@ -139,6 +140,16 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                     <label className="text-xs mb-1 block" style={{ color: C.faint }}>Type</label>
                     <input className={inputCls} style={inputStyle} placeholder="e.g. Red Dry, Amber, Spirit 55%" value={editDraft.type ?? ''} onChange={e => setEditDraft(d => ({ ...d, type: e.target.value }))} />
                   </div>
+                </div>
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: C.faint }}>Description / tasting notes</label>
+                  <textarea
+                    className={inputCls} style={{ ...inputStyle, resize: 'vertical', minHeight: 64 }}
+                    placeholder="e.g. Deep ruby colour. Notes of dark cherry, plum, and spice. Long finish."
+                    value={editDraft.description ?? ''}
+                    onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))}
+                    rows={3}
+                  />
                 </div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
@@ -232,6 +243,9 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                     {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>Hidden</span>}
                   </div>
                   <p className="text-xs" style={{ color: C.faint }}>{wine.type} · {wine.price}₾ / bottle</p>
+                  {wine.description && (
+                    <p className="text-xs mt-1 line-clamp-2" style={{ color: C.muted }}>{wine.description}</p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -285,6 +299,15 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
               <label className="text-xs mb-1 block" style={{ color: C.faint }}>Type</label>
               <input className={inputCls} style={inputStyle} placeholder="e.g. Red Dry" value={draft.type} onChange={e => setDraft(d => ({ ...d, type: e.target.value }))} />
             </div>
+          </div>
+          <div>
+            <label className="text-xs mb-1 block" style={{ color: C.faint }}>Description / tasting notes</label>
+            <textarea
+              className={inputCls} style={{ ...inputStyle, resize: 'vertical', minHeight: 64 }}
+              placeholder="e.g. Deep ruby colour. Notes of dark cherry, plum, and spice."
+              value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+              rows={3}
+            />
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>

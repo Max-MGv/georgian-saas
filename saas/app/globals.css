@@ -126,7 +126,23 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #f0e8de 25%, #fdf6ee 50%, #f0e8de 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes nav-progress {
+  0%   { width: 0%;   opacity: 1; }
+  100% { width: 82%;  opacity: 1; }
 }
 
 /* Prevent iOS Safari auto-zoom on input focus (requires font-size >= 16px) */

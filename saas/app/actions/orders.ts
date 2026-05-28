@@ -6,6 +6,7 @@ import { recalcOrderTotal } from '@/lib/pricing'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
+import { OrderStatus } from '@prisma/client'
 
 export async function deleteOrder(id: string) {
   await db.order.delete({ where: { id } })
@@ -284,6 +285,56 @@ export async function sendOrderInvoice(
   } catch {
     return { error: 'Failed to send email. Please try again.' }
   }
+}
+
+function csvCell(val: string | number | null | undefined): string {
+  const s = String(val ?? '')
+  return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+export async function exportOrdersCsv(filters: {
+  dateFrom?: string
+  dateTo?: string
+  companyId?: string
+  status?: string
+}): Promise<string> {
+  const orders = await db.order.findMany({
+    where: {
+      ...(filters.dateFrom || filters.dateTo ? {
+        date: {
+          ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+          ...(filters.dateTo   ? { lte: new Date(filters.dateTo + 'T23:59:59') } : {}),
+        },
+      } : {}),
+      ...(filters.companyId === '__individual__'
+        ? { bookingType: 'INDIVIDUAL' }
+        : filters.companyId
+          ? { companyId: filters.companyId }
+          : {}),
+      ...(filters.status ? { status: filters.status as OrderStatus } : {}),
+    },
+    include: { company: true },
+    orderBy: { date: 'desc' },
+  })
+
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Total (GEL)', 'Status', 'Email', 'Phone', 'Notes']
+  const rows = orders.map(o => [
+    o.date.toLocaleDateString('en-GB'),
+    o.timeSlot,
+    o.name,
+    o.surname,
+    o.company?.name ?? '',
+    o.bookingType,
+    o.visitType,
+    o.guestCount,
+    o.totalPrice ?? '',
+    o.status,
+    o.email ?? '',
+    o.phone ?? '',
+    o.notes ?? '',
+  ])
+
+  return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
 }
 
 export async function updateOrderStatus(

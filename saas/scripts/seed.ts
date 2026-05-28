@@ -1,141 +1,141 @@
-import dotenv from 'dotenv'
+﻿/**
+ * Seed script — Nikalas Marani test data
+ * Run: npm run seed
+ *
+ * Sections (add new ones at the bottom, each is independent):
+ *   1. Wine Orders   <- active
+ *   2. (future) Test Companies + Price Tiers
+ *   3. (future) Test Booking Orders
+ */
+
+import { PrismaClient } from '@prisma/client'
+import * as dotenv from 'dotenv'
+
 dotenv.config({ path: '.env' })
 
-// Dynamic imports ensure DATABASE_URL is set before Prisma client is created
-async function main() {
-  const { db } = await import('../lib/db')
-  const { createBooking } = await import('../app/actions/createBooking')
+const db = new PrismaClient()
 
-  // Seed wines (skip if already exist)
-  const wineCount = await db.wine.count()
-  if (wineCount === 0) {
-    const wines = [
-      { name: 'Saperavi 2022',         type: 'Red Dry',    price: 18, color: '#7c1d23', sortOrder: 0 },
-      { name: 'Rkatsiteli 2023',       type: 'White Dry',  price: 15, color: '#8b6914', sortOrder: 1 },
-      { name: 'Rkatsiteli Amber 2022', type: 'Amber',      price: 22, color: '#c27c2a', sortOrder: 2 },
-      { name: 'Mtsvane 2023',          type: 'White Dry',  price: 16, color: '#5a7c14', sortOrder: 3 },
-      { name: 'Rosé 2023',             type: 'Rosé Dry',   price: 17, color: '#c45a6e', sortOrder: 4 },
-      { name: 'Chacha',                type: 'Spirit 55%', price: 25, color: '#6b5a47', sortOrder: 5 },
-    ]
-    await db.wine.createMany({ data: wines })
-    console.log(`  ✓ Seeded ${wines.length} wines`)
-  } else {
-    console.log(`  — Wines already seeded (${wineCount} found), skipping`)
+// --- helpers ------------------------------------------------------------------
+
+function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
+function qty() { return Math.floor(Math.random() * 10) + 2 }
+
+// --- 1. Wine Orders -----------------------------------------------------------
+
+async function seedWineOrders() {
+  console.log('\n-- Wine Orders --')
+
+  // Pull active wines from DB so names/IDs match the real catalogue
+  const wines = await db.wine.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })
+
+  if (wines.length === 0) {
+    console.log('  WARNING: No active wines found — add wines in the admin panel first, then re-run.')
+    return
   }
 
-  // Fetch companies and their tiers so we can make valid company bookings
-  const companies = await db.company.findMany({ include: { prices: { orderBy: { minGuests: 'asc' } } } })
-  const companiesWithTiers = companies.filter(c => c.prices.length > 0)
+  console.log(`  Found ${wines.length} active wine(s): ${wines.map((w: { name: string }) => w.name).join(', ')}`)
 
-  // Spread dates across the past 6 months
-  function daysAgo(n: number) {
-    const d = new Date()
-    d.setDate(d.getDate() - n)
-    return d.toISOString().split('T')[0]
+  // Pick 1-3 random wines for an order
+  function pickWines() {
+    const shuffled = [...wines].sort(() => Math.random() - 0.5)
+    const count = Math.min(Math.floor(Math.random() * 3) + 1, wines.length)
+    return shuffled.slice(0, count).map((w: { id: string; name: string }) => ({ id: w.id, name: w.name, quantity: qty() }))
   }
 
-  const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
-
-  const INDIVIDUAL_GUESTS = [
-    { name: 'Giorgi',   surname: 'Beridze',      phone: '+995 555 11 22 33', guests: 4  },
-    { name: 'Nino',     surname: 'Kvaratskhelia', email: 'nino.k@gmail.com',  guests: 6  },
-    { name: 'Luka',     surname: 'Tsiklauri',     phone: '+995 577 44 55 66', guests: 8  },
-    { name: 'Tamar',    surname: 'Gelashvili',    email: 'tamar.g@mail.ge',   guests: 5  },
-    { name: 'David',    surname: 'Chikvanaia',    phone: '+995 599 77 88 99', guests: 10 },
-    { name: 'Ana',      surname: 'Maisuradze',    email: 'ana.m@gmail.com',   guests: 4  },
-    { name: 'Mikheil',  surname: 'Jgarkava',      phone: '+995 555 00 11 22', guests: 7  },
-    { name: 'Mariam',   surname: 'Khachidze',     email: 'mariam.h@mail.ge',  guests: 9  },
-    { name: 'Levan',    surname: 'Lomidze',        phone: '+995 577 33 44 55', guests: 12 },
-    { name: 'Ketevan',  surname: 'Javakhishvili',  email: 'keti.j@gmail.com',  guests: 5  },
-    { name: 'Beka',     surname: 'Sturua',         phone: '+995 599 22 33 44', guests: 6  },
-    { name: 'Salome',   surname: 'Iashvili',       email: 'salome.i@mail.ge',  guests: 14 },
-    { name: 'Tornike',  surname: 'Megrelidze',     phone: '+995 555 66 77 88', guests: 4  },
-    { name: 'Elene',    surname: 'Nadiradze',      email: 'elene.n@gmail.com', guests: 8  },
-    { name: 'Zaza',     surname: 'Kobiashvili',    phone: '+995 577 99 00 11', guests: 11 },
-    { name: 'Nato',     surname: 'Gigauri',        email: 'nato.g@mail.ge',    guests: 5  },
-    { name: 'Shota',    surname: 'Arveladze',      phone: '+995 599 55 66 77', guests: 7  },
-    { name: 'Maka',     surname: 'Chikhladze',     email: 'maka.ch@gmail.com', guests: 4  },
-    { name: 'Irakli',   surname: 'Tsulukidze',     phone: '+995 555 88 99 00', guests: 9  },
-    { name: 'Tinatin',  surname: 'Darchiashvili',  email: 'tina.d@mail.ge',    guests: 6  },
+  const BUSINESSES = [
+    {
+      businessName: 'Rustavi Wine & Dine',
+      llcName: 'Rustavi Food Group LLC',
+      llcId: '401234567',
+      address: 'Kostava St 14, Rustavi 3700',
+      workingHours: 'Mon-Sat 10:00-22:00',
+      contactName: 'Giorgi Beridze',
+      contactPhone: '+995 598 100 200',
+      status: 'pending',
+    },
+    {
+      businessName: 'Batumi Seaside Restaurant',
+      llcName: null,
+      llcId: null,
+      address: 'Rustaveli Ave 3, Batumi 6010',
+      workingHours: 'Daily 12:00-23:00',
+      contactName: 'Nino Tsiklauri',
+      contactPhone: '+995 577 300 400',
+      status: 'confirmed',
+    },
+    {
+      businessName: 'Tbilisi Old Town Hotel',
+      llcName: 'Tbilisi Hospitality LLC',
+      llcId: '405678901',
+      address: 'Shardeni St 7, Tbilisi 0105',
+      workingHours: '24/7',
+      contactName: 'Luka Jikia',
+      contactPhone: '+995 591 500 600',
+      status: 'pending',
+    },
+    {
+      businessName: 'Kutaisi Grand Cafe',
+      llcName: null,
+      llcId: null,
+      address: 'Tamar Mepe St 22, Kutaisi 4600',
+      workingHours: 'Tue-Sun 11:00-21:00',
+      contactName: 'Mariam Kvaratskhelia',
+      contactPhone: '+995 555 700 800',
+      status: 'pending',
+    },
+    {
+      businessName: 'Signagi Wine House',
+      llcName: 'Kakheti Wine Retail LLC',
+      llcId: '407891234',
+      address: 'Chavchavadze St 1, Signagi 4200',
+      workingHours: 'Mon-Sun 10:00-20:00',
+      contactName: 'Davit Alavidze',
+      contactPhone: '+995 599 900 100',
+      status: 'confirmed',
+    },
   ]
 
-  // Date distribution: cluster more orders in recent months, fewer earlier
-  const DATE_OFFSETS = [
-    3, 5, 8, 11, 14, 18, 22, 25, 30, 35,
-    40, 45, 52, 60, 68, 75, 85, 100, 120, 150,
-  ]
-
-  const VISIT_TYPES: ('TASTING' | 'TASTING_LUNCH')[] = [
-    'TASTING', 'TASTING', 'TASTING',
-    'TASTING_LUNCH', 'TASTING_LUNCH',
-  ]
-
-  console.log(`\nSeeding database...`)
-  console.log(`Found ${companies.length} companies, ${companiesWithTiers.length} with price tiers.\n`)
-
-  let success = 0
-  let failed = 0
-
-  // Individual bookings
-  for (let i = 0; i < INDIVIDUAL_GUESTS.length; i++) {
-    const person = INDIVIDUAL_GUESTS[i]
-    const visitType = VISIT_TYPES[i % VISIT_TYPES.length]
-    const date = daysAgo(DATE_OFFSETS[i % DATE_OFFSETS.length])
-    const timeSlot = TIME_SLOTS[i % TIME_SLOTS.length]
-
-    const result = await createBooking({
-      bookingType: 'INDIVIDUAL',
-      visitType,
-      date,
-      timeSlot,
-      guestCount: person.guests,
-      name: person.name,
-      surname: person.surname,
-      email: person.email,
-      phone: person.phone,
+  let created = 0
+  for (const biz of BUSINESSES) {
+    await db.wineOrder.create({
+      data: {
+        ...biz,
+        wines: pickWines(),
+      },
     })
-
-    if (result.success) {
-      console.log(`  ✓ ${person.name} ${person.surname} — ${person.guests} guests, ${visitType}, ${date}`)
-      success++
-    } else {
-      console.log(`  ✗ ${person.name} ${person.surname} — ${result.error}`)
-      failed++
-    }
+    created++
+    console.log(`  + ${biz.businessName} (${biz.status})`)
   }
 
-  // Company bookings — one per company-tier pair, only if tiers exist
-  for (const company of companiesWithTiers) {
-    for (const tier of company.prices) {
-      const midpoint = Math.floor((tier.minGuests + tier.maxGuests) / 2)
-      const visitType = VISIT_TYPES[success % VISIT_TYPES.length]
-      const date = daysAgo(DATE_OFFSETS[success % DATE_OFFSETS.length])
-      const timeSlot = TIME_SLOTS[success % TIME_SLOTS.length]
-
-      const result = await createBooking({
-        bookingType: 'COMPANY',
-        companyId: company.id,
-        visitType,
-        date,
-        timeSlot,
-        guestCount: midpoint,
-        name: 'Group',
-        surname: company.name,
-        phone: '+995 555 00 00 00',
-      })
-
-      if (result.success) {
-        console.log(`  ✓ ${company.name} — ${midpoint} guests (tier ${tier.minGuests}–${tier.maxGuests}), ${visitType}, ${date}`)
-        success++
-      } else {
-        console.log(`  ✗ ${company.name} — ${result.error}`)
-        failed++
-      }
-    }
-  }
-
-  console.log(`\nDone. ${success} orders created, ${failed} failed.\n`)
-  await db.$disconnect()
+  console.log(`  -> ${created} wine order(s) created.`)
 }
 
-main().catch(e => { console.error(e); process.exit(1) })
+// --- 2. Test Companies (placeholder - uncomment & fill when needed) -----------
+
+// async function seedTestCompanies() {
+//   console.log('\n-- Test Companies --')
+//   // TODO: add test companies with price tiers here
+// }
+
+// --- 3. Test Booking Orders (placeholder) ------------------------------------
+
+// async function seedTestOrders() {
+//   console.log('\n-- Test Booking Orders --')
+//   // TODO: add test booking orders here
+// }
+
+// --- runner ------------------------------------------------------------------
+
+async function main() {
+  console.log('Seeding Nikalas Marani test data...')
+
+  await seedWineOrders()
+  // await seedTestCompanies()
+  // await seedTestOrders()
+
+  console.log('\nDone.\n')
+}
+
+main()
+  .catch(e => { console.error(e); process.exit(1) })
+  .finally(() => db.$disconnect())

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { BookingType, VisitType } from '@prisma/client'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { findTier } from '@/lib/pricingUtils'
+import { getSetting } from '@/app/actions/settings'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -32,9 +33,27 @@ export type BookingResult =
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
   try {
+    // Server-side guard: blocked dates
+    const dateStr = new Date(data.date).toISOString().split('T')[0]
+    const blocked = await db.blockedDate.findFirst({
+      where: { date: new Date(dateStr) },
+    })
+    if (blocked) {
+      return { success: false, error: 'The winery is closed on this date. Please choose another date.' }
+    }
+
+    // Server-side guard: min guests from settings
+    const [minTastingStr, minLunchStr] = await Promise.all([
+      getSetting('min_guests_tasting'),
+      getSetting('min_guests_tasting_lunch'),
+    ])
+    const minGuests = data.visitType === 'TASTING'
+      ? (parseInt(minTastingStr) || 4)
+      : (parseInt(minLunchStr) || 4)
+
     const guestCount = Number(data.guestCount)
-    if (guestCount < 4) {
-      return { success: false, error: 'Minimum 4 guests required.' }
+    if (guestCount < minGuests) {
+      return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
     }
 
     const isEnhanced = data.bookingType === 'COMPANY' &&

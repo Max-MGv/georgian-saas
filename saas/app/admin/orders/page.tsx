@@ -1,8 +1,11 @@
 import { db } from '@/lib/db'
+import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
 import Link from 'next/link'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
+import CalendarView from './CalendarView'
+import ViewToggle from './ViewToggle'
 
 const C = { faint: '#a89070', muted: '#6b5a47', border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23', text: '#1c1008' }
 
@@ -10,6 +13,8 @@ type SearchParams = {
   dateFrom?: string
   dateTo?: string
   companyId?: string   // a real company ID, or '__individual__' for individual-only
+  status?: string      // NEW | CONFIRMED | INVOICE_SENT | PAID | COMPLETED | CANCELLED
+  view?: 'table' | 'calendar'
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -28,19 +33,71 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
   const detailed = invoiceDetailed === 'true'
 
-  const orders = await db.order.findMany({
-    where: {
-      ...(params.dateFrom || params.dateTo ? {
-        date: {
-          ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
-          ...(params.dateTo   ? { lte: new Date(params.dateTo + 'T23:59:59') } : {}),
+  const view = params.view === 'calendar' ? 'calendar' : 'table'
+
+  // For calendar view: fetch all orders with enough detail for day hover preview
+  const calendarOrders = view === 'calendar'
+    ? await db.order.findMany({
+        select: {
+          id: true,
+          date: true,
+          name: true,
+          surname: true,
+          timeSlot: true,
+          guestCount: true,
+          visitType: true,
+          status: true,
+          totalPrice: true,
+          company: { select: { name: true } },
         },
-      } : {}),
-      ...(params.companyId === '__individual__'
-        ? { bookingType: 'INDIVIDUAL' }
-        : params.companyId
-          ? { companyId: params.companyId }
-          : {}),
+        orderBy: [{ date: 'asc' }, { timeSlot: 'asc' }],
+      })
+    : []
+
+  type CalendarOrder = {
+    id: string; name: string; surname: string; timeSlot: string
+    guestCount: number; visitType: string; status: string; totalPrice: number | null
+    companyName: string | null
+  }
+  const ordersByDate: Record<string, CalendarOrder[]> = {}
+  for (const o of calendarOrders) {
+    const d = o.date.toISOString().split('T')[0]
+    if (!ordersByDate[d]) ordersByDate[d] = []
+    ordersByDate[d].push({
+      id: o.id, name: o.name, surname: o.surname, timeSlot: o.timeSlot,
+      guestCount: o.guestCount, visitType: o.visitType, status: o.status,
+      totalPrice: o.totalPrice, companyName: o.company?.name ?? null,
+    })
+  }
+
+  const daySummaries = Object.entries(ordersByDate).map(([date, orders]) => ({ date, count: orders.length }))
+
+  const now = new Date()
+
+  // Count orders per status within current date+company context (ignores status filter so counts are always visible)
+  const baseWhere = {
+    ...(params.dateFrom || params.dateTo ? {
+      date: {
+        ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
+        ...(params.dateTo   ? { lte: new Date(params.dateTo + 'T23:59:59') } : {}),
+      },
+    } : {}),
+    ...(params.companyId === '__individual__'
+      ? { bookingType: 'INDIVIDUAL' as const }
+      : params.companyId
+        ? { companyId: params.companyId }
+        : {}),
+  }
+
+  const statusCountRows = view === 'table'
+    ? await db.order.groupBy({ by: ['status'], where: baseWhere, _count: { status: true } })
+    : []
+  const statusCounts = Object.fromEntries(statusCountRows.map(r => [r.status, r._count.status]))
+
+  const orders = view === 'table' ? await db.order.findMany({
+    where: {
+      ...baseWhere,
+      ...(params.status ? { status: params.status as OrderStatus } : {}),
     },
     include: {
       company: true,
@@ -48,7 +105,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       extras: true,
     },
     orderBy: { date: 'desc' },
-  })
+  }) : []
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 
@@ -57,7 +114,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: C.text }}>Orders</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm" style={{ color: C.faint }}>{orders.length} booking{orders.length !== 1 ? 's' : ''}</span>
+          {view === 'table' && <span className="text-sm" style={{ color: C.faint }}>{orders.length} booking{orders.length !== 1 ? 's' : ''}</span>}
+          <ViewToggle view={view} params={params} />
           <Link
             href="/admin/orders/new"
             className="px-3 py-1.5 rounded-lg text-sm font-medium text-white"
@@ -68,7 +126,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       </div>
 
-      <OrdersFilters companies={companies} params={params} />
+      {view === 'calendar' ? (
+        <CalendarView
+          daySummaries={daySummaries}
+          ordersByDate={ordersByDate}
+          initialYear={now.getFullYear()}
+          initialMonth={now.getMonth()}
+        />
+      ) : (
+        <>
+      <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} />
 
       {orders.length === 0 ? (
         <div className="rounded-xl border p-12 text-center mt-4" style={{ borderColor: C.border, backgroundColor: C.bg }}>
@@ -76,7 +143,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <>
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,
@@ -113,6 +180,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <span className="font-bold text-lg" style={{ color: C.wine }}>{totalRevenue}₾</span>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>

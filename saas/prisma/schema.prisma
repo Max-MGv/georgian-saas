@@ -104,6 +104,7 @@ model WineOrder {
   contactName  String
   contactPhone String
   wines        Json
+  totalAmount  Float?
   status       String   @default("pending")
   createdAt    DateTime @default(now())
 }
@@ -114,16 +115,24 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
-model Wine {
+model BlockedDate {
   id        String   @id @default(cuid())
-  name      String
-  type      String
-  price     Float
-  color     String   @default("#7c1d23")
-  imagePath String?
-  active    Boolean  @default(true)
-  sortOrder Int      @default(0)
+  date      DateTime @unique
+  reason    String?
   createdAt DateTime @default(now())
+}
+
+model Wine {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  description String?
+  price       Float
+  color       String   @default("#7c1d23")
+  imagePath   String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
 }
 
 enum OrderStatus {

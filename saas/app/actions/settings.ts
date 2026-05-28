@@ -14,6 +14,8 @@ const DEFAULTS: Record<string, string> = {
   payment_bank_code: '',
   payment_iban: '',
   invoice_email_message: '',
+  min_guests_tasting: '4',
+  min_guests_tasting_lunch: '4',
 }
 
 export async function getSetting(key: string): Promise<string> {

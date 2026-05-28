@@ -44,7 +44,7 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
     setError('')
     const form = e.currentTarget
     const formData = new FormData(form)
-    const wines = WINES.map(w => ({ id: w.id, name: w.name, quantity: quantities[w.id] ?? 0 }))
+    const wines = WINES.map(w => ({ id: w.id, name: w.name, quantity: quantities[w.id] ?? 0, price: w.price }))
     formData.set('wines', JSON.stringify(wines))
 
     startTransition(async () => {

@@ -98,13 +98,19 @@ Complete this before writing a single line of product code.
 - [x] Company identification code field — optional field on Company, shown in CRUD and on printed invoices
 - [x] Payment details in admin settings — 5 bank fields (recipient name, personal number, bank name, bank code, IBAN), editable on `/admin/settings`, shown on invoices
 - [x] Print invoice — printer icon on each order row; Georgian-language invoice (ინვოისი) rendered and printed via browser; `@media print` CSS isolates the invoice layout
-- [ ] **Send invoice by email** — "Send Invoice" button on order row/detail; auto-generates the invoice PDF and emails it to the customer in 1 click (Resend + PDF generation)
+- [x] **Send invoice by email (HTML)** — envelope icon on order row; modal shows recipient + editable message; sends Georgian invoice HTML via Resend; default message in Settings → Emails; PDF attachment to follow
+- [ ] **Send invoice by email (PDF attachment)** — generate PDF of invoice and attach to the email (follow-up to HTML-only phase above)
+- [x] **Invoice UI polish** — brown palette throughout, bold values vs normal labels, WebKit monospace color fix
+- [x] **Order status tracking** — NEW / CONFIRMED / COMPLETED / CANCELLED pipeline statuses; yellow NEW badge; editable on detail page
+- [x] **Hover preview card** — Obsidian-style floating popover on order row hover; shows key details without navigating away
+- [x] **Configurable columns** — show/hide any column in orders table; dropdown stays open; sticky actions column; icon buttons
+- [x] **Rate UI improvements** — rate inputs in Guest Breakdown; both rates always visible; collapse after save
 - [ ] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
 - [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
 - [ ] Gallery page — wire up slider photos and gallery photos on public site (images already in `public/images/`)
 - [ ] Georgian / English language toggle
-- [ ] Calendar view for bookings
-- [ ] Export orders to CSV / Excel
+- [x] Calendar view for bookings — month grid, booking count badges, day hover preview, click-to-filter
+- [x] Export orders to CSV / Excel — filter-aware CSV download
 
 ---
 
@@ -121,8 +127,8 @@ Full plan: `vault/Plan-EnhancedCompanyBooking.md`
 - [x] **Step 7 — Invoice updates**: Simple/Detailed toggle on print picker; detailed shows split guest counts, masterclass lines, extras, itemised amount breakdown
 
 Other planned improvements:
-- [ ] Minimum guest count configurable per visit type in admin settings
-- [ ] Block dates (e.g. winery closed days) configurable in admin
+- [x] Minimum guest count configurable per visit type in admin settings — `min_guests_tasting` + `min_guests_tasting_lunch` settings; enforced on form + server
+- [x] Block dates (e.g. winery closed days) configurable in admin — `BlockedDate` DB model; Settings UI; form + server guards
 
 ---
 
