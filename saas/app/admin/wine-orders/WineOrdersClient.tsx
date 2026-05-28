@@ -189,19 +189,30 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
 export default function WineOrdersClient({ orders: initial }: { orders: WineOrder[] }) {
   const [orders, setOrders] = useState<WineOrder[]>(initial)
   const [filter, setFilter] = useState<Filter>('all')
+  const [recentlyInactive, setRecentlyInactive] = useState<Set<string>>(new Set())
   const [, startTransition] = useTransition()
 
   function handleUpdate(id: string, status: string) {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
-    startTransition(async () => {
-      await updateWineOrderStatus(id, status)
-    })
+    const prev = orders.find(o => o.id === id)
+    const wasActive = prev && prev.status !== 'delivered' && prev.status !== 'cancelled'
+    const isNowInactive = status === 'delivered' || status === 'cancelled'
+
+    setOrders(p => p.map(o => o.id === id ? { ...o, status } : o))
+
+    if (wasActive && isNowInactive) {
+      setRecentlyInactive(s => new Set([...s, id]))
+      setTimeout(() => {
+        setRecentlyInactive(s => { const n = new Set(s); n.delete(id); return n })
+      }, 520)
+    }
+
+    startTransition(async () => { await updateWineOrderStatus(id, status) })
   }
 
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter)
   const visible = [...filtered].sort((a, b) => {
-    const aInactive = a.status === 'delivered' || a.status === 'cancelled'
-    const bInactive = b.status === 'delivered' || b.status === 'cancelled'
+    const aInactive = (a.status === 'delivered' || a.status === 'cancelled') && !recentlyInactive.has(a.id)
+    const bInactive = (b.status === 'delivered' || b.status === 'cancelled') && !recentlyInactive.has(b.id)
     return Number(aInactive) - Number(bInactive)
   })
 
@@ -260,6 +271,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
               backgroundColor: C.bg,
               borderColor: C.border,
               opacity: isInactive ? 0.55 : 1,
+              transition: 'opacity 0.45s ease',
               borderRightWidth: 4,
               borderRightColor: sc.border,
             }}
