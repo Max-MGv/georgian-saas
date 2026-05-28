@@ -28,8 +28,8 @@ type Props = { order: Order; payment: Payment; detailed?: boolean }
 function Row({ label, value, mono = false }: { label: string; value: string | number; mono?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '5px 0', borderBottom: '1px solid #e8e0d0' }}>
-      <span style={{ color: '#888', fontSize: 13 }}>{label}</span>
-      <span style={{ fontSize: 13, color: '#1c1008', fontFamily: mono ? "'Courier New', Courier, monospace" : 'inherit' }}>{value}</span>
+      <span style={{ color: '#6b5a47', fontSize: 13, fontWeight: 400 }}>{label}</span>
+      <span style={{ fontSize: 13, color: '#1c1008', fontWeight: 600, fontFamily: mono ? "'Courier New', Courier, monospace" : 'inherit' }}>{value}</span>
     </div>
   )
 }
