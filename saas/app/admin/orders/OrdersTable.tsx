@@ -312,7 +312,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       <div className="flex justify-end mt-4 mb-2">
         <div className="relative">
           <button
-            onClick={() => setColumnsOpen(o => !o)}
+            onClick={e => { e.stopPropagation(); setColumnsOpen(o => !o) }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
             style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
           >
@@ -323,6 +323,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             <div
               className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
               style={{ backgroundColor: '#fff9f3', borderColor: C.border, minWidth: 180 }}
+              onClick={e => e.stopPropagation()}
             >
               <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
                 <span className="text-xs font-semibold" style={{ color: C.faint }}>SHOW / HIDE COLUMNS</span>
