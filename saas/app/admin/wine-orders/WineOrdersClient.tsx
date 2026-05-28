@@ -12,6 +12,7 @@ const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: str
   pending:   { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', label: 'Pending' },
   confirmed: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', label: 'Confirmed' },
   paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', label: 'Paid' },
+  delivered: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', label: 'Delivered' },
   cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', label: 'Cancelled' },
 }
 
@@ -34,11 +35,11 @@ type WineOrder = {
   createdAt: Date
 }
 
-const STAGES = ['pending', 'confirmed', 'paid'] as const
+const STAGES = ['pending', 'confirmed', 'paid', 'delivered'] as const
 type Stage = typeof STAGES[number]
-const STAGE_LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', paid: 'Paid' }
+const STAGE_LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', paid: 'Paid', delivered: 'Delivered' }
 
-const FILTER_OPTIONS = ['all', 'pending', 'confirmed', 'paid', 'cancelled'] as const
+const FILTER_OPTIONS = ['all', 'pending', 'confirmed', 'paid', 'delivered', 'cancelled'] as const
 type Filter = typeof FILTER_OPTIONS[number]
 
 function TrashIcon() {
@@ -131,13 +132,6 @@ function VerticalStepper({ orderId, status, onUpdate }: {
               )
             })}
           </div>
-          <button
-            onClick={() => onUpdate(orderId, 'cancelled')}
-            className="mt-3 flex items-center gap-1.5 text-xs font-medium transition-opacity duration-150 hover:opacity-70"
-            style={{ color: '#dc2626' }}
-          >
-            <TrashIcon /> Cancel order
-          </button>
         </>
       )}
     </div>
