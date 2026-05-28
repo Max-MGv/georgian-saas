@@ -25,18 +25,18 @@ type Payment = {
 
 type Props = { order: Order; payment: Payment; detailed?: boolean }
 
-function Row({ label, value }: { label: string; value: string | number }) {
+function Row({ label, value, mono = false }: { label: string; value: string | number; mono?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '5px 0', borderBottom: '1px solid #e8e0d0' }}>
       <span style={{ color: '#888', fontSize: 13 }}>{label}</span>
-      <span style={{ fontSize: 13, color: '#1c1008' }}>{value}</span>
+      <span style={{ fontSize: 13, color: '#1c1008', fontFamily: mono ? "'Courier New', Courier, monospace" : 'inherit' }}>{value}</span>
     </div>
   )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div className="invoice-section" style={{ marginBottom: 20 }}>
       <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 8 }}>
         <strong style={{ fontSize: 14, color: '#1c1008' }}>{title}</strong>
       </div>
@@ -139,10 +139,10 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
             <strong style={{ fontSize: 14 }}>გადახდის რეკვიზიტები</strong>
           </div>
           <Row label="მიმღების სახელი"   value={payment.recipientName  || '—'} />
-          <Row label="პირადი ნომერი"      value={payment.personalNumber || '—'} />
+          <Row label="პირადი ნომერი"      value={payment.personalNumber || '—'} mono />
           <Row label="მიმღები ბანკი"      value={payment.bankName       || '—'} />
-          <Row label="ბანკის კოდი"        value={payment.bankCode       || '—'} />
-          <Row label="მიმღების ანგარიში"  value={payment.iban           || '—'} />
+          <Row label="ბანკის კოდი"        value={payment.bankCode       || '—'} mono />
+          <Row label="მიმღების ანგარიში"  value={payment.iban           || '—'} mono />
         </div>
       </div>
     )

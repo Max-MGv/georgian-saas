@@ -13,6 +13,7 @@ const DEFAULTS: Record<string, string> = {
   payment_bank_name: '',
   payment_bank_code: '',
   payment_iban: '',
+  invoice_email_message: '',
 }
 
 export async function getSetting(key: string): Promise<string> {

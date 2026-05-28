@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { findTier } from '@/lib/pricingUtils'
+import { getSetting } from '@/app/actions/settings'
+import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 
 export async function deleteOrder(id: string) {
   await db.order.delete({ where: { id } })
@@ -220,4 +222,59 @@ export async function createOrderAdmin(data: {
   revalidatePath('/admin/orders')
   revalidatePath('/admin/statistics')
   return { orderId: order.id }
+}
+
+export async function sendOrderInvoice(
+  orderId: string,
+  customMessage: string
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const order = await db.order.findUnique({
+      where: { id: orderId },
+      include: {
+        company: true,
+        masterclassLines: { include: { masterclassItem: true } },
+        extras: true,
+      },
+    })
+
+    if (!order) return { error: 'Order not found.' }
+    if (!order.email) return { error: 'This order has no email address.' }
+
+    const [recipientName, personalNumber, bankName, bankCode, iban] = await Promise.all([
+      getSetting('payment_recipient_name'),
+      getSetting('payment_personal_number'),
+      getSetting('payment_bank_name'),
+      getSetting('payment_bank_code'),
+      getSetting('payment_iban'),
+    ])
+
+    await sendInvoiceEmail({
+      name: order.name,
+      surname: order.surname,
+      email: order.email,
+      date: order.date,
+      timeSlot: order.timeSlot,
+      visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',
+      guestCount: order.guestCount,
+      tastingGuestCount: order.tastingGuestCount,
+      lunchGuestCount: order.lunchGuestCount,
+      freeGuestCount: order.freeGuestCount,
+      totalPrice: order.totalPrice ?? 0,
+      companyName: order.company?.name ?? null,
+      identificationCode: order.company?.identificationCode ?? null,
+      masterclassLines: order.masterclassLines.map(l => ({
+        name: l.masterclassItem.name,
+        quantity: l.quantity,
+        pricePerUnit: l.pricePerUnit,
+      })),
+      extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
+      payment: { recipientName, personalNumber, bankName, bankCode, iban },
+      customMessage,
+    })
+
+    return { success: true }
+  } catch {
+    return { error: 'Failed to send email. Please try again.' }
+  }
 }

@@ -14,7 +14,7 @@ type SearchParams = {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage] = await Promise.all([
     db.company.findMany({ orderBy: { name: 'asc' } }),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -22,6 +22,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
+    getSetting('invoice_email_message'),
   ])
 
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
@@ -75,7 +76,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <>
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} detailed={detailed} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} orders={orders.map(o => ({
             id: o.id,
             date: o.date,
             timeSlot: o.timeSlot,

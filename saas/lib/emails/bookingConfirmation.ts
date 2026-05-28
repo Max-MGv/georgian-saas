@@ -78,11 +78,19 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
 
   const resend = new Resend(process.env.RESEND_API_KEY)
 
-  return resend.emails.send({
+  // Sandbox mode: onboarding@resend.dev can only deliver to the verified owner email.
+  // Once nikalasmarani.ge is verified in Resend, change `to` back to data.email
+  // and update `from` to something like bookings@nikalasmarani.ge.
+  const isDomainVerified = false // flip to true after verifying nikalasmarani.ge in Resend
+  const toAddress = isDomainVerified ? data.email : 'max.mghvdliashvili@gmail.com'
+
+  const { error } = await resend.emails.send({
     from: 'onboarding@resend.dev',
-    to: data.email,
+    to: toAddress,
     replyTo: 'max.mghvdliashvili@gmail.com',
     subject: `Booking request received — ${data.date} at ${data.timeSlot}`,
     html,
   })
+
+  if (error) throw new Error(error.message)
 }

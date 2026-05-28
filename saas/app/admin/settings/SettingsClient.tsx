@@ -17,6 +17,7 @@ type Props = {
     payment_bank_code: string
     payment_iban: string
   }
+  invoiceEmailMessage: string
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -46,11 +47,12 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, payment }: Props) {
+export default function SettingsClient({ settings, payment, invoiceEmailMessage }: Props) {
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
   const [paymentFields, setPaymentFields] = useState(payment)
+  const [emailMessage, setEmailMessage] = useState(invoiceEmailMessage)
   const [isPending, startTransition] = useTransition()
   const [savedKey, setSavedKey] = useState<string | null>(null)
 
@@ -85,6 +87,14 @@ export default function SettingsClient({ settings, payment }: Props) {
     startTransition(async () => {
       await updateSetting(key, paymentFields[key])
       setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleEmailMessageBlur() {
+    startTransition(async () => {
+      await updateSetting('invoice_email_message', emailMessage)
+      setSavedKey('invoice_email_message')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -173,6 +183,32 @@ export default function SettingsClient({ settings, payment }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Emails */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Emails</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+            Default message included in invoice emails. You can edit it before each send.
+          </p>
+        </div>
+        <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
+          <label className="text-sm block mb-2" style={{ color: C.muted }}>Default invoice message</label>
+          <div className="flex items-start gap-2">
+            <textarea
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical' }}
+              value={emailMessage}
+              placeholder="e.g. გმადლობთ ვიზიტისთვის! Please find your invoice below."
+              onChange={e => setEmailMessage(e.target.value)}
+              onBlur={handleEmailMessageBlur}
+            />
+            {savedKey === 'invoice_email_message' && !isPending && (
+              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓</span>
+            )}
+          </div>
         </div>
       </div>
 

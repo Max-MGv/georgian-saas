@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { deleteOrder, updateOrder } from '@/app/actions/orders'
+import { deleteOrder, updateOrder, sendOrderInvoice } from '@/app/actions/orders'
 import InvoicePrint from './InvoicePrint'
 
 const C = {
@@ -69,7 +69,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed }: { orders: Order[]; payment: Payment; detailed: boolean }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string }) {
   const router = useRouter()
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -78,6 +78,12 @@ export default function OrdersTable({ orders: initial, payment, detailed }: { or
   const [error, setError] = useState('')
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
+
+  // Email invoice state
+  const [emailOrder, setEmailOrder] = useState<Order | null>(null)
+  const [emailMessage, setEmailMessage] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
 
   // Edit form state
   const [editDate, setEditDate] = useState('')
@@ -102,6 +108,29 @@ export default function OrdersTable({ orders: initial, payment, detailed }: { or
   function handlePrint(order: Order) {
     printPending.current = true
     setPrintOrder(order)
+  }
+
+  function isValidEmail(email: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  }
+
+  function openEmail(order: Order) {
+    setEmailOrder(order)
+    setEmailMessage(defaultEmailMessage)
+    setEmailStatus(null)
+  }
+
+  async function handleSendEmail() {
+    if (!emailOrder) return
+    setEmailSending(true)
+    setEmailStatus(null)
+    const result = await sendOrderInvoice(emailOrder.id, emailMessage)
+    setEmailSending(false)
+    if ('error' in result) {
+      setEmailStatus('error')
+    } else {
+      setEmailStatus('sent')
+    }
   }
 
   function openEdit(order: Order) {
@@ -228,6 +257,17 @@ export default function OrdersTable({ orders: initial, payment, detailed }: { or
                           <rect x="6" y="14" width="12" height="8"/>
                         </svg>
                       </button>
+                      <button
+                        onClick={() => openEmail(order)}
+                        title="Send invoice by email"
+                        className="p-1 rounded border"
+                        style={{ borderColor: C.border, color: order.email ? C.muted : C.faint }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="4" width="20" height="16" rx="2"/>
+                          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                        </svg>
+                      </button>
                       <button onClick={() => openEdit(order)}
                         className="text-xs px-2 py-1 rounded border"
                         style={{ borderColor: C.border, color: C.muted }}>Edit</button>
@@ -249,6 +289,99 @@ export default function OrdersTable({ orders: initial, payment, detailed }: { or
           <InvoicePrint order={printOrder} payment={payment} detailed={detailed} />
         </div>,
         document.body
+      )}
+
+      {/* Send invoice email modal */}
+      {emailOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(28,16,8,0.45)' }}>
+          <div className="w-full max-w-xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: C.border, maxHeight: '90vh' }}>
+
+            {/* Fixed header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
+              <h2 className="font-semibold text-base" style={{ color: C.text }}>Send Invoice by Email</h2>
+              <button onClick={() => setEmailOrder(null)} style={{ color: C.faint, fontSize: '1.25rem', lineHeight: 1 }}>×</button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="px-6 py-5 overflow-y-auto">
+              <p className="text-xs mb-0.5" style={{ color: C.faint }}>Order</p>
+              <p className="text-sm font-medium mb-4" style={{ color: C.text }}>
+                {emailOrder.name} {emailOrder.surname} · {formatDate(emailOrder.date)} {emailOrder.timeSlot}
+              </p>
+
+              {emailOrder.email ? (
+                <>
+                  {/* To field + validation */}
+                  <p className="text-xs mb-0.5" style={{ color: C.faint }}>To</p>
+                  <p className="text-sm mb-1 font-mono" style={{ color: C.text }}>{emailOrder.email}</p>
+                  {!isValidEmail(emailOrder.email) ? (
+                    <div className="flex items-center gap-1.5 rounded-lg px-3 py-2 mb-3 text-xs" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                      ⚠ Invalid email format — edit the order to fix before sending
+                    </div>
+                  ) : (
+                    <p className="text-xs mb-3" style={{ color: '#16a34a' }}>✓ Valid email</p>
+                  )}
+
+                  {/* Message */}
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>Message (optional — edit before sending)</label>
+                  <textarea
+                    rows={3}
+                    value={emailMessage}
+                    onChange={e => setEmailMessage(e.target.value)}
+                    placeholder="Add a personal message…"
+                    style={{ ...inputStyle, resize: 'vertical', marginBottom: 12 }}
+                  />
+
+                  {/* Invoice preview — always visible */}
+                  <p className="text-xs mb-1" style={{ color: C.faint }}>Invoice preview</p>
+                  <div className="rounded-lg border overflow-auto mb-4" style={{ borderColor: C.border, backgroundColor: '#fff', maxHeight: 360 }}>
+                    <div style={{ zoom: '75%' }}>
+                      <InvoicePrint order={emailOrder} payment={payment} detailed={detailed} />
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  {emailStatus === 'error' && (
+                    <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>Failed to send. Please try again.</p>
+                  )}
+                  {emailStatus === 'sent' && (
+                    <p className="text-sm mb-3" style={{ color: '#16a34a' }}>✓ Invoice sent successfully!</p>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSendEmail}
+                      disabled={emailSending || emailStatus === 'sent' || !isValidEmail(emailOrder.email)}
+                      className="btn-wine flex-1 py-2 rounded-lg text-sm font-medium"
+                    >
+                      {emailSending ? 'Sending…' : emailStatus === 'sent' ? 'Sent ✓' : 'Send Invoice'}
+                    </button>
+                    <button
+                      onClick={() => setEmailOrder(null)}
+                      className="px-4 py-2 rounded-lg border text-sm"
+                      style={{ borderColor: C.border, color: C.muted }}
+                    >
+                      {emailStatus === 'sent' ? 'Close' : 'Cancel'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-lg px-4 py-3 mb-4 text-sm" style={{ backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fca5a5' }}>
+                    No email address on file. Edit the order to add one first.
+                  </div>
+                  <button
+                    onClick={() => setEmailOrder(null)}
+                    className="px-4 py-2 rounded-lg border text-sm"
+                    style={{ borderColor: C.border, color: C.muted }}
+                  >
+                    Close
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Edit panel backdrop */}

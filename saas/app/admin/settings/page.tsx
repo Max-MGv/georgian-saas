@@ -11,6 +11,7 @@ export default async function SettingsPage() {
     bankName,
     bankCode,
     iban,
+    invoiceEmailMessage,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
@@ -20,6 +21,7 @@ export default async function SettingsPage() {
     getSetting('payment_bank_name'),
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
+    getSetting('invoice_email_message'),
   ])
 
   return (
@@ -48,6 +50,7 @@ export default async function SettingsPage() {
               payment_bank_code: bankCode,
               payment_iban: iban,
             }}
+            invoiceEmailMessage={invoiceEmailMessage}
           />
         </div>
 
