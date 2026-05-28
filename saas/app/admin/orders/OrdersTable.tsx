@@ -14,7 +14,7 @@ const C = {
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: string }> = {
-  NEW:          { label: 'New',          bg: '#f1f5f9', color: '#475569' },
+  NEW:          { label: 'New',          bg: '#fef9c3', color: '#a16207' },
   CONFIRMED:    { label: 'Confirmed',    bg: '#dbeafe', color: '#1d4ed8' },
   INVOICE_SENT: { label: 'Invoice Sent', bg: '#fef3c7', color: '#92400e' },
   PAID:         { label: 'Paid',         bg: '#dcfce7', color: '#166534' },
