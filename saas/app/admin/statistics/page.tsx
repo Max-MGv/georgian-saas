@@ -1,19 +1,23 @@
 import { db } from '@/lib/db'
 import StatisticsClient from './StatisticsClient'
 
+type WineSelection = { id: string; name: string; quantity: number; price?: number }
+
 export default async function StatisticsPage() {
-  const [rawOrders, companies] = await Promise.all([
+  const [rawOrders, companies, rawWineOrders, wines] = await Promise.all([
     db.order.findMany({
       include: { company: { select: { name: true } } },
       orderBy: { date: 'asc' },
     }),
     db.company.findMany({ orderBy: { name: 'asc' } }),
+    db.wineOrder.findMany({ orderBy: { createdAt: 'desc' } }),
+    db.wine.findMany({ select: { id: true, price: true } }),
   ])
 
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
-  // V1 pre-computed stats
+  // Booking stats (pre-computed)
   const totalOrders = rawOrders.length
   const totalRevenue = rawOrders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
   const monthOrders = rawOrders.filter(o => o.date >= monthStart).length
@@ -59,7 +63,6 @@ export default async function StatisticsPage() {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5)
 
-  // V2 raw orders (serialise dates as ISO strings for client)
   const orders = rawOrders.map(o => ({
     id: o.id,
     date: o.date.toISOString(),
@@ -68,11 +71,29 @@ export default async function StatisticsPage() {
     companyName: o.company?.name ?? null,
   }))
 
+  // Wine order stats
+  const priceMap = Object.fromEntries(wines.map(w => [w.id, w.price]))
+  const wineOrders = rawWineOrders.map(o => {
+    const rawItems = o.wines as WineSelection[]
+    // Always resolve price from the catalog fallback so revenue charts have valid values
+    const items = rawItems.map(w => ({ ...w, price: w.price ?? priceMap[w.id] ?? 0 }))
+    const displayTotal = o.totalAmount != null
+      ? o.totalAmount
+      : items.reduce((sum, w) => sum + w.quantity * (w.price as number), 0)
+    return {
+      id: o.id,
+      businessName: o.businessName,
+      wines: items,
+      displayTotal: Math.round(displayTotal),
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+    }
+  })
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Statistics</h1>
-        <span className="text-sm" style={{ color: '#a89070' }}>{totalOrders} orders total</span>
       </div>
       <StatisticsClient
         totalOrders={totalOrders}
@@ -85,6 +106,7 @@ export default async function StatisticsPage() {
         topCompanies={topCompanies}
         orders={orders}
         companies={companies.map(c => ({ id: c.id, name: c.name }))}
+        wineOrders={wineOrders}
       />
     </div>
   )

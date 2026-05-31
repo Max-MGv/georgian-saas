@@ -3,8 +3,10 @@
 import { useState, useMemo } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
+  ResponsiveContainer, CartesianGrid, LabelList,
 } from 'recharts'
+import SearchableSelect from './SearchableSelect'
+import { useContainerWidth } from './useContainerWidth'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -26,10 +28,10 @@ type Props = { orders: Order[]; companies: Company[] }
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-      <p className="text-xs font-medium mb-1" style={{ color: C.faint }}>{label}</p>
+    <div className="rounded-xl border p-5 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+      <p className="text-xs font-medium mb-1" style={{ color: C.muted }}>{label}</p>
       <p className="text-2xl font-bold" style={{ color: C.text }}>{value}</p>
-      {sub && <p className="text-xs mt-1" style={{ color: C.muted }}>{sub}</p>}
+      {sub && <p className="text-xs mt-1" style={{ color: C.faint }}>{sub}</p>}
     </div>
   )
 }
@@ -58,6 +60,9 @@ export default function StatisticsV2({ orders, companies }: Props) {
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedMonth, setSelectedMonth] = useState<number | ''>('')   // '' = all
   const [selectedCompanyId, setSelectedCompanyId] = useState('')         // '' = all
+
+  const [revenueChartRef, revenueChartWidth] = useContainerWidth()
+  const [companyChartRef, companyChartWidth] = useContainerWidth()
 
   // Orders filtered by year + month + company
   const filteredOrders = useMemo(() => orders.filter(o => {
@@ -164,18 +169,21 @@ export default function StatisticsV2({ orders, companies }: Props) {
         </div>
         <div>
           <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Company</label>
-          <select value={selectedCompanyId} onChange={e => setSelectedCompanyId(e.target.value)} style={{ ...selectStyle, minWidth: 160 }}>
-            <option value="">All companies</option>
-            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={selectedCompanyId}
+            onChange={setSelectedCompanyId}
+            options={[{ value: '', label: 'All companies' }, ...companies.map(c => ({ value: c.id, label: c.name }))]}
+            placeholder="All companies"
+            minWidth={180}
+          />
         </div>
         {(selectedMonth !== '' || selectedCompanyId) && (
           <button
             onClick={() => { setSelectedMonth(''); setSelectedCompanyId('') }}
-            className="text-sm px-3 py-2 rounded-lg border"
-            style={{ borderColor: C.border, color: C.muted }}
+            className="text-sm px-3 py-2 rounded-lg"
+            style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
-            Clear
+            Clear filters
           </button>
         )}
       </div>
@@ -191,15 +199,23 @@ export default function StatisticsV2({ orders, companies }: Props) {
           {revenueByPeriod.length === 0 ? (
             <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, revenueByPeriod.length * 36)}>
-              <BarChart data={revenueByPeriod} layout="vertical" barSize={18}>
-                <CartesianGrid horizontal={false} stroke={C.border} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
-                <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={36} />
-                <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
-                <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div ref={revenueChartRef}>
+              <ResponsiveContainer width="100%" height={Math.max(200, revenueByPeriod.length * 36)}>
+                <BarChart data={revenueByPeriod} layout="vertical" barSize={18} margin={{ right: 72 }}>
+                  <CartesianGrid horizontal={false} stroke={C.border} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={36} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
+                  <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]}>
+                    <LabelList content={(props: any) => {
+                      const { y, height: bh, value } = props
+                      if (!value || value === 0) return <g />
+                      return <text x={revenueChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString()}₾`}</text>
+                    }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
 
@@ -209,15 +225,23 @@ export default function StatisticsV2({ orders, companies }: Props) {
           {revenueByCompany.length === 0 ? (
             <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, revenueByCompany.length * 48)}>
-              <BarChart data={revenueByCompany} layout="vertical" barSize={22}>
-                <CartesianGrid horizontal={false} stroke={C.border} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={90} />
-                <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
-                <Bar dataKey="revenue" fill="#a0392a" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div ref={companyChartRef}>
+              <ResponsiveContainer width="100%" height={Math.max(200, revenueByCompany.length * 48)}>
+                <BarChart data={revenueByCompany} layout="vertical" barSize={22} margin={{ right: 72 }}>
+                  <CartesianGrid horizontal={false} stroke={C.border} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
+                  <Bar dataKey="revenue" fill="#a0392a" radius={[0, 4, 4, 0]}>
+                    <LabelList content={(props: any) => {
+                      const { y, height: bh, value } = props
+                      if (!value || value === 0) return <g />
+                      return <text x={companyChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString()}₾`}</text>
+                    }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
 
