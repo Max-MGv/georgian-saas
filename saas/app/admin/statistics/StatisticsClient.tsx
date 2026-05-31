@@ -156,7 +156,7 @@ export default function StatisticsClient({
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={28} />
                   <Tooltip {...tooltipStyle} formatter={(v) => [v ?? 0, 'bookings']} />
                   <Bar dataKey="orders" fill={C.wine} radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="orders" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: number) => v > 0 ? String(v) : ''} />
+                    <LabelList dataKey="orders" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? String(v) : ''} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -171,7 +171,7 @@ export default function StatisticsClient({
                   <YAxis tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={48} />
                   <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v ?? 0).toLocaleString()}₾`, 'revenue']} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: number) => v > 0 ? `${v.toLocaleString()}₾` : ''} />
+                    <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? `${Number(v).toLocaleString()}₾` : ''} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
