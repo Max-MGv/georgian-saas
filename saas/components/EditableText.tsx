@@ -75,6 +75,9 @@ export default function EditableText({
     transition: 'outline 0.1s',
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const T = Tag as any
+
   return (
     <div
       style={{ position: 'relative' }}
@@ -104,9 +107,8 @@ export default function EditableText({
         ✎
       </span>
 
-      <Tag
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ref={ref as any}
+      <T
+        ref={ref}
         className={className}
         style={editableStyle}
         contentEditable={editing}
@@ -115,7 +117,7 @@ export default function EditableText({
         title={editing ? undefined : `Edit: ${label}`}
       >
         {value}
-      </Tag>
+      </T>
 
       {editing && (
         <div className="flex items-center gap-1.5 mt-1.5">
