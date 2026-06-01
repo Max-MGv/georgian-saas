@@ -149,6 +149,20 @@ Other planned improvements:
 
 ---
 
+## Security & Bug Fixes (Active Plan)
+
+Full plan: `vault/Plan-SecurityAndBugFixes.md`
+
+- [ ] **#1 Auth redirect in admin layout** — `app/admin/layout.tsx` reads user but never redirects; all `/admin/*` routes publicly accessible without login
+- [ ] **#2 Auth guard on write server actions** — `saveContent`, `deleteContent`, `updateSetting`, `addBlockedDate`, `removeBlockedDate` callable by anyone via HTTP POST; no session check
+- [ ] **#3 Masterclass price trusted from client** — `createBooking` uses client-supplied `pricePerUnit`; fetch from DB instead
+- [ ] **#4 Enhanced booking skips min-guest check** — validation uses `guestCount` not `tastingGuestCount + lunchGuestCount`
+- [ ] **#5 `hasDbValue` false-negative** — empty-string saves make reset badge disappear; pass explicit prop
+- [ ] **#6 `revalidatePath` missing** — `saveContent`/`deleteContent` don't revalidate `/admin/content` or site pages
+- [ ] **#7 EditableText `<div>` wrapper** — outer wrapper breaks HTML semantics when `as="span"` used inside block elements
+
+---
+
 ## v2 — Growth Features
 
 - [ ] Online payments (Georgian bank integration or Stripe)

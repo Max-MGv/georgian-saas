@@ -45,6 +45,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - `saas/components/BookingForm.tsx` — `formContent` prop, `fc()` helper, all visible labels DB-backed
 
 ### Next up
+- **Security & bug fixes** — see `vault/Plan-SecurityAndBugFixes.md` (7 items, 2 critical)
 - User test the editor — edit a nav label, a button, a paragraph; confirm it shows on live site
 - Gallery page (images already in `public/images/`, just need wiring)
 - Fix date filters on admin orders (KnownBugs #1)
