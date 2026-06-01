@@ -3,13 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import LocaleSwitcher from '@/components/LocaleSwitcher'
-
-const NAV_LINKS = [
-  { href: '/',        label: 'Home' },
-  { href: '/about',   label: 'About' },
-  { href: '/wines',   label: 'Order Wine' },
-  { href: '/contact', label: 'Contact' },
-]
+import { t } from '@/lib/t'
 
 function SocialIcons() {
   return (
@@ -34,8 +28,16 @@ function SocialIcons() {
   )
 }
 
-export default function SiteNav({ locale }: { locale: string }) {
+export default function SiteNav({ locale, navContent = {} }: { locale: string; navContent?: Record<string, string> }) {
   const [open, setOpen] = useState(false)
+
+  const navLinks = [
+    { href: '/',        label: navContent['nav_home']    || t(locale, 'nav.home') },
+    { href: '/about',   label: navContent['nav_about']   || t(locale, 'nav.about') },
+    { href: '/wines',   label: navContent['nav_wines']   || t(locale, 'nav.wines') },
+    { href: '/contact', label: navContent['nav_contact'] || t(locale, 'nav.contact') },
+  ]
+  const bookLabel = navContent['nav_book'] || t(locale, 'nav.book')
 
   return (
     <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: '#f5efe6', borderColor: '#e0d4c0' }}>
@@ -47,14 +49,14 @@ export default function SiteNav({ locale }: { locale: string }) {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          {NAV_LINKS.map(l => (
+        <nav className={`hidden md:flex items-center ${locale === 'ka' ? 'gap-4' : 'gap-6'}`}>
+          {navLinks.map(l => (
             <Link key={l.href} href={l.href} className="text-sm font-medium hover:opacity-70 transition-opacity" style={{ color: '#6b5a47' }}>
               {l.label}
             </Link>
           ))}
           <Link href="/#book" className="btn-wine text-sm font-semibold px-5 py-2 rounded-lg">
-            Book a Visit
+            {bookLabel}
           </Link>
           <span className="w-px h-5" style={{ backgroundColor: '#e0d4c0' }} />
           <LocaleSwitcher locale={locale} />
@@ -87,7 +89,7 @@ export default function SiteNav({ locale }: { locale: string }) {
       {/* Mobile dropdown menu */}
       {open && (
         <div className="md:hidden border-t px-6 py-4 flex flex-col gap-4" style={{ backgroundColor: '#f5efe6', borderColor: '#e0d4c0' }}>
-          {NAV_LINKS.map(l => (
+          {navLinks.map(l => (
             <Link
               key={l.href}
               href={l.href}
@@ -103,7 +105,7 @@ export default function SiteNav({ locale }: { locale: string }) {
             onClick={() => setOpen(false)}
             className="btn-wine text-sm font-semibold px-5 py-3 rounded-lg text-center mt-1"
           >
-            Book a Visit
+            {bookLabel}
           </Link>
           <div className="pt-1">
             <LocaleSwitcher locale={locale} />

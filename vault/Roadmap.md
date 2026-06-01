@@ -79,6 +79,7 @@ Complete this before writing a single line of product code.
 - [x] Order Wine page — wine catalogue with grid/list toggle, reservation form
 - [x] Brand assets — SVG logo, phone/email/Facebook/Instagram icons in nav
 - [x] Wine orders saved to DB, visible in admin under Wine Orders tab
+- [x] Wine orders admin redesign — 3-column card layout; 4-stage stepper (Pending → Confirmed → Paid → Delivered); status filter pills; colored right border per status; active step highlighted; cancel order removed
 
 ---
 
@@ -111,6 +112,22 @@ Complete this before writing a single line of product code.
 - [ ] Georgian / English language toggle
 - [x] Calendar view for bookings — month grid, booking count badges, day hover preview, click-to-filter
 - [x] Export orders to CSV / Excel — filter-aware CSV download
+
+---
+
+## v1.3 — Editable Site Content ✅ Complete
+
+Full plan: `vault/Plan-EditableSiteContent.md`
+
+- [x] **SiteContent DB model** — `key/value/section/label/locale`; `@@unique([key, locale])`; `prisma db push`; RLS grant
+- [x] **Server actions** — `getContent`, `getContentMap`, `saveContent`, `deleteContent` in `siteContent.ts`
+- [x] **Admin content editor — Text mode** — `/admin/content`; sections: Navigation / Home / Form / About / Contact; flat labeled list; click-to-edit inline; Save/Cancel per field
+- [x] **Admin content editor — Visual mode** — full live page replica (nav bar + page body) inside admin; every hardcoded string is an inline `EditableText`; booking form structure rendered visually with editable labels
+- [x] **Reset to default** — ↺ badge per field (only when DB value exists); tooltip shows fallback before reset; `deleteContent` wipes the row; live site reverts to hardcoded fallback
+- [x] **EN/KA locale switcher** — locale tabs on both modes; saves to `site_locale` cookie; `LocaleSwitcher` in public SiteNav
+- [x] **All public pages wired** — Home, About, Contact use DB values with `t()` fallback for all visible text
+- [x] **SiteNav wired** — layout fetches `getContentMap('nav', locale)`; nav links + "Book a Visit" button DB-backed
+- [x] **BookingForm wired** — `formContent` prop; all 14 visible labels (Booking Type, field labels, submit button, cancel policy, success messages) DB-backed
 
 ---
 

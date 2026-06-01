@@ -8,6 +8,49 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-01 — Dual-mode site content editor (full detail)
+
+### Completed
+- **Dual-mode content editor** — `/admin/content` now has **Text** mode (flat labeled list per section: Navigation / Home / About / Contact) and **Visual** mode (full faithful page preview — nav bar + page body — with every hardcoded string editable inline via hover+click).
+- **New SiteContent keys** — added ~25 new keys for strings previously locked in `lib/t.ts`: nav labels (`nav_home`, `nav_about`, `nav_wines`, `nav_contact`, `nav_book`), button text (`home_book_btn`, `home_order_wine_btn`, `about_cta_btn`, `contact_book_btn`), page headings (`about_eyebrow`, `about_heading`, `contact_eyebrow`, `contact_heading`, etc.), card notes, directions text, CTAs.
+- **Public pages wired** — `app/(site)/page.tsx`, `about/page.tsx`, `contact/page.tsx` all check `SiteContent` first with `t()` as fallback, so edits in admin now show on the live site.
+- **SiteNav wired** — `(site)/layout.tsx` fetches `getContentMap('nav', locale)` and passes to `SiteNav`; nav labels + "Book a Visit" button now DB-backed.
+- **Visual mode details**: framed in a rounded border with drop shadow; nav links are inert (not navigating away); booking form shows as a visual placeholder (`pointer-events-none`); `Navigation` tab hidden in visual mode (nav always shown at top of each preview).
+
+### Key files changed
+- `saas/app/admin/content/ContentClient.tsx` — full rewrite with mode switcher, FIELDS schema, TextMode, VisualNav, VisualHome, VisualAbout, VisualContact
+- `saas/app/(site)/layout.tsx` — fetches nav content map, passes to SiteNav
+- `saas/app/(site)/SiteNav.tsx` — accepts `navContent` prop, uses DB values with t() fallback
+- `saas/app/(site)/page.tsx` — hero buttons + booking heading use new SiteContent keys
+- `saas/app/(site)/about/page.tsx` — eyebrow, heading, expect heading, CTA from SiteContent
+- `saas/app/(site)/contact/page.tsx` — eyebrow, heading, card notes, directions, CTA from SiteContent
+
+### Extended (same session — notes from Max)
+- **"Kakheti, Georgia" eyebrow** — was hardcoded, now editable via `home_location_eyebrow` key
+- **Contact card headers** (Phone / Email / Location / Cancellation) — now editable via `contact_label_*` keys; wired to live contact page
+- **Booking form preview in visual mode** — replaced gray placeholder with full form structure: Booking Type toggles, Visit Type options, Date, Time Slot, Number of Guests, First Name, Last Name, Phone, Email, "Request Booking" button, cancel policy text — all labels editable in-place
+- **BookingForm wired** — accepts `formContent` prop; `fc()` helper uses DB value with `t()` fallback for all 14 visible labels; home page fetches `getContentMap('form', locale)` and passes it down
+- **Form section tab** added to Text mode (Navigation / Home / Form / About / Contact)
+- **Reset to default** — `↺` badge on `EditableText` hover (only when DB value exists); tooltip previews fallback text; click calls `deleteContent` action; value snaps to fallback; "↺ Reset to default" flash. `deleteContent` added to `siteContent.ts`.
+
+### Key files changed (full session)
+- `saas/app/admin/content/ContentClient.tsx` — full rewrite × 2: dual-mode editor, FIELDS schema, VisualNav, VisualHome, VisualAbout, VisualContact, VisualFormPreview, TextMode
+- `saas/components/EditableText.tsx` — reset badge + tooltip + `deleteContent` call; `hasDbValue` guard
+- `saas/app/actions/siteContent.ts` — `deleteContent` action added
+- `saas/app/(site)/layout.tsx` — fetches nav content map, passes to SiteNav
+- `saas/app/(site)/SiteNav.tsx` — `navContent` prop; DB-backed nav labels + book button
+- `saas/app/(site)/page.tsx` — `home_location_eyebrow`, hero buttons, book heading, `formContent` fetch + BookingForm prop
+- `saas/app/(site)/about/page.tsx` — eyebrow, heading, expect heading, CTA from SiteContent
+- `saas/app/(site)/contact/page.tsx` — eyebrow, heading, card headers + notes + directions + CTA from SiteContent
+- `saas/components/BookingForm.tsx` — `formContent` prop, `fc()` helper, all visible labels DB-backed
+
+### Next up
+- User test the editor — edit a nav label, a button, a paragraph; confirm it shows on live site
+- Gallery page (images already in `public/images/`, just need wiring)
+- Fix date filters on admin orders (KnownBugs #1)
+
+---
+
 ## 2026-05-28 — Session 3 (full detail)
 
 ### Completed
@@ -51,7 +94,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - **Fix: calendar hover preview** — `e.currentTarget` is nullified by React after the event handler returns, so calling `.getBoundingClientRect()` inside a `setTimeout` always failed silently. Fixed by capturing `const target = e.currentTarget` before the timeout.
 
 - **Wine description field** — `description String?` on Wine model; textarea in admin edit+add forms; shown on card below type/price
-- **Wine orders status stepper** — Pending → Confirmed → Paid + Cancel/Restore; optimistic UI update; `updateWineOrderStatus` server action in `app/actions/wineOrders.ts`
+- **Wine orders status stepper** — Pending → Confirmed → Paid → Delivered (4 stages); active step has glow ring + bold label; inactive steps faded; stepper centered in col 3; optimistic UI; `updateWineOrderStatus` server action
 - **Wine order ID on card** — `#xxxxxxxx` monospace badge (first 8 chars of cuid)
 - **Wine order total amount** — `totalAmount Float?` on WineOrder schema; price now stored per wine in JSON (`{id, name, quantity, price}`); total computed in `submitWineOrder`; displayed on admin card
 - **Schema**: `prisma db push` done — both Wine.description and WineOrder.totalAmount columns live in DB
@@ -68,6 +111,19 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ### Bugs fixed / lessons learned
 - Wine order JSON was missing `price` per bottle — amounts couldn't be computed without it. Fixed at submission time; old orders will show `—` for total (totalAmount is nullable).
+
+- **Wine orders card layout redesign** — 3-column layout: col 1 (name/company/tags/address/contact), col 2 (amount/hours/phone, centered), col 3 (stepper); colored border on right edge matching status; status filter pills with solid color when selected; cancel order button removed; card width narrowed (`max-w-3xl`)
+
+### Key files changed (wine orders redesign — 2026-05-28)
+- `saas/app/admin/wine-orders/WineOrdersClient.tsx` — full layout redesign + stepper improvements + delivered status + filter pills
+- `saas/app/admin/wine-orders/page.tsx` — max-w-5xl → max-w-3xl
+
+- **Wine order statistics** — mode switcher (Bookings / Wine Orders pill toggle) on Statistics page; `WineStatistics.tsx` new component; 4 summary cards (total orders, total revenue, active orders, avg order value); year/month filter; status breakdown bars (5 statuses with matching colors from wine orders page); revenue by month/day chart; top wines by bottles ordered (bar chart aggregated from JSON); top customers by spend; all data fetched server-side in `statistics/page.tsx` using same displayTotal fallback logic as wine-orders page.
+
+### Key files changed (wine order stats — 2026-05-29)
+- `saas/app/admin/statistics/page.tsx` — added `db.wineOrder.findMany` + `db.wine.findMany`; wineOrders array with displayTotal computed server-side; passed as `wineOrders` prop
+- `saas/app/admin/statistics/StatisticsClient.tsx` — added `mode` state (`bookings` | `wine`); pill switcher UI; renders `<WineStatistics>` when wine mode active; `wineOrders` prop added
+- `saas/app/admin/statistics/WineStatistics.tsx` — NEW: full wine stats client component
 
 ### Next up
 - **Fix date filters** on admin orders (KnownBugs #1) — date range filter doesn't work

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
 import { findTier } from '@/lib/pricingUtils'
+import { t } from '@/lib/t'
 
 type Price = {
   id: string; minGuests: number; maxGuests: number
@@ -20,6 +21,7 @@ const C = {
 }
 
 type Props = {
+  locale?: string
   companies: Company[]
   showCompanyPrice: boolean
   enhancedEnabled?: boolean
@@ -28,9 +30,11 @@ type Props = {
   minGuestsTasting?: number
   minGuestsTastingLunch?: number
   blockedDates?: string[]
+  formContent?: Record<string, string>
 }
 
-export default function BookingForm({ companies, showCompanyPrice, enhancedEnabled, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [] }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {} }: Props) {
+  const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
@@ -57,14 +61,14 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
   const today = new Date().toISOString().split('T')[0]
   const currentHour = new Date().getHours()
   const availableSlots = selectedDate === today
-    ? TIME_SLOTS.filter(t => parseInt(t) > currentHour)
+    ? TIME_SLOTS.filter(s => parseInt(s) > currentHour)
     : TIME_SLOTS
 
   const isDateBlocked = (date: string) => blockedDates.includes(date)
 
   function handleDateChange(date: string) {
     setSelectedDate(date)
-    const slots = date === today ? TIME_SLOTS.filter(t => parseInt(t) > currentHour) : TIME_SLOTS
+    const slots = date === today ? TIME_SLOTS.filter(s => parseInt(s) > currentHour) : TIME_SLOTS
     if (slots.length > 0 && !slots.includes(timeSlot)) setTimeSlot(slots[0])
   }
 
@@ -131,17 +135,17 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
     const fd = new FormData(e.currentTarget)
     if (!fd.get('phone') && !fd.get('email')) {
       setStatus('error')
-      setErrorMsg('Please provide at least a phone number or email so we can confirm your booking.')
+      setErrorMsg(t(locale, 'form.err_contact'))
       return
     }
     if (isDateBlocked(selectedDate)) {
       setStatus('error')
-      setErrorMsg('The winery is closed on this date. Please choose another date.')
+      setErrorMsg(t(locale, 'form.err_blocked'))
       return
     }
     if (isEnhanced && totalGuests < minGuests) {
       setStatus('error')
-      setErrorMsg(`Minimum ${minGuests} guests total required.`)
+      setErrorMsg(t(locale, 'form.err_min_guests', { min: minGuests }))
       return
     }
     setStatus('loading')
@@ -182,11 +186,11 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
     return (
       <div className="rounded-xl border p-10 text-center" style={{ backgroundColor: C.bg, borderColor: C.border }}>
         <div className="text-4xl mb-4">🍷</div>
-        <h3 className="text-xl font-bold mb-2" style={{ color: C.text }}>Booking received!</h3>
-        <p style={{ color: C.muted }}>Thank you. We will contact you shortly to confirm your visit.</p>
+        <h3 className="text-xl font-bold mb-2" style={{ color: C.text }}>{fc('form_success_heading', 'form.success_heading')}</h3>
+        <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: '#fdf6ee', borderColor: C.border }}>
-            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>Estimated total</p>
+            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
             <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}₾</p>
           </div>
         )}
@@ -212,13 +216,13 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
 
       {/* Booking type */}
       <div>
-        <label style={labelStyle}>Booking Type</label>
+        <label style={labelStyle}>{fc('form_booking_type', 'form.booking_type')}</label>
         <div className="grid grid-cols-2 gap-3">
           <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => setBookingType('INDIVIDUAL')}>
-            Individual Booking
+            {fc('form_individual', 'form.individual')}
           </ToggleButton>
           <ToggleButton active={bookingType === 'COMPANY'} onClick={() => setBookingType('COMPANY')}>
-            Tour Company
+            {fc('form_company_type', 'form.company_type')}
           </ToggleButton>
         </div>
       </div>
@@ -226,10 +230,10 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Company selector */}
       {bookingType === 'COMPANY' && (
         <div>
-          <label style={labelStyle}>Company</label>
+          <label style={labelStyle}>{t(locale, 'form.company')}</label>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
             className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
-            <option value="">Select your company…</option>
+            <option value="">{t(locale, 'form.company_placeholder')}</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -237,18 +241,18 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
 
       {/* Visit type */}
       <div>
-        <label style={labelStyle}>Visit Type</label>
+        <label style={labelStyle}>{fc('form_visit_type', 'form.visit_type')}</label>
         <div className="grid grid-cols-2 gap-3">
           {([
-            { value: 'TASTING', label: 'Wine Tasting', price: 50 },
-            { value: 'TASTING_LUNCH', label: 'Tasting + Lunch', price: 100 },
+            { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: 50 },
+            { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: 100 },
           ] as const).map(opt => (
             <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
               className="py-3 px-4 rounded-lg border text-left transition-colors"
               style={{ backgroundColor: visitType === opt.value ? '#fff3ef' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
-              <div className="font-medium text-sm">{opt.label}</div>
+              <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
               <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                {bookingType === 'COMPANY' ? 'Company rate' : `${opt.price}₾ / person`}
+                {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price}₾ ${t(locale, 'form.per_pp')}`}
               </div>
             </button>
           ))}
@@ -258,21 +262,21 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Date & time */}
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="date" style={labelStyle}>Date</label>
+          <label htmlFor="date" style={labelStyle}>{fc('form_date', 'form.date')}</label>
           <input id="date" name="date" type="date" required min={today}
             value={selectedDate} onChange={e => handleDateChange(e.target.value)}
             className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
           {selectedDate && isDateBlocked(selectedDate) && (
-            <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>The winery is closed on this date. Please choose another date.</p>
+            <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{t(locale, 'form.blocked_date')}</p>
           )}
         </div>
         <div>
-          <label style={labelStyle}>Time Slot</label>
+          <label style={labelStyle}>{fc('form_time_slot', 'form.time_slot')}</label>
           <select value={timeSlot} onChange={e => setTimeSlot(e.target.value)}
             className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
             {availableSlots.length > 0
-              ? availableSlots.map(t => <option key={t} value={t}>{t}</option>)
-              : <option value="">No slots available today</option>}
+              ? availableSlots.map(s => <option key={s} value={s}>{s}</option>)
+              : <option value="">{t(locale, 'form.no_slots')}</option>}
           </select>
         </div>
       </div>
@@ -280,15 +284,15 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Guest count — enhanced vs simple */}
       {isEnhanced ? (
         <div>
-          <label style={labelStyle}>Guest Counts</label>
+          <label style={labelStyle}>{t(locale, 'form.guest_counts')}</label>
           <div className="grid grid-cols-3 gap-3">
             {([
-              { label: 'Tasting', value: tastingGuestsStr, set: setTastingGuestsStr, hidden: false },
-              { label: 'Lunch', value: lunchGuestsStr, set: setLunchGuestsStr, hidden: visitType === 'TASTING' },
-              { label: 'Free / Guide', value: freeGuestsStr, set: setFreeGuestsStr, hidden: false },
-            ] as { label: string; value: string; set: (v: string) => void; hidden: boolean }[]).map(({ label, value, set, hidden }) => hidden ? null : (
-              <div key={label}>
-                <p className="text-xs mb-1" style={{ color: C.faint }}>{label}</p>
+              { labelKey: 'form.guests_tasting', value: tastingGuestsStr, set: setTastingGuestsStr, hidden: false },
+              { labelKey: 'form.guests_lunch',   value: lunchGuestsStr,   set: setLunchGuestsStr,   hidden: visitType === 'TASTING' },
+              { labelKey: 'form.guests_free',    value: freeGuestsStr,    set: setFreeGuestsStr,    hidden: false },
+            ] as { labelKey: string; value: string; set: (v: string) => void; hidden: boolean }[]).map(({ labelKey, value, set, hidden }) => hidden ? null : (
+              <div key={labelKey}>
+                <p className="text-xs mb-1" style={{ color: C.faint }}>{t(locale, labelKey)}</p>
                 <input type="number" min={0} max={200} value={value}
                   onChange={e => set(e.target.value)}
                   onBlur={e => { const v = parseInt(e.target.value) || 0; set(String(Math.max(v, 0))) }}
@@ -298,21 +302,22 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
           </div>
           {totalGuests > 0 && (
             <p className="text-xs mt-1.5" style={{ color: C.faint }}>
-              Total: {totalGuests} guest{totalGuests !== 1 ? 's' : ''}{payingGuests > 0 ? ` (${payingGuests} paying)` : ''}
+              {t(locale, 'form.total')}: {totalGuests} {totalGuests !== 1 ? t(locale, 'form.guest_plural') : t(locale, 'form.guest_singular')}{payingGuests > 0 ? ` (${payingGuests} ${t(locale, 'form.paying')})` : ''}
             </p>
           )}
         </div>
       ) : (
         <div>
           <label htmlFor="guestCount" style={labelStyle}>
-            Number of Guests <span style={{ color: C.faint }}>(minimum {minGuests})</span>
+            {fc('form_num_guests', 'form.num_guests')}
+            <span className="block text-xs font-normal mt-0.5" style={{ color: C.faint }}>({t(locale, 'form.minimum')} {minGuests})</span>
           </label>
           <input id="guestCount" name="guestCount" type="number" min={minGuests} max={200}
             value={guestInput}
             onChange={e => { setGuestInput(e.target.value); setGuestWarning('') }}
             onBlur={() => {
               const val = parseInt(guestInput) || 0
-              if (val < minGuests) { setGuestInput(String(minGuests)); setGuestWarning(`Minimum is ${minGuests} guests — reset to ${minGuests}.`) }
+              if (val < minGuests) { setGuestInput(String(minGuests)); setGuestWarning(t(locale, 'form.guest_min_warn', { min: minGuests })) }
               else { setGuestInput(String(val)); setGuestWarning('') }
             }}
             required className="rounded-lg border px-3 py-2.5 w-28" style={inputStyle} />
@@ -323,24 +328,24 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Enhanced: Hot dishes (only for TASTING_LUNCH) */}
       {isEnhanced && visitType === 'TASTING_LUNCH' && (vegItems.length > 0 || meatItems.length > 0) && (
         <div>
-          <label style={labelStyle}>Hot Dish Selection</label>
+          <label style={labelStyle}>{t(locale, 'form.hot_dish')}</label>
           <div className="grid sm:grid-cols-2 gap-3">
             {vegItems.length > 0 && (
               <div>
-                <p className="text-xs mb-1" style={{ color: C.faint }}>Vegetable dish</p>
+                <p className="text-xs mb-1" style={{ color: C.faint }}>{t(locale, 'form.veg_dish')}</p>
                 <select value={hotDishVeg} onChange={e => setHotDishVeg(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
-                  <option value="">— choose —</option>
+                  <option value="">{t(locale, 'form.choose')}</option>
                   {vegItems.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               </div>
             )}
             {meatItems.length > 0 && (
               <div>
-                <p className="text-xs mb-1" style={{ color: C.faint }}>Meat dish</p>
+                <p className="text-xs mb-1" style={{ color: C.faint }}>{t(locale, 'form.meat_dish')}</p>
                 <select value={hotDishMeat} onChange={e => setHotDishMeat(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
-                  <option value="">— choose —</option>
+                  <option value="">{t(locale, 'form.choose')}</option>
                   {meatItems.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                 </select>
               </div>
@@ -352,7 +357,7 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Enhanced: Masterclass add-ons */}
       {isEnhanced && masterclassItems.length > 0 && (
         <div>
-          <label style={labelStyle}>Masterclass Add-ons</label>
+          <label style={labelStyle}>{t(locale, 'form.masterclass')}</label>
           <div className="rounded-lg border divide-y" style={{ borderColor: C.border }}>
             {masterclassItems.map(m => {
               const sel = mcSelections[m.id]
@@ -364,12 +369,12 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
                   <label htmlFor={`mc-${m.id}`} className="flex-1 text-sm cursor-pointer" style={{ color: C.text }}>
                     {m.name}
                     <span className="ml-1 text-xs" style={{ color: C.faint }}>
-                      {m.pricePerUnit}₾/{m.unitType === 'PER_PERSON' ? 'pp' : m.unitType === 'FLAT' ? 'flat' : 'pc'}
+                      {m.pricePerUnit}₾/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
                     </span>
                   </label>
                   {sel?.checked && (
                     <div className="flex items-center gap-1">
-                      <span className="text-xs" style={{ color: C.faint }}>qty</span>
+                      <span className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.qty')}</span>
                       <input type="number" min={1} max={999} value={sel.qtyStr}
                         onChange={e => setMcQty(m.id, e.target.value)}
                         onBlur={e => setMcQty(m.id, String(Math.max(parseInt(e.target.value) || 1, 1)))}
@@ -386,9 +391,9 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Enhanced: Food notes */}
       {isEnhanced && (
         <div>
-          <label htmlFor="foodNotes" style={labelStyle}>Food Notes <span style={{ color: C.faint }}>(allergies, dietary requirements)</span></label>
+          <label htmlFor="foodNotes" style={labelStyle}>{fc('form_food_notes', 'form.food_notes')} <span style={{ color: C.faint }}>({fc('form_food_notes_sub', 'form.food_notes_sub')})</span></label>
           <textarea id="foodNotes" rows={3} value={foodNotes} onChange={e => setFoodNotes(e.target.value)}
-            placeholder="Any dietary restrictions or special requests for the kitchen…"
+            placeholder={fc('form_food_notes_placeholder', 'form.food_notes_placeholder')}
             className="w-full rounded-lg border px-3 py-2.5 text-sm resize-none" style={inputStyle} />
         </div>
       )}
@@ -396,11 +401,11 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Name & surname */}
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="name" style={labelStyle}>First Name</label>
+          <label htmlFor="name" style={labelStyle}>{fc('form_first_name', 'form.first_name')}</label>
           <input id="name" name="name" required className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
         </div>
         <div>
-          <label htmlFor="surname" style={labelStyle}>Last Name</label>
+          <label htmlFor="surname" style={labelStyle}>{fc('form_last_name', 'form.last_name')}</label>
           <input id="surname" name="surname" required className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
         </div>
       </div>
@@ -408,11 +413,11 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
       {/* Contact */}
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="phone" style={labelStyle}>Phone</label>
+          <label htmlFor="phone" style={labelStyle}>{fc('form_phone', 'form.phone')}</label>
           <input id="phone" name="phone" type="tel" className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
         </div>
         <div>
-          <label htmlFor="email" style={labelStyle}>Email</label>
+          <label htmlFor="email" style={labelStyle}>{fc('form_email', 'form.email')}</label>
           <input id="email" name="email" type="email" className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
         </div>
       </div>
@@ -422,48 +427,48 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
         payingGuests > 0 && enhancedTier ? (
           <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
+              <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{enhancedTotal}₾</p>
             </div>
             <div className="space-y-0.5">
               {tastingGuests > 0 && (
-                <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} tasting × {enhancedTier.pricePerPerson}₾</p>
+                <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {enhancedTier.pricePerPerson}₾</p>
               )}
               {lunchGuests > 0 && (
-                <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} lunch × {enhancedTier.tastingLunchPricePerPerson}₾</p>
+                <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {enhancedTier.tastingLunchPricePerPerson}₾</p>
               )}
               {enhancedTier.registrationPrice > 0 && (
-                <p className="text-xs" style={{ color: C.faint }}>Registration: {enhancedTier.registrationPrice}₾</p>
+                <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {enhancedTier.registrationPrice}₾</p>
               )}
               {masterclassAmt > 0 && (
-                <p className="text-xs" style={{ color: C.faint }}>Masterclass: {masterclassAmt}₾</p>
+                <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.masterclass')}: {masterclassAmt}₾</p>
               )}
             </div>
           </div>
         ) : payingGuests === 0 ? null : (
           <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
-            <p className="text-sm" style={{ color: C.muted }}>Price will be confirmed after submission.</p>
+            <p className="text-sm" style={{ color: C.muted }}>{t(locale, 'form.price_after_submit')}</p>
           </div>
         )
       ) : bookingType === 'INDIVIDUAL' ? (
         <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.muted }}>Estimated Total</p>
-            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guestCount} guests</p>
+            <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
           </div>
           <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
         </div>
       ) : tierGap ? (
         <div className="rounded-lg border p-4" style={{ backgroundColor: '#fff8f0', borderColor: '#fca5a5' }}>
-          <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>No rate for {guestCount} guests</p>
+          <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
           <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-            This company has no pricing tier that covers {guestCount} guests. Please contact us directly.
+            {t(locale, 'form.no_rate_detail', { n: guestCount })}
           </p>
         </div>
       ) : (
         <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
-          <p className="text-sm font-medium" style={{ color: C.muted }}>Your company rate applies</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Price will be confirmed after submission.</p>
+          <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.company_rate_applies')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{t(locale, 'form.price_after_submit')}</p>
         </div>
       )}
 
@@ -475,11 +480,11 @@ export default function BookingForm({ companies, showCompanyPrice, enhancedEnabl
         disabled={status === 'loading' || (!isEnhanced && !!tierGap)}
         className="w-full font-semibold py-3 rounded-lg transition-colors text-white"
         style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? '#a0392a' : C.wine }}>
-        {status === 'loading' ? 'Submitting…' : 'Request Booking'}
+        {status === 'loading' ? t(locale, 'form.submitting') : fc('form_submit', 'form.submit')}
       </button>
 
       <p className="text-xs text-center" style={{ color: C.faint }}>
-        48-hour cancellation policy. We will contact you to confirm.
+        {fc('form_cancel_policy', 'form.cancel_policy')}
       </p>
     </form>
   )

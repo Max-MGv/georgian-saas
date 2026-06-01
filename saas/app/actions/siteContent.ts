@@ -28,3 +28,7 @@ export async function saveContentSection(
 ) {
   await Promise.all(rows.map(r => saveContent(r.key, r.value, r.section, r.label, r.locale ?? 'en')))
 }
+
+export async function deleteContent(key: string, locale = 'en') {
+  await db.siteContent.deleteMany({ where: { key, locale } })
+}

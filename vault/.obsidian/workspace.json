@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Decisions.md",
-                "mode": "source",
+                "file": "Plan-EditableSiteContent.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Decisions"
+              "title": "Plan-EditableSiteContent"
             }
           }
         ]
@@ -53,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "plan",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -185,10 +185,24 @@
   },
   "active": "0eae5ecf8a741e4f",
   "lastOpenFiles": [
+    "Plan-EditableSiteContent.md.tmp.17464.ef935c992f9a",
+    "Roadmap.md.tmp.17464.a06a8eca6115",
+    "FeatureLog.md.tmp.17464.006d4ed28e03",
+    "FeatureLog.md",
+    "Plan-4Features.md",
+    "Features/Add Language/Georgian Translations.md",
+    "SessionLog.md.tmp.15152.e68c22cbc725",
+    "Seeding/Seed Wine Orders.md",
+    "Seeding",
+    "SessionLog.md.tmp.2344.dfc109bce3d6",
+    "Plan-EnhancedCompanyBooking.md",
+    "MVP Features.md",
+    "Plan-4Features.md.tmp.2344.bec634992348",
+    "Home.md",
+    "Decisions.md",
     "SessionLog.md.tmp.22004.d4c0cad753d7",
     "Plan-EnhancedCompanyBooking.md.tmp.22004.d4c32c2cfd84",
     "ClaudeInstructions.md",
-    "FeatureLog.md",
     "Roadmap.md",
     "Business Model.md",
     "Architecture.md"

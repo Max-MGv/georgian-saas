@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useTransition } from 'react'
-import { saveContent } from '@/app/actions/siteContent'
+import { saveContent, deleteContent } from '@/app/actions/siteContent'
 
 type Props = {
   contentKey: string
@@ -20,16 +20,20 @@ export default function EditableText({
   contentKey, section, label, locale, fallback, isAdmin,
   as: Tag = 'span', className, style, children,
 }: Props) {
-  const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(children || fallback)
-  const [hovered, setHovered] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [editing, setEditing]         = useState(false)
+  const [value, setValue]             = useState(children || fallback)
+  const [hovered, setHovered]         = useState(false)
+  const [saved, setSaved]             = useState(false)
+  const [resetDone, setResetDone]     = useState(false)
+  const [showResetTip, setShowResetTip] = useState(false)
+  const [isPending, startTransition]  = useTransition()
   const ref = useRef<HTMLElement>(null)
 
   if (!isAdmin) {
     return <Tag className={className} style={style}>{children || fallback}</Tag>
   }
+
+  const hasDbValue = !!(children)
 
   function handleClick() {
     if (editing) return
@@ -62,6 +66,16 @@ export default function EditableText({
     setEditing(false)
   }
 
+  function handleReset() {
+    startTransition(async () => {
+      await deleteContent(contentKey, locale)
+      setValue(fallback)
+      setResetDone(true)
+      setShowResetTip(false)
+      setTimeout(() => setResetDone(false), 2000)
+    })
+  }
+
   const editableStyle: React.CSSProperties = {
     ...style,
     cursor: editing ? 'text' : 'pointer',
@@ -75,6 +89,9 @@ export default function EditableText({
     transition: 'outline 0.1s',
   }
 
+  // Truncate fallback for tooltip preview
+  const tipText = fallback.length > 60 ? fallback.slice(0, 60) + '…' : fallback
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T = Tag as any
 
@@ -82,9 +99,61 @@ export default function EditableText({
     <div
       style={{ position: 'relative' }}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setShowResetTip(false) }}
     >
-      {/* Red pencil badge — top-right corner on hover */}
+      {/* Reset badge — appears left of pencil when a DB value exists */}
+      {hovered && !editing && hasDbValue && (
+        <span
+          aria-label={`Reset to default: ${fallback}`}
+          onMouseEnter={() => setShowResetTip(true)}
+          onMouseLeave={() => setShowResetTip(false)}
+          onClick={handleReset}
+          style={{
+            position: 'absolute',
+            top: -6,
+            right: 18,
+            color: '#fff',
+            backgroundColor: '#a89070',
+            fontSize: '0.65rem',
+            lineHeight: 1,
+            padding: '2px 4px',
+            borderRadius: 4,
+            opacity: isPending ? 0.5 : 1,
+            cursor: 'pointer',
+            pointerEvents: 'all',
+            zIndex: 10,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ↺
+          {/* Tooltip */}
+          {showResetTip && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: 4,
+                backgroundColor: '#1c1008',
+                color: '#f5efe6',
+                fontSize: '0.7rem',
+                lineHeight: 1.4,
+                padding: '5px 8px',
+                borderRadius: 5,
+                whiteSpace: 'normal',
+                width: 200,
+                zIndex: 50,
+                pointerEvents: 'none',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              }}
+            >
+              Reset to: &ldquo;{tipText}&rdquo;
+            </span>
+          )}
+        </span>
+      )}
+
+      {/* Pencil badge — top-right */}
       <span
         aria-hidden
         style={{
@@ -143,6 +212,9 @@ export default function EditableText({
 
       {saved && !editing && (
         <span className="text-xs mt-0.5 block" style={{ color: '#16a34a' }}>✓ Saved</span>
+      )}
+      {resetDone && !editing && (
+        <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>↺ Reset to default</span>
       )}
     </div>
   )

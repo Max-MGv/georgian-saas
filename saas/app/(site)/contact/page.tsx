@@ -1,6 +1,7 @@
 import { getContentMap } from '@/app/actions/siteContent'
 import { getSetting } from '@/app/actions/settings'
 import { cookies } from 'next/headers'
+import { t } from '@/lib/t'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,19 +10,25 @@ export default async function ContactPage() {
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const c = await getContentMap('contact', locale)
 
+  const cards = [
+    { label: c['contact_label_phone']    || t(locale, 'contact.label_phone'),    value: c['contact_phone']        || '+995 599 96 33 17',       note: c['contact_note_phone']    || t(locale, 'contact.note_phone') },
+    { label: c['contact_label_email']    || t(locale, 'contact.label_email'),    value: c['contact_email']        || 'nikalasmarani@gmail.com', note: c['contact_note_email']    || t(locale, 'contact.note_email') },
+    { label: c['contact_label_location'] || t(locale, 'contact.label_location'), value: c['contact_address']      || 'Kardanakhi, Gurjaani',    note: c['contact_note_location'] || t(locale, 'contact.note_location') },
+    { label: c['contact_label_cancel']   || t(locale, 'contact.label_cancel'),   value: c['contact_cancel_value'] || t(locale, 'contact.cancel_value'), note: c['contact_note_cancel'] || t(locale, 'contact.note_cancel') },
+  ]
+
   return (
     <div className="max-w-2xl mx-auto px-6 py-16">
-      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Get in Touch</p>
-      <h1 className="text-3xl sm:text-4xl font-bold mb-8" style={{ color: '#1c1008' }}>Contact Us</h1>
+      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>
+        {c['contact_eyebrow'] || t(locale, 'contact.eyebrow')}
+      </p>
+      <h1 className="text-3xl sm:text-4xl font-bold mb-8" style={{ color: '#1c1008' }}>
+        {c['contact_heading'] || t(locale, 'contact.heading')}
+      </h1>
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
-        {[
-          { label: 'Phone',        value: c['contact_phone']   || '+995 599 96 33 17',       note: 'Call or WhatsApp, Georgian or English' },
-          { label: 'Email',        value: c['contact_email']   || 'nikalasmarani@gmail.com', note: 'We reply within 24 hours' },
-          { label: 'Location',     value: c['contact_address'] || 'Kardanakhi, Gurjaani',    note: 'Kakheti region, Eastern Georgia' },
-          { label: 'Cancellation', value: '48-hour policy',                                  note: 'Please notify us at least 48 hours before your visit' },
-        ].map(item => (
+        {cards.map(item => (
           <div key={item.label} className="rounded-xl p-5 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
             <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8b4513' }}>{item.label}</p>
             <p className="font-semibold mb-1" style={{ color: '#1c1008' }}>{item.value}</p>
@@ -33,18 +40,24 @@ export default async function ContactPage() {
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       <section className="mb-12">
-        <h2 className="text-lg font-bold mb-4" style={{ color: '#1c1008' }}>How to Find Us</h2>
+        <h2 className="text-lg font-bold mb-4" style={{ color: '#1c1008' }}>
+          {c['contact_find_us'] || t(locale, 'contact.find_us')}
+        </h2>
         <div className="w-full h-64 rounded-xl border flex items-center justify-center text-sm" style={{ backgroundColor: '#ede5d8', borderColor: '#e0d4c0', color: '#a89070' }}>
-          Kardanakhi, Gurjaani Municipality, Kakheti, Georgia
+          {t(locale, 'contact.map_placeholder')}
         </div>
         <p className="text-sm mt-3" style={{ color: '#6b5a47' }}>
-          We are located in the village of Kardanakhi, about 15 minutes from Gurjaani town. Exact directions are sent with your booking confirmation.
+          {c['contact_map_directions'] || t(locale, 'contact.map_directions')}
         </p>
       </section>
 
       <div className="text-center">
-        <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>Prefer to just book directly?</p>
-        <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">Book a Visit</a>
+        <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>
+          {c['contact_book_cta'] || t(locale, 'contact.book_cta')}
+        </p>
+        <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
+          {c['contact_book_btn'] || t(locale, 'contact.book_btn')}
+        </a>
       </div>
     </div>
   )
