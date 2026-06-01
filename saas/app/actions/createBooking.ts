@@ -59,8 +59,17 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const isEnhanced = data.bookingType === 'COMPANY' &&
       (data.tastingGuestCount != null || data.lunchGuestCount != null)
 
+    // Fetch real masterclass prices from DB — never trust client-supplied pricePerUnit
+    const masterclassIds = (data.masterclassLines ?? []).map(l => l.masterclassItemId)
+    const masterclassItemsFromDb = masterclassIds.length > 0
+      ? await db.masterclassItem.findMany({
+          where: { id: { in: masterclassIds } },
+          select: { id: true, pricePerUnit: true },
+        })
+      : []
+    const masterclassPriceMap = Object.fromEntries(masterclassItemsFromDb.map(i => [i.id, i.pricePerUnit]))
     const masterclassAmt = (data.masterclassLines ?? []).reduce(
-      (s, l) => s + l.quantity * l.pricePerUnit, 0
+      (s, l) => s + l.quantity * (masterclassPriceMap[l.masterclassItemId] ?? 0), 0
     )
 
     const pricePerPerson = data.visitType === 'TASTING' ? 50 : 100
@@ -122,7 +131,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           create: (data.masterclassLines ?? []).map(l => ({
             masterclassItemId: l.masterclassItemId,
             quantity: l.quantity,
-            pricePerUnit: l.pricePerUnit,
+            pricePerUnit: masterclassPriceMap[l.masterclassItemId] ?? 0,
           })),
         } : undefined,
       },
