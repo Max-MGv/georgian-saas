@@ -105,7 +105,8 @@ export default function EditableText({
       </span>
 
       <Tag
-        ref={ref as React.RefObject<never>}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ref={ref as any}
         className={className}
         style={editableStyle}
         contentEditable={editing}
