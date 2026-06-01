@@ -143,7 +143,7 @@ When `as="span"`, the outer container is still a `<div>`. Rendering this inside 
 ## Checklist
 
 - [x] ~~#1 — Auth redirect in admin layout~~ (not an issue — proxy.ts handles it)
-- [ ] #2 — Auth guard on all write server actions
+- [x] #2 — Auth guard on all write server actions (lib/requireAdmin.ts, 12 action files)
 - [ ] #3 — Fetch masterclass prices from DB in createBooking
 - [ ] #4 — Enhanced booking min-guest check on paying headcount
 - [ ] #5 — `hasDbValue` prop on EditableText
