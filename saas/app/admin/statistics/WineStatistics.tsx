@@ -394,7 +394,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
                       <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={28} />
                       <Tooltip
                         {...tooltipStyle}
-                        formatter={(v: number, name: string) => [`${v} bottle${v !== 1 ? 's' : ''}`, name]}
+                        formatter={(v: unknown, name: string) => [`${Number(v)} bottle${Number(v) !== 1 ? 's' : ''}`, name]}
                       />
                       {Array.from(selectedWines).map(name => (
                         <Line
