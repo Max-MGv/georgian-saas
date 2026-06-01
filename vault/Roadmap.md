@@ -154,9 +154,9 @@ Other planned improvements:
 Full plan: `vault/Plan-SecurityAndBugFixes.md`
 
 - [x] ~~**#1 Auth redirect in admin layout**~~ — `proxy.ts` handles this correctly (Next.js 16 middleware)
-- [ ] **#2 Auth guard on write server actions** — `saveContent`, `deleteContent`, `updateSetting`, `addBlockedDate`, `removeBlockedDate` callable by anyone via HTTP POST; no session check
-- [ ] **#3 Masterclass price trusted from client** — `createBooking` uses client-supplied `pricePerUnit`; fetch from DB instead
-- [ ] **#4 Enhanced booking skips min-guest check** — validation uses `guestCount` not `tastingGuestCount + lunchGuestCount`
+- [x] **#2 Auth guard on write server actions** — `lib/requireAdmin.ts` added; all 12 write action files guarded
+- [x] **#3 Masterclass price trusted from client** — `createBooking` now fetches prices from DB by ID
+- [x] **#4 Enhanced booking skips min-guest check** — now validates `tastingGuestCount + lunchGuestCount`
 - [ ] **#5 `hasDbValue` false-negative** — empty-string saves make reset badge disappear; pass explicit prop
 - [ ] **#6 `revalidatePath` missing** — `saveContent`/`deleteContent` don't revalidate `/admin/content` or site pages
 - [ ] **#7 EditableText `<div>` wrapper** — outer wrapper breaks HTML semantics when `as="span"` used inside block elements

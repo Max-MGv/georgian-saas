@@ -8,6 +8,44 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-01 — Security audit + fixes (full detail)
+
+### Completed
+- **Code inspection** — full review of recent features (editable content, booking form, server actions); 7 findings identified (2 critical, 2 medium, 3 minor).
+- **Finding #1 disproved** — initial finding that admin routes were unprotected was wrong; `saas/proxy.ts` is the Next.js 16 middleware entry point and correctly redirects unauthenticated visitors to `/admin/login`. Verified by navigating to admin without session.
+- **Finding #2 fixed — server action auth guard** — server actions are exposed as HTTP POST endpoints; the proxy only protects page URLs, so direct POSTs to action endpoints via public URLs bypassed auth entirely. Proved by calling `saveContent` via `POST /` with `Next-Action` header — DB was written without a session. Fix: created `lib/requireAdmin.ts` (checks Supabase session, throws Unauthorized if no user) and added `await requireAdmin()` to every write action across 12 files.
+- **Finding #3 fixed — masterclass price from DB** — `createBooking` trusted client-supplied `pricePerUnit` for masterclass line items, allowing a user to submit `pricePerUnit: 0` and pay nothing for add-ons. Proved by submitting a booking with fake price — order created with totalPrice excluding masterclass cost. Fix: server now fetches `masterclassItem.pricePerUnit` from DB by ID and ignores the client value in both the total calculation and the stored record.
+- **Finding #4 fixed — enhanced booking min-guest check** — min-guest validation used `guestCount` (total incl. free guests), so a booking with `guestCount: 10` but `tastingGuestCount: 0, lunchGuestCount: 0` passed validation with `totalPrice: 0`. Fix: enhanced bookings now validate `tastingGuestCount + lunchGuestCount` against the minimum.
+
+### Key files changed
+- `saas/lib/requireAdmin.ts` — NEW: Supabase auth check helper
+- `saas/app/actions/siteContent.ts` — requireAdmin on saveContent, saveContentSection, deleteContent
+- `saas/app/actions/settings.ts` — requireAdmin on updateSetting
+- `saas/app/actions/blockedDates.ts` — requireAdmin on addBlockedDate, removeBlockedDate
+- `saas/app/actions/companies.ts` — requireAdmin on createCompany, updateCompany, deleteCompany
+- `saas/app/actions/orders.ts` — requireAdmin on all 6 write functions
+- `saas/app/actions/wines.ts` — requireAdmin on createWine, updateWine, deleteWine
+- `saas/app/actions/wineOrders.ts` — requireAdmin on updateWineOrderStatus
+- `saas/app/actions/prices.ts` — requireAdmin on createPrice, updatePrice, deletePrice
+- `saas/app/actions/masterclassItems.ts` — requireAdmin on all 3 write functions
+- `saas/app/actions/menuItems.ts` — requireAdmin on all 3 write functions
+- `saas/app/actions/orderExtras.ts` — requireAdmin on addOrderExtra, removeOrderExtra
+- `saas/app/actions/orderMasterclass.ts` — requireAdmin on addMasterclassLine, removeMasterclassLine
+- `saas/app/actions/createBooking.ts` — DB-fetched masterclass prices; paying-guest min check
+
+### Remaining (minor — no security/pricing risk)
+- **#5** `hasDbValue` false-negative in EditableText when empty string saved
+- **#6** No `revalidatePath` in `saveContent`/`deleteContent`
+- **#7** EditableText outer `<div>` wrapper breaks HTML semantics for inline elements
+
+### Next up
+- User test the editor — edit a nav label, a button, a paragraph; confirm it shows on live site
+- Fix date filters on admin orders (KnownBugs #1)
+- Gallery page (images already in `public/images/`, just need wiring)
+- Minor fixes #5–#7 from security plan when convenient
+
+---
+
 ## 2026-06-01 — Dual-mode site content editor (full detail)
 
 ### Completed
