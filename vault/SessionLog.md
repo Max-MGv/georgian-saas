@@ -8,6 +8,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-01 — Bug fix: date filter inputs (full detail)
+
+### Completed
+- **KnownBug #1 fixed — date filter inputs** — The "From" and "To" date inputs in the orders filter bar were controlled by server-side `params` props. When a user picked a date from the native picker, `onChange` fired, `router.push` started a navigation, but React immediately reset the input back to the old value (from `params`) while waiting for the server to respond. This made the selection look lost. Fix: added `localDateFrom`/`localDateTo` local state that updates instantly on change, then syncs back to server params once navigation settles (detected by the existing `navKey` effect). The server query itself was always correct — all bookings are stored at UTC midnight so the `gte`/`lte` Prisma filters were sound.
+
+### Key files changed
+- `saas/app/admin/orders/OrdersFilters.tsx` — added `localDateFrom`/`localDateTo` state; inputs now use local state; `setUpcoming`/`clearFilters` also update local state; `navKey` effect syncs on settlement
+
+### Next up
+- User test the date filters — set From/To and confirm results update correctly
+- User test the content editor — edit a nav label, a button, a paragraph; confirm it shows on live site
+- Gallery page (images already in `public/images/`, just need wiring)
+- Minor fixes #5–#7 from security plan when convenient
+
+---
+
 ## 2026-06-01 — Security audit + fixes (full detail)
 
 ### Completed

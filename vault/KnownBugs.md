@@ -6,6 +6,6 @@ tags: [bugs]
 
 | # | Description | Area | Status |
 |---|---|---|---|
-| 1 | Date filters don't work on orders admin panel | Admin / Orders | 🔴 Open |
+| 1 | Date filters don't work on orders admin panel | Admin / Orders | 🟢 Resolved |
 | 2 | Guest count input: backspace resets to 0, typing prepends to 0 instead of replacing | Public / Booking form | 🟢 Resolved |
 | 3 | Time slot picker allows selecting past hours on today's date | Public / Booking form | 🟢 Resolved |

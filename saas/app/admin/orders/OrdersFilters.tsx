@@ -39,12 +39,19 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
   const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`
   const prevNavKey = useRef(navKey)
 
+  // Local state so date inputs don't visually reset while navigation is in-flight
+  const [localDateFrom, setLocalDateFrom] = useState(params.dateFrom ?? '')
+  const [localDateTo, setLocalDateTo] = useState(params.dateTo ?? '')
+
   useEffect(() => {
     if (prevNavKey.current !== navKey) {
       prevNavKey.current = navKey
       setIsNavigating(false)
+      // Sync local state once server params have settled
+      setLocalDateFrom(params.dateFrom ?? '')
+      setLocalDateTo(params.dateTo ?? '')
     }
-  }, [navKey])
+  }, [navKey, params.dateFrom, params.dateTo])
 
   // ── Column visibility (lives here so Columns button is in the filter bar) ──
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
@@ -98,11 +105,15 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
   function setUpcoming() {
     setIsNavigating(true)
     const today = new Date().toISOString().split('T')[0]
+    setLocalDateFrom(today)
+    setLocalDateTo('')
     router.push(buildQuery({ dateFrom: today, dateTo: undefined }))
   }
 
   function clearFilters() {
     setIsNavigating(true)
+    setLocalDateFrom('')
+    setLocalDateTo('')
     router.push(pathname)
   }
 
@@ -158,11 +169,11 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
       {/* Date range */}
       <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>From</label>
-        <input type="date" value={params.dateFrom ?? ''} onChange={e => update('dateFrom', e.target.value)} style={inputStyle} />
+        <input type="date" value={localDateFrom} onChange={e => { setLocalDateFrom(e.target.value); update('dateFrom', e.target.value) }} style={inputStyle} />
       </div>
       <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>To</label>
-        <input type="date" value={params.dateTo ?? ''} onChange={e => update('dateTo', e.target.value)} style={inputStyle} />
+        <input type="date" value={localDateTo} onChange={e => { setLocalDateTo(e.target.value); update('dateTo', e.target.value) }} style={inputStyle} />
       </div>
 
       {/* Booking type / company */}
