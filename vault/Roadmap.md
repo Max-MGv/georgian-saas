@@ -153,7 +153,7 @@ Other planned improvements:
 
 Full plan: `vault/Plan-SecurityAndBugFixes.md`
 
-- [ ] **#1 Auth redirect in admin layout** — `app/admin/layout.tsx` reads user but never redirects; all `/admin/*` routes publicly accessible without login
+- [x] ~~**#1 Auth redirect in admin layout**~~ — `proxy.ts` handles this correctly (Next.js 16 middleware)
 - [ ] **#2 Auth guard on write server actions** — `saveContent`, `deleteContent`, `updateSetting`, `addBlockedDate`, `removeBlockedDate` callable by anyone via HTTP POST; no session check
 - [ ] **#3 Masterclass price trusted from client** — `createBooking` uses client-supplied `pricePerUnit`; fetch from DB instead
 - [ ] **#4 Enhanced booking skips min-guest check** — validation uses `guestCount` not `tastingGuestCount + lunchGuestCount`
