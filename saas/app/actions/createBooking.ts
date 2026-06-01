@@ -52,12 +52,17 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       : (parseInt(minLunchStr) || 4)
 
     const guestCount = Number(data.guestCount)
-    if (guestCount < minGuests) {
-      return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
-    }
 
     const isEnhanced = data.bookingType === 'COMPANY' &&
       (data.tastingGuestCount != null || data.lunchGuestCount != null)
+
+    // For enhanced bookings validate paying headcount, not total headcount
+    const effectiveGuestCount = isEnhanced
+      ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
+      : guestCount
+    if (effectiveGuestCount < minGuests) {
+      return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
+    }
 
     // Fetch real masterclass prices from DB — never trust client-supplied pricePerUnit
     const masterclassIds = (data.masterclassLines ?? []).map(l => l.masterclassItemId)
