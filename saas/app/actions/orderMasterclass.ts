@@ -3,11 +3,13 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 export async function addMasterclassLine(
   orderId: string,
   data: { masterclassItemId: string; quantity: number }
 ): Promise<{ success: true; lineId: string } | { error: string }> {
+  await requireAdmin()
   const item = await db.masterclassItem.findUnique({
     where: { id: data.masterclassItemId },
   })
@@ -32,6 +34,7 @@ export async function removeMasterclassLine(
   lineId: string,
   orderId: string
 ): Promise<{ success: true }> {
+  await requireAdmin()
   await db.orderMasterclass.delete({ where: { id: lineId } })
   await recalcOrderTotal(orderId)
   revalidatePath(`/admin/orders/${orderId}`)

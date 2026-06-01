@@ -3,11 +3,13 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 export async function addOrderExtra(
   orderId: string,
   data: { label: string; amount: number }
 ): Promise<{ success: true; extraId: string } | { error: string }> {
+  await requireAdmin()
   if (!data.label.trim()) return { error: 'Label is required' }
   if (data.amount <= 0) return { error: 'Amount must be greater than 0' }
 
@@ -29,6 +31,7 @@ export async function removeOrderExtra(
   extraId: string,
   orderId: string
 ): Promise<{ success: true }> {
+  await requireAdmin()
   await db.orderExtra.delete({ where: { id: extraId } })
   await recalcOrderTotal(orderId)
   revalidatePath(`/admin/orders/${orderId}`)

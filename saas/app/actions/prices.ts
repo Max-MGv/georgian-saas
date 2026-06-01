@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 async function validateTier(
   companyId: string,
@@ -32,6 +33,7 @@ export async function createPrice(data: {
   tastingLunchPricePerPerson: number
   registrationPrice: number
 }) {
+  await requireAdmin()
   const err = await validateTier(data.companyId, data.minGuests, data.maxGuests)
   if (err) return { error: err }
   await db.price.create({ data })
@@ -46,6 +48,7 @@ export async function updatePrice(id: string, data: {
   tastingLunchPricePerPerson: number
   registrationPrice: number
 }, companyId: string) {
+  await requireAdmin()
   const err = await validateTier(companyId, data.minGuests, data.maxGuests, id)
   if (err) return { error: err }
   await db.price.update({ where: { id }, data })
@@ -54,6 +57,7 @@ export async function updatePrice(id: string, data: {
 }
 
 export async function deletePrice(id: string) {
+  await requireAdmin()
   await db.price.delete({ where: { id } })
   revalidatePath('/admin/companies')
   return { success: true }

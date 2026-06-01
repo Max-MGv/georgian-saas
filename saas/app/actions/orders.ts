@@ -3,12 +3,14 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
+import { requireAdmin } from '@/lib/requireAdmin'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { OrderStatus } from '@prisma/client'
 
 export async function deleteOrder(id: string) {
+  await requireAdmin()
   await db.order.delete({ where: { id } })
   revalidatePath('/admin/orders')
   revalidatePath('/admin/statistics')
@@ -25,6 +27,7 @@ export async function updateOrder(id: string, data: {
   email: string
   notes: string
 }) {
+  await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
@@ -60,6 +63,7 @@ export async function updateOrderEnhanced(
     manualLunchRate?: number
   }
 ): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
   // Fetch order with company prices + current masterclass/extras for total recalc
   const order = await db.order.findUnique({
     where: { id },
@@ -141,6 +145,7 @@ export async function createOrderAdmin(data: {
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
+  await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (!data.date) return { error: 'Date is required.' }
@@ -229,6 +234,7 @@ export async function sendOrderInvoice(
   orderId: string,
   customMessage: string
 ): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
   try {
     const order = await db.order.findUnique({
       where: { id: orderId },
@@ -298,6 +304,7 @@ export async function exportOrdersCsv(filters: {
   companyId?: string
   status?: string
 }): Promise<string> {
+  await requireAdmin()
   const orders = await db.order.findMany({
     where: {
       ...(filters.dateFrom || filters.dateTo ? {
@@ -341,6 +348,7 @@ export async function updateOrderStatus(
   orderId: string,
   status: 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 ): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
   try {
     await db.order.update({ where: { id: orderId }, data: { status } })
     revalidatePath('/admin/orders')

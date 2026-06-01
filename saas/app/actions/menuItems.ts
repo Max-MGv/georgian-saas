@@ -2,12 +2,14 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 export async function createMenuItem(data: {
   name: string
   type: 'VEGETABLE' | 'MEAT'
   sortOrder?: number
 }) {
+  await requireAdmin()
   await db.menuItem.create({
     data: {
       name: data.name.trim(),
@@ -24,6 +26,7 @@ export async function updateMenuItem(id: string, data: {
   active?: boolean
   sortOrder?: number
 }) {
+  await requireAdmin()
   await db.menuItem.update({
     where: { id },
     data: {
@@ -37,6 +40,7 @@ export async function updateMenuItem(id: string, data: {
 }
 
 export async function deleteMenuItem(id: string) {
+  await requireAdmin()
   await db.menuItem.delete({ where: { id } })
   revalidatePath('/admin/menu-items')
 }

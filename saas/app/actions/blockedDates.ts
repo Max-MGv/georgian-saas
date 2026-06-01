@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 export async function getBlockedDates() {
   const rows = await db.blockedDate.findMany({ orderBy: { date: 'asc' } })
@@ -13,6 +14,7 @@ export async function getBlockedDates() {
 }
 
 export async function addBlockedDate(dateStr: string, reason?: string) {
+  await requireAdmin()
   const date = new Date(dateStr)
   const row = await db.blockedDate.upsert({
     where: { date },
@@ -25,6 +27,7 @@ export async function addBlockedDate(dateStr: string, reason?: string) {
 }
 
 export async function removeBlockedDate(id: string) {
+  await requireAdmin()
   await db.blockedDate.delete({ where: { id } })
   revalidatePath('/admin/settings')
   revalidatePath('/')

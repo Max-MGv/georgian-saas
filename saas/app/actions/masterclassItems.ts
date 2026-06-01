@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import type { MasterclassUnit } from '@/lib/masterclass'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 export async function createMasterclassItem(data: {
   name: string
@@ -10,6 +11,7 @@ export async function createMasterclassItem(data: {
   pricePerUnit: number
   sortOrder?: number
 }) {
+  await requireAdmin()
   await db.masterclassItem.create({
     data: {
       name: data.name.trim(),
@@ -28,6 +30,7 @@ export async function updateMasterclassItem(id: string, data: {
   active?: boolean
   sortOrder?: number
 }) {
+  await requireAdmin()
   await db.masterclassItem.update({
     where: { id },
     data: {
@@ -42,6 +45,7 @@ export async function updateMasterclassItem(id: string, data: {
 }
 
 export async function deleteMasterclassItem(id: string) {
+  await requireAdmin()
   await db.masterclassItem.delete({ where: { id } })
   revalidatePath('/admin/masterclass')
 }

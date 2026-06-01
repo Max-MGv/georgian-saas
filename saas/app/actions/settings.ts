@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/requireAdmin'
 
 // Default values for all settings
 const DEFAULTS: Record<string, string> = {
@@ -24,6 +25,7 @@ export async function getSetting(key: string): Promise<string> {
 }
 
 export async function updateSetting(key: string, value: string) {
+  await requireAdmin()
   await db.setting.upsert({
     where: { key },
     update: { value },
