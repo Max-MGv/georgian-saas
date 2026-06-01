@@ -163,6 +163,20 @@ Full plan: `vault/Plan-SecurityAndBugFixes.md`
 
 ---
 
+## v1.4 — Page Background Customization
+
+Full plan: `vault/Plan-PageBackgrounds.md`
+
+**Designed to be fully reversible** — no new DB models, no file uploads, no new routes. Uses existing `Setting` table. Public pages fall back to hardcoded images if settings are missing. Revert = one `git revert` command.
+
+- [ ] **Backgrounds tab in `/admin/content`** — new tab alongside Text / Visual
+- [ ] **`BackgroundImageEditor` component** — image picker grid (from `public/images/`), X/Y position sliders, zoom slider, live preview box (300×200px updates as you drag)
+- [ ] **Home hero wired** — reads `home_hero_bg_path` / `home_hero_bg_position` / `home_hero_bg_size` settings; falls back to current hardcoded image
+- [ ] **About hero wired** — same pattern with `about_hero_bg_*` keys
+- [ ] **Contact hero wired** — same pattern with `contact_hero_bg_*` keys
+
+---
+
 ## v2 — Growth Features
 
 - [ ] Online payments (Georgian bank integration or Stripe)
