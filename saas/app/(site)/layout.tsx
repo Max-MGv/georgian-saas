@@ -1,9 +1,17 @@
+import { cookies } from 'next/headers'
+import { getSetting } from '@/app/actions/settings'
 import SiteNav from './SiteNav'
 
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  const [cookieStore, defaultLocale] = await Promise.all([
+    cookies(),
+    getSetting('default_locale'),
+  ])
+  const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
+
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
-      <SiteNav />
+      <SiteNav locale={locale} />
 
       <main className="flex-1">
         {children}

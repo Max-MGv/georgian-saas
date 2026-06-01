@@ -11,6 +11,7 @@ const C = {
 
 type Props = {
   settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean }
+  defaultLocale: string
   payment: {
     payment_recipient_name: string
     payment_personal_number: string
@@ -51,7 +52,8 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [] }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [] }: Props) {
+  const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
@@ -64,6 +66,15 @@ export default function SettingsClient({ settings, payment, invoiceEmailMessage,
   const [newBlockReason, setNewBlockReason] = useState('')
   const [isPending, startTransition] = useTransition()
   const [savedKey, setSavedKey] = useState<string | null>(null)
+
+  function handleDefaultLocale(locale: string) {
+    setDefaultLocale(locale)
+    startTransition(async () => {
+      await updateSetting('default_locale', locale)
+      setSavedKey('default_locale')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
 
   function handleToggle(value: boolean) {
     setShowPrice(value)
@@ -157,6 +168,41 @@ export default function SettingsClient({ settings, payment, invoiceEmailMessage,
 
   return (
     <div className="space-y-6">
+
+      {/* Default Language */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Language</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Default language shown to visitors who have not set a preference.</p>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>Default site language</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>Visitors can still switch language using the EN / KA toggle in the nav.</p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'default_locale' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+            )}
+            <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: C.border }}>
+              {(['en', 'ka'] as const).map(l => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => handleDefaultLocale(l)}
+                  className="px-4 py-1.5 text-sm font-semibold uppercase transition-colors"
+                  style={{
+                    backgroundColor: defaultLocale === l ? '#7c1d23' : C.bg,
+                    color: defaultLocale === l ? '#fff' : C.muted,
+                  }}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Booking toggles */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>

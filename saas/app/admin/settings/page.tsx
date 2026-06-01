@@ -16,6 +16,7 @@ export default async function SettingsPage() {
     minGuestsTasting,
     minGuestsTastingLunch,
     blockedDates,
+    defaultLocale,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
     getSetting('min_guests_tasting'),
     getSetting('min_guests_tasting_lunch'),
     getBlockedDates(),
+    getSetting('default_locale'),
   ])
 
   return (
@@ -54,6 +56,7 @@ export default async function SettingsPage() {
         minGuestsTasting={minGuestsTasting}
         minGuestsTastingLunch={minGuestsTastingLunch}
         blockedDates={blockedDates}
+        defaultLocale={defaultLocale ?? 'en'}
       />
     </div>
   )

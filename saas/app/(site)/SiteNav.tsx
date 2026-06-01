@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import LocaleSwitcher from '@/components/LocaleSwitcher'
 
 const NAV_LINKS = [
-  { href: '/',       label: 'Home' },
-  { href: '/about',  label: 'About' },
-  { href: '/wines',  label: 'Order Wine' },
+  { href: '/',        label: 'Home' },
+  { href: '/about',   label: 'About' },
+  { href: '/wines',   label: 'Order Wine' },
   { href: '/contact', label: 'Contact' },
 ]
 
@@ -33,7 +34,7 @@ function SocialIcons() {
   )
 }
 
-export default function SiteNav() {
+export default function SiteNav({ locale }: { locale: string }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -55,6 +56,8 @@ export default function SiteNav() {
           <Link href="/#book" className="btn-wine text-sm font-semibold px-5 py-2 rounded-lg">
             Book a Visit
           </Link>
+          <span className="w-px h-5" style={{ backgroundColor: '#e0d4c0' }} />
+          <LocaleSwitcher locale={locale} />
           <span className="w-px h-5" style={{ backgroundColor: '#e0d4c0' }} />
           <SocialIcons />
         </nav>
@@ -102,6 +105,9 @@ export default function SiteNav() {
           >
             Book a Visit
           </Link>
+          <div className="pt-1">
+            <LocaleSwitcher locale={locale} />
+          </div>
         </div>
       )}
     </header>

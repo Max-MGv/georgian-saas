@@ -116,6 +116,18 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+model SiteContent {
+  id        String   @id @default(cuid())
+  key       String
+  value     String
+  section   String
+  label     String
+  locale    String   @default("en")
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, locale])
+}
+
 model BlockedDate {
   id        String   @id @default(cuid())
   date      DateTime @unique
