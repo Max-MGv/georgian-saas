@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import type { Company } from '@prisma/client'
 import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE, type ColumnId } from './columnDefs'
 import { exportOrdersCsv } from '@/app/actions/orders'
+import DateInput from '@/components/DateInput'
 
 const C = {
   border: '#e0d4c0',
@@ -169,11 +170,11 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
       {/* Date range */}
       <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>From</label>
-        <input type="date" value={localDateFrom} onChange={e => { setLocalDateFrom(e.target.value); update('dateFrom', e.target.value) }} style={inputStyle} />
+        <DateInput value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={inputStyle} />
       </div>
       <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>To</label>
-        <input type="date" value={localDateTo} onChange={e => { setLocalDateTo(e.target.value); update('dateTo', e.target.value) }} style={inputStyle} />
+        <DateInput value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={inputStyle} />
       </div>
 
       {/* Booking type / company */}

@@ -8,6 +8,28 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-01 — Date format + past date protection (full detail)
+
+### Completed
+- **DD/MM/YYYY custom date input** — built `saas/components/DateInput.tsx`: text input with DD/MM/YYYY placeholder, auto-inserts slashes as user types, calendar icon button opens native date picker via `showPicker()`, syncs internal YYYY-MM-DD value with display. Replaces all `input[type=date]` in booking form and admin orders filter bar. Universal — works the same regardless of OS/browser locale.
+- **Past date protection** — booking form: `isPastDate` flag shows inline red warning immediately when user types a past date; handleSubmit blocks submission with error message. `createBooking.ts`: server-side guard compares `dateStr < todayStr` and returns error before any DB writes. Missing-date guard also added to handleSubmit.
+- **lang="en-GB"** — set on `<html>` in `app/layout.tsx` (good for other locale-dependent behaviour; doesn't affect date inputs in Chrome which ignores it, hence the custom component).
+
+### Key files changed
+- `saas/components/DateInput.tsx` — NEW: universal DD/MM/YYYY input component
+- `saas/components/BookingForm.tsx` — uses DateInput; hidden `name="date"` input; past-date warning + submit guard; missing-date submit guard
+- `saas/app/admin/orders/OrdersFilters.tsx` — From/To filters use DateInput
+- `saas/app/actions/createBooking.ts` — past-date server guard
+- `saas/app/layout.tsx` — lang="en-GB"
+
+### Next up
+- User test the date filters — set From/To and confirm results update correctly
+- User test the content editor — edit a nav label, a button, a paragraph; confirm it shows on live site
+- Gallery page (images already in `public/images/`, just need wiring)
+- Minor fixes #5–#7 from security plan when convenient
+
+---
+
 ## 2026-06-01 — Bug fix: date filter inputs (full detail)
 
 ### Completed

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
 import { findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
+import DateInput from '@/components/DateInput'
 
 type Price = {
   id: string; minGuests: number; maxGuests: number
@@ -65,6 +66,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : TIME_SLOTS
 
   const isDateBlocked = (date: string) => blockedDates.includes(date)
+
+  const isPastDate = selectedDate !== '' && selectedDate < today
 
   function handleDateChange(date: string) {
     setSelectedDate(date)
@@ -133,9 +136,19 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    if (!selectedDate) {
+      setStatus('error')
+      setErrorMsg('Please select a date.')
+      return
+    }
     if (!fd.get('phone') && !fd.get('email')) {
       setStatus('error')
       setErrorMsg(t(locale, 'form.err_contact'))
+      return
+    }
+    if (selectedDate < today) {
+      setStatus('error')
+      setErrorMsg('Please choose a future date.')
       return
     }
     if (isDateBlocked(selectedDate)) {
@@ -262,11 +275,19 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       {/* Date & time */}
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="date" style={labelStyle}>{fc('form_date', 'form.date')}</label>
-          <input id="date" name="date" type="date" required min={today}
-            value={selectedDate} onChange={e => handleDateChange(e.target.value)}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
-          {selectedDate && isDateBlocked(selectedDate) && (
+          <label style={labelStyle}>{fc('form_date', 'form.date')}</label>
+          <input type="hidden" name="date" value={selectedDate} />
+          <DateInput
+            value={selectedDate}
+            onChange={handleDateChange}
+            min={today}
+            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+            style={inputStyle}
+          />
+          {isPastDate && (
+            <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Please choose a future date.</p>
+          )}
+          {selectedDate && !isPastDate && isDateBlocked(selectedDate) && (
             <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{t(locale, 'form.blocked_date')}</p>
           )}
         </div>

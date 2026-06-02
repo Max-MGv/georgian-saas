@@ -33,8 +33,14 @@ export type BookingResult =
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
   try {
-    // Server-side guard: blocked dates
+    // Server-side guard: past dates
     const dateStr = new Date(data.date).toISOString().split('T')[0]
+    const todayStr = new Date().toISOString().split('T')[0]
+    if (dateStr < todayStr) {
+      return { success: false, error: 'Bookings cannot be made for past dates.' }
+    }
+
+    // Server-side guard: blocked dates
     const blocked = await db.blockedDate.findFirst({
       where: { date: new Date(dateStr) },
     })
