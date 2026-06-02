@@ -279,6 +279,91 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   return (
     <>
+      {/* ── Mobile card list (hidden on md+) ──────────────────── */}
+      <div className="flex flex-col gap-2 mt-4 md:hidden">
+        {orders.length === 0 && (
+          <p className="text-center py-12 text-sm" style={{ color: C.faint }}>No orders found.</p>
+        )}
+        {orders.map(order => {
+          const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+          return (
+            <div
+              key={order.id}
+              className="rounded-xl border overflow-hidden"
+              style={{ backgroundColor: '#ffffff', borderColor: C.border, borderLeftWidth: 4, borderLeftColor: cfg.color }}
+            >
+              <div
+                onClick={() => router.push(`/admin/orders/${order.id}`)}
+                className="p-4 cursor-pointer active:bg-amber-50"
+              >
+                {/* Name + status badge */}
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <span className="font-semibold" style={{ color: C.text, fontSize: '0.9375rem' }}>
+                    {order.name} {order.surname}
+                  </span>
+                  <div
+                    className="relative flex-shrink-0"
+                    onClick={e => { e.stopPropagation(); setStatusMenuId(statusMenuId === order.id ? null : order.id) }}
+                  >
+                    <button
+                      className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
+                      style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
+                    >
+                      {cfg.label} ▾
+                    </button>
+                    {statusMenuId === order.id && (
+                      <div
+                        className="absolute right-0 z-30 rounded-xl shadow-lg border py-1 mt-1"
+                        style={{ minWidth: 160, backgroundColor: '#fff9f3', borderColor: C.border }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {ALL_STATUSES.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => handleStatusChange(order.id, s)}
+                            className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2"
+                            style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                          >
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
+                            {STATUS_CONFIG[s].label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Date / time / guests */}
+                <p className="text-sm mb-0.5" style={{ color: C.muted }}>
+                  {formatDate(order.date)} · {order.timeSlot}
+                </p>
+                <p className="text-sm mb-0.5" style={{ color: C.muted }}>
+                  {order.guestCount} {order.guestCount === 1 ? 'guest' : 'guests'} · {visitLabel(order.visitType)}
+                </p>
+                {order.company && (
+                  <p className="text-sm" style={{ color: C.faint }}>{order.company.name}</p>
+                )}
+
+                {/* Footer row: total + arrow */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+                  <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1rem' }}>
+                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                  </span>
+                  <span className="text-xs flex items-center gap-1" style={{ color: C.faint }}>
+                    View details
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Desktop table (hidden on mobile) ──────────────────── */}
+      <div className="hidden md:block">
       <div className="rounded-xl border overflow-x-auto mt-4" style={{ borderColor: C.border }}>
         <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
@@ -527,6 +612,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           </tbody>
         </table>
       </div>
+      </div>{/* end hidden md:block */}
 
       {/* Invoice portal — renders directly into <body> so print CSS can isolate it */}
       {printOrder && typeof document !== 'undefined' && createPortal(

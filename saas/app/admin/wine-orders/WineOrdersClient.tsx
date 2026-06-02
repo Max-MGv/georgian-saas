@@ -268,14 +268,14 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         return (
           <div
             key={order.id}
-            className="rounded-xl border overflow-hidden flex"
+            className="rounded-xl border overflow-hidden flex flex-col md:flex-row"
             style={{
               backgroundColor: C.bg,
               borderColor: C.border,
               opacity: isInactive ? 0.55 : 1,
               transition: 'opacity 0.45s ease',
-              borderRightWidth: 4,
-              borderRightColor: sc.border,
+              borderLeftWidth: 4,
+              borderLeftColor: sc.border,
             }}
           >
             {/* Col 1 — name, company, tags, address, contact */}
@@ -301,7 +301,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
             </div>
 
             {/* Col 2 — amount, hours, phone */}
-            <div className="flex-shrink-0 flex flex-col justify-center items-center gap-1 px-6 text-sm border-l"
+            <div className="flex-shrink-0 flex flex-col justify-center items-center gap-1 px-6 py-4 text-sm border-t md:border-t-0 md:border-l"
               style={{ color: C.muted, borderColor: C.border, minWidth: 160 }}>
               <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
                 {order.displayTotal != null
@@ -314,7 +314,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
 
             {/* Col 3 — vertical stepper */}
             <div
-              className="flex-shrink-0 flex items-center p-5 pl-4 border-l"
+              className="flex-shrink-0 flex items-center p-5 pl-4 border-t md:border-t-0 md:border-l"
               style={{ borderColor: C.border, backgroundColor: '#fdf8f2' }}
             >
               <VerticalStepper orderId={order.id} status={order.status} onUpdate={handleUpdate} />

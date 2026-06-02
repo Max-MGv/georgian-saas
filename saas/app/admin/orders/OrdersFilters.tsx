@@ -57,6 +57,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
   // ── Column visibility (lives here so Columns button is in the filter bar) ──
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
   const [columnsOpen, setColumnsOpen] = useState(false)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -145,9 +146,94 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
     outline: 'none',
   }
 
+  const activeFilterCount = [params.dateFrom, params.dateTo, params.companyId, params.status].filter(Boolean).length
+
   return (
     <>
-    <div className="flex flex-wrap items-end gap-3" style={{ opacity: isNavigating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+
+    {/* ── Mobile compact bar (hidden on md+) ─────────────────── */}
+    <div className="flex md:hidden items-center gap-2 flex-wrap" style={{ opacity: isNavigating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+      <button
+        onClick={setUpcoming}
+        style={{
+          ...inputStyle, cursor: 'pointer', minHeight: 40, paddingLeft: 14, paddingRight: 14,
+          border: `1px solid ${isUpcoming ? C.wine : C.border}`,
+          color: isUpcoming ? C.wine : C.muted,
+          backgroundColor: isUpcoming ? '#fdf2f3' : C.inputBg,
+          fontWeight: isUpcoming ? 600 : 400,
+        }}
+      >
+        Upcoming
+      </button>
+      <button
+        onClick={() => setMobileFiltersOpen(o => !o)}
+        style={{
+          ...inputStyle, cursor: 'pointer', minHeight: 40, paddingLeft: 14, paddingRight: 14,
+          border: `1px solid ${mobileFiltersOpen || activeFilterCount > 0 ? C.wine : C.border}`,
+          color: mobileFiltersOpen || activeFilterCount > 0 ? C.wine : C.muted,
+          backgroundColor: mobileFiltersOpen || activeFilterCount > 0 ? '#fdf2f3' : C.inputBg,
+          fontWeight: activeFilterCount > 0 ? 600 : 400,
+        }}
+      >
+        Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : '▾'}
+      </button>
+      {hasFilters && (
+        <button
+          onClick={clearFilters}
+          style={{
+            ...inputStyle, cursor: 'pointer', minHeight: 40, paddingLeft: 14, paddingRight: 14,
+            border: `1px solid ${C.wine}`, color: C.wine, backgroundColor: '#fdf2f3', fontWeight: 500,
+          }}
+        >
+          Clear ×
+        </button>
+      )}
+    </div>
+
+    {/* ── Mobile expanded filter panel ───────────────────────── */}
+    {mobileFiltersOpen && (
+      <div className="md:hidden flex flex-col gap-3 p-3 rounded-xl border mt-2" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>From</label>
+            <DateInput value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={{ ...inputStyle, minHeight: 40 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>To</label>
+            <DateInput value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={{ ...inputStyle, minHeight: 40 }} />
+          </div>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Filter by</label>
+          <select
+            value={params.companyId ?? ''}
+            onChange={e => update('companyId', e.target.value)}
+            style={{ ...inputStyle, width: '100%', minHeight: 40 }}
+          >
+            <option value="">All bookings</option>
+            <option value="__individual__">Individuals only</option>
+            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Status</label>
+          <select
+            value={params.status ?? ''}
+            onChange={e => update('status', e.target.value)}
+            style={{ ...inputStyle, width: '100%', minHeight: 40 }}
+          >
+            <option value="">All statuses ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})</option>
+            {STATUSES.map(s => {
+              const count = statusCounts[s.value] ?? 0
+              return <option key={s.value} value={s.value} disabled={count === 0}>{s.label} ({count})</option>
+            })}
+          </select>
+        </div>
+      </div>
+    )}
+
+    {/* ── Desktop full filter bar (hidden on mobile) ─────────── */}
+    <div className="hidden md:flex flex-wrap items-end gap-3" style={{ opacity: isNavigating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
 
       {/* Quick */}
       <div>
