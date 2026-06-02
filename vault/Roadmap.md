@@ -163,7 +163,21 @@ Full plan: `vault/Plan-SecurityAndBugFixes.md`
 
 ---
 
-## v1.4 — Page Background Customization
+## v1.4 — Mobile Admin Optimization
+
+Full plan: `vault/Plan-MobileAdmin.md`
+
+Goal: make the admin usable on a phone for the tasks an owner does on the go (check orders, read details, update status). Not full desktop parity.
+
+- [x] **Show password toggle on admin login** — eye icon button toggles `type="password"` / `type="text"` on the password field
+- [ ] **Orders list: mobile card view** — on screens < 768px, hide table and show a card per order (name, date/time, guests, visit type, status badge, total); tap card → order detail
+- [ ] **Orders filter bar: collapsible on mobile** — show Upcoming button + Filters toggle on mobile; expanded panel shows all filter inputs; desktop unchanged
+- [ ] **Order detail: tap target audit** — verify all buttons ≥ 44px tall, no horizontal overflow
+- [ ] **Wine Orders: column collapse** — 3-column card grid collapses to 1 column on mobile
+
+---
+
+## v1.5 — Page Background Customization
 
 Full plan: `vault/Plan-PageBackgrounds.md`
 

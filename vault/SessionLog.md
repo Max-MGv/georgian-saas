@@ -8,6 +8,25 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-02 — Mobile admin plan + show password (full detail)
+
+### Completed
+- **Show password toggle on admin login** — added `showPassword` state to `LoginForm.tsx`; eye icon button (SVG, no library) positioned absolutely inside the password field wrapper; toggles `type="password"` / `type="text"`; eye-off icon shown when password visible, eye icon when hidden
+- **Mobile admin plan written** — `vault/Plan-MobileAdmin.md` created; full plan for Orders list card view, filter bar collapse, order detail audit, wine orders column fix; v1.4 added to Roadmap
+
+### Key files changed
+- `saas/app/admin/login/LoginForm.tsx` — `showPassword` state, eye toggle button, `paddingRight` on input
+- `vault/Plan-MobileAdmin.md` — NEW: full mobile admin plan
+- `vault/Roadmap.md` — v1.4 Mobile Admin section added; old v1.4 Page Backgrounds renamed to v1.5
+- `vault/FeatureLog.md` — feature #71 added
+
+### Next up
+- Build mobile admin: start with Orders list card view (biggest impact)
+- Then filter bar collapse
+- Then order detail audit + wine orders column fix
+
+---
+
 ## 2026-06-01 — Date format + past date protection (full detail)
 
 ### Completed
