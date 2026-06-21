@@ -126,7 +126,7 @@ function TextMode({ section, c, locale }: { section: SectionKey; c: Record<strin
               className="text-sm leading-relaxed"
               style={{ color: C.text }}
             >
-              {c[f.key] || ''}
+              {c[f.key] ?? null}
             </EditableText>
           </div>
         </div>
@@ -153,13 +153,13 @@ function VisualNav({ c, locale }: { c: Record<string, string>; locale: string })
             <EditableText key={l.key} contentKey={l.key} section="nav" label={l.label}
               locale={locale} fallback={l.fb} isAdmin as="span"
               className="text-sm font-medium" style={{ color: C.muted }}>
-              {c[l.key] || ''}
+              {c[l.key] ?? null}
             </EditableText>
           ))}
           <div className="rounded-lg px-5 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.wine }}>
             <EditableText contentKey="nav_book" section="nav" label='"Book a Visit" button'
               locale={locale} fallback="Book a Visit" isAdmin as="span">
-              {c['nav_book'] || ''}
+              {c['nav_book'] ?? null}
             </EditableText>
           </div>
         </nav>
@@ -177,7 +177,7 @@ function VisualFormPreview({ c, locale }: { c: Record<string, string>; locale: s
   }) => (
     <EditableText contentKey={k} section="form" label={lbl} locale={locale} fallback={fb}
       isAdmin as={Tag} className={className} style={style}>
-      {c[k] || ''}
+      {c[k] ?? null}
     </EditableText>
   )
 
@@ -282,7 +282,7 @@ function VisualHome({ c, locale }: { c: Record<string, string>; locale: string }
   }) => (
     <EditableText contentKey={k} section={sec} label={lbl} locale={locale} fallback={fb}
       isAdmin as={Tag} className={className} style={style}>
-      {c[k] || ''}
+      {c[k] ?? null}
     </EditableText>
   )
 
@@ -356,7 +356,7 @@ function VisualAbout({ c, locale }: { c: Record<string, string>; locale: string 
   }) => (
     <EditableText contentKey={k} section={sec} label={lbl} locale={locale} fallback={fb}
       isAdmin as={Tag} className={className} style={style}>
-      {c[k] || ''}
+      {c[k] ?? null}
     </EditableText>
   )
 
@@ -423,7 +423,7 @@ function VisualContact({ c, locale }: { c: Record<string, string>; locale: strin
   }) => (
     <EditableText contentKey={k} section={sec} label={lbl} locale={locale} fallback={fb}
       isAdmin as={Tag} className={className} style={style}>
-      {c[k] || ''}
+      {c[k] ?? null}
     </EditableText>
   )
 

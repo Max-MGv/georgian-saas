@@ -87,9 +87,16 @@ export default async function ContactPage() {
           <h2 className="text-lg font-bold mb-4" style={{ color: '#1c1008' }}>
             {c['contact_find_us'] || t(locale, 'contact.find_us')}
           </h2>
-          <div className="w-full h-64 rounded-xl border flex items-center justify-center text-sm" style={{ backgroundColor: '#ede5d8', borderColor: '#e0d4c0', color: '#a89070' }}>
-            {t(locale, 'contact.map_placeholder')}
-          </div>
+          <iframe
+            title="Nikalas Marani location"
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2990!2d45.8950242!3d41.6876107!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x404689bc7cf7805d%3A0x77694e6cb5060d1b!2sNikalas%20Marani!5e0!3m2!1sen!2sge!4v1719000000000!5m2!1sen!2sge"
+            width="100%"
+            height="256"
+            style={{ border: 0, borderRadius: '12px' }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
           <p className="text-sm mt-3" style={{ color: '#6b5a47' }}>
             {c['contact_map_directions'] || t(locale, 'contact.map_directions')}
           </p>

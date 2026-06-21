@@ -1,6 +1,7 @@
 'use server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { revalidatePath } from 'next/cache'
 
 export async function getContent(key: string, fallback: string, locale = 'en'): Promise<string> {
   const row = await db.siteContent.findUnique({ where: { key_locale: { key, locale } } })
@@ -23,6 +24,7 @@ export async function saveContent(key: string, value: string, section: string, l
     update: { value },
     create: { key, value, section, label, locale },
   })
+  revalidatePath('/', 'layout')
 }
 
 export async function saveContentSection(
@@ -35,4 +37,5 @@ export async function saveContentSection(
 export async function deleteContent(key: string, locale = 'en') {
   await requireAdmin()
   await db.siteContent.deleteMany({ where: { key, locale } })
+  revalidatePath('/', 'layout')
 }

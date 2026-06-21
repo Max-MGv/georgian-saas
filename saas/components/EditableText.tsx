@@ -13,7 +13,7 @@ type Props = {
   as?: keyof React.JSX.IntrinsicElements
   className?: string
   style?: React.CSSProperties
-  children: string
+  children: string | null | undefined
 }
 
 export default function EditableText({
@@ -21,7 +21,7 @@ export default function EditableText({
   as: Tag = 'span', className, style, children,
 }: Props) {
   const [editing, setEditing]         = useState(false)
-  const [value, setValue]             = useState(children || fallback)
+  const [value, setValue]             = useState(children ?? fallback)
   const [hovered, setHovered]         = useState(false)
   const [saved, setSaved]             = useState(false)
   const [resetDone, setResetDone]     = useState(false)
@@ -30,10 +30,10 @@ export default function EditableText({
   const ref = useRef<HTMLElement>(null)
 
   if (!isAdmin) {
-    return <Tag className={className} style={style}>{children || fallback}</Tag>
+    return <Tag className={className} style={style}>{children ?? fallback}</Tag>
   }
 
-  const hasDbValue = !!(children)
+  const hasDbValue = children != null
 
   function handleClick() {
     if (editing) return
@@ -94,9 +94,11 @@ export default function EditableText({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T = Tag as any
+  const inlineTags = new Set(['span', 'a', 'strong', 'em', 'b', 'i', 'label'])
+  const Wrapper = inlineTags.has(Tag) ? 'span' : 'div'
 
   return (
-    <div
+    <Wrapper
       style={{ position: 'relative' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setShowResetTip(false) }}
@@ -216,6 +218,6 @@ export default function EditableText({
       {resetDone && !editing && (
         <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>↺ Reset to default</span>
       )}
-    </div>
+    </Wrapper>
   )
 }
