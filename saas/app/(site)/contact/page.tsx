@@ -35,21 +35,17 @@ export default async function ContactPage() {
     <>
       {/* Hero banner — Option C: light overlay + frosted text card */}
       <div className="relative overflow-hidden" style={{ height: '300px' }}>
-        {/* Mobile background — cover baseline, scale for zoom */}
+        {/* Mobile background */}
         <div className="block sm:hidden absolute inset-0" style={{
           backgroundImage: `url(${activeMobileBgPath})`,
           backgroundPosition: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
-          backgroundSize: 'cover',
-          transform: `scale(${(parseInt(bgMobileZoom || '') || 100) / 100})`,
-          transformOrigin: 'center center',
+          backgroundSize: `auto max(${parseInt(bgMobileZoom || '') || 100}vh, ${Math.round((parseInt(bgMobileZoom || '') || 100) * 0.5625)}vw)`,
         }} />
         {/* Desktop background */}
         <div className="hidden sm:block absolute inset-0" style={{
           backgroundImage: `url(${activeBgPath})`,
           backgroundPosition: `${bgX || '50'}% ${bgY || '50'}%`,
-          backgroundSize: 'cover',
-          transform: `scale(${(parseInt(bgZoom || '') || 110) / 100})`,
-          transformOrigin: 'center center',
+          backgroundSize: `max(${parseInt(bgZoom || '') || 110}vw, ${Math.round((parseInt(bgZoom || '') || 110) * 1.78)}vh) auto`,
         }} />
         <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
         <div className="relative h-full flex items-end max-w-2xl mx-auto px-6 pb-10">

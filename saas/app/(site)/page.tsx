@@ -66,21 +66,17 @@ export default async function Home() {
       `}</style>
 
       <div className="hero-banner relative overflow-hidden">
-        {/* Mobile background — cover baseline, scale for zoom */}
+        {/* Mobile background */}
         <div className="block sm:hidden absolute inset-0" style={{
           backgroundImage: `url(${activeMobileBgPath})`,
           backgroundPosition: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
-          backgroundSize: 'cover',
-          transform: `scale(${(parseInt(heroBgMobileZoom || '') || 100) / 100})`,
-          transformOrigin: 'center center',
+          backgroundSize: `auto max(${parseInt(heroBgMobileZoom || '') || 100}vh, ${Math.round((parseInt(heroBgMobileZoom || '') || 100) * 0.5625)}vw)`,
         }} />
-        {/* Desktop background — zoom controlled from admin */}
+        {/* Desktop background */}
         <div className="hidden sm:block absolute inset-0" style={{
           backgroundImage: `url(${activeBgPath})`,
           backgroundPosition: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
-          backgroundSize: 'cover',
-          transform: `scale(${(parseInt(heroBgZoom || '') || 110) / 100})`,
-          transformOrigin: 'center center',
+          backgroundSize: `max(${parseInt(heroBgZoom || '') || 110}vw, ${Math.round((parseInt(heroBgZoom || '') || 110) * 1.78)}vh) auto`,
         }} />
         {/* Light tint — darkens on hover via CSS */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
