@@ -64,6 +64,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
   const [blockedDates, setBlockedDates] = useState(initialBlockedDates)
   const [mapsEmbedUrl, setMapsEmbedUrl] = useState(initialMapsEmbedUrl)
+  const [mapsEditMode, setMapsEditMode] = useState(false)
+  const [mapsDraft, setMapsDraft] = useState(initialMapsEmbedUrl)
+  const [mapsError, setMapsError] = useState<string | null>(null)
   const [newBlockDate, setNewBlockDate] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -131,12 +134,26 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     })
   }
 
-  function handleMapsEmbedUrlBlur() {
+  function handleMapsSave() {
+    const trimmed = mapsDraft.trim()
+    if (!trimmed.startsWith('https://www.google.com/maps/embed')) {
+      setMapsError('Must be a Google Maps embed URL starting with https://www.google.com/maps/embed')
+      return
+    }
+    setMapsError(null)
+    setMapsEmbedUrl(trimmed)
+    setMapsEditMode(false)
     startTransition(async () => {
-      await updateSetting('maps_embed_url', mapsEmbedUrl)
+      await updateSetting('maps_embed_url', trimmed)
       setSavedKey('maps_embed_url')
       setTimeout(() => setSavedKey(null), 2000)
     })
+  }
+
+  function handleMapsCancel() {
+    setMapsDraft(mapsEmbedUrl)
+    setMapsError(null)
+    setMapsEditMode(false)
   }
 
   function handleMinTastingLunchBlur() {
@@ -357,24 +374,75 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Contact Page</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Map shown in the &ldquo;How to Find Us&rdquo; section. Paste the embed URL from Google Maps → Share → Embed a map → copy the <code style={{ fontSize: '0.7rem' }}>src</code> value.
+            Map shown in the &ldquo;How to Find Us&rdquo; section. Click Edit to change it.
           </p>
         </div>
         <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
-          <label className="text-sm block mb-2" style={{ color: C.muted }}>Google Maps embed URL</label>
-          <div className="flex items-start gap-2">
-            <textarea
-              rows={3}
-              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.75rem' }}
-              value={mapsEmbedUrl}
-              placeholder="https://www.google.com/maps/embed?pb=..."
-              onChange={e => setMapsEmbedUrl(e.target.value)}
-              onBlur={handleMapsEmbedUrlBlur}
-            />
-            {savedKey === 'maps_embed_url' && !isPending && (
-              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓</span>
-            )}
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm" style={{ color: C.muted }}>Google Maps embed URL</label>
+            <div className="flex items-center gap-2">
+              {savedKey === 'maps_embed_url' && !isPending && (
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              )}
+              {!mapsEditMode && (
+                <button
+                  type="button"
+                  onClick={() => { setMapsDraft(mapsEmbedUrl); setMapsEditMode(true) }}
+                  className="text-xs px-3 py-1 rounded-lg font-medium"
+                  style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted }}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
           </div>
+
+          {mapsEditMode ? (
+            <div className="space-y-2">
+              <textarea
+                rows={3}
+                autoFocus
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.75rem',
+                  borderColor: mapsError ? '#b91c1c' : C.border }}
+                value={mapsDraft}
+                placeholder="https://www.google.com/maps/embed?pb=..."
+                onChange={e => { setMapsDraft(e.target.value); setMapsError(null) }}
+              />
+              {mapsError && (
+                <p className="text-xs" style={{ color: '#b91c1c' }}>{mapsError}</p>
+              )}
+              <p className="text-xs" style={{ color: C.faint }}>
+                Get this from Google Maps → Share → Embed a map → copy the <code style={{ fontSize: '0.7rem' }}>src="…"</code> value.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleMapsSave}
+                  disabled={isPending}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
+                  style={{ backgroundColor: C.wine, opacity: isPending ? 0.6 : 1 }}
+                >
+                  {isPending ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMapsCancel}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                  style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: '#fffdf9' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-lg px-3 py-2.5 text-xs break-all"
+              style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`,
+                fontFamily: 'monospace', color: C.faint, lineHeight: 1.6 }}
+            >
+              {mapsEmbedUrl || <span style={{ fontStyle: 'italic' }}>No URL set</span>}
+            </div>
+          )}
         </div>
       </div>
 
