@@ -23,6 +23,7 @@ type Props = {
   minGuestsTasting: string
   minGuestsTastingLunch: string
   blockedDates?: { id: string; date: string; reason: string | null }[]
+  mapsEmbedUrl: string
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -52,7 +53,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [] }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
@@ -62,6 +63,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [minTasting, setMinTasting] = useState(minGuestsTasting)
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
   const [blockedDates, setBlockedDates] = useState(initialBlockedDates)
+  const [mapsEmbedUrl, setMapsEmbedUrl] = useState(initialMapsEmbedUrl)
   const [newBlockDate, setNewBlockDate] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -125,6 +127,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting('min_guests_tasting', String(val))
       setSavedKey('min_guests_tasting')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleMapsEmbedUrlBlur() {
+    startTransition(async () => {
+      await updateSetting('maps_embed_url', mapsEmbedUrl)
+      setSavedKey('maps_embed_url')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -339,6 +349,32 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Contact Page */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Contact Page</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+            Map shown in the &ldquo;How to Find Us&rdquo; section. Paste the embed URL from Google Maps → Share → Embed a map → copy the <code style={{ fontSize: '0.7rem' }}>src</code> value.
+          </p>
+        </div>
+        <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
+          <label className="text-sm block mb-2" style={{ color: C.muted }}>Google Maps embed URL</label>
+          <div className="flex items-start gap-2">
+            <textarea
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.75rem' }}
+              value={mapsEmbedUrl}
+              placeholder="https://www.google.com/maps/embed?pb=..."
+              onChange={e => setMapsEmbedUrl(e.target.value)}
+              onBlur={handleMapsEmbedUrlBlur}
+            />
+            {savedKey === 'maps_embed_url' && !isPending && (
+              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓</span>
+            )}
+          </div>
         </div>
       </div>
 

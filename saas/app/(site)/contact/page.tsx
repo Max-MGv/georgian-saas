@@ -9,7 +9,7 @@ export default async function ContactPage() {
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
 
-  const [c, bgPath, bgX, bgY, bgZoom, bgMobilePath, bgMobileX, bgMobileY, bgMobileZoom] = await Promise.all([
+  const [c, bgPath, bgX, bgY, bgZoom, bgMobilePath, bgMobileX, bgMobileY, bgMobileZoom, mapsEmbedUrl] = await Promise.all([
     getContentMap('contact', locale),
     getSetting('contact_hero_bg_path'),
     getSetting('contact_hero_bg_x'),
@@ -19,6 +19,7 @@ export default async function ContactPage() {
     getSetting('contact_hero_bg_mobile_x'),
     getSetting('contact_hero_bg_mobile_y'),
     getSetting('contact_hero_bg_mobile_zoom'),
+    getSetting('maps_embed_url'),
   ])
 
   const activeBgPath       = bgPath || '/images/winery3.jpg'
@@ -89,7 +90,7 @@ export default async function ContactPage() {
           </h2>
           <iframe
             title="Nikalas Marani location"
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2990!2d45.8950242!3d41.6876107!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x404689bc7cf7805d%3A0x77694e6cb5060d1b!2sNikalas%20Marani!5e0!3m2!1sen!2sge!4v1719000000000!5m2!1sen!2sge"
+            src={mapsEmbedUrl}
             width="100%"
             height="256"
             style={{ border: 0, borderRadius: '12px' }}
