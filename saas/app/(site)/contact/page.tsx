@@ -41,7 +41,7 @@ export default async function ContactPage() {
           backgroundPosition: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
           backgroundSize: 'cover',
           transform: `scale(${(parseInt(bgMobileZoom || '') || 100) / 100})`,
-          transformOrigin: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
+          transformOrigin: 'center center',
         }} />
         {/* Desktop background */}
         <div className="hidden sm:block absolute inset-0" style={{
@@ -49,7 +49,7 @@ export default async function ContactPage() {
           backgroundPosition: `${bgX || '50'}% ${bgY || '50'}%`,
           backgroundSize: 'cover',
           transform: `scale(${(parseInt(bgZoom || '') || 110) / 100})`,
-          transformOrigin: `${bgX || '50'}% ${bgY || '50'}%`,
+          transformOrigin: 'center center',
         }} />
         <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
         <div className="relative h-full flex items-end max-w-2xl mx-auto px-6 pb-10">

@@ -72,7 +72,7 @@ export default async function Home() {
           backgroundPosition: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
           backgroundSize: 'cover',
           transform: `scale(${(parseInt(heroBgMobileZoom || '') || 100) / 100})`,
-          transformOrigin: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
+          transformOrigin: 'center center',
         }} />
         {/* Desktop background — zoom controlled from admin */}
         <div className="hidden sm:block absolute inset-0" style={{
@@ -80,7 +80,7 @@ export default async function Home() {
           backgroundPosition: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
           backgroundSize: 'cover',
           transform: `scale(${(parseInt(heroBgZoom || '') || 110) / 100})`,
-          transformOrigin: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
+          transformOrigin: 'center center',
         }} />
         {/* Light tint — darkens on hover via CSS */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
