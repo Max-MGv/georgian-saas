@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { updateSetting } from '@/app/actions/settings'
+import { uploadBgImage, deleteBgImage } from '@/app/actions/uploadImage'
 
-const IMAGES = [
+const BUILTIN_IMAGES = [
   { path: '/images/winery1.jpg',        label: 'Winery 1' },
   { path: '/images/winery2.jpg',        label: 'Winery 2' },
   { path: '/images/winery3.jpg',        label: 'Winery 3' },
@@ -19,17 +20,59 @@ const C = {
   border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23', rust: '#8b4513',
 }
 
-type DesktopBg = { path: string; x: number; y: number; zoom: number }
-type MobileBg  = { path: string; x: number; y: number; zoom: number }
+function filenameFromUrl(url: string) {
+  return url.split('/').pop() ?? ''
+}
 
-function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path: string) => void }) {
+function ImagePicker({
+  selected, onSelect, extraImages, onUpload, onDelete,
+}: {
+  selected: string
+  onSelect: (path: string) => void
+  extraImages: string[]
+  onUpload: (url: string) => void
+  onDelete: (url: string) => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const url = await uploadBgImage(fd)
+      onUpload(url)
+      onSelect(url)
+    } catch (err) {
+      alert('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function handleDelete(url: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    const filename = filenameFromUrl(url)
+    if (!filename) return
+    await deleteBgImage(filename)
+    onDelete(url)
+    // If deleted image was selected, clear selection
+    if (selected === url) onSelect('')
+  }
+
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: C.rust }}>
         Choose image
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {IMAGES.map(img => (
+        {/* Built-in images */}
+        {BUILTIN_IMAGES.map(img => (
           <button key={img.path} type="button"
             onClick={() => onSelect(img.path)}
             className="relative rounded-lg overflow-hidden border-2 transition-all"
@@ -45,6 +88,57 @@ function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path
             )}
           </button>
         ))}
+
+        {/* Uploaded images — with hover X */}
+        {extraImages.map(url => (
+          <div key={url} className="relative"
+            onMouseEnter={() => setHoveredUrl(url)}
+            onMouseLeave={() => setHoveredUrl(null)}>
+            <button type="button"
+              onClick={() => onSelect(url)}
+              className="relative w-full rounded-lg overflow-hidden border-2 transition-all"
+              style={{ aspectRatio: '16/9', borderColor: selected === url ? C.wine : C.border }}>
+              <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
+              {selected === url && (
+                <div className="absolute inset-0 flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(124,29,35,0.3)' }}>
+                  <svg className="w-5 h-5" fill="white" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+            </button>
+            {hoveredUrl === url && (
+              <button type="button"
+                onClick={(e) => handleDelete(url, e)}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-white transition-opacity hover:opacity-80"
+                style={{ backgroundColor: 'rgba(0,0,0,0.6)', fontSize: 12, lineHeight: 1 }}
+                title="Remove image">
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+
+        {/* Upload button */}
+        <button type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors hover:border-opacity-70 disabled:opacity-50"
+          style={{ aspectRatio: '16/9', borderColor: C.border, color: C.faint }}>
+          {uploading ? (
+            <span className="text-xs">Uploading…</span>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="text-xs">Upload</span>
+            </>
+          )}
+        </button>
+
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       </div>
     </div>
   )
@@ -53,12 +147,10 @@ function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path
 function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   path: string; x: number; y: number; size: string; scale?: number; pageKey: string; isMobile: boolean
 }) {
-  // Aspect ratio matching the live hero at the reference viewport for each context
   const aspectRatio = isMobile
-    ? (pageKey === 'home' ? '390/520' : '390/300')  // portrait/square for mobile
-    : (pageKey === 'home' ? '8/3'     : '1280/300') // landscape for desktop
+    ? (pageKey === 'home' ? '390/520' : '390/300')
+    : (pageKey === 'home' ? '8/3'     : '1280/300')
 
-  // Home mobile preview is portrait — constrain width and centre it
   const isPortrait = isMobile && pageKey === 'home'
 
   return (
@@ -67,7 +159,6 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
         Preview — {isMobile ? 'mobile' : 'desktop at 1280px viewport'}
       </p>
 
-      {/* Nav bar shown above the hero, just like on the real site */}
       <div style={{
         width: isPortrait ? 260 : '100%',
         backgroundColor: '#f5efe6',
@@ -91,7 +182,6 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
         )}
       </div>
 
-      {/* Hero preview */}
       <div className="overflow-hidden relative" style={{
         aspectRatio,
         width: isPortrait ? 260 : '100%',
@@ -140,11 +230,14 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   )
 }
 
-function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
+function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImages, onUpload, onDelete }: {
   pageKey: string
   label: string
   initialDesktop: DesktopBg
   initialMobile: MobileBg
+  extraImages: string[]
+  onUpload: (url: string) => void
+  onDelete: (url: string) => void
 }) {
   const [mode, setMode]       = useState<'desktop' | 'mobile'>('desktop')
   const [desktop, setDesktop] = useState<DesktopBg>(initialDesktop)
@@ -222,7 +315,13 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
 
       {mode === 'desktop' ? (
         <>
-          <ImagePicker selected={desktop.path} onSelect={path => setDesktop(d => ({ ...d, path }))} />
+          <ImagePicker
+            selected={desktop.path}
+            onSelect={path => setDesktop(d => ({ ...d, path }))}
+            extraImages={extraImages}
+            onUpload={onUpload}
+            onDelete={onDelete}
+          />
           <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} isMobile={false} />
           <div className="space-y-4">
               <div>
@@ -256,7 +355,13 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
           <p className="text-xs" style={{ color: C.muted }}>
             Mobile always fills the screen first (no grey boxes), then zoom magnifies on top of that.
           </p>
-          <ImagePicker selected={mobile.path} onSelect={path => setMobile(m => ({ ...m, path }))} />
+          <ImagePicker
+            selected={mobile.path}
+            onSelect={path => setMobile(m => ({ ...m, path }))}
+            extraImages={extraImages}
+            onUpload={onUpload}
+            onDelete={onDelete}
+          />
           <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} isMobile={true} />
           <div className="space-y-4">
               <div>
@@ -296,7 +401,10 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
   )
 }
 
-type Props = { settings: Record<string, string> }
+type DesktopBg = { path: string; x: number; y: number; zoom: number }
+type MobileBg  = { path: string; x: number; y: number; zoom: number }
+
+type Props = { settings: Record<string, string>; uploadedImages: string[] }
 
 const D_DEFAULTS: DesktopBg = { path: '', x: 50, y: 50, zoom: 110 }
 const M_DEFAULTS: MobileBg  = { path: '', x: 50, y: 50, zoom: 100 }
@@ -319,7 +427,17 @@ function getMobileInitial(settings: Record<string, string>, key: string): Mobile
   }
 }
 
-export default function BackgroundsTab({ settings }: Props) {
+export default function BackgroundsTab({ settings, uploadedImages: initialUploaded }: Props) {
+  const [extraImages, setExtraImages] = useState<string[]>(initialUploaded)
+
+  function handleUpload(url: string) {
+    setExtraImages(prev => prev.includes(url) ? prev : [...prev, url])
+  }
+
+  function handleDelete(url: string) {
+    setExtraImages(prev => prev.filter(u => u !== url))
+  }
+
   const pages = [
     { key: 'home',    label: 'Home page hero' },
     { key: 'about',   label: 'About page hero' },
@@ -338,6 +456,9 @@ export default function BackgroundsTab({ settings }: Props) {
           label={p.label}
           initialDesktop={getDesktopInitial(settings, p.key)}
           initialMobile={getMobileInitial(settings, p.key)}
+          extraImages={extraImages}
+          onUpload={handleUpload}
+          onDelete={handleDelete}
         />
       ))}
     </div>

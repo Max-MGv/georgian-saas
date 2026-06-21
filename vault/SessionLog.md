@@ -8,6 +8,32 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-21 — Custom image upload for Backgrounds tab (full detail)
+
+### Completed
+- **Upload button in Backgrounds tab** — dashed `+`-style card added to the image picker grid (after all built-in images); clicking it opens a hidden `<input type="file" accept="image/*">`; the selected file is uploaded to Supabase Storage `backgrounds` bucket via `uploadBgImage` server action; the returned public URL is added to `extraImages` state and auto-selected as the active background.
+- **Uploaded images appear in the grid** — shown alongside built-in winery/hero/gallery images; no visual difference except they have an X delete button.
+- **Remove uploaded images** — hovering an uploaded image reveals a small dark `×` button in the top-right corner; clicking calls `deleteBgImage` server action (deletes from Supabase Storage) and removes from local state; if the deleted image was active it clears the selection.
+- **Shared image list** — all 3 page editors (Home / About / Contact) share the same uploaded image list; uploading from one editor makes the image available in all.
+- **Persisted across page loads** — `page.tsx` calls `supabase.storage.from('backgrounds').list()` on load and passes existing uploads as `uploadedImages` prop through `ContentClient` → `BackgroundsTab`.
+- **Supabase Storage** — uses the `backgrounds` public bucket; `uploadBgImage` auto-creates the bucket on first upload; service role client (`SUPABASE_SERVICE_ROLE_KEY`) used server-side for write access; 10 MB file size limit; path traversal guard on delete.
+
+### Key files changed
+- `saas/lib/supabase/service.ts` — NEW: service role Supabase client
+- `saas/app/actions/uploadImage.ts` — NEW: `uploadBgImage` + `deleteBgImage` server actions
+- `saas/app/admin/content/page.tsx` — lists existing uploads from Supabase Storage on load
+- `saas/app/admin/content/ContentClient.tsx` — `uploadedImages` prop added to Props + component signature + BackgroundsTab call
+- `saas/app/admin/content/BackgroundsTab.tsx` — `ImagePicker` rewritten: upload button, uploaded image cells with hover-X, delete handler; `PageBgEditor` passes extraImages/onUpload/onDelete; `BackgroundsTab` manages `extraImages` state
+
+### Next up
+- User test: upload an image, set it as background, save; hover + delete an uploaded image
+- One-time setup: ensure Supabase `backgrounds` bucket exists (auto-created on first upload)
+- Gallery page still outstanding
+- PDF invoice email attachment still outstanding
+- Minor fixes #5–#7 from security plan
+
+---
+
 ## 2026-06-19 — Hero subtitle box fix + responsive text (full detail)
 
 ### Completed

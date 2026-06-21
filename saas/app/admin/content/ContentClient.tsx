@@ -16,7 +16,7 @@ type ContentRow = { key: string; value: string; section: string; label: string; 
 type LocaleKey = 'en' | 'ka'
 type ModeKey = 'text' | 'visual' | 'backgrounds'
 type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact'
-type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string> }
+type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[] }
 type FieldDef = { key: string; label: string; fallback: string }
 
 function buildMap(rows: ContentRow[]) {
@@ -486,7 +486,7 @@ function VisualContact({ c, locale }: { c: Record<string, string>; locale: strin
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ContentClient({ rows, bgSettings }: Props) {
+export default function ContentClient({ rows, bgSettings, uploadedImages }: Props) {
   const [mode, setMode]       = useState<ModeKey>('text')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
@@ -554,7 +554,7 @@ export default function ContentClient({ rows, bgSettings }: Props) {
       </div>
 
       {/* Backgrounds mode — no locale/section switchers needed */}
-      {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} />}
+      {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} uploadedImages={uploadedImages} />}
 
       {/* Locale + section switchers — only for text/visual modes */}
       {mode !== 'backgrounds' && (
