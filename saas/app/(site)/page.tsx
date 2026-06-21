@@ -60,6 +60,9 @@ export default async function Home() {
           box-shadow: 0 0 18px rgba(255,255,255,0.35), 0 0 36px rgba(255,255,255,0.15);
           transform: scale(1.06) !important;
         }
+        @media (min-width: 640px) {
+          .hero-banner { height: 480px; }
+        }
       `}</style>
 
       <div className="hero-banner relative overflow-hidden">
@@ -82,8 +85,7 @@ export default async function Home() {
         {/* Light tint — darkens on hover via CSS */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
 
-        {/* #3 — taller hero with more vertical padding */}
-        <section className="relative px-6 pt-24 pb-20 text-center max-w-xl mx-auto flex flex-col items-center gap-6">
+        <section className="relative px-6 pt-24 pb-20 sm:pt-0 sm:pb-0 sm:h-full sm:justify-center text-center max-w-xl mx-auto flex flex-col items-center gap-6">
 
           {/* Logo on cream pill — #4 rounder corners */}
           <div style={{
