@@ -51,10 +51,13 @@ function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path
 }
 
 function BgPreview({ path, x, y, size, scale, pageKey }: { path: string; x: number; y: number; size: string; scale?: number; pageKey: string }) {
+  // Match the live hero's aspect ratio so cover produces the identical crop proportion
+  const aspectRatio = pageKey === 'home' ? '8/3' : '1280/300'
+
   return (
-    <div className="flex-shrink-0">
-      <p className="text-xs mb-1.5" style={{ color: C.muted }}>Preview</p>
-      <div className="rounded-lg overflow-hidden relative" style={{ width: 200, height: 128 }}>
+    <div className="w-full">
+      <p className="text-xs mb-1.5" style={{ color: C.muted }}>Preview — actual proportions at 1280px viewport</p>
+      <div className="rounded-lg overflow-hidden relative w-full" style={{ aspectRatio }}>
         {/* Background image */}
         <div style={{
           position: 'absolute', inset: 0,
@@ -73,26 +76,26 @@ function BgPreview({ path, x, y, size, scale, pageKey }: { path: string; x: numb
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 5, padding: '8px 16px',
+            gap: 8, padding: '12px 20%',
           }}>
-            <div style={{ backgroundColor: 'rgba(245,239,230,0.92)', borderRadius: 5, width: 52, height: 16 }} />
-            <div style={{ backgroundColor: 'rgba(10,5,2,0.58)', borderRadius: 999, width: 42, height: 6 }} />
-            <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 2, width: '78%', height: 16 }} />
-            <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
-              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1px solid rgba(255,255,255,0.65)', borderRadius: 3, width: 42, height: 13 }} />
-              <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1px solid rgba(255,255,255,0.65)', borderRadius: 3, width: 42, height: 13 }} />
+            <div style={{ backgroundColor: 'rgba(245,239,230,0.92)', borderRadius: 8, width: 84, height: 26 }} />
+            <div style={{ backgroundColor: 'rgba(10,5,2,0.58)', borderRadius: 999, width: 64, height: 9 }} />
+            <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 4, width: '55%', height: 24 }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 64, height: 20 }} />
+              <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 64, height: 20 }} />
             </div>
           </div>
         ) : (
           /* About / Contact wireframe: frosted card pinned to bottom-left */
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: '0 10px 10px 10px' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: '0 16px 14px 16px' }}>
             <div style={{
               backgroundColor: 'rgba(10,5,2,0.55)',
               backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-              borderRadius: 5, padding: '6px 10px',
+              borderRadius: 8, padding: '10px 18px',
             }}>
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2, width: 36, height: 4, marginBottom: 4 }} />
-              <div style={{ backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 2, width: 60, height: 7 }} />
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2, width: 52, height: 6, marginBottom: 8 }} />
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 2, width: 88, height: 12 }} />
             </div>
           </div>
         )}
@@ -184,8 +187,8 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
       {mode === 'desktop' ? (
         <>
           <ImagePicker selected={desktop.path} onSelect={path => setDesktop(d => ({ ...d, path }))} />
-          <div className="flex flex-col sm:flex-row gap-6 items-start">
-            <div className="flex-1 space-y-4">
+          <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} />
+          <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
                   <span>Horizontal position</span><span>{desktop.x}%</span>
@@ -210,8 +213,6 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
                   onChange={e => setDesktop(d => ({ ...d, zoom: +e.target.value }))}
                   className="w-full" style={{ accentColor: C.wine }} />
               </div>
-            </div>
-            <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} />
           </div>
         </>
       ) : (
@@ -220,8 +221,8 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
             Mobile always fills the screen first (no grey boxes), then zoom magnifies on top of that.
           </p>
           <ImagePicker selected={mobile.path} onSelect={path => setMobile(m => ({ ...m, path }))} />
-          <div className="flex flex-col sm:flex-row gap-6 items-start">
-            <div className="flex-1 space-y-4">
+          <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} />
+          <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
                   <span>Horizontal position</span><span>{mobile.x}%</span>
@@ -246,8 +247,6 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
                   onChange={e => setMobile(m => ({ ...m, zoom: +e.target.value }))}
                   className="w-full" style={{ accentColor: C.wine }} />
               </div>
-            </div>
-            <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} />
           </div>
         </>
       )}
