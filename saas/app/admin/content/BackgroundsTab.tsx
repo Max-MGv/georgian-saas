@@ -50,15 +50,54 @@ function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path
   )
 }
 
-function BgPreview({ path, x, y, size, scale, pageKey }: { path: string; x: number; y: number; size: string; scale?: number; pageKey: string }) {
-  // Match the live hero's aspect ratio so cover produces the identical crop proportion
-  const aspectRatio = pageKey === 'home' ? '8/3' : '1280/300'
+function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
+  path: string; x: number; y: number; size: string; scale?: number; pageKey: string; isMobile: boolean
+}) {
+  // Aspect ratio matching the live hero at the reference viewport for each context
+  const aspectRatio = isMobile
+    ? (pageKey === 'home' ? '390/520' : '390/300')  // portrait/square for mobile
+    : (pageKey === 'home' ? '8/3'     : '1280/300') // landscape for desktop
+
+  // Home mobile preview is portrait — constrain width and centre it
+  const isPortrait = isMobile && pageKey === 'home'
 
   return (
-    <div className="w-full">
-      <p className="text-xs mb-1.5" style={{ color: C.muted }}>Preview — actual proportions at 1280px viewport</p>
-      <div className="rounded-lg overflow-hidden relative w-full" style={{ aspectRatio }}>
-        {/* Background image */}
+    <div className={isPortrait ? 'flex flex-col items-center w-full' : 'w-full'}>
+      <p className="text-xs mb-1.5 w-full" style={{ color: C.muted }}>
+        Preview — {isMobile ? 'mobile' : 'desktop at 1280px viewport'}
+      </p>
+
+      {/* Nav bar shown above the hero, just like on the real site */}
+      <div style={{
+        width: isPortrait ? 260 : '100%',
+        backgroundColor: '#f5efe6',
+        border: `1px solid ${C.border}`,
+        borderBottom: 'none',
+        borderRadius: '8px 8px 0 0',
+        padding: '0 12px',
+        height: 32,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ width: 28, height: 8, backgroundColor: '#c8b090', borderRadius: 3 }} />
+        {isMobile ? (
+          <div style={{ width: 14, height: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {[0,1,2].map(i => <div key={i} style={{ height: 2, backgroundColor: '#a89070', borderRadius: 1 }} />)}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {[44, 36, 44].map((w, i) => <div key={i} style={{ width: w, height: 6, backgroundColor: '#c8b090', borderRadius: 3 }} />)}
+            <div style={{ width: 48, height: 18, backgroundColor: C.wine, borderRadius: 4, opacity: 0.8 }} />
+          </div>
+        )}
+      </div>
+
+      {/* Hero preview */}
+      <div className="overflow-hidden relative" style={{
+        aspectRatio,
+        width: isPortrait ? 260 : '100%',
+        borderRadius: '0 0 8px 8px',
+        border: `1px solid ${C.border}`,
+      }}>
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: path ? `url(${path})` : 'none',
@@ -68,26 +107,23 @@ function BgPreview({ path, x, y, size, scale, pageKey }: { path: string; x: numb
           transform: scale && scale !== 1 ? `scale(${scale})` : undefined,
           transformOrigin: `${x}% ${y}%`,
         }} />
-        {/* Overlay tint — matches live site */}
         <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(28,16,8,0.32)' }} />
 
         {pageKey === 'home' ? (
-          /* Home wireframe: logo box + eyebrow pill + subtitle block + two buttons */
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 8, padding: '12px 20%',
+            gap: 8, padding: isMobile ? '12px 10%' : '12px 20%',
           }}>
             <div style={{ backgroundColor: 'rgba(245,239,230,0.92)', borderRadius: 8, width: 84, height: 26 }} />
             <div style={{ backgroundColor: 'rgba(10,5,2,0.58)', borderRadius: 999, width: 64, height: 9 }} />
-            <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 4, width: '55%', height: 24 }} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 64, height: 20 }} />
-              <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 64, height: 20 }} />
+            <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 4, width: '65%', height: 24 }} />
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginTop: 4, alignItems: 'center' }}>
+              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 80, height: 20 }} />
+              <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 80, height: 20 }} />
             </div>
           </div>
         ) : (
-          /* About / Contact wireframe: frosted card pinned to bottom-left */
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: '0 16px 14px 16px' }}>
             <div style={{
               backgroundColor: 'rgba(10,5,2,0.55)',
@@ -187,7 +223,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
       {mode === 'desktop' ? (
         <>
           <ImagePicker selected={desktop.path} onSelect={path => setDesktop(d => ({ ...d, path }))} />
-          <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} />
+          <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} isMobile={false} />
           <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
@@ -221,7 +257,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
             Mobile always fills the screen first (no grey boxes), then zoom magnifies on top of that.
           </p>
           <ImagePicker selected={mobile.path} onSelect={path => setMobile(m => ({ ...m, path }))} />
-          <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} />
+          <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} isMobile={true} />
           <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
