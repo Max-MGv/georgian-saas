@@ -50,11 +50,12 @@ function ImagePicker({ selected, onSelect }: { selected: string; onSelect: (path
   )
 }
 
-function BgPreview({ path, x, y, size, scale }: { path: string; x: number; y: number; size: string; scale?: number }) {
+function BgPreview({ path, x, y, size, scale, pageKey }: { path: string; x: number; y: number; size: string; scale?: number; pageKey: string }) {
   return (
     <div className="flex-shrink-0">
       <p className="text-xs mb-1.5" style={{ color: C.muted }}>Preview</p>
       <div className="rounded-lg overflow-hidden relative" style={{ width: 200, height: 128 }}>
+        {/* Background image */}
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: path ? `url(${path})` : 'none',
@@ -64,13 +65,37 @@ function BgPreview({ path, x, y, size, scale }: { path: string; x: number; y: nu
           transform: scale && scale !== 1 ? `scale(${scale})` : undefined,
           transformOrigin: `${x}% ${y}%`,
         }} />
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(28,16,8,0.52)' }} />
-        <div style={{ position: 'relative', padding: '18px 14px', textAlign: 'center', color: 'white' }}>
-          <div style={{ fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.7, marginBottom: 4 }}>
-            Kakheti, Georgia
+        {/* Overlay tint — matches live site */}
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(28,16,8,0.32)' }} />
+
+        {pageKey === 'home' ? (
+          /* Home wireframe: logo box + eyebrow pill + subtitle block + two buttons */
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 5, padding: '8px 16px',
+          }}>
+            <div style={{ backgroundColor: 'rgba(245,239,230,0.92)', borderRadius: 5, width: 52, height: 16 }} />
+            <div style={{ backgroundColor: 'rgba(10,5,2,0.58)', borderRadius: 999, width: 42, height: 6 }} />
+            <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 2, width: '78%', height: 16 }} />
+            <div style={{ display: 'flex', gap: 5, marginTop: 2 }}>
+              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1px solid rgba(255,255,255,0.65)', borderRadius: 3, width: 42, height: 13 }} />
+              <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1px solid rgba(255,255,255,0.65)', borderRadius: 3, width: 42, height: 13 }} />
+            </div>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>Nikalas Marani</div>
-        </div>
+        ) : (
+          /* About / Contact wireframe: frosted card pinned to bottom-left */
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', padding: '0 10px 10px 10px' }}>
+            <div style={{
+              backgroundColor: 'rgba(10,5,2,0.55)',
+              backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+              borderRadius: 5, padding: '6px 10px',
+            }}>
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2, width: 36, height: 4, marginBottom: 4 }} />
+              <div style={{ backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 2, width: 60, height: 7 }} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -186,7 +211,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
                   className="w-full" style={{ accentColor: C.wine }} />
               </div>
             </div>
-            <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} />
+            <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} />
           </div>
         </>
       ) : (
@@ -222,7 +247,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
                   className="w-full" style={{ accentColor: C.wine }} />
               </div>
             </div>
-            <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} />
+            <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} />
           </div>
         </>
       )}
