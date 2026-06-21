@@ -186,7 +186,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile }: {
                   className="w-full" style={{ accentColor: C.wine }} />
               </div>
             </div>
-            <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size={`${desktop.zoom}%`} />
+            <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} />
           </div>
         </>
       ) : (

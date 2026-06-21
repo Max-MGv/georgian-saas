@@ -75,7 +75,9 @@ export default async function Home() {
         <div className="hidden sm:block absolute inset-0" style={{
           backgroundImage: `url(${activeBgPath})`,
           backgroundPosition: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
-          backgroundSize: `${heroBgZoom || '110'}%`,
+          backgroundSize: 'cover',
+          transform: `scale(${(parseInt(heroBgZoom || '') || 110) / 100})`,
+          transformOrigin: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
         }} />
         {/* Light tint — darkens on hover via CSS */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
