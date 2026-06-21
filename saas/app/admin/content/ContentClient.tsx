@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import EditableText from '@/components/EditableText'
+import BackgroundsTab from './BackgroundsTab'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
@@ -13,9 +14,9 @@ const C = {
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ContentRow = { key: string; value: string; section: string; label: string; locale: string }
 type LocaleKey = 'en' | 'ka'
-type ModeKey = 'text' | 'visual'
+type ModeKey = 'text' | 'visual' | 'backgrounds'
 type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact'
-type Props = { rows: { en: ContentRow[]; ka: ContentRow[] } }
+type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string> }
 type FieldDef = { key: string; label: string; fallback: string }
 
 function buildMap(rows: ContentRow[]) {
@@ -485,7 +486,7 @@ function VisualContact({ c, locale }: { c: Record<string, string>; locale: strin
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ContentClient({ rows }: Props) {
+export default function ContentClient({ rows, bgSettings }: Props) {
   const [mode, setMode]       = useState<ModeKey>('text')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
@@ -524,7 +525,9 @@ export default function ContentClient({ rows }: Props) {
         <p className="text-sm mt-1" style={{ color: C.faint }}>
           {mode === 'text'
             ? 'Click any field to edit it inline. Changes save per field.'
-            : 'Hover any text on the page preview to edit it. Changes save per field.'}
+            : mode === 'visual'
+            ? 'Hover any text on the page preview to edit it. Changes save per field.'
+            : 'Choose a background image for each page. Adjust position and zoom, then save.'}
         </p>
       </div>
 
@@ -532,64 +535,73 @@ export default function ContentClient({ rows }: Props) {
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>View</span>
         <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: '#ede5d8' }}>
-          {(['text', 'visual'] as ModeKey[]).map(m => (
-            <button key={m} type="button" onClick={() => switchMode(m)}
-              className="px-4 py-1.5 rounded-md text-sm font-semibold capitalize transition-all"
+          {([
+            { id: 'text',        label: 'Text' },
+            { id: 'visual',      label: 'Visual' },
+            { id: 'backgrounds', label: 'Backgrounds' },
+          ] as { id: ModeKey; label: string }[]).map(m => (
+            <button key={m.id} type="button" onClick={() => switchMode(m.id)}
+              className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
               style={{
-                backgroundColor: mode === m ? '#fff9f3' : 'transparent',
-                color: mode === m ? C.wine : C.muted,
-                boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                backgroundColor: mode === m.id ? '#fff9f3' : 'transparent',
+                color: mode === m.id ? C.wine : C.muted,
+                boxShadow: mode === m.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               }}>
-              {m === 'text' ? 'Text' : 'Visual'}
+              {m.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Locale switcher */}
-      <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ backgroundColor: '#ede5d8' }}>
-        {(['en', 'ka'] as LocaleKey[]).map(l => (
-          <button key={l} type="button" onClick={() => setLocale(l)}
-            className="px-5 py-1.5 rounded-md text-sm font-semibold uppercase transition-all"
-            style={{
-              backgroundColor: locale === l ? '#fff9f3' : 'transparent',
-              color: locale === l ? C.wine : C.muted,
-              boxShadow: locale === l ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-            }}>
-            {l === 'en' ? 'English' : 'Georgian'}
-          </button>
-        ))}
-      </div>
+      {/* Backgrounds mode — no locale/section switchers needed */}
+      {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} />}
 
-      {/* Section tabs */}
-      <div className="flex gap-1 border-b" style={{ borderColor: C.border }}>
-        {activeSections.map(tab => (
-          <button key={tab.id} type="button" onClick={() => setSection(tab.id)}
-            className="px-4 py-2 text-sm font-medium transition-colors rounded-t-lg"
-            style={{
-              color: section === tab.id ? C.wine : C.muted,
-              borderBottom: section === tab.id ? `2px solid ${C.wine}` : '2px solid transparent',
-              backgroundColor: section === tab.id ? '#fff9f3' : 'transparent',
-            }}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content — key forces remount (resets edit state) on locale/section change */}
-      <div key={mode + '-' + locale + '-' + section}>
-        {mode === 'text' ? (
-          <TextMode section={section} c={c} locale={locale} />
-        ) : (
-          <div className="rounded-xl border overflow-hidden"
-            style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
-            <VisualNav c={c} locale={locale} />
-            {section === 'home'    && <VisualHome    c={c} locale={locale} />}
-            {section === 'about'   && <VisualAbout   c={c} locale={locale} />}
-            {section === 'contact' && <VisualContact c={c} locale={locale} />}
+      {/* Locale + section switchers — only for text/visual modes */}
+      {mode !== 'backgrounds' && (
+        <>
+          <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ backgroundColor: '#ede5d8' }}>
+            {(['en', 'ka'] as LocaleKey[]).map(l => (
+              <button key={l} type="button" onClick={() => setLocale(l)}
+                className="px-5 py-1.5 rounded-md text-sm font-semibold uppercase transition-all"
+                style={{
+                  backgroundColor: locale === l ? '#fff9f3' : 'transparent',
+                  color: locale === l ? C.wine : C.muted,
+                  boxShadow: locale === l ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}>
+                {l === 'en' ? 'English' : 'Georgian'}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+
+          <div className="flex gap-1 border-b" style={{ borderColor: C.border }}>
+            {activeSections.map(tab => (
+              <button key={tab.id} type="button" onClick={() => setSection(tab.id)}
+                className="px-4 py-2 text-sm font-medium transition-colors rounded-t-lg"
+                style={{
+                  color: section === tab.id ? C.wine : C.muted,
+                  borderBottom: section === tab.id ? `2px solid ${C.wine}` : '2px solid transparent',
+                  backgroundColor: section === tab.id ? '#fff9f3' : 'transparent',
+                }}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div key={mode + '-' + locale + '-' + section}>
+            {mode === 'text' ? (
+              <TextMode section={section} c={c} locale={locale} />
+            ) : (
+              <div className="rounded-xl border overflow-hidden"
+                style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+                <VisualNav c={c} locale={locale} />
+                {section === 'home'    && <VisualHome    c={c} locale={locale} />}
+                {section === 'about'   && <VisualAbout   c={c} locale={locale} />}
+                {section === 'contact' && <VisualContact c={c} locale={locale} />}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
     </div>
   )

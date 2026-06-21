@@ -8,6 +8,84 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-19 — Hero subtitle box fix + responsive text (full detail)
+
+### Completed
+- **Hero subtitle — single unified box** — `saas/app/(site)/page.tsx`: replaced `display: inline` + `box-decoration-break: clone` + `border-radius: 0` (which fragmented the background into per-line boxes) with `display: block` on the span + `border-radius: 6px`. Box now renders as one clean rounded box.
+- **Fluid font sizing** — removed Tailwind breakpoint classes; subtitle `<p>` now uses `fontSize: 'clamp(0.8rem, 2.2vw, 1.05rem)'` for continuous scaling as viewport is dragged.
+- **Box stretches with viewport** — `<p>` changed from `maxWidth: '34ch'` to `width: 'min(90%, 680px)'` with `mx-auto`; span changed to `display: block` so it fills the container width rather than shrinking to longest line.
+- **v1.5 Page Backgrounds user-tested ✅** — Max confirmed the full image feature is done: Backgrounds tab (pick images, adjust position/zoom, save, remove), hero banners on all 3 public pages, winery fallback images, hover effects. Features #75–#78 marked user-tested.
+
+### Key files changed
+- `saas/app/(site)/page.tsx` — subtitle span: `display: block`, `border-radius: 6px`, removed `box-decoration-break`; `<p>` width `min(90%, 680px)`, `clamp()` font size
+
+### Next up
+- Gallery page still outstanding (images in `public/images/slider/` + `gallery/`)
+- PDF invoice email attachment still outstanding
+- Minor fixes #5–#7 from security plan
+
+---
+
+## 2026-06-19 — Hero background images, admin backgrounds editor + hero UI polish (full detail)
+
+### Completed
+- **3 winery images imported** — `Winery Image 1.jfif`, `winery image 2.avif`, `winery image 3.jpg` converted to JPG via sharp; saved to `saas/public/images/winery1.jpg`, `winery2.jpg`, `winery3.jpg`
+- **Admin Backgrounds tab** — new third mode in `/admin/content` (alongside Text / Visual); image picker grid (8 images), X/Y position sliders, zoom slider, 200×128px live preview; saves to `Setting` table; per-page (Home / About / Contact)
+- **Hero banners on all 3 public pages** — Home gets a full-bleed hero wrapping existing content; About and Contact get a 300px hero banner at top; all read background settings from DB with hardcoded winery image fallbacks (winery1/2/3.jpg)
+- **`updateSetting` revalidation expanded** — now also revalidates `/about`, `/contact`, `/admin/content`
+- **Overlay style settled** — About + Contact: frosted card (light 0.30 tint, `backdrop-filter: blur(6px)` dark pill bottom-left). Home: combination approach (see below)
+- **Home hero — combination design:**
+  - Light overlay (0.32) that darkens to 0.70 on banner hover (`transition: background-color 0.45s ease`) via pure CSS `.hero-banner:hover .hero-overlay`
+  - Logo displayed in original colours on a cream rounded box (`rgba(245,239,230,0.92)`, `border-radius: 22px`)
+  - "Kakheti, Georgia" eyebrow: inline dark pill (`box-decoration-break: clone`) — hugs text per line
+  - Subtitle: inline dark background with `box-decoration-break: clone`, `border-radius: 0` and padding sized to eliminate gaps between lines — lines merge into one connected block
+  - Two buttons in individual opaque boxes; both get `2px solid rgba(255,255,255,0.65)` border; wine-red glow on Book hover, white glow on Order Wine hover; buttons scale 1.06 on individual hover, 1.04 on banner hover
+- **Hero taller** — `pt-24 pb-20` for more image presence; `max-w-xl` for better centring
+
+### Key decisions
+- Settled on Option C (frosted card) for About + Contact, custom combination for Home
+- `box-decoration-break: clone` with `border-radius: 0` and `padding: 11px` on the subtitle span is the technique that creates seamless per-line-width highlights
+- Pure CSS hover (no client component) keeps the home page a server component
+
+### Key files changed
+- `saas/public/images/winery1.jpg`, `winery2.jpg`, `winery3.jpg` — NEW
+- `saas/app/admin/content/BackgroundsTab.tsx` — NEW
+- `saas/app/admin/content/ContentClient.tsx` — backgrounds mode added
+- `saas/app/admin/content/page.tsx` — fetches bg settings
+- `saas/app/actions/settings.ts` — expanded revalidatePath
+- `saas/app/(site)/page.tsx` — full hero rewrite with all combination effects
+- `saas/app/(site)/about/page.tsx` — 300px hero banner, frosted card style
+- `saas/app/(site)/contact/page.tsx` — 300px hero banner, frosted card style
+
+### Next up
+- User test the Backgrounds tab — pick images, save, verify live
+- Gallery page still outstanding (images in `public/images/slider/` + `gallery/`)
+- PDF invoice email attachment still outstanding
+- Minor fixes #5–#7 from security plan
+
+---
+
+## 2026-06-19 — Multi-tenant architecture plan (full detail)
+
+### Completed
+- **Multi-tenant plan written** — `vault/Plan-MultiTenant.md` created; full 8-phase plan for growing from 1 to N client companies on a shared DB + single deployment
+- **Roadmap v3 expanded** — v3 section updated to reference the plan with sprint-by-sprint checkboxes
+
+### Key decisions
+- Architecture: Option A — single Supabase DB with `tenantId` column on every table (vs. separate DB per client or separate deployments)
+- Domain routing: Next.js middleware reads `Host` header → resolves `tenantId`
+- RLS is the safety net; query-level scoping is the primary guard
+- Theming (colors, logo) via CSS variables — no separate codebase per client
+
+### Key files changed
+- `vault/Plan-MultiTenant.md` — NEW: full multi-tenant plan, 8 phases, sprint grouping
+- `vault/Roadmap.md` — v3 Platform section expanded with sprint breakdown + plan reference
+
+### Next up
+- Start Sprint 1 when ready: create `tenants` table, seed it, write middleware, add nullable `tenantId` to all tables
+
+---
+
 ## 2026-06-02 — Mobile admin plan + show password (full detail)
 
 ### Completed
@@ -20,10 +98,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - `vault/Roadmap.md` — v1.4 Mobile Admin section added; old v1.4 Page Backgrounds renamed to v1.5
 - `vault/FeatureLog.md` — feature #71 added
 
-### Next up
-- Build mobile admin: start with Orders list card view (biggest impact)
-- Then filter bar collapse
-- Then order detail audit + wine orders column fix
+### Next up (remaining from this session)
+- Order detail page: tap target audit (last piece of mobile plan)
+- User test all mobile admin changes on a real phone
 
 ---
 

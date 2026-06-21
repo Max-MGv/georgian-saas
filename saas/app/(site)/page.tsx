@@ -12,7 +12,7 @@ export default async function Home() {
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
 
-  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent] = await Promise.all([
+  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
     db.company.findMany({ orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } }),
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
@@ -23,30 +23,145 @@ export default async function Home() {
     getBlockedDates(),
     getContentMap('home', locale),
     getContentMap('form', locale),
+    getSetting('home_hero_bg_path'),
+    getSetting('home_hero_bg_x'),
+    getSetting('home_hero_bg_y'),
+    getSetting('home_hero_bg_zoom'),
+    getSetting('home_hero_bg_mobile_path'),
+    getSetting('home_hero_bg_mobile_x'),
+    getSetting('home_hero_bg_mobile_y'),
+    getSetting('home_hero_bg_mobile_zoom'),
   ])
+
+  const activeBgPath       = heroBgPath || '/images/winery1.jpg'
+  const activeMobileBgPath = heroBgMobilePath || activeBgPath
 
   return (
     <>
-      {/* Hero */}
-      <section className="px-6 pt-20 pb-16 text-center max-w-2xl mx-auto">
-        <p className="text-sm font-medium tracking-widest uppercase mb-4" style={{ color: '#8b4513' }}>
-          {c['home_location_eyebrow'] || 'Kakheti, Georgia'}
-        </p>
-        <div className="flex justify-center mb-4">
-          <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '80px', width: 'auto' }} />
-        </div>
-        <p className="text-lg mb-10" style={{ color: '#6b5a47' }}>
-          {c['home_hero_subtitle'] || 'Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle.'}
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <a href="#book" className="btn-wine font-semibold px-8 py-3 rounded-lg">
-            {c['home_book_btn'] || t(locale, 'nav.book')}
-          </a>
-          <a href="/wines" className="border font-semibold px-8 py-3 rounded-lg transition-opacity hover:opacity-70" style={{ borderColor: '#c9b99a', color: '#6b5a47' }}>
-            {c['home_order_wine_btn'] || t(locale, 'home.order_wine')}
-          </a>
-        </div>
-      </section>
+      {/* Hero — combination: light overlay with hover-darken, logo on cream bg, individual text pills, separate button boxes */}
+      <style>{`
+        .hero-banner .hero-overlay {
+          transition: background-color 0.45s ease;
+        }
+        .hero-banner:hover .hero-overlay {
+          background-color: rgba(28,16,8,0.70) !important;
+        }
+        .hero-btn {
+          transition: transform 0.2s ease, box-shadow 0.25s ease, brightness 0.2s ease;
+        }
+        .hero-banner:hover .hero-btn {
+          transform: scale(1.04);
+        }
+        .hero-btn-book:hover {
+          box-shadow: 0 0 18px rgba(180,40,50,0.75), 0 0 40px rgba(180,40,50,0.35);
+          transform: scale(1.06) !important;
+        }
+        .hero-btn-wine:hover {
+          box-shadow: 0 0 18px rgba(255,255,255,0.35), 0 0 36px rgba(255,255,255,0.15);
+          transform: scale(1.06) !important;
+        }
+      `}</style>
+
+      <div className="hero-banner relative overflow-hidden">
+        {/* Mobile background — cover baseline, scale for zoom */}
+        <div className="block sm:hidden absolute inset-0" style={{
+          backgroundImage: `url(${activeMobileBgPath})`,
+          backgroundPosition: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
+          backgroundSize: 'cover',
+          transform: `scale(${(parseInt(heroBgMobileZoom || '') || 100) / 100})`,
+          transformOrigin: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
+        }} />
+        {/* Desktop background — zoom controlled from admin */}
+        <div className="hidden sm:block absolute inset-0" style={{
+          backgroundImage: `url(${activeBgPath})`,
+          backgroundPosition: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
+          backgroundSize: `${heroBgZoom || '110'}%`,
+        }} />
+        {/* Light tint — darkens on hover via CSS */}
+        <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
+
+        {/* #3 — taller hero with more vertical padding */}
+        <section className="relative px-6 pt-24 pb-20 text-center max-w-xl mx-auto flex flex-col items-center gap-6">
+
+          {/* Logo on cream pill — #4 rounder corners */}
+          <div style={{
+            backgroundColor: 'rgba(245,239,230,0.92)',
+            borderRadius: '22px',
+            padding: '14px 28px',
+            display: 'inline-block',
+          }}>
+            <img src="/icons/logo-dark.svg" alt="Nikalas Marani"
+              style={{ height: '72px', width: 'auto', display: 'block' }} />
+          </div>
+
+          {/* Eyebrow — per-line inline highlight */}
+          <p className="text-xs font-semibold tracking-widest uppercase text-center">
+            <span style={{
+              backgroundColor: 'rgba(10,5,2,0.58)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              borderRadius: '999px',
+              padding: '4px 12px',
+              color: 'rgba(255,255,255,0.82)',
+              boxDecorationBreak: 'clone',
+              WebkitBoxDecorationBreak: 'clone',
+              display: 'inline',
+              lineHeight: '2',
+            }}>
+              {c['home_location_eyebrow'] || 'Kakheti, Georgia'}
+            </span>
+          </p>
+
+          {/* Subtitle */}
+          <p className="text-center mx-auto" style={{ width: 'min(90%, 680px)', fontSize: 'clamp(0.8rem, 2.2vw, 1.05rem)' }}>
+            <span style={{
+              backgroundColor: 'rgba(10,5,2,0.65)',
+              borderRadius: '6px',
+              padding: '10px 14px',
+              color: 'rgba(255,255,255,0.9)',
+              display: 'block',
+              lineHeight: '1.6',
+            }}>
+              {c['home_hero_subtitle'] || 'Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle.'}
+            </span>
+          </p>
+
+          {/* Buttons — #5 more gap above buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 mt-3">
+            <a href="#book" className="hero-btn hero-btn-book" style={{
+              backgroundColor: 'rgba(124,29,35,0.92)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              border: '2px solid rgba(255,255,255,0.65)',
+              borderRadius: '8px',
+              padding: '12px 32px',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '0.95rem',
+              textDecoration: 'none',
+              display: 'inline-block',
+            }}>
+              {c['home_book_btn'] || t(locale, 'nav.book')}
+            </a>
+            <a href="/wines" className="hero-btn hero-btn-wine" style={{
+              backgroundColor: 'rgba(10,5,2,0.52)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              border: '2px solid rgba(255,255,255,0.65)',
+              borderRadius: '8px',
+              padding: '12px 32px',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '0.95rem',
+              textDecoration: 'none',
+              display: 'inline-block',
+            }}>
+              {c['home_order_wine_btn'] || t(locale, 'home.order_wine')}
+            </a>
+          </div>
+
+        </section>
+      </div>
 
       <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: '#e0d4c0' }} /></div>
 

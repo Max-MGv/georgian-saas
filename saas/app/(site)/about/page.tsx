@@ -8,16 +8,61 @@ export const dynamic = 'force-dynamic'
 export default async function AboutPage() {
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const c = await getContentMap('about', locale)
+  const [c, bgPath, bgX, bgY, bgZoom, bgMobilePath, bgMobileX, bgMobileY, bgMobileZoom] = await Promise.all([
+    getContentMap('about', locale),
+    getSetting('about_hero_bg_path'),
+    getSetting('about_hero_bg_x'),
+    getSetting('about_hero_bg_y'),
+    getSetting('about_hero_bg_zoom'),
+    getSetting('about_hero_bg_mobile_path'),
+    getSetting('about_hero_bg_mobile_x'),
+    getSetting('about_hero_bg_mobile_y'),
+    getSetting('about_hero_bg_mobile_zoom'),
+  ])
+
+  const activeBgPath       = bgPath || '/images/winery2.jpg'
+  const activeMobileBgPath = bgMobilePath || activeBgPath
 
   return (
+    <>
+      {/* Hero banner — Option C: light overlay + frosted text card */}
+      <div className="relative overflow-hidden" style={{ height: '300px' }}>
+        {/* Mobile background — cover baseline, scale for zoom */}
+        <div className="block sm:hidden absolute inset-0" style={{
+          backgroundImage: `url(${activeMobileBgPath})`,
+          backgroundPosition: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
+          backgroundSize: 'cover',
+          transform: `scale(${(parseInt(bgMobileZoom || '') || 100) / 100})`,
+          transformOrigin: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
+        }} />
+        {/* Desktop background */}
+        <div className="hidden sm:block absolute inset-0" style={{
+          backgroundImage: `url(${activeBgPath})`,
+          backgroundPosition: `${bgX || '50'}% ${bgY || '50'}%`,
+          backgroundSize: `${bgZoom || '110'}%`,
+        }} />
+        <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
+        <div className="relative h-full flex items-end max-w-2xl mx-auto px-6 pb-10">
+          <div style={{
+            backgroundColor: 'rgba(10,5,2,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            borderRadius: '12px',
+            padding: '14px 22px',
+          }}>
+            <p className="text-sm font-medium tracking-widest uppercase mb-1.5"
+              style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {c['about_eyebrow'] || t(locale, 'about.eyebrow')}
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-bold" style={{ color: 'white' }}>
+              {c['about_heading'] || t(locale, 'about.heading')}
+            </h1>
+          </div>
+        </div>
+      </div>
+
     <div className="max-w-2xl mx-auto px-6 py-16">
-      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>
-        {c['about_eyebrow'] || t(locale, 'about.eyebrow')}
-      </p>
-      <h1 className="text-3xl sm:text-4xl font-bold mb-8" style={{ color: '#1c1008' }}>
-        {c['about_heading'] || t(locale, 'about.heading')}
-      </h1>
+      {/* heading moved into hero above */}
       <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
       <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
@@ -57,5 +102,6 @@ export default async function AboutPage() {
         </a>
       </div>
     </div>
+    </>
   )
 }

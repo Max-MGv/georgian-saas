@@ -8,7 +8,21 @@ export const dynamic = 'force-dynamic'
 export default async function ContactPage() {
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const c = await getContentMap('contact', locale)
+
+  const [c, bgPath, bgX, bgY, bgZoom, bgMobilePath, bgMobileX, bgMobileY, bgMobileZoom] = await Promise.all([
+    getContentMap('contact', locale),
+    getSetting('contact_hero_bg_path'),
+    getSetting('contact_hero_bg_x'),
+    getSetting('contact_hero_bg_y'),
+    getSetting('contact_hero_bg_zoom'),
+    getSetting('contact_hero_bg_mobile_path'),
+    getSetting('contact_hero_bg_mobile_x'),
+    getSetting('contact_hero_bg_mobile_y'),
+    getSetting('contact_hero_bg_mobile_zoom'),
+  ])
+
+  const activeBgPath       = bgPath || '/images/winery3.jpg'
+  const activeMobileBgPath = bgMobilePath || activeBgPath
 
   const cards = [
     { label: c['contact_label_phone']    || t(locale, 'contact.label_phone'),    value: c['contact_phone']        || '+995 599 96 33 17',       note: c['contact_note_phone']    || t(locale, 'contact.note_phone') },
@@ -18,47 +32,80 @@ export default async function ContactPage() {
   ]
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-16">
-      <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>
-        {c['contact_eyebrow'] || t(locale, 'contact.eyebrow')}
-      </p>
-      <h1 className="text-3xl sm:text-4xl font-bold mb-8" style={{ color: '#1c1008' }}>
-        {c['contact_heading'] || t(locale, 'contact.heading')}
-      </h1>
-      <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
-        {cards.map(item => (
-          <div key={item.label} className="rounded-xl p-5 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8b4513' }}>{item.label}</p>
-            <p className="font-semibold mb-1" style={{ color: '#1c1008' }}>{item.value}</p>
-            <p className="text-sm" style={{ color: '#a89070' }}>{item.note}</p>
+    <>
+      {/* Hero banner — Option C: light overlay + frosted text card */}
+      <div className="relative overflow-hidden" style={{ height: '300px' }}>
+        {/* Mobile background — cover baseline, scale for zoom */}
+        <div className="block sm:hidden absolute inset-0" style={{
+          backgroundImage: `url(${activeMobileBgPath})`,
+          backgroundPosition: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
+          backgroundSize: 'cover',
+          transform: `scale(${(parseInt(bgMobileZoom || '') || 100) / 100})`,
+          transformOrigin: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
+        }} />
+        {/* Desktop background */}
+        <div className="hidden sm:block absolute inset-0" style={{
+          backgroundImage: `url(${activeBgPath})`,
+          backgroundPosition: `${bgX || '50'}% ${bgY || '50'}%`,
+          backgroundSize: `${bgZoom || '110'}%`,
+        }} />
+        <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
+        <div className="relative h-full flex items-end max-w-2xl mx-auto px-6 pb-10">
+          <div style={{
+            backgroundColor: 'rgba(10,5,2,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            borderRadius: '12px',
+            padding: '14px 22px',
+          }}>
+            <p className="text-sm font-medium tracking-widest uppercase mb-1.5"
+              style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {c['contact_eyebrow'] || t(locale, 'contact.eyebrow')}
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-bold" style={{ color: 'white' }}>
+              {c['contact_heading'] || t(locale, 'contact.heading')}
+            </h1>
           </div>
-        ))}
-      </div>
-
-      <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
-
-      <section className="mb-12">
-        <h2 className="text-lg font-bold mb-4" style={{ color: '#1c1008' }}>
-          {c['contact_find_us'] || t(locale, 'contact.find_us')}
-        </h2>
-        <div className="w-full h-64 rounded-xl border flex items-center justify-center text-sm" style={{ backgroundColor: '#ede5d8', borderColor: '#e0d4c0', color: '#a89070' }}>
-          {t(locale, 'contact.map_placeholder')}
         </div>
-        <p className="text-sm mt-3" style={{ color: '#6b5a47' }}>
-          {c['contact_map_directions'] || t(locale, 'contact.map_directions')}
-        </p>
-      </section>
-
-      <div className="text-center">
-        <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>
-          {c['contact_book_cta'] || t(locale, 'contact.book_cta')}
-        </p>
-        <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
-          {c['contact_book_btn'] || t(locale, 'contact.book_btn')}
-        </a>
       </div>
-    </div>
+
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        {/* heading moved into hero above */}
+        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
+          {cards.map(item => (
+            <div key={item.label} className="rounded-xl p-5 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+              <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8b4513' }}>{item.label}</p>
+              <p className="font-semibold mb-1" style={{ color: '#1c1008' }}>{item.value}</p>
+              <p className="text-sm" style={{ color: '#a89070' }}>{item.note}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+
+        <section className="mb-12">
+          <h2 className="text-lg font-bold mb-4" style={{ color: '#1c1008' }}>
+            {c['contact_find_us'] || t(locale, 'contact.find_us')}
+          </h2>
+          <div className="w-full h-64 rounded-xl border flex items-center justify-center text-sm" style={{ backgroundColor: '#ede5d8', borderColor: '#e0d4c0', color: '#a89070' }}>
+            {t(locale, 'contact.map_placeholder')}
+          </div>
+          <p className="text-sm mt-3" style={{ color: '#6b5a47' }}>
+            {c['contact_map_directions'] || t(locale, 'contact.map_directions')}
+          </p>
+        </section>
+
+        <div className="text-center">
+          <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>
+            {c['contact_book_cta'] || t(locale, 'contact.book_cta')}
+          </p>
+          <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
+            {c['contact_book_btn'] || t(locale, 'contact.book_btn')}
+          </a>
+        </div>
+      </div>
+    </>
   )
 }

@@ -25,7 +25,7 @@ Complete this before writing a single line of product code.
 - [x] Decide: full site replacement vs. booking widget only → **Full site, but MVP = booking widget + admin only. Public site (home, about, gallery, wine catalogue) comes after.**
 
 ### Business Model
-- [x] Chosen architecture: per-client instances (separate Vercel + Supabase per client)
+- [x] Chosen architecture: multi-tenant (single Vercel deployment + single Supabase DB, `tenantId` per row, custom domain per client — see `vault/Plan-MultiTenant.md`)
 - [x] Draft pricing: 150–200 GEL setup + 50 GEL/month
 - [ ] Confirm pricing with partner
 - [ ] Define what "setup" includes (domain config, branding, DB seed, onboarding call?)
@@ -33,13 +33,15 @@ Complete this before writing a single line of product code.
 - [ ] Draft a one-paragraph sales pitch in Georgian
 
 ### Operations
-- [x] Define client onboarding checklist (what steps to deploy a new client instance):
-  1. Client creates free Supabase account (supabase.com)
-  2. Client creates a new Supabase project, shares connection string with us
-  3. We deploy a new Vercel project from the same GitHub repo
-  4. We add the client's env vars (Supabase keys) to Vercel
-  5. We run `prisma migrate deploy` to set up their DB tables
-  6. Done — their instance is live
+- [x] Define client onboarding checklist (what steps to add a new client — updated for multi-tenant architecture):
+  1. Add their domain to the Vercel project (Settings → Domains)
+  2. Client points their domain DNS at Vercel
+  3. Insert a row in the `tenants` table (name, domain, slug)
+  4. Create their admin Supabase user, link to their `tenantId`
+  5. Seed their settings (prices, min guests, payment details, branding)
+  6. Done — their instance is live on their own domain
+  
+  *(Old plan was one Supabase + one Vercel deployment per client — replaced by single shared deployment, see `vault/Plan-MultiTenant.md`)*
 - [ ] Decide: who handles client support? (you, partner, shared?)
 - [ ] Decide: what SLA / uptime expectation do you offer?
 - [x] Hosting path: localhost for development → Vercel when ready for first client.
@@ -170,24 +172,40 @@ Full plan: `vault/Plan-MobileAdmin.md`
 Goal: make the admin usable on a phone for the tasks an owner does on the go (check orders, read details, update status). Not full desktop parity.
 
 - [x] **Show password toggle on admin login** — eye icon button toggles `type="password"` / `type="text"` on the password field
-- [ ] **Orders list: mobile card view** — on screens < 768px, hide table and show a card per order (name, date/time, guests, visit type, status badge, total); tap card → order detail
-- [ ] **Orders filter bar: collapsible on mobile** — show Upcoming button + Filters toggle on mobile; expanded panel shows all filter inputs; desktop unchanged
+- [x] **Orders list: mobile card view** — on screens < 768px, hide table and show a card per order (name, date/time, guests, visit type, status badge, total); tap card → order detail; status badge tappable inline
+- [x] **Orders filter bar: collapsible on mobile** — show Upcoming button + Filters(n) toggle + Clear on mobile; expanded panel with date/company/status; desktop bar unchanged
 - [ ] **Order detail: tap target audit** — verify all buttons ≥ 44px tall, no horizontal overflow
-- [ ] **Wine Orders: column collapse** — 3-column card grid collapses to 1 column on mobile
+- [x] **Wine Orders: column collapse** — card columns stack vertically on mobile (flex-col md:flex-row); col borders flip from left → top on mobile
 
 ---
 
-## v1.5 — Page Background Customization
+## v1.5 — Page Background Customization ✅ COMPLETE (2026-06-19)
 
 Full plan: `vault/Plan-PageBackgrounds.md`
 
 **Designed to be fully reversible** — no new DB models, no file uploads, no new routes. Uses existing `Setting` table. Public pages fall back to hardcoded images if settings are missing. Revert = one `git revert` command.
 
-- [ ] **Backgrounds tab in `/admin/content`** — new tab alongside Text / Visual
-- [ ] **`BackgroundImageEditor` component** — image picker grid (from `public/images/`), X/Y position sliders, zoom slider, live preview box (300×200px updates as you drag)
-- [ ] **Home hero wired** — reads `home_hero_bg_path` / `home_hero_bg_position` / `home_hero_bg_size` settings; falls back to current hardcoded image
-- [ ] **About hero wired** — same pattern with `about_hero_bg_*` keys
-- [ ] **Contact hero wired** — same pattern with `contact_hero_bg_*` keys
+> **Implementation note:** settings use `_bg_x` / `_bg_y` / `_bg_zoom` (separate numeric keys) instead of the planned `_bg_position` / `_bg_size`. Live preview is 200×128px (not 300×200px). Home page got a full combination-style hero (logo box, per-line text pills, hover-darken overlay, button glows) rather than the planned simple overlay. About + Contact got frosted-card style heroes. See Features #75–#77.
+
+- [x] **Backgrounds tab in `/admin/content`** — new tab alongside Text / Visual
+- [x] **`BackgroundImageEditor` component** — image picker grid (from `public/images/`), X/Y position sliders, zoom slider, live preview box (200×128px updates as you drag) — implemented as `BackgroundsTab.tsx` with inline `PageBgEditor`
+- [x] **Home hero wired** — reads `home_hero_bg_path/x/y/zoom`; combination hero style with hover effects; falls back to `winery1.jpg`
+- [x] **About hero wired** — 300px frosted-card banner; reads `about_hero_bg_*`; falls back to `winery2.jpg`
+- [x] **Contact hero wired** — 300px frosted-card banner; reads `contact_hero_bg_*`; falls back to `winery3.jpg`
+
+---
+
+## Draft Ideas / Backlog (not planned yet — notes only)
+
+These are rough ideas, not committed features. Scope and approach TBD.
+
+- [ ] **Company soft-auth / access codes** — companies get a one-time code (admin can regenerate or hardcode it); code entered on booking form or wine order form; valid code pre-fills company data (name, tax code, address, etc.); company profile page in admin gets extended with all order-relevant fields; admin can edit company profile. *(Draft: auth flow, code delivery method, and form UX all TBD)*
+- [ ] **Editable social / contact links in admin** — admin page to change the URLs behind all contact icons (Instagram, Facebook, phone, email, etc.) so they don't need to be hardcoded. *(Draft: likely extends existing SiteContent or Settings store)*
+- [ ] **Forgot password for admins** — "Forgot password" flow on the admin login page; sends a reset link to Max or the company rep's email. *(Draft: Supabase has a built-in reset flow — needs deciding who receives the email)*
+- [ ] **Feature flags panel (for Max)** — internal panel where Max can toggle features on/off (e.g. hide wine orders tab, disable image backgrounds, hide masterclass section); scoped to admin UI and public site. *(Draft: list of toggleable features TBD)*
+- [ ] **Printable daily booking sheet** — print/export view for employees; rows grouped by day, each row shows one booking with all relevant info (name, time, guests, visit type, company, notes). *(Draft: format and trigger TBD — browser print or PDF?)*
+- [ ] **Printable wine packing sheet** — print/export view for employees; shows total bottles per wine across all upcoming orders, with breakdown of how to distribute into boxes per company order. *(Draft: box-packing logic TBD)*
+- [ ] **Wine orders — total upcoming bottles banner** — sticky or top-of-page summary on the wine orders admin page showing total bottles per wine across all non-delivered orders, so employees can see packing totals at a glance without printing. *(Draft: filter scope TBD — all pending, or configurable date range?)*
 
 ---
 
@@ -202,7 +220,30 @@ Full plan: `vault/Plan-PageBackgrounds.md`
 
 ## v3 — Platform
 
-- [ ] Multi-tenant architecture (shared DB, subdomain per client)
+Full plan: `vault/Plan-MultiTenant.md`
+
+**Sprint 1** (safe, additive):
+- [ ] `tenants` table + seed with current client
+- [ ] Middleware resolves `tenantId` from `Host` header
+- [ ] Nullable `tenantId` column on every table + backfill
+
+**Sprint 2** (the big flip):
+- [ ] All server actions + DB queries scoped by `tenantId`
+- [ ] Supabase RLS updated to enforce `tenantId`
+
+**Sprint 3** (independent, any order):
+- [ ] SiteContent scoped per tenant
+- [ ] Settings scoped per tenant
+- [ ] BlockedDates scoped per tenant
+
+**Sprint 4:**
+- [ ] Per-tenant admin auth (Supabase user tied to `tenantId`)
+
+**Anytime:**
+- [ ] Theming — `theme` JSON on `tenants` table, CSS variables
+
+**When ready:**
+- [ ] First new client onboarding (Vercel domain, DB row, admin login)
 - [ ] Self-service onboarding (client signs up, sets up their own instance)
 - [ ] Billing dashboard
 

@@ -32,6 +32,9 @@ export async function updateSetting(key: string, value: string) {
     create: { key, value },
   })
   revalidatePath('/admin/settings')
+  revalidatePath('/admin/content')
   revalidatePath('/')
+  revalidatePath('/about')
+  revalidatePath('/contact')
 }
 
