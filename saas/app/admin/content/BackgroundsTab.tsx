@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { uploadBgImage, deleteBgImage } from '@/app/actions/uploadImage'
 
@@ -152,16 +152,26 @@ function ImagePicker({
 function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   path: string; x: number; y: number; size: string; scale?: number; pageKey: string; isMobile: boolean
 }) {
+  // Mirror the actual site viewport width so cover-scaling crops identically
+  const [vw, setVw] = useState(1280)
+  useEffect(() => {
+    setVw(window.innerWidth)
+    const onResize = () => setVw(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const heroHeight = pageKey === 'home' ? 480 : 300
   const aspectRatio = isMobile
     ? (pageKey === 'home' ? '390/520' : '390/300')
-    : (pageKey === 'home' ? '8/3'     : '1280/300')
+    : `${vw}/${heroHeight}`
 
   const isPortrait = isMobile && pageKey === 'home'
 
   return (
     <div className={isPortrait ? 'flex flex-col items-center w-full' : 'w-full'}>
       <p className="text-xs mb-1.5 w-full" style={{ color: C.muted }}>
-        Preview — {isMobile ? 'mobile (390px)' : 'desktop at 1280px viewport'} — adjust sliders then Save to apply
+        Preview — {isMobile ? 'mobile (390px)' : `desktop at ${vw}px viewport`} — adjust sliders then Save to apply
       </p>
 
       <div style={{
