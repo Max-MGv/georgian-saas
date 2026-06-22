@@ -1,6 +1,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
+import { getSiteContext } from '@/lib/siteContext'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getContentMap } from '@/app/actions/siteContent'
 import { cookies } from 'next/headers'
@@ -8,12 +9,22 @@ import BookingForm from '@/components/BookingForm'
 import { t } from '@/lib/t'
 import Image from 'next/image'
 import { preload } from 'react-dom'
+import EditableText from '@/components/EditableText'
+import EditModeSuppressor from '@/components/EditModeSuppressor'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Home() {
+type PageProps = { searchParams: Promise<{ editMode?: string; locale?: string }> }
+
+export default async function Home({ searchParams }: PageProps) {
+  const sp = await searchParams
+  const isEditMode = sp.editMode === 'true'
+
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
-  const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
+  const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
+  const locale = sp.locale ?? cookieLocale
+
+  const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
   const tenantId = await getTenantId()
   const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
@@ -50,8 +61,26 @@ export default async function Home() {
   preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
   if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
+  // Inline-or-editable helper — captured over locale, isAdmin, c
+  function ET({ k, s, lbl, fb, as: Tag, className, style }: {
+    k: string; s: string; lbl: string; fb: string
+    as: keyof React.JSX.IntrinsicElements; className?: string; style?: React.CSSProperties
+  }) {
+    if (!isAdmin) {
+      const T = Tag as React.ElementType
+      return <T className={className} style={style}>{c[k] ?? fb}</T>
+    }
+    return (
+      <EditableText contentKey={k} section={s} label={lbl} locale={locale} fallback={fb}
+        isAdmin as={Tag} className={className} style={style}>
+        {c[k] ?? null}
+      </EditableText>
+    )
+  }
+
   return (
     <>
+      {isEditMode && isAdmin && <EditModeSuppressor />}
       {/* Hero — combination: light overlay with hover-darken, logo on cream bg, individual text pills, separate button boxes */}
       <style>{`
         .hero-banner .hero-overlay {
@@ -101,7 +130,7 @@ export default async function Home() {
 
         <section className="relative px-6 pt-24 pb-20 sm:pt-0 sm:pb-0 sm:h-full sm:justify-center text-center max-w-xl mx-auto flex flex-col items-center gap-6">
 
-          {/* Logo on cream pill — #4 rounder corners */}
+          {/* Logo on cream pill */}
           <div style={{
             backgroundColor: 'rgba(245,239,230,0.92)',
             borderRadius: '22px',
@@ -113,39 +142,75 @@ export default async function Home() {
               style={{ height: '72px', width: 'auto', display: 'block' }} />
           </div>
 
-          {/* Eyebrow — per-line inline highlight */}
+          {/* Eyebrow */}
           <p className="text-xs font-semibold tracking-widest uppercase text-center">
-            <span style={{
-              backgroundColor: 'rgba(10,5,2,0.58)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              borderRadius: '999px',
-              padding: '4px 12px',
-              color: 'rgba(255,255,255,0.82)',
-              boxDecorationBreak: 'clone',
-              WebkitBoxDecorationBreak: 'clone',
-              display: 'inline',
-              lineHeight: '2',
-            }}>
-              {c['home_location_eyebrow'] || 'Kakheti, Georgia'}
-            </span>
+            {isAdmin ? (
+              <EditableText contentKey="home_location_eyebrow" section="home" label="Location eyebrow"
+                locale={locale} fallback="Kakheti, Georgia" isAdmin as="span"
+                style={{
+                  backgroundColor: 'rgba(10,5,2,0.58)',
+                  backdropFilter: 'blur(4px)',
+                  WebkitBackdropFilter: 'blur(4px)',
+                  borderRadius: '999px',
+                  padding: '4px 12px',
+                  color: 'rgba(255,255,255,0.82)',
+                  boxDecorationBreak: 'clone',
+                  WebkitBoxDecorationBreak: 'clone',
+                  display: 'inline',
+                  lineHeight: '2',
+                }}>
+                {c['home_location_eyebrow'] ?? null}
+              </EditableText>
+            ) : (
+              <span style={{
+                backgroundColor: 'rgba(10,5,2,0.58)',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                borderRadius: '999px',
+                padding: '4px 12px',
+                color: 'rgba(255,255,255,0.82)',
+                boxDecorationBreak: 'clone',
+                WebkitBoxDecorationBreak: 'clone',
+                display: 'inline',
+                lineHeight: '2',
+              }}>
+                {c['home_location_eyebrow'] || 'Kakheti, Georgia'}
+              </span>
+            )}
           </p>
 
           {/* Subtitle */}
           <p className="text-center mx-auto" style={{ width: 'min(90%, 680px)', fontSize: 'clamp(0.8rem, 2.2vw, 1.05rem)' }}>
-            <span style={{
-              backgroundColor: 'rgba(10,5,2,0.65)',
-              borderRadius: '6px',
-              padding: '10px 14px',
-              color: 'rgba(255,255,255,0.9)',
-              display: 'block',
-              lineHeight: '1.6',
-            }}>
-              {c['home_hero_subtitle'] || 'Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle.'}
-            </span>
+            {isAdmin ? (
+              <EditableText contentKey="home_hero_subtitle" section="home" label="Hero subtitle"
+                locale={locale}
+                fallback="Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle."
+                isAdmin as="span"
+                style={{
+                  backgroundColor: 'rgba(10,5,2,0.65)',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  color: 'rgba(255,255,255,0.9)',
+                  display: 'block',
+                  lineHeight: '1.6',
+                }}>
+                {c['home_hero_subtitle'] ?? null}
+              </EditableText>
+            ) : (
+              <span style={{
+                backgroundColor: 'rgba(10,5,2,0.65)',
+                borderRadius: '6px',
+                padding: '10px 14px',
+                color: 'rgba(255,255,255,0.9)',
+                display: 'block',
+                lineHeight: '1.6',
+              }}>
+                {c['home_hero_subtitle'] || 'Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle.'}
+              </span>
+            )}
           </p>
 
-          {/* Buttons — #5 more gap above buttons */}
+          {/* Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 mt-3">
             <a href="#book" className="hero-btn hero-btn-book" style={{
               backgroundColor: 'rgba(124,29,35,0.92)',
@@ -160,7 +225,12 @@ export default async function Home() {
               textDecoration: 'none',
               display: 'inline-block',
             }}>
-              {c['home_book_btn'] || t(locale, 'nav.book')}
+              {isAdmin ? (
+                <EditableText contentKey="home_book_btn" section="home" label='"Book a Visit" button'
+                  locale={locale} fallback={t(locale, 'nav.book')} isAdmin as="span">
+                  {c['home_book_btn'] ?? null}
+                </EditableText>
+              ) : (c['home_book_btn'] || t(locale, 'nav.book'))}
             </a>
             <a href="/wines" className="hero-btn hero-btn-wine" style={{
               backgroundColor: 'rgba(10,5,2,0.52)',
@@ -175,7 +245,12 @@ export default async function Home() {
               textDecoration: 'none',
               display: 'inline-block',
             }}>
-              {c['home_order_wine_btn'] || t(locale, 'home.order_wine')}
+              {isAdmin ? (
+                <EditableText contentKey="home_order_wine_btn" section="home" label='"Order Wine" button'
+                  locale={locale} fallback={t(locale, 'home.order_wine')} isAdmin as="span">
+                  {c['home_order_wine_btn'] ?? null}
+                </EditableText>
+              ) : (c['home_order_wine_btn'] || t(locale, 'home.order_wine'))}
             </a>
           </div>
 
@@ -188,19 +263,23 @@ export default async function Home() {
       <section className="px-6 py-14 max-w-2xl mx-auto grid sm:grid-cols-2 gap-4">
         {[
           {
-            title: c['home_package1_title'] || t(locale, 'form.tasting'),
-            desc:  c['home_package1_desc']  || '2 red wines, 1 white, chacha — guided by the winemaker',
+            tk: 'home_package1_title', dk: 'home_package1_desc',
+            tFb: t(locale, 'form.tasting'),
+            dFb: '2 red wines, 1 white, chacha — guided by the winemaker',
             price: 50, min: parseInt(minGuestsTasting) || 4,
           },
           {
-            title: c['home_package2_title'] || t(locale, 'form.tasting_lunch'),
-            desc:  c['home_package2_desc']  || '3 wines, chacha brandy, and a full traditional Georgian meal',
+            tk: 'home_package2_title', dk: 'home_package2_desc',
+            tFb: t(locale, 'form.tasting_lunch'),
+            dFb: '3 wines, chacha brandy, and a full traditional Georgian meal',
             price: 100, min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
-          <div key={pkg.title} className="rounded-xl p-6 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-            <h3 className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }}>{pkg.title}</h3>
-            <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>{pkg.desc}</p>
+          <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+            <ET k={pkg.tk} s="home" lbl={pkg.tFb + ' — title'} fb={pkg.tFb}
+              as="h3" className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }} />
+            <ET k={pkg.dk} s="home" lbl={pkg.tFb + ' — description'} fb={pkg.dFb}
+              as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
             <p className="font-bold text-2xl" style={{ color: '#7c1d23' }}>
               {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
             </p>
@@ -213,10 +292,12 @@ export default async function Home() {
 
       {/* Booking form */}
       <section id="book" className="px-6 py-16 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-2" style={{ color: '#1c1008' }}>{c['home_book_heading'] || t(locale, 'home.book_heading')}</h2>
-        <p className="text-sm mb-8" style={{ color: '#6b5a47' }}>
-          {c['home_booking_intro'] || 'Fill in the form and we will confirm your booking shortly.'}
-        </p>
+        <ET k="home_book_heading" s="home" lbl="Booking section heading"
+          fb={t(locale, 'home.book_heading')} as="h2"
+          className="text-2xl font-bold mb-2" style={{ color: '#1c1008' }} />
+        <ET k="home_booking_intro" s="home" lbl="Booking intro text"
+          fb="Fill in the form and we will confirm your booking shortly." as="p"
+          className="text-sm mb-8" style={{ color: '#6b5a47' }} />
         <BookingForm
           locale={locale}
           companies={companies}

@@ -1,14 +1,26 @@
 import { getContentMap } from '@/app/actions/siteContent'
 import { getSetting } from '@/app/actions/settings'
+import { getSiteContext } from '@/lib/siteContext'
 import { cookies } from 'next/headers'
 import { t } from '@/lib/t'
 import { preload } from 'react-dom'
+import EditableText from '@/components/EditableText'
+import EditModeSuppressor from '@/components/EditModeSuppressor'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AboutPage() {
+type PageProps = { searchParams: Promise<{ editMode?: string; locale?: string }> }
+
+export default async function AboutPage({ searchParams }: PageProps) {
+  const sp = await searchParams
+  const isEditMode = sp.editMode === 'true'
+
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
-  const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
+  const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
+  const locale = sp.locale ?? cookieLocale
+
+  const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
+
   const [c, bgPath, bgX, bgY, bgZoom, bgMobilePath, bgMobileX, bgMobileY, bgMobileZoom] = await Promise.all([
     getContentMap('about', locale),
     getSetting('about_hero_bg_path'),
@@ -34,8 +46,26 @@ export default async function AboutPage() {
   preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
   if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
+  // Inline-or-editable helper — captured over locale, isAdmin, c
+  function ET({ k, s, lbl, fb, as: Tag, className, style }: {
+    k: string; s: string; lbl: string; fb: string
+    as: keyof React.JSX.IntrinsicElements; className?: string; style?: React.CSSProperties
+  }) {
+    if (!isAdmin) {
+      const T = Tag as React.ElementType
+      return <T className={className} style={style}>{c[k] ?? fb}</T>
+    }
+    return (
+      <EditableText contentKey={k} section={s} label={lbl} locale={locale} fallback={fb}
+        isAdmin as={Tag} className={className} style={style}>
+        {c[k] ?? null}
+      </EditableText>
+    )
+  }
+
   return (
     <>
+      {isEditMode && isAdmin && <EditModeSuppressor />}
       <style>{`
         .about-hero-bg {
           background-image: url("${activeMobileBgPath}");
@@ -53,7 +83,7 @@ export default async function AboutPage() {
           }
         }
       `}</style>
-      {/* Hero banner — Option C: light overlay + frosted text card */}
+      {/* Hero banner */}
       <div className="relative overflow-hidden" style={{ height: '300px' }}>
         <div className="about-hero-bg absolute inset-0" />
         <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
@@ -65,58 +95,64 @@ export default async function AboutPage() {
             borderRadius: '12px',
             padding: '14px 22px',
           }}>
-            <p className="text-sm font-medium tracking-widest uppercase mb-1.5"
-              style={{ color: 'rgba(255,255,255,0.75)' }}>
-              {c['about_eyebrow'] || t(locale, 'about.eyebrow')}
-            </p>
-            <h1 className="text-3xl sm:text-4xl font-bold" style={{ color: 'white' }}>
-              {c['about_heading'] || t(locale, 'about.heading')}
-            </h1>
+            <ET k="about_eyebrow" s="about" lbl="Eyebrow text" fb={t(locale, 'about.eyebrow')}
+              as="p" className="text-sm font-medium tracking-widest uppercase mb-1.5"
+              style={{ color: 'rgba(255,255,255,0.75)' }} />
+            <ET k="about_heading" s="about" lbl="Page heading" fb={t(locale, 'about.heading')}
+              as="h1" className="text-3xl sm:text-4xl font-bold" style={{ color: 'white' }} />
           </div>
         </div>
       </div>
 
-    <div className="max-w-2xl mx-auto px-6 py-16">
-      {/* heading moved into hero above */}
-      <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
-      <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
-        <p>{c['about_story_p1'] || 'Nikalas Marani is a family winery tucked into the rolling vineyards of Kardanakhi, in the Gurjaani district of Kakheti — Georgia\'s most celebrated wine region.'}</p>
-        <p>{c['about_story_p2'] || 'For generations, our family has grown Rkatsiteli and Saperavi grapes on the same land, using traditional Kakhetian methods passed down through the years. Our wines are made with minimal intervention — the grapes, the sun, and the clay vessels do most of the work.'}</p>
-        <p>{c['about_story_p3'] || 'We opened Nikalas Marani to visitors so that anyone curious about Georgian wine culture could experience it the way we do — not in a tasting room, but at the table, with food, conversation, and the winemaker sitting across from you.'}</p>
-      </section>
+        <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
+          <ET k="about_story_p1" s="about" lbl="Story — paragraph 1" as="p"
+            fb="Nikalas Marani is a family winery tucked into the rolling vineyards of Kardanakhi, in the Gurjaani district of Kakheti — Georgia's most celebrated wine region." />
+          <ET k="about_story_p2" s="about" lbl="Story — paragraph 2" as="p"
+            fb="For generations, our family has grown Rkatsiteli and Saperavi grapes on the same land, using traditional Kakhetian methods passed down through the years. Our wines are made with minimal intervention — the grapes, the sun, and the clay vessels do most of the work." />
+          <ET k="about_story_p3" s="about" lbl="Story — paragraph 3" as="p"
+            fb="We opened Nikalas Marani to visitors so that anyone curious about Georgian wine culture could experience it the way we do — not in a tasting room, but at the table, with food, conversation, and the winemaker sitting across from you." />
+        </section>
 
-      <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
 
-      <section className="mb-12">
-        <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>
-          {c['about_expect_heading'] || t(locale, 'about.expect_heading')}
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {[
-            { label: c['about_expect1_label'] || 'Wine Tasting',     text: c['about_expect1_text'] || 'Guided tasting of 2–3 house wines and chacha, explained by the winemaker himself.' },
-            { label: c['about_expect2_label'] || 'Traditional Meal', text: c['about_expect2_text'] || 'Optional lunch with classic Kakhetian dishes — mtsvadi, lobiani, fresh bread from the oven.' },
-            { label: c['about_expect3_label'] || 'Vineyard Walk',    text: c['about_expect3_text'] || 'A short walk through the vineyard and a look at our qvevri (clay vessel) cellar.' },
-          ].map(item => (
-            <div key={item.label} className="rounded-xl p-5 border flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
-              <p className="font-semibold mb-2" style={{ color: '#1c1008' }}>{item.label}</p>
-              <p className="text-sm leading-relaxed" style={{ color: '#6b5a47' }}>{item.text}</p>
-            </div>
-          ))}
+        <section className="mb-12">
+          <ET k="about_expect_heading" s="about" lbl='"What to Expect" heading'
+            fb={t(locale, 'about.expect_heading')} as="h2"
+            className="text-xl font-bold mb-6" style={{ color: '#1c1008' }} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              { lk: 'about_expect1_label', tk: 'about_expect1_text', lFb: 'Wine Tasting',     tFb: 'Guided tasting of 2–3 house wines and chacha, explained by the winemaker himself.' },
+              { lk: 'about_expect2_label', tk: 'about_expect2_text', lFb: 'Traditional Meal', tFb: 'Optional lunch with classic Kakhetian dishes — mtsvadi, lobiani, fresh bread from the oven.' },
+              { lk: 'about_expect3_label', tk: 'about_expect3_text', lFb: 'Vineyard Walk',    tFb: 'A short walk through the vineyard and a look at our qvevri (clay vessel) cellar.' },
+            ].map(card => (
+              <div key={card.lk} className="rounded-xl p-5 border flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+                <ET k={card.lk} s="about" lbl="Expect card — label" fb={card.lFb}
+                  as="p" className="font-semibold mb-2" style={{ color: '#1c1008' }} />
+                <ET k={card.tk} s="about" lbl="Expect card — text" fb={card.tFb}
+                  as="p" className="text-sm leading-relaxed" style={{ color: '#6b5a47' }} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+
+        <div className="text-center">
+          <ET k="about_cta_text" s="about" lbl="CTA text" fb={t(locale, 'about.cta_text')}
+            as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
+          <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
+            {isAdmin ? (
+              <EditableText contentKey="about_cta_btn" section="about" label="CTA button"
+                locale={locale} fallback={t(locale, 'about.cta_btn')} isAdmin as="span">
+                {c['about_cta_btn'] ?? null}
+              </EditableText>
+            ) : (c['about_cta_btn'] || t(locale, 'about.cta_btn'))}
+          </a>
         </div>
-      </section>
-
-      <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
-
-      <div className="text-center">
-        <p className="text-sm mb-4" style={{ color: '#6b5a47' }}>
-          {c['about_cta_text'] || t(locale, 'about.cta_text')}
-        </p>
-        <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
-          {c['about_cta_btn'] || t(locale, 'about.cta_btn')}
-        </a>
       </div>
-    </div>
     </>
   )
 }

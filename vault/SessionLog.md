@@ -8,6 +8,69 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-22 — Visual mode: iframe-based live site editor (full detail)
+
+### Completed
+
+**Problem solved**: Visual mode was a hardcoded replica of the site (VisualNav, VisualHome, VisualAbout, VisualContact, VisualFormPreview) — it drifted from the real site every time the UI changed.
+
+**Solution**: Visual mode now renders the actual live site page in an `<iframe>` with `?editMode=true&locale={locale}`. The iframe loads the real page server-side, so it's always in sync.
+
+**`saas/components/EditModeSuppressor.tsx` — NEW client component**
+- Runs inside the iframe; intercepts all `<a>` click events (capture phase, `preventDefault` only) to prevent navigation away
+- Also intercepts `<form>` submit events to prevent form submission
+- Hash anchors (e.g. `#book`) are allowed through so page-internal scroll still works
+- Only rendered when `isEditMode && isAdmin` — non-admin visitors with `?editMode=true` in URL are unaffected
+
+**`saas/app/admin/content/ContentClient.tsx` — Visual mode rewrite**
+- Deleted VisualNav, VisualFormPreview, VisualHome, VisualAbout, VisualContact (330 lines removed)
+- Visual mode now renders: `<iframe src="/{section}?editMode=true&locale={locale}" style={{ height: 800px }} />`
+- Section tabs map to: home → `/`, about → `/about`, contact → `/contact`
+- `key={mode+'-'+locale+'-'+section}` on outer div forces iframe reload when section/locale changes
+- Locale switcher and section tabs still work — they change the iframe URL
+
+**`saas/app/(site)/page.tsx` — Edit mode support**
+- New `searchParams: Promise<{ editMode?: string; locale?: string }>` prop (Next.js 15 async pattern)
+- When `editMode=true`: awaits `getSiteContext()` to check admin; overrides locale from searchParams
+- Defines local `ET()` helper function (closure over `isAdmin`, `locale`, `c`) — conditionally renders `EditableText` or plain tag
+- Wraps editable content: hero eyebrow, hero subtitle, book/order buttons in hero, package titles/descs, booking heading/intro
+- Hero eyebrow and subtitle: conditional JSX (EditableText when admin, original styled span when not)
+- Button text inside `<a>` tags: EditableText rendered inline with `as="span"`
+- `<EditModeSuppressor />` rendered when `isEditMode && isAdmin`
+
+**`saas/app/(site)/about/page.tsx` — Edit mode support**
+- Same pattern: searchParams, isEditMode, locale override, isAdmin check
+- ET helper wraps: about_eyebrow, about_heading (hero), 3 story paragraphs, expect heading, 6 expect card fields, cta_text, cta_btn
+- Hero eyebrow/heading rendered via ET inside the backdrop-blur frosted card
+
+**`saas/app/(site)/contact/page.tsx` — Edit mode support**
+- Same pattern
+- ET helper wraps: contact_eyebrow, contact_heading (hero), 4×3 contact card fields (12 total), find_us heading, map_directions, book_cta, book_btn
+
+**TypeScript**: 0 errors
+
+### Key design decisions
+- `ET()` is a plain function (not a JSX component) defined inside each async page function — closures over `isAdmin`, `locale`, `c`; returns EditableText or a plain HTML tag
+- Navigation suppressor uses capture phase (`addEventListener('click', ..., true)`) so it fires before any child handlers; does NOT call `stopPropagation()` so EditableText's own `onClick` still fires
+- Form fields inside `<BookingForm>` are not wrapped with EditableText (too complex, still fully editable via Text mode)
+- `saveContent` server action already has `requireAdmin()` guard — EditableText in the iframe is safe even without extra checks
+
+### Key files changed
+- `saas/components/EditModeSuppressor.tsx` — NEW
+- `saas/app/admin/content/ContentClient.tsx` — Visual* components deleted, iframe added
+- `saas/app/(site)/page.tsx` — editMode support, ET helper, EditModeSuppressor
+- `saas/app/(site)/about/page.tsx` — editMode support, ET helper, EditModeSuppressor
+- `saas/app/(site)/contact/page.tsx` — editMode support, ET helper, EditModeSuppressor
+
+### Next up (user testing)
+1. Go to `/admin/content` → switch to Visual mode → verify the iframe shows the real site (real hero images, real nav, real content)
+2. Hover over a text element (e.g. package title) → verify pencil badge appears → click → edit text → Save
+3. Switch locale EN ↔ KA → verify iframe reloads in correct language
+4. Switch section tabs (Home / About / Contact) → verify correct page loads in iframe
+5. Try clicking a nav link in the iframe → verify it does NOT navigate away
+
+---
+
 ## 2026-06-22 — Company access codes (soft auth) — v1.7 complete
 
 ### Completed
