@@ -161,7 +161,7 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   return (
     <div className={isPortrait ? 'flex flex-col items-center w-full' : 'w-full'}>
       <p className="text-xs mb-1.5 w-full" style={{ color: C.muted }}>
-        Preview — {isMobile ? 'mobile' : 'desktop at 1280px viewport'}
+        Preview — {isMobile ? 'mobile (390px)' : 'desktop at 1280px viewport'} — adjust sliders then Save to apply
       </p>
 
       <div style={{
@@ -235,6 +235,10 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   )
 }
 
+function bgEqual(a: DesktopBg | MobileBg, b: DesktopBg | MobileBg) {
+  return a.path === b.path && a.x === b.x && a.y === b.y && a.zoom === b.zoom
+}
+
 function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImages, onUpload, onDelete }: {
   pageKey: string
   label: string
@@ -248,7 +252,12 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
   const [desktop, setDesktop] = useState<DesktopBg>(initialDesktop)
   const [mobile, setMobile]   = useState<MobileBg>(initialMobile)
   const [saving, setSaving]   = useState(false)
-  const [saved, setSaved]     = useState(false)
+
+  // Track the last-saved state so we know when preview differs from live site
+  const [savedDesktop, setSavedDesktop] = useState<DesktopBg>(initialDesktop)
+  const [savedMobile,  setSavedMobile]  = useState<MobileBg>(initialMobile)
+
+  const isDirty = mode === 'desktop' ? !bgEqual(desktop, savedDesktop) : !bgEqual(mobile, savedMobile)
 
   async function save() {
     setSaving(true)
@@ -257,15 +266,15 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
       await updateSetting(`${pageKey}_hero_bg_x`,    String(desktop.x))
       await updateSetting(`${pageKey}_hero_bg_y`,    String(desktop.y))
       await updateSetting(`${pageKey}_hero_bg_zoom`, String(desktop.zoom))
+      setSavedDesktop({ ...desktop })
     } else {
       await updateSetting(`${pageKey}_hero_bg_mobile_path`, mobile.path)
       await updateSetting(`${pageKey}_hero_bg_mobile_x`,    String(mobile.x))
       await updateSetting(`${pageKey}_hero_bg_mobile_y`,    String(mobile.y))
       await updateSetting(`${pageKey}_hero_bg_mobile_zoom`, String(mobile.zoom))
+      setSavedMobile({ ...mobile })
     }
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   async function clear() {
@@ -275,13 +284,17 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
       await updateSetting(`${pageKey}_hero_bg_x`,    '50')
       await updateSetting(`${pageKey}_hero_bg_y`,    '50')
       await updateSetting(`${pageKey}_hero_bg_zoom`, '110')
-      setDesktop({ path: '', x: 50, y: 50, zoom: 110 })
+      const cleared = { path: '', x: 50, y: 50, zoom: 110 }
+      setDesktop(cleared)
+      setSavedDesktop(cleared)
     } else {
       await updateSetting(`${pageKey}_hero_bg_mobile_path`, '')
       await updateSetting(`${pageKey}_hero_bg_mobile_x`,    '50')
       await updateSetting(`${pageKey}_hero_bg_mobile_y`,    '50')
       await updateSetting(`${pageKey}_hero_bg_mobile_zoom`, '100')
-      setMobile({ path: '', x: 50, y: 50, zoom: 100 })
+      const cleared = { path: '', x: 50, y: 50, zoom: 100 }
+      setMobile(cleared)
+      setSavedMobile(cleared)
     }
     setSaving(false)
   }
@@ -397,10 +410,22 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
         </>
       )}
 
+      {isDirty && (
+        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
+          style={{ backgroundColor: 'rgba(180,120,0,0.10)', border: '1px solid rgba(180,120,0,0.30)', color: '#7a5200' }}>
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          Preview shows unsaved changes — live site still shows previous settings
+        </div>
+      )}
       <button type="button" onClick={save} disabled={saving || !hasImage}
-        className="px-6 py-2 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
-        style={{ backgroundColor: C.wine }}>
-        {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+        className="px-6 py-2 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
+        style={{
+          backgroundColor: C.wine,
+          boxShadow: isDirty ? '0 0 0 2px rgba(124,29,35,0.35)' : 'none',
+        }}>
+        {saving ? 'Saving…' : isDirty ? 'Save to apply →' : '✓ Saved (live)'}
       </button>
     </div>
   )
