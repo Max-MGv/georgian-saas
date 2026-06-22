@@ -1,8 +1,9 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { getTenantId } from '@/lib/tenant'
 
 export async function createMenuItem(data: {
   name: string
@@ -10,13 +11,12 @@ export async function createMenuItem(data: {
   sortOrder?: number
 }) {
   await requireAdmin()
-  await db.menuItem.create({
-    data: {
-      name: data.name.trim(),
-      type: data.type,
-      sortOrder: data.sortOrder ?? 0,
-    },
-  })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.menuItem.create({
+      data: { name: data.name.trim(), type: data.type, sortOrder: data.sortOrder ?? 0, tenantId },
+    })
+  )
   revalidatePath('/admin/menu-items')
 }
 
@@ -27,20 +27,26 @@ export async function updateMenuItem(id: string, data: {
   sortOrder?: number
 }) {
   await requireAdmin()
-  await db.menuItem.update({
-    where: { id },
-    data: {
-      ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-      ...(data.type !== undefined ? { type: data.type } : {}),
-      ...(data.active !== undefined ? { active: data.active } : {}),
-      ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-    },
-  })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.menuItem.updateMany({
+      where: { id, tenantId },
+      data: {
+        ...(data.name !== undefined      ? { name: data.name.trim() }      : {}),
+        ...(data.type !== undefined      ? { type: data.type }              : {}),
+        ...(data.active !== undefined    ? { active: data.active }          : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder }    : {}),
+      },
+    })
+  )
   revalidatePath('/admin/menu-items')
 }
 
 export async function deleteMenuItem(id: string) {
   await requireAdmin()
-  await db.menuItem.delete({ where: { id } })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.menuItem.deleteMany({ where: { id, tenantId } })
+  )
   revalidatePath('/admin/menu-items')
 }

@@ -1,6 +1,11 @@
 import { PrismaClient } from '@prisma/client'
+import * as dotenv from 'dotenv'
+dotenv.config({ path: '.env' })
 
 const db = new PrismaClient()
+
+// Default tenant — Nikalas Marani
+const TENANT_ID = process.env.DEFAULT_TENANT_ID ?? ''
 
 const rows = [
   // Home
@@ -31,9 +36,9 @@ const rows = [
 async function main() {
   for (const row of rows) {
     await db.siteContent.upsert({
-      where: { key_locale: { key: row.key, locale: row.locale } },
+      where: { key_locale_tenantId: { key: row.key, locale: row.locale, tenantId: TENANT_ID } },
       update: { value: row.value },
-      create: row,
+      create: { ...row, tenantId: TENANT_ID },
     })
     console.log(`✓ ${row.key}`)
   }

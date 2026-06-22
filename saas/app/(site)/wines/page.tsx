@@ -1,4 +1,5 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import WineCatalogueClient from './WineCatalogueClient'
 
 export const dynamic = 'force-dynamic'
@@ -9,9 +10,10 @@ export const metadata = {
 }
 
 export default async function WinesPage() {
-  const wines = await db.wine.findMany({
-    where: { active: true },
+  const tenantId = await getTenantId()
+  const wines = await withTenantDb(tenantId, tx => tx.wine.findMany({
+    where: { active: true, tenantId },
     orderBy: { sortOrder: 'asc' },
-  })
+  }))
   return <WineCatalogueClient wines={wines} />
 }

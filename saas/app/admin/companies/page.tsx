@@ -1,14 +1,19 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import CompaniesClient from './CompaniesClient'
 
 export default async function CompaniesPage() {
-  const companies = await db.company.findMany({
-    orderBy: { name: 'asc' },
-    include: {
-      _count: { select: { orders: true } },
-      prices: { orderBy: { minGuests: 'asc' } },
-    },
-  })
+  const tenantId = await getTenantId()
+  const companies = await withTenantDb(tenantId, tx =>
+    tx.company.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+      include: {
+        _count: { select: { orders: true } },
+        prices: { orderBy: { minGuests: 'asc' } },
+      },
+    })
+  )
 
   return (
     <div>

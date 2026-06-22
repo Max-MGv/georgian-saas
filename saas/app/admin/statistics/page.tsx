@@ -1,17 +1,20 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import StatisticsClient from './StatisticsClient'
 
 type WineSelection = { id: string; name: string; quantity: number; price?: number }
 
 export default async function StatisticsPage() {
+  const tenantId = await getTenantId()
   const [rawOrders, companies, rawWineOrders, wines] = await Promise.all([
-    db.order.findMany({
+    withTenantDb(tenantId, tx => tx.order.findMany({
+      where: { tenantId },
       include: { company: { select: { name: true } } },
       orderBy: { date: 'asc' },
-    }),
-    db.company.findMany({ orderBy: { name: 'asc' } }),
-    db.wineOrder.findMany({ orderBy: { createdAt: 'desc' } }),
-    db.wine.findMany({ select: { id: true, price: true } }),
+    })),
+    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
+    withTenantDb(tenantId, tx => tx.wineOrder.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } })),
+    withTenantDb(tenantId, tx => tx.wine.findMany({ where: { tenantId }, select: { id: true, price: true } })),
   ])
 
   const now = new Date()

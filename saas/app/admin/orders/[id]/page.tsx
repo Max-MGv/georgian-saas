@@ -1,4 +1,5 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
@@ -12,10 +13,11 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const tenantId = await getTenantId()
 
   const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
-    db.order.findUnique({
-      where: { id },
+    withTenantDb(tenantId, tx => tx.order.findFirst({
+      where: { id, tenantId },
       include: {
         company: { include: { prices: true } },
         masterclassLines: {
@@ -24,15 +26,15 @@ export default async function OrderDetailPage({
         },
         extras: { orderBy: { id: 'asc' } },
       },
-    }),
-    db.menuItem.findMany({
-      where: { active: true },
+    })),
+    withTenantDb(tenantId, tx => tx.menuItem.findMany({
+      where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
-    }),
-    db.masterclassItem.findMany({
-      where: { active: true },
+    })),
+    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
+      where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
-    }),
+    })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
     getSetting('payment_bank_name'),

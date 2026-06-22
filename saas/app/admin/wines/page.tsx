@@ -1,8 +1,12 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import WinesClient from './WinesClient'
 
 export default async function AdminWinesPage() {
-  const wines = await db.wine.findMany({ orderBy: { sortOrder: 'asc' } })
+  const tenantId = await getTenantId()
+  const wines = await withTenantDb(tenantId, tx =>
+    tx.wine.findMany({ where: { tenantId }, orderBy: { sortOrder: 'asc' } })
+  )
   return (
     <div>
       <div className="flex items-center justify-between mb-6">

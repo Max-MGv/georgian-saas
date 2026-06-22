@@ -1,10 +1,10 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { getTenantId } from '@/lib/tenant'
 
-// Default values for all settings
 const DEFAULTS: Record<string, string> = {
   show_company_price_after_booking: 'true',
   enable_enhanced_company_booking: 'false',
@@ -21,21 +21,26 @@ const DEFAULTS: Record<string, string> = {
 }
 
 export async function getSetting(key: string): Promise<string> {
-  const row = await db.setting.findUnique({ where: { key } })
+  const tenantId = await getTenantId()
+  const row = await withTenantDb(tenantId, tx =>
+    tx.setting.findUnique({ where: { key_tenantId: { key, tenantId } } })
+  )
   return row?.value ?? DEFAULTS[key] ?? ''
 }
 
 export async function updateSetting(key: string, value: string) {
   await requireAdmin()
-  await db.setting.upsert({
-    where: { key },
-    update: { value },
-    create: { key, value },
-  })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.setting.upsert({
+      where: { key_tenantId: { key, tenantId } },
+      update: { value },
+      create: { key, value, tenantId },
+    })
+  )
   revalidatePath('/admin/settings')
   revalidatePath('/admin/content')
   revalidatePath('/')
   revalidatePath('/about')
   revalidatePath('/contact')
 }
-

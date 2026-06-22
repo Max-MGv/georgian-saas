@@ -2,6 +2,7 @@ import { getContentMap } from '@/app/actions/siteContent'
 import { getSetting } from '@/app/actions/settings'
 import { cookies } from 'next/headers'
 import { t } from '@/lib/t'
+import { preload } from 'react-dom'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,22 +24,38 @@ export default async function AboutPage() {
   const activeBgPath       = bgPath || '/images/winery2.jpg'
   const activeMobileBgPath = bgMobilePath || activeBgPath
 
+  const dx = bgX || '50'
+  const dy = bgY || '50'
+  const dz = (parseInt(bgZoom || '') || 110) / 100
+  const mx = bgMobileX || '50'
+  const my = bgMobileY || '50'
+  const mz = (parseInt(bgMobileZoom || '') || 100) / 100
+
+  preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
+  if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
+
   return (
     <>
+      <style>{`
+        .about-hero-bg {
+          background-image: url("${activeMobileBgPath}");
+          background-position: ${mx}% ${my}%;
+          background-size: cover;
+          transform: scale(${mz});
+          transform-origin: ${mx}% ${my}%;
+        }
+        @media (min-width: 640px) {
+          .about-hero-bg {
+            background-image: url("${activeBgPath}");
+            background-position: ${dx}% ${dy}%;
+            transform: scale(${dz});
+            transform-origin: ${dx}% ${dy}%;
+          }
+        }
+      `}</style>
       {/* Hero banner — Option C: light overlay + frosted text card */}
       <div className="relative overflow-hidden" style={{ height: '300px' }}>
-        {/* Mobile background */}
-        <div className="block sm:hidden absolute inset-0" style={{
-          backgroundImage: `url(${activeMobileBgPath})`,
-          backgroundPosition: `${bgMobileX || '50'}% ${bgMobileY || '50'}%`,
-          backgroundSize: `auto max(${parseInt(bgMobileZoom || '') || 100}vh, ${Math.round((parseInt(bgMobileZoom || '') || 100) * 0.5625)}vw)`,
-        }} />
-        {/* Desktop background */}
-        <div className="hidden sm:block absolute inset-0" style={{
-          backgroundImage: `url(${activeBgPath})`,
-          backgroundPosition: `${bgX || '50'}% ${bgY || '50'}%`,
-          backgroundSize: `max(${parseInt(bgZoom || '') || 110}vw, ${Math.round((parseInt(bgZoom || '') || 110) * 1.78)}vh) auto`,
-        }} />
+        <div className="about-hero-bg absolute inset-0" />
         <div className="absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.30)' }} />
         <div className="relative h-full flex items-end max-w-2xl mx-auto px-6 pb-10">
           <div style={{

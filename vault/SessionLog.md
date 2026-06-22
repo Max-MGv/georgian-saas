@@ -8,6 +8,151 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-22 — Image/banner audit + two fixes: compression + tenant isolation (full detail)
+
+### Completed
+
+**Image/banner audit**
+- Full review of how images and hero banners are handled vs. industry standards
+- 7 findings documented; 2 implemented this session; 5 added as v1.6 roadmap items
+
+**Fix 1 — Image compression on upload (`saas/app/actions/uploadImage.ts`)**
+- Installed `sharp` as a dependency
+- All uploaded background images are now compressed server-side before storage: resized to max 2000px wide, converted to WebP at quality 82
+- Typical reduction: 3–9 MB raw file → ~150–300 KB WebP
+- Stored filename is now `${tenantId}/${Date.now()}.webp` (includes tenant prefix — see Fix 2)
+
+**Fix 2 — Tenant isolation in Supabase Storage (`saas/app/actions/uploadImage.ts`, `saas/app/admin/content/page.tsx`, `saas/app/admin/content/BackgroundsTab.tsx`)**
+- Uploads stored at `${tenantId}/filename.webp` (previously flat shared bucket)
+- `listUploadedImages()` in `page.tsx` now lists from `${tenantId}/` prefix — tenants only see their own images
+- `deleteBgImage` validates the storage path starts with the caller's own `${tenantId}/` and has exactly one slash — blocks cross-tenant deletes
+- `BackgroundsTab.tsx`: replaced `filenameFromUrl()` (returned only last URL segment) with `storagePathFromUrl()` (extracts full bucket-relative path after `/backgrounds/`) so the delete call passes the correct path including tenant prefix
+
+**TypeScript**: 0 errors after all changes
+
+### Key files changed
+- `saas/app/actions/uploadImage.ts` — sharp compression + WebP conversion + tenant-scoped paths
+- `saas/app/admin/content/page.tsx` — `listUploadedImages` scoped to tenant prefix
+- `saas/app/admin/content/BackgroundsTab.tsx` — `storagePathFromUrl` replaces `filenameFromUrl`
+- `saas/package.json` — sharp + @types/sharp added
+
+### Remaining v1.6 items (see Roadmap)
+- ~~LCP preload hint for hero image~~ ✅ Done
+- ~~CSS media query for responsive backgrounds~~ ✅ Done
+- ~~Next.js `<Image>` for logo~~ ✅ Done
+- ~~Simplify background-size to `cover`~~ ✅ Done (cover + scale)
+- ~~Alt text on uploaded image thumbnails~~ ✅ Done
+- **v1.6 fully complete**
+
+### Next up
+- User test: upload a background image → confirm it appears, save it, delete it
+- Run `setup-rls.ts` against Supabase (still outstanding from Sprint 3A)
+- Sprint 4: per-tenant admin auth
+
+---
+
+## 2026-06-22 — RLS structural change: withTenantDb wrapper + setup-rls script (full detail)
+
+### Completed
+
+**Diagnosis**
+- Ran `scripts/check-rls.ts` → confirmed RLS is ON for all 12 tables but with **0 policies**
+- Root cause: Prisma connects as `postgres` (Supabase superuser), which **bypasses RLS by design**; policies have no effect unless the connection voluntarily downgrades to a non-superuser role
+
+**`withTenantDb` wrapper — `saas/lib/db.ts`**
+- Added `TxClient` type (Prisma transaction client shape)
+- Added `withTenantDb(tenantId, fn)`: opens a `$transaction`, executes `set_config('app.tenant_id', tenantId, true)` (session variable for policies to read) and `SET LOCAL ROLE app_user` (voluntarily downgrade to non-superuser → RLS enforced), then runs `fn(tx)`
+- `LOCAL` on both commands means they revert at COMMIT/ROLLBACK — no leakage between requests
+
+**All 25 tenant data files updated to use `withTenantDb`**
+- 13 server action files: `settings.ts`, `siteContent.ts`, `blockedDates.ts`, `companies.ts`, `wines.ts`, `wineOrders.ts`, `menuItems.ts`, `masterclassItems.ts`, `orderExtras.ts`, `orderMasterclass.ts`, `orders.ts`, `createBooking.ts`, `submitWineOrder.ts`
+- 12 page files: `admin/wines/`, `admin/companies/`, `admin/menu-items/`, `admin/masterclass/`, `admin/wine-orders/`, `admin/content/`, `admin/orders/`, `admin/orders/new/`, `admin/orders/[id]/`, `admin/statistics/`, `(site)/`, `(site)/wines/`
+- `lib/pricing.ts`: `recalcOrderTotal` now takes `tenantId` + uses `withTenantDb` internally
+- Atomic read+write pattern: functions like `updateOrderEnhanced`, `addOrderExtra`, `addMasterclassLine` now group their read+write in one `withTenantDb` callback
+
+**`scripts/setup-rls.ts` — NEW**
+- Creates `app_user` role (NOLOGIN)
+- GRANTs SELECT/INSERT/UPDATE/DELETE on all 12 tenanted tables; SELECT only on Tenant
+- Creates `tenant_isolation` policies:
+  - 9 tables with direct `tenantId`: `USING ("tenantId" = current_setting('app.tenant_id', true))`
+  - `Price`: JOIN to Company
+  - `OrderMasterclass`, `OrderExtra`: JOIN to Order
+- Idempotent (DROP POLICY IF EXISTS before each CREATE)
+
+**TypeScript check**: 0 errors after all changes
+
+### Key files changed
+- `saas/lib/db.ts` — `TxClient` type + `withTenantDb` function added
+- `saas/lib/pricing.ts` — `recalcOrderTotal(orderId, tenantId)` new signature
+- All 13 server action files in `saas/app/actions/` — wrapped with `withTenantDb`
+- All 12 page files in `saas/app/` — wrapped with `withTenantDb`
+- `saas/scripts/setup-rls.ts` — NEW: creates app_user role + all RLS policies
+
+### Next up
+- **Run `setup-rls.ts`** against Supabase to actually create the role and policies
+- Verify with `check-rls.ts` — should show policies on all 12 tables
+- Sprint 4: per-tenant admin auth
+
+---
+
+## 2026-06-22 — Multi-tenant architecture: Sprint 1A + 1B + Sprint 2 (full detail)
+
+### Completed
+
+**Sprint 1A — Schema + Seed**
+- Added `Tenant` model to `schema.prisma` (`id, name, domain, slug, createdAt`)
+- Added nullable `tenantId String?` to 9 tables: Company, Order, MenuItem, MasterclassItem, WineOrder, Setting, SiteContent, BlockedDate, Wine
+- Child tables left without `tenantId` (always accessed via parent): Price, OrderMasterclass, OrderExtra
+- Updated unique constraints: `SiteContent` → `@@unique([key, locale, tenantId])`; `BlockedDate` → `@@unique([date, tenantId])`
+- Ran `prisma db push --accept-data-loss` successfully; all columns created in DB
+- Created `scripts/seed-tenants.ts` — inserts 2 tenants, backfills 59 orders, 2 companies, 6 wines, 6 wine orders, 6 menu items, 5 masterclass items, 29 settings, 19 site content rows to Nikalas Marani tenant
+
+**Sprint 1B — Middleware + Tenant Helper**
+- Added `DEFAULT_TENANT_ID` to `.env` (fallback for localhost dev)
+- Rewrote `saas/proxy.ts`: expanded matcher to all routes (not just `/admin`); added `resolveTenantId(host)` with module-level Map cache; sets `x-tenant-id` on every request header; localhost uses env fallback; auth redirect logic preserved
+- Created `saas/lib/tenant.ts`: `getTenantId()` reads `x-tenant-id` from request headers; throws if missing (fail-safe against unscoped queries)
+
+**Sprint 2 — Query Scoping (THE FLIP)**
+- Setting PK changed from `key @id` → `id @id @default(cuid())` + `@@unique([key, tenantId])` via raw SQL script (`scripts/migrate-setting-pk.ts`) — handled safely because `prisma db push` cannot add a non-nullable column to tables with existing rows
+- Updated all 13 server action files and 12 page/component files — 27 files total in a single coordinated pass (half-scoped is worse than unscoped)
+- Security patterns applied: `findMany → where: { tenantId }`, `create → tenantId in data`, `update → updateMany with tenantId`, `delete → deleteMany with tenantId`, `findUnique on ID → findFirst with tenantId`
+- Child tables (OrderMasterclass, OrderExtra) verified via parent Order tenantId before mutation
+- Public actions (createBooking, submitWineOrder) also scoped — tenant resolved from request headers
+- TypeScript: 0 errors after all changes
+- Public site verified: `http://localhost:3000` home page loaded correctly with booking form
+
+### Key files changed
+- `saas/prisma/schema.prisma` — Tenant model + tenantId columns + unique constraint updates + Setting PK change
+- `saas/proxy.ts` — full rewrite: tenant resolution + expanded matcher
+- `saas/lib/tenant.ts` — NEW: `getTenantId()` helper
+- `saas/.env` — `DEFAULT_TENANT_ID` added
+- `saas/scripts/seed-tenants.ts` — NEW: tenant seed + backfill
+- `saas/scripts/migrate-setting-pk.ts` — NEW: raw SQL PK migration for Setting
+- All 13 server action files in `saas/app/actions/` — tenantId scoping
+- All 12 page/component files in `saas/app/` with direct db calls — tenantId scoping
+- `saas/scripts/seed-ka.ts` — updated to use new `key_locale_tenantId` accessor
+- `vault/migration-progress.md` — NEW: full migration tracker with sprint-by-sprint details
+
+### Key decisions
+- Node.js runtime (not Edge) for proxy.ts by default in Next.js 16 → Prisma works directly, no Supabase REST fetch needed
+- Module-level Map cache in proxy.ts avoids DB hit on every request after first resolution per domain
+- All 27 files updated in one pass — no interim half-scoped state
+- Localhost uses `DEFAULT_TENANT_ID` env var; second tenant testable via Windows hosts file trick (`127.0.0.1 winery2.local`)
+
+### ⚠️ Needs user testing (Max to do manually)
+See full checklist in `vault/migration-progress.md` → Sprint 2 "What to test" section.
+1. Admin orders — visit `/admin/orders`, confirm 59 orders visible
+2. Admin companies, wines, content, settings — spot check a few pages
+3. Submit a test booking on public form → check it appears in admin orders
+4. Second tenant isolation — add `127.0.0.1 winery2.local` to Windows hosts file, visit `http://winery2.local:3000/admin/orders` → should show 0 orders
+
+### Next up
+- Max to run the 4 user testing steps above (⚠️ these are for Max, not for Claude)
+- Supabase RLS update to enforce `tenantId` (Sprint 2 deferred item — query scoping is now the primary guard)
+- Sprint 4: per-tenant admin auth (Supabase user tied to `tenantId`)
+
+---
+
 ## 2026-06-21 — Custom image upload for Backgrounds tab (full detail)
 
 ### Completed

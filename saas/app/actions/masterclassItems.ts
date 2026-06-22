@@ -1,9 +1,10 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { getTenantId } from '@/lib/tenant'
 
 export async function createMasterclassItem(data: {
   name: string
@@ -12,14 +13,18 @@ export async function createMasterclassItem(data: {
   sortOrder?: number
 }) {
   await requireAdmin()
-  await db.masterclassItem.create({
-    data: {
-      name: data.name.trim(),
-      unitType: data.unitType,
-      pricePerUnit: data.pricePerUnit,
-      sortOrder: data.sortOrder ?? 0,
-    },
-  })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.masterclassItem.create({
+      data: {
+        name: data.name.trim(),
+        unitType: data.unitType,
+        pricePerUnit: data.pricePerUnit,
+        sortOrder: data.sortOrder ?? 0,
+        tenantId,
+      },
+    })
+  )
   revalidatePath('/admin/masterclass')
 }
 
@@ -31,21 +36,27 @@ export async function updateMasterclassItem(id: string, data: {
   sortOrder?: number
 }) {
   await requireAdmin()
-  await db.masterclassItem.update({
-    where: { id },
-    data: {
-      ...(data.name !== undefined        ? { name: data.name.trim() }       : {}),
-      ...(data.unitType !== undefined    ? { unitType: data.unitType }       : {}),
-      ...(data.pricePerUnit !== undefined ? { pricePerUnit: data.pricePerUnit } : {}),
-      ...(data.active !== undefined      ? { active: data.active }           : {}),
-      ...(data.sortOrder !== undefined   ? { sortOrder: data.sortOrder }     : {}),
-    },
-  })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.masterclassItem.updateMany({
+      where: { id, tenantId },
+      data: {
+        ...(data.name !== undefined         ? { name: data.name.trim() }          : {}),
+        ...(data.unitType !== undefined     ? { unitType: data.unitType }          : {}),
+        ...(data.pricePerUnit !== undefined ? { pricePerUnit: data.pricePerUnit }  : {}),
+        ...(data.active !== undefined       ? { active: data.active }              : {}),
+        ...(data.sortOrder !== undefined    ? { sortOrder: data.sortOrder }        : {}),
+      },
+    })
+  )
   revalidatePath('/admin/masterclass')
 }
 
 export async function deleteMasterclassItem(id: string) {
   await requireAdmin()
-  await db.masterclassItem.delete({ where: { id } })
+  const tenantId = await getTenantId()
+  await withTenantDb(tenantId, tx =>
+    tx.masterclassItem.deleteMany({ where: { id, tenantId } })
+  )
   revalidatePath('/admin/masterclass')
 }

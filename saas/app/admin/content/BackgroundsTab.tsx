@@ -20,8 +20,13 @@ const C = {
   border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23', rust: '#8b4513',
 }
 
-function filenameFromUrl(url: string) {
-  return url.split('/').pop() ?? ''
+// Extracts the bucket-relative storage path from a Supabase public URL
+// e.g. https://xxx.supabase.co/.../backgrounds/tenantId/file.webp → "tenantId/file.webp"
+function storagePathFromUrl(url: string) {
+  const marker = '/backgrounds/'
+  const idx = url.indexOf(marker)
+  if (idx === -1) return url.split('/').pop() ?? ''
+  return url.slice(idx + marker.length)
 }
 
 function ImagePicker({
@@ -57,9 +62,9 @@ function ImagePicker({
 
   async function handleDelete(url: string, e: React.MouseEvent) {
     e.stopPropagation()
-    const filename = filenameFromUrl(url)
-    if (!filename) return
-    await deleteBgImage(filename)
+    const storagePath = storagePathFromUrl(url)
+    if (!storagePath) return
+    await deleteBgImage(storagePath)
     onDelete(url)
     // If deleted image was selected, clear selection
     if (selected === url) onSelect('')
@@ -98,7 +103,7 @@ function ImagePicker({
               onClick={() => onSelect(url)}
               className="relative w-full rounded-lg overflow-hidden border-2 transition-all"
               style={{ aspectRatio: '16/9', borderColor: selected === url ? C.wine : C.border }}>
-              <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
+              <img src={url} alt={storagePathFromUrl(url).split('/').pop() ?? 'Uploaded image'} className="w-full h-full object-cover" />
               {selected === url && (
                 <div className="absolute inset-0 flex items-center justify-center"
                   style={{ backgroundColor: 'rgba(124,29,35,0.3)' }}>

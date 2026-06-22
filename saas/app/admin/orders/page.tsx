@@ -1,4 +1,5 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
 import Link from 'next/link'
@@ -19,8 +20,9 @@ type SearchParams = {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
+  const tenantId = await getTenantId()
   const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage] = await Promise.all([
-    db.company.findMany({ orderBy: { name: 'asc' } }),
+    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
     getSetting('payment_bank_name'),
@@ -37,7 +39,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   // For calendar view: fetch all orders with enough detail for day hover preview
   const calendarOrders = view === 'calendar'
-    ? await db.order.findMany({
+    ? await withTenantDb(tenantId, tx => tx.order.findMany({
+        where: { tenantId },
         select: {
           id: true,
           date: true,
@@ -51,7 +54,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           company: { select: { name: true } },
         },
         orderBy: [{ date: 'asc' }, { timeSlot: 'asc' }],
-      })
+      }))
     : []
 
   type CalendarOrder = {
@@ -76,6 +79,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   // Count orders per status within current date+company context (ignores status filter so counts are always visible)
   const baseWhere = {
+    tenantId,
     ...(params.dateFrom || params.dateTo ? {
       date: {
         ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
@@ -90,11 +94,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   }
 
   const statusCountRows = view === 'table'
-    ? await db.order.groupBy({ by: ['status'], where: baseWhere, _count: { status: true } })
+    ? await withTenantDb(tenantId, tx => tx.order.groupBy({ by: ['status'], where: baseWhere, _count: { status: true } }))
     : []
   const statusCounts = Object.fromEntries(statusCountRows.map(r => [r.status, r._count.status]))
 
-  const orders = view === 'table' ? await db.order.findMany({
+  const orders = view === 'table' ? await withTenantDb(tenantId, tx => tx.order.findMany({
     where: {
       ...baseWhere,
       ...(params.status ? { status: params.status as OrderStatus } : {}),
@@ -105,7 +109,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       extras: true,
     },
     orderBy: { date: 'desc' },
-  }) : []
+  })) : []
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 

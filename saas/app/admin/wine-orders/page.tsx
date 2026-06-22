@@ -1,12 +1,14 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import WineOrdersClient from './WineOrdersClient'
 
 type WineSelection = { id: string; name: string; quantity: number; price?: number }
 
 export default async function WineOrdersPage() {
+  const tenantId = await getTenantId()
   const [orders, wines] = await Promise.all([
-    db.wineOrder.findMany({ orderBy: { createdAt: 'desc' } }),
-    db.wine.findMany({ select: { id: true, price: true } }),
+    withTenantDb(tenantId, tx => tx.wineOrder.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } })),
+    withTenantDb(tenantId, tx => tx.wine.findMany({ where: { tenantId }, select: { id: true, price: true } })),
   ])
 
   const priceMap = Object.fromEntries(wines.map(w => [w.id, w.price]))

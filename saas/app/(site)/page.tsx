@@ -1,10 +1,13 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getContentMap } from '@/app/actions/siteContent'
 import { cookies } from 'next/headers'
 import BookingForm from '@/components/BookingForm'
 import { t } from '@/lib/t'
+import Image from 'next/image'
+import { preload } from 'react-dom'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,12 +15,13 @@ export default async function Home() {
   const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
 
+  const tenantId = await getTenantId()
   const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
-    db.company.findMany({ orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } }),
+    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
-    db.menuItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
-    db.masterclassItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
+    withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
+    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     getSetting('min_guests_tasting'),
     getSetting('min_guests_tasting_lunch'),
     getBlockedDates(),
@@ -35,6 +39,16 @@ export default async function Home() {
 
   const activeBgPath       = heroBgPath || '/images/winery1.jpg'
   const activeMobileBgPath = heroBgMobilePath || activeBgPath
+
+  const dx = heroBgX || '50'
+  const dy = heroBgY || '50'
+  const dz = (parseInt(heroBgZoom || '') || 110) / 100
+  const mx = heroBgMobileX || '50'
+  const my = heroBgMobileY || '50'
+  const mz = (parseInt(heroBgMobileZoom || '') || 100) / 100
+
+  preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
+  if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
   return (
     <>
@@ -63,21 +77,25 @@ export default async function Home() {
         @media (min-width: 640px) {
           .hero-banner { height: 480px; }
         }
+        .home-hero-bg {
+          background-image: url("${activeMobileBgPath}");
+          background-position: ${mx}% ${my}%;
+          background-size: cover;
+          transform: scale(${mz});
+          transform-origin: ${mx}% ${my}%;
+        }
+        @media (min-width: 640px) {
+          .home-hero-bg {
+            background-image: url("${activeBgPath}");
+            background-position: ${dx}% ${dy}%;
+            transform: scale(${dz});
+            transform-origin: ${dx}% ${dy}%;
+          }
+        }
       `}</style>
 
       <div className="hero-banner relative overflow-hidden">
-        {/* Mobile background */}
-        <div className="block sm:hidden absolute inset-0" style={{
-          backgroundImage: `url(${activeMobileBgPath})`,
-          backgroundPosition: `${heroBgMobileX || '50'}% ${heroBgMobileY || '50'}%`,
-          backgroundSize: `auto max(${parseInt(heroBgMobileZoom || '') || 100}vh, ${Math.round((parseInt(heroBgMobileZoom || '') || 100) * 0.5625)}vw)`,
-        }} />
-        {/* Desktop background */}
-        <div className="hidden sm:block absolute inset-0" style={{
-          backgroundImage: `url(${activeBgPath})`,
-          backgroundPosition: `${heroBgX || '50'}% ${heroBgY || '50'}%`,
-          backgroundSize: `max(${parseInt(heroBgZoom || '') || 110}vw, ${Math.round((parseInt(heroBgZoom || '') || 110) * 1.78)}vh) auto`,
-        }} />
+        <div className="home-hero-bg absolute inset-0" />
         {/* Light tint — darkens on hover via CSS */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
 
@@ -90,7 +108,8 @@ export default async function Home() {
             padding: '14px 28px',
             display: 'inline-block',
           }}>
-            <img src="/icons/logo-dark.svg" alt="Nikalas Marani"
+            <Image src="/icons/logo-dark.svg" alt="Nikalas Marani"
+              width={200} height={72} priority
               style={{ height: '72px', width: 'auto', display: 'block' }} />
           </div>
 

@@ -1,17 +1,20 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import Link from 'next/link'
 import NewOrderForm from './NewOrderForm'
 
 const C = { wine: '#7c1d23', faint: '#a89070' }
 
 export default async function NewOrderPage() {
+  const tenantId = await getTenantId()
   const [companies, menuItems, masterclassItems] = await Promise.all([
-    db.company.findMany({
+    withTenantDb(tenantId, tx => tx.company.findMany({
+      where: { tenantId },
       include: { prices: true },
       orderBy: { name: 'asc' },
-    }),
-    db.menuItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
-    db.masterclassItem.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } }),
+    })),
+    withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
+    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
   ])
 
   return (

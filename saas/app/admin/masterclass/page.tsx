@@ -1,10 +1,15 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import MasterclassClient from './MasterclassClient'
 
 export default async function MasterclassPage() {
-  const items = await db.masterclassItem.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-  })
+  const tenantId = await getTenantId()
+  const items = await withTenantDb(tenantId, tx =>
+    tx.masterclassItem.findMany({
+      where: { tenantId },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    })
+  )
 
   return (
     <div className="max-w-2xl">

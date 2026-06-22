@@ -1,10 +1,11 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
 import { BookingType, VisitType } from '@prisma/client'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
+import { getTenantId } from '@/lib/tenant'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -17,7 +18,6 @@ export type BookingFormData = {
   surname: string
   email?: string
   phone?: string
-  // Enhanced company booking fields
   tastingGuestCount?: number
   lunchGuestCount?: number
   freeGuestCount?: number
@@ -33,22 +33,24 @@ export type BookingResult =
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
   try {
-    // Server-side guard: past dates
+    const tenantId = await getTenantId()
+
+    // Guard: past dates
     const dateStr = new Date(data.date).toISOString().split('T')[0]
     const todayStr = new Date().toISOString().split('T')[0]
     if (dateStr < todayStr) {
       return { success: false, error: 'Bookings cannot be made for past dates.' }
     }
 
-    // Server-side guard: blocked dates
-    const blocked = await db.blockedDate.findFirst({
-      where: { date: new Date(dateStr) },
-    })
+    // Guard: blocked dates (scoped to this tenant)
+    const blocked = await withTenantDb(tenantId, tx =>
+      tx.blockedDate.findFirst({ where: { date: new Date(dateStr), tenantId } })
+    )
     if (blocked) {
       return { success: false, error: 'The winery is closed on this date. Please choose another date.' }
     }
 
-    // Server-side guard: min guests from settings
+    // Guard: min guests from settings (tenant-scoped via getSetting)
     const [minTastingStr, minLunchStr] = await Promise.all([
       getSetting('min_guests_tasting'),
       getSetting('min_guests_tasting_lunch'),
@@ -58,11 +60,9 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       : (parseInt(minLunchStr) || 4)
 
     const guestCount = Number(data.guestCount)
-
     const isEnhanced = data.bookingType === 'COMPANY' &&
       (data.tastingGuestCount != null || data.lunchGuestCount != null)
 
-    // For enhanced bookings validate paying headcount, not total headcount
     const effectiveGuestCount = isEnhanced
       ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
       : guestCount
@@ -70,13 +70,15 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
     }
 
-    // Fetch real masterclass prices from DB — never trust client-supplied pricePerUnit
+    // Fetch real masterclass prices from DB (scoped to this tenant)
     const masterclassIds = (data.masterclassLines ?? []).map(l => l.masterclassItemId)
     const masterclassItemsFromDb = masterclassIds.length > 0
-      ? await db.masterclassItem.findMany({
-          where: { id: { in: masterclassIds } },
-          select: { id: true, pricePerUnit: true },
-        })
+      ? await withTenantDb(tenantId, tx =>
+          tx.masterclassItem.findMany({
+            where: { id: { in: masterclassIds }, tenantId },
+            select: { id: true, pricePerUnit: true },
+          })
+        )
       : []
     const masterclassPriceMap = Object.fromEntries(masterclassItemsFromDb.map(i => [i.id, i.pricePerUnit]))
     const masterclassAmt = (data.masterclassLines ?? []).reduce(
@@ -84,14 +86,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     )
 
     const pricePerPerson = data.visitType === 'TASTING' ? 50 : 100
-    // Enhanced bookings: start at masterclassAmt so 0-paying-guest groups get correct total
     let totalPrice = isEnhanced ? masterclassAmt : pricePerPerson * guestCount
 
     if (data.bookingType === 'COMPANY' && data.companyId) {
-      const company = await db.company.findUnique({
-        where: { id: data.companyId },
-        include: { prices: true },
-      })
+      const company = await withTenantDb(tenantId, tx =>
+        tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
+      )
 
       if (company?.prices.length) {
         const payingGuests = isEnhanced
@@ -119,7 +119,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       totalPrice = masterclassAmt
     }
 
-    await db.order.create({
+    await withTenantDb(tenantId, tx => tx.order.create({
       data: {
         bookingType: data.bookingType as BookingType,
         visitType: data.visitType as VisitType,
@@ -137,6 +137,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         email: data.email || null,
         phone: data.phone || null,
         totalPrice,
+        tenantId,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
           create: (data.masterclassLines ?? []).map(l => ({
@@ -146,15 +147,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           })),
         } : undefined,
       },
-    })
+    }))
 
-    // Send confirmation email if customer provided an email address
     if (data.email) {
-
       const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
       })
-      // Fire and forget — don't fail the booking if email fails
       sendBookingConfirmation({
         name: data.name,
         surname: data.surname,

@@ -8,10 +8,19 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  domain    String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Company {
   id                 String   @id @default(cuid())
   name               String
   identificationCode String?
+  tenantId           String?
   createdAt          DateTime @default(now())
   orders             Order[]
   prices             Price[]
@@ -39,6 +48,7 @@ model Order {
   phone             String?
   notes             String?
   totalPrice        Float?
+  tenantId          String?
   companyId         String?
   company           Company?           @relation(fields: [companyId], references: [id])
   createdAt         DateTime           @default(now())
@@ -63,6 +73,7 @@ model MenuItem {
   type      String   // "VEGETABLE" | "MEAT"
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
+  tenantId  String?
   createdAt DateTime @default(now())
 }
 
@@ -73,6 +84,7 @@ model MasterclassItem {
   pricePerUnit Float
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
+  tenantId     String?
   createdAt    DateTime           @default(now())
   orderLines   OrderMasterclass[]
 }
@@ -107,13 +119,18 @@ model WineOrder {
   wines        Json
   totalAmount  Float?
   status       String   @default("pending")
+  tenantId     String?
   createdAt    DateTime @default(now())
 }
 
 model Setting {
-  key       String   @id
+  id        String   @id @default(cuid())
+  key       String
   value     String
+  tenantId  String?
   updatedAt DateTime @updatedAt
+
+  @@unique([key, tenantId])
 }
 
 model SiteContent {
@@ -123,16 +140,20 @@ model SiteContent {
   section   String
   label     String
   locale    String   @default("en")
+  tenantId  String?
   updatedAt DateTime @updatedAt
 
-  @@unique([key, locale])
+  @@unique([key, locale, tenantId])
 }
 
 model BlockedDate {
   id        String   @id @default(cuid())
-  date      DateTime @unique
+  date      DateTime
   reason    String?
+  tenantId  String?
   createdAt DateTime @default(now())
+
+  @@unique([date, tenantId])
 }
 
 model Wine {
@@ -145,6 +166,7 @@ model Wine {
   imagePath   String?
   active      Boolean  @default(true)
   sortOrder   Int      @default(0)
+  tenantId    String?
   createdAt   DateTime @default(now())
 }
 

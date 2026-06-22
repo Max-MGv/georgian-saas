@@ -195,11 +195,27 @@ Full plan: `vault/Plan-PageBackgrounds.md`
 
 ---
 
+## v1.6 — Image & Banner Quality
+
+Findings from an industry-standards audit of how images and hero banners are handled.
+
+- [x] **Image compression on upload** — uploaded background images now compressed with `sharp` on the server before storage: resized to max 2000px wide, converted to WebP at quality 82. Reduces typical hero image from 3–9 MB raw to ~150–300 KB.
+- [x] **Tenant isolation in uploaded image storage** — uploaded images are stored at `${tenantId}/filename.webp` in Supabase Storage (previously all tenants shared one flat folder). Listing scoped to own tenant prefix; delete validates path belongs to caller's tenant.
+- [x] **LCP preload hint for hero image** — `preload(activeBgPath, { as: 'image', fetchPriority: 'high' })` (React 19 API) called server-side in all three public pages; emits `<link rel="preload">` in the rendered HTML so the browser discovers the hero image immediately, before CSS is parsed.
+- [x] **Responsive images via CSS media query** — dual DOM nodes (mobile + desktop divs, shown/hidden via Tailwind — both downloaded by browser) replaced with a single `<div>` per page; background-image URL is swapped via a `<style>` block with `@media (min-width: 640px)` so only the matching image is fetched.
+- [x] **Next.js `<Image>` for logo** — plain `<img>` in home hero swapped for Next.js `<Image width={200} height={72} priority>` to prevent CLS and add an early fetch hint for the logo.
+- [x] **Simplify background-size logic** — manual viewport math (`max(zoom*vw, zoom*1.78*vh) auto`) replaced with `background-size: cover` + `transform: scale(zoom/100)` on the background div. Consistent with how the admin preview already works.
+- [x] **Alt text on uploaded images in admin grid** — thumbnails now use the filename extracted from the storage path as alt text instead of the meaningless `"Uploaded"`.
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.
 
 - [ ] **Company soft-auth / access codes** — companies get a one-time code (admin can regenerate or hardcode it); code entered on booking form or wine order form; valid code pre-fills company data (name, tax code, address, etc.); company profile page in admin gets extended with all order-relevant fields; admin can edit company profile. *(Draft: auth flow, code delivery method, and form UX all TBD)*
+- [ ] **Google Maps embed on Contact page** — replace the current placeholder with a real embedded Google Map showing the winery location. *(Draft: needs a Google Maps Embed API key or a simple iframe embed URL from Google Maps)*
+- [ ] **Development / staging environment** — a middleground between local code and the live site; deploy changes to a staging URL to test before they go live. *(Draft: approach TBD — options include a Vercel preview branch, a separate Vercel project pointing at a staging DB, or Vercel's built-in preview deployments per PR. Also need to decide whether staging shares the production DB or gets its own.)*
 - [ ] **Editable social / contact links in admin** — admin page to change the URLs behind all contact icons (Instagram, Facebook, phone, email, etc.) so they don't need to be hardcoded. *(Draft: likely extends existing SiteContent or Settings store)*
 - [ ] **Forgot password for admins** — "Forgot password" flow on the admin login page; sends a reset link to Max or the company rep's email. *(Draft: Supabase has a built-in reset flow — needs deciding who receives the email)*
 - [ ] **Feature flags panel (for Max)** — internal panel where Max can toggle features on/off (e.g. hide wine orders tab, disable image backgrounds, hide masterclass section); scoped to admin UI and public site. *(Draft: list of toggleable features TBD)*
@@ -222,19 +238,26 @@ These are rough ideas, not committed features. Scope and approach TBD.
 
 Full plan: `vault/Plan-MultiTenant.md`
 
-**Sprint 1** (safe, additive):
-- [ ] `tenants` table + seed with current client
-- [ ] Middleware resolves `tenantId` from `Host` header
-- [ ] Nullable `tenantId` column on every table + backfill
+**Sprint 1** (safe, additive): ✅ DONE 2026-06-22
+- [x] `tenants` table + seed with current client
+- [x] Middleware resolves `tenantId` from `Host` header
+- [x] Nullable `tenantId` column on every table + backfill
 
-**Sprint 2** (the big flip):
-- [ ] All server actions + DB queries scoped by `tenantId`
-- [ ] Supabase RLS updated to enforce `tenantId`
+**Sprint 2** (the big flip): ✅ DONE 2026-06-22
+- [x] All server actions + DB queries scoped by `tenantId`
 
-**Sprint 3** (independent, any order):
-- [ ] SiteContent scoped per tenant
-- [ ] Settings scoped per tenant
-- [ ] BlockedDates scoped per tenant
+**Sprint 3** (independent, any order): ✅ DONE as part of Sprint 2
+- [x] SiteContent scoped per tenant
+- [x] Settings scoped per tenant
+- [x] BlockedDates scoped per tenant
+
+**Sprint 3A — RLS structural enforcement**: ✅ DONE 2026-06-22
+- [x] `withTenantDb(tenantId, fn)` wrapper in `lib/db.ts` — every transaction voluntarily downgrades to `app_user` role, enabling RLS
+- [x] `app_user` Postgres role created (NOLOGIN), granted to `postgres`
+- [x] `tenant_isolation` RLS policy deployed on all 12 tables (9 direct, 3 via JOIN)
+- [x] All 25 files (13 actions + 12 pages) updated to use `withTenantDb`
+- [x] 21/21 DB integration tests pass; cross-tenant isolation confirmed; 0 TypeScript errors
+- [x] See `vault/RLS-Architecture.md` for full setup reference
 
 **Sprint 4:**
 - [ ] Per-tenant admin auth (Supabase user tied to `tenantId`)

@@ -1,6 +1,7 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 
 export type WineSelection = {
   id: string
@@ -31,9 +32,10 @@ export async function submitWineOrder(formData: FormData) {
   }
 
   const totalAmount = selectedWines.reduce((sum, w) => sum + w.quantity * w.price, 0)
+  const tenantId = await getTenantId()
 
   try {
-    await db.wineOrder.create({
+    await withTenantDb(tenantId, tx => tx.wineOrder.create({
       data: {
         businessName,
         llcName: llcName || null,
@@ -44,8 +46,9 @@ export async function submitWineOrder(formData: FormData) {
         contactPhone,
         wines: selectedWines,
         totalAmount,
+        tenantId,
       },
-    })
+    }))
     return { success: true }
   } catch {
     return { error: 'Something went wrong. Please try again.' }

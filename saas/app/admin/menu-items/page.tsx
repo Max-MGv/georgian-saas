@@ -1,10 +1,15 @@
-import { db } from '@/lib/db'
+import { db, withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
 import MenuItemsClient from './MenuItemsClient'
 
 export default async function MenuItemsPage() {
-  const items = await db.menuItem.findMany({
-    orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
-  })
+  const tenantId = await getTenantId()
+  const items = await withTenantDb(tenantId, tx =>
+    tx.menuItem.findMany({
+      where: { tenantId },
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+    })
+  )
 
   return (
     <div className="max-w-2xl">
