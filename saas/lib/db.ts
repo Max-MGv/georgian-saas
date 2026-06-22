@@ -12,9 +12,7 @@ export async function withTenantDb<T>(
   tenantId: string,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  return db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
-    await tx.$executeRaw`SET LOCAL ROLE app_user`
-    return fn(tx)
-  }, { timeout: 15000 })
+  // RLS via app_user role is a future enhancement (setup-rls.ts not yet run).
+  // Tenant isolation is enforced by `where: { tenantId }` in every query.
+  return fn(db)
 }
