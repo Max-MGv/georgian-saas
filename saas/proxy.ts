@@ -18,7 +18,7 @@ async function resolveTenantId(host: string): Promise<string | null> {
   if (tenantCache.has(domain)) return tenantCache.get(domain)!
 
   const tenant = await db.tenant.findUnique({ where: { domain } })
-  const tenantId = tenant?.id ?? null
+  const tenantId = tenant?.id ?? process.env.DEFAULT_TENANT_ID ?? null
   tenantCache.set(domain, tenantId)
   return tenantId
 }
