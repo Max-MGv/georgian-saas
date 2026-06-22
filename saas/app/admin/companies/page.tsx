@@ -28,6 +28,11 @@ export default async function CompaniesPage() {
           id: c.id,
           name: c.name,
           identificationCode: c.identificationCode,
+          contactName: c.contactName,
+          contactPhone: c.contactPhone,
+          contactEmail: c.contactEmail,
+          address: c.address,
+          accessCode: c.accessCode,
           orderCount: c._count.orders,
           prices: c.prices,
         }))}

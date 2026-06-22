@@ -8,6 +8,61 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-22 — Company access codes (soft auth) — v1.7 complete
+
+### Completed
+
+**DB schema** (`saas/prisma/schema.prisma`)
+- Added 5 nullable fields to Company model: `contactName`, `contactPhone`, `contactEmail`, `address`, `accessCode`
+- `prisma db push` done — all columns live in DB
+
+**Server actions** (`saas/app/actions/companies.ts`)
+- `createCompany` — now auto-generates an 8-char alphanumeric access code on creation (e.g. `XK9F2M48`)
+- `updateCompany` — extended to accept all 5 new profile fields
+- `regenerateAccessCode(id)` — admin action; generates new code, saves, returns it
+- `setAccessCode(id, code)` — admin action; sets a custom code (uppercased)
+- `verifyCompanyCode(companyId, code)` — public action (no requireAdmin); verifies code case-insensitively; returns profile fields on match, error on mismatch
+
+**Admin — Companies slide-over panel** (`saas/app/admin/companies/CompaniesClient.tsx`)
+- Edit button now opens a full right-side slide-over panel (instead of inline edit)
+- Panel sections: Company info (name, ID code, address), Contact person (name, phone, email), Access code
+- Access code row: show/hide toggle, copy button, "Generate new code" button; edit inline (saves on blur)
+- "Code set" green badge shown on company row when a code exists
+- Price tier expand/edit functionality unchanged
+
+**Booking form** (`saas/components/BookingForm.tsx`)
+- Company type now includes `accessCode: string | null`
+- Name/phone/email inputs converted from uncontrolled → controlled (state: `firstName`, `lastName`, `phone`, `email`)
+- When company selected + code exists: popup appears (password input with show/hide toggle, "Remember device" checkbox, "I'm not a company rep" escape link)
+- Correct code → `verifyCompanyCode` server call → splits `contactName` on first space into firstName/lastName; fills phone/email
+- localStorage: key `company_auth_{companyId}`, 30-day expiry; on selection checks cache before showing popup
+- Wrong code → inline error, unlimited retries
+
+**Wine orders form** (`saas/app/(site)/wines/WineCatalogueClient.tsx`, `saas/app/(site)/wines/page.tsx`)
+- Company dropdown added at top of reservation form (optional)
+- Selecting company with a code → same popup flow
+- Auto-fills: businessName, llcId, address, contactName, contactPhone
+- No company selected → form works exactly as before
+
+**TypeScript**: 0 errors
+
+### Key files changed
+- `saas/prisma/schema.prisma` — 5 new Company fields
+- `saas/app/actions/companies.ts` — full rewrite: new actions + extended updateCompany
+- `saas/app/admin/companies/CompaniesClient.tsx` — slide-over panel replaces inline edit
+- `saas/app/admin/companies/page.tsx` — passes new fields to client
+- `saas/components/BookingForm.tsx` — controlled inputs + code popup + auto-fill + localStorage
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — company selector + popup + controlled inputs
+- `saas/app/(site)/wines/page.tsx` — fetches companies, passes as prop
+
+### Next up (user testing)
+1. Admin: open Companies page → click Edit on any company → verify slide-over opens with all fields
+2. Admin: set a custom code (e.g. `MARANI42`) or use the generated one → click Copy
+3. Public booking form: select that company → verify popup appears → enter wrong code (error) → enter correct code → verify name/phone/email auto-fill
+4. Wine orders page: select company → same popup flow → verify fields auto-fill
+
+---
+
 ## 2026-06-22 — Image/banner audit + two fixes: compression + tenant isolation (full detail)
 
 ### Completed

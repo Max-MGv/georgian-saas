@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createCompany, updateCompany, deleteCompany } from '@/app/actions/companies'
+import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice } from '@/app/actions/prices'
 
 const C = {
@@ -10,7 +10,18 @@ const C = {
 }
 
 type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number }
-type Company = { id: string; name: string; identificationCode: string | null; orderCount: number; prices: Price[] }
+type Company = {
+  id: string
+  name: string
+  identificationCode: string | null
+  contactName: string | null
+  contactPhone: string | null
+  contactEmail: string | null
+  address: string | null
+  accessCode: string | null
+  orderCount: number
+  prices: Price[]
+}
 
 const inputStyle = {
   backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
@@ -34,15 +45,9 @@ function SmallInput({ label, value, onChange, type = 'text', width = 80 }: {
 }
 
 function PriceForm({
-  initial,
-  onSave,
-  onCancel,
-  loading,
+  initial, onSave, onCancel, loading,
 }: {
-  initial?: Price
-  onSave: (data: Omit<Price, 'id'>) => void
-  onCancel: () => void
-  loading: boolean
+  initial?: Price; onSave: (data: Omit<Price, 'id'>) => void; onCancel: () => void; loading: boolean
 }) {
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
@@ -60,37 +65,198 @@ function PriceForm({
       <div className="flex gap-2 pb-0.5">
         <button
           onClick={() => onSave({
-            minGuests: Number(minGuests),
-            maxGuests: Number(maxGuests),
+            minGuests: Number(minGuests), maxGuests: Number(maxGuests),
             pricePerPerson: Number(pricePerPerson),
             tastingLunchPricePerPerson: tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice),
             registrationPrice: registrationPrice === '' ? 0 : Number(registrationPrice),
           })}
           disabled={loading}
           className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
-        >
-          Save
-        </button>
-        <button
-          onClick={onCancel}
-          className="text-xs px-3 py-2 rounded-lg border"
-          style={{ borderColor: C.border, color: C.muted }}
-        >
-          Cancel
-        </button>
+        >Save</button>
+        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
       </div>
     </div>
   )
 }
 
+// ── Edit slide-over panel ──────────────────────────────────────────────────
+function EditPanel({ company, onClose, onSaved }: {
+  company: Company
+  onClose: () => void
+  onSaved: (updated: Partial<Company>) => void
+}) {
+  const [name, setName] = useState(company.name)
+  const [idCode, setIdCode] = useState(company.identificationCode ?? '')
+  const [contactName, setContactName] = useState(company.contactName ?? '')
+  const [contactPhone, setContactPhone] = useState(company.contactPhone ?? '')
+  const [contactEmail, setContactEmail] = useState(company.contactEmail ?? '')
+  const [address, setAddress] = useState(company.address ?? '')
+  const [code, setCode] = useState(company.accessCode ?? '')
+  const [showCode, setShowCode] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    setLoading(true); setError('')
+    const result = await updateCompany(company.id, {
+      name, identificationCode: idCode,
+      contactName, contactPhone, contactEmail, address,
+    })
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    onSaved({ name: name.trim(), identificationCode: idCode.trim() || null, contactName: contactName.trim() || null, contactPhone: contactPhone.trim() || null, contactEmail: contactEmail.trim() || null, address: address.trim() || null })
+    onClose()
+    setLoading(false)
+  }
+
+  async function handleRegenerate() {
+    setLoading(true)
+    const result = await regenerateAccessCode(company.id)
+    if ('error' in result) { setError(result.error ?? '') }
+    else { setCode(result.code ?? '') }
+    setLoading(false)
+  }
+
+  async function handleSetCode() {
+    if (!code.trim()) return
+    setLoading(true)
+    const result = await setAccessCode(company.id, code)
+    if ('error' in result) { setError(result.error ?? '') }
+    setLoading(false)
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const field = (label: string, value: string, onChange: (v: string) => void, placeholder = '') => (
+    <div className="flex flex-col gap-1.5">
+      <label style={{ fontSize: '0.75rem', fontWeight: 500, color: C.muted }}>{label}</label>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ ...inputStyle, width: '100%', padding: '9px 12px', fontSize: '0.875rem' }}
+      />
+    </div>
+  )
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }} onClick={onClose} />
+
+      {/* Panel */}
+      <div
+        className="fixed top-0 right-0 h-full z-50 flex flex-col shadow-2xl overflow-y-auto"
+        style={{ width: '420px', maxWidth: '100vw', backgroundColor: '#fffdf9', borderLeft: `1px solid ${C.border}` }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.border }}>
+          <h2 className="font-semibold text-base" style={{ color: C.text }}>Edit Company</h2>
+          <button onClick={onClose} style={{ color: C.faint }} className="hover:opacity-70 text-xl leading-none">×</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-col gap-5 px-6 py-6 flex-1">
+          {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
+
+          <div className="flex flex-col gap-4">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Company info</p>
+            {field('Company name', name, setName, 'Company name')}
+            {field('Identification code (ID)', idCode, setIdCode, 'Optional')}
+            {field('Address', address, setAddress, 'Company address')}
+          </div>
+
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+
+          <div className="flex flex-col gap-4">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Contact person (auto-fills booking form)</p>
+            {field('Full name', contactName, setContactName, 'First and last name')}
+            {field('Phone', contactPhone, setContactPhone, '+995 5XX XXX XXX')}
+            {field('Email', contactEmail, setContactEmail, 'contact@company.ge')}
+          </div>
+
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+
+          {/* Access code */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Access code</p>
+            <p className="text-xs" style={{ color: C.muted }}>Companies enter this on the booking form to auto-fill their details.</p>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showCode ? 'text' : 'password'}
+                  value={code}
+                  onChange={e => setCode(e.target.value.toUpperCase())}
+                  onBlur={handleSetCode}
+                  placeholder="No code set"
+                  style={{ ...inputStyle, width: '100%', padding: '9px 36px 9px 12px', fontSize: '0.875rem', fontFamily: 'monospace', letterSpacing: showCode ? '0.1em' : undefined }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCode(s => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+                  title={showCode ? 'Hide' : 'Show'}
+                >
+                  {showCode ? (
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <button
+                onClick={handleCopy}
+                disabled={!code}
+                title="Copy code"
+                className="px-3 py-2 rounded-lg border text-xs font-medium"
+                style={{ borderColor: C.border, color: copied ? '#15803d' : C.muted, minWidth: 60 }}
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+
+            <button
+              onClick={handleRegenerate}
+              disabled={loading}
+              className="text-xs px-3 py-2 rounded-lg border w-fit"
+              style={{ borderColor: C.border, color: C.muted }}
+            >
+              ↻ Generate new code
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: C.border }}>
+          <button onClick={handleSave} disabled={loading} className="btn-wine flex-1 py-2.5 rounded-lg text-sm font-medium">
+            {loading ? 'Saving…' : 'Save changes'}
+          </button>
+          <button onClick={onClose} className="px-5 py-2.5 rounded-lg border text-sm" style={{ borderColor: C.border, color: C.muted }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
 export default function CompaniesClient({ companies: initial }: { companies: Company[] }) {
   const [companies, setCompanies] = useState(initial)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editIdCode, setEditIdCode] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [addingPriceFor, setAddingPriceFor] = useState<string | null>(null)
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
@@ -107,14 +273,6 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
     const result = await createCompany(newName)
     if ('error' in result) { setError(result.error ?? '') }
     else { setNewName(''); setAdding(false); window.location.reload() }
-    setLoading(false)
-  }
-
-  async function handleUpdate(id: string) {
-    setLoading(true); setError('')
-    const result = await updateCompany(id, editName, editIdCode)
-    if ('error' in result) { setError(result.error ?? '') }
-    else { setCompanies(prev => prev.map(c => c.id === id ? { ...c, name: editName.trim(), identificationCode: editIdCode.trim() || null } : c)); setEditingId(null) }
     setLoading(false)
   }
 
@@ -152,6 +310,14 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
 
   return (
     <div>
+      {editingCompany && (
+        <EditPanel
+          company={editingCompany}
+          onClose={() => setEditingCompany(null)}
+          onSaved={updated => setCompanies(prev => prev.map(c => c.id === editingCompany.id ? { ...c, ...updated } : c))}
+        />
+      )}
+
       {!adding && (
         <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium mb-4">
           + Add Company
@@ -183,30 +349,24 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
 
                 {/* Company row */}
                 <div className="flex items-center px-5 py-4 gap-4">
-                  {editingId === company.id ? (
-                    <div className="flex gap-2 flex-1">
-                      <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleUpdate(company.id); if (e.key === 'Escape') setEditingId(null) }}
-                        placeholder="Company name" style={{ ...inputStyle, flex: 1, maxWidth: 240, padding: '8px 12px' }} />
-                      <input value={editIdCode} onChange={e => setEditIdCode(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleUpdate(company.id); if (e.key === 'Escape') setEditingId(null) }}
-                        placeholder="ID code (optional)" style={{ ...inputStyle, width: 160, padding: '8px 12px' }} />
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setExpandedId(expanded ? null : company.id)}
-                      className="flex items-center gap-2 flex-1 text-left"
-                    >
-                      <svg className="w-4 h-4 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
-                        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
-                      {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>ID: {company.identificationCode}</span>}
-                      <span className="text-xs" style={{ color: C.faint }}>
-                        {company.prices.length} tier{company.prices.length !== 1 ? 's' : ''} · {company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : company.id)}
+                    className="flex items-center gap-2 flex-1 text-left"
+                  >
+                    <svg className="w-4 h-4 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
+                      <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
+                    {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>ID: {company.identificationCode}</span>}
+                    {company.accessCode && (
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                        Code set
                       </span>
-                    </button>
-                  )}
+                    )}
+                    <span className="text-xs" style={{ color: C.faint }}>
+                      {company.prices.length} tier{company.prices.length !== 1 ? 's' : ''} · {company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
+                    </span>
+                  </button>
 
                   {deletingId === company.id ? (
                     <div className="flex items-center gap-2">
@@ -214,14 +374,13 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                       <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes, delete'}</button>
                       <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
                     </div>
-                  ) : editingId === company.id ? (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleUpdate(company.id)} disabled={loading} className="btn-wine text-sm px-3 py-1.5 rounded-lg font-medium">{loading ? 'Saving…' : 'Save'}</button>
-                      <button onClick={() => setEditingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
-                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <button onClick={() => { setEditingId(company.id); setEditName(company.name); setEditIdCode(company.identificationCode ?? '') }} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
+                      <button
+                        onClick={() => setEditingCompany(company)}
+                        className="text-sm px-3 py-1.5 rounded-lg border"
+                        style={{ borderColor: C.border, color: C.muted }}
+                      >Edit</button>
                       <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
                     </div>
                   )}
@@ -241,7 +400,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                         {editingPriceId === price.id ? (
                           <PriceForm
                             initial={price}
-                        onSave={data => handleUpdatePrice(company.id, price.id, data)}
+                            onSave={data => handleUpdatePrice(company.id, price.id, data)}
                             onCancel={() => setEditingPriceId(null)}
                             loading={loading}
                           />
@@ -253,18 +412,10 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                           </div>
                         ) : (
                           <div className="flex items-center gap-4 flex-wrap">
-                            <span className="text-sm" style={{ color: C.text }}>
-                              {price.minGuests}–{price.maxGuests} guests
-                            </span>
-                            <span className="text-xs" style={{ color: C.faint }}>
-                              Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span>
-                            </span>
-                            <span className="text-xs" style={{ color: C.faint }}>
-                              +Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span>
-                            </span>
-                            {price.registrationPrice > 0 && (
-                              <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>
-                            )}
+                            <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} guests</span>
+                            <span className="text-xs" style={{ color: C.faint }}>Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
+                            <span className="text-xs" style={{ color: C.faint }}>+Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
+                            {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>}
                             <button onClick={() => setEditingPriceId(price.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
                             <button onClick={() => setDeletingPriceId(price.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
                           </div>

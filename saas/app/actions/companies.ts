@@ -5,32 +5,124 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 
+function generateCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return code
+}
+
+type CompanyProfile = {
+  name: string
+  identificationCode?: string
+  contactName?: string
+  contactPhone?: string
+  contactEmail?: string
+  address?: string
+}
+
 export async function createCompany(name: string, identificationCode?: string) {
   await requireAdmin()
   if (!name.trim()) return { error: 'Name is required.' }
   const tenantId = await getTenantId()
   await withTenantDb(tenantId, tx =>
     tx.company.create({
-      data: { name: name.trim(), identificationCode: identificationCode?.trim() || null, tenantId },
+      data: {
+        name: name.trim(),
+        identificationCode: identificationCode?.trim() || null,
+        accessCode: generateCode(),
+        tenantId,
+      },
     })
   )
   revalidatePath('/admin/companies')
   return { success: true }
 }
 
-export async function updateCompany(id: string, name: string, identificationCode?: string) {
+export async function updateCompany(id: string, profile: CompanyProfile) {
   await requireAdmin()
-  if (!name.trim()) return { error: 'Name is required.' }
+  if (!profile.name.trim()) return { error: 'Name is required.' }
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, tx =>
     tx.company.updateMany({
       where: { id, tenantId },
-      data: { name: name.trim(), identificationCode: identificationCode?.trim() || null },
+      data: {
+        name: profile.name.trim(),
+        identificationCode: profile.identificationCode?.trim() || null,
+        contactName: profile.contactName?.trim() || null,
+        contactPhone: profile.contactPhone?.trim() || null,
+        contactEmail: profile.contactEmail?.trim() || null,
+        address: profile.address?.trim() || null,
+      },
     })
   )
   if (result.count === 0) return { error: 'Company not found.' }
   revalidatePath('/admin/companies')
   return { success: true }
+}
+
+export async function regenerateAccessCode(id: string) {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const newCode = generateCode()
+  const result = await withTenantDb(tenantId, tx =>
+    tx.company.updateMany({
+      where: { id, tenantId },
+      data: { accessCode: newCode },
+    })
+  )
+  if (result.count === 0) return { error: 'Company not found.' }
+  revalidatePath('/admin/companies')
+  return { success: true, code: newCode }
+}
+
+export async function setAccessCode(id: string, code: string) {
+  await requireAdmin()
+  if (!code.trim()) return { error: 'Code cannot be empty.' }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, tx =>
+    tx.company.updateMany({
+      where: { id, tenantId },
+      data: { accessCode: code.trim().toUpperCase() },
+    })
+  )
+  if (result.count === 0) return { error: 'Company not found.' }
+  revalidatePath('/admin/companies')
+  return { success: true }
+}
+
+export async function verifyCompanyCode(companyId: string, code: string) {
+  const tenantId = await getTenantId()
+  const company = await withTenantDb(tenantId, tx =>
+    tx.company.findFirst({
+      where: { id: companyId, tenantId },
+      select: {
+        accessCode: true,
+        contactName: true,
+        contactPhone: true,
+        contactEmail: true,
+        identificationCode: true,
+        address: true,
+      },
+    })
+  )
+  if (!company) return { error: 'Company not found.' }
+  if (!company.accessCode) return { error: 'No code set.' }
+  if (company.accessCode.toUpperCase() !== code.trim().toUpperCase()) {
+    return { error: 'Incorrect code.' }
+  }
+  return {
+    success: true,
+    profile: {
+      contactName: company.contactName,
+      contactPhone: company.contactPhone,
+      contactEmail: company.contactEmail,
+      identificationCode: company.identificationCode,
+      address: company.address,
+    },
+  }
 }
 
 export async function deleteCompany(id: string) {

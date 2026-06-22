@@ -20,6 +20,11 @@ model Company {
   id                 String   @id @default(cuid())
   name               String
   identificationCode String?
+  contactName        String?
+  contactPhone       String?
+  contactEmail       String?
+  address            String?
+  accessCode         String?
   tenantId           String?
   createdAt          DateTime @default(now())
   orders             Order[]

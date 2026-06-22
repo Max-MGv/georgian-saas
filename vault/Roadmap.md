@@ -209,11 +209,23 @@ Findings from an industry-standards audit of how images and hero banners are han
 
 ---
 
+## v1.7 — Company Access Codes (Soft Auth)
+
+Full plan: `vault/Plan-CompanyAccessCodes.md`
+
+- [x] **Step 1 — DB schema**: add `contactName`, `contactPhone`, `contactEmail`, `address`, `accessCode` to Company model
+- [x] **Step 2 — Server actions**: extend `updateCompany`; add `verifyCompanyCode` (public), `regenerateAccessCode` (admin)
+- [x] **Step 3 — Admin slide-over panel**: replace inline company edit with full side panel; access code field with show/hide, copy, regenerate
+- [x] **Step 4 — Booking form popup**: company selected → code popup → auto-fill name/phone/email; localStorage 30-day memory
+- [x] **Step 5 — Wine orders company selector**: add company dropdown to wine order form; same popup → auto-fill profile fields
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.
 
-- [ ] **Company soft-auth / access codes** — companies get a one-time code (admin can regenerate or hardcode it); code entered on booking form or wine order form; valid code pre-fills company data (name, tax code, address, etc.); company profile page in admin gets extended with all order-relevant fields; admin can edit company profile. *(Draft: auth flow, code delivery method, and form UX all TBD)*
+- [x] ~~**Company soft-auth / access codes**~~ → promoted to v1.7
 - [ ] **Google Maps embed on Contact page** — replace the current placeholder with a real embedded Google Map showing the winery location. *(Draft: needs a Google Maps Embed API key or a simple iframe embed URL from Google Maps)*
 - [ ] **Development / staging environment** — a middleground between local code and the live site; deploy changes to a staging URL to test before they go live. *(Draft: approach TBD — options include a Vercel preview branch, a separate Vercel project pointing at a staging DB, or Vercel's built-in preview deployments per PR. Also need to decide whether staging shares the production DB or gets its own.)*
 - [ ] **Editable social / contact links in admin** — admin page to change the URLs behind all contact icons (Instagram, Facebook, phone, email, etc.) so they don't need to be hardcoded. *(Draft: likely extends existing SiteContent or Settings store)*

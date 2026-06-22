@@ -2,10 +2,38 @@
 
 import { useState, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
+import { verifyCompanyCode } from '@/app/actions/companies'
 
 type DbWine = { id: string; name: string; type: string; price: number; color: string; imagePath: string | null }
 type WineQty = Record<string, number>
 type ViewMode = 'grid' | 'list'
+type Company = {
+  id: string
+  name: string
+  identificationCode: string | null
+  contactName: string | null
+  contactPhone: string | null
+  address: string | null
+  accessCode: string | null
+}
+
+const C = {
+  bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
+  muted: '#6b5a47', faint: '#a89070', wine: '#7c1d23', inputBg: '#fffdf9',
+}
+const inputStyle = { backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }
+
+const LS_PREFIX = 'company_auth_'
+const LS_EXPIRY_DAYS = 30
+
+function saveAuth(companyId: string) {
+  try {
+    localStorage.setItem(LS_PREFIX + companyId, String(Date.now() + LS_EXPIRY_DAYS * 86400 * 1000))
+  } catch {}
+}
+function hasValidAuth(companyId: string): boolean {
+  try { return Number(localStorage.getItem(LS_PREFIX + companyId) ?? 0) > Date.now() } catch { return false }
+}
 
 function WineBottlePlaceholder({ color }: { color: string }) {
   return (
@@ -17,17 +45,36 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] }) {
+export default function WineCatalogueClient({ wines: WINES, companies = [] }: { wines: DbWine[]; companies?: Company[] }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
+  // Company selector
+  const [companyId, setCompanyId] = useState('')
+
+  // Access code popup
+  const [showCodePopup, setShowCodePopup] = useState(false)
+  const [codeInput, setCodeInput] = useState('')
+  const [showCodeText, setShowCodeText] = useState(false)
+  const [codeError, setCodeError] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
+  const [rememberDevice, setRememberDevice] = useState(true)
+
+  // Controlled form fields (auto-fillable)
+  const [businessName, setBusinessName] = useState('')
+  const [llcName, setLlcName] = useState('')
+  const [llcId, setLlcId] = useState('')
+  const [address, setAddress] = useState('')
+  const [workingHours, setWorkingHours] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+
   function setQty(id: string, delta: number) {
     setQuantities(prev => {
-      const current = prev[id] ?? 0
-      const next = Math.max(0, current + delta)
+      const next = Math.max(0, (prev[id] ?? 0) + delta)
       return { ...prev, [id]: next }
     })
   }
@@ -38,6 +85,55 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
 
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.id] ?? 0) * w.price, 0)
+
+  function handleCompanyChange(id: string) {
+    setCompanyId(id)
+    if (!id) return
+    const company = companies.find(c => c.id === id)
+    if (!company?.accessCode) {
+      // No code set — auto-fill name immediately, no popup
+      setBusinessName(company?.name ?? '')
+      return
+    }
+    if (hasValidAuth(id)) {
+      // Already authenticated — just fill the name (no profile available without server call)
+      setBusinessName(company.name)
+      return
+    }
+    setCodeInput('')
+    setCodeError('')
+    setShowCodeText(false)
+    setShowCodePopup(true)
+  }
+
+  function applyProfile(company: Company, profile: { contactName: string | null; contactPhone: string | null; identificationCode: string | null; address: string | null }) {
+    setBusinessName(company.name)
+    if (profile.identificationCode) setLlcId(profile.identificationCode)
+    if (profile.address) setAddress(profile.address)
+    if (profile.contactName) setContactName(profile.contactName)
+    if (profile.contactPhone) setContactPhone(profile.contactPhone)
+  }
+
+  async function handleCodeSubmit() {
+    if (!codeInput.trim()) return
+    setCodeLoading(true)
+    setCodeError('')
+    const result = await verifyCompanyCode(companyId, codeInput)
+    setCodeLoading(false)
+    if ('error' in result) {
+      setCodeError('Incorrect code — please try again or contact the winery.')
+      return
+    }
+    if (rememberDevice) saveAuth(companyId)
+    const company = companies.find(c => c.id === companyId)!
+    applyProfile(company, result.profile)
+    setShowCodePopup(false)
+  }
+
+  function handleNotARep() {
+    setShowCodePopup(false)
+    setCompanyId('')
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -55,6 +151,8 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
         setSubmitted(true)
         form.reset()
         setQuantities({})
+        setCompanyId('')
+        setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       }
     })
   }
@@ -74,7 +172,74 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
     )
   }
 
+  const selectedCompany = companies.find(c => c.id === companyId)
+
   return (
+    <>
+      {/* Access code popup */}
+      {showCodePopup && selectedCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4" style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
+            <div>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
+              <p className="text-sm" style={{ color: C.muted }}>
+                {selectedCompany.name} — enter the access code provided by the winery.
+              </p>
+            </div>
+
+            <div className="relative">
+              <input
+                autoFocus
+                type={showCodeText ? 'text' : 'password'}
+                value={codeInput}
+                onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') handleCodeSubmit() }}
+                placeholder="e.g. MARANI42"
+                className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
+                style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCodeText(s => !s)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+              >
+                {showCodeText ? (
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
+            {codeError && <p className="text-sm" style={{ color: '#b91c1c' }}>{codeError}</p>}
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={rememberDevice} onChange={e => setRememberDevice(e.target.checked)} className="rounded" />
+              <span className="text-sm" style={{ color: C.muted }}>Remember this device for 30 days</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={handleCodeSubmit}
+              disabled={codeLoading || !codeInput.trim()}
+              className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
+              style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
+            >
+              {codeLoading ? 'Checking…' : 'Confirm'}
+            </button>
+
+            <button type="button" onClick={handleNotARep} className="text-xs text-center hover:underline" style={{ color: C.faint }}>
+              I'm not a company rep — continue without a code
+            </button>
+          </div>
+        </div>
+      )}
+
     <div className="max-w-4xl mx-auto px-6 py-16">
 
       {/* Heading */}
@@ -87,8 +252,7 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
         {/* View toggle */}
         <div className="flex items-center gap-1 rounded-lg border p-0.5 flex-shrink-0" style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3' }}>
           <button
-            onClick={() => setView('grid')}
-            title="Grid view"
+            onClick={() => setView('grid')} title="Grid view"
             className={`p-2 rounded transition-colors ${view === 'grid' ? 'text-white' : 'hover:opacity-70'}`}
             style={{ backgroundColor: view === 'grid' ? '#7c1d23' : 'transparent', color: view === 'grid' ? 'white' : '#6b5a47' }}
           >
@@ -98,8 +262,7 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
             </svg>
           </button>
           <button
-            onClick={() => setView('list')}
-            title="List view"
+            onClick={() => setView('list')} title="List view"
             className={`p-2 rounded transition-colors ${view === 'list' ? 'text-white' : 'hover:opacity-70'}`}
             style={{ backgroundColor: view === 'list' ? '#7c1d23' : 'transparent', color: view === 'list' ? 'white' : '#6b5a47' }}
           >
@@ -159,7 +322,6 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
       {/* ── LIST VIEW ── */}
       {view === 'list' && (
         <div className="mb-10 rounded-xl border overflow-x-auto" style={{ borderColor: '#e0d4c0' }}>
-          {/* Header */}
           <div className="grid items-center text-xs font-medium uppercase tracking-wider px-4 py-3 border-b"
             style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', backgroundColor: '#f5efe6', borderColor: '#e0d4c0', color: '#a89070' }}>
             <span>Wine</span>
@@ -172,12 +334,8 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
             const qty = quantities[wine.id] ?? 0
             const lineTotal = qty * wine.price
             return (
-              <div
-                key={wine.id}
-                className="grid items-center px-4 py-3 border-b last:border-b-0"
-                style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', borderColor: '#e0d4c0', backgroundColor: i % 2 === 0 ? '#fff9f3' : '#fdf7ef' }}
-              >
-                {/* Wine name + colour dot */}
+              <div key={wine.id} className="grid items-center px-4 py-3 border-b last:border-b-0"
+                style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', borderColor: '#e0d4c0', backgroundColor: i % 2 === 0 ? '#fff9f3' : '#fdf7ef' }}>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-10 rounded flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: '#f5efe6' }}>
                     {wine.imagePath ? (
@@ -191,29 +349,19 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
                     <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wine.type}</p>
                   </div>
                 </div>
-
-                {/* Unit price */}
                 <p className="text-sm font-medium text-center" style={{ color: '#6b5a47' }}>{wine.price}₾</p>
-
-                {/* Quantity — spinners */}
                 <div className="flex items-center justify-center gap-1">
                   <button type="button" onClick={() => setQty(wine.id, -1)} disabled={qty === 0}
                     className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center disabled:opacity-30"
                     style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
-                  <input
-                    type="number"
-                    min={0}
-                    value={qty}
+                  <input type="number" min={0} value={qty}
                     onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
                     className="w-10 text-center text-sm font-semibold border rounded outline-none"
-                    style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }}
-                  />
+                    style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }} />
                   <button type="button" onClick={() => setQty(wine.id, 1)}
                     className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
                     style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
                 </div>
-
-                {/* Line total */}
                 <p className="text-sm font-semibold text-right" style={{ color: lineTotal > 0 ? '#7c1d23' : '#c9b99a' }}>
                   {lineTotal > 0 ? `${lineTotal}₾` : '—'}
                 </p>
@@ -221,7 +369,6 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
             )
           })}
 
-          {/* Footer total */}
           {totalBottles > 0 && (
             <div className="flex items-center justify-between px-4 py-3 border-t"
               style={{ borderColor: '#c9b99a', backgroundColor: '#f5efe6' }}>
@@ -250,24 +397,46 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
       <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>Place a Reservation</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {[
-          { name: 'businessName', placeholder: 'Bar, restaurant, or individual name', required: true },
-          { name: 'llcName',      placeholder: 'LLC name (if applicable)',             required: false },
-          { name: 'llcId',        placeholder: 'LLC identification number',            required: false },
-          { name: 'address',      placeholder: 'Actual address of bar / restaurant',   required: true },
-          { name: 'workingHours', placeholder: 'Working hours',                        required: false },
-          { name: 'contactName',  placeholder: 'Contact person full name',             required: true },
-          { name: 'contactPhone', placeholder: 'Contact person phone number',          required: true },
-        ].map(field => (
-          <input
-            key={field.name}
-            name={field.name}
-            required={field.required}
-            placeholder={field.placeholder}
-            className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
-            style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0', color: '#1c1008' }}
-          />
-        ))}
+
+        {/* Company selector (optional) */}
+        {companies.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: C.muted }}>
+              Ordering as a company? <span className="font-normal" style={{ color: C.faint }}>(optional — auto-fills your details)</span>
+            </label>
+            <select
+              value={companyId}
+              onChange={e => handleCompanyChange(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
+              style={inputStyle}
+            >
+              <option value="">— Individual / no company —</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <input name="businessName" required placeholder="Bar, restaurant, or individual name"
+          value={businessName} onChange={e => setBusinessName(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="llcName" placeholder="LLC name (if applicable)"
+          value={llcName} onChange={e => setLlcName(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="llcId" placeholder="LLC identification number"
+          value={llcId} onChange={e => setLlcId(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="address" required placeholder="Actual address of bar / restaurant"
+          value={address} onChange={e => setAddress(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="workingHours" placeholder="Working hours"
+          value={workingHours} onChange={e => setWorkingHours(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="contactName" required placeholder="Contact person full name"
+          value={contactName} onChange={e => setContactName(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+        <input name="contactPhone" required placeholder="Contact person phone number"
+          value={contactPhone} onChange={e => setContactPhone(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
 
         {error && <p className="text-sm" style={{ color: '#7c1d23' }}>{error}</p>}
 
@@ -278,5 +447,6 @@ export default function WineCatalogueClient({ wines: WINES }: { wines: DbWine[] 
       </form>
 
     </div>
+    </>
   )
 }

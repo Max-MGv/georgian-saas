@@ -11,9 +11,16 @@ export const metadata = {
 
 export default async function WinesPage() {
   const tenantId = await getTenantId()
-  const wines = await withTenantDb(tenantId, tx => tx.wine.findMany({
-    where: { active: true, tenantId },
-    orderBy: { sortOrder: 'asc' },
-  }))
-  return <WineCatalogueClient wines={wines} />
+  const [wines, companies] = await Promise.all([
+    withTenantDb(tenantId, tx => tx.wine.findMany({
+      where: { active: true, tenantId },
+      orderBy: { sortOrder: 'asc' },
+    })),
+    withTenantDb(tenantId, tx => tx.company.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true },
+    })),
+  ])
+  return <WineCatalogueClient wines={wines} companies={companies} />
 }
