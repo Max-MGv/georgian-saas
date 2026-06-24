@@ -22,22 +22,6 @@ const C = {
   muted: '#6b5a47', faint: '#a89070', wine: '#7c1d23', inputBg: '#fffdf9',
 }
 
-const LS_PREFIX = 'company_auth_'
-const LS_EXPIRY_DAYS = 30
-
-function saveAuth(companyId: string) {
-  try {
-    const expiry = Date.now() + LS_EXPIRY_DAYS * 86400 * 1000
-    localStorage.setItem(LS_PREFIX + companyId, String(expiry))
-  } catch {}
-}
-
-function hasValidAuth(companyId: string): boolean {
-  try {
-    const expiry = Number(localStorage.getItem(LS_PREFIX + companyId) ?? 0)
-    return expiry > Date.now()
-  } catch { return false }
-}
 
 type Props = {
   locale?: string
@@ -78,7 +62,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
-  const [rememberDevice, setRememberDevice] = useState(true)
 
   // Enhanced company form state
   const [tastingGuestsStr, setTastingGuestsStr] = useState('0')
@@ -109,16 +92,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
 
-  // When company selection changes, decide whether to show popup or auto-fill from localStorage
+  // Show access code popup when a company with a code is selected
   useEffect(() => {
     if (!companyId || bookingType !== 'COMPANY') return
     const company = companies.find(c => c.id === companyId)
-    if (!company?.accessCode) return // no code set — no popup needed
-    if (hasValidAuth(companyId)) {
-      // Already authenticated on this device — no popup, but we don't have profile data here
-      // Profile data is only available after server verification; skip popup only
-      return
-    }
+    if (!company?.accessCode) return
     setCodeInput('')
     setCodeError('')
     setShowCodeText(false)
@@ -135,7 +113,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (profile.contactEmail) setEmail(profile.contactEmail)
   }
 
-  async function handleCodeSubmit() {
+  async function handleCodeSubmit(e?: React.FormEvent) {
+    e?.preventDefault()
     if (!codeInput.trim()) return
     setCodeLoading(true)
     setCodeError('')
@@ -145,7 +124,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setCodeError('Incorrect code — please try again or contact the winery.')
       return
     }
-    if (rememberDevice) saveAuth(companyId)
+    // Ask the browser to save the credential natively (triggers "Save password?" prompt)
+    if (typeof window !== 'undefined' && 'PasswordCredential' in window) {
+      try {
+        const companyName = companies.find(c => c.id === companyId)?.name ?? companyId
+        // @ts-ignore — PasswordCredential is not in all TS lib versions
+        const cred = new window.PasswordCredential({ id: companyName, password: codeInput, name: companyName })
+        await navigator.credentials.store(cred)
+      } catch {}
+    }
     applyProfile(result.profile)
     setShowCodePopup(false)
   }
@@ -280,7 +267,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       {/* Access code popup */}
       {showCodePopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4" style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
+          <form
+            onSubmit={handleCodeSubmit}
+            className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4"
+            style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}
+          >
             <div>
               <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
               <p className="text-sm" style={{ color: C.muted }}>
@@ -288,13 +279,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               </p>
             </div>
 
+            {/* Hidden username field — tells the browser what account this password belongs to */}
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={companies.find(c => c.id === companyId)?.name ?? ''}
+              readOnly
+              style={{ display: 'none' }}
+            />
+
             <div className="relative">
               <input
                 autoFocus
+                name="password"
                 type={showCodeText ? 'text' : 'password'}
+                autoComplete="current-password"
                 value={codeInput}
                 onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
-                onKeyDown={e => { if (e.key === 'Enter') handleCodeSubmit() }}
                 placeholder="e.g. MARANI42"
                 className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
                 style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
@@ -319,19 +321,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
             {codeError && <p className="text-sm" style={{ color: '#b91c1c' }}>{codeError}</p>}
 
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={rememberDevice}
-                onChange={e => setRememberDevice(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm" style={{ color: C.muted }}>Remember this device for 30 days</span>
-            </label>
-
             <button
-              type="button"
-              onClick={handleCodeSubmit}
+              type="submit"
               disabled={codeLoading || !codeInput.trim()}
               className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
               style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
@@ -347,7 +338,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             >
               I'm not a company rep — book as individual
             </button>
-          </div>
+          </form>
         </div>
       )}
 
