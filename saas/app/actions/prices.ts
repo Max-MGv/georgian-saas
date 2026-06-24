@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { getTenantId } from '@/lib/tenant'
 
 async function validateTier(
   companyId: string,
@@ -59,6 +60,25 @@ export async function updatePrice(id: string, data: {
 export async function deletePrice(id: string) {
   await requireAdmin()
   await db.price.delete({ where: { id } })
+  revalidatePath('/admin/companies')
+  return { success: true }
+}
+
+export async function setDisplayPrice(priceId: string) {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const price = await db.price.findFirst({
+    where: { id: priceId },
+    select: { companyId: true, company: { select: { isIndividual: true, tenantId: true } } },
+  })
+  if (!price || price.company.tenantId !== tenantId || !price.company.isIndividual) {
+    return { error: 'Not found.' }
+  }
+  await db.$transaction(async tx => {
+    await tx.price.updateMany({ where: { companyId: price.companyId }, data: { isDisplayPrice: false } })
+    await tx.price.update({ where: { id: priceId }, data: { isDisplayPrice: true } })
+  })
+  revalidatePath('/')
   revalidatePath('/admin/companies')
   return { success: true }
 }

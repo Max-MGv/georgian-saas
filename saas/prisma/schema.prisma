@@ -25,6 +25,7 @@ model Company {
   contactEmail       String?
   address            String?
   accessCode         String?
+  isIndividual       Boolean  @default(false)
   tenantId           String?
   createdAt          DateTime @default(now())
   orders             Order[]
@@ -70,6 +71,7 @@ model Price {
   pricePerPerson             Float
   tastingLunchPricePerPerson Float   @default(0)
   registrationPrice          Float   @default(0)
+  isDisplayPrice             Boolean @default(false)
 }
 
 model MenuItem {

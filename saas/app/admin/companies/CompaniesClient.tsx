@@ -2,17 +2,26 @@
 
 import { useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
-import { createPrice, updatePrice, deletePrice } from '@/app/actions/prices'
+import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
 }
 
-type Price = { id: string; minGuests: number; maxGuests: number; pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number }
+type Price = {
+  id: string
+  minGuests: number
+  maxGuests: number
+  pricePerPerson: number
+  tastingLunchPricePerPerson: number
+  registrationPrice: number
+  isDisplayPrice: boolean
+}
 type Company = {
   id: string
   name: string
+  isIndividual: boolean
   identificationCode: string | null
   contactName: string | null
   contactPhone: string | null
@@ -47,7 +56,7 @@ function SmallInput({ label, value, onChange, type = 'text', width = 80 }: {
 function PriceForm({
   initial, onSave, onCancel, loading,
 }: {
-  initial?: Price; onSave: (data: Omit<Price, 'id'>) => void; onCancel: () => void; loading: boolean
+  initial?: Price; onSave: (data: Omit<Price, 'id' | 'isDisplayPrice'>) => void; onCancel: () => void; loading: boolean
 }) {
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
@@ -79,7 +88,7 @@ function PriceForm({
   )
 }
 
-// ── Edit slide-over panel ──────────────────────────────────────────────────
+// ── Edit slide-over panel (tour operators only) ────────────────────────────
 function EditPanel({ company, onClose, onSaved }: {
   company: Company
   onClose: () => void
@@ -145,47 +154,34 @@ function EditPanel({ company, onClose, onSaved }: {
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }} onClick={onClose} />
-
-      {/* Panel */}
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col shadow-2xl overflow-y-auto"
         style={{ width: '420px', maxWidth: '100vw', backgroundColor: '#fffdf9', borderLeft: `1px solid ${C.border}` }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.border }}>
           <h2 className="font-semibold text-base" style={{ color: C.text }}>Edit Company</h2>
           <button onClick={onClose} style={{ color: C.faint }} className="hover:opacity-70 text-xl leading-none">×</button>
         </div>
-
-        {/* Body */}
         <div className="flex flex-col gap-5 px-6 py-6 flex-1">
           {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
-
           <div className="flex flex-col gap-4">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Company info</p>
             {field('Company name', name, setName, 'Company name')}
             {field('Identification code (ID)', idCode, setIdCode, 'Optional')}
             {field('Address', address, setAddress, 'Company address')}
           </div>
-
           <div className="h-px" style={{ backgroundColor: C.border }} />
-
           <div className="flex flex-col gap-4">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Contact person (auto-fills booking form)</p>
             {field('Full name', contactName, setContactName, 'First and last name')}
             {field('Phone', contactPhone, setContactPhone, '+995 5XX XXX XXX')}
             {field('Email', contactEmail, setContactEmail, 'contact@company.ge')}
           </div>
-
           <div className="h-px" style={{ backgroundColor: C.border }} />
-
-          {/* Access code */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Access code</p>
             <p className="text-xs" style={{ color: C.muted }}>Companies enter this on the booking form to auto-fill their details.</p>
-
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -224,7 +220,6 @@ function EditPanel({ company, onClose, onSaved }: {
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
-
             <button
               onClick={handleRegenerate}
               disabled={loading}
@@ -235,8 +230,6 @@ function EditPanel({ company, onClose, onSaved }: {
             </button>
           </div>
         </div>
-
-        {/* Footer */}
         <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: C.border }}>
           <button onClick={handleSave} disabled={loading} className="btn-wine flex-1 py-2.5 rounded-lg text-sm font-medium">
             {loading ? 'Saving…' : 'Save changes'}
@@ -247,6 +240,121 @@ function EditPanel({ company, onClose, onSaved }: {
         </div>
       </div>
     </>
+  )
+}
+
+// ── Price tiers section (shared between Individuals + tour operators) ───────
+function PriceTiersSection({
+  company,
+  isIndividual,
+  addingPriceFor,
+  editingPriceId,
+  deletingPriceId,
+  loading,
+  error,
+  onAddTier,
+  onUpdateTier,
+  onDeleteTier,
+  onSetDisplayPrice,
+  setAddingPriceFor,
+  setEditingPriceId,
+  setDeletingPriceId,
+}: {
+  company: Company
+  isIndividual: boolean
+  addingPriceFor: string | null
+  editingPriceId: string | null
+  deletingPriceId: string | null
+  loading: boolean
+  error: string
+  onAddTier: (companyId: string, data: Omit<Price, 'id' | 'isDisplayPrice'>) => void
+  onUpdateTier: (companyId: string, priceId: string, data: Omit<Price, 'id' | 'isDisplayPrice'>) => void
+  onDeleteTier: (companyId: string, priceId: string) => void
+  onSetDisplayPrice: (priceId: string) => void
+  setAddingPriceFor: (id: string | null) => void
+  setEditingPriceId: (id: string | null) => void
+  setDeletingPriceId: (id: string | null) => void
+}) {
+  return (
+    <div className="px-5 pb-5" style={{ backgroundColor: isIndividual ? '#fffbf2' : '#faf5ef', borderTop: `1px solid ${C.border}` }}>
+      <p className="text-xs font-medium mt-4 mb-3" style={{ color: C.muted }}>Price tiers</p>
+
+      {isIndividual && (
+        <p className="text-xs mb-3" style={{ color: C.faint }}>
+          Tick <span style={{ color: '#b45309' }}>★ Show on site</span> on the tier to display on the public home page. Falls back to 50₾ / 100₾ if none selected.
+        </p>
+      )}
+
+      {company.prices.length === 0 && addingPriceFor !== company.id && (
+        <p className="text-xs mb-3" style={{ color: C.faint }}>
+          {isIndividual
+            ? 'No custom tiers. Public site shows 50₾ / 100₾ defaults.'
+            : 'No price tiers yet. Individual booking rates will apply.'}
+        </p>
+      )}
+
+      {company.prices.map(price => (
+        <div key={price.id} className="mb-2">
+          {editingPriceId === price.id ? (
+            <PriceForm
+              initial={price}
+              onSave={data => onUpdateTier(company.id, price.id, data)}
+              onCancel={() => setEditingPriceId(null)}
+              loading={loading}
+            />
+          ) : deletingPriceId === price.id ? (
+            <div className="flex items-center gap-3 text-sm">
+              <span style={{ color: C.muted }}>Delete this tier?</span>
+              <button onClick={() => onDeleteTier(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes'}</button>
+              <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} guests</span>
+              <span className="text-xs" style={{ color: C.faint }}>Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>+Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
+              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>}
+
+              {isIndividual && (
+                <button
+                  onClick={() => !price.isDisplayPrice && onSetDisplayPrice(price.id)}
+                  disabled={loading || price.isDisplayPrice}
+                  title={price.isDisplayPrice ? 'Shown on public site' : 'Show this tier on public site'}
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded border"
+                  style={{
+                    borderColor: price.isDisplayPrice ? '#d97706' : C.border,
+                    color: price.isDisplayPrice ? '#b45309' : C.faint,
+                    backgroundColor: price.isDisplayPrice ? '#fffbeb' : 'transparent',
+                    cursor: price.isDisplayPrice ? 'default' : 'pointer',
+                  }}
+                >
+                  ★ {price.isDisplayPrice ? 'Shown on site' : 'Show on site'}
+                </button>
+              )}
+
+              <button onClick={() => setEditingPriceId(price.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
+              <button onClick={() => setDeletingPriceId(price.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {addingPriceFor === company.id ? (
+        <PriceForm
+          onSave={data => onAddTier(company.id, data)}
+          onCancel={() => setAddingPriceFor(null)}
+          loading={loading}
+        />
+      ) : (
+        <button
+          onClick={() => setAddingPriceFor(company.id)}
+          className="text-xs mt-2 px-3 py-1.5 rounded-lg border"
+          style={{ borderColor: C.border, color: C.muted }}
+        >
+          + Add tier
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -263,6 +371,9 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   const [deletingPriceId, setDeletingPriceId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const individualsRow = companies.find(c => c.isIndividual)
+  const tourOperators = companies.filter(c => !c.isIndividual)
 
   function updateCompanyPrices(companyId: string, prices: Price[]) {
     setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, prices } : c))
@@ -283,7 +394,7 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
     setDeletingId(null); setLoading(false)
   }
 
-  async function handleAddPrice(companyId: string, data: Omit<Price, 'id'>) {
+  async function handleAddPrice(companyId: string, data: Omit<Price, 'id' | 'isDisplayPrice'>) {
     setLoading(true)
     const result = await createPrice({ companyId, ...data })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
@@ -291,12 +402,12 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
     window.location.reload()
   }
 
-  async function handleUpdatePrice(companyId: string, priceId: string, data: Omit<Price, 'id'>) {
+  async function handleUpdatePrice(companyId: string, priceId: string, data: Omit<Price, 'id' | 'isDisplayPrice'>) {
     setLoading(true)
     const result = await updatePrice(priceId, data, companyId)
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     const company = companies.find(c => c.id === companyId)!
-    updateCompanyPrices(companyId, company.prices.map(p => p.id === priceId ? { id: priceId, ...data } : p))
+    updateCompanyPrices(companyId, company.prices.map(p => p.id === priceId ? { id: priceId, isDisplayPrice: p.isDisplayPrice, ...data } : p))
     setEditingPriceId(null); setLoading(false)
   }
 
@@ -306,6 +417,26 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
     const company = companies.find(c => c.id === companyId)!
     updateCompanyPrices(companyId, company.prices.filter(p => p.id !== priceId))
     setDeletingPriceId(null); setLoading(false)
+  }
+
+  async function handleSetDisplayPrice(priceId: string) {
+    setLoading(true)
+    const result = await setDisplayPrice(priceId)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    setCompanies(prev => prev.map(c => {
+      if (!c.isIndividual) return c
+      return { ...c, prices: c.prices.map(p => ({ ...p, isDisplayPrice: p.id === priceId })) }
+    }))
+    setLoading(false)
+  }
+
+  const priceTiersProps = {
+    addingPriceFor, editingPriceId, deletingPriceId, loading, error,
+    onAddTier: handleAddPrice,
+    onUpdateTier: handleUpdatePrice,
+    onDeleteTier: handleDeletePrice,
+    onSetDisplayPrice: handleSetDisplayPrice,
+    setAddingPriceFor, setEditingPriceId, setDeletingPriceId,
   }
 
   return (
@@ -318,6 +449,47 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
         />
       )}
 
+      {/* ── Individuals row — always pinned at top ── */}
+      {individualsRow && (() => {
+        const expanded = expandedId === individualsRow.id
+        const displayTier = individualsRow.prices.find(p => p.isDisplayPrice)
+        return (
+          <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: '#d97706', backgroundColor: '#ffffff' }}>
+            <div className="flex items-center px-5 py-4 gap-4" style={{ backgroundColor: '#fffbeb' }}>
+              <button
+                onClick={() => setExpandedId(expanded ? null : individualsRow.id)}
+                className="flex items-center gap-2 flex-1 text-left"
+              >
+                <svg className="w-4 h-4 transition-transform" style={{ color: '#b45309', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
+                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="font-semibold" style={{ color: '#92400e' }}>Individuals</span>
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                  Public pricing
+                </span>
+                {displayTier ? (
+                  <span className="text-xs" style={{ color: '#b45309' }}>
+                    {displayTier.pricePerPerson}₾ / {displayTier.tastingLunchPricePerPerson}₾ shown on site
+                  </span>
+                ) : (
+                  <span className="text-xs" style={{ color: C.faint }}>
+                    50₾ / 100₾ defaults · {individualsRow.prices.length} tier{individualsRow.prices.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </button>
+            </div>
+            {expanded && (
+              <PriceTiersSection
+                company={individualsRow}
+                isIndividual
+                {...priceTiersProps}
+              />
+            )}
+          </div>
+        )
+      })()}
+
+      {/* ── Add tour operator ── */}
       {!adding && (
         <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium mb-4">
           + Add Company
@@ -336,18 +508,17 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
       )}
       {error && <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{error}</p>}
 
-      {companies.length === 0 ? (
+      {/* ── Tour operators list ── */}
+      {tourOperators.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-          <p style={{ color: C.faint }}>No companies yet. Add your first tour operator.</p>
+          <p style={{ color: C.faint }}>No tour operators yet. Add your first one above.</p>
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-          {companies.map((company, i) => {
+          {tourOperators.map((company, i) => {
             const expanded = expandedId === company.id
             return (
-              <div key={company.id} style={{ borderBottom: i < companies.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
-
-                {/* Company row */}
+              <div key={company.id} style={{ borderBottom: i < tourOperators.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
                 <div className="flex items-center px-5 py-4 gap-4">
                   <button
                     onClick={() => setExpandedId(expanded ? null : company.id)}
@@ -386,59 +557,12 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                   )}
                 </div>
 
-                {/* Expanded price tiers */}
                 {expanded && (
-                  <div className="px-5 pb-5" style={{ backgroundColor: '#faf5ef', borderTop: `1px solid ${C.border}` }}>
-                    <p className="text-xs font-medium mt-4 mb-3" style={{ color: C.muted }}>Price tiers</p>
-
-                    {company.prices.length === 0 && addingPriceFor !== company.id && (
-                      <p className="text-xs mb-3" style={{ color: C.faint }}>No price tiers yet. Individual booking rates will apply.</p>
-                    )}
-
-                    {company.prices.map(price => (
-                      <div key={price.id} className="mb-2">
-                        {editingPriceId === price.id ? (
-                          <PriceForm
-                            initial={price}
-                            onSave={data => handleUpdatePrice(company.id, price.id, data)}
-                            onCancel={() => setEditingPriceId(null)}
-                            loading={loading}
-                          />
-                        ) : deletingPriceId === price.id ? (
-                          <div className="flex items-center gap-3 text-sm">
-                            <span style={{ color: C.muted }}>Delete this tier?</span>
-                            <button onClick={() => handleDeletePrice(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes'}</button>
-                            <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-4 flex-wrap">
-                            <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} guests</span>
-                            <span className="text-xs" style={{ color: C.faint }}>Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
-                            <span className="text-xs" style={{ color: C.faint }}>+Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
-                            {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>}
-                            <button onClick={() => setEditingPriceId(price.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
-                            <button onClick={() => setDeletingPriceId(price.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    {addingPriceFor === company.id ? (
-                      <PriceForm
-                        onSave={data => handleAddPrice(company.id, data)}
-                        onCancel={() => setAddingPriceFor(null)}
-                        loading={loading}
-                      />
-                    ) : (
-                      <button
-                        onClick={() => setAddingPriceFor(company.id)}
-                        className="text-xs mt-2 px-3 py-1.5 rounded-lg border"
-                        style={{ borderColor: C.border, color: C.muted }}
-                      >
-                        + Add tier
-                      </button>
-                    )}
-                  </div>
+                  <PriceTiersSection
+                    company={company}
+                    isIndividual={false}
+                    {...priceTiersProps}
+                  />
                 )}
               </div>
             )

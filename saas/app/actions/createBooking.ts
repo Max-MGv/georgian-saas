@@ -85,7 +85,23 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       (s, l) => s + l.quantity * (masterclassPriceMap[l.masterclassItemId] ?? 0), 0
     )
 
-    const pricePerPerson = data.visitType === 'TASTING' ? 50 : 100
+    // Fetch individual pricing tiers (fall back to 50/100 if none configured)
+    const individualsCompany = await withTenantDb(tenantId, tx =>
+      tx.company.findFirst({
+        where: { tenantId, isIndividual: true },
+        include: { prices: { orderBy: { minGuests: 'asc' } } },
+      })
+    )
+    let pricePerPersonTasting = 50
+    let pricePerPersonLunch = 100
+    if (individualsCompany?.prices.length) {
+      const tier = findTier(individualsCompany.prices, guestCount)
+      if (tier) {
+        pricePerPersonTasting = tier.pricePerPerson
+        pricePerPersonLunch = tier.tastingLunchPricePerPerson || tier.pricePerPerson
+      }
+    }
+    const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
     let totalPrice = isEnhanced ? masterclassAmt : pricePerPerson * guestCount
 
     if (data.bookingType === 'COMPANY' && data.companyId) {

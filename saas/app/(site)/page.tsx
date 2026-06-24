@@ -27,7 +27,7 @@ export default async function Home({ searchParams }: PageProps) {
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
   const tenantId = await getTenantId()
-  const [companies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
+  const [allCompanies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
@@ -47,6 +47,12 @@ export default async function Home({ searchParams }: PageProps) {
     getSetting('home_hero_bg_mobile_y'),
     getSetting('home_hero_bg_mobile_zoom'),
   ])
+
+  const individualsRow = allCompanies.find(c => c.isIndividual)
+  const companies = allCompanies.filter(c => !c.isIndividual)
+  const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
+  const displayPriceTasting = displayTier?.pricePerPerson ?? 50
+  const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? 100
 
   const activeBgPath       = heroBgPath || '/images/winery1.jpg'
   const activeMobileBgPath = heroBgMobilePath || activeBgPath
@@ -266,13 +272,13 @@ export default async function Home({ searchParams }: PageProps) {
             tk: 'home_package1_title', dk: 'home_package1_desc',
             tFb: t(locale, 'form.tasting'),
             dFb: '2 red wines, 1 white, chacha — guided by the winemaker',
-            price: 50, min: parseInt(minGuestsTasting) || 4,
+            price: displayPriceTasting, min: parseInt(minGuestsTasting) || 4,
           },
           {
             tk: 'home_package2_title', dk: 'home_package2_desc',
             tFb: t(locale, 'form.tasting_lunch'),
             dFb: '3 wines, chacha brandy, and a full traditional Georgian meal',
-            price: 100, min: parseInt(minGuestsTastingLunch) || 4,
+            price: displayPriceLunch, min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
           <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>

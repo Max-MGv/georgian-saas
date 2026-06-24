@@ -17,7 +17,7 @@ export default async function WinesPage() {
       orderBy: { sortOrder: 'asc' },
     })),
     withTenantDb(tenantId, tx => tx.company.findMany({
-      where: { tenantId },
+      where: { tenantId, isIndividual: false },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true },
     })),

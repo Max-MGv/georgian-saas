@@ -125,6 +125,16 @@ export async function verifyCompanyCode(companyId: string, code: string) {
   }
 }
 
+export async function ensureIndividualsCompany(tenantId: string) {
+  const existing = await withTenantDb(tenantId, tx =>
+    tx.company.findFirst({ where: { tenantId, isIndividual: true } })
+  )
+  if (existing) return existing
+  return withTenantDb(tenantId, tx =>
+    tx.company.create({ data: { name: 'Individuals', isIndividual: true, tenantId } })
+  )
+}
+
 export async function deleteCompany(id: string) {
   await requireAdmin()
   const tenantId = await getTenantId()
