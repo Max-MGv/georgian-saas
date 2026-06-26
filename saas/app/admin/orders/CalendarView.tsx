@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 
 const C = {
   border: '#e0d4c0', muted: '#6b5a47', faint: '#a89070',
-  wine: '#7c1d23', text: '#1c1008', bg: '#fff9f3', inputBg: '#fffdf9',
+  wine: 'var(--color-brand)', text: '#1c1008', bg: '#fff9f3', inputBg: '#fffdf9',
 }
 
 const STATUS_COLORS: Record<string, string> = {

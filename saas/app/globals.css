@@ -49,6 +49,8 @@
 }
 
 :root {
+  --color-brand: #7c1d23;
+  --color-brand-hover: #9b2429;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -151,12 +153,12 @@ input, select, textarea {
 }
 
 .btn-wine {
-  background-color: #7c1d23;
+  background-color: var(--color-brand);
   color: white;
   transition: background-color 0.15s;
 }
 .btn-wine:hover {
-  background-color: #9b2429;
+  background-color: var(--color-brand-hover);
 }
 
 @media screen {

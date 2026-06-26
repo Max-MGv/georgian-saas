@@ -10,7 +10,7 @@ import WineStatistics, { type WineOrderStat } from './WineStatistics'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23', wineLight: '#f3e8e9',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)', wineLight: '#f3e8e9',
 }
 
 type MonthData = { month: string; orders: number; revenue: number }

@@ -48,13 +48,15 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🔧 Still outstanding (from previous sessions)
 
-- [ ] Run `setup-rls.ts` against Supabase to create `app_user` role + RLS policies (Sprint 3A — script is ready, just needs to be run)
+- [x] **Redo visual content editor** — iframe approach implemented 2026-06-22 ✅
+
+- [x] Run `setup-rls.ts` against Supabase — confirmed deployed, all 12 tables have tenant_isolation policies ✅
 - [ ] Verify **nikalasmarani.ge** in Resend — unlocks email delivery to any customer (currently only delivers to max.mghvdliashvili@gmail.com)
 - [ ] **Gallery page** — images already in `saas/public/images/slider/` and `gallery/` — just needs wiring into the public site
 - [ ] **Order detail tap target audit** (v1.4 Mobile Admin last item) — verify all buttons ≥ 44px, no horizontal overflow on phone
 - [ ] **PDF invoice email attachment** — send PDF alongside HTML invoice email (follow-up to the HTML-only email feature)
 - [ ] Security fixes **#5, #6, #7** from Plan-SecurityAndBugFixes.md (minor, no security risk)
-- [ ] **Sprint 4** — per-tenant admin auth (Supabase user tied to `tenantId`)
+- [ ] **Phase 6 testing** — log in with `max.mghvdliashvili@gmail.com` → confirm admin works; log in with `nikalasmarani@email.ge` → confirm it works on nikalasmarani.ge
 
 ---
 

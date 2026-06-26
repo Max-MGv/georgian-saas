@@ -11,13 +11,13 @@ import { useContainerWidth } from './useContainerWidth'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const WINE_LINE_COLORS = [
-  '#7c1d23', '#2563eb', '#16a34a', '#ca8a04',
+  'var(--color-brand)', '#2563eb', '#16a34a', '#ca8a04',
   '#7c3aed', '#dc2626', '#0891b2', '#ea580c',
 ]
 

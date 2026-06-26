@@ -9,7 +9,7 @@ const C = {
   text: '#1c1008',
   muted: '#6b5a47',
   inputBg: '#fffdf9',
-  wine: '#7c1d23',
+  wine: 'var(--color-brand)',
 }
 
 export default function LoginForm() {

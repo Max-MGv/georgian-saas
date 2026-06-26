@@ -19,7 +19,7 @@ type Company = {
 
 const C = {
   bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
-  muted: '#6b5a47', faint: '#a89070', wine: '#7c1d23', inputBg: '#fffdf9',
+  muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)', inputBg: '#fffdf9',
 }
 const inputStyle = { backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }
 
@@ -233,8 +233,8 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
               {codeLoading ? 'Checking…' : 'Confirm'}
             </button>
 
-            <button type="button" onClick={handleNotARep} className="text-xs text-center hover:underline" style={{ color: C.faint }}>
-              I'm not a company rep — continue without a code
+            <button type="button" onClick={handleNotARep} className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50" style={{ color: C.muted, borderColor: C.border }}>
+              Enter Manually
             </button>
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
           <button
             onClick={() => setView('grid')} title="Grid view"
             className={`p-2 rounded transition-colors ${view === 'grid' ? 'text-white' : 'hover:opacity-70'}`}
-            style={{ backgroundColor: view === 'grid' ? '#7c1d23' : 'transparent', color: view === 'grid' ? 'white' : '#6b5a47' }}
+            style={{ backgroundColor: view === 'grid' ? 'var(--color-brand)' : 'transparent', color: view === 'grid' ? 'white' : '#6b5a47' }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <rect x="1" y="1" width="6" height="6" rx="1" /><rect x="9" y="1" width="6" height="6" rx="1" />
@@ -264,7 +264,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
           <button
             onClick={() => setView('list')} title="List view"
             className={`p-2 rounded transition-colors ${view === 'list' ? 'text-white' : 'hover:opacity-70'}`}
-            style={{ backgroundColor: view === 'list' ? '#7c1d23' : 'transparent', color: view === 'list' ? 'white' : '#6b5a47' }}
+            style={{ backgroundColor: view === 'list' ? 'var(--color-brand)' : 'transparent', color: view === 'list' ? 'white' : '#6b5a47' }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <rect x="1" y="2" width="14" height="2" rx="1" /><rect x="1" y="7" width="14" height="2" rx="1" />
@@ -362,7 +362,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
                     className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
                     style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
                 </div>
-                <p className="text-sm font-semibold text-right" style={{ color: lineTotal > 0 ? '#7c1d23' : '#c9b99a' }}>
+                <p className="text-sm font-semibold text-right" style={{ color: lineTotal > 0 ? 'var(--color-brand)' : '#c9b99a' }}>
                   {lineTotal > 0 ? `${lineTotal}₾` : '—'}
                 </p>
               </div>
@@ -373,7 +373,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
             <div className="flex items-center justify-between px-4 py-3 border-t"
               style={{ borderColor: '#c9b99a', backgroundColor: '#f5efe6' }}>
               <span className="text-sm font-medium" style={{ color: '#6b5a47' }}>{totalBottles} bottle{totalBottles !== 1 ? 's' : ''}</span>
-              <span className="text-sm font-bold" style={{ color: '#7c1d23' }}>Total: {totalPrice}₾</span>
+              <span className="text-sm font-bold" style={{ color: 'var(--color-brand)' }}>Total: {totalPrice}₾</span>
             </div>
           )}
         </div>
@@ -387,7 +387,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
             <span>🍷</span>
             <span>{WINES.filter(w => (quantities[w.id] ?? 0) > 0).map(w => `${w.name} × ${quantities[w.id]}`).join(', ')}</span>
           </span>
-          <span className="font-bold flex-shrink-0 ml-4" style={{ color: '#7c1d23' }}>{totalPrice}₾</span>
+          <span className="font-bold flex-shrink-0 ml-4" style={{ color: 'var(--color-brand)' }}>{totalPrice}₾</span>
         </div>
       )}
 
@@ -438,7 +438,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
           value={contactPhone} onChange={e => setContactPhone(e.target.value)}
           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
 
-        {error && <p className="text-sm" style={{ color: '#7c1d23' }}>{error}</p>}
+        {error && <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{error}</p>}
 
         <button type="submit" disabled={isPending}
           className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">

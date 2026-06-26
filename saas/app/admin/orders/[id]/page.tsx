@@ -5,7 +5,7 @@ import Link from 'next/link'
 import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
 
-const C = { wine: '#7c1d23', faint: '#a89070' }
+const C = { wine: 'var(--color-brand)', faint: '#a89070' }
 
 export default async function OrderDetailPage({
   params,

@@ -29,7 +29,7 @@ export default function LocaleSwitcher({ locale }: Props) {
             disabled={isPending}
             className="text-xs font-semibold uppercase transition-opacity hover:opacity-70"
             style={{
-              color: locale === l ? '#7c1d23' : '#a89070',
+              color: locale === l ? 'var(--color-brand)' : '#a89070',
               fontWeight: locale === l ? 700 : 400,
             }}
           >

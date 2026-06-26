@@ -3,7 +3,7 @@ import { getTenantId } from '@/lib/tenant'
 import Link from 'next/link'
 import NewOrderForm from './NewOrderForm'
 
-const C = { wine: '#7c1d23', faint: '#a89070' }
+const C = { wine: 'var(--color-brand)', faint: '#a89070' }
 
 export default async function NewOrderPage() {
   const tenantId = await getTenantId()

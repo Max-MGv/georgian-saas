@@ -6,7 +6,7 @@ import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
 type Props = {
@@ -219,7 +219,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   onClick={() => handleDefaultLocale(l)}
                   className="px-4 py-1.5 text-sm font-semibold uppercase transition-colors"
                   style={{
-                    backgroundColor: defaultLocale === l ? '#7c1d23' : C.bg,
+                    backgroundColor: defaultLocale === l ? 'var(--color-brand)' : C.bg,
                     color: defaultLocale === l ? '#fff' : C.muted,
                   }}
                 >
@@ -473,7 +473,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               onClick={handleAddBlockedDate}
               disabled={!newBlockDate || isPending}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity"
-              style={{ backgroundColor: '#7c1d23', opacity: !newBlockDate || isPending ? 0.5 : 1 }}
+              style={{ backgroundColor: 'var(--color-brand)', opacity: !newBlockDate || isPending ? 0.5 : 1 }}
             >
               Block date
             </button>

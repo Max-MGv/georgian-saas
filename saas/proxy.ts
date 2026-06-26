@@ -1,38 +1,52 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { db } from '@/lib/db'
 
-// Module-level cache: domain → tenantId (persists for the lifetime of the server process)
-const tenantCache = new Map<string, string | null>()
-const db = new PrismaClient()
+interface TenantInfo {
+  tenantId: string | null
+  brandColor: string
+  brandHover: string
+}
 
-async function resolveTenantId(host: string): Promise<string | null> {
+// Module-level cache: domain → tenant info (persists for the lifetime of the server process)
+const tenantCache = new Map<string, TenantInfo>()
+
+async function resolveTenant(host: string): Promise<TenantInfo> {
   // Strip port (e.g. "localhost:3000" → "localhost", "winery2.local:3000" → "winery2.local")
   const domain = host.split(':')[0]
+  const isLocal = domain === 'localhost' || domain === '127.0.0.1'
+  const cacheKey = isLocal ? '__localhost__' : domain
 
-  // Localhost fallback — use DEFAULT_TENANT_ID from env
-  if (domain === 'localhost' || domain === '127.0.0.1') {
-    return process.env.DEFAULT_TENANT_ID ?? null
+  if (tenantCache.has(cacheKey)) return tenantCache.get(cacheKey)!
+
+  let tenant = null
+  if (isLocal) {
+    const defaultId = process.env.DEFAULT_TENANT_ID
+    if (defaultId) tenant = await db.tenant.findUnique({ where: { id: defaultId } })
+  } else {
+    tenant = await db.tenant.findUnique({ where: { domain } })
   }
 
-  if (tenantCache.has(domain)) return tenantCache.get(domain)!
-
-  const tenant = await db.tenant.findUnique({ where: { domain } })
-  const tenantId = tenant?.id ?? process.env.DEFAULT_TENANT_ID ?? null
-  tenantCache.set(domain, tenantId)
-  return tenantId
+  const theme = (tenant?.theme as { primaryColor?: string; primaryHover?: string } | null) ?? {}
+  const info: TenantInfo = {
+    tenantId: tenant?.id ?? process.env.DEFAULT_TENANT_ID ?? null,
+    brandColor: theme.primaryColor ?? '#7c1d23',
+    brandHover: theme.primaryHover ?? '#9b2429',
+  }
+  tenantCache.set(cacheKey, info)
+  return info
 }
 
 export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
-  const tenantId = await resolveTenantId(host)
+  const { tenantId, brandColor, brandHover } = await resolveTenant(host)
 
-  // Clone request headers and inject tenantId
+  // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
-  if (tenantId) {
-    requestHeaders.set('x-tenant-id', tenantId)
-  }
+  if (tenantId) requestHeaders.set('x-tenant-id', tenantId)
+  requestHeaders.set('x-tenant-brand', brandColor)
+  requestHeaders.set('x-tenant-brand-hover', brandHover)
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },
@@ -62,12 +76,23 @@ export async function proxy(request: NextRequest) {
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
   const isLoginPage = request.nextUrl.pathname === '/admin/login'
 
-  if (isAdminRoute && !isLoginPage && !user) {
-    return NextResponse.redirect(new URL('/admin/login', request.url))
+  if (isAdminRoute && !isLoginPage) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+    // Super admins can access any tenant; tenant admins must match this domain
+    const isSuperAdmin = user.app_metadata?.role === 'super_admin'
+    if (!isSuperAdmin && user.app_metadata?.tenantId !== tenantId) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
   }
 
   if (isLoginPage && user) {
-    return NextResponse.redirect(new URL('/admin', request.url))
+    const isSuperAdmin = user.app_metadata?.role === 'super_admin'
+    const belongsHere = isSuperAdmin || user.app_metadata?.tenantId === tenantId
+    if (belongsHere) {
+      return NextResponse.redirect(new URL('/admin', request.url))
+    }
   }
 
   return response

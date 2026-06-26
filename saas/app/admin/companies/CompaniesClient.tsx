@@ -6,7 +6,7 @@ import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/ac
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
 type Price = {

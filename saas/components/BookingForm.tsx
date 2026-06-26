@@ -11,7 +11,7 @@ type Price = {
   id: string; minGuests: number; maxGuests: number
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
 }
-type Company = { id: string; name: string; prices: Price[]; accessCode: string | null }
+type Company = { id: string; name: string; prices: Price[]; accessCode: string | null; contactName: string | null; contactPhone: string | null; contactEmail: string | null }
 type MenuItem = { id: string; name: string; type: string }
 type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
 
@@ -19,7 +19,7 @@ const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00
 
 const C = {
   bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
-  muted: '#6b5a47', faint: '#a89070', wine: '#7c1d23', inputBg: '#fffdf9',
+  muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)', inputBg: '#fffdf9',
 }
 
 
@@ -92,11 +92,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
 
-  // Show access code popup when a company with a code is selected
+  // Show access code popup when a company with a code is selected; auto-fill directly if no code
   useEffect(() => {
     if (!companyId || bookingType !== 'COMPANY') return
     const company = companies.find(c => c.id === companyId)
-    if (!company?.accessCode) return
+    if (!company) return
+    if (!company.accessCode) {
+      applyProfile({ contactName: company.contactName, contactPhone: company.contactPhone, contactEmail: company.contactEmail })
+      return
+    }
     setCodeInput('')
     setCodeError('')
     setShowCodeText(false)
@@ -256,7 +260,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     return (
       <button type="button" onClick={onClick}
         className="py-3 px-4 rounded-lg border text-sm font-medium transition-colors text-left w-full"
-        style={{ backgroundColor: active ? '#7c1d23' : C.bg, borderColor: active ? '#7c1d23' : C.border, color: active ? '#fff' : C.muted }}>
+        style={{ backgroundColor: active ? 'var(--color-brand)' : C.bg, borderColor: active ? 'var(--color-brand)' : C.border, color: active ? '#fff' : C.muted }}>
         {children}
       </button>
     )
@@ -333,10 +337,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <button
               type="button"
               onClick={handleNotARep}
-              className="text-xs text-center hover:underline"
-              style={{ color: C.faint }}
+              className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50"
+              style={{ color: C.muted, borderColor: C.border }}
             >
-              I'm not a company rep — book as individual
+              Enter Manually
             </button>
           </form>
         </div>

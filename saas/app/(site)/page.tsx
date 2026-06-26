@@ -286,7 +286,7 @@ export default async function Home({ searchParams }: PageProps) {
               as="h3" className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }} />
             <ET k={pkg.dk} s="home" lbl={pkg.tFb + ' — description'} fb={pkg.dFb}
               as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
-            <p className="font-bold text-2xl" style={{ color: '#7c1d23' }}>
+            <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
               {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
             </p>
             <p className="text-xs mt-1" style={{ color: '#a89070' }}>{t(locale, 'form.minimum')} {pkg.min} {t(locale, 'form.guest_plural')}</p>

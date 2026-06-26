@@ -6,7 +6,7 @@ import { updateWineOrderStatus } from '@/app/actions/wineOrders'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
 const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: string; label: string }> = {

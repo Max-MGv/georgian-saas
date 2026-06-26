@@ -8,7 +8,7 @@ import InvoicePrint from './InvoicePrint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23',
+  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
@@ -929,7 +929,7 @@ function PRow({ label, value, bold, wine }: { label: string; value: string; bold
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '1px 0' }}>
       <span style={{ color: '#6b5a47' }}>{label}</span>
-      <span style={{ fontWeight: bold ? 700 : 400, color: wine ? '#7c1d23' : '#1c1008' }}>{value}</span>
+      <span style={{ fontWeight: bold ? 700 : 400, color: wine ? 'var(--color-brand)' : '#1c1008' }}>{value}</span>
     </div>
   )
 }

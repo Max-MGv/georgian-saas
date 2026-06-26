@@ -7,6 +7,8 @@ import PhaseNode from './PhaseNode'
 import FeatureNode from './FeatureNode'
 import DetailPanel from './DetailPanel'
 import ArchitectureFlow from './ArchitectureFlow'
+import MultiTenantFlow from './MultiTenantFlow'
+import PricingPanel from './PricingPanel'
 import type { VaultData, Phase, Section, ArchData, OverviewData } from '@/lib/parseVault'
 
 const nodeTypes = {
@@ -20,11 +22,12 @@ const SECTION_W = 176
 const SECTION_GAP = 50
 
 export default function FlowChart({ data, arch, overview }: { data: VaultData; arch: ArchData; overview: OverviewData }) {
-  const [tab, setTab] = useState<'roadmap' | 'architecture'>('roadmap')
+  const [tab, setTab] = useState<'roadmap' | 'architecture' | 'multi-tenant'>('roadmap')
   const [view, setView] = useState<'overview' | 'phase'>('overview')
   const [activePhase, setActivePhase] = useState<Phase | null>(null)
   const [selectedSection, setSelectedSection] = useState<Section | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [pricingOpen, setPricingOpen] = useState(false)
 
   function openPhase(phase: Phase) {
     setActivePhase(phase)
@@ -135,7 +138,7 @@ export default function FlowChart({ data, arch, overview }: { data: VaultData; a
 
         {/* Tab switcher */}
         <div className="ml-6 flex items-center gap-1 bg-gray-800 rounded-md p-0.5">
-          {(['roadmap', 'architecture'] as const).map(t => (
+          {(['roadmap', 'architecture', 'multi-tenant'] as const).map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); setView('overview') }}
@@ -148,8 +151,14 @@ export default function FlowChart({ data, arch, overview }: { data: VaultData; a
           ))}
         </div>
 
-        <div className="ml-auto text-xs text-gray-600">
-          Last updated: {data.lastUpdated}
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            onClick={() => setPricingOpen(o => !o)}
+            className={`text-xs px-3 py-1 rounded border transition-colors ${pricingOpen ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'}`}
+          >
+            Pricing model
+          </button>
+          <span className="text-xs text-gray-600">Last updated: {data.lastUpdated}</span>
         </div>
       </div>
 
@@ -157,6 +166,8 @@ export default function FlowChart({ data, arch, overview }: { data: VaultData; a
       <div className="flex-1 relative flex flex-col">
         {tab === 'architecture' ? (
           <ArchitectureFlow data={arch} overview={overview} />
+        ) : tab === 'multi-tenant' ? (
+          <MultiTenantFlow />
         ) : (
           <>
             <ReactFlow
@@ -193,6 +204,7 @@ export default function FlowChart({ data, arch, overview }: { data: VaultData; a
             />
           </>
         )}
+        <PricingPanel open={pricingOpen} onClose={() => setPricingOpen(false)} />
       </div>
     </div>
   )

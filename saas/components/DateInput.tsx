@@ -63,6 +63,7 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
         value={text}
         onChange={handleChange}
         onBlur={handleBlur}
+        onFocus={() => (hiddenRef.current as any)?.showPicker?.()}
         placeholder="DD/MM/YYYY"
         maxLength={10}
         className={className}

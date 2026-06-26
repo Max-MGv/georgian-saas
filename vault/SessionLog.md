@@ -8,6 +8,252 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-26 — Bug #4: PgBouncer transaction mode (full detail)
+
+### Completed
+
+**Problem solved**: `DATABASE_URL` used port 5432 (PgBouncer session mode). Each `PrismaClient` holds a connection open for its lifetime; Supabase caps session mode at 15 connections. Under Vercel serverless (cold starts) or dev hot reloads, the pool fills up and returns `EMAXCONNSESSION`. `proxy.ts` also created a second `new PrismaClient()` at module level, burning two connections per hot reload instead of one.
+
+**`saas/.env`**
+- `DATABASE_URL` switched from port 5432 → port 6543 (`?pgbouncer=true`)
+- `DIRECT_URL` stays on port 5432 (used only by `prisma db push` / migrations)
+
+**`saas/proxy.ts`**
+- Removed `import { PrismaClient } from '@prisma/client'` and `const db = new PrismaClient()`
+- Now imports shared singleton: `import { db } from '@/lib/db'`
+- Eliminates the second connection that bypassed the singleton guard
+
+### Key design decisions
+- Transaction mode returns connections to the pool immediately after each query — 15 physical connections can serve hundreds of concurrent requests
+- `?pgbouncer=true` tells Prisma to disable prepared statements, which don't work in transaction mode
+- `SET LOCAL ROLE` and `set_config(..., true)` (needed for Bug #5 / RLS) are transaction-scoped and revert at `COMMIT` — fully compatible with transaction mode
+
+### What's still needed (user action required)
+1. **Update Vercel environment variable** — go to Vercel → Project Settings → Environment Variables → update `DATABASE_URL` to the port 6543 URL with `?pgbouncer=true`. The local `.env` is already updated; Vercel still has the old value.
+2. After deploying, run `npx prisma db push` from `saas/` to confirm the `DIRECT_URL` path still works
+
+### Key files changed
+- `saas/.env` — `DATABASE_URL` → port 6543 + `?pgbouncer=true`
+- `saas/proxy.ts` — removed rogue `new PrismaClient()`, uses shared singleton
+
+### Next up
+- ~~Bug #5~~ — also resolved this session (see below)
+
+---
+
+## 2026-06-26 — Bug #5: withTenantDb fully implemented (RLS now enforced)
+
+### Completed
+
+**Problem solved**: `withTenantDb` in `lib/db.ts` was a stub — it never opened a transaction or called `SET LOCAL ROLE`. The app connected as `postgres` (Supabase superuser), which bypasses RLS by design. The RLS policies were deployed but dormant.
+
+**`saas/lib/db.ts`**
+- Replaced stub body with full implementation:
+  - Opens a Prisma `$transaction` (15s timeout)
+  - Calls `set_config('app.tenant_id', tenantId, true)` — sets the session variable RLS policies read
+  - Calls `SET LOCAL ROLE app_user` — voluntarily downgrades to non-superuser so Postgres enforces RLS
+  - `LOCAL` on both means they revert at `COMMIT` — no leakage between requests
+
+**Verified with `check-rls.ts`**: all 12 tenant tables have `tenant_isolation` policies; RLS ON on all of them. `Tenant` table is 🔴 (correct — no tenantId, no RLS needed).
+
+**TypeScript**: 0 errors
+
+### What changed
+- Tenant isolation is now enforced at two independent layers:
+  1. Query-level `where: { tenantId }` in every server action (unchanged)
+  2. DB-level RLS via `app_user` role + `tenant_isolation` policy (now active)
+- A query that accidentally omits `tenantId` filter will now return 0 rows instead of cross-tenant data
+
+### Key files changed
+- `saas/lib/db.ts` — `withTenantDb` stub replaced with real `$transaction` + role/config setup
+
+### Next up
+- All 5 known bugs are now resolved (bugs #1–#5)
+- Ready to move to next roadmap item
+
+---
+
+## 2026-06-25 — Theming: per-tenant CSS brand color (full detail)
+
+### Completed
+
+**Problem solved**: `#7c1d23` (wine-red) was hardcoded in 32 files (56 occurrences). New tenants couldn't have a different brand color.
+
+**Solution**: Single CSS variable `--color-brand` injected server-side per tenant with zero flash.
+
+**`saas/prisma/schema.prisma`**
+- Added `theme Json?` to `Tenant` model; `prisma db push` done
+
+**`saas/app/globals.css`**
+- Added `:root { --color-brand: #7c1d23; --color-brand-hover: #9b2429; }` as defaults
+- `.btn-wine` updated to use `var(--color-brand)` / `var(--color-brand-hover)`
+
+**`saas/proxy.ts`**
+- Cache expanded from `Map<string, string>` to `Map<string, TenantInfo>` (tenantId + brandColor + brandHover)
+- Reads `theme` JSON from tenant row on first request per domain, then caches for process lifetime
+- Forwards brand colors as `x-tenant-brand` / `x-tenant-brand-hover` request headers
+
+**`saas/app/layout.tsx`**
+- Now async; reads `x-tenant-brand` / `x-tenant-brand-hover` from headers
+- Injects `<style>:root { --color-brand: X; --color-brand-hover: Y; }</style>` into `<head>` server-side — no flash
+
+**All 32 UI files updated (replace_all)**
+- Every `'#7c1d23'` → `'var(--color-brand)'` across components, admin pages, public site pages
+- Email templates (`invoiceEmail.ts`, `bookingConfirmation.ts`) intentionally left as hex — email clients don't support CSS vars
+- `WinesClient.tsx` BLANK.color kept as `'#7c1d23'` (wine bottle dot data, not theme)
+
+**`saas/scripts/seed-theme.ts` — NEW**
+- Sets `{ primaryColor: '#7c1d23', primaryHover: '#9b2429' }` on nikalasmarani.ge tenant
+- Run: `npx tsx scripts/seed-theme.ts` (from saas/ folder — not yet run due to classifier outage)
+
+### Key design decisions
+- Colors forwarded as headers from proxy (already has cached DB access) rather than a second DB hit in layout
+- CSS variable injection happens in `<head>` before any styles load — no color flash for non-default tenants
+- Fallback chain: tenant theme JSON → header fallback (`#7c1d23`) → CSS `:root` default — three layers of safety
+- Adding a new client with different branding: just set `theme` JSON on their tenant row in DB
+
+### Key files changed
+- `saas/prisma/schema.prisma` — `theme Json?` on Tenant
+- `saas/app/globals.css` — CSS variable definitions + `.btn-wine` updated
+- `saas/proxy.ts` — TenantInfo cache, theme header forwarding
+- `saas/app/layout.tsx` — async, reads headers, injects style tag
+- 32 UI files — replace_all `#7c1d23` → `var(--color-brand)`
+- `saas/scripts/seed-theme.ts` — NEW: theme seed for nikalasmarani.ge
+
+### Next up (user)
+1. Run `npx tsx scripts/seed-theme.ts` from saas/ folder (sets theme on nikalas marani tenant)
+2. To give a future client a different color: update their tenant row's `theme` field in DB or via the upcoming super-admin UI
+3. **Todo**: `/super-admin` page — list tenants, color picker UI, edit theme JSON
+
+---
+
+## 2026-06-25 — Phase 6: Per-tenant admin auth (full detail)
+
+### Completed
+
+**Problem solved**: Admin auth only checked "is someone logged in?" — no tenant verification. Any logged-in user could access any tenant's admin.
+
+**Solution**: `app_metadata` on Supabase users now determines access. Two roles:
+- `role: 'super_admin'` — bypasses tenant check, can access all tenants (Max's account)
+- `tenantId: '<id>'` — must match the current domain's tenant
+
+**`saas/lib/requireAdmin.ts`**
+- Now reads `x-tenant-id` from request headers (set by middleware from the domain)
+- If `user.app_metadata.role === 'super_admin'` → passes immediately
+- Else checks `user.app_metadata.tenantId === currentTenantId` → throws Unauthorized if mismatch
+
+**`saas/proxy.ts`**
+- Same tenant check enforced at the edge before requests reach the app
+- Wrong-tenant users redirected to `/admin/login`
+- Login page redirect also tenant-aware (won't auto-redirect to `/admin` if user belongs to a different tenant)
+
+**`saas/scripts/set-admin-metadata.ts` — NEW**
+- Uses Supabase REST API directly (no SDK — avoids Node 20 WebSocket issue)
+- `npm run set-admin -- --email <email> --super` → grants super_admin
+- `npm run set-admin -- --email <email> --tenantId <id>` → locks to a tenant
+
+**`saas/package.json`**
+- Added `"set-admin": "tsx scripts/set-admin-metadata.ts"` script
+
+**Users configured:**
+- `max.mghvdliashvili@gmail.com` → `super_admin` (all tenants)
+- `nikalasmarani@email.ge` → `tenantId: cmqou94er0000vl1sl9v0yv54` (Nikalas Marani only)
+
+**TypeScript**: 0 errors
+
+### Key design decisions
+- `super_admin` flag is a clean hook for Max's future management UI — any "list all tenants / impersonate" feature just checks that same flag
+- Script uses raw fetch against Supabase REST API rather than the JS SDK to avoid the Node 20 WebSocket dependency issue
+- Both proxy.ts and requireAdmin.ts enforce the check — edge blocks page loads, requireAdmin blocks direct server action POSTs
+
+### Key files changed
+- `saas/lib/requireAdmin.ts` — tenant check + super_admin bypass
+- `saas/proxy.ts` — tenant check at edge + tenant-aware login redirect
+- `saas/scripts/set-admin-metadata.ts` — NEW: user provisioning script
+- `saas/package.json` — set-admin script added
+
+### Next up (user testing)
+1. Log in with `max.mghvdliashvili@gmail.com` → should access `/admin` normally
+2. Log in with `nikalasmarani@email.ge` → should work on nikalasmarani.ge, blocked on other domains
+3. When adding a new client: `npm run set-admin -- --email client@domain.ge --tenantId <id>`
+
+---
+
+## 2026-06-25 — Individual pricing management (full detail)
+
+### Completed
+
+**Problem solved**: Individual booking prices were hardcoded at 50₾/100₾ — no admin UI to change them, no way to set volume discounts for walk-in groups.
+
+**Solution**: Individuals treated as a special pinned "company" with full price tier management, identical to tour operators.
+
+**`saas/prisma/schema.prisma`**
+- Added `isIndividual Boolean @default(false)` to Company model
+- Added `isDisplayPrice Boolean @default(false)` to Price model
+- `prisma db push` — both columns live in DB
+
+**`saas/app/actions/companies.ts` — `ensureIndividualsCompany`**
+- New exported helper; finds or creates the Individuals pseudo-company for a given tenant
+- Called from companies page on every load — idempotent, safe to call repeatedly
+
+**`saas/app/actions/prices.ts` — `setDisplayPrice`**
+- New server action; atomically unsets all `isDisplayPrice` flags for a company then sets the given price
+- Guards: requires admin, verifies the price belongs to an Individuals company of the current tenant
+- Revalidates `/` (home page) and `/admin/companies`
+
+**`saas/app/admin/companies/page.tsx`**
+- Calls `ensureIndividualsCompany` on load (creates Individuals row if missing)
+- Passes `isIndividual` flag through to client; count shows "X tour operators" (excludes Individuals)
+
+**`saas/app/admin/companies/CompaniesClient.tsx` — full rewrite**
+- `isIndividual` + `isDisplayPrice` added to Company/Price types
+- Individuals row pinned above the tour operators list; amber/gold border + `#fffbeb` background
+- Individuals row header shows currently displayed prices or "50₾ / 100₾ defaults" if none selected
+- No edit/delete buttons on Individuals row
+- Price tiers on Individuals row show a **★ Show on site** amber button — clicking it calls `setDisplayPrice`; active tier shows "★ Shown on site" with amber styling; only one active at a time
+- Shared `PriceTiersSection` component used by both Individuals and tour operator rows (previously inlined)
+- Hint text under tiers explains the 50/100₾ fallback behavior
+
+**`saas/app/(site)/page.tsx`**
+- Renamed `companies` → `allCompanies`; post-fetch: filters to `companies` (non-individual) + extracts `individualsRow`
+- `displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)`
+- `displayPriceTasting` and `displayPriceLunch` replace hardcoded 50/100 in package cards
+- Company selector for booking form receives `companies` (Individuals excluded)
+
+**`saas/app/actions/createBooking.ts`**
+- Fetches Individuals company + tiers at booking time
+- Uses `findTier(individualsCompany.prices, guestCount)` to resolve the correct rate
+- Falls back to 50/100₾ if no Individuals company or no matching tier
+
+**`saas/app/(site)/wines/page.tsx`**
+- Added `isIndividual: false` to company `findMany` — Individuals row excluded from wine order form selector
+
+**TypeScript**: 0 errors
+
+### Key design decisions
+- Individuals is a real DB row (not a virtual construct) — same Price table, same tier logic, zero special-casing in pricing engine
+- `ensureIndividualsCompany` is idempotent — safe to call on every page load; cheap SELECT, CREATE only on first access
+- `isDisplayPrice` is per-company (not global) so future tenants can have their own display tiers
+- `setDisplayPrice` uses a `$transaction` to avoid a window where no tier is marked as display
+
+### Key files changed
+- `saas/prisma/schema.prisma` — isIndividual + isDisplayPrice fields
+- `saas/app/actions/companies.ts` — ensureIndividualsCompany added
+- `saas/app/actions/prices.ts` — setDisplayPrice added; getTenantId imported
+- `saas/app/admin/companies/page.tsx` — ensureIndividualsCompany call + isIndividual prop
+- `saas/app/admin/companies/CompaniesClient.tsx` — full rewrite: Individuals row pinned, display-price radio, PriceTiersSection extracted
+- `saas/app/(site)/page.tsx` — display price fetch + Individuals filter
+- `saas/app/actions/createBooking.ts` — Individuals tiers for individual pricing
+- `saas/app/(site)/wines/page.tsx` — isIndividual: false filter
+
+### Next up (user testing)
+1. Go to `/admin/companies` → verify Individuals row is pinned at top with amber styling
+2. Expand Individuals → add a tier (e.g. 1–20 guests, 45₾/85₾) → click ★ Show on site → check home page shows updated prices
+3. Add another tier → click ★ Show on site on it → verify previous tier's star clears
+4. Check booking form still works for individual bookings with the new tier pricing
+
+---
+
 ## 2026-06-22 — Visual mode: iframe-based live site editor (full detail)
 
 ### Completed

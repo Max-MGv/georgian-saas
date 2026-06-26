@@ -105,14 +105,14 @@ This is the highest-risk step. Test thoroughly before deploying.
 
 ## Suggested sprint grouping
 
-| Sprint | Phases | Notes |
-|---|---|---|
-| Sprint 1 | 1 + 2 | Safe, additive, no risk. ~1 day. |
-| Sprint 2 | 3 + 4 | The big flip. ~2–3 days with testing. |
-| Sprint 3 | 5a, 5b, 5c | Any order, each standalone. |
-| Sprint 4 | 6 | Auth, separate concern. |
-| Anytime | 7 | Theming, zero risk. |
-| When ready | 8 | First new client onboarding. |
+| Sprint     | Phases     | Notes                                 |
+| ---------- | ---------- | ------------------------------------- |
+| Sprint 1   | 1 + 2      | Safe, additive, no risk. ~1 day.      |
+| Sprint 2   | 3 + 4      | The big flip. ~2–3 days with testing. |
+| Sprint 3   | 5a, 5b, 5c | Any order, each standalone.           |
+| Sprint 4   | 6          | Auth, separate concern.               |
+| Anytime    | 7          | Theming, zero risk.                   |
+| When ready | 8          | First new client onboarding.          |
 
 ---
 

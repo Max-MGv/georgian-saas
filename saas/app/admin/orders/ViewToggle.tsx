@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 
-const C = { border: '#e0d4c0', muted: '#6b5a47', wine: '#7c1d23', inputBg: '#fffdf9' }
+const C = { border: '#e0d4c0', muted: '#6b5a47', wine: 'var(--color-brand)', inputBg: '#fffdf9' }
 
 type Props = {
   view: 'table' | 'calendar'

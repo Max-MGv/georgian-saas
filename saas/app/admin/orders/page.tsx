@@ -8,7 +8,7 @@ import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
 import ViewToggle from './ViewToggle'
 
-const C = { faint: '#a89070', muted: '#6b5a47', border: '#e0d4c0', bg: '#fff9f3', wine: '#7c1d23', text: '#1c1008' }
+const C = { faint: '#a89070', muted: '#6b5a47', border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)', text: '#1c1008' }
 
 type SearchParams = {
   dateFrom?: string

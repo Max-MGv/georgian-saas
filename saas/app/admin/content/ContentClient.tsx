@@ -8,7 +8,7 @@ import BackgroundsTab from './BackgroundsTab'
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', pageBg: '#f5efe6',
-  wine: '#7c1d23', rust: '#8b4513', inputBg: '#fffdf9',
+  wine: 'var(--color-brand)', rust: '#8b4513', inputBg: '#fffdf9',
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────

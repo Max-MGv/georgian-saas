@@ -13,6 +13,7 @@ model Tenant {
   name      String
   domain    String   @unique
   slug      String   @unique
+  theme     Json?
   createdAt DateTime @default(now())
 }
 

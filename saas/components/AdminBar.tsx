@@ -34,9 +34,9 @@ export default function AdminBar({ locale }: Props) {
             disabled={isPending}
             className="px-2 py-0.5 rounded text-xs font-semibold uppercase transition-all"
             style={{
-              backgroundColor: locale === l ? '#7c1d23' : 'transparent',
+              backgroundColor: locale === l ? 'var(--color-brand)' : 'transparent',
               color: locale === l ? '#fff' : '#c9a090',
-              border: `1px solid ${locale === l ? '#7c1d23' : '#5a3030'}`,
+              border: `1px solid ${locale === l ? 'var(--color-brand)' : '#5a3030'}`,
             }}
           >
             {l}

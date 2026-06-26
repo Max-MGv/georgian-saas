@@ -37,7 +37,7 @@ function Row({ label, value, mono = false }: { label: string; value: string | nu
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="invoice-section" style={{ marginBottom: 20 }}>
-      <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 8 }}>
+      <div style={{ borderLeft: '3px solid var(--color-brand)', paddingLeft: 10, marginBottom: 8 }}>
         <strong style={{ fontSize: 14, color: '#1c1008' }}>{title}</strong>
       </div>
       {children}
@@ -135,7 +135,7 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
         </Section>
 
         <div style={{ border: '1px solid #e8e0d0', borderRadius: 8, padding: 16, marginTop: 8 }}>
-          <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 10 }}>
+          <div style={{ borderLeft: '3px solid var(--color-brand)', paddingLeft: 10, marginBottom: 10 }}>
             <strong style={{ fontSize: 14 }}>გადახდის რეკვიზიტები</strong>
           </div>
           <Row label="მიმღების სახელი"   value={payment.recipientName  || '—'} />
@@ -237,7 +237,7 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
 
       {/* Payment details */}
       <div style={{ border: '1px solid #e8e0d0', borderRadius: 8, padding: 16, marginTop: 8 }}>
-        <div style={{ borderLeft: '3px solid #7c1d23', paddingLeft: 10, marginBottom: 10 }}>
+        <div style={{ borderLeft: '3px solid var(--color-brand)', paddingLeft: 10, marginBottom: 10 }}>
           <strong style={{ fontSize: 14 }}>გადახდის რეკვიზიტები</strong>
         </div>
         <Row label="მიმღების სახელი"   value={payment.recipientName  || '—'} />

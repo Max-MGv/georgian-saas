@@ -80,7 +80,7 @@ export default function EditableText({
     ...style,
     cursor: editing ? 'text' : 'pointer',
     outline: editing
-      ? '2px solid #7c1d23'
+      ? '2px solid var(--color-brand)'
       : hovered
       ? '1px dashed #c9a090'
       : '1px dashed transparent',
@@ -163,7 +163,7 @@ export default function EditableText({
           top: -6,
           right: -6,
           color: '#fff',
-          backgroundColor: '#7c1d23',
+          backgroundColor: 'var(--color-brand)',
           fontSize: '0.65rem',
           lineHeight: 1,
           padding: '2px 4px',
@@ -197,7 +197,7 @@ export default function EditableText({
             onClick={handleSave}
             disabled={isPending}
             className="text-xs px-2.5 py-1 rounded font-medium text-white"
-            style={{ backgroundColor: '#7c1d23', opacity: isPending ? 0.6 : 1 }}
+            style={{ backgroundColor: 'var(--color-brand)', opacity: isPending ? 0.6 : 1 }}
           >
             {isPending ? '…' : 'Save'}
           </button>

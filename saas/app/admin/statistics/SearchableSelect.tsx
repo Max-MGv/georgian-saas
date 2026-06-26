@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', wine: '#7c1d23',
+  border: '#e0d4c0', wine: 'var(--color-brand)',
 }
 
 export type SelectOption = { value: string; label: string }

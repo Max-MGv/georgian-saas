@@ -108,7 +108,7 @@ Complete this before writing a single line of product code.
 - [x] **Hover preview card** — Obsidian-style floating popover on order row hover; shows key details without navigating away
 - [x] **Configurable columns** — show/hide any column in orders table; dropdown stays open; sticky actions column; icon buttons
 - [x] **Rate UI improvements** — rate inputs in Guest Breakdown; both rates always visible; collapse after save
-- [ ] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
+- [x] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
 - [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
 - [ ] Gallery page — wire up slider photos and gallery photos on public site (images already in `public/images/`)
 - [ ] Georgian / English language toggle
@@ -271,11 +271,22 @@ Full plan: `vault/Plan-MultiTenant.md`
 - [x] 21/21 DB integration tests pass; cross-tenant isolation confirmed; 0 TypeScript errors
 - [x] See `vault/RLS-Architecture.md` for full setup reference
 
-**Sprint 4:**
-- [ ] Per-tenant admin auth (Supabase user tied to `tenantId`)
+**Sprint 4:** ✅ DONE 2026-06-25
+- [x] Per-tenant admin auth (Supabase user tied to `tenantId`)
+  - `app_metadata.role = 'super_admin'` → bypasses tenant check (Max's account)
+  - `app_metadata.tenantId` → must match domain's tenant (client admin accounts)
+  - `requireAdmin.ts` + `proxy.ts` both enforce; `set-admin` script provisions users
 
-**Anytime:**
-- [ ] Theming — `theme` JSON on `tenants` table, CSS variables
+**Theming:** ✅ DONE 2026-06-25
+- [x] `theme Json?` column on `tenants` table (`prisma db push`)
+- [x] `--color-brand` + `--color-brand-hover` CSS variables defined in `globals.css`
+- [x] All 56 hardcoded `#7c1d23` / `#9b2429` uses in 32 files replaced with CSS variables (emails kept as hex — email clients don't support CSS vars)
+- [x] `proxy.ts` reads tenant theme from DB (cached), forwards as `x-tenant-brand` / `x-tenant-brand-hover` request headers
+- [x] `app/layout.tsx` injects `<style>:root { --color-brand: X; }</style>` per tenant — zero flash, server-side
+- [x] `scripts/seed-theme.ts` — sets nikalasmarani.ge theme in DB (run `npx tsx scripts/seed-theme.ts`)
+
+**Super-admin UI (TODO):**
+- [ ] `/super-admin` page (Max only, super_admin check) — list all tenants, edit their `theme` JSON (color picker for primaryColor/primaryHover), manage tenant rows
 
 **When ready:**
 - [ ] First new client onboarding (Vercel domain, DB row, admin login)

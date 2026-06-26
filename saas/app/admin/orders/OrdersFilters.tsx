@@ -12,7 +12,7 @@ const C = {
   muted: '#6b5a47',
   inputBg: '#fffdf9',
   text: '#1c1008',
-  wine: '#7c1d23',
+  wine: 'var(--color-brand)',
   faint: '#a89070',
   bg: '#fff9f3',
 }
@@ -383,7 +383,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
       {isNavigating && (
         <div style={{
           height: '100%',
-          backgroundColor: '#7c1d23',
+          backgroundColor: 'var(--color-brand)',
           borderRadius: 2,
           animation: 'nav-progress 1s ease-out forwards',
         }} />
