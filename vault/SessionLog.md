@@ -8,6 +8,83 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-26 — Super-admin panel (full detail)
+
+### Completed
+
+**New route: `/super-admin`** — separate from tenant admin, accessible only to `super_admin` users.
+
+**Proxy guard (`saas/proxy.ts`)**
+- Added `/super-admin` route check: unauthenticated → redirect to `/admin/login`; authenticated but not `super_admin` → redirect to `/admin`
+- Refactored `isSuperAdmin` to be computed once at the top of the guard block
+
+**`saas/lib/requireSuperAdmin.ts` — NEW**
+- Checks Supabase session + `app_metadata.role === 'super_admin'`; throws if not satisfied
+
+**`saas/app/actions/superAdmin.ts` — NEW**
+- Tenant CRUD: `getTenants`, `getTenant`, `createTenant`, `updateTenant`, `deleteTenant`
+  - `deleteTenant` blocks deletion if tenant has any orders or companies (FK safety)
+  - All theme data serialized from `tenant.theme` Json column
+- User management (Supabase Admin REST API, same pattern as `set-admin-metadata.ts`):
+  - `listAdminUsers` — fetches all Supabase users with `no-store` cache
+  - `setUserTenant(userId, tenantId)` — assigns tenant admin role
+  - `setUserSuperAdmin(userId)` — grants super_admin
+  - `removeUserAdminRole(userId)` — clears app_metadata; guards against self-demotion
+  - `createAdminUser(email, password, mode, tenantId?)` — creates Supabase user + sets metadata in one call
+
+**`saas/app/super-admin/ColorPicker.tsx` — NEW**
+- `react-colorful` `HexColorPicker` (proper color wheel + saturation area) in a click-to-open popover
+- Hex text input with `#` prefix for manual entry
+- Color preview strip at bottom of popover
+- Closes on outside click
+
+**Layout + pages:**
+- `layout.tsx` — dark theme (`#0b1120` bg, `#111827` nav); gradient indigo logo mark; "PLATFORM" badge; Tenants / Users nav; "← Tenant Admin" back link; super_admin check (redirects to `/admin` if not authorized)
+- `page.tsx` — redirects to `/super-admin/tenants`
+- `tenants/page.tsx` — server component; fetches all tenants with stats
+- `tenants/TenantsClient.tsx` — card-per-tenant list; color swatch with glow; order/company count; edit link; delete (only shown when 0 data); inline confirm dialog
+- `tenants/TenantFormClient.tsx` (shared by new + [id]) — name, domain, slug (auto-fills from name while untouched); two ColorPicker instances (primary + hover); live brand preview panel (mock nav strip in brand color, mock buttons, accent text); save/cancel; success toast
+- `tenants/new/page.tsx` — breadcrumb + TenantFormClient in "new" mode
+- `tenants/[id]/page.tsx` — fetches tenant by ID, passes to TenantFormClient in "edit" mode
+- `users/page.tsx` — server component; fetches all Supabase users + all tenants + current user ID
+- `users/UsersClient.tsx` — user row per account; avatar initial; role badge (super_admin indigo / tenant name green / no access gray); "Change role" inline form (tenant dropdown or super_admin option); "Remove access" (hidden for self); "New Admin User" form (email, password, access level selector, tenant dropdown)
+
+**`saas/app/admin/layout.tsx`**
+- Added "⬡ Platform" indigo link in top-right nav, visible only when `user.app_metadata.role === 'super_admin'`
+
+**TypeScript**: 0 errors
+
+### What's still needed (user testing)
+1. Log in → verify "⬡ Platform" link appears in admin nav top-right
+2. Click "⬡ Platform" → verify dark super-admin layout loads with Tenants and Users nav
+3. Tenants page → verify Nikalas Marani row shows with brand color swatch + order/company counts
+4. Click Edit on Nikalas Marani → verify form pre-fills; open color picker → verify color wheel + hex input work; pick a new color → verify live preview updates
+5. Save → verify changes persist (reload the edit page)
+6. Users page → verify all Supabase accounts listed; verify your account shows "super_admin" badge
+7. Create a new admin user for a test tenant → verify user appears in Supabase auth dashboard
+
+### Key files changed
+- `saas/proxy.ts` — super-admin route guard
+- `saas/lib/requireSuperAdmin.ts` — NEW
+- `saas/app/actions/superAdmin.ts` — NEW
+- `saas/app/admin/layout.tsx` — Platform link
+- `saas/app/super-admin/layout.tsx` — NEW
+- `saas/app/super-admin/page.tsx` — NEW (redirect)
+- `saas/app/super-admin/ColorPicker.tsx` — NEW
+- `saas/app/super-admin/tenants/page.tsx` — NEW
+- `saas/app/super-admin/tenants/TenantsClient.tsx` — NEW
+- `saas/app/super-admin/tenants/TenantFormClient.tsx` — NEW
+- `saas/app/super-admin/tenants/new/page.tsx` — NEW
+- `saas/app/super-admin/tenants/[id]/page.tsx` — NEW
+- `saas/app/super-admin/users/page.tsx` — NEW
+- `saas/app/super-admin/users/UsersClient.tsx` — NEW
+
+### Next up
+- User test the super-admin panel (7 steps in "What's still needed" above) — currently blocked on login verification
+- **Dynamic branding sprint** — make logo, favicon, and admin display name per-tenant (see Roadmap v3 "Dynamic branding" section for full task list). This is the next thing to build before onboarding a second client. Architecture: same pattern as brand colors — add fields to Tenant table, read in proxy, forward as headers, render in layout. Upload UI goes in both super-admin Edit Tenant form and client's own /admin/settings.
+
+---
+
 ## 2026-06-26 — Bug #4: PgBouncer transaction mode (full detail)
 
 ### Completed

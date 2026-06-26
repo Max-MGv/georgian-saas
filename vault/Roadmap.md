@@ -285,8 +285,20 @@ Full plan: `vault/Plan-MultiTenant.md`
 - [x] `app/layout.tsx` injects `<style>:root { --color-brand: X; }</style>` per tenant — zero flash, server-side
 - [x] `scripts/seed-theme.ts` — sets nikalasmarani.ge theme in DB (run `npx tsx scripts/seed-theme.ts`)
 
-**Super-admin UI (TODO):**
-- [ ] `/super-admin` page (Max only, super_admin check) — list all tenants, edit their `theme` JSON (color picker for primaryColor/primaryHover), manage tenant rows
+**Super-admin UI:** ✅ DONE 2026-06-26
+- [x] `/super-admin` route (super_admin only, proxy-guarded) — dark platform-layer theme
+- [x] Tenants list — all tenants with brand color swatches, order/company stats, edit/delete
+- [x] Add/edit tenant — name, domain, slug, brand color picker (react-colorful wheel + hex), live preview
+- [x] Users page — list all Supabase users with role badges; change role; create new admin user
+
+**Dynamic branding (logo, favicon, display name):** 🔜 TODO
+- [ ] Add `logoUrl String?`, `logoAlt String?`, `faviconUrl String?` to `Tenant` model → `prisma db push`
+- [ ] `proxy.ts` reads these fields from the cached tenant row, forwards as `x-tenant-logo`, `x-tenant-name`, `x-tenant-favicon` request headers (same pattern as brand colors)
+- [ ] `app/layout.tsx` reads headers and renders the correct `<img>` logo + `<link rel="icon">` favicon — falls back to current Nikalas Marani assets if not set
+- [ ] `app/admin/layout.tsx` reads `x-tenant-name` header and renders dynamic name instead of hardcoded "Nikalas Marani"
+- [ ] Logo upload in **super-admin Edit Tenant form** — file picker → uploads to Supabase Storage `logos` bucket → saves URL to `tenant.logoUrl`; same for favicon
+- [ ] Logo upload also accessible from **client's own `/admin/settings`** — so they can update it themselves without going through Max
+- [ ] Seed Nikalas Marani logo URL in DB so existing client is unaffected (use their current `/icons/logo-dark.svg` path or upload to Storage)
 
 **When ready:**
 - [ ] First new client onboarding (Vercel domain, DB row, admin login)

@@ -72,23 +72,29 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // ── Admin auth guard ───────────────────────────────────────────────────────
+  // ── Auth guards ────────────────────────────────────────────────────────────
+  const isSuperAdmin = user?.app_metadata?.role === 'super_admin'
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
+  const isSuperAdminRoute = request.nextUrl.pathname.startsWith('/super-admin')
   const isLoginPage = request.nextUrl.pathname === '/admin/login'
 
+  // /super-admin — only for super_admin users
+  if (isSuperAdminRoute) {
+    if (!user) return NextResponse.redirect(new URL('/admin/login', request.url))
+    if (!isSuperAdmin) return NextResponse.redirect(new URL('/admin', request.url))
+  }
+
+  // /admin — for super admins and matching tenant admins
   if (isAdminRoute && !isLoginPage) {
     if (!user) {
       return NextResponse.redirect(new URL('/admin/login', request.url))
     }
-    // Super admins can access any tenant; tenant admins must match this domain
-    const isSuperAdmin = user.app_metadata?.role === 'super_admin'
     if (!isSuperAdmin && user.app_metadata?.tenantId !== tenantId) {
       return NextResponse.redirect(new URL('/admin/login', request.url))
     }
   }
 
   if (isLoginPage && user) {
-    const isSuperAdmin = user.app_metadata?.role === 'super_admin'
     const belongsHere = isSuperAdmin || user.app_metadata?.tenantId === tenantId
     if (belongsHere) {
       return NextResponse.redirect(new URL('/admin', request.url))

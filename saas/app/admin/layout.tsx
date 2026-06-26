@@ -20,6 +20,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden sm:block text-xs" style={{ color: '#a89070' }}>{user?.email}</span>
+            {user?.app_metadata?.role === 'super_admin' && (
+              <a
+                href="/super-admin"
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                style={{ backgroundColor: '#1e1b4b', border: '1px solid #3730a3', color: '#a5b4fc' }}
+              >
+                ⬡ Platform
+              </a>
+            )}
             <LogoutButton />
           </div>
         </div>
