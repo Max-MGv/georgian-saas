@@ -19,6 +19,11 @@ export default async function SettingsPage() {
     blockedDates,
     defaultLocale,
     mapsEmbedUrl,
+    contactEmail,
+    contactPhone,
+    contactAddress,
+    contactFacebook,
+    contactInstagram,
     h,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
@@ -35,6 +40,11 @@ export default async function SettingsPage() {
     getBlockedDates(),
     getSetting('default_locale'),
     getSetting('maps_embed_url'),
+    getSetting('contact_email'),
+    getSetting('contact_phone'),
+    getSetting('contact_address'),
+    getSetting('contact_facebook'),
+    getSetting('contact_instagram'),
     headers(),
   ])
 
@@ -70,6 +80,11 @@ export default async function SettingsPage() {
         logoUrl={logoUrl}
         logoAlt={logoAlt}
         faviconUrl={faviconUrl}
+        contactEmail={contactEmail}
+        contactPhone={contactPhone}
+        contactAddress={contactAddress}
+        contactFacebook={contactFacebook}
+        contactInstagram={contactInstagram}
       />
     </div>
   )

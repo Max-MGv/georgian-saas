@@ -48,10 +48,41 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🧪 Needs testing — Dynamic Branding
 
-1. **Seed Nikalas Marani branding** — run `npx tsx scripts/seed-branding.ts` from `saas/` folder (sets logoUrl + displayName on the tenant DB row)
+1. ~~**Seed Nikalas Marani branding**~~ — ✅ Claude ran `seed-branding.ts`
 2. **Super-admin logo upload** — go to `/super-admin/tenants` → edit Nikalas Marani → verify Display Name, Logo, Favicon fields appear; try uploading a logo
-3. **Client settings branding** — go to `/admin/settings` → scroll to **Branding** section → verify it appears with Upload logo / Upload favicon buttons
-4. **Cache TTL** — after uploading a logo in super-admin, wait up to 5 minutes and reload the public site → logo should update
+3. **Client settings branding** — go to `/admin/settings` → scroll to **Branding** section (above Closed Days) → verify it shows Upload logo + Upload favicon buttons → upload a file → verify preview appears and "✓ Saved" flashes → reload page → verify it persists
+4. **Cache TTL** — after uploading a logo, wait up to 5 min and reload the public site → logo should update
+5. **Wines page title** — go to `/wines` → check the browser tab title reads "Order Wine — Nikalas Marani" (not hardcoded, reads from DB via header)
+6. **Wines page logo** — on the `/wines` page, the logo image in the page heading (above the wine grid) should match whatever logo is set in branding — not the hardcoded fallback
+7. **Invoice display name** — go to `/admin/orders` → click the print icon on any order → verify the printed invoice shows "Nikalas Marani" (coming from the DB, not hardcoded); same on the order detail page print
+
+> **What is a favicon?** The tiny icon shown in your browser tab next to the page title. Upload a small PNG (32×32px) of the NM logo and it'll appear in tabs, bookmarks, and phone shortcuts.
+
+---
+
+## 🧪 Needs testing — Contact Info settings
+
+**Contact Info** section is live in `/admin/settings`, seeded with NM defaults (✅ seed-contact.ts already run), and wired to the public site.
+
+1. Go to `/admin/settings` → scroll to **Contact Info** (collapsible section between Branding and Closed Days) → click the section header to expand
+2. Each field shows its current value (or faded italic placeholder if empty) — click the **red pencil icon** to edit
+3. Change a value → click the **red return arrow (↵)** to save → should see green **"Saved"** text appear briefly below the field
+4. Press **Escape** while editing → should cancel without saving (value returns to what it was)
+5. Reload the **public site home page** → footer should show your address · phone · email
+6. Check the nav bar → phone/email/Facebook/Instagram icons should link to your values
+7. Click the Facebook icon → should go to your page (not the hardcoded NM fallback)
+
+> **Note:** Fields fall back to Nikalas Marani defaults if left blank — nothing breaks if you leave some empty.
+
+---
+
+## 🧪 Needs testing — Settings edit/save UX (pencil/save pattern)
+
+Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — test that the pattern works consistently.
+
+1. Go to `/admin/settings` → **Payment Details** section → click pencil on any row (e.g. Recipient Name) → edit → click return arrow → "Saved" should appear
+2. **Branding** section → click pencil next to the Logo Alt text field → edit → return arrow → "Saved"
+3. **Booking Rules** section → click pencil on "Wine Tasting minimum" → change value → return arrow → "Saved"
 
 ---
 
@@ -60,6 +91,7 @@ Things Max needs to test or do manually. Claude updates this after each session.
 - [x] **Redo visual content editor** — iframe approach implemented 2026-06-22 ✅
 
 - [x] Run `setup-rls.ts` against Supabase — confirmed deployed, all 12 tables have tenant_isolation policies ✅
+- [x] **Update Vercel `DATABASE_URL`** to port 6543 + `?pgbouncer=true` — ✅ confirmed updated 7 hours ago in Vercel dashboard
 - [ ] Verify **nikalasmarani.ge** in Resend — unlocks email delivery to any customer (currently only delivers to max.mghvdliashvili@gmail.com)
 - [ ] **Gallery page** — images already in `saas/public/images/slider/` and `gallery/` — just needs wiring into the public site
 - [ ] **Order detail tap target audit** (v1.4 Mobile Admin last item) — verify all buttons ≥ 44px, no horizontal overflow on phone

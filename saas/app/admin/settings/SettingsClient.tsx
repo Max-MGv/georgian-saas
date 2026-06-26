@@ -28,6 +28,11 @@ type Props = {
   logoUrl?: string | null
   logoAlt?: string
   faviconUrl?: string | null
+  contactEmail: string
+  contactPhone: string
+  contactAddress: string
+  contactFacebook: string
+  contactInstagram: string
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -57,7 +62,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
@@ -83,6 +88,16 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [brandingError, setBrandingError] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
+  const [contactEmail, setContactEmail] = useState(initialContactEmail)
+  const [contactPhone, setContactPhone] = useState(initialContactPhone)
+  const [contactAddress, setContactAddress] = useState(initialContactAddress)
+  const [contactFacebook, setContactFacebook] = useState(initialContactFacebook)
+  const [contactInstagram, setContactInstagram] = useState(initialContactInstagram)
+  const [paymentEditing, setPaymentEditing] = useState<string | null>(null)
+  const [altEditing, setAltEditing] = useState(false)
+  const [bookingRulesEditing, setBookingRulesEditing] = useState<string | null>(null)
+  const [contactOpen, setContactOpen] = useState(true)
+  const [contactEditing, setContactEditing] = useState<string | null>(null)
 
   function handleDefaultLocale(locale: string) {
     setDefaultLocale(locale)
@@ -178,6 +193,46 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     })
   }
 
+  function handlePaymentSave(key: keyof typeof paymentFields) {
+    setPaymentEditing(null)
+    startTransition(async () => {
+      await updateSetting(key, paymentFields[key])
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleAltTextSave() {
+    if (!logoUrl) return
+    setAltEditing(false)
+    startTransition(async () => {
+      await saveTenantLogo(logoUrl, logoAlt)
+      setSavedKey('logo_alt')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleBookingRuleSave(key: 'min_guests_tasting' | 'min_guests_tasting_lunch') {
+    setBookingRulesEditing(null)
+    if (key === 'min_guests_tasting') {
+      const val = String(Math.max(parseInt(minTasting) || 1, 1))
+      setMinTasting(val)
+      startTransition(async () => {
+        await updateSetting('min_guests_tasting', val)
+        setSavedKey('min_guests_tasting')
+        setTimeout(() => setSavedKey(null), 2000)
+      })
+    } else {
+      const val = String(Math.max(parseInt(minTastingLunch) || 1, 1))
+      setMinTastingLunch(val)
+      startTransition(async () => {
+        await updateSetting('min_guests_tasting_lunch', val)
+        setSavedKey('min_guests_tasting_lunch')
+        setTimeout(() => setSavedKey(null), 2000)
+      })
+    }
+  }
+
   function handleAddBlockedDate() {
     if (!newBlockDate) return
     startTransition(async () => {
@@ -244,6 +299,15 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     } finally {
       setFaviconUploading(false)
     }
+  }
+
+  function handleContactSave(key: 'contact_email' | 'contact_phone' | 'contact_address' | 'contact_facebook' | 'contact_instagram', value: string) {
+    setContactEditing(null)
+    startTransition(async () => {
+      await updateSetting(key, value)
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
   }
 
   const paymentRows: { key: keyof typeof paymentFields; label: string; placeholder: string }[] = [
@@ -351,23 +415,52 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>Shown on printed invoices. Changes apply to all future prints.</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
-          {paymentRows.map(({ key, label, placeholder }) => (
-            <div key={key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{label}</label>
-              <div className="flex-1 flex items-center gap-2">
-                <input
-                  style={inputStyle}
-                  value={paymentFields[key]}
-                  placeholder={placeholder}
-                  onChange={e => setPaymentFields(prev => ({ ...prev, [key]: e.target.value }))}
-                  onBlur={() => handlePaymentBlur(key)}
-                />
-                {savedKey === key && !isPending && (
-                  <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>✓</span>
-                )}
+          {paymentRows.map(({ key, label, placeholder }) => {
+            const isEditing = paymentEditing === key
+            return (
+              <div key={key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{label}</label>
+                <div className="flex-1 flex items-center gap-2">
+                  {isEditing ? (
+                    <input
+                      style={inputStyle}
+                      value={paymentFields[key]}
+                      placeholder={placeholder}
+                      autoFocus
+                      onChange={e => setPaymentFields(prev => ({ ...prev, [key]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Escape') setPaymentEditing(null) }}
+                    />
+                  ) : (
+                    <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
+                      {paymentFields[key]
+                        ? <span style={{ color: C.text }}>{paymentFields[key]}</span>
+                        : <span style={{ color: C.faint, fontStyle: 'italic' }}>{placeholder}</span>
+                      }
+                    </div>
+                  )}
+                  {isEditing ? (
+                    <button type="button" onClick={() => handlePaymentSave(key)} title="Save"
+                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
+                      </svg>
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setPaymentEditing(key)} title="Edit"
+                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                  )}
+                  {savedKey === key && !isPending && (
+                    <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>Saved</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -405,28 +498,52 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
           {([
-            { key: 'min_guests_tasting', label: 'Wine Tasting minimum', value: minTasting, set: setMinTasting, onBlur: handleMinTastingBlur },
-            { key: 'min_guests_tasting_lunch', label: 'Tasting + Lunch minimum', value: minTastingLunch, set: setMinTastingLunch, onBlur: handleMinTastingLunchBlur },
-          ] as const).map(row => (
-            <div key={row.key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  style={{ ...inputStyle, width: 80 }}
-                  value={row.value}
-                  onChange={e => row.set(e.target.value)}
-                  onBlur={row.onBlur}
-                />
-                <span className="text-xs" style={{ color: C.faint }}>guests</span>
-                {savedKey === row.key && !isPending && (
-                  <span className="text-xs" style={{ color: '#16a34a' }}>✓</span>
-                )}
+            { key: 'min_guests_tasting' as const,       label: 'Wine Tasting minimum',    value: minTasting,     set: setMinTasting },
+            { key: 'min_guests_tasting_lunch' as const, label: 'Tasting + Lunch minimum', value: minTastingLunch, set: setMinTastingLunch },
+          ]).map(row => {
+            const isEditing = bookingRulesEditing === row.key
+            return (
+              <div key={row.key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
+                <div className="flex items-center gap-2">
+                  {isEditing ? (
+                    <input
+                      type="number" min={1} max={200}
+                      style={{ ...inputStyle, width: 80 }}
+                      value={row.value}
+                      autoFocus
+                      onChange={e => row.set(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setBookingRulesEditing(null) }}
+                    />
+                  ) : (
+                    <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
+                      <span style={{ color: C.text }}>{row.value}</span>
+                    </div>
+                  )}
+                  <span className="text-xs" style={{ color: C.faint }}>guests</span>
+                  {isEditing ? (
+                    <button type="button" onClick={() => handleBookingRuleSave(row.key)} title="Save"
+                      className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
+                      </svg>
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setBookingRulesEditing(row.key)} title="Edit"
+                      className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                  )}
+                  {savedKey === row.key && !isPending && (
+                    <span className="text-xs" style={{ color: '#16a34a' }}>Saved</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -548,17 +665,45 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               )}
             </div>
             {logoUrl && (
-              <div className="mt-3 flex items-center gap-2">
-                <label className="text-xs flex-shrink-0" style={{ color: C.muted }}>Alt text</label>
-                <input
-                  style={{ ...inputStyle, flex: 1 }}
-                  value={logoAlt}
-                  placeholder="e.g. Nikalas Marani"
-                  onChange={e => setLogoAlt(e.target.value)}
-                  onBlur={handleLogoAltBlur}
-                />
+              <div className="mt-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs flex-shrink-0" style={{ color: C.muted }}>Alt text</label>
+                  {altEditing ? (
+                    <input
+                      style={{ ...inputStyle, flex: 1 }}
+                      value={logoAlt}
+                      placeholder="e.g. Nikalas Marani"
+                      autoFocus
+                      onChange={e => setLogoAlt(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setAltEditing(false) }}
+                    />
+                  ) : (
+                    <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
+                      {logoAlt
+                        ? <span style={{ color: C.text }}>{logoAlt}</span>
+                        : <span style={{ color: C.faint, fontStyle: 'italic' }}>your logo description here</span>
+                      }
+                    </div>
+                  )}
+                  {altEditing ? (
+                    <button type="button" onClick={handleAltTextSave} title="Save"
+                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
+                      </svg>
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setAltEditing(true)} title="Edit"
+                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 {savedKey === 'logo_alt' && !isPending && (
-                  <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>✓</span>
+                  <p className="text-xs mt-1" style={{ color: '#16a34a' }}>Saved</p>
                 )}
               </div>
             )}
@@ -589,6 +734,95 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Contact Info */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <button
+          type="button"
+          onClick={() => setContactOpen(o => !o)}
+          className="w-full px-5 py-3 border-b flex items-center justify-between"
+          style={{ backgroundColor: '#f5efe6', borderColor: C.border }}
+        >
+          <div className="text-left">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Contact Info</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>Email, phone, address and social links shown in the site nav and footer.</p>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, transform: contactOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: C.faint }}>
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        {contactOpen && (
+          <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
+
+            {([
+              { key: 'contact_email',     label: 'Email address', hint: 'Shown in the nav bar and footer.',          placeholder: 'your email here',        value: contactEmail,     set: setContactEmail },
+              { key: 'contact_phone',     label: 'Phone number',  hint: 'Shown in the footer.',                      placeholder: 'your phone number here', value: contactPhone,     set: setContactPhone },
+              { key: 'contact_address',   label: 'Address',       hint: 'Shown in the footer.',                      placeholder: 'your address here',      value: contactAddress,   set: setContactAddress },
+              { key: 'contact_facebook',  label: 'Facebook URL',  hint: 'Link behind the Facebook icon in the nav.', placeholder: 'your Facebook URL here', value: contactFacebook,  set: setContactFacebook },
+              { key: 'contact_instagram', label: 'Instagram URL', hint: 'Link behind the Instagram icon in the nav.',placeholder: 'your Instagram URL here',value: contactInstagram, set: setContactInstagram },
+            ] as const).map(({ key, label, hint, placeholder, value, set }) => {
+              const isEditing = contactEditing === key
+              return (
+                <div key={key}>
+                  <label className="text-xs block mb-1 font-medium" style={{ color: C.muted }}>{label}</label>
+                  <div className="flex items-center gap-2">
+                    {isEditing ? (
+                      <input
+                        style={inputStyle}
+                        value={value}
+                        autoFocus
+                        onChange={e => set(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Escape') setContactEditing(null) }}
+                      />
+                    ) : (
+                      <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
+                        {value
+                          ? <span style={{ color: C.text }}>{value}</span>
+                          : <span style={{ color: C.faint, fontStyle: 'italic' }}>{placeholder}</span>
+                        }
+                      </div>
+                    )}
+
+                    {isEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => handleContactSave(key, value)}
+                        title="Save"
+                        className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
+                        style={{ color: '#9b090c' }}
+                      >
+                        {/* return arrow ↵ */}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 10 4 15 9 20"/>
+                          <path d="M20 4v7a4 4 0 0 1-4 4H4"/>
+                        </svg>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setContactEditing(key)}
+                        title="Edit"
+                        className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
+                        style={{ color: '#9b090c' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {savedKey === key && !isPending
+                    ? <p className="text-xs mt-1" style={{ color: '#16a34a' }}>Saved</p>
+                    : <p className="text-xs mt-1" style={{ color: C.faint }}>{hint}</p>
+                  }
+                </div>
+              )
+            })}
+
+          </div>
+        )}
       </div>
 
       {/* Closed Days */}

@@ -8,6 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-26 (Part 2) — Hardcoding fixes, Contact Info settings, Settings UX overhaul (full detail)
+
+### Completed
+
+**Hardcoded branding fixes (wines page + invoice)**
+- `saas/app/(site)/wines/page.tsx` — replaced static `export const metadata` with `export async function generateMetadata()` reading `x-tenant-name` header; reads logo headers and passes to WineCatalogueClient
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — added `logoUrl`/`logoAlt` props; replaced hardcoded `<img>` in wine page heading with props
+- `saas/app/admin/orders/InvoicePrint.tsx` — added `displayName` prop (default `'Nikalas Marani'`), replaced all 3 hardcoded name strings
+- `saas/app/admin/orders/page.tsx` — reads `x-tenant-name` header, passes `displayName` to OrdersTable
+- `saas/app/admin/orders/OrdersTable.tsx` — accepts `displayName` prop, passes to both InvoicePrint instances
+- `saas/app/admin/orders/[id]/page.tsx` — reads `x-tenant-name` header, passes to OrderDetail
+- `saas/app/admin/orders/[id]/OrderDetail.tsx` — accepts `displayName` prop, passes to InvoicePrint
+
+**Contact Info settings section — NEW**
+- `saas/app/admin/settings/SettingsClient.tsx` — collapsible "Contact Info" section (chevron toggle) with 5 fields: email, phone, address, Facebook URL, Instagram URL; saves via `updateSetting` on return-arrow click
+- `saas/app/admin/settings/page.tsx` — loads all 5 contact settings via `getSetting`, passes as props
+- `saas/app/(site)/layout.tsx` — reads 5 contact settings, passes to SiteNav + uses in footer (fallback to NM defaults if empty)
+- `saas/app/(site)/SiteNav.tsx` — `SocialIcons` now accepts props; phone/email/Facebook/Instagram all dynamic from settings
+- `saas/scripts/seed-contact.ts` — NEW: seeds NM contact values into Setting table; run: `npx tsx scripts/seed-contact.ts` ✅ already run
+
+**Settings page UX — inline edit/save pattern**
+Applied consistent read-only display → pencil edit → return arrow save → "Saved" hint text pattern to:
+- Payment Details (5 rows: recipient name, personal ID, bank name, bank code, IBAN)
+- Branding alt text field
+- Booking Rules (Wine Tasting minimum, Tasting + Lunch minimum)
+- Contact Info (5 fields — same pattern, introduced here)
+
+Pattern details:
+- Default: shows current value as styled display div (or faded italic placeholder if empty)
+- Red pencil icon (right) → enter edit mode; red return arrow (↵) → save and exit
+- No blur auto-save — must click the arrow
+- "Saved" replaces hint text for 2 seconds on success; Escape cancels without saving
+
+**TypeScript**: 0 errors throughout
+
+### Key files changed
+- `saas/app/(site)/wines/page.tsx` — generateMetadata + logo prop
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — logoUrl/logoAlt props
+- `saas/app/admin/orders/InvoicePrint.tsx` — displayName prop
+- `saas/app/admin/orders/page.tsx` + `OrdersTable.tsx` — displayName chain
+- `saas/app/admin/orders/[id]/page.tsx` + `OrderDetail.tsx` — displayName chain
+- `saas/app/(site)/layout.tsx` — contact settings + footer dynamic
+- `saas/app/(site)/SiteNav.tsx` — SocialIcons accepts props
+- `saas/app/admin/settings/SettingsClient.tsx` — Contact Info section + edit/save UX across 3 sections
+- `saas/app/admin/settings/page.tsx` — 5 new getSetting calls
+- `saas/scripts/seed-contact.ts` — NEW: seeds NM contact info
+
+---
+
 ## 2026-06-26 — Dynamic branding (logo, favicon, display name) (full detail)
 
 ### Completed

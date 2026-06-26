@@ -88,7 +88,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Nikalas Marani' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string }) {
   const router = useRouter()
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -617,7 +617,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       {/* Invoice portal — renders directly into <body> so print CSS can isolate it */}
       {printOrder && typeof document !== 'undefined' && createPortal(
         <div id="invoice-portal">
-          <InvoicePrint order={printOrder} payment={payment} detailed={detailed} />
+          <InvoicePrint order={printOrder} payment={payment} detailed={detailed} displayName={displayName} />
         </div>,
         document.body
       )}
@@ -667,7 +667,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <p className="text-xs mb-1" style={{ color: C.faint }}>Invoice preview</p>
                   <div className="rounded-lg border overflow-auto mb-4" style={{ borderColor: C.border, backgroundColor: '#fff', maxHeight: 360 }}>
                     <div style={{ zoom: '75%' }}>
-                      <InvoicePrint order={emailOrder} payment={payment} detailed={detailed} />
+                      <InvoicePrint order={emailOrder} payment={payment} detailed={detailed} displayName={displayName} />
                     </div>
                   </div>
 

@@ -1,6 +1,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
@@ -13,7 +14,8 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const tenantId = await getTenantId()
+  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const displayName = h.get('x-tenant-name') ?? 'Nikalas Marani'
 
   const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
@@ -59,6 +61,7 @@ export default async function OrderDetailPage({
       <OrderDetail
         payment={{ recipientName, personalNumber, bankName, bankCode, iban }}
         detailed={invoiceDetailed === 'true'}
+        displayName={displayName}
         order={{
           id: order.id,
           status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',

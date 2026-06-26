@@ -2,6 +2,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
@@ -20,7 +21,8 @@ type SearchParams = {
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
-  const tenantId = await getTenantId()
+  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const displayName = h.get('x-tenant-name') ?? 'Nikalas Marani'
   const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
@@ -147,7 +149,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <>
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,

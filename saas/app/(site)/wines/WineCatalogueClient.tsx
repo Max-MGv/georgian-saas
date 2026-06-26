@@ -45,7 +45,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient({ wines: WINES, companies = [] }: { wines: DbWine[]; companies?: Company[] }) {
+export default function WineCatalogueClient({ wines: WINES, companies = [], logoUrl = '/icons/logo-dark.svg', logoAlt = 'Nikalas Marani' }: { wines: DbWine[]; companies?: Company[]; logoUrl?: string; logoAlt?: string }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)
@@ -246,7 +246,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [] }: { 
       <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Order Wine</p>
       <div className="flex items-start justify-between gap-4 mb-10">
         <div>
-          <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '56px', width: 'auto' }} />
+          <img src={logoUrl} alt={logoAlt} style={{ height: '56px', width: 'auto' }} />
           <p className="text-base" style={{ color: '#6b5a47' }}>Select wines, set quantities, and place a reservation.</p>
         </div>
         {/* View toggle */}

@@ -23,7 +23,7 @@ type Payment = {
   iban: string
 }
 
-type Props = { order: Order; payment: Payment; detailed?: boolean }
+type Props = { order: Order; payment: Payment; detailed?: boolean; displayName?: string }
 
 function Row({ label, value, mono = false }: { label: string; value: string | number; mono?: boolean }) {
   return (
@@ -45,7 +45,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export default function InvoicePrint({ order, payment, detailed = false }: Props) {
+export default function InvoicePrint({ order, payment, detailed = false, displayName = 'Nikalas Marani' }: Props) {
   const d = new Date(order.date)
   const dateStr = d.toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
   const nowStr = new Date().toLocaleString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -70,7 +70,7 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
       <div style={{ textAlign: 'center', marginBottom: 32, borderBottom: '1px solid #e8e0d0', paddingBottom: 16 }}>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{nowStr}</div>
         <div style={{ fontSize: 22, fontWeight: 'bold', fontFamily: 'serif' }}>ნიკალას მარანი</div>
-        <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>Nikalas Marani</div>
+        <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>{displayName}</div>
         <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>1928</div>
       </div>
 
@@ -98,7 +98,7 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
         <div style={{ textAlign: 'center', marginBottom: 32, borderBottom: '1px solid #e8e0d0', paddingBottom: 16 }}>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{nowStr}</div>
           <div style={{ fontSize: 22, fontWeight: 'bold', fontFamily: 'serif' }}>ნიკალას მარანი</div>
-          <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>Nikalas Marani</div>
+          <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>{displayName}</div>
           <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>1928</div>
         </div>
 
@@ -155,7 +155,7 @@ export default function InvoicePrint({ order, payment, detailed = false }: Props
       <div style={{ textAlign: 'center', marginBottom: 32, borderBottom: '1px solid #e8e0d0', paddingBottom: 16 }}>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{nowStr}</div>
         <div style={{ fontSize: 22, fontWeight: 'bold', fontFamily: 'serif' }}>ნიკალას მარანი</div>
-        <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>Nikalas Marani</div>
+        <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>{displayName}</div>
         <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>1928</div>
       </div>
 

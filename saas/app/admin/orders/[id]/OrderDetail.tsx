@@ -149,12 +149,14 @@ export default function OrderDetail({
   order,
   payment,
   detailed,
+  displayName = 'Nikalas Marani',
   menuItems,
   masterclassItems,
 }: {
   order: OrderProp
   payment: Payment
   detailed: boolean
+  displayName?: string
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
 }) {
@@ -489,6 +491,7 @@ export default function OrderDetail({
             }}
             payment={payment}
             detailed={detailed}
+            displayName={displayName}
           />
         </div>,
         document.body

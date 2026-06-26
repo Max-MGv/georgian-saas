@@ -298,7 +298,7 @@ Full plan: `vault/Plan-MultiTenant.md`
 - [x] All 4 logo placements (public nav, home hero, admin nav, admin login) read from headers with fallback
 - [x] Logo/favicon upload in **super-admin Edit Tenant form** — Supabase Storage `logos` bucket
 - [x] Logo/favicon upload in **client's own `/admin/settings`** — Branding section
-- [ ] Run `npx tsx scripts/seed-branding.ts` — seeds Nikalas Marani logoUrl in DB (still outstanding)
+- [x] Run `npx tsx scripts/seed-branding.ts` — ✅ done 2026-06-26
 
 **When ready:**
 - [ ] First new client onboarding (Vercel domain, DB row, admin login)
