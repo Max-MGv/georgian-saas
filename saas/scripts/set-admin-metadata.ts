@@ -27,7 +27,7 @@ async function listUsers(): Promise<{ id: string; email: string }[]> {
   return body.users
 }
 
-async function setMetadata(userId: string, metadata: Record<string, string>) {
+async function setMetadata(userId: string, metadata: Record<string, string | undefined>) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
     headers,
