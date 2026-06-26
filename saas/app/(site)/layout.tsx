@@ -1,20 +1,23 @@
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
 import { getContentMap } from '@/app/actions/siteContent'
 import SiteNav from './SiteNav'
 import { t } from '@/lib/t'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [cookieStore, defaultLocale] = await Promise.all([
+  const [cookieStore, defaultLocale, h] = await Promise.all([
     cookies(),
     getSetting('default_locale'),
+    headers(),
   ])
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const navContent = await getContentMap('nav', locale)
+  const logoUrl = h.get('x-tenant-logo') ?? null
+  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
-      <SiteNav locale={locale} navContent={navContent} />
+      <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt} />
 
       <main className="flex-1">
         {children}

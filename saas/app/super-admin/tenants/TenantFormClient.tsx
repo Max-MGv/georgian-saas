@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColorPicker } from '../ColorPicker'
 import { createTenant, updateTenant } from '@/app/actions/superAdmin'
+import { uploadTenantLogoAdmin, uploadTenantFaviconAdmin } from '@/app/actions/uploadLogo'
 
 type Props = {
   mode: 'new' | 'edit'
@@ -14,6 +15,10 @@ type Props = {
     slug: string
     primaryColor: string
     primaryHover: string
+    logoUrl?: string | null
+    logoAlt?: string
+    faviconUrl?: string | null
+    displayName?: string
   }
 }
 
@@ -57,15 +62,55 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [name, setName] = useState(tenant?.name ?? '')
   const [domain, setDomain] = useState(tenant?.domain ?? '')
   const [slug, setSlug] = useState(tenant?.slug ?? '')
+  const [displayName, setDisplayName] = useState(tenant?.displayName ?? '')
   const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? '#7c1d23')
   const [primaryHover, setPrimaryHover] = useState(tenant?.primaryHover ?? '#9b2429')
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
+  const [logoAlt, setLogoAlt] = useState(tenant?.logoAlt ?? '')
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(tenant?.faviconUrl ?? null)
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [faviconUploading, setFaviconUploading] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
 
   function handleNameChange(val: string) {
     setName(val)
     if (!slugTouched) setSlug(toSlug(val))
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !tenant?.id) return
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const url = await uploadTenantLogoAdmin(tenant.id, fd)
+      setLogoUrl(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Logo upload failed')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  async function handleFaviconUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !tenant?.id) return
+    setFaviconUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const url = await uploadTenantFaviconAdmin(tenant.id, fd)
+      setFaviconUrl(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Favicon upload failed')
+    } finally {
+      setFaviconUploading(false)
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -78,10 +123,11 @@ export default function TenantFormClient({ mode, tenant }: Props) {
 
     startTransition(async () => {
       try {
+        const payload = { name, domain, slug, primaryColor, primaryHover, logoUrl, logoAlt, faviconUrl, displayName: displayName || undefined }
         if (mode === 'new') {
-          await createTenant({ name, domain, slug, primaryColor, primaryHover })
+          await createTenant(payload)
         } else {
-          await updateTenant(tenant!.id, { name, domain, slug, primaryColor, primaryHover })
+          await updateTenant(tenant!.id, payload)
           setSuccess(true)
           setTimeout(() => setSuccess(false), 2500)
         }
@@ -129,6 +175,122 @@ export default function TenantFormClient({ mode, tenant }: Props) {
               style={{ ...inputStyle, fontFamily: 'monospace' }}
             />
           </Field>
+
+          <Field label="Display name" hint="Shown in browser tab title and admin nav. Defaults to client name if blank.">
+            <input
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              placeholder={name || 'Nikalas Marani'}
+              style={inputStyle}
+            />
+          </Field>
+
+          {/* Logo upload */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
+              Logo
+            </label>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 8 }}>
+              Must work on a light/white background. SVG or PNG recommended.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {logoUrl && (
+                <div style={{
+                  padding: '8px 12px', backgroundColor: '#fff9f3', borderRadius: 8,
+                  border: '1px solid #e0d4c0',
+                }}>
+                  <img src={logoUrl} alt="Logo preview" style={{ height: 36, width: 'auto', display: 'block' }} />
+                </div>
+              )}
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                style={{ display: 'none' }}
+                onChange={handleLogoUpload}
+              />
+              <button
+                type="button"
+                disabled={!tenant?.id || logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, fontSize: 13, cursor: tenant?.id ? 'pointer' : 'not-allowed',
+                  backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
+                  opacity: !tenant?.id || logoUploading ? 0.5 : 1,
+                }}
+              >
+                {logoUploading ? 'Uploading…' : logoUrl ? 'Replace' : 'Upload logo'}
+              </button>
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setLogoUrl(null)}
+                  style={{ fontSize: 12, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {!tenant?.id && (
+              <p style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>Save the tenant first, then upload a logo.</p>
+            )}
+            {logoUrl && (
+              <Field label="Logo alt text" hint="Shown when logo image fails to load (accessibility)">
+                <input
+                  value={logoAlt}
+                  onChange={e => setLogoAlt(e.target.value)}
+                  placeholder={name || 'Winery logo'}
+                  style={{ ...inputStyle, marginTop: 8 }}
+                />
+              </Field>
+            )}
+          </div>
+
+          {/* Favicon upload */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
+              Favicon
+            </label>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 8 }}>
+              ICO or 32×32 PNG. Shown in browser tabs.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {faviconUrl && (
+                <img src={faviconUrl} alt="Favicon" style={{ width: 32, height: 32 }} />
+              )}
+              <input
+                ref={faviconInputRef}
+                type="file"
+                accept="image/x-icon,image/png,image/svg+xml"
+                style={{ display: 'none' }}
+                onChange={handleFaviconUpload}
+              />
+              <button
+                type="button"
+                disabled={!tenant?.id || faviconUploading}
+                onClick={() => faviconInputRef.current?.click()}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, fontSize: 13, cursor: tenant?.id ? 'pointer' : 'not-allowed',
+                  backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
+                  opacity: !tenant?.id || faviconUploading ? 0.5 : 1,
+                }}
+              >
+                {faviconUploading ? 'Uploading…' : faviconUrl ? 'Replace' : 'Upload favicon'}
+              </button>
+              {faviconUrl && (
+                <button
+                  type="button"
+                  onClick={() => setFaviconUrl(null)}
+                  style={{ fontSize: 12, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {!tenant?.id && (
+              <p style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>Save the tenant first, then upload a favicon.</p>
+            )}
+          </div>
 
           {/* Color pickers */}
           <div>

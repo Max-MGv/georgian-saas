@@ -1,5 +1,6 @@
 import { getSetting } from '@/app/actions/settings'
 import { getBlockedDates } from '@/app/actions/blockedDates'
+import { headers } from 'next/headers'
 import SettingsClient from './SettingsClient'
 
 export default async function SettingsPage() {
@@ -18,6 +19,7 @@ export default async function SettingsPage() {
     blockedDates,
     defaultLocale,
     mapsEmbedUrl,
+    h,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
@@ -33,7 +35,12 @@ export default async function SettingsPage() {
     getBlockedDates(),
     getSetting('default_locale'),
     getSetting('maps_embed_url'),
+    headers(),
   ])
+
+  const logoUrl = h.get('x-tenant-logo') ?? null
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const faviconUrl = h.get('x-tenant-favicon') ?? null
 
   return (
     <div className="max-w-2xl">
@@ -60,6 +67,9 @@ export default async function SettingsPage() {
         blockedDates={blockedDates}
         defaultLocale={defaultLocale ?? 'en'}
         mapsEmbedUrl={mapsEmbedUrl}
+        logoUrl={logoUrl}
+        logoAlt={logoAlt}
+        faviconUrl={faviconUrl}
       />
     </div>
   )

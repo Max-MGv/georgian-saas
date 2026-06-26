@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
+import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavicon } from '@/app/actions/uploadLogo'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -24,6 +25,9 @@ type Props = {
   minGuestsTastingLunch: string
   blockedDates?: { id: string; date: string; reason: string | null }[]
   mapsEmbedUrl: string
+  logoUrl?: string | null
+  logoAlt?: string
+  faviconUrl?: string | null
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -53,7 +57,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
@@ -71,6 +75,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [newBlockReason, setNewBlockReason] = useState('')
   const [isPending, startTransition] = useTransition()
   const [savedKey, setSavedKey] = useState<string | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl)
+  const [logoAlt, setLogoAlt] = useState(initialLogoAlt)
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(initialFaviconUrl)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [faviconUploading, setFaviconUploading] = useState(false)
+  const [brandingError, setBrandingError] = useState<string | null>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
 
   function handleDefaultLocale(locale: string) {
     setDefaultLocale(locale)
@@ -183,6 +195,55 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       await removeBlockedDate(id)
       setBlockedDates(prev => prev.filter(d => d.id !== id))
     })
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBrandingError(null)
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const url = await uploadTenantLogo(fd)
+      setLogoUrl(url)
+      await saveTenantLogo(url, logoAlt)
+      setSavedKey('logo')
+      setTimeout(() => setSavedKey(null), 2000)
+    } catch (err) {
+      setBrandingError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  async function handleLogoAltBlur() {
+    if (!logoUrl) return
+    startTransition(async () => {
+      await saveTenantLogo(logoUrl, logoAlt)
+      setSavedKey('logo_alt')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  async function handleFaviconUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBrandingError(null)
+    setFaviconUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const url = await uploadTenantFavicon(fd)
+      setFaviconUrl(url)
+      await saveTenantFavicon(url)
+      setSavedKey('favicon')
+      setTimeout(() => setSavedKey(null), 2000)
+    } catch (err) {
+      setBrandingError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setFaviconUploading(false)
+    }
   }
 
   const paymentRows: { key: keyof typeof paymentFields; label: string; placeholder: string }[] = [
@@ -443,6 +504,90 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               {mapsEmbedUrl || <span style={{ fontStyle: 'italic' }}>No URL set</span>}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Branding */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Branding</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+            Logo shown in the site navigation and admin panel. Favicon shown in browser tabs.
+          </p>
+        </div>
+        <div className="px-5 py-4 space-y-5" style={{ backgroundColor: C.bg }}>
+          {brandingError && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+              {brandingError}
+            </p>
+          )}
+
+          {/* Logo */}
+          <div>
+            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>Logo</p>
+            <p className="text-xs mb-3" style={{ color: C.faint }}>SVG or PNG. Must work on a light background.</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {logoUrl && (
+                <div className="rounded-lg px-3 py-2 border" style={{ backgroundColor: '#fffdf9', borderColor: C.border }}>
+                  <img src={logoUrl} alt={logoAlt || 'Logo'} style={{ height: 40, width: 'auto', display: 'block' }} />
+                </div>
+              )}
+              <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                style={{ display: 'none' }} onChange={handleLogoUpload} />
+              <button
+                type="button"
+                disabled={logoUploading}
+                onClick={() => logoInputRef.current?.click()}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: logoUploading ? 0.6 : 1 }}
+              >
+                {logoUploading ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+              </button>
+              {savedKey === 'logo' && !logoUploading && (
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              )}
+            </div>
+            {logoUrl && (
+              <div className="mt-3 flex items-center gap-2">
+                <label className="text-xs flex-shrink-0" style={{ color: C.muted }}>Alt text</label>
+                <input
+                  style={{ ...inputStyle, flex: 1 }}
+                  value={logoAlt}
+                  placeholder="e.g. Nikalas Marani"
+                  onChange={e => setLogoAlt(e.target.value)}
+                  onBlur={handleLogoAltBlur}
+                />
+                {savedKey === 'logo_alt' && !isPending && (
+                  <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>✓</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Favicon */}
+          <div>
+            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>Favicon</p>
+            <p className="text-xs mb-3" style={{ color: C.faint }}>ICO or 32×32 PNG shown in browser tabs.</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              {faviconUrl && (
+                <img src={faviconUrl} alt="Favicon" style={{ width: 32, height: 32, borderRadius: 4 }} />
+              )}
+              <input ref={faviconInputRef} type="file" accept="image/x-icon,image/png,image/svg+xml"
+                style={{ display: 'none' }} onChange={handleFaviconUpload} />
+              <button
+                type="button"
+                disabled={faviconUploading}
+                onClick={() => faviconInputRef.current?.click()}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: faviconUploading ? 0.6 : 1 }}
+              >
+                {faviconUploading ? 'Uploading…' : faviconUrl ? 'Replace favicon' : 'Upload favicon'}
+              </button>
+              {savedKey === 'favicon' && !faviconUploading && (
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

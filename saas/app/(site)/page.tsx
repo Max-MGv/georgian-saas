@@ -4,10 +4,9 @@ import { getSetting } from '@/app/actions/settings'
 import { getSiteContext } from '@/lib/siteContext'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getContentMap } from '@/app/actions/siteContent'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import BookingForm from '@/components/BookingForm'
 import { t } from '@/lib/t'
-import Image from 'next/image'
 import { preload } from 'react-dom'
 import EditableText from '@/components/EditableText'
 import EditModeSuppressor from '@/components/EditModeSuppressor'
@@ -20,7 +19,7 @@ export default async function Home({ searchParams }: PageProps) {
   const sp = await searchParams
   const isEditMode = sp.editMode === 'true'
 
-  const [cookieStore, defaultLocale] = await Promise.all([cookies(), getSetting('default_locale')])
+  const [cookieStore, defaultLocale, h] = await Promise.all([cookies(), getSetting('default_locale'), headers()])
   const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const locale = sp.locale ?? cookieLocale
 
@@ -53,6 +52,9 @@ export default async function Home({ searchParams }: PageProps) {
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
   const displayPriceTasting = displayTier?.pricePerPerson ?? 50
   const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? 100
+
+  const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
 
   const activeBgPath       = heroBgPath || '/images/winery1.jpg'
   const activeMobileBgPath = heroBgMobilePath || activeBgPath
@@ -143,8 +145,7 @@ export default async function Home({ searchParams }: PageProps) {
             padding: '14px 28px',
             display: 'inline-block',
           }}>
-            <Image src="/icons/logo-dark.svg" alt="Nikalas Marani"
-              width={200} height={72} priority
+            <img src={logoUrl} alt={logoAlt}
               style={{ height: '72px', width: 'auto', display: 'block' }} />
           </div>
 

@@ -28,7 +28,7 @@ function SocialIcons() {
   )
 }
 
-export default function SiteNav({ locale, navContent = {} }: { locale: string; navContent?: Record<string, string> }) {
+export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = 'Nikalas Marani' }: { locale: string; navContent?: Record<string, string>; logoUrl?: string | null; logoAlt?: string }) {
   const [open, setOpen] = useState(false)
 
   const navLinks = [
@@ -45,7 +45,7 @@ export default function SiteNav({ locale, navContent = {} }: { locale: string; n
 
         {/* Logo */}
         <Link href="/" onClick={() => setOpen(false)}>
-          <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '48px', width: 'auto' }} />
+          <img src={logoUrl ?? '/icons/logo-dark.svg'} alt={logoAlt} style={{ height: '48px', width: 'auto' }} />
         </Link>
 
         {/* Desktop nav */}

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "KnownBugs.md",
+                "file": "Roadmap.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "KnownBugs"
+              "title": "Roadmap"
             }
           }
         ]
@@ -78,8 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "b6bf389b802e7e20",
@@ -186,39 +185,41 @@
   },
   "active": "0eae5ecf8a741e4f",
   "lastOpenFiles": [
+    "Plan-DynamicBranding.md",
+    "KnownBugs.md",
+    "Progress Log.md",
+    "RLS-Architecture.md",
+    "Plan-SecurityAndBugFixes.md",
+    "Plan-MultiTenant.md",
+    "Plan-EditableSiteContent.md",
+    "Plan-4Features.md",
+    "Plan-CompanyAccessCodes.md",
+    "MyToDo.md",
+    "SessionLog.md.tmp.18564.fb1939e3ac57",
+    "SuperAdmin-Architecture.md",
+    "FeatureLog.md.tmp.2680.cbb7afe423d7",
     "SessionLog.md.tmp.8320.f86a608c23d4",
     "KnownBugs.md.tmp.18716.1571a38d2ef9",
     "KnownBugs.md.tmp.18716.9e91c8a1d05a",
     "KnownBugs.md.tmp.10276.e8fdea8602a5",
-    "Plan-4Features.md",
     "migration-progress.md",
     "Decisions.md",
     "Database Schema.md",
     "Architecture.md",
     "Business Model.md",
-    "Plan-MultiTenant.md",
     "SessionLog.md.tmp.10276.5193984caf81",
     "MigrationNotes.md",
     "MigrationNotes.md.tmp.9252.d47b2eb338d2",
-    "MyToDo.md",
     "SessionLog.md.tmp.20804.30a59745ac97",
     "Roadmap.md.tmp.20804.f98c9a23cdab",
-    "Plan-CompanyAccessCodes.md",
-    "SessionLog.md.tmp.5172.c11073756c74",
-    "FeatureLog.md.tmp.5172.6015f5bb53e2",
-    "RLS-Architecture.md",
-    "Roadmap.md.tmp.17540.37635cfb0a18",
-    "Plan-EditableSiteContent.md",
     "Dashboard.md",
     "Plan-PageBackgrounds.md",
-    "Plan-SecurityAndBugFixes.md",
     "FeatureLog.md",
     "Features/Add Language/Georgian Translations.md",
     "Seeding/Seed Wine Orders.md",
     "Plan-EnhancedCompanyBooking.md",
     "MVP Features.md",
     "Home.md",
-    "ClaudeInstructions.md",
-    "Roadmap.md"
+    "ClaudeInstructions.md"
   ]
 }

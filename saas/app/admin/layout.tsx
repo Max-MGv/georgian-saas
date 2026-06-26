@@ -1,9 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { headers } from 'next/headers'
 import LogoutButton from './LogoutButton'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
+  const [supabase, h] = await Promise.all([createClient(), headers()])
   const { data: { user } } = await supabase.auth.getUser()
+  const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f0ebe3' }}>
@@ -15,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Top row: brand + logout */}
         <div className="px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/icons/logo-dark.svg" alt="Nikalas Marani" style={{ height: '28px', width: 'auto' }} />
+            <img src={logoUrl} alt={logoAlt} style={{ height: '28px', width: 'auto' }} />
             <span className="text-xs font-medium" style={{ color: '#a89070' }}>Admin</span>
           </div>
           <div className="flex items-center gap-3">

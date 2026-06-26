@@ -50,6 +50,10 @@ export async function getTenant(id: string) {
     slug: t.slug,
     primaryColor: theme.primaryColor ?? '#7c1d23',
     primaryHover: theme.primaryHover ?? '#9b2429',
+    logoUrl: t.logoUrl ?? null,
+    logoAlt: t.logoAlt ?? '',
+    faviconUrl: t.faviconUrl ?? null,
+    displayName: t.displayName ?? '',
   }
 }
 
@@ -59,6 +63,10 @@ export async function createTenant(data: {
   slug: string
   primaryColor: string
   primaryHover: string
+  logoUrl?: string | null
+  logoAlt?: string
+  faviconUrl?: string | null
+  displayName?: string
 }) {
   await requireSuperAdmin()
   const tenant = await db.tenant.create({
@@ -67,6 +75,10 @@ export async function createTenant(data: {
       domain: data.domain.toLowerCase().trim(),
       slug: data.slug.toLowerCase().trim(),
       theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+      logoUrl: data.logoUrl ?? null,
+      logoAlt: data.logoAlt ?? null,
+      faviconUrl: data.faviconUrl ?? null,
+      displayName: data.displayName ?? null,
     },
   })
   revalidatePath('/super-admin/tenants')
@@ -79,6 +91,10 @@ export async function updateTenant(id: string, data: {
   slug: string
   primaryColor: string
   primaryHover: string
+  logoUrl?: string | null
+  logoAlt?: string
+  faviconUrl?: string | null
+  displayName?: string
 }) {
   await requireSuperAdmin()
   await db.tenant.update({
@@ -88,6 +104,10 @@ export async function updateTenant(id: string, data: {
       domain: data.domain.toLowerCase().trim(),
       slug: data.slug.toLowerCase().trim(),
       theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+      logoUrl: data.logoUrl ?? null,
+      logoAlt: data.logoAlt ?? null,
+      faviconUrl: data.faviconUrl ?? null,
+      displayName: data.displayName ?? null,
     },
   })
   revalidatePath('/super-admin/tenants')

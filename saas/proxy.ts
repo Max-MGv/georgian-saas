@@ -6,9 +6,16 @@ interface TenantInfo {
   tenantId: string | null
   brandColor: string
   brandHover: string
+  logoUrl: string | null
+  logoAlt: string
+  faviconUrl: string | null
+  displayName: string
+  cachedAt: number
 }
 
-// Module-level cache: domain → tenant info (persists for the lifetime of the server process)
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+// Module-level cache: domain → tenant info
 const tenantCache = new Map<string, TenantInfo>()
 
 async function resolveTenant(host: string): Promise<TenantInfo> {
@@ -17,7 +24,8 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
   const isLocal = domain === 'localhost' || domain === '127.0.0.1'
   const cacheKey = isLocal ? '__localhost__' : domain
 
-  if (tenantCache.has(cacheKey)) return tenantCache.get(cacheKey)!
+  const cached = tenantCache.get(cacheKey)
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached
 
   let tenant = null
   if (isLocal) {
@@ -32,6 +40,11 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     tenantId: tenant?.id ?? process.env.DEFAULT_TENANT_ID ?? null,
     brandColor: theme.primaryColor ?? '#7c1d23',
     brandHover: theme.primaryHover ?? '#9b2429',
+    logoUrl: tenant?.logoUrl ?? null,
+    logoAlt: tenant?.logoAlt ?? tenant?.displayName ?? tenant?.name ?? 'Nikalas Marani',
+    faviconUrl: tenant?.faviconUrl ?? null,
+    displayName: tenant?.displayName ?? tenant?.name ?? 'Nikalas Marani',
+    cachedAt: Date.now(),
   }
   tenantCache.set(cacheKey, info)
   return info
@@ -40,13 +53,17 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
 export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
-  const { tenantId, brandColor, brandHover } = await resolveTenant(host)
+  const { tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName } = await resolveTenant(host)
 
   // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
   if (tenantId) requestHeaders.set('x-tenant-id', tenantId)
   requestHeaders.set('x-tenant-brand', brandColor)
   requestHeaders.set('x-tenant-brand-hover', brandHover)
+  requestHeaders.set('x-tenant-name', displayName)
+  requestHeaders.set('x-tenant-logo-alt', logoAlt)
+  if (logoUrl) requestHeaders.set('x-tenant-logo', logoUrl)
+  if (faviconUrl) requestHeaders.set('x-tenant-favicon', faviconUrl)
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },
