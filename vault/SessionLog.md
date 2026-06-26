@@ -8,6 +8,102 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-26 — Dynamic branding (logo, favicon, display name) (full detail)
+
+### Completed
+
+**`saas/prisma/schema.prisma`**
+- Added `logoUrl String?`, `logoAlt String?`, `faviconUrl String?`, `displayName String?` to `Tenant` model
+- `prisma db push` done — all 4 columns live in DB
+
+**`saas/proxy.ts`**
+- Extended `TenantInfo` with the 4 new fields
+- Switched from process-lifetime cache to **5-minute TTL** (`cachedAt` timestamp per entry)
+- Forwards new headers: `x-tenant-logo`, `x-tenant-logo-alt`, `x-tenant-favicon`, `x-tenant-name`
+
+**`saas/app/layout.tsx`**
+- Replaced static `metadata` export with `generateMetadata()` — reads `x-tenant-name` header for dynamic `<title>` and description
+- Renders `<link rel="icon">` from `x-tenant-favicon` header when set
+
+**`saas/app/(site)/layout.tsx` + `SiteNav.tsx`**
+- Layout reads `x-tenant-logo` / `x-tenant-logo-alt` headers, passes to SiteNav as props
+- SiteNav renders dynamic logo with fallback to `/icons/logo-dark.svg`
+
+**`saas/app/(site)/page.tsx`**
+- Removed `next/image` `<Image>` for logo (SVG, not LCP element, doesn't need optimization)
+- Reads logo from header, renders plain `<img>` — simpler and consistent with other placements
+
+**`saas/app/admin/layout.tsx` + `admin/login/page.tsx`**
+- Both read `x-tenant-logo` / `x-tenant-logo-alt` headers
+- Dynamic logo in admin nav top-left and login page
+
+**`saas/app/actions/superAdmin.ts`**
+- `getTenant`, `createTenant`, `updateTenant` extended with `logoUrl`, `logoAlt`, `faviconUrl`, `displayName`
+
+**`saas/app/actions/uploadLogo.ts` — NEW**
+- `uploadTenantLogo(formData)` — client admin uploads their own logo
+- `uploadTenantFavicon(formData)` — client admin uploads their own favicon
+- `uploadTenantLogoAdmin(tenantId, formData)` — super-admin uploads for any tenant
+- `uploadTenantFaviconAdmin(tenantId, formData)` — super-admin uploads favicon for any tenant
+- `saveTenantLogo(url, alt)` / `saveTenantFavicon(url)` — save URLs to DB, revalidate layout
+- All upload to Supabase Storage `logos` bucket; accepts SVG/PNG/JPG/ICO/WebP
+
+**`saas/app/super-admin/tenants/TenantFormClient.tsx`**
+- Added Display Name field
+- Logo upload: file picker → immediate upload → preview; shows existing logo; Remove button
+- Favicon upload: same pattern; shows 32px preview
+- Note on upload buttons: disabled until tenant is saved (need ID for storage path)
+- Logo alt text field appears when logo is set
+
+**`saas/app/admin/settings/SettingsClient.tsx` + `page.tsx`**
+- New **Branding** section above Closed Days
+- Logo upload: upload → saves immediately to DB (no separate save button)
+- Alt text field: saves on blur
+- Favicon upload: same immediate-save pattern
+
+**`saas/next.config.ts`**
+- Added Supabase Storage domain to `images.remotePatterns` (for any future `<Image>` usage with remote logos)
+
+**`saas/prisma.config.ts`** (bug fix)
+- Added `directUrl: env("DIRECT_URL")` — prisma.config.ts was overriding schema.prisma and ignoring DIRECT_URL, causing `db push` to timeout against PgBouncer port 6543. Now correctly uses port 5432 for migrations.
+
+**`saas/scripts/seed-branding.ts` — NEW**
+- Sets `displayName: 'Nikalas Marani'`, `logoUrl: '/icons/logo-dark.svg'`, `logoAlt: 'Nikalas Marani'` on the nikalasmarani.ge tenant
+- Run: `npx tsx scripts/seed-branding.ts`
+
+**TypeScript**: 0 errors
+
+### What's still needed (user testing)
+1. Go to `/super-admin/tenants` → edit Nikalas Marani → verify Display Name, Logo, Favicon fields appear
+2. Run `npx tsx scripts/seed-branding.ts` from saas/ to seed Nikalas Marani's branding in DB
+3. For a new client: upload a different logo → verify the public site and admin nav update (within 5 min cache TTL)
+4. Upload a favicon → verify browser tab icon updates
+
+### Key files changed
+- `saas/prisma/schema.prisma` — 4 new Tenant fields
+- `saas/prisma.config.ts` — directUrl fix (critical bug: db push was timing out)
+- `saas/proxy.ts` — TTL cache + new branding headers
+- `saas/next.config.ts` — Supabase Storage remotePatterns
+- `saas/app/layout.tsx` — generateMetadata + favicon link
+- `saas/app/(site)/layout.tsx` — logo headers → SiteNav
+- `saas/app/(site)/SiteNav.tsx` — dynamic logo prop
+- `saas/app/(site)/page.tsx` — plain img for hero logo, read from header
+- `saas/app/admin/layout.tsx` — dynamic logo
+- `saas/app/admin/login/page.tsx` — dynamic logo (now async)
+- `saas/app/actions/superAdmin.ts` — branding fields in CRUD
+- `saas/app/actions/uploadLogo.ts` — NEW: upload actions
+- `saas/app/super-admin/tenants/TenantFormClient.tsx` — logo/favicon/displayName UI
+- `saas/app/admin/settings/SettingsClient.tsx` — Branding section
+- `saas/app/admin/settings/page.tsx` — passes logo headers as props
+- `saas/scripts/seed-branding.ts` — NEW: seed Nikalas Marani branding
+
+### Next up
+- Run `npx tsx scripts/seed-branding.ts` (seeds Nikalas Marani logo URL in DB so tenant row is authoritative)
+- **Update Vercel `DATABASE_URL`** — still needs port 6543 + `?pgbouncer=true` (local .env already correct)
+- User test super-admin panel (7 steps from previous session still outstanding)
+
+---
+
 ## 2026-06-26 — Super-admin panel (full detail)
 
 ### Completed

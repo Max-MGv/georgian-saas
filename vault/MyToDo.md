@@ -46,6 +46,15 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🧪 Needs testing — Dynamic Branding
+
+1. **Seed Nikalas Marani branding** — run `npx tsx scripts/seed-branding.ts` from `saas/` folder (sets logoUrl + displayName on the tenant DB row)
+2. **Super-admin logo upload** — go to `/super-admin/tenants` → edit Nikalas Marani → verify Display Name, Logo, Favicon fields appear; try uploading a logo
+3. **Client settings branding** — go to `/admin/settings` → scroll to **Branding** section → verify it appears with Upload logo / Upload favicon buttons
+4. **Cache TTL** — after uploading a logo in super-admin, wait up to 5 minutes and reload the public site → logo should update
+
+---
+
 ## 🔧 Still outstanding (from previous sessions)
 
 - [x] **Redo visual content editor** — iframe approach implemented 2026-06-22 ✅

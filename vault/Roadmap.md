@@ -291,14 +291,14 @@ Full plan: `vault/Plan-MultiTenant.md`
 - [x] Add/edit tenant — name, domain, slug, brand color picker (react-colorful wheel + hex), live preview
 - [x] Users page — list all Supabase users with role badges; change role; create new admin user
 
-**Dynamic branding (logo, favicon, display name):** 🔜 TODO
-- [ ] Add `logoUrl String?`, `logoAlt String?`, `faviconUrl String?` to `Tenant` model → `prisma db push`
-- [ ] `proxy.ts` reads these fields from the cached tenant row, forwards as `x-tenant-logo`, `x-tenant-name`, `x-tenant-favicon` request headers (same pattern as brand colors)
-- [ ] `app/layout.tsx` reads headers and renders the correct `<img>` logo + `<link rel="icon">` favicon — falls back to current Nikalas Marani assets if not set
-- [ ] `app/admin/layout.tsx` reads `x-tenant-name` header and renders dynamic name instead of hardcoded "Nikalas Marani"
-- [ ] Logo upload in **super-admin Edit Tenant form** — file picker → uploads to Supabase Storage `logos` bucket → saves URL to `tenant.logoUrl`; same for favicon
-- [ ] Logo upload also accessible from **client's own `/admin/settings`** — so they can update it themselves without going through Max
-- [ ] Seed Nikalas Marani logo URL in DB so existing client is unaffected (use their current `/icons/logo-dark.svg` path or upload to Storage)
+**Dynamic branding (logo, favicon, display name):** ✅ DONE 2026-06-26
+- [x] Add `logoUrl String?`, `logoAlt String?`, `faviconUrl String?`, `displayName String?` to `Tenant` model → `prisma db push`
+- [x] `proxy.ts` reads these fields, forwards as `x-tenant-logo`, `x-tenant-logo-alt`, `x-tenant-favicon`, `x-tenant-name` headers; 5-min TTL cache
+- [x] `app/layout.tsx` — `generateMetadata()` for dynamic title; `<link rel="icon">` from favicon header
+- [x] All 4 logo placements (public nav, home hero, admin nav, admin login) read from headers with fallback
+- [x] Logo/favicon upload in **super-admin Edit Tenant form** — Supabase Storage `logos` bucket
+- [x] Logo/favicon upload in **client's own `/admin/settings`** — Branding section
+- [ ] Run `npx tsx scripts/seed-branding.ts` — seeds Nikalas Marani logoUrl in DB (still outstanding)
 
 **When ready:**
 - [ ] First new client onboarding (Vercel domain, DB row, admin login)
