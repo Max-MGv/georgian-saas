@@ -14,8 +14,10 @@ const C = {
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ContentRow = { key: string; value: string; section: string; label: string; locale: string }
 type LocaleKey = 'en' | 'ka'
-type ModeKey = 'text' | 'visual' | 'backgrounds'
+type ModeKey = 'visual' | 'backgrounds'
 type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact'
+
+const IFRAME_SECTIONS = new Set<SectionKey>(['home', 'about', 'contact'])
 type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[] }
 type FieldDef = { key: string; label: string; fallback: string }
 
@@ -104,11 +106,11 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
   ],
 }
 
-// ── Text mode ─────────────────────────────────────────────────────────────────
+// ── Fields panel (used for Form + Nav tabs in Visual mode) ───────────────────
 
-function TextMode({ section, c, locale }: { section: SectionKey; c: Record<string, string>; locale: string }) {
+function FieldsPanel({ section, c, locale }: { section: SectionKey; c: Record<string, string>; locale: string }) {
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-4 max-w-2xl">
       {FIELDS[section].map(f => (
         <div key={f.key}>
           <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: C.rust }}>
@@ -141,7 +143,7 @@ function TextMode({ section, c, locale }: { section: SectionKey; c: Record<strin
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ContentClient({ rows, bgSettings, uploadedImages }: Props) {
-  const [mode, setMode]       = useState<ModeKey>('text')
+  const [mode, setMode]       = useState<ModeKey>('visual')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
 
@@ -151,38 +153,27 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
   }
   const c = maps[locale]
 
-  const textSections:   { id: SectionKey; label: string }[] = [
+  const allSections: { id: SectionKey; label: string }[] = [
+    { id: 'home',    label: 'Home' },
+    { id: 'about',   label: 'About' },
+    { id: 'contact', label: 'Contact' },
+    { id: 'form',    label: 'Booking Form' },
     { id: 'nav',     label: 'Navigation' },
-    { id: 'home',    label: 'Home' },
-    { id: 'form',    label: 'Form' },
-    { id: 'about',   label: 'About' },
-    { id: 'contact', label: 'Contact' },
   ]
-  const visualSections: { id: SectionKey; label: string }[] = [
-    { id: 'home',    label: 'Home' },
-    { id: 'about',   label: 'About' },
-    { id: 'contact', label: 'Contact' },
-  ]
-  const activeSections = mode === 'text' ? textSections : visualSections
 
-  function switchMode(next: ModeKey) {
-    setMode(next)
-    if (next === 'visual' && (section === 'nav' || section === 'form')) setSection('home')
-  }
+  const subtitle = mode === 'visual'
+    ? IFRAME_SECTIONS.has(section)
+      ? 'Hover any text on the page preview to edit it inline. Changes save per field.'
+      : 'Click any field below to edit it. Changes save per field.'
+    : 'Choose a background image for each page. Adjust position and zoom, then save.'
 
   return (
-    <div className="space-y-6" style={{ maxWidth: mode === 'visual' ? '900px' : '672px' }}>
+    <div className="space-y-6" style={{ maxWidth: IFRAME_SECTIONS.has(section) && mode === 'visual' ? '900px' : '672px' }}>
 
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold" style={{ color: C.text }}>Site Content</h1>
-        <p className="text-sm mt-1" style={{ color: C.faint }}>
-          {mode === 'text'
-            ? 'Click any field to edit it inline. Changes save per field.'
-            : mode === 'visual'
-            ? 'Hover any text on the page preview to edit it. Changes save per field.'
-            : 'Choose a background image for each page. Adjust position and zoom, then save.'}
-        </p>
+        <p className="text-sm mt-1" style={{ color: C.faint }}>{subtitle}</p>
       </div>
 
       {/* Mode switcher */}
@@ -190,11 +181,10 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
         <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>View</span>
         <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: '#ede5d8' }}>
           {([
-            { id: 'text',        label: 'Text' },
             { id: 'visual',      label: 'Visual' },
             { id: 'backgrounds', label: 'Backgrounds' },
           ] as { id: ModeKey; label: string }[]).map(m => (
-            <button key={m.id} type="button" onClick={() => switchMode(m.id)}
+            <button key={m.id} type="button" onClick={() => setMode(m.id)}
               className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
               style={{
                 backgroundColor: mode === m.id ? '#fff9f3' : 'transparent',
@@ -207,12 +197,13 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
         </div>
       </div>
 
-      {/* Backgrounds mode — no locale/section switchers needed */}
+      {/* Backgrounds mode */}
       {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} uploadedImages={uploadedImages} />}
 
-      {/* Locale + section switchers — only for text/visual modes */}
-      {mode !== 'backgrounds' && (
+      {/* Visual mode */}
+      {mode === 'visual' && (
         <>
+          {/* Locale switcher */}
           <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ backgroundColor: '#ede5d8' }}>
             {(['en', 'ka'] as LocaleKey[]).map(l => (
               <button key={l} type="button" onClick={() => setLocale(l)}
@@ -227,10 +218,11 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
             ))}
           </div>
 
-          <div className="flex gap-1 border-b" style={{ borderColor: C.border }}>
-            {activeSections.map(tab => (
+          {/* Section tabs */}
+          <div className="flex gap-1 border-b flex-wrap" style={{ borderColor: C.border }}>
+            {allSections.map(tab => (
               <button key={tab.id} type="button" onClick={() => setSection(tab.id)}
-                className="px-4 py-2 text-sm font-medium transition-colors rounded-t-lg"
+                className="px-4 py-2 text-sm font-medium transition-colors rounded-t-lg whitespace-nowrap"
                 style={{
                   color: section === tab.id ? C.wine : C.muted,
                   borderBottom: section === tab.id ? `2px solid ${C.wine}` : '2px solid transparent',
@@ -241,10 +233,9 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
             ))}
           </div>
 
-          <div key={mode + '-' + locale + '-' + section}>
-            {mode === 'text' ? (
-              <TextMode section={section} c={c} locale={locale} />
-            ) : (
+          {/* Content area */}
+          <div key={locale + '-' + section}>
+            {IFRAME_SECTIONS.has(section) ? (
               <div className="rounded-xl border overflow-hidden"
                 style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
                 <iframe
@@ -253,6 +244,8 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
                   title={`${section} page preview`}
                 />
               </div>
+            ) : (
+              <FieldsPanel section={section} c={c} locale={locale} />
             )}
           </div>
         </>
