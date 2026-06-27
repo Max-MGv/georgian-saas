@@ -141,6 +141,11 @@
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
+.shimmer-dark {
+  background: linear-gradient(90deg, #1a0b04 25%, #2e1508 50%, #1a0b04 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
 
 @keyframes nav-progress {
   0%   { width: 0%;   opacity: 1; }
