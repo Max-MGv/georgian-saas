@@ -8,6 +8,74 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-06-27 — Wine Orders overhaul: table view, packing mode, inline status confirm (full detail)
+
+### Completed
+
+**Mode toggle — Cards | Table | 📦 Pack**
+- All three modes added to `WineOrdersClient.tsx` via a `Mode` state
+- Page widened from `max-w-3xl` to `max-w-5xl` to accommodate table + split packing layout
+
+**Shared filter bar (all modes)**
+- Status pills (All / Pending / Confirmed / Paid / Delivered / Cancelled)
+- Company name search (text input, case-insensitive)
+- Date range: From → To (native `<input type="date">`)
+- "Clear" button appears when search/date filters are active
+- Same filter state applies to cards, table, and packing mode
+
+**Table view**
+- Compact table: Company (name + wine tags), Amount, Date, Status (stepper)
+- Same `VerticalStepper` used in cards — inline confirm works here too
+- Color-coded left border per status; inactive orders (delivered/cancelled) faded
+
+**Pack mode — `PackingView.tsx` (new file)**
+- On entering Pack mode: auto-selects all confirmed+paid orders (pre-checked)
+- Packing table: checkbox per row, Company/Wines, Bottles count, Status pill, Date
+- Click anywhere on a row to toggle check; header checkbox toggles all visible (with indeterminate state)
+- Filters apply to what's visible — selection is independent (checked orders drive the summary)
+
+**Packing summary — 3 layouts (A/B/C toggle)**
+- **A — Right panel**: table 60% left, sticky 300px summary panel on right; scrollable
+- **B — Sticky bottom bar** (default): bar pinned to bottom shows live counts; click to expand full summary sheet up to 60vh
+- **C — Top collapsible**: banner above table with counts; click ▼ to expand full summary; layout toggle embedded in header
+
+**Summary content (shared across A/B/C)**
+- Box size input (default 6, manual override, min 1)
+- Total Wines section: each wine × quantity, then "X bottles → Y full boxes + 1 partial (Z)"
+- By Company section: per-order wine breakdown + bottle count + box calc + contact name/phone
+- Print button → opens new window with formatted packing sheet, auto-triggers print, closes
+
+**Print sheet**
+- Monospace `Courier New` layout
+- Header: date, box size, order count
+- TOTAL WINES section with wine breakdown + total boxes
+- BY COMPANY section: per-company wines, bottles, boxes, contact — `page-break-inside: avoid`
+
+**Inline status confirmation**
+- Clicking any step on `VerticalStepper` no longer fires immediately
+- Sets `pendingChange` state → small "→ Confirmed? ✓ ✗" row appears below the stepper
+- ✓ confirms and fires `updateWineOrderStatus`; ✗ cancels; auto-dismisses after 5 seconds
+- Works in all modes (cards, table); only one pending change at a time across all orders
+
+**TypeScript**: 0 errors
+
+### Key files changed
+- `saas/app/admin/wine-orders/WineOrdersClient.tsx` — full rewrite
+- `saas/app/admin/wine-orders/PackingView.tsx` — NEW: summary layouts A/B/C + print
+- `saas/app/admin/wine-orders/page.tsx` — `max-w-3xl` → `max-w-5xl`
+
+### What's still needed (user testing)
+1. Switch to Table view → filter by status + search → verify rows filter correctly
+2. Switch to Pack mode → verify confirmed+paid orders pre-checked → uncheck one → verify summary updates
+3. Change box size from 6 to 12 → verify box counts recalculate
+4. Click Print → verify packing sheet opens and prints correctly
+5. Click a stepper step → verify "→ X?" confirm row appears → confirm → verify status changes → verify auto-dismiss after 5s
+6. Test layout A (split panel) and C (top collapsible) — switch between them in Pack mode
+
+---
+
+## 2026-06-26 (Part 2) — Hardcoding fixes, Contact Info settings, Settings UX overhaul (full detail)
+
 ## 2026-06-26 (Part 2) — Hardcoding fixes, Contact Info settings, Settings UX overhaul (full detail)
 
 ### Completed

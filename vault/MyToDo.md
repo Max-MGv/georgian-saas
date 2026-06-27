@@ -8,6 +8,37 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 📝 Draft ideas — needs review before building (2026-06-27)
+
+> These are rough notes from Max — details still being figured out, don't build yet.
+
+1. **Companies — tier editing** — couldn't see "Add tier" button when editing tiers. Verify it was a UI bug or just hidden (check before building anything).
+2. **Booking page — hide company list** — add a setting to hide the company dropdown so clients can't see who else you work with. When toggled, show a code-entry box instead; entering the code auto-fills company info.
+3. **Booking page — first-time company registration** — need a user-friendly way for new companies to fill in their profile (inc. company ID) during their first booking, without disrupting the existing flow. Still thinking about UX.
+4. **Wine orders — custom wine pricing per company** — allow per-company price overrides for wines. Likely a section in the Companies page. Needs design.
+5. **Wine orders — company code check on order form** — make sure the access code system works on the wine ordering page, same as booking page.
+6. **Company code — ensure data is actually used** — data entered via the code popup (like Company ID) should flow through to the order. Company ID is not currently on the booking form — needs a plan.
+7. **Booking page — guest price label** — replace "minimum 4 guests" with something like "price is for 4 or more guests" — probably with an icon.
+8. **Wine orders admin — box stickers** — generate printable stickers to label each box (what wine is inside). Simple layout, one per box.
+9. **Wine orders — invoice + email** — same invoice options as booking orders: print + email. Needs both printout and email delivery.
+10. **Email planning reminder** — plan how emails will work since clients will use the sub-domain (not their own domain). Think through sender address, deliverability, reply-to setup.
+11. **Site content not rendering** — check what's going on; content edits don't seem to be showing on the public site.
+
+---
+
+## 🧪 Needs testing — Wine Orders overhaul (2026-06-27)
+
+1. **Table view** — switch to Table → filter by status + search by company name → verify rows update
+2. **Pack mode — pre-selection** — switch to Pack → verify confirmed+paid orders are pre-checked, others unchecked
+3. **Pack mode — include/exclude** — uncheck one order → verify summary totals update immediately
+4. **Box size** — change from 6 to 12 → verify box counts recalculate (full boxes + partial)
+5. **Print** — click Print button in any layout → verify packing sheet opens → print dialog appears → sheet shows correct wine totals + per-company breakdown
+6. **Layout A** — switch to layout A in Pack mode → verify split panel (table left, summary right, sticky)
+7. **Layout C** — switch to layout C → verify top collapsible → click ▼ to expand → confirm summary shows
+8. **Inline confirm** — click any stepper step (in Cards or Table view) → verify "→ X?" row appears → click ✓ → verify status changes → also test auto-dismiss (wait 5 seconds without clicking)
+
+---
+
 ## 🧪 Needs testing — v1.7 Company Access Codes
 
 1. **Set a code on a company**
@@ -83,6 +114,13 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 1. Go to `/admin/settings` → **Payment Details** section → click pencil on any row (e.g. Recipient Name) → edit → click return arrow → "Saved" should appear
 2. **Branding** section → click pencil next to the Logo Alt text field → edit → return arrow → "Saved"
 3. **Booking Rules** section → click pencil on "Wine Tasting minimum" → change value → return arrow → "Saved"
+
+---
+
+## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
+
+- [ ] **Neutral fallback defaults** — replace all NM-specific hardcoded fallbacks (`'Nikalas Marani'`, NM email/phone/social URLs) with neutral strings (`'Your Winery'`, `''`, etc.) across: SiteNav, layout.tsx, InvoicePrint, WineCatalogueClient, generateMetadata calls, and any other component. New tenants should never see NM branding if their settings are empty.
+- [ ] **NM domain migration** — Nikalas Marani will eventually move to its own standalone deployment; the current multi-tenant SaaS becomes the platform for all other clients. Plan the migration before onboarding a second tenant.
 
 ---
 
