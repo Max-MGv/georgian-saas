@@ -27,6 +27,7 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 **Files involved:**
 - `saas/components/BookingForm.tsx` — public form, reads labels from `formContent` prop
 - `saas/app/admin/content/ContentClient.tsx` — `FIELDS.form` array defines which keys appear in admin panel
+- `saas/app/admin/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor; layout must stay in sync with `BookingForm.tsx`
 - `saas/prisma/seed-ka.ts` — Georgian locale seed data
 
 ---

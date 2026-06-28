@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import EditableText from '@/components/EditableText'
 import BackgroundsTab from './BackgroundsTab'
+import BookingFormVisualPanel from './BookingFormVisualPanel'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
@@ -258,6 +259,8 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
                   title={`${section} page preview`}
                 />
               </div>
+            ) : section === 'form' ? (
+              <BookingFormVisualPanel c={c} locale={locale} />
             ) : (
               <FieldsPanel section={section} c={c} locale={locale} />
             )}
