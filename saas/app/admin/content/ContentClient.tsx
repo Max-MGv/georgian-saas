@@ -260,7 +260,12 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
                 />
               </div>
             ) : section === 'form' ? (
-              <BookingFormVisualPanel c={c} locale={locale} />
+              <div className="rounded-xl border overflow-hidden"
+                style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', backgroundColor: '#f5efe6' }}>
+                <div className="p-8">
+                  <BookingFormVisualPanel c={c} locale={locale} />
+                </div>
+              </div>
             ) : (
               <FieldsPanel section={section} c={c} locale={locale} />
             )}
