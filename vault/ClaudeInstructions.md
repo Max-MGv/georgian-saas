@@ -69,7 +69,13 @@ Examples:
 
 ---
 
-## 6. Handoff preparation
+## 6. Read MaintenanceNotes before non-trivial changes
+
+Before making any non-trivial change to the booking form, admin site-content editor, or public-site layout — read `vault/MaintenanceNotes.md`. It lists structural dependencies between components that must be kept in sync. Skipping this risks silent breakage in coupled files.
+
+---
+
+## 7. Handoff preparation
 
 When Max says "prepare for handoff," update:
 1. `vault/SessionLog.md` — full detail of what was done, pending user tests, what's next

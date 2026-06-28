@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import EditableText from '@/components/EditableText'
 import BackgroundsTab from './BackgroundsTab'
 
@@ -46,6 +46,9 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'home_book_heading',     label: 'Booking section heading',  fallback: 'Book a Visit' },
     { key: 'home_booking_intro',    label: 'Booking intro text',       fallback: 'Fill in the form and we will confirm your booking shortly.' },
   ],
+  // MAINTENANCE: If you add, remove, or rename a key here, mirror the change in
+  // BookingForm.tsx (which reads these keys from the formContent prop).
+  // See vault/MaintenanceNotes.md §1 for full details.
   form: [
     { key: 'form_booking_type',          label: 'Booking Type label',         fallback: 'Booking Type' },
     { key: 'form_individual',            label: 'Individual Booking button',  fallback: 'Individual Booking' },
@@ -146,6 +149,17 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
   const [mode, setMode]       = useState<ModeKey>('visual')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'switchTab' && e.data?.tab === 'form') {
+        setMode('visual')
+        setSection('form')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   const maps: Record<LocaleKey, Record<string, string>> = {
     en: buildMap(rows.en),

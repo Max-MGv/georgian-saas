@@ -6,6 +6,7 @@ import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getContentMap } from '@/app/actions/siteContent'
 import { cookies, headers } from 'next/headers'
 import BookingForm from '@/components/BookingForm'
+import BookingFormEditOverlay from '@/components/BookingFormEditOverlay'
 import { t } from '@/lib/t'
 import { preload } from 'react-dom'
 import EditableText from '@/components/EditableText'
@@ -305,18 +306,21 @@ export default async function Home({ searchParams }: PageProps) {
         <ET k="home_booking_intro" s="home" lbl="Booking intro text"
           fb="Fill in the form and we will confirm your booking shortly." as="p"
           className="text-sm mb-8" style={{ color: '#6b5a47' }} />
-        <BookingForm
-          locale={locale}
-          companies={companies}
-          showCompanyPrice={showCompanyPrice === 'true'}
-          enhancedEnabled={enhancedBookingStr === 'true'}
-          menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
-          masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
-          minGuestsTasting={parseInt(minGuestsTasting) || 4}
-          minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
-          blockedDates={blockedDates.map(d => d.date)}
-          formContent={formContent}
-        />
+        <div style={{ position: 'relative' }}>
+          <BookingForm
+            locale={locale}
+            companies={companies}
+            showCompanyPrice={showCompanyPrice === 'true'}
+            enhancedEnabled={enhancedBookingStr === 'true'}
+            menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
+            masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
+            minGuestsTasting={parseInt(minGuestsTasting) || 4}
+            minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
+            blockedDates={blockedDates.map(d => d.date)}
+            formContent={formContent}
+          />
+          {isEditMode && isAdmin && <BookingFormEditOverlay />}
+        </div>
       </section>
     </>
   )

@@ -1,5 +1,9 @@
 'use client'
 
+// MAINTENANCE: If you add, remove, or rename any label in this form, mirror the change in
+// FIELDS.form inside saas/app/admin/content/ContentClient.tsx so the admin panel stays in sync.
+// See vault/MaintenanceNotes.md §1 for full details.
+
 import { useState, useEffect } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
 import { verifyCompanyCode } from '@/app/actions/companies'
