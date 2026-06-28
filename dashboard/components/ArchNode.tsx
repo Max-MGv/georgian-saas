@@ -10,6 +10,8 @@ const typeStyles: Record<ArchNode['type'], { bg: string; border: string; label: 
   page:      { bg: 'bg-indigo-950', border: 'border-indigo-600',label: 'text-indigo-300',dot: 'bg-indigo-400' },
   service:   { bg: 'bg-amber-950',  border: 'border-amber-700', label: 'text-amber-300', dot: 'bg-amber-400' },
   database:  { bg: 'bg-emerald-950',border: 'border-emerald-700',label:'text-emerald-300',dot:'bg-emerald-400'},
+  tool:      { bg: 'bg-cyan-950',   border: 'border-cyan-700',  label: 'text-cyan-300',  dot: 'bg-cyan-400' },
+  subpage:   { bg: 'bg-slate-900',  border: 'border-slate-600', label: 'text-slate-300', dot: 'bg-slate-400' },
 }
 
 const typeLabel: Record<ArchNode['type'], string> = {
@@ -19,6 +21,8 @@ const typeLabel: Record<ArchNode['type'], string> = {
   page: 'Page',
   service: 'Service',
   database: 'Database',
+  tool: 'Tool',
+  subpage: 'Subpage',
 }
 
 export default function ArchNodeComponent({ data }: { data: { node: ArchNode; isSelected: boolean } }) {
