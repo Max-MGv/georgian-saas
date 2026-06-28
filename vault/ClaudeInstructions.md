@@ -75,6 +75,16 @@ Before making any non-trivial change to the booking form, admin site-content edi
 
 ---
 
+## 8. Confirm before editing
+
+Before making any code or file changes, state the plan clearly and wait for Max to confirm. Do not start editing immediately after proposing an approach — "yes" or explicit approval is required first.
+
+Exceptions (no confirmation needed):
+- Max explicitly says to go ahead (e.g. "do it", "yes", "go")
+- The change is a direct follow-on to something already approved in the same turn (e.g. fixing a typo spotted during an approved edit)
+
+---
+
 ## 7. Handoff preparation
 
 When Max says "prepare for handoff," update:
