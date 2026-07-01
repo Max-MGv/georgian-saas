@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode } from '@/app/actions/companies'
 
@@ -23,17 +23,6 @@ const C = {
 }
 const inputStyle = { backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }
 
-const LS_PREFIX = 'company_auth_'
-const LS_EXPIRY_DAYS = 30
-
-function saveAuth(companyId: string) {
-  try {
-    localStorage.setItem(LS_PREFIX + companyId, String(Date.now() + LS_EXPIRY_DAYS * 86400 * 1000))
-  } catch {}
-}
-function hasValidAuth(companyId: string): boolean {
-  try { return Number(localStorage.getItem(LS_PREFIX + companyId) ?? 0) > Date.now() } catch { return false }
-}
 
 function WineBottlePlaceholder({ color }: { color: string }) {
   return (
@@ -85,34 +74,23 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.id] ?? 0) * w.price, 0)
 
-  function handleCompanyChange(id: string) {
-    setCompanyId(id)
-    if (!id) return
-    const company = companies.find(c => c.id === id)
-    if (!company?.accessCode) {
-      // No code set — auto-fill name immediately, no popup
-      setBusinessName(company?.name ?? '')
-      return
-    }
-    if (hasValidAuth(id)) {
-      setBusinessName(company.name)
-      try {
-        const saved = localStorage.getItem(`company_profile_${id}`)
-        if (saved) {
-          const profile = JSON.parse(saved)
-          applyProfile(company, profile)
-        }
-      } catch {}
+  useEffect(() => {
+    if (!companyId) return
+    const company = companies.find(c => c.id === companyId)
+    if (!company) return
+    if (!company.accessCode) {
+      applyProfile(company, { contactName: company.contactName, contactPhone: company.contactPhone, identificationCode: company.identificationCode, address: company.address })
       return
     }
     setCodeInput('')
     setCodeError('')
     setShowCodeText(false)
     setShowCodePopup(true)
-  }
+  }, [companyId])
 
   function applyProfile(company: Company, profile: { contactName: string | null; contactPhone: string | null; identificationCode: string | null; address: string | null }) {
     setBusinessName(company.name)
+    setLlcName(company.name)
     if (profile.identificationCode) setLlcId(profile.identificationCode)
     if (profile.address) setAddress(profile.address)
     if (profile.contactName) setContactName(profile.contactName)
@@ -129,15 +107,6 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
       setCodeError('Incorrect code — please try again or contact the winery.')
       return
     }
-    saveAuth(companyId)
-    try {
-      localStorage.setItem(`company_profile_${companyId}`, JSON.stringify({
-        contactName: result.profile.contactName,
-        contactPhone: result.profile.contactPhone,
-        identificationCode: result.profile.identificationCode,
-        address: result.profile.address,
-      }))
-    } catch {}
     const company = companies.find(c => c.id === companyId)!
     applyProfile(company, result.profile)
     setShowCodePopup(false)
@@ -414,7 +383,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
             </label>
             <select
               value={companyId}
-              onChange={e => handleCompanyChange(e.target.value)}
+              onChange={e => setCompanyId(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
               style={inputStyle}
             >
