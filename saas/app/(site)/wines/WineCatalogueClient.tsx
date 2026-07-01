@@ -61,7 +61,6 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
   const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
-  const [rememberDevice, setRememberDevice] = useState(true)
 
   // Controlled form fields (auto-fillable)
   const [businessName, setBusinessName] = useState('')
@@ -96,8 +95,14 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
       return
     }
     if (hasValidAuth(id)) {
-      // Already authenticated — just fill the name (no profile available without server call)
       setBusinessName(company.name)
+      try {
+        const saved = localStorage.getItem(`company_profile_${id}`)
+        if (saved) {
+          const profile = JSON.parse(saved)
+          applyProfile(company, profile)
+        }
+      } catch {}
       return
     }
     setCodeInput('')
@@ -124,7 +129,15 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
       setCodeError('Incorrect code — please try again or contact the winery.')
       return
     }
-    if (rememberDevice) saveAuth(companyId)
+    saveAuth(companyId)
+    try {
+      localStorage.setItem(`company_profile_${companyId}`, JSON.stringify({
+        contactName: result.profile.contactName,
+        contactPhone: result.profile.contactPhone,
+        identificationCode: result.profile.identificationCode,
+        address: result.profile.address,
+      }))
+    } catch {}
     const company = companies.find(c => c.id === companyId)!
     applyProfile(company, result.profile)
     setShowCodePopup(false)
@@ -217,11 +230,6 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
             </div>
 
             {codeError && <p className="text-sm" style={{ color: '#b91c1c' }}>{codeError}</p>}
-
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={rememberDevice} onChange={e => setRememberDevice(e.target.checked)} className="rounded" />
-              <span className="text-sm" style={{ color: C.muted }}>Remember this device for 30 days</span>
-            </label>
 
             <button
               type="button"

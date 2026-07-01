@@ -8,6 +8,67 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-01 — Planning session: Features #111–116 (full detail)
+
+### Planned (in build order)
+
+**#111 — Bug fix: wine orders company profile not auto-filling**
+- Root cause confirmed in code: `hasValidAuth()` branch in `WineCatalogueClient.tsx` only calls `setBusinessName`, never fills contactName / phone / address / llcId. The "Remember device" checkbox (wine form only — booking form never had it) was the trigger.
+- Fix: remove "Remember device" checkbox from wine form entirely; save profile fields to localStorage on code success alongside the auth expiry; restore on `hasValidAuth()`.
+
+**#112 — Guest price label**
+- Replace "minimum X guests" text on home page package cards with a person silhouette SVG + `"X ან მეტი სტუმარი"` (Georgian). X from existing `min_tasting_guests` setting.
+
+**#113 + #114 — Hide company dropdown + "New Company?" request (built together)**
+- New setting `hide_company_dropdown` (Booking section, default OFF)
+- When ON: both booking and wine order forms replace dropdown with a code input field
+- Valid code → `findCompanyByCode(code)` server action → company chip + auto-fill; invalid → "Code not recognised."
+- "New Company? →" button appears at the TOP of the code input area (only when setting is ON)
+- Popup: Company Name + Your Name + Phone (required) + Email (optional)
+- On submit: Resend notification email to `contact_email` from Settings. Customer sees "Request received!" No DB record — admin creates company manually.
+
+**#115 — Company wine % discount**
+- New setting `enable_company_wine_pricing` (Booking section, default OFF)
+- When ON: company slide-over shows `Booking | Wine Prices` tab toggle
+- Wine Prices tab: single flat `"X% off all wines"` field → `wineDiscountPercent Float?` on Company model
+- Applied in `submitWineOrder`; discount badge shown on admin wine order cards
+- Per-wine overrides deferred to a future feature
+
+**#116 — Wine hierarchy (WineProduct + WineVintage)**
+- Schema: `Wine` parent (name, key/slug, sortOrder) + `WineVintage` child (year, color, dryness, alcoholPercent, price, imagePath, active)
+- Migration script: converts existing flat Wine rows to parent + one vintage child
+- Admin: 2-level expand UI; public: vintage selector on cards; orders reference vintageId
+- **Largest refactor — do last**
+
+### Key decisions made
+- "Remember device" removed from wine form entirely (browser handles session)
+- Draft #11 (site content not rendering) — marked solved (not a real bug)
+- Company wine pricing: flat % only for now; per-wine overrides = future feature
+- Wine hierarchy uses `groupKey` approach (explicit slug field, not derived from name to avoid fragility)
+- Registration request: email-only flow, no DB approval queue
+
+### What's next
+Start building in order: #112 → #113+#114 together → #115 → #116
+
+---
+
+## 2026-07-01 — Feature #111: wine orders profile auto-fill fix (full detail)
+
+### Completed
+
+**Bug fix: wine orders company profile not auto-filling**
+- Root cause was in the `hasValidAuth()` branch of `handleCompanyChange` — only `setBusinessName` was called, profile fields were never filled.
+- **Part 1:** Removed `rememberDevice` state variable and "Remember this device for 30 days" checkbox UI from the wine form. `saveAuth()` is now always called on successful code entry. `BookingForm.tsx` was already clean — no change there.
+- **Part 2:** On successful code entry in `handleCodeSubmit`, profile fields (`contactName`, `contactPhone`, `identificationCode`, `address`) are now saved to `localStorage` as `company_profile_{companyId}`. In `handleCompanyChange`, when `hasValidAuth(id)` is true, the saved profile is read back and `applyProfile()` is called — filling all fields without showing the popup.
+- **File changed:** `saas/app/(site)/wines/WineCatalogueClient.tsx` only. TypeScript: 0 errors.
+
+### What needs user testing
+1. Go to `/wines` → select a company with an access code → popup appears → enter correct code → verify **all fields fill**: business name, contact name, phone, address, LLC ID
+2. Without reloading, deselect and reselect the same company → verify all fields fill again **without the popup appearing**
+3. In a fresh browser session (after localStorage has been set in a prior session), select the same company → verify all fields fill without popup
+
+---
+
 ## 2026-07-01 — Platform logo, login page fix, dev/prod brainstorm (full detail)
 
 ### Completed
