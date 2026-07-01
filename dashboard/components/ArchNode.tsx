@@ -1,52 +1,60 @@
 'use client'
 
 import { Handle, Position } from '@xyflow/react'
-import type { ArchNode } from '@/lib/parseVault'
+import type { ArchNode } from '@/lib/parseArchitecture'
 
-const typeStyles: Record<ArchNode['type'], { bg: string; border: string; label: string; dot: string }> = {
-  client:    { bg: 'bg-blue-950',   border: 'border-blue-700',  label: 'text-blue-300',  dot: 'bg-blue-400' },
-  auth:      { bg: 'bg-rose-950',   border: 'border-rose-700',  label: 'text-rose-300',  dot: 'bg-rose-400' },
-  framework: { bg: 'bg-violet-950', border: 'border-violet-600',label: 'text-violet-300',dot: 'bg-violet-400' },
-  page:      { bg: 'bg-indigo-950', border: 'border-indigo-600',label: 'text-indigo-300',dot: 'bg-indigo-400' },
-  service:   { bg: 'bg-amber-950',  border: 'border-amber-700', label: 'text-amber-300', dot: 'bg-amber-400' },
-  database:  { bg: 'bg-emerald-950',border: 'border-emerald-700',label:'text-emerald-300',dot:'bg-emerald-400'},
-  tool:      { bg: 'bg-cyan-950',   border: 'border-cyan-700',  label: 'text-cyan-300',  dot: 'bg-cyan-400' },
-  subpage:   { bg: 'bg-slate-900',  border: 'border-slate-600', label: 'text-slate-300', dot: 'bg-slate-400' },
+const TYPE_STYLES: Record<string, { border: string; badge: string; badgeText: string }> = {
+  client:    { border: '#3b82f6', badge: '#1e3a5f', badgeText: '#93c5fd' },
+  framework: { border: '#a855f7', badge: '#2e1065', badgeText: '#c4b5fd' },
+  service:   { border: '#14b8a6', badge: '#134e4a', badgeText: '#5eead4' },
+  auth:      { border: '#f59e0b', badge: '#451a03', badgeText: '#fcd34d' },
+  database:  { border: '#22c55e', badge: '#14532d', badgeText: '#86efac' },
+  page:      { border: '#0ea5e9', badge: '#0c4a6e', badgeText: '#7dd3fc' },
+  tool:      { border: '#f97316', badge: '#431407', badgeText: '#fdba74' },
+  subpage:   { border: '#6b7280', badge: '#1f2937', badgeText: '#9ca3af' },
 }
 
-const typeLabel: Record<ArchNode['type'], string> = {
-  client: 'Client',
-  auth: 'Auth',
-  framework: 'Framework',
-  page: 'Page',
-  service: 'Service',
-  database: 'Database',
-  tool: 'Tool',
-  subpage: 'Subpage',
+type Props = {
+  data: { node: ArchNode; isSelected?: boolean }
 }
 
-export default function ArchNodeComponent({ data }: { data: { node: ArchNode; isSelected: boolean } }) {
+export default function ArchNode({ data }: Props) {
   const { node, isSelected } = data
-  const s = typeStyles[node.type] ?? typeStyles.service
+  const style = TYPE_STYLES[node.type] ?? TYPE_STYLES.service
 
   return (
     <div
-      className={`
-        w-44 rounded-lg border px-4 py-3 cursor-pointer transition-all select-none
-        ${s.bg} ${isSelected ? 'border-white shadow-lg shadow-white/10' : s.border}
-      `}
+      style={{
+        width: 180,
+        background: isSelected ? '#1f2937' : '#111827',
+        border: `1px solid ${isSelected ? style.border : '#374151'}`,
+        borderRadius: 10,
+        padding: '12px 14px',
+        cursor: 'pointer',
+        boxShadow: isSelected ? `0 0 0 1px ${style.border}40` : 'none',
+        transition: 'border-color 0.15s',
+      }}
     >
-      <Handle type="target" position={Position.Top} className="!bg-gray-600 !border-gray-500" />
+      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
 
-      <div className="flex items-center gap-2 mb-1">
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
-        <span className={`text-[10px] font-medium uppercase tracking-wider ${s.label}`}>
-          {typeLabel[node.type]}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 4,
+          background: style.badge, color: style.badgeText, whiteSpace: 'nowrap',
+        }}>
+          {node.type}
         </span>
       </div>
-      <div className="text-white font-semibold text-sm leading-tight">{node.label}</div>
 
-      <Handle type="source" position={Position.Bottom} className="!bg-gray-600 !border-gray-500" />
+      <div style={{ fontSize: 13, fontWeight: 500, color: '#f9fafb', lineHeight: 1.35 }}>
+        {node.label}
+      </div>
+
+      <div style={{ fontSize: 11, color: '#4b5563', marginTop: 6 }}>
+        Click for details →
+      </div>
+
+      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-const VAULT_PATH = process.env.VAULT_PATH ?? path.join(process.cwd(), '..', 'vault')
+const VAULT_PATH = process.env.VAULT_PATH || 'C:\\Users\\Max\\Desktop\\claude-projects\\georgian-saas\\vault'
 
 export type Task = {
   id: string
@@ -27,30 +27,6 @@ export type Phase = {
 export type VaultData = {
   phases: Phase[]
   lastUpdated: string
-}
-
-export type ArchNode = {
-  id: string
-  label: string
-  type: 'client' | 'auth' | 'framework' | 'page' | 'tool' | 'subpage' | 'service' | 'database'
-  connectsTo: string[]
-  detailMarkdown: string
-}
-
-export type ArchData = {
-  nodes: ArchNode[]
-}
-
-export type OverviewNode = {
-  id: string
-  label: string
-  type: 'user' | 'repo' | 'host' | 'backend'
-  connectsTo: string[]
-  detailMarkdown: string
-}
-
-export type OverviewData = {
-  nodes: OverviewNode[]
 }
 
 function readVaultFile(filename: string): string {
@@ -120,14 +96,15 @@ export function parseVault(): VaultData {
   }
 
   for (const line of roadmapContent.split('\n')) {
-    // Phase heading: ## Phase 0 — ... or ## v1 — ... or ## v1.1 — ...
-    const phaseMatch = line.match(/^## ((?:Phase\s+\d+|v[\d.]+)\s*[—–-].+)/)
+    // Phase heading: ## Phase 0 —, ## v1 —, ## Security ..., etc. Excludes meta sections.
+    const SKIP = /^(Draft Ideas|Client Pipeline|Related)/i
+    const phaseMatch = !SKIP.test(line.slice(3)) && line.match(/^## (.+)/)
     if (phaseMatch) {
       flushPhase()
       const label = phaseMatch[1].trim()
-      const versionPart = label.match(/(?:Phase\s+\d+|v[\d.]+)/)?.[0] ?? label
+      const versionPart = label.match(/v[\d.]+/)?.[0] ?? label
       currentPhase = {
-        id: versionPart.toLowerCase().replace(/[\s.]+/g, '_'),
+        id: versionPart.replace(/\./g, '_'),
         label,
         sections: [],
         totalTasks: 0,
@@ -187,96 +164,4 @@ export function parseVault(): VaultData {
   flushPhase()
 
   return { phases, lastUpdated: getLastProgressDate(progressContent) }
-}
-
-export function parseArchitecture(): ArchData {
-  const content = readVaultFile('Architecture.md')
-  const nodes: ArchNode[] = []
-
-  // Split on --- separators (ignore frontmatter block)
-  const sections = content.split(/\n---\n/)
-
-  for (const section of sections) {
-    const lines = section.trim().split('\n')
-    const headingLine = lines.find(l => /^## .+/.test(l) && !l.startsWith('# '))
-    if (!headingLine) continue
-
-    const label = headingLine.replace(/^## /, '').trim()
-    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
-
-    let type: ArchNode['type'] = 'service'
-    let connectsTo: string[] = []
-    const detailLines: string[] = []
-    let pastProperties = false
-
-    for (const line of lines) {
-      if (line === headingLine) continue
-      const typeMatch = line.match(/^- type:\s*(.+)/)
-      const connectsMatch = line.match(/^- connects-to:\s*(.*)/)
-
-      if (typeMatch) {
-        type = typeMatch[1].trim() as ArchNode['type']
-        continue
-      }
-      if (connectsMatch) {
-        const val = connectsMatch[1].trim()
-        connectsTo = val ? val.split(',').map(s => s.trim()).filter(Boolean) : []
-        continue
-      }
-      if (line.startsWith('- ')) continue // skip other bullet props
-      if (!pastProperties && line.trim() === '') { pastProperties = true; continue }
-      if (pastProperties || (!line.startsWith('-') && !line.startsWith('#'))) {
-        pastProperties = true
-        detailLines.push(line)
-      }
-    }
-
-    nodes.push({ id, label, type, connectsTo, detailMarkdown: detailLines.join('\n').trim() })
-  }
-
-  return { nodes }
-}
-
-export function parseSystemOverview(): OverviewData {
-  const content = readVaultFile('SystemOverview.md')
-  const nodes: OverviewNode[] = []
-
-  const sections = content.split(/\n---\n/)
-
-  for (const section of sections) {
-    const lines = section.trim().split('\n')
-    const headingLine = lines.find(l => /^## .+/.test(l))
-    if (!headingLine) continue
-
-    const label = headingLine.replace(/^## /, '').trim()
-    const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
-
-    let type: OverviewNode['type'] = 'host'
-    let connectsTo: string[] = []
-    const detailLines: string[] = []
-    let pastProperties = false
-
-    for (const line of lines) {
-      if (line === headingLine) continue
-      const typeMatch = line.match(/^- type:\s*(.+)/)
-      const connectsMatch = line.match(/^- connects-to:\s*(.*)/)
-
-      if (typeMatch) { type = typeMatch[1].trim() as OverviewNode['type']; continue }
-      if (connectsMatch) {
-        const val = connectsMatch[1].trim()
-        connectsTo = val ? val.split(',').map(s => s.trim()).filter(Boolean) : []
-        continue
-      }
-      if (line.startsWith('- ')) continue
-      if (!pastProperties && line.trim() === '') { pastProperties = true; continue }
-      if (pastProperties || (!line.startsWith('-') && !line.startsWith('#'))) {
-        pastProperties = true
-        detailLines.push(line)
-      }
-    }
-
-    nodes.push({ id, label, type, connectsTo, detailMarkdown: detailLines.join('\n').trim() })
-  }
-
-  return { nodes }
 }
