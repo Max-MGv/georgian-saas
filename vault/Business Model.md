@@ -23,6 +23,8 @@ tags: [business]
 
 Break-even math: 10 clients = 500 GEL/month (~$180). 20 clients = 1,000 GEL/month (~$360). Meaningful side income, could scale.
 
+Infrastructure cost trigger: Supabase free plan holds comfortably to ~25 clients. At 25–30 clients, upgrade to Supabase Pro ($25/month ~70 GEL). At that revenue level (~1,250 GEL/month) it's a rounding error. See [[Tech Stack]] for full capacity breakdown.
+
 ## What to Offer Clients
 
 ### What they get

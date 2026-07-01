@@ -32,6 +32,14 @@ A record of key choices made and why — useful when revisiting or explaining tr
 
 ---
 
+## 2026-07-01 — Scaling path at ~30 clients: account sharding over paying for Pro
+
+**Chose:** Account sharding — open a new Supabase + Vercel account for new clients at ~25–30 tenants
+**Rejected (for now):** Upgrading to Supabase Pro ($25/month)
+**Why:** Egress is the constraint, not DB or storage. Opening a fresh account resets the free quota with zero code changes. At early growth stage, free is better until revenue is stable. Pro becomes the obvious call once the monthly cost is clearly covered. See [[Scaling-AccountSharding]] for the full checklist.
+
+---
+
 ## 2026-05-16 — Pricing: setup fee + monthly
 
 **Chose:** ~150–200 GEL setup + 50 GEL/month

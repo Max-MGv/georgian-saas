@@ -102,6 +102,12 @@ On Vercel: add the domain in the dashboard first or you'll get cert errors. On a
 
 ---
 
+## Scaling beyond one account
+
+When you hit ~25–30 clients on a single Supabase account, open a new account and onboard new clients there (existing clients stay put). The onboarding checklist above applies identically — just run it against the new Supabase + Vercel. See [[Scaling-AccountSharding]] for the full setup steps and tradeoff comparison vs. Supabase Pro.
+
+---
+
 ## Tenant IDs (current clients)
 
 | Name | Slug | Domain | Tenant ID |
