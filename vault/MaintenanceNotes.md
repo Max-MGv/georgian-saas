@@ -32,4 +32,22 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 
 ---
 
-## 2. [Add future dependencies here]
+---
+
+## 2. Admin route group structure — `(panel)` vs root
+
+**What the structure is:**
+`app/admin/` has two distinct zones:
+- `app/admin/login/` — standalone login page; inherits the root pass-through `app/admin/layout.tsx`; **no nav bar**
+- `app/admin/(panel)/` — all other admin pages (orders, companies, settings, etc.); inherits `app/admin/(panel)/layout.tsx` which renders the full nav bar with logo, nav links, logout
+
+**Why it matters:**
+If you add a new admin page that should have the nav bar, it must go inside `app/admin/(panel)/`. If you put it at `app/admin/mynewpage/` it will get a bare page with no nav.
+
+If you add a new auth-related page (e.g. forgot-password, magic-link callback) that should be standalone, put it alongside `login/` at the root admin level.
+
+**The `(panel)` name is invisible to Next.js routing** — `/admin/orders` still resolves to `app/admin/(panel)/orders/page.tsx`. Route group names in parentheses never appear in the URL.
+
+---
+
+## 3. [Add future dependencies here]

@@ -8,6 +8,56 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-01 — Platform logo, login page fix, dev/prod brainstorm (full detail)
+
+### Completed
+
+**Security fixes #5–7 — verified already resolved**
+- #5 (`hasDbValue` false-negative on empty string): `children != null` check already correct
+- #6 (missing `revalidatePath` in `saveContent`/`deleteContent`): both already call `revalidatePath('/', 'layout')`
+- #7 (EditableText `<div>` wrapper on inline elements): already uses `inlineTags` set to pick `span` vs `div`
+
+**Neutral fallback defaults — verified already resolved**
+- All rendering components (SiteNav, admin layout, InvoicePrint, WineCatalogueClient, email templates) already cleaned of NM-specific hardcoded strings
+- Only remaining NM references are: form placeholder text in super-admin UI ("e.g. Nikalas Marani"), comments in email files about Resend domain verification, and seed scripts — all appropriate
+
+**Platform logo system (Feature #109)**
+- `PlatformConfig` DB model added to Prisma (singleton, `id = 'platform'`); `prisma db push` done
+- Proxy fetches platform config in parallel with tenant resolution; forwards `x-platform-logo` + `x-platform-logo-alt` headers (5-min TTL cache)
+- `/admin/login` now reads `x-platform-logo` — no NM logo fallback; renders no image at all when header is absent (neutral "Admin Panel" text only)
+- `app/actions/platform.ts` NEW: `getPlatformConfig`, `uploadPlatformLogo`, `savePlatformLogoAlt`, `removePlatformLogo` server actions
+- `/super-admin/settings` NEW page + nav link: upload/replace/remove platform logo, set alt text, previewed on cream background
+
+**Admin login page layout fix**
+- Root cause: Next.js App Router always nests child layouts inside parent ones — the old `login/layout.tsx` pass-through had no effect; admin nav always rendered around the login form
+- Fix: all admin pages moved into `app/admin/(panel)/` route group; `(panel)/layout.tsx` has the nav; root `app/admin/layout.tsx` is a pass-through; `login/` stays outside the group
+- URLs unchanged (`/admin/orders`, `/admin/login`, etc. — route group name invisible to router)
+- TypeScript: 0 errors
+
+**Dev/prod environments brainstorm**
+- Options documented in `MyToDo.md`: Option A (separate Supabase dev project), Option B (Vercel preview deployments + staging DB), Option C (local-only, not recommended)
+- Recommendation: A + B together; ~30 min setup; free on both platforms
+
+### Key files changed
+- `saas/prisma/schema.prisma` — PlatformConfig model added
+- `saas/proxy.ts` — `resolvePlatform()` + `x-platform-logo` header forwarding
+- `saas/app/admin/login/page.tsx` — uses `x-platform-logo`, no fallback
+- `saas/app/admin/layout.tsx` — now a pass-through (nav layout moved to `(panel)`)
+- `saas/app/admin/(panel)/layout.tsx` — NEW: nav layout (moved from root admin layout)
+- `saas/app/admin/(panel)/` — all 9 admin page directories moved here
+- `saas/app/admin/login/layout.tsx` — DELETED (no longer needed)
+- `saas/app/actions/platform.ts` — NEW: platform config server actions
+- `saas/app/super-admin/settings/page.tsx` — NEW
+- `saas/app/super-admin/settings/PlatformSettingsClient.tsx` — NEW
+- `saas/app/super-admin/layout.tsx` — Settings nav link added
+- `vault/MyToDo.md` — security fixes + neutral fallbacks marked done; dev/prod + data migration items added with full brainstorm
+
+### What's still needed (user testing)
+1. Deploy to Vercel → go to `/admin/login` → verify no logo shows (neutral "Admin Panel" text only)
+2. Go to `/super-admin/settings` → upload a logo → verify preview appears → check `/admin/login` after cache clears (≤5 min)
+
+---
+
 ## 2026-06-27 — Wine Orders overhaul: table view, packing mode, inline status confirm (full detail)
 
 ### Completed
