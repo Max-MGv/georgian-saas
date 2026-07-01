@@ -88,7 +88,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Nikalas Marani' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Your Winery' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string }) {
   const router = useRouter()
   const [orders, setOrders] = useState(initial)
   const [deletingId, setDeletingId] = useState<string | null>(null)

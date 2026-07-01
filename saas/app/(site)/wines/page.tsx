@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(): Promise<Metadata> {
   const h = await headers()
-  const displayName = h.get('x-tenant-name') ?? 'Nikalas Marani'
+  const displayName = h.get('x-tenant-name') ?? 'Your Winery'
   return {
     title: `Order Wine — ${displayName}`,
     description: `Order wine from ${displayName} winery. Saperavi, Rkatsiteli, Mtsvane, Chacha and more.`,
@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function WinesPage() {
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
-  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const [wines, companies] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },

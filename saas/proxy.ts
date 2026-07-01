@@ -41,9 +41,9 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     brandColor: theme.primaryColor ?? '#7c1d23',
     brandHover: theme.primaryHover ?? '#9b2429',
     logoUrl: tenant?.logoUrl ?? null,
-    logoAlt: tenant?.logoAlt ?? tenant?.displayName ?? tenant?.name ?? 'Nikalas Marani',
+    logoAlt: tenant?.logoAlt ?? tenant?.displayName ?? tenant?.name ?? '',
     faviconUrl: tenant?.faviconUrl ?? null,
-    displayName: tenant?.displayName ?? tenant?.name ?? 'Nikalas Marani',
+    displayName: tenant?.displayName ?? tenant?.name ?? 'Your Winery',
     cachedAt: Date.now(),
   }
   tenantCache.set(cacheKey, info)

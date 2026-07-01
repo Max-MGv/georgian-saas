@@ -18,13 +18,13 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const navContent = await getContentMap('nav', locale)
   const logoUrl = h.get('x-tenant-logo') ?? null
-  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
 
-  const email    = contactEmail    || 'nikalasmarani@gmail.com'
-  const phone    = contactPhone    || '+995 599 96 33 17'
-  const address  = contactAddress  || 'Kardanakhi, Gurjaani'
-  const facebook = contactFacebook || 'https://www.facebook.com/nikalasmarani/'
-  const instagram = contactInstagram || 'https://www.instagram.com/nikalas_marani/'
+  const email    = contactEmail    || ''
+  const phone    = contactPhone    || ''
+  const address  = contactAddress  || ''
+  const facebook = contactFacebook || ''
+  const instagram = contactInstagram || ''
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>

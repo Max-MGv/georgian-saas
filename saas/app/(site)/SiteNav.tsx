@@ -28,7 +28,7 @@ function SocialIcons({ email, phone, facebook, instagram }: { email: string; pho
   )
 }
 
-export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = 'Nikalas Marani', contactEmail = 'nikalasmarani@gmail.com', contactPhone = '+995 599 96 33 17', contactFacebook = 'https://www.facebook.com/nikalasmarani/', contactInstagram = 'https://www.instagram.com/nikalas_marani/' }: { locale: string; navContent?: Record<string, string>; logoUrl?: string | null; logoAlt?: string; contactEmail?: string; contactPhone?: string; contactFacebook?: string; contactInstagram?: string }) {
+export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = '', contactEmail = '', contactPhone = '', contactFacebook = '', contactInstagram = '' }: { locale: string; navContent?: Record<string, string>; logoUrl?: string | null; logoAlt?: string; contactEmail?: string; contactPhone?: string; contactFacebook?: string; contactInstagram?: string }) {
   const [open, setOpen] = useState(false)
 
   const navLinks = [

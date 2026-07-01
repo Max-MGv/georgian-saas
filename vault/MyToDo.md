@@ -119,7 +119,8 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 ## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
 
-- [ ] **Neutral fallback defaults** — replace all NM-specific hardcoded fallbacks (`'Nikalas Marani'`, NM email/phone/social URLs) with neutral strings (`'Your Winery'`, `''`, etc.) across: SiteNav, layout.tsx, InvoicePrint, WineCatalogueClient, generateMetadata calls, and any other component. New tenants should never see NM branding if their settings are empty.
+- [ ] **Neutral fallback defaults** *(in progress 2026-07-01)* — replace all NM-specific hardcoded fallbacks (`'Nikalas Marani'`, NM email/phone/social URLs) with neutral strings (`'Your Winery'`, `''`, etc.) across: SiteNav, layout.tsx, InvoicePrint, WineCatalogueClient, email templates, and any other component. Email templates now also fetch winery name + contact info from the DB so they are fully tenant-aware. New tenants should never see NM branding if their settings are empty.
+- [ ] **Multi-tenant auto emailing** — each tenant needs its own sender address (e.g. `bookings@theirwinery.ge`) or at minimum a branded reply-to. Covers: per-tenant `from` address in Resend, booking confirmation email, invoice email, and any future automated emails. Requires domain verification per tenant in Resend. Depends on NM domain migration being settled first.
 - [ ] **NM domain migration** — Nikalas Marani will eventually move to its own standalone deployment; the current multi-tenant SaaS becomes the platform for all other clients. Plan the migration before onboarding a second tenant.
 
 ---

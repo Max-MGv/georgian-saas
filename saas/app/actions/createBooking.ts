@@ -169,6 +169,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
       })
+      const [wineryPhone, wineryEmail, wineryAddress, tenant] = await Promise.all([
+        getSetting('contact_phone'),
+        getSetting('contact_email'),
+        getSetting('contact_address'),
+        db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true } }),
+      ])
       sendBookingConfirmation({
         name: data.name,
         surname: data.surname,
@@ -178,6 +184,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         guestCount,
         visitType: data.visitType,
         totalPrice,
+        wineryName: tenant?.displayName ?? tenant?.name ?? '',
+        wineryAddress,
+        wineryPhone,
+        wineryEmail,
       }).catch(err => console.error('Email send failed:', err))
     }
 

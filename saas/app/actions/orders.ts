@@ -252,12 +252,14 @@ export async function sendOrderInvoice(
     if (!order) return { error: 'Order not found.' }
     if (!order.email) return { error: 'This order has no email address.' }
 
-    const [recipientName, personalNumber, bankName, bankCode, iban] = await Promise.all([
+    const [recipientName, personalNumber, bankName, bankCode, iban, wineryAddress, tenant] = await Promise.all([
       getSetting('payment_recipient_name'),
       getSetting('payment_personal_number'),
       getSetting('payment_bank_name'),
       getSetting('payment_bank_code'),
       getSetting('payment_iban'),
+      getSetting('contact_address'),
+      db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true } }),
     ])
 
     await sendInvoiceEmail({
@@ -282,6 +284,8 @@ export async function sendOrderInvoice(
       extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
       payment: { recipientName, personalNumber, bankName, bankCode, iban },
       customMessage,
+      wineryName: tenant?.displayName ?? tenant?.name ?? '',
+      wineryAddress,
     })
 
     const advanceStatuses = ['NEW', 'CONFIRMED']

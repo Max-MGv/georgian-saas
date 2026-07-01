@@ -22,7 +22,7 @@ type SearchParams = {
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
-  const displayName = h.get('x-tenant-name') ?? 'Nikalas Marani'
+  const displayName = h.get('x-tenant-name') ?? 'Your Winery'
   const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),

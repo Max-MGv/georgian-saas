@@ -45,7 +45,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export default function InvoicePrint({ order, payment, detailed = false, displayName = 'Nikalas Marani' }: Props) {
+export default function InvoicePrint({ order, payment, detailed = false, displayName = 'Your Winery' }: Props) {
   const d = new Date(order.date)
   const dateStr = d.toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
   const nowStr = new Date().toLocaleString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -97,9 +97,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 32, borderBottom: '1px solid #e8e0d0', paddingBottom: 16 }}>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{nowStr}</div>
-          <div style={{ fontSize: 22, fontWeight: 'bold', fontFamily: 'serif' }}>ნიკალას მარანი</div>
-          <div style={{ fontSize: 13, letterSpacing: 2, marginTop: 2 }}>{displayName}</div>
-          <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>1928</div>
+          <div style={{ fontSize: 22, fontWeight: 'bold', fontFamily: 'serif' }}>{displayName}</div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>

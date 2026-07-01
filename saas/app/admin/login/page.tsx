@@ -4,7 +4,7 @@ import LoginForm from './LoginForm'
 export default async function LoginPage() {
   const h = await headers()
   const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
-  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f5efe6' }}>

@@ -149,7 +149,7 @@ export default function OrderDetail({
   order,
   payment,
   detailed,
-  displayName = 'Nikalas Marani',
+  displayName = 'Your Winery',
   menuItems,
   masterclassItems,
 }: {

@@ -45,7 +45,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient({ wines: WINES, companies = [], logoUrl = '/icons/logo-dark.svg', logoAlt = 'Nikalas Marani' }: { wines: DbWine[]; companies?: Company[]; logoUrl?: string; logoAlt?: string }) {
+export default function WineCatalogueClient({ wines: WINES, companies = [], logoUrl = '/icons/logo-dark.svg', logoAlt = '' }: { wines: DbWine[]; companies?: Company[]; logoUrl?: string; logoAlt?: string }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)

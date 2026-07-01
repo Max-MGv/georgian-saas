@@ -109,11 +109,11 @@ export default async function AboutPage({ searchParams }: PageProps) {
 
         <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
           <ET k="about_story_p1" s="about" lbl="Story — paragraph 1" as="p"
-            fb="Nikalas Marani is a family winery tucked into the rolling vineyards of Kardanakhi, in the Gurjaani district of Kakheti — Georgia's most celebrated wine region." />
+            fb="A family winery producing traditional Georgian wine." />
           <ET k="about_story_p2" s="about" lbl="Story — paragraph 2" as="p"
             fb="For generations, our family has grown Rkatsiteli and Saperavi grapes on the same land, using traditional Kakhetian methods passed down through the years. Our wines are made with minimal intervention — the grapes, the sun, and the clay vessels do most of the work." />
           <ET k="about_story_p3" s="about" lbl="Story — paragraph 3" as="p"
-            fb="We opened Nikalas Marani to visitors so that anyone curious about Georgian wine culture could experience it the way we do — not in a tasting room, but at the table, with food, conversation, and the winemaker sitting across from you." />
+            fb="We welcome visitors to experience Georgian wine culture firsthand — at the table, with food, conversation, and the winemaker." />
         </section>
 
         <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />

@@ -15,7 +15,7 @@ export default async function OrderDetailPage({
 }) {
   const { id } = await params
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
-  const displayName = h.get('x-tenant-name') ?? 'Nikalas Marani'
+  const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
   const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({

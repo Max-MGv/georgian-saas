@@ -9,17 +9,31 @@ type BookingEmailData = {
   guestCount: number
   visitType: 'TASTING' | 'TASTING_LUNCH'
   totalPrice: number
+  wineryName?: string
+  wineryAddress?: string
+  wineryPhone?: string
+  wineryEmail?: string
 }
 
 export async function sendBookingConfirmation(data: BookingEmailData) {
   const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : 'Wine Tasting + Lunch'
+  const winery = data.wineryName || ''
+  const address = data.wineryAddress || ''
+  const phone = data.wineryPhone || ''
+  const contactEmail = data.wineryEmail || ''
+
+  const contactLines = [
+    address    ? `<p style="font-size: 13px; color: #6b5a47; margin: 0 0 8px;">📍 ${address}</p>` : '',
+    phone      ? `<p style="font-size: 13px; color: #6b5a47; margin: 0 0 8px;">📞 ${phone} · Call or WhatsApp</p>` : '',
+    contactEmail ? `<p style="font-size: 13px; color: #6b5a47; margin: 0 0 24px;">✉️ ${contactEmail}</p>` : '',
+  ].join('')
 
   const html = `
     <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto; color: #1c1008;">
 
       <div style="background-color: #7c1d23; padding: 32px 40px; border-radius: 8px 8px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 22px; font-weight: bold;">Nikalas Marani</h1>
-        <p style="color: #f5c6c8; margin: 6px 0 0; font-size: 14px;">Kardanakhi, Kakheti · Family Winery</p>
+        <h1 style="color: white; margin: 0; font-size: 22px; font-weight: bold;">${winery}</h1>
+        ${address ? `<p style="color: #f5c6c8; margin: 6px 0 0; font-size: 14px;">${address} · Family Winery</p>` : ''}
       </div>
 
       <div style="background-color: #fff9f3; padding: 32px 40px; border-radius: 0 0 8px 8px; border: 1px solid #e0d4c0; border-top: none;">
@@ -56,17 +70,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
           </table>
         </div>
 
-        <p style="font-size: 13px; color: #6b5a47; margin: 0 0 8px;">
-          📍 Kardanakhi village, Gurjaani Municipality, Kakheti
-        </p>
-        <p style="font-size: 13px; color: #6b5a47; margin: 0 0 8px;">
-          📞 +995 599 96 33 17 · Call or WhatsApp
-        </p>
-        <p style="font-size: 13px; color: #6b5a47; margin: 0 0 24px;">
-          ✉️ nikalasmarani@gmail.com
-        </p>
+        ${contactLines}
 
-        <div style="border-top: 1px solid #e0d4c0; padding-top: 16px;">
+        <div style="border-top: 1px solid #e0d4c0; padding-top: 16px; ${contactLines ? '' : 'margin-top: 24px;'}">
           <p style="font-size: 12px; color: #a89070; margin: 0; line-height: 1.6;">
             48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.
           </p>

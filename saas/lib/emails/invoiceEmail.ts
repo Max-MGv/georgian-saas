@@ -24,6 +24,8 @@ type InvoiceEmailData = {
     iban: string
   }
   customMessage: string
+  wineryName?: string
+  wineryAddress?: string
 }
 
 function tableRow(label: string, value: string) {
@@ -99,9 +101,8 @@ export async function sendInvoiceEmail(data: InvoiceEmailData) {
     <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#1c1008 !important;background-color:#ffffff !important;">
 
       <div style="background-color:#7c1d23 !important;padding:32px 40px;border-radius:8px 8px 0 0;text-align:center;">
-        <h1 style="color:#ffffff !important;margin:0;font-size:22px;font-weight:bold;">ნიკალას მარანი</h1>
-        <p style="color:#f5c6c8 !important;margin:4px 0 0;font-size:13px;letter-spacing:2px;">Nikalas Marani</p>
-        <p style="color:#c9a0a4 !important;margin:4px 0 0;font-size:11px;">1928 · Kardanakhi, Kakheti</p>
+        <h1 style="color:#ffffff !important;margin:0;font-size:22px;font-weight:bold;">${data.wineryName || ''}</h1>
+        ${data.wineryAddress ? `<p style="color:#c9a0a4 !important;margin:4px 0 0;font-size:11px;">${data.wineryAddress}</p>` : ''}
       </div>
 
       <div style="background-color:#fff9f3 !important;padding:32px 40px;border-radius:0 0 8px 8px;border:1px solid #e0d4c0;border-top:none;">

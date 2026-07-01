@@ -55,7 +55,7 @@ export default async function Home({ searchParams }: PageProps) {
   const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? 100
 
   const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
-  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
 
   const activeBgPath       = heroBgPath || '/images/winery1.jpg'
   const activeMobileBgPath = heroBgMobilePath || activeBgPath

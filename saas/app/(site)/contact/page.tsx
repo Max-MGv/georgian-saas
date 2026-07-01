@@ -65,9 +65,9 @@ export default async function ContactPage({ searchParams }: PageProps) {
   }
 
   const cards = [
-    { hk: 'contact_label_phone',    hFb: t(locale, 'contact.label_phone'),    vk: 'contact_phone',        vFb: '+995 599 96 33 17',       nk: 'contact_note_phone',    nFb: t(locale, 'contact.note_phone') },
-    { hk: 'contact_label_email',    hFb: t(locale, 'contact.label_email'),    vk: 'contact_email',        vFb: 'nikalasmarani@gmail.com', nk: 'contact_note_email',    nFb: t(locale, 'contact.note_email') },
-    { hk: 'contact_label_location', hFb: t(locale, 'contact.label_location'), vk: 'contact_address',      vFb: 'Kardanakhi, Gurjaani',    nk: 'contact_note_location', nFb: t(locale, 'contact.note_location') },
+    { hk: 'contact_label_phone',    hFb: t(locale, 'contact.label_phone'),    vk: 'contact_phone',        vFb: '',                        nk: 'contact_note_phone',    nFb: t(locale, 'contact.note_phone') },
+    { hk: 'contact_label_email',    hFb: t(locale, 'contact.label_email'),    vk: 'contact_email',        vFb: '',                        nk: 'contact_note_email',    nFb: t(locale, 'contact.note_email') },
+    { hk: 'contact_label_location', hFb: t(locale, 'contact.label_location'), vk: 'contact_address',      vFb: '',                        nk: 'contact_note_location', nFb: t(locale, 'contact.note_location') },
     { hk: 'contact_label_cancel',   hFb: t(locale, 'contact.label_cancel'),   vk: 'contact_cancel_value', vFb: t(locale, 'contact.cancel_value'), nk: 'contact_note_cancel', nFb: t(locale, 'contact.note_cancel') },
   ]
 
@@ -135,7 +135,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
             fb={t(locale, 'contact.find_us')} as="h2"
             className="text-lg font-bold mb-4" style={{ color: '#1c1008' }} />
           <iframe
-            title="Nikalas Marani location"
+            title="Winery location"
             src={mapsEmbedUrl}
             width="100%"
             height="256"

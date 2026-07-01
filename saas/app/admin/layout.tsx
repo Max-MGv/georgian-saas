@@ -6,7 +6,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const [supabase, h] = await Promise.all([createClient(), headers()])
   const { data: { user } } = await supabase.auth.getUser()
   const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
-  const logoAlt = h.get('x-tenant-logo-alt') ?? 'Nikalas Marani'
+  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f0ebe3' }}>
