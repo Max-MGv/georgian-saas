@@ -119,7 +119,31 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 ## 🔍 Explore — Needs research + brainstorm before building
 
-- [ ] **Dev/prod environments** — explore options for separating development from production. We have one Vercel deployment + one Supabase project right now. Options to brainstorm: (a) separate Supabase project for dev + env var swap, (b) Vercel preview deployments with a staging DB, (c) branch-based previews, (d) local-only dev with prod DB read-only. Want to understand trade-offs: cost, safety, ease of testing new tenants without affecting NM live data.
+- [ ] **Dev/prod environments** — explore options for separating development from production. We have one Vercel deployment + one Supabase project right now. Brainstormed options below:
+
+  **Option A — Separate Supabase project for dev (recommended base)**
+  Create a free second Supabase project (`georgian-saas-dev`). Local `.env` points at dev DB; Vercel production env vars point at live DB. Schema migrations (`prisma db push`) run against dev first, then prod.
+  - ✅ Completely isolated — seed scripts, test tenants, broken migrations can't touch NM
+  - ✅ Free (Supabase free tier = 2 projects)
+  - ⚠️ Two schemas to keep in sync manually (run `db push` twice per migration)
+
+  **Option B — Vercel Preview Deployments + staging DB (pairs with A)**
+  Every git branch pushed gets a Vercel preview URL automatically (e.g. `georgian-saas-git-feature-x.vercel.app`). Vercel scopes env vars by environment: Production / Preview / Development — preview deployments point at dev Supabase, production at live.
+  - ✅ Every branch testable at a real URL before merging to master
+  - ✅ Good for showing a client a feature before going live
+  - ✅ Free on Vercel hobby plan
+  - ⚠️ Needs Option A to be safe
+
+  **Option C — Local dev only, prod DB read-only (not recommended)**
+  No second Supabase. Discipline only.
+  - ❌ One bad script wipes NM live data. Not viable with 2+ tenants.
+
+  **Recommendation: A + B together.** Setup cost ~30 min:
+  1. Create free Supabase project `georgian-saas-dev`
+  2. Run `prisma db push` against it to clone schema
+  3. Add `DEV_DATABASE_URL` + `DEV_DIRECT_URL` to local `.env`
+  4. In Vercel: set DATABASE_URL for Production = live Supabase, Preview = dev Supabase
+  5. Done — local + preview branches hit dev DB, master pushes hit prod
 
 - [ ] **Data migration tool / service** — clients will have existing data in Excel/CSV/other formats (bookings history, company lists, price tiers, wine catalogue). Need to decide: use an existing ETL framework (e.g. Airbyte, Papa Parse + custom scripts, Google Sheets API) vs. build a lightweight in-app import UI. Scope to explore: one-time admin import (CSV upload → map columns → preview → confirm), handling duplicates, what tables are in scope (companies, wines, historical orders), and whether this is a paid onboarding service or self-serve.
 
