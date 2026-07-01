@@ -13,10 +13,28 @@ interface TenantInfo {
   cachedAt: number
 }
 
+interface PlatformInfo {
+  logoUrl: string | null
+  logoAlt: string
+  cachedAt: number
+}
+
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 // Module-level cache: domain → tenant info
 const tenantCache = new Map<string, TenantInfo>()
+let platformCache: PlatformInfo | null = null
+
+async function resolvePlatform(): Promise<PlatformInfo> {
+  if (platformCache && Date.now() - platformCache.cachedAt < CACHE_TTL_MS) return platformCache
+  const config = await db.platformConfig.findUnique({ where: { id: 'platform' } })
+  platformCache = {
+    logoUrl: config?.logoUrl ?? null,
+    logoAlt: config?.logoAlt ?? '',
+    cachedAt: Date.now(),
+  }
+  return platformCache
+}
 
 async function resolveTenant(host: string): Promise<TenantInfo> {
   // Strip port (e.g. "localhost:3000" → "localhost", "winery2.local:3000" → "winery2.local")
@@ -53,7 +71,8 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
 export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
-  const { tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName } = await resolveTenant(host)
+  const [{ tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName }, platform] =
+    await Promise.all([resolveTenant(host), resolvePlatform()])
 
   // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
@@ -64,6 +83,8 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set('x-tenant-logo-alt', logoAlt)
   if (logoUrl) requestHeaders.set('x-tenant-logo', logoUrl)
   if (faviconUrl) requestHeaders.set('x-tenant-favicon', faviconUrl)
+  if (platform.logoUrl) requestHeaders.set('x-platform-logo', platform.logoUrl)
+  requestHeaders.set('x-platform-logo-alt', platform.logoAlt)
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },

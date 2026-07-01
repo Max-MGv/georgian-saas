@@ -117,9 +117,17 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 ---
 
+## 🔍 Explore — Needs research + brainstorm before building
+
+- [ ] **Dev/prod environments** — explore options for separating development from production. We have one Vercel deployment + one Supabase project right now. Options to brainstorm: (a) separate Supabase project for dev + env var swap, (b) Vercel preview deployments with a staging DB, (c) branch-based previews, (d) local-only dev with prod DB read-only. Want to understand trade-offs: cost, safety, ease of testing new tenants without affecting NM live data.
+
+- [ ] **Data migration tool / service** — clients will have existing data in Excel/CSV/other formats (bookings history, company lists, price tiers, wine catalogue). Need to decide: use an existing ETL framework (e.g. Airbyte, Papa Parse + custom scripts, Google Sheets API) vs. build a lightweight in-app import UI. Scope to explore: one-time admin import (CSV upload → map columns → preview → confirm), handling duplicates, what tables are in scope (companies, wines, historical orders), and whether this is a paid onboarding service or self-serve.
+
+---
+
 ## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
 
-- [ ] **Neutral fallback defaults** *(in progress 2026-07-01)* — replace all NM-specific hardcoded fallbacks (`'Nikalas Marani'`, NM email/phone/social URLs) with neutral strings (`'Your Winery'`, `''`, etc.) across: SiteNav, layout.tsx, InvoicePrint, WineCatalogueClient, email templates, and any other component. Email templates now also fetch winery name + contact info from the DB so they are fully tenant-aware. New tenants should never see NM branding if their settings are empty.
+- [x] **Neutral fallback defaults** ✅ — rendering components already clean. Admin login page now uses platform logo (`x-platform-logo`) with no NM fallback. `PlatformConfig` DB table added; super-admin Settings page lets you upload the login page logo. New tenants with no logo set see neutral "Admin Panel" text only.
 - [ ] **Multi-tenant auto emailing** — each tenant needs its own sender address (e.g. `bookings@theirwinery.ge`) or at minimum a branded reply-to. Covers: per-tenant `from` address in Resend, booking confirmation email, invoice email, and any future automated emails. Requires domain verification per tenant in Resend. Depends on NM domain migration being settled first.
 - [ ] **NM domain migration** — Nikalas Marani will eventually move to its own standalone deployment; the current multi-tenant SaaS becomes the platform for all other clients. Plan the migration before onboarding a second tenant.
 
@@ -135,7 +143,7 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 - [ ] **Gallery page** — images already in `saas/public/images/slider/` and `gallery/` — just needs wiring into the public site
 - [ ] **Order detail tap target audit** (v1.4 Mobile Admin last item) — verify all buttons ≥ 44px, no horizontal overflow on phone
 - [ ] **PDF invoice email attachment** — send PDF alongside HTML invoice email (follow-up to the HTML-only email feature)
-- [ ] Security fixes **#5, #6, #7** from Plan-SecurityAndBugFixes.md (minor, no security risk)
+- [x] Security fixes **#5, #6, #7** — all already resolved (verified 2026-07-01)
 - [ ] **Phase 6 testing** — log in with `max.mghvdliashvili@gmail.com` → confirm admin works; log in with `nikalasmarani@email.ge` → confirm it works on nikalasmarani.ge
 
 ---

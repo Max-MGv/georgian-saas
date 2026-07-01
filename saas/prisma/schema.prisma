@@ -8,6 +8,13 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model PlatformConfig {
+  id        String   @id @default("platform")
+  logoUrl   String?
+  logoAlt   String?
+  updatedAt DateTime @updatedAt
+}
+
 model Tenant {
   id          String   @id @default(cuid())
   name        String
