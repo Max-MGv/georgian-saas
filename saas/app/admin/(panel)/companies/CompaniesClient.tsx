@@ -420,21 +420,23 @@ function ModuleBadge({ label, active }: { label: string; active: boolean }) {
 // ── Tab toggle ─────────────────────────────────────────────────────────────
 function TabToggle({ active, onChange }: { active: Module; onChange: (m: Module) => void }) {
   return (
-    <div className="inline-flex rounded-lg border overflow-hidden mb-5" style={{ borderColor: C.border }}>
-      {(['BOOKING', 'WINE_ORDER'] as Module[]).map(m => (
-        <button
-          key={m}
-          onClick={() => onChange(m)}
-          className="px-4 py-2 text-sm font-medium transition-colors"
-          style={{
-            backgroundColor: active === m ? 'var(--color-brand)' : C.bg,
-            color: active === m ? '#fff' : C.muted,
-            borderRight: m === 'BOOKING' ? `1px solid ${C.border}` : undefined,
-          }}
-        >
-          {m === 'BOOKING' ? 'Bookings' : 'Wine Orders'}
-        </button>
-      ))}
+    <div className="flex mb-5">
+      <div className="inline-flex rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
+        {(['BOOKING', 'WINE_ORDER'] as Module[]).map(m => (
+          <button
+            key={m}
+            onClick={() => onChange(m)}
+            className="px-4 py-2 text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: active === m ? 'var(--color-brand)' : C.bg,
+              color: active === m ? '#fff' : C.muted,
+              borderRight: m === 'BOOKING' ? `1px solid ${C.border}` : undefined,
+            }}
+          >
+            {m === 'BOOKING' ? 'Bookings' : 'Wine Orders'}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
