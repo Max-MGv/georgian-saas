@@ -301,7 +301,7 @@ export default function WineCatalogueClient({
     <>
       {/* ── Access code popup ─────────────────────────────────────────────── */}
       {showCodePopup && selectedCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4" style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
             <div>
               <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
@@ -356,7 +356,7 @@ export default function WineCatalogueClient({
 
       {/* ── New Company popup ─────────────────────────────────────────────── */}
       {showNewCompanyPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
             style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
             <div>
