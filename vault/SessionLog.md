@@ -8,6 +8,94 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-16 — Features #117 + commit of #112–114 (full detail)
+
+### Completed
+
+**#117 — Company module system**
+- Added `isBookingCompany Boolean @default(true)` and `isWineOrderCompany Boolean @default(false)` to Company model
+- Added `companyId String?` FK to WineOrder (links wine orders to a company record)
+- `prisma db push` applied; existing rows default to `isBookingCompany=true`, `isWineOrderCompany=false`
+- Companies admin page now has Bookings / Wine Orders tab toggle
+  - Each tab shows only companies belonging to that module; a company in both appears in both tabs
+  - "Add Company" button in each tab creates a company with the correct module flag
+  - Edit slide-over has "Modules" checkboxes at the top (Bookings / Wine Orders); saves to DB
+  - Price tiers section only renders in Bookings tab; Wine Orders tab shows contact summary only
+  - Individuals row only appears in Bookings tab
+  - Header counter: "X booking · Y wine orders"
+- `findCompanyByCode` now accepts `module: 'BOOKING' | 'WINE_ORDER'` and filters accordingly
+- `notifyNewCompany` email names which module the request came from
+- `submitWineOrder` saves `companyId` when a company was selected
+- Public booking page filters companies by `isBookingCompany: true`; wine page by `isWineOrderCompany: true`
+- TypeScript: 0 errors; browser-verified
+
+### Files changed
+- `saas/prisma/schema.prisma` — Company module flags + WineOrder.companyId FK
+- `saas/app/actions/companies.ts` — createCompany/updateCompany accept module flags; findCompanyByCode gets module param
+- `saas/app/actions/notifyNewCompany.ts` — module param added to email
+- `saas/app/actions/submitWineOrder.ts` — saves companyId
+- `saas/app/(site)/page.tsx` — filter companies by isBookingCompany
+- `saas/app/(site)/wines/page.tsx` — filter companies by isWineOrderCompany
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — hidden companyId input; WINE_ORDER module passed to actions
+- `saas/components/BookingForm.tsx` — BOOKING module passed to actions
+- `saas/app/admin/(panel)/companies/page.tsx` — new fields in map; module counts in header
+- `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — full tab rewrite with module toggle
+
+### What's next
+Build #115 (company wine % discount)
+
+---
+
+## 2026-07-01 — Features #112, #113, #114 (full detail)
+
+### Completed
+
+**#112 — Guest price label**
+- `saas/app/(site)/page.tsx` line ~294: replaced "minimum X guests" text with inline person silhouette SVG (brand color, 75% opacity) + locale-aware text ("X ან მეტი სტუმარი" / "X or more guests")
+
+**New instruction: Rule #9 — Feature notes**
+- Added to `vault/ClaudeInstructions.md`: when a feature is complex (3+ files, new server actions, non-trivial state), create a note in `vault/features/Feature NNN - Name.md` and link it from FeatureLog.
+- Feature notes created: `Feature 112 - Guest Price Label.md`, `Feature 113-114 - Hide Company Dropdown and New Company Request.md`
+
+**#113 + #114 — Hide company dropdown + New Company request**
+- New `hide_company_dropdown` setting (toggle in Settings → Booking, default OFF)
+- When ON: booking form and wine order form both replace company `<select>` with inline code input + "New Company? →" button
+- Valid code → `findCompanyByCode` server action → company chip appears, profile auto-fills
+- Invalid → "Code not recognised."
+- "New Company?" popup: Company Name + Your Name + Phone (required) + Email (optional) → `notifyNewCompany` server action → Resend email to winery admin → "Request received!"
+- TypeScript: 0 errors
+
+### Files changed
+- `vault/ClaudeInstructions.md` — Rule #9 added
+- `vault/features/Feature 112 - Guest Price Label.md` — NEW
+- `vault/features/Feature 113-114 - Hide Company Dropdown and New Company Request.md` — NEW
+- `saas/app/actions/companies.ts` — `findCompanyByCode` added
+- `saas/app/actions/notifyNewCompany.ts` — NEW server action
+- `saas/app/admin/(panel)/settings/SettingsClient.tsx` — `hide_company_dropdown` toggle added
+- `saas/app/admin/(panel)/settings/page.tsx` — fetches + passes new setting
+- `saas/components/BookingForm.tsx` — `hideCompanyDropdown` prop, direct code flow, new company popup
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — same changes
+- `saas/app/(site)/page.tsx` — fetches setting + #112 SVG label
+- `saas/app/(site)/wines/page.tsx` — fetches setting, passes to client
+
+### What needs user testing
+1. **#112:** Go to home page → package cards should show person silhouette + "X ან მეტი სტუმარი"
+2. **#113/#114 (setting OFF):** Verify booking form and wine form still work exactly as before (dropdown present, code popup still works)
+3. **#113/#114 (setting ON):**
+   - Go to Settings → Booking → turn on "Hide company dropdown"
+   - Home page → select "Tour Company" → verify dropdown gone, code input appears
+   - Click "New Company? →" → fill 3 required fields → Send Request → verify "Request received!"
+   - Enter wrong code → verify "Code not recognised."
+   - Enter correct company code → verify chip appears + all form fields auto-fill
+   - Click × on chip → verify everything clears
+   - Try submitting with company type but no code → verify error message
+   - Go to `/wines` → verify same behavior in wine form
+
+### What's next
+Build #115 (company wine % discount), then #116 (wine hierarchy)
+
+---
+
 ## 2026-07-01 — Planning session: Features #111–116 (full detail)
 
 ### Planned (in build order)

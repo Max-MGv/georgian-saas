@@ -85,6 +85,25 @@ Exceptions (no confirmation needed):
 
 ---
 
+## 9. Feature notes for complex features
+
+When a feature (or any process) is complex enough that its design is non-trivial, create a dedicated note for it in `vault/features/`. Name the file `Feature NNN - Feature Name.md` (or `Feature NNN-NNN - Feature Name.md` for features built together).
+
+A feature note should cover:
+- What the feature does (user-facing description)
+- Key design decisions (why this approach was chosen)
+- Files touched and what changed in each
+- Edge cases handled
+- What to test
+
+Link the note from `FeatureLog.md` in the feature's row.
+
+**When to create a note:** when the feature touches 3+ files, involves new server actions, has non-obvious state logic, or is likely to be referenced when building related features in the future.
+
+Simple one-file changes (e.g. a label swap) do not need a note.
+
+---
+
 ## 7. Handoff preparation
 
 When Max says "prepare for handoff," update:

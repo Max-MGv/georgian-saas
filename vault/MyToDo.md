@@ -8,21 +8,86 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 📝 Draft ideas — needs review before building (2026-06-27)
+## 🚧 In Progress — Next to build
+
+### #115 — Company wine % discount (Feature #4 from drafts)
+- New setting: `enable_company_wine_pricing` (toggle in Settings → Booking section, default OFF)
+- When ON: company edit slide-over "Price Tiers" section header becomes a `Booking | Wine Prices` pill toggle
+  - Wine Prices tab: single number field "Wine discount: __% off all listed prices" → saves as `wineDiscountPercent Float?` on Company model
+- Wine order submission: if `company.wineDiscountPercent` is set, applies to all wine prices; discounted total stored
+- Admin wine order card: shows `"-X%"` discount badge next to the amount
+- Per-wine price overrides are a separate future feature (not built here)
+- **DB:** `wineDiscountPercent Float?` on Company model → `prisma db push`
+- **Files:** `saas/prisma/schema.prisma`, `saas/app/actions/companies.ts`, `saas/app/admin/(panel)/companies/CompaniesClient.tsx`, `saas/app/actions/submitWineOrder.ts`, `saas/app/admin/(panel)/wine-orders/WineOrdersClient.tsx`
+
+### #116 — Wine hierarchy: WineProduct + WineVintage schema (Feature #12 from drafts)
+- **Two-level DB schema:**
+  - `Wine` (parent product): `id, tenantId, name, key String (auto-slug from name e.g. "rkatsiteli"), sortOrder, createdAt` — removes `price, color, imagePath, description` (those move to vintage)
+  - `WineVintage` (child): `id, wineId, tenantId, year Int?, color String? (red/white/orange/rosé), dryness String? (dry/semi-dry/semi-sweet/sweet), alcoholPercent Float?, price Float, imagePath String?, active Boolean @default(true), sortOrder Int, description String?`
+- **Migration script needed:** converts existing flat Wine rows → Wine parent + one WineVintage child each
+- **Admin:** expand wine product to see/add vintages; edit vintage opens inline fields for year, color, dryness, alcohol%, price, image, active
+- **Public catalogue:** wine card shows product; if multiple vintages, selector per vintage; order items reference `vintageId`
+- **Scope:** touches schema, admin wines page, public wines page, `submitWineOrder`, wine orders admin display, statistics
+- **Do last** — biggest refactor on this list
+- **Files:** `saas/prisma/schema.prisma`, migration script, `saas/app/admin/(panel)/wines/`, `saas/app/(site)/wines/`, `saas/app/actions/submitWineOrder.ts`, `saas/app/admin/(panel)/wine-orders/`
+
+---
+
+## 📝 Draft ideas — still needs design (trimmed 2026-07-01)
 
 > These are rough notes from Max — details still being figured out, don't build yet.
 
 1. **Companies — tier editing** — couldn't see "Add tier" button when editing tiers. Verify it was a UI bug or just hidden (check before building anything).
-2. **Booking page — hide company list** — add a setting to hide the company dropdown so clients can't see who else you work with. When toggled, show a code-entry box instead; entering the code auto-fills company info.
-3. **Booking page — first-time company registration** — need a user-friendly way for new companies to fill in their profile (inc. company ID) during their first booking, without disrupting the existing flow. Still thinking about UX.
-4. **Wine orders — custom wine pricing per company** — allow per-company price overrides for wines. Likely a section in the Companies page. Needs design.
-5. **Wine orders — company code check on order form** — make sure the access code system works on the wine ordering page, same as booking page.
-6. **Company code — ensure data is actually used** — data entered via the code popup (like Company ID) should flow through to the order. Company ID is not currently on the booking form — needs a plan.
-7. **Booking page — guest price label** — replace "minimum 4 guests" with something like "price is for 4 or more guests" — probably with an icon.
-8. **Wine orders admin — box stickers** — generate printable stickers to label each box (what wine is inside). Simple layout, one per box.
-9. **Wine orders — invoice + email** — same invoice options as booking orders: print + email. Needs both printout and email delivery.
-10. **Email planning reminder** — plan how emails will work since clients will use the sub-domain (not their own domain). Think through sender address, deliverability, reply-to setup.
-11. **Site content not rendering** — check what's going on; content edits don't seem to be showing on the public site.
+2. **Company code — ensure data is actually used** — data entered via the code popup (like Company ID) should flow through to the order. Company ID is not currently on the booking form — needs a plan.
+3. **Wine orders admin — box stickers** — generate printable stickers to label each box (what wine is inside). Simple layout, one per box.
+4. **Wine orders — invoice + email** — same invoice options as booking orders: print + email. Needs both printout and email delivery.
+5. **Email planning reminder** — plan how emails will work since clients will use the sub-domain (not their own domain). Think through sender address, deliverability, reply-to setup.
+
+---
+
+## 🧪 Needs testing — Feature #117 (2026-07-16)
+
+### #117 — Company module system
+
+**Bookings tab:**
+1. Go to `/admin/companies` → "Bookings" tab is default; existing companies show
+2. Individuals row pinned at top with price tiers working as before
+3. Click Edit on any company → "Modules" section at top: Bookings ✓, Wine Orders ☐
+4. Check Wine Orders → Save → company now appears in both tabs
+
+**Wine Orders tab:**
+5. Click "Wine Orders" tab → empty (no wine order companies yet)
+6. Click "+ Add Wine Order Company" → add a test company → appears in Wine Orders tab only
+7. Expand it → contact summary shown, NO price tiers section
+
+**Public forms:**
+8. Home page booking form → company dropdown shows only `isBookingCompany` companies
+9. `/wines` form → company dropdown (or code field) shows only `isWineOrderCompany` companies
+
+---
+
+## 🧪 Needs testing — Features #112, #113, #114 (2026-07-01)
+
+### #112 — Guest price label
+1. Go to home page → scroll to the two package cards
+2. The "minimum X guests" text should now be: **person silhouette icon** + "X ან მეტი სტუმარი" (Georgian) or "X or more guests" (English)
+
+### #113/#114 — Hide company dropdown + New Company request
+**First: test with setting OFF (default behavior unchanged)**
+1. Go to `/admin/settings` → Booking section → confirm "Hide company dropdown" toggle is OFF
+2. Go to home page → select Tour Company → verify company **dropdown still appears**
+3. Select a company with a code → verify code **popup still works** (old behavior unchanged)
+
+**Then: turn ON and test new behavior**
+4. Turn ON "Hide company dropdown" in Settings
+5. Home page → select Tour Company → verify **dropdown is gone**, code input appears instead
+6. Click "New Company? →" → verify popup opens with 4 fields → fill Company Name + Your Name + Phone → click "Send Request" → verify "Request received!" appears → close
+7. In code input: type a wrong code → click Confirm → verify "Code not recognised." appears
+8. Type a valid company code → click Confirm → verify green chip with company name appears + all form fields (Name, Phone, etc.) auto-fill
+9. Click × on the chip → verify chip disappears, code input returns, profile fields clear
+10. Select Tour Company but don't enter a code → click "Request Booking" → verify error "Please enter and confirm your company code."
+11. Go to `/wines` → verify steps 5–10 work the same way in the wine order form
+12. Turn OFF setting again → verify dropdown returns on both forms
 
 ---
 
