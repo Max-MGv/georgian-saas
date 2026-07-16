@@ -20,6 +20,8 @@ export async function submitWineOrder(formData: FormData) {
   const contactPhone = formData.get('contactPhone') as string
   const winesJson = formData.get('wines') as string
   const companyId = (formData.get('companyId') as string | null)?.trim() || null
+  const discountPercentRaw = formData.get('discountPercent') as string | null
+  const discountPercent = discountPercentRaw ? parseFloat(discountPercentRaw) : null
 
   if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
@@ -32,7 +34,10 @@ export async function submitWineOrder(formData: FormData) {
     return { error: 'Please select at least one wine.' }
   }
 
-  const totalAmount = selectedWines.reduce((sum, w) => sum + w.quantity * w.price, 0)
+  const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * w.price, 0)
+  const totalAmount = discountPercent && discountPercent > 0
+    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
+    : subtotal
   const tenantId = await getTenantId()
 
   try {
@@ -47,6 +52,7 @@ export async function submitWineOrder(formData: FormData) {
         contactPhone,
         wines: selectedWines,
         totalAmount,
+        discountPercent: discountPercent || null,
         tenantId,
         companyId: companyId || null,
       },

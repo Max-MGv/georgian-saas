@@ -28,7 +28,7 @@ export default async function WinesPage() {
     withTenantDb(tenantId, tx => tx.company.findMany({
       where: { tenantId, isIndividual: false, isWineOrderCompany: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true },
+      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true },
     })),
     getSetting('hide_company_dropdown'),
   ])

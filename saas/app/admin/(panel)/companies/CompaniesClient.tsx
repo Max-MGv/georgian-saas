@@ -24,6 +24,7 @@ type Company = {
   isIndividual: boolean
   isBookingCompany: boolean
   isWineOrderCompany: boolean
+  wineDiscountPercent: number | null
   identificationCode: string | null
   contactName: string | null
   contactPhone: string | null
@@ -107,6 +108,7 @@ function EditPanel({ company, onClose, onSaved }: {
   const [code, setCode] = useState(company.accessCode ?? '')
   const [isBooking, setIsBooking] = useState(company.isBookingCompany)
   const [isWineOrder, setIsWineOrder] = useState(company.isWineOrderCompany)
+  const [wineDiscount, setWineDiscount] = useState(company.wineDiscountPercent != null ? String(company.wineDiscountPercent) : '')
   const [showCode, setShowCode] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -118,11 +120,13 @@ function EditPanel({ company, onClose, onSaved }: {
       return
     }
     setLoading(true); setError('')
+    const parsedDiscount = wineDiscount.trim() !== '' ? parseFloat(wineDiscount) : null
     const result = await updateCompany(company.id, {
       name, identificationCode: idCode,
       contactName, contactPhone, contactEmail, address,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
+      wineDiscountPercent: parsedDiscount,
     })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     onSaved({
@@ -134,6 +138,7 @@ function EditPanel({ company, onClose, onSaved }: {
       address: address.trim() || null,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
+      wineDiscountPercent: parsedDiscount,
     })
     onClose()
     setLoading(false)
@@ -213,6 +218,30 @@ function EditPanel({ company, onClose, onSaved }: {
           </div>
 
           <div className="h-px" style={{ backgroundColor: C.border }} />
+
+          {/* Wine discount — only relevant when isWineOrderCompany */}
+          {isWineOrder && (
+            <>
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Wine discount</p>
+                <p className="text-xs" style={{ color: C.muted }}>Applied to all wine order totals for this company.</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={wineDiscount}
+                    onChange={e => setWineDiscount(e.target.value)}
+                    placeholder="0"
+                    style={{ ...inputStyle, width: 80, padding: '9px 12px', fontSize: '0.875rem', textAlign: 'right' }}
+                  />
+                  <span className="text-sm font-medium" style={{ color: C.muted }}>% off all wines</span>
+                </div>
+              </div>
+              <div className="h-px" style={{ backgroundColor: C.border }} />
+            </>
+          )}
 
           <div className="flex flex-col gap-4">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Company info</p>
@@ -670,18 +699,22 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                   />
                 )}
 
-                {/* Wine Orders tab expanded: show contact summary only */}
+                {/* Wine Orders tab expanded: show contact summary + discount */}
                 {expanded && activeModule === 'WINE_ORDER' && (
                   <div className="px-5 pb-5 pt-3" style={{ backgroundColor: '#faf5ef', borderTop: `1px solid ${C.border}` }}>
-                    {company.contactName || company.contactPhone || company.contactEmail ? (
-                      <div className="flex flex-wrap gap-4 text-xs" style={{ color: C.muted }}>
-                        {company.contactName && <span>Contact: <span style={{ color: C.text }}>{company.contactName}</span></span>}
-                        {company.contactPhone && <span>Phone: <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
-                        {company.contactEmail && <span>Email: <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
-                      </div>
-                    ) : (
-                      <p className="text-xs" style={{ color: C.faint }}>No contact info set. Click Edit to add.</p>
-                    )}
+                    <div className="flex flex-wrap gap-4 text-xs" style={{ color: C.muted }}>
+                      {company.contactName && <span>Contact: <span style={{ color: C.text }}>{company.contactName}</span></span>}
+                      {company.contactPhone && <span>Phone: <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
+                      {company.contactEmail && <span>Email: <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
+                      {company.wineDiscountPercent != null && company.wineDiscountPercent > 0 && (
+                        <span className="px-2 py-0.5 rounded font-semibold" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                          −{company.wineDiscountPercent}% wine discount
+                        </span>
+                      )}
+                      {!company.contactName && !company.contactPhone && !company.contactEmail && !company.wineDiscountPercent && (
+                        <p style={{ color: C.faint }}>No contact info set. Click Edit to add.</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

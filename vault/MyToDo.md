@@ -10,15 +10,29 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
-### #115 — Company wine % discount (Feature #4 from drafts)
-- New setting: `enable_company_wine_pricing` (toggle in Settings → Booking section, default OFF)
-- When ON: company edit slide-over "Price Tiers" section header becomes a `Booking | Wine Prices` pill toggle
-  - Wine Prices tab: single number field "Wine discount: __% off all listed prices" → saves as `wineDiscountPercent Float?` on Company model
-- Wine order submission: if `company.wineDiscountPercent` is set, applies to all wine prices; discounted total stored
-- Admin wine order card: shows `"-X%"` discount badge next to the amount
-- Per-wine price overrides are a separate future feature (not built here)
-- **DB:** `wineDiscountPercent Float?` on Company model → `prisma db push`
-- **Files:** `saas/prisma/schema.prisma`, `saas/app/actions/companies.ts`, `saas/app/admin/(panel)/companies/CompaniesClient.tsx`, `saas/app/actions/submitWineOrder.ts`, `saas/app/admin/(panel)/wine-orders/WineOrdersClient.tsx`
+### #118 — Wine catalogue UX (Claude tested 2026-07-16, needs Max to test on real device)
+1. Go to `/wines` → grid shows only `+` per card (no steppers at rest)
+2. Click `+` on Saperavi → stepper `− 1 +` appears; click into number → type `12` → replaces cleanly (no leading zero)
+3. Sticky bar appears at bottom: bottle count, wine names, total
+4. Hover over the qty number → confirm NO up/down spinner arrows
+5. Click "Place Reservation →" → drawer slides in from right; catalogue visible behind
+6. Drawer top panel shows order summary (line items + total + discount hint text in italic)
+7. Select "Wine Test Company" in dropdown → code popup appears ON TOP of drawer (not behind it)
+8. Enter Q8VBA6QY → contact auto-fills
+9. Fill address → "Place Reservation" → success screen shows INSIDE drawer
+10. "Place another order" → drawer closes, catalogue resets to zero
+
+### #115 — Company wine % discount (Claude tested 2026-07-16, needs Max to test on real device)
+1. Go to `/admin/companies` → Wine Orders tab → click Edit on Wine Test Company
+2. "Wine discount" section appears in slide-over (below Modules checkboxes) → enter `10` → Save
+3. Go to `/wines` → add wines to cart → click "Place Reservation →"
+4. In drawer: select "Wine Test Company" → code popup appears → enter Q8VBA6QY
+5. Drawer order summary should update: ~~original~~ · **−10%** badge · discounted total (wine red)
+6. Hint text (*"Company discounts…"*) should be gone (hidden when discount is active)
+7. Fill in remaining form fields → Place Reservation → verify success
+8. Go to `/admin/wine-orders` → new order card should show `−10%` green badge next to the amount
+9. Switch to Table view → same `−10%` badge visible
+10. Edit Wine Test Company → set discount to blank → save → repeat order flow → hint text returns, no badge
 
 ### #116 — Wine hierarchy: WineProduct + WineVintage schema (Feature #12 from drafts)
 - **Two-level DB schema:**
@@ -45,24 +59,13 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 🧪 Needs testing — Feature #117 (2026-07-16)
+## ✅ Confirmed working — Features #115, #117, #118 (2026-07-16, Claude tested)
 
-### #117 — Company module system
+**#117 — Company module system** — Bookings/Wine Orders tab toggle in admin; module flags on Company; companyId FK on WineOrder; public pages filter by module. Wine Test Company (code Q8VBA6QY) created as test data. End-to-end order flow verified.
 
-**Bookings tab:**
-1. Go to `/admin/companies` → "Bookings" tab is default; existing companies show
-2. Individuals row pinned at top with price tiers working as before
-3. Click Edit on any company → "Modules" section at top: Bookings ✓, Wine Orders ☐
-4. Check Wine Orders → Save → company now appears in both tabs
+**#115 — Company wine % discount** — `wineDiscountPercent` on Company; discount field in EditPanel; `verifyCompanyCode`/`findCompanyByCode` return discount; `submitWineOrder` applies discount; drawer shows struck-through total + `−X%` badge; admin order cards + table show badge. Claude tested.
 
-**Wine Orders tab:**
-5. Click "Wine Orders" tab → empty (no wine order companies yet)
-6. Click "+ Add Wine Order Company" → add a test company → appears in Wine Orders tab only
-7. Expand it → contact summary shown, NO price tiers section
-
-**Public forms:**
-8. Home page booking form → company dropdown shows only `isBookingCompany` companies
-9. `/wines` form → company dropdown (or code field) shows only `isWineOrderCompany` companies
+**#118 — Wine catalogue UX** — Drawer checkout; sticky bar; `+` only at zero stepper; no spinner arrows; discount hint; z-index fix for popups. Claude tested all flows including code popup layering over drawer.
 
 ---
 

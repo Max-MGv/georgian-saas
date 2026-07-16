@@ -38,9 +38,10 @@ model Company {
   address            String?
   accessCode         String?
   isIndividual       Boolean      @default(false)
-  isBookingCompany   Boolean      @default(true)
-  isWineOrderCompany Boolean      @default(false)
-  tenantId           String?
+  isBookingCompany     Boolean      @default(true)
+  isWineOrderCompany   Boolean      @default(false)
+  wineDiscountPercent  Float?
+  tenantId             String?
   createdAt          DateTime     @default(now())
   orders             Order[]
   wineOrders         WineOrder[]
@@ -140,6 +141,7 @@ model WineOrder {
   contactPhone    String
   wines           Json
   totalAmount     Float?
+  discountPercent Float?
   status          String   @default("pending")
   tenantId        String?
   companyId       String?

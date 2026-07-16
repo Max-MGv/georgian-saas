@@ -37,6 +37,7 @@ export default async function CompaniesPage() {
           isIndividual: c.isIndividual,
           isBookingCompany: c.isBookingCompany ?? true,
           isWineOrderCompany: c.isWineOrderCompany ?? false,
+          wineDiscountPercent: c.wineDiscountPercent,
           identificationCode: c.identificationCode,
           contactName: c.contactName,
           contactPhone: c.contactPhone,

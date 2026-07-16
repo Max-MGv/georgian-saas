@@ -15,13 +15,13 @@ export default async function WineOrdersPage() {
 
   // Compute displayTotal: stored value if present, otherwise estimate from current prices
   const ordersWithTotal = orders.map(o => {
-    if (o.totalAmount != null) return { ...o, displayTotal: o.totalAmount, totalEstimated: false }
+    if (o.totalAmount != null) return { ...o, discountPercent: o.discountPercent, displayTotal: o.totalAmount, totalEstimated: false }
     const items = o.wines as WineSelection[]
     const estimated = items.reduce((sum, w) => {
       const p = w.price ?? priceMap[w.id] ?? 0
       return sum + w.quantity * p
     }, 0)
-    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
+    return { ...o, discountPercent: o.discountPercent, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
   })
 
   return (

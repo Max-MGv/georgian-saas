@@ -8,152 +8,74 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-07-16 — Features #117 + commit of #112–114 (full detail)
+## 2026-07-16 (session 3) — Feature #115 company wine % discount (full detail)
 
 ### Completed
-
-**#117 — Company module system**
-- Added `isBookingCompany Boolean @default(true)` and `isWineOrderCompany Boolean @default(false)` to Company model
-- Added `companyId String?` FK to WineOrder (links wine orders to a company record)
-- `prisma db push` applied; existing rows default to `isBookingCompany=true`, `isWineOrderCompany=false`
-- Companies admin page now has Bookings / Wine Orders tab toggle
-  - Each tab shows only companies belonging to that module; a company in both appears in both tabs
-  - "Add Company" button in each tab creates a company with the correct module flag
-  - Edit slide-over has "Modules" checkboxes at the top (Bookings / Wine Orders); saves to DB
-  - Price tiers section only renders in Bookings tab; Wine Orders tab shows contact summary only
-  - Individuals row only appears in Bookings tab
-  - Header counter: "X booking · Y wine orders"
-- `findCompanyByCode` now accepts `module: 'BOOKING' | 'WINE_ORDER'` and filters accordingly
-- `notifyNewCompany` email names which module the request came from
-- `submitWineOrder` saves `companyId` when a company was selected
-- Public booking page filters companies by `isBookingCompany: true`; wine page by `isWineOrderCompany: true`
-- TypeScript: 0 errors; browser-verified
-
-### Files changed
-- `saas/prisma/schema.prisma` — Company module flags + WineOrder.companyId FK
-- `saas/app/actions/companies.ts` — createCompany/updateCompany accept module flags; findCompanyByCode gets module param
-- `saas/app/actions/notifyNewCompany.ts` — module param added to email
-- `saas/app/actions/submitWineOrder.ts` — saves companyId
-- `saas/app/(site)/page.tsx` — filter companies by isBookingCompany
-- `saas/app/(site)/wines/page.tsx` — filter companies by isWineOrderCompany
-- `saas/app/(site)/wines/WineCatalogueClient.tsx` — hidden companyId input; WINE_ORDER module passed to actions
-- `saas/components/BookingForm.tsx` — BOOKING module passed to actions
-- `saas/app/admin/(panel)/companies/page.tsx` — new fields in map; module counts in header
-- `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — full tab rewrite with module toggle
-
-### What's next
-Build #115 (company wine % discount)
-
----
-
-## 2026-07-01 — Features #112, #113, #114 (full detail)
-
-### Completed
-
-**#112 — Guest price label**
-- `saas/app/(site)/page.tsx` line ~294: replaced "minimum X guests" text with inline person silhouette SVG (brand color, 75% opacity) + locale-aware text ("X ან მეტი სტუმარი" / "X or more guests")
-
-**New instruction: Rule #9 — Feature notes**
-- Added to `vault/ClaudeInstructions.md`: when a feature is complex (3+ files, new server actions, non-trivial state), create a note in `vault/features/Feature NNN - Name.md` and link it from FeatureLog.
-- Feature notes created: `Feature 112 - Guest Price Label.md`, `Feature 113-114 - Hide Company Dropdown and New Company Request.md`
-
-**#113 + #114 — Hide company dropdown + New Company request**
-- New `hide_company_dropdown` setting (toggle in Settings → Booking, default OFF)
-- When ON: booking form and wine order form both replace company `<select>` with inline code input + "New Company? →" button
-- Valid code → `findCompanyByCode` server action → company chip appears, profile auto-fills
-- Invalid → "Code not recognised."
-- "New Company?" popup: Company Name + Your Name + Phone (required) + Email (optional) → `notifyNewCompany` server action → Resend email to winery admin → "Request received!"
-- TypeScript: 0 errors
-
-### Files changed
-- `vault/ClaudeInstructions.md` — Rule #9 added
-- `vault/features/Feature 112 - Guest Price Label.md` — NEW
-- `vault/features/Feature 113-114 - Hide Company Dropdown and New Company Request.md` — NEW
-- `saas/app/actions/companies.ts` — `findCompanyByCode` added
-- `saas/app/actions/notifyNewCompany.ts` — NEW server action
-- `saas/app/admin/(panel)/settings/SettingsClient.tsx` — `hide_company_dropdown` toggle added
-- `saas/app/admin/(panel)/settings/page.tsx` — fetches + passes new setting
-- `saas/components/BookingForm.tsx` — `hideCompanyDropdown` prop, direct code flow, new company popup
-- `saas/app/(site)/wines/WineCatalogueClient.tsx` — same changes
-- `saas/app/(site)/page.tsx` — fetches setting + #112 SVG label
-- `saas/app/(site)/wines/page.tsx` — fetches setting, passes to client
-
-### What needs user testing
-1. **#112:** Go to home page → package cards should show person silhouette + "X ან მეტი სტუმარი"
-2. **#113/#114 (setting OFF):** Verify booking form and wine form still work exactly as before (dropdown present, code popup still works)
-3. **#113/#114 (setting ON):**
-   - Go to Settings → Booking → turn on "Hide company dropdown"
-   - Home page → select "Tour Company" → verify dropdown gone, code input appears
-   - Click "New Company? →" → fill 3 required fields → Send Request → verify "Request received!"
-   - Enter wrong code → verify "Code not recognised."
-   - Enter correct company code → verify chip appears + all form fields auto-fill
-   - Click × on chip → verify everything clears
-   - Try submitting with company type but no code → verify error message
-   - Go to `/wines` → verify same behavior in wine form
-
-### What's next
-Build #115 (company wine % discount), then #116 (wine hierarchy)
-
----
-
-## 2026-07-01 — Planning session: Features #111–116 (full detail)
-
-### Planned (in build order)
-
-**#111 — Bug fix: wine orders company profile not auto-filling**
-- Root cause confirmed in code: `hasValidAuth()` branch in `WineCatalogueClient.tsx` only calls `setBusinessName`, never fills contactName / phone / address / llcId. The "Remember device" checkbox (wine form only — booking form never had it) was the trigger.
-- Fix: remove "Remember device" checkbox from wine form entirely; save profile fields to localStorage on code success alongside the auth expiry; restore on `hasValidAuth()`.
-
-**#112 — Guest price label**
-- Replace "minimum X guests" text on home page package cards with a person silhouette SVG + `"X ან მეტი სტუმარი"` (Georgian). X from existing `min_tasting_guests` setting.
-
-**#113 + #114 — Hide company dropdown + "New Company?" request (built together)**
-- New setting `hide_company_dropdown` (Booking section, default OFF)
-- When ON: both booking and wine order forms replace dropdown with a code input field
-- Valid code → `findCompanyByCode(code)` server action → company chip + auto-fill; invalid → "Code not recognised."
-- "New Company? →" button appears at the TOP of the code input area (only when setting is ON)
-- Popup: Company Name + Your Name + Phone (required) + Email (optional)
-- On submit: Resend notification email to `contact_email` from Settings. Customer sees "Request received!" No DB record — admin creates company manually.
 
 **#115 — Company wine % discount**
-- New setting `enable_company_wine_pricing` (Booking section, default OFF)
-- When ON: company slide-over shows `Booking | Wine Prices` tab toggle
-- Wine Prices tab: single flat `"X% off all wines"` field → `wineDiscountPercent Float?` on Company model
-- Applied in `submitWineOrder`; discount badge shown on admin wine order cards
-- Per-wine overrides deferred to a future feature
+- **Schema**: `wineDiscountPercent Float?` on Company; `discountPercent Float?` on WineOrder (snapshot).
+- **Admin — company edit slide-over**: "Wine discount" section appears only when `isWineOrderCompany` is checked; single number field "X% off all wines" → saves `wineDiscountPercent`. Wine Orders expanded view shows `−X% wine discount` green badge when set.
+- **Server actions**: `verifyCompanyCode` and `findCompanyByCode` now return `wineDiscountPercent`. `updateCompany` accepts and saves it. `submitWineOrder` reads `discountPercent` from form, applies to subtotal (`total * (1 − percent/100)`, rounded to 2dp), stores both the discounted `totalAmount` and `discountPercent` on WineOrder.
+- **Public `/wines` — drawer**: after code verification (popup or direct code), `discountPercent` state is set. Order summary panel shows: struck-through original total + `−X%` green badge + discounted total in wine red. Hint text (*"Company discounts…"*) is hidden when a discount is already active.
+- **Admin wine orders**: cards and table view show `−X%` green badge next to the amount when `discountPercent` is set on the order.
+- TypeScript: 0 errors.
 
-**#116 — Wine hierarchy (WineProduct + WineVintage)**
-- Schema: `Wine` parent (name, key/slug, sortOrder) + `WineVintage` child (year, color, dryness, alcoholPercent, price, imagePath, active)
-- Migration script: converts existing flat Wine rows to parent + one vintage child
-- Admin: 2-level expand UI; public: vintage selector on cards; orders reference vintageId
-- **Largest refactor — do last**
-
-### Key decisions made
-- "Remember device" removed from wine form entirely (browser handles session)
-- Draft #11 (site content not rendering) — marked solved (not a real bug)
-- Company wine pricing: flat % only for now; per-wine overrides = future feature
-- Wine hierarchy uses `groupKey` approach (explicit slug field, not derived from name to avoid fragility)
-- Registration request: email-only flow, no DB approval queue
+### Files changed
+- `saas/prisma/schema.prisma` — 2 new fields
+- `saas/app/actions/companies.ts` — wineDiscountPercent in CompanyProfile/updateCompany/verifyCompanyCode/findCompanyByCode
+- `saas/app/actions/submitWineOrder.ts` — discount applied + stored
+- `saas/app/admin/(panel)/companies/page.tsx` — wineDiscountPercent passed to client
+- `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — discount field in EditPanel; badge in Wine Orders panel
+- `saas/app/(site)/wines/page.tsx` — wineDiscountPercent in select
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — discountPercent state; struck-through drawer total; hidden field
+- `saas/app/admin/(panel)/wine-orders/WineOrdersClient.tsx` — discountPercent type; −X% badge in cards + table
+- `saas/app/admin/(panel)/wine-orders/page.tsx` — discountPercent passed through
 
 ### What's next
-Start building in order: #112 → #113+#114 together → #115 → #116
+#116 — Wine hierarchy (WineProduct + WineVintage) — biggest refactor, do last.
 
 ---
 
-## 2026-07-01 — Feature #111: wine orders profile auto-fill fix (full detail)
+## 2026-07-16 (session 2) — Feature #118 wine catalogue UX (full detail)
 
 ### Completed
 
-**Bug fix: wine orders company profile not auto-filling**
-- Root cause was in the `hasValidAuth()` branch of `handleCompanyChange` — only `setBusinessName` was called, profile fields were never filled.
-- **Part 1:** Removed `rememberDevice` state variable and "Remember this device for 30 days" checkbox UI from the wine form. `saveAuth()` is now always called on successful code entry. `BookingForm.tsx` was already clean — no change there.
-- **Part 2:** On successful code entry in `handleCodeSubmit`, profile fields (`contactName`, `contactPhone`, `identificationCode`, `address`) are now saved to `localStorage` as `company_profile_{companyId}`. In `handleCompanyChange`, when `hasValidAuth(id)` is true, the saved profile is read back and `applyProfile()` is called — filling all fields without showing the popup.
-- **File changed:** `saas/app/(site)/wines/WineCatalogueClient.tsx` only. TypeScript: 0 errors.
+**#118 — Wine catalogue UX overhaul**
+- **Drawer checkout**: form removed from inline page; now lives in a right-side drawer opened by a sticky bottom bar. Catalogue stays visible + interactive behind dimmed overlay. X closes drawer; clicking overlay (when not submitted) closes it too.
+- **Sticky bottom bar**: appears as soon as any item is selected; shows bottle count, wine summary (truncated), total, "Place Reservation →" CTA. Bottom padding added to catalogue so bar doesn't obscure last row.
+- **Order summary in drawer**: read-only panel at top of drawer shows line items + total before customer fills in details. Italic hint: *"Company discounts, if applicable, are applied here at checkout."*
+- **Success state inside drawer**: "Order received!" shown inside drawer; "Place another order" closes drawer + resets quantities; catalogue is never replaced.
+- **Qty: `+` only at zero, stepper when selected**: grid cards show just a branded `+` button when qty = 0; clicking sets qty to 1 and renders `− n +`. Eliminates "zero always visible" clutter. Same pattern for list view.
+- **Typed quantity inputs**: `type="text" inputMode="numeric"` (no spinner arrows); `onFocus` selects all so typing replaces value cleanly.
+- **z-index fix**: code popup and "New Company?" popup raised to `z-[60]` so they appear above the `z-50` drawer.
+- **Roadmap**: added "Wine catalogue filters (color, type/style)" entry, blocked behind #116.
+- TypeScript: 0 errors; browser-verified end-to-end.
 
-### What needs user testing
-1. Go to `/wines` → select a company with an access code → popup appears → enter correct code → verify **all fields fill**: business name, contact name, phone, address, LLC ID
-2. Without reloading, deselect and reselect the same company → verify all fields fill again **without the popup appearing**
-3. In a fresh browser session (after localStorage has been set in a prior session), select the same company → verify all fields fill without popup
+### Files changed
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — full rewrite (drawer, sticky bar, qty UX, z-index fix)
+- `vault/Roadmap.md` — wine catalogue filters entry added
+
+### Commits
+- `e950e6f` — TabToggle layout fix (Wine Orders "Add" button on its own line)
+- `d6a5e30` — drawer checkout + typed quantity inputs
+- `9208644` — `+` only at zero, stepper when selected
+- `d2b72b0` — hide spinner arrows; discount hint text
+- `51f0763` — z-index fix for popups above drawer
+
+### What's next
+Build #115 (company wine % discount) — `wineDiscountPercent Float?` on Company; discount applied in `submitWineOrder`; struck-through old price + new price in drawer and on wine cards; "-X%" badge on admin wine order cards.
+
+---
+
+## 2026-07-16 — Feature #117 + commit of #112–114 (compressed)
+
+#117 Company module system: `isBookingCompany`/`isWineOrderCompany` on Company; `WineOrder.companyId` FK; Companies admin Bookings/Wine Orders tab toggle; module checkboxes in edit slide-over; `findCompanyByCode` filters by module; `submitWineOrder` saves companyId; public pages filter by module. Wine Test Company created (Q8VBA6QY). All E2E tests passed. 10 files changed + `prisma db push`.
+
+---
+
+## 2026-07-01 — Features #111, #112, #113, #114 (compressed)
+
+#111 Bug fix: wine orders profile auto-fill — removed "Remember device" checkbox; profile saved to localStorage on code success, restored on `hasValidAuth()`. #112 Guest price label — person silhouette SVG + "X ან მეტი სტუმარი" on home page package cards. #113+#114 Hide company dropdown + New Company request — `hide_company_dropdown` setting (Booking section, default OFF); when ON both forms show code input + "New Company?" popup; popup sends Resend email to winery; "Request received!" confirmation. 11 files changed.
 
 ---
 

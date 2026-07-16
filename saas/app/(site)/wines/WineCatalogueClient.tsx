@@ -16,6 +16,7 @@ type Company = {
   contactPhone: string | null
   address: string | null
   accessCode: string | null
+  wineDiscountPercent: number | null
 }
 
 const C = {
@@ -56,6 +57,7 @@ export default function WineCatalogueClient({
 
   // Company selector
   const [companyId, setCompanyId] = useState('')
+  const [discountPercent, setDiscountPercent] = useState<number | null>(null)
 
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
@@ -109,11 +111,15 @@ export default function WineCatalogueClient({
   }, [totalBottles, showDrawer, submitted])
 
   useEffect(() => {
-    if (!companyId || hideCompanyDropdown) return
+    if (!companyId || hideCompanyDropdown) {
+      if (!companyId) setDiscountPercent(null)
+      return
+    }
     const company = companies.find(c => c.id === companyId)
     if (!company) return
     if (!company.accessCode) {
       applyProfile(company, { contactName: company.contactName, contactPhone: company.contactPhone, identificationCode: company.identificationCode, address: company.address })
+      setDiscountPercent(company.wineDiscountPercent ?? null)
       return
     }
     setCodeInput('')
@@ -143,6 +149,7 @@ export default function WineCatalogueClient({
     }
     const company = companies.find(c => c.id === companyId)!
     applyProfile(company, result.profile)
+    setDiscountPercent(result.wineDiscountPercent ?? null)
     setShowCodePopup(false)
   }
 
@@ -163,6 +170,7 @@ export default function WineCatalogueClient({
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
+    setDiscountPercent(result.company.wineDiscountPercent ?? null)
     applyProfile(
       { ...result.company, accessCode: null },
       { contactName: result.company.contactName, contactPhone: result.company.contactPhone, identificationCode: result.company.identificationCode, address: result.company.address }
@@ -174,6 +182,7 @@ export default function WineCatalogueClient({
     setDirectCompanyName('')
     setDirectCode('')
     setDirectCodeError('')
+    setDiscountPercent(null)
     setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone('')
   }
 
@@ -207,6 +216,7 @@ export default function WineCatalogueClient({
         form.reset()
         setQuantities({})
         setCompanyId('')
+        setDiscountPercent(null)
         setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       }
     })
@@ -490,17 +500,32 @@ export default function WineCatalogueClient({
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: '#d9c9b0' }}>
                     <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
-                    <span className="text-base font-bold" style={{ color: C.wine }}>{totalPrice}₾</span>
+                    {discountPercent && discountPercent > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs line-through" style={{ color: C.faint }}>{totalPrice}₾</span>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                          −{discountPercent}%
+                        </span>
+                        <span className="text-base font-bold" style={{ color: C.wine }}>
+                          {Math.round(totalPrice * (1 - discountPercent / 100) * 100) / 100}₾
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-base font-bold" style={{ color: C.wine }}>{totalPrice}₾</span>
+                    )}
                   </div>
-                  <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
-                    Company discounts, if applicable, are applied here at checkout.
-                  </p>
+                  {!discountPercent && (
+                    <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
+                      Company discounts, if applicable, are applied here at checkout.
+                    </p>
+                  )}
                 </div>
 
                 {/* Scrollable form */}
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                   <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <input type="hidden" name="companyId" value={companyId} />
+                    <input type="hidden" name="discountPercent" value={discountPercent ?? ''} />
 
                     {companySelectorJsx}
 

@@ -23,6 +23,7 @@ type CompanyProfile = {
   address?: string
   isBookingCompany?: boolean
   isWineOrderCompany?: boolean
+  wineDiscountPercent?: number | null
 }
 
 export async function createCompany(name: string, modules: { isBookingCompany?: boolean; isWineOrderCompany?: boolean } = {}) {
@@ -60,6 +61,7 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
         address: profile.address?.trim() || null,
         ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
         ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
+        ...(profile.wineDiscountPercent !== undefined ? { wineDiscountPercent: profile.wineDiscountPercent } : {}),
       },
     })
   )
@@ -110,6 +112,7 @@ export async function verifyCompanyCode(companyId: string, code: string) {
         contactEmail: true,
         identificationCode: true,
         address: true,
+        wineDiscountPercent: true,
       },
     })
   )
@@ -127,6 +130,7 @@ export async function verifyCompanyCode(companyId: string, code: string) {
       identificationCode: company.identificationCode,
       address: company.address,
     },
+    wineDiscountPercent: company.wineDiscountPercent,
   }
 }
 
@@ -151,7 +155,7 @@ export async function findCompanyByCode(code: string, module: 'BOOKING' | 'WINE_
         isIndividual: false,
         ...(module === 'BOOKING' ? { isBookingCompany: true } : { isWineOrderCompany: true }),
       },
-      select: { id: true, name: true, contactName: true, contactPhone: true, contactEmail: true, identificationCode: true, address: true },
+      select: { id: true, name: true, contactName: true, contactPhone: true, contactEmail: true, identificationCode: true, address: true, wineDiscountPercent: true },
     })
   )
   if (!company) return { error: 'Code not recognised.' as const }

@@ -31,6 +31,7 @@ type WineOrder = {
   contactPhone: string
   wines: unknown
   totalAmount: number | null
+  discountPercent: number | null
   displayTotal: number | null
   totalEstimated: boolean
   status: string
@@ -343,11 +344,17 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                 </td>
 
                 {/* Amount */}
-                <td className="px-4 py-3 text-right font-medium whitespace-nowrap"
-                  style={{ color: order.displayTotal != null ? C.wine : C.faint }}>
-                  {order.displayTotal != null
-                    ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
-                    : '—'}
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <span className="font-medium" style={{ color: order.displayTotal != null ? C.wine : C.faint }}>
+                    {order.displayTotal != null
+                      ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                      : '—'}
+                  </span>
+                  {order.discountPercent && order.discountPercent > 0 && (
+                    <span className="ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                      −{order.discountPercent}%
+                    </span>
+                  )}
                 </td>
 
                 {/* Date */}
@@ -680,6 +687,11 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                   <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
                     {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾` : '—'}
                   </p>
+                  {order.discountPercent && order.discountPercent > 0 && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                      −{order.discountPercent}%
+                    </span>
+                  )}
                   <p>&#128100; {order.contactName}</p>
                   <p>&#128222; {order.contactPhone}</p>
                   <button
