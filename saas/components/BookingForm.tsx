@@ -6,7 +6,8 @@
 
 import { useState, useEffect } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
-import { verifyCompanyCode } from '@/app/actions/companies'
+import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
+import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
@@ -32,6 +33,7 @@ type Props = {
   companies: Company[]
   showCompanyPrice: boolean
   enhancedEnabled?: boolean
+  hideCompanyDropdown?: boolean
   menuItems?: MenuItem[]
   masterclassItems?: MasterclassItem[]
   minGuestsTasting?: number
@@ -40,7 +42,7 @@ type Props = {
   formContent?: Record<string, string>
 }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {} }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {} }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -66,6 +68,20 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
+
+  // Direct code entry state (used when hideCompanyDropdown=true)
+  const [directCode, setDirectCode] = useState('')
+  const [directCodeLoading, setDirectCodeLoading] = useState(false)
+  const [directCodeError, setDirectCodeError] = useState('')
+  const [directCompanyName, setDirectCompanyName] = useState('')
+
+  // New company request popup
+  const [showNewCompanyPopup, setShowNewCompanyPopup] = useState(false)
+  const [newCoName, setNewCoName] = useState('')
+  const [newCoContact, setNewCoContact] = useState('')
+  const [newCoPhone, setNewCoPhone] = useState('')
+  const [newCoEmail, setNewCoEmail] = useState('')
+  const [newCoStatus, setNewCoStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle')
 
   // Enhanced company form state
   const [tastingGuestsStr, setTastingGuestsStr] = useState('0')
@@ -98,7 +114,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   // Show access code popup when a company with a code is selected; auto-fill directly if no code
   useEffect(() => {
-    if (!companyId || bookingType !== 'COMPANY') return
+    if (!companyId || bookingType !== 'COMPANY' || hideCompanyDropdown) return
     const company = companies.find(c => c.id === companyId)
     if (!company) return
     if (!company.accessCode) {
@@ -109,7 +125,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setCodeError('')
     setShowCodeText(false)
     setShowCodePopup(true)
-  }, [companyId, bookingType])
+  }, [companyId, bookingType, hideCompanyDropdown])
 
   function applyProfile(profile: { contactName: string | null; contactPhone: string | null; contactEmail: string | null }) {
     if (profile.contactName) {
@@ -149,6 +165,42 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setShowCodePopup(false)
     setCompanyId('')
     setBookingType('INDIVIDUAL')
+  }
+
+  async function handleDirectCodeSubmit() {
+    if (!directCode.trim()) return
+    setDirectCodeLoading(true)
+    setDirectCodeError('')
+    const result = await findCompanyByCode(directCode, 'BOOKING')
+    setDirectCodeLoading(false)
+    if ('error' in result) {
+      setDirectCodeError('Code not recognised.')
+      return
+    }
+    setCompanyId(result.company.id)
+    setDirectCompanyName(result.company.name)
+    applyProfile({ contactName: result.company.contactName, contactPhone: result.company.contactPhone, contactEmail: result.company.contactEmail })
+  }
+
+  function clearDirectCode() {
+    setCompanyId('')
+    setDirectCompanyName('')
+    setDirectCode('')
+    setDirectCodeError('')
+    setFirstName(''); setLastName(''); setPhone(''); setEmail('')
+  }
+
+  async function handleNewCompanySubmit() {
+    if (!newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) return
+    setNewCoStatus('submitting')
+    const result = await notifyNewCompany({
+      companyName: newCoName.trim(),
+      contactName: newCoContact.trim(),
+      phone: newCoPhone.trim(),
+      email: newCoEmail.trim() || undefined,
+      module: 'BOOKING',
+    })
+    setNewCoStatus(result.success ? 'sent' : 'error')
   }
 
   // Enhanced guest counts
@@ -202,6 +254,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (bookingType === 'COMPANY' && hideCompanyDropdown && !companyId) {
+      setStatus('error'); setErrorMsg('Please enter and confirm your company code.'); return
+    }
     if (!selectedDate) { setStatus('error'); setErrorMsg('Please select a date.'); return }
     if (!phone && !email) { setStatus('error'); setErrorMsg(t(locale, 'form.err_contact')); return }
     if (selectedDate < today) { setStatus('error'); setErrorMsg('Please choose a future date.'); return }
@@ -350,6 +405,59 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         </div>
       )}
 
+      {/* New Company popup */}
+      {showNewCompanyPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
+            style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
+            <div>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
+              <p className="text-sm" style={{ color: C.muted }}>Fill in your details and we'll get in touch to set up your account.</p>
+            </div>
+            {newCoStatus === 'sent' ? (
+              <div className="py-4 text-center">
+                <p className="font-medium" style={{ color: '#15803d' }}>Request received!</p>
+                <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
+                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
+                  className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
+                  style={{ borderColor: C.border, color: C.text }}>
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <input type="text" placeholder="Company Name *" value={newCoName}
+                  onChange={e => setNewCoName(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
+                <input type="text" placeholder="Your Name *" value={newCoContact}
+                  onChange={e => setNewCoContact(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
+                <input type="tel" placeholder="Phone Number *" value={newCoPhone}
+                  onChange={e => setNewCoPhone(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
+                <input type="email" placeholder="Email (optional)" value={newCoEmail}
+                  onChange={e => setNewCoEmail(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
+                {newCoStatus === 'error' && (
+                  <p className="text-xs" style={{ color: '#b91c1c' }}>Something went wrong. Please try again.</p>
+                )}
+                <button type="button" onClick={handleNewCompanySubmit}
+                  disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
+                  className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
+                  style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
+                  {newCoStatus === 'submitting' ? 'Sending…' : 'Send Request'}
+                </button>
+                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
+                  className="w-full py-2 rounded-lg text-xs font-medium border text-center"
+                  style={{ color: C.muted, borderColor: C.border }}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Booking type */}
@@ -367,14 +475,73 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
         {/* Company selector */}
         {bookingType === 'COMPANY' && (
-          <div>
-            <label style={labelStyle}>{t(locale, 'form.company')}</label>
-            <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
-              <option value="">{t(locale, 'form.company_placeholder')}</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+          hideCompanyDropdown ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
+                style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
+              >
+                New Company?
+              </button>
+              {directCompanyName ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
+                  style={{ backgroundColor: '#f0fdf4', borderColor: '#86efac' }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <circle cx="6" cy="6" r="5.5" stroke="#16a34a" strokeWidth="1.5" />
+                    <path d="M3.5 6l2 2 3-3" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="text-sm font-medium flex-1" style={{ color: '#15803d' }}>{directCompanyName}</span>
+                  <button type="button" onClick={clearDirectCode}
+                    className="text-base font-bold leading-none hover:opacity-70" style={{ color: '#16a34a' }}>×</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter your company code"
+                    value={directCode}
+                    onChange={e => { setDirectCode(e.target.value.toUpperCase()); setDirectCodeError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleDirectCodeSubmit() } }}
+                    className="flex-1 rounded-lg border px-3 py-2.5 text-sm font-mono"
+                    style={{ ...inputStyle, letterSpacing: '0.06em' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDirectCodeSubmit}
+                    disabled={directCodeLoading || !directCode.trim()}
+                    className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white flex-shrink-0 transition-opacity"
+                    style={{ backgroundColor: 'var(--color-brand)', opacity: (directCodeLoading || !directCode.trim()) ? 0.6 : 1 }}
+                  >
+                    {directCodeLoading ? '…' : 'Confirm'}
+                  </button>
+                </div>
+              )}
+              {directCodeError && (
+                <p className="text-xs" style={{ color: '#b91c1c' }}>{directCodeError}</p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label style={{ ...labelStyle, marginBottom: 0 }}>{t(locale, 'form.company')}</label>
+                <button
+                  type="button"
+                  onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                  className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                  style={{ color: 'var(--color-brand)' }}
+                >
+                  New Company?
+                </button>
+              </div>
+              <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
+                className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
+                <option value="">{t(locale, 'form.company_placeholder')}</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )
         )}
 
         {/* Visit type */}

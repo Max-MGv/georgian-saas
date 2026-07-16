@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
-import { verifyCompanyCode } from '@/app/actions/companies'
+import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
+import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 
 type DbWine = { id: string; name: string; type: string; price: number; color: string; imagePath: string | null }
 type WineQty = Record<string, number>
@@ -34,7 +35,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
   )
 }
 
-export default function WineCatalogueClient({ wines: WINES, companies = [], logoUrl = '/icons/logo-dark.svg', logoAlt = '' }: { wines: DbWine[]; companies?: Company[]; logoUrl?: string; logoAlt?: string }) {
+export default function WineCatalogueClient({ wines: WINES, companies = [], logoUrl = '/icons/logo-dark.svg', logoAlt = '', hideCompanyDropdown = false }: { wines: DbWine[]; companies?: Company[]; logoUrl?: string; logoAlt?: string; hideCompanyDropdown?: boolean }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [submitted, setSubmitted] = useState(false)
@@ -50,6 +51,20 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
   const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
+
+  // Direct code entry state (used when hideCompanyDropdown=true)
+  const [directCode, setDirectCode] = useState('')
+  const [directCodeLoading, setDirectCodeLoading] = useState(false)
+  const [directCodeError, setDirectCodeError] = useState('')
+  const [directCompanyName, setDirectCompanyName] = useState('')
+
+  // New company request popup
+  const [showNewCompanyPopup, setShowNewCompanyPopup] = useState(false)
+  const [newCoName, setNewCoName] = useState('')
+  const [newCoContact, setNewCoContact] = useState('')
+  const [newCoPhone, setNewCoPhone] = useState('')
+  const [newCoEmail, setNewCoEmail] = useState('')
+  const [newCoStatus, setNewCoStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle')
 
   // Controlled form fields (auto-fillable)
   const [businessName, setBusinessName] = useState('')
@@ -75,7 +90,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.id] ?? 0) * w.price, 0)
 
   useEffect(() => {
-    if (!companyId) return
+    if (!companyId || hideCompanyDropdown) return
     const company = companies.find(c => c.id === companyId)
     if (!company) return
     if (!company.accessCode) {
@@ -86,7 +101,7 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
     setCodeError('')
     setShowCodeText(false)
     setShowCodePopup(true)
-  }, [companyId])
+  }, [companyId, hideCompanyDropdown])
 
   function applyProfile(company: Company, profile: { contactName: string | null; contactPhone: string | null; identificationCode: string | null; address: string | null }) {
     setBusinessName(company.name)
@@ -115,6 +130,45 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
+  }
+
+  async function handleDirectCodeSubmit() {
+    if (!directCode.trim()) return
+    setDirectCodeLoading(true)
+    setDirectCodeError('')
+    const result = await findCompanyByCode(directCode, 'WINE_ORDER')
+    setDirectCodeLoading(false)
+    if ('error' in result) {
+      setDirectCodeError('Code not recognised.')
+      return
+    }
+    setCompanyId(result.company.id)
+    setDirectCompanyName(result.company.name)
+    applyProfile(
+      { ...result.company, accessCode: null },
+      { contactName: result.company.contactName, contactPhone: result.company.contactPhone, identificationCode: result.company.identificationCode, address: result.company.address }
+    )
+  }
+
+  function clearDirectCode() {
+    setCompanyId('')
+    setDirectCompanyName('')
+    setDirectCode('')
+    setDirectCodeError('')
+    setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone('')
+  }
+
+  async function handleNewCompanySubmit() {
+    if (!newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) return
+    setNewCoStatus('submitting')
+    const result = await notifyNewCompany({
+      companyName: newCoName.trim(),
+      contactName: newCoContact.trim(),
+      phone: newCoPhone.trim(),
+      email: newCoEmail.trim() || undefined,
+      module: 'WINE_ORDER',
+    })
+    setNewCoStatus(result.success ? 'sent' : 'error')
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -213,6 +267,59 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
             <button type="button" onClick={handleNotARep} className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50" style={{ color: C.muted, borderColor: C.border }}>
               Enter Manually
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* New Company popup */}
+      {showNewCompanyPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
+            style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
+            <div>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
+              <p className="text-sm" style={{ color: C.muted }}>Fill in your details and we'll get in touch to set up your account.</p>
+            </div>
+            {newCoStatus === 'sent' ? (
+              <div className="py-4 text-center">
+                <p className="font-medium" style={{ color: '#15803d' }}>Request received!</p>
+                <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
+                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
+                  className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
+                  style={{ borderColor: C.border, color: C.text }}>
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <input type="text" placeholder="Company Name *" value={newCoName}
+                  onChange={e => setNewCoName(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
+                <input type="text" placeholder="Your Name *" value={newCoContact}
+                  onChange={e => setNewCoContact(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
+                <input type="tel" placeholder="Phone Number *" value={newCoPhone}
+                  onChange={e => setNewCoPhone(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
+                <input type="email" placeholder="Email (optional)" value={newCoEmail}
+                  onChange={e => setNewCoEmail(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
+                {newCoStatus === 'error' && (
+                  <p className="text-xs" style={{ color: '#b91c1c' }}>Something went wrong. Please try again.</p>
+                )}
+                <button type="button" onClick={handleNewCompanySubmit}
+                  disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
+                  className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
+                  style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
+                  {newCoStatus === 'submitting' ? 'Sending…' : 'Send Request'}
+                </button>
+                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
+                  className="w-full py-2 rounded-lg text-xs font-medium border text-center"
+                  style={{ color: C.muted, borderColor: C.border }}>
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -374,23 +481,83 @@ export default function WineCatalogueClient({ wines: WINES, companies = [], logo
       <h2 className="text-xl font-bold mb-6" style={{ color: '#1c1008' }}>Place a Reservation</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <input type="hidden" name="companyId" value={companyId} />
 
-        {/* Company selector (optional) */}
-        {companies.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: C.muted }}>
-              Ordering as a company? <span className="font-normal" style={{ color: C.faint }}>(optional — auto-fills your details)</span>
-            </label>
-            <select
-              value={companyId}
-              onChange={e => setCompanyId(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
-              style={inputStyle}
-            >
-              <option value="">— Individual / no company —</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+        {/* Company selector / code entry */}
+        {(companies.length > 0 || hideCompanyDropdown) && (
+          hideCompanyDropdown ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
+                style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
+              >
+                New Company?
+              </button>
+              {directCompanyName ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
+                  style={{ backgroundColor: '#f0fdf4', borderColor: '#86efac' }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <circle cx="6" cy="6" r="5.5" stroke="#16a34a" strokeWidth="1.5" />
+                    <path d="M3.5 6l2 2 3-3" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span className="text-sm font-medium flex-1" style={{ color: '#15803d' }}>{directCompanyName}</span>
+                  <button type="button" onClick={clearDirectCode}
+                    className="text-base font-bold leading-none hover:opacity-70" style={{ color: '#16a34a' }}>×</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter your company code"
+                    value={directCode}
+                    onChange={e => { setDirectCode(e.target.value.toUpperCase()); setDirectCodeError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleDirectCodeSubmit() } }}
+                    className="flex-1 rounded-lg border px-3 py-2.5 text-sm font-mono outline-none"
+                    style={{ ...inputStyle, letterSpacing: '0.06em' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDirectCodeSubmit}
+                    disabled={directCodeLoading || !directCode.trim()}
+                    className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white flex-shrink-0 transition-opacity"
+                    style={{ backgroundColor: 'var(--color-brand)', opacity: (directCodeLoading || !directCode.trim()) ? 0.6 : 1 }}
+                  >
+                    {directCodeLoading ? '…' : 'Confirm'}
+                  </button>
+                </div>
+              )}
+              {directCodeError && (
+                <p className="text-xs" style={{ color: '#b91c1c' }}>{directCodeError}</p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium" style={{ color: C.muted }}>
+                  Ordering as a company? <span className="font-normal" style={{ color: C.faint }}>(optional — auto-fills your details)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                  className="text-xs font-medium transition-all hover:opacity-75 active:scale-95 flex-shrink-0 ml-3"
+                  style={{ color: 'var(--color-brand)' }}
+                >
+                  New Company?
+                </button>
+              </div>
+              <select
+                value={companyId}
+                onChange={e => setCompanyId(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
+                style={inputStyle}
+              >
+                <option value="">— Individual / no company —</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )
         )}
 
         <input name="businessName" required placeholder="Bar, restaurant, or individual name"

@@ -8,6 +8,7 @@ export default async function SettingsPage() {
     showCompanyPrice,
     enhancedBooking,
     invoiceDetailed,
+    hideCompanyDropdown,
     recipientName,
     personalNumber,
     bankName,
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
     getSetting('invoice_detailed'),
+    getSetting('hide_company_dropdown'),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
     getSetting('payment_bank_name'),
@@ -63,6 +65,7 @@ export default async function SettingsPage() {
           show_company_price_after_booking: showCompanyPrice === 'true',
           enable_enhanced_company_booking: enhancedBooking === 'true',
           invoice_detailed: invoiceDetailed === 'true',
+          hide_company_dropdown: hideCompanyDropdown === 'true',
         }}
         payment={{
           payment_recipient_name: recipientName,

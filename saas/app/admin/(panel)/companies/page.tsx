@@ -19,13 +19,15 @@ export default async function CompaniesPage() {
   )
 
   const tourOperators = companies.filter(c => !c.isIndividual)
+  const bookingCount = tourOperators.filter(c => c.isBookingCompany ?? true).length
+  const wineCount = tourOperators.filter(c => c.isWineOrderCompany ?? false).length
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Companies</h1>
         <span className="text-sm" style={{ color: '#a89070' }}>
-          {tourOperators.length} tour operator{tourOperators.length !== 1 ? 's' : ''}
+          {bookingCount} booking · {wineCount} wine orders
         </span>
       </div>
       <CompaniesClient
@@ -33,6 +35,8 @@ export default async function CompaniesPage() {
           id: c.id,
           name: c.name,
           isIndividual: c.isIndividual,
+          isBookingCompany: c.isBookingCompany ?? true,
+          isWineOrderCompany: c.isWineOrderCompany ?? false,
           identificationCode: c.identificationCode,
           contactName: c.contactName,
           contactPhone: c.contactPhone,

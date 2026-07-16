@@ -22,6 +22,8 @@ type Company = {
   id: string
   name: string
   isIndividual: boolean
+  isBookingCompany: boolean
+  isWineOrderCompany: boolean
   identificationCode: string | null
   contactName: string | null
   contactPhone: string | null
@@ -31,6 +33,8 @@ type Company = {
   orderCount: number
   prices: Price[]
 }
+
+type Module = 'BOOKING' | 'WINE_ORDER'
 
 const inputStyle = {
   backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
@@ -88,7 +92,7 @@ function PriceForm({
   )
 }
 
-// ── Edit slide-over panel (tour operators only) ────────────────────────────
+// ── Edit slide-over panel ──────────────────────────────────────────────────
 function EditPanel({ company, onClose, onSaved }: {
   company: Company
   onClose: () => void
@@ -101,19 +105,36 @@ function EditPanel({ company, onClose, onSaved }: {
   const [contactEmail, setContactEmail] = useState(company.contactEmail ?? '')
   const [address, setAddress] = useState(company.address ?? '')
   const [code, setCode] = useState(company.accessCode ?? '')
+  const [isBooking, setIsBooking] = useState(company.isBookingCompany)
+  const [isWineOrder, setIsWineOrder] = useState(company.isWineOrderCompany)
   const [showCode, setShowCode] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleSave() {
+    if (!isBooking && !isWineOrder) {
+      setError('Company must belong to at least one module.')
+      return
+    }
     setLoading(true); setError('')
     const result = await updateCompany(company.id, {
       name, identificationCode: idCode,
       contactName, contactPhone, contactEmail, address,
+      isBookingCompany: isBooking,
+      isWineOrderCompany: isWineOrder,
     })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
-    onSaved({ name: name.trim(), identificationCode: idCode.trim() || null, contactName: contactName.trim() || null, contactPhone: contactPhone.trim() || null, contactEmail: contactEmail.trim() || null, address: address.trim() || null })
+    onSaved({
+      name: name.trim(),
+      identificationCode: idCode.trim() || null,
+      contactName: contactName.trim() || null,
+      contactPhone: contactPhone.trim() || null,
+      contactEmail: contactEmail.trim() || null,
+      address: address.trim() || null,
+      isBookingCompany: isBooking,
+      isWineOrderCompany: isWineOrder,
+    })
     onClose()
     setLoading(false)
   }
@@ -165,6 +186,34 @@ function EditPanel({ company, onClose, onSaved }: {
         </div>
         <div className="flex flex-col gap-5 px-6 py-6 flex-1">
           {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
+
+          {/* Modules */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Modules</p>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isBooking}
+                  onChange={e => setIsBooking(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm" style={{ color: C.text }}>Bookings</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isWineOrder}
+                  onChange={e => setIsWineOrder(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm" style={{ color: C.text }}>Wine Orders</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+
           <div className="flex flex-col gap-4">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Company info</p>
             {field('Company name', name, setName, 'Company name')}
@@ -173,7 +222,7 @@ function EditPanel({ company, onClose, onSaved }: {
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-4">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Contact person (auto-fills booking form)</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Contact person (auto-fills forms)</p>
             {field('Full name', contactName, setContactName, 'First and last name')}
             {field('Phone', contactPhone, setContactPhone, '+995 5XX XXX XXX')}
             {field('Email', contactEmail, setContactEmail, 'contact@company.ge')}
@@ -181,7 +230,7 @@ function EditPanel({ company, onClose, onSaved }: {
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Access code</p>
-            <p className="text-xs" style={{ color: C.muted }}>Companies enter this on the booking form to auto-fill their details.</p>
+            <p className="text-xs" style={{ color: C.muted }}>Companies enter this on booking or wine order forms to auto-fill their details.</p>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -243,7 +292,7 @@ function EditPanel({ company, onClose, onSaved }: {
   )
 }
 
-// ── Price tiers section (shared between Individuals + tour operators) ───────
+// ── Price tiers section (bookings only) ────────────────────────────────────
 function PriceTiersSection({
   company,
   isIndividual,
@@ -358,9 +407,42 @@ function PriceTiersSection({
   )
 }
 
+// ── Module badge ───────────────────────────────────────────────────────────
+function ModuleBadge({ label, active }: { label: string; active: boolean }) {
+  if (!active) return null
+  return (
+    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: active ? '#f0fdf4' : '#f5f5f5', color: active ? '#15803d' : '#9ca3af', border: `1px solid ${active ? '#bbf7d0' : '#e5e7eb'}` }}>
+      {label}
+    </span>
+  )
+}
+
+// ── Tab toggle ─────────────────────────────────────────────────────────────
+function TabToggle({ active, onChange }: { active: Module; onChange: (m: Module) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border overflow-hidden mb-5" style={{ borderColor: C.border }}>
+      {(['BOOKING', 'WINE_ORDER'] as Module[]).map(m => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          className="px-4 py-2 text-sm font-medium transition-colors"
+          style={{
+            backgroundColor: active === m ? 'var(--color-brand)' : C.bg,
+            color: active === m ? '#fff' : C.muted,
+            borderRight: m === 'BOOKING' ? `1px solid ${C.border}` : undefined,
+          }}
+        >
+          {m === 'BOOKING' ? 'Bookings' : 'Wine Orders'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
 export default function CompaniesClient({ companies: initial }: { companies: Company[] }) {
   const [companies, setCompanies] = useState(initial)
+  const [activeModule, setActiveModule] = useState<Module>('BOOKING')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
   const [adding, setAdding] = useState(false)
@@ -373,7 +455,12 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
   const [error, setError] = useState('')
 
   const individualsRow = companies.find(c => c.isIndividual)
-  const tourOperators = companies.filter(c => !c.isIndividual)
+  const allTourOperators = companies.filter(c => !c.isIndividual)
+
+  // Companies visible in the active tab (a company in both modules appears in both)
+  const visibleCompanies = allTourOperators.filter(c =>
+    activeModule === 'BOOKING' ? c.isBookingCompany : c.isWineOrderCompany
+  )
 
   function updateCompanyPrices(companyId: string, prices: Price[]) {
     setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, prices } : c))
@@ -381,7 +468,10 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
 
   async function handleAdd() {
     setLoading(true); setError('')
-    const result = await createCompany(newName)
+    const result = await createCompany(newName, {
+      isBookingCompany: activeModule === 'BOOKING',
+      isWineOrderCompany: activeModule === 'WINE_ORDER',
+    })
     if ('error' in result) { setError(result.error ?? '') }
     else { setNewName(''); setAdding(false); window.location.reload() }
     setLoading(false)
@@ -449,8 +539,10 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
         />
       )}
 
-      {/* ── Individuals row — always pinned at top ── */}
-      {individualsRow && (() => {
+      <TabToggle active={activeModule} onChange={m => { setActiveModule(m); setExpandedId(null) }} />
+
+      {/* ── Individuals row — only in Bookings tab ── */}
+      {activeModule === 'BOOKING' && individualsRow && (() => {
         const expanded = expandedId === individualsRow.id
         const displayTier = individualsRow.prices.find(p => p.isDisplayPrice)
         return (
@@ -489,10 +581,10 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
         )
       })()}
 
-      {/* ── Add tour operator ── */}
+      {/* ── Add company ── */}
       {!adding && (
         <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium mb-4">
-          + Add Company
+          + Add {activeModule === 'BOOKING' ? 'Booking' : 'Wine Order'} Company
         </button>
       )}
       {adding && (
@@ -508,17 +600,20 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
       )}
       {error && <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{error}</p>}
 
-      {/* ── Tour operators list ── */}
-      {tourOperators.length === 0 ? (
+      {/* ── Company list ── */}
+      {visibleCompanies.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-          <p style={{ color: C.faint }}>No tour operators yet. Add your first one above.</p>
+          <p style={{ color: C.faint }}>
+            No {activeModule === 'BOOKING' ? 'booking' : 'wine order'} companies yet. Add one above.
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-          {tourOperators.map((company, i) => {
+          {visibleCompanies.map((company, i) => {
             const expanded = expandedId === company.id
+            const isInBoth = company.isBookingCompany && company.isWineOrderCompany
             return (
-              <div key={company.id} style={{ borderBottom: i < tourOperators.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
+              <div key={company.id} style={{ borderBottom: i < visibleCompanies.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
                 <div className="flex items-center px-5 py-4 gap-4">
                   <button
                     onClick={() => setExpandedId(expanded ? null : company.id)}
@@ -534,8 +629,15 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                         Code set
                       </span>
                     )}
+                    {isInBoth && (
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                        Both modules
+                      </span>
+                    )}
                     <span className="text-xs" style={{ color: C.faint }}>
-                      {company.prices.length} tier{company.prices.length !== 1 ? 's' : ''} · {company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
+                      {activeModule === 'BOOKING'
+                        ? `${company.prices.length} tier${company.prices.length !== 1 ? 's' : ''} · `
+                        : ''}{company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
                     </span>
                   </button>
 
@@ -557,12 +659,28 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
                   )}
                 </div>
 
-                {expanded && (
+                {/* Price tiers only in Bookings tab */}
+                {expanded && activeModule === 'BOOKING' && (
                   <PriceTiersSection
                     company={company}
                     isIndividual={false}
                     {...priceTiersProps}
                   />
+                )}
+
+                {/* Wine Orders tab expanded: show contact summary only */}
+                {expanded && activeModule === 'WINE_ORDER' && (
+                  <div className="px-5 pb-5 pt-3" style={{ backgroundColor: '#faf5ef', borderTop: `1px solid ${C.border}` }}>
+                    {company.contactName || company.contactPhone || company.contactEmail ? (
+                      <div className="flex flex-wrap gap-4 text-xs" style={{ color: C.muted }}>
+                        {company.contactName && <span>Contact: <span style={{ color: C.text }}>{company.contactName}</span></span>}
+                        {company.contactPhone && <span>Phone: <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
+                        {company.contactEmail && <span>Email: <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
+                      </div>
+                    ) : (
+                      <p className="text-xs" style={{ color: C.faint }}>No contact info set. Click Edit to add.</p>
+                    )}
+                  </div>
                 )}
               </div>
             )

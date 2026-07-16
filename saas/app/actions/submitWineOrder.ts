@@ -19,6 +19,7 @@ export async function submitWineOrder(formData: FormData) {
   const contactName = formData.get('contactName') as string
   const contactPhone = formData.get('contactPhone') as string
   const winesJson = formData.get('wines') as string
+  const companyId = (formData.get('companyId') as string | null)?.trim() || null
 
   if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
@@ -47,6 +48,7 @@ export async function submitWineOrder(formData: FormData) {
         wines: selectedWines,
         totalAmount,
         tenantId,
+        companyId: companyId || null,
       },
     }))
     return { success: true }

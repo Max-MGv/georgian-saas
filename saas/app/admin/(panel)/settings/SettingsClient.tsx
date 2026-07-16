@@ -11,7 +11,7 @@ const C = {
 }
 
 type Props = {
-  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean }
+  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean; hide_company_dropdown: boolean }
   defaultLocale: string
   payment: {
     payment_recipient_name: string
@@ -67,6 +67,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
+  const [hideCompanyDropdown, setHideCompanyDropdown] = useState(settings.hide_company_dropdown)
   const [paymentFields, setPaymentFields] = useState(payment)
   const [emailMessage, setEmailMessage] = useState(invoiceEmailMessage)
   const [minTasting, setMinTasting] = useState(minGuestsTasting)
@@ -131,6 +132,15 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting('invoice_detailed', value ? 'true' : 'false')
       setSavedKey('invoice_detailed')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleHideDropdownToggle(value: boolean) {
+    setHideCompanyDropdown(value)
+    startTransition(async () => {
+      await updateSetting('hide_company_dropdown', value ? 'true' : 'false')
+      setSavedKey('hide_company_dropdown')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -391,8 +401,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             <Toggle enabled={enhancedBooking} onChange={handleEnhancedToggle} />
           </div>
         </div>
-        <div className="flex items-center justify-between gap-6 px-5 py-4"
-          style={{ backgroundColor: C.bg }}>
+        <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
             <p className="text-sm font-medium" style={{ color: C.text }}>Detailed invoice</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
@@ -404,6 +414,21 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
             )}
             <Toggle enabled={invoiceDetailed} onChange={handleInvoiceDetailedToggle} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4"
+          style={{ backgroundColor: C.bg }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>Hide company dropdown (use code instead)</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+              When on, both booking and wine order forms replace the company dropdown with a direct code entry field. A "New Company?" button also appears.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'hide_company_dropdown' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+            )}
+            <Toggle enabled={hideCompanyDropdown} onChange={handleHideDropdownToggle} />
           </div>
         </div>
       </div>

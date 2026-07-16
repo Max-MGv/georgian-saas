@@ -27,10 +27,11 @@ export default async function Home({ searchParams }: PageProps) {
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
   const tenantId = await getTenantId()
-  const [allCompanies, showCompanyPrice, enhancedBookingStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
-    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
+  const [allCompanies, showCompanyPrice, enhancedBookingStr, hideCompanyDropdownStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
+    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     getSetting('show_company_price_after_booking'),
     getSetting('enable_enhanced_company_booking'),
+    getSetting('hide_company_dropdown'),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     getSetting('min_guests_tasting'),
@@ -291,7 +292,13 @@ export default async function Home({ searchParams }: PageProps) {
             <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
               {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
             </p>
-            <p className="text-xs mt-1" style={{ color: '#a89070' }}>{t(locale, 'form.minimum')} {pkg.min} {t(locale, 'form.guest_plural')}</p>
+            <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#a89070' }}>
+              <svg width="10" height="13" viewBox="0 0 10 13" fill="none" aria-hidden="true">
+                <circle cx="5" cy="3.5" r="2.5" fill="var(--color-brand)" opacity="0.75" />
+                <path d="M1 12.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="var(--color-brand)" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.75" />
+              </svg>
+              {locale === 'ka' ? `${pkg.min} ან მეტი სტუმარი` : `${pkg.min} or more guests`}
+            </p>
           </div>
         ))}
       </section>
@@ -312,6 +319,7 @@ export default async function Home({ searchParams }: PageProps) {
             companies={companies}
             showCompanyPrice={showCompanyPrice === 'true'}
             enhancedEnabled={enhancedBookingStr === 'true'}
+            hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
             masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
             minGuestsTasting={parseInt(minGuestsTasting) || 4}

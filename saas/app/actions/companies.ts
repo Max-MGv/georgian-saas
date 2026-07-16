@@ -21,9 +21,11 @@ type CompanyProfile = {
   contactPhone?: string
   contactEmail?: string
   address?: string
+  isBookingCompany?: boolean
+  isWineOrderCompany?: boolean
 }
 
-export async function createCompany(name: string, identificationCode?: string) {
+export async function createCompany(name: string, modules: { isBookingCompany?: boolean; isWineOrderCompany?: boolean } = {}) {
   await requireAdmin()
   if (!name.trim()) return { error: 'Name is required.' }
   const tenantId = await getTenantId()
@@ -31,8 +33,9 @@ export async function createCompany(name: string, identificationCode?: string) {
     tx.company.create({
       data: {
         name: name.trim(),
-        identificationCode: identificationCode?.trim() || null,
         accessCode: generateCode(),
+        isBookingCompany: modules.isBookingCompany ?? true,
+        isWineOrderCompany: modules.isWineOrderCompany ?? false,
         tenantId,
       },
     })
@@ -55,6 +58,8 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
         contactPhone: profile.contactPhone?.trim() || null,
         contactEmail: profile.contactEmail?.trim() || null,
         address: profile.address?.trim() || null,
+        ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
+        ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
       },
     })
   )
@@ -133,6 +138,24 @@ export async function ensureIndividualsCompany(tenantId: string) {
   return withTenantDb(tenantId, tx =>
     tx.company.create({ data: { name: 'Individuals', isIndividual: true, tenantId } })
   )
+}
+
+export async function findCompanyByCode(code: string, module: 'BOOKING' | 'WINE_ORDER') {
+  if (!code.trim()) return { error: 'Code not recognised.' as const }
+  const tenantId = await getTenantId()
+  const company = await withTenantDb(tenantId, tx =>
+    tx.company.findFirst({
+      where: {
+        tenantId,
+        accessCode: code.trim().toUpperCase(),
+        isIndividual: false,
+        ...(module === 'BOOKING' ? { isBookingCompany: true } : { isWineOrderCompany: true }),
+      },
+      select: { id: true, name: true, contactName: true, contactPhone: true, contactEmail: true, identificationCode: true, address: true },
+    })
+  )
+  if (!company) return { error: 'Code not recognised.' as const }
+  return { success: true as const, company }
 }
 
 export async function deleteCompany(id: string) {

@@ -29,7 +29,7 @@ model Tenant {
 }
 
 model Company {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   name               String
   identificationCode String?
   contactName        String?
@@ -37,10 +37,13 @@ model Company {
   contactEmail       String?
   address            String?
   accessCode         String?
-  isIndividual       Boolean  @default(false)
+  isIndividual       Boolean      @default(false)
+  isBookingCompany   Boolean      @default(true)
+  isWineOrderCompany Boolean      @default(false)
   tenantId           String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime     @default(now())
   orders             Order[]
+  wineOrders         WineOrder[]
   prices             Price[]
 }
 
@@ -127,19 +130,21 @@ model OrderExtra {
 }
 
 model WineOrder {
-  id           String   @id @default(cuid())
-  businessName String
-  llcName      String?
-  llcId        String?
-  address      String
-  workingHours String?
-  contactName  String
-  contactPhone String
-  wines        Json
-  totalAmount  Float?
-  status       String   @default("pending")
-  tenantId     String?
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  businessName    String
+  llcName         String?
+  llcId           String?
+  address         String
+  workingHours    String?
+  contactName     String
+  contactPhone    String
+  wines           Json
+  totalAmount     Float?
+  status          String   @default("pending")
+  tenantId        String?
+  companyId       String?
+  company         Company? @relation(fields: [companyId], references: [id])
+  createdAt       DateTime @default(now())
 }
 
 model Setting {
