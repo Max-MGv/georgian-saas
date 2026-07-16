@@ -492,6 +492,9 @@ export default function WineCatalogueClient({
                     <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
                     <span className="text-base font-bold" style={{ color: C.wine }}>{totalPrice}₾</span>
                   </div>
+                  <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
+                    Company discounts, if applicable, are applied here at checkout.
+                  </p>
                 </div>
 
                 {/* Scrollable form */}
@@ -615,8 +618,8 @@ export default function WineCatalogueClient({
                             className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
                             style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
                           <input
-                            type="number"
-                            min={0}
+                            type="text"
+                            inputMode="numeric"
                             value={qty}
                             onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
                             onFocus={e => e.target.select()}
@@ -680,7 +683,7 @@ export default function WineCatalogueClient({
                         <button type="button" onClick={() => setQty(wine.id, -1)}
                           className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
                           style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
-                        <input type="number" min={0} value={qty}
+                        <input type="text" inputMode="numeric" value={qty}
                           onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
                           onFocus={e => e.target.select()}
                           className="w-10 text-center text-sm font-semibold border rounded outline-none"
