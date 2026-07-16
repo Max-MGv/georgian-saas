@@ -602,22 +602,32 @@ export default function WineCatalogueClient({
                     </div>
                     <div className="flex items-center justify-between mt-auto">
                       <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}₾ / bottle</span>
-                      <div className="flex items-center gap-1.5">
-                        <button type="button" onClick={() => setQty(wine.id, -1)} disabled={qty === 0}
-                          className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center disabled:opacity-30"
-                          style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
-                        <input
-                          type="number"
-                          min={0}
-                          value={qty}
-                          onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
-                          className="w-9 text-center font-semibold text-sm border rounded outline-none"
-                          style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }}
-                        />
+                      {qty === 0 ? (
                         <button type="button" onClick={() => setQty(wine.id, 1)}
-                          className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
-                          style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
-                      </div>
+                          className="w-8 h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
+                          style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
+                        >+</button>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" onClick={() => setQty(wine.id, -1)}
+                            className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
+                            style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
+                          <input
+                            type="number"
+                            min={0}
+                            value={qty}
+                            onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
+                            onFocus={e => e.target.select()}
+                            className="w-9 text-center font-semibold text-sm border rounded outline-none"
+                            style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }}
+                          />
+                          <button type="button" onClick={() => setQty(wine.id, 1)}
+                            className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
+                            style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -658,16 +668,28 @@ export default function WineCatalogueClient({
                   </div>
                   <p className="text-sm font-medium text-center" style={{ color: '#6b5a47' }}>{wine.price}₾</p>
                   <div className="flex items-center justify-center gap-1">
-                    <button type="button" onClick={() => setQty(wine.id, -1)} disabled={qty === 0}
-                      className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center disabled:opacity-30"
-                      style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
-                    <input type="number" min={0} value={qty}
-                      onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
-                      className="w-10 text-center text-sm font-semibold border rounded outline-none"
-                      style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }} />
-                    <button type="button" onClick={() => setQty(wine.id, 1)}
-                      className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
-                      style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
+                    {qty === 0 ? (
+                      <button type="button" onClick={() => setQty(wine.id, 1)}
+                        className="w-7 h-7 rounded border-2 font-bold text-base flex items-center justify-center transition-colors hover:text-white"
+                        style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
+                      >+</button>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => setQty(wine.id, -1)}
+                          className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
+                          style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
+                        <input type="number" min={0} value={qty}
+                          onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
+                          onFocus={e => e.target.select()}
+                          className="w-10 text-center text-sm font-semibold border rounded outline-none"
+                          style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }} />
+                        <button type="button" onClick={() => setQty(wine.id, 1)}
+                          className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
+                          style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
+                      </>
+                    )}
                   </div>
                   <p className="text-sm font-semibold text-right" style={{ color: lineTotal > 0 ? 'var(--color-brand)' : '#c9b99a' }}>
                     {lineTotal > 0 ? `${lineTotal}₾` : '—'}
