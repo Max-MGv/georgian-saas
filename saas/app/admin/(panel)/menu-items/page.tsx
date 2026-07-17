@@ -1,8 +1,10 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { requireBookingModule } from '@/lib/requireModule'
 import MenuItemsClient from './MenuItemsClient'
 
 export default async function MenuItemsPage() {
+  await requireBookingModule()
   const tenantId = await getTenantId()
   const items = await withTenantDb(tenantId, tx =>
     tx.menuItem.findMany({

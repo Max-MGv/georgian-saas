@@ -8,6 +8,112 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-17 (session 3) — Feature #120 Per-tenant module toggles (full detail)
+
+### Completed
+
+Built the larger feature Max asked for after the #119 quick-wins review: per-tenant module toggles for Bookings / Wine Orders / Public Website. Full step-by-step build log lives in `vault/Plan-TenantModules.md` (created at the start so work could resume if the session ended mid-build — all 11 steps completed in one session, plan file left in place as a reference rather than deleted).
+
+**Design** — 3 booleans on `Tenant` (`modulesBooking` default true, `modulesWineOrders` default false, `modulesPublicSite` default true), mirroring the existing Company-level `isBookingCompany`/`isWineOrderCompany` pattern (#117). Public Website module is a kill switch (redirects to a "coming soon" page), not a widget-only mode — Max explicitly chose this over the bigger "full site vs. booking-widget" alternative when asked.
+
+**Enforcement (3 layers)**:
+- `proxy.ts` resolves the 3 flags alongside the existing tenant fetch, forwards as headers (`x-tenant-modules-booking`, `x-tenant-modules-wine-orders`); redirects all public `(site)` routes to new `/coming-soon` page when Public Website is off (admin/super-admin routes explicitly excluded from this redirect)
+- Admin nav (`admin/(panel)/layout.tsx`) filters hidden links by module
+- New `lib/requireModule.ts` (`requireBookingModule`/`requireWineOrdersModule`) added as a server-side guard at the top of every gated page — Orders, Menu Items, Masterclass (booking); Wines, Wine Orders (wine); public `/wines` redirects inline to `/`. This matters because hiding a nav link doesn't stop someone deep-linking directly.
+
+**Consistency fixes beyond the original plan** (small, done while in the area): public `SiteNav.tsx` hides the "Order Wine" link when wine module is off (threaded `wineOrdersOn` prop through `(site)/layout.tsx`); home page hero's "Order Wine" button same treatment. Without these, a disabled module would still show dead links that just bounce back.
+
+**Shared pages made conditional instead of gated**: Statistics (`page.tsx` skips the DB query for whichever module is off; `StatisticsClient.tsx` only shows the Bookings/Wine Orders mode switcher when both are on, defaults to whichever single module is enabled) and Companies (tab switcher same treatment — hidden when only one module active). These two pages already mixed booking + wine data before this feature (statistics queries both `Order` and `WineOrder`; Companies already has Bookings/Wine Orders tabs from #117), so they got conditional sections rather than an all-or-nothing page guard.
+
+**Super-admin tenant form** — 3 checkboxes added between Favicon and Brand colors sections in `TenantFormClient.tsx`; amber warning note when Public Website is unchecked; `getTenant`/`createTenant`/`updateTenant` in `superAdmin.ts` read/write all 3 fields.
+
+**Critical catch during verification** — the new `modulesWineOrders` column defaulted to `false` on `db push`, and Postgres backfills that default onto existing rows too. This meant the LIVE Nikalas Marani tenant (9 real wine orders, fully active feature) would have had Wines/Wine Orders silently disappear from its own admin nav the moment this shipped, until someone manually flipped the toggle. Caught by querying the DB directly with a one-off `npx tsx` script (deleted after use) before assuming anything was fine, and fixed by setting `modulesWineOrders: true` specifically for Nikalas Marani. Restarted the dev server to clear `proxy.ts`'s in-memory tenant cache and re-verified nav/Orders/Wine Orders/Statistics/Companies all render exactly as before. **Lesson**: any new `@default` boolean on a shared table needs its value checked against existing tenants' actual usage, not just assumed safe because "it's just a new column."
+
+**Verification boundary** — did not toggle Nikalas Marani's real `modulesPublicSite` off to test the coming-soon redirect live, even briefly, because this project has no separate dev/staging DB yet (single shared Supabase instance — see Roadmap backlog "Development / staging environment", still unchecked) and that tenant is the actual production site with real customer traffic. Verified everything else that could be checked safely: `/coming-soon` renders correctly with tenant branding when visited directly; the redirect logic itself is a 4-line boolean check following the exact pattern of 3 other route guards already live in the same `proxy.ts` function. If Max wants to see the kill-switch redirect happen live, he should trigger it himself for a few seconds when convenient.
+
+TypeScript: 0 errors throughout.
+
+### Files changed
+- `saas/prisma/schema.prisma` — 3 new Tenant fields
+- `saas/proxy.ts` — module flags resolved + forwarded, public-site kill switch redirect
+- `saas/app/coming-soon/page.tsx` — NEW
+- `saas/lib/requireModule.ts` — NEW
+- `saas/app/admin/(panel)/layout.tsx` — nav filtered by module
+- `saas/app/admin/(panel)/orders/page.tsx`, `menu-items/page.tsx`, `masterclass/page.tsx` — booking guard
+- `saas/app/admin/(panel)/wines/page.tsx`, `wine-orders/page.tsx` — wine guard
+- `saas/app/(site)/wines/page.tsx` — wine guard (inline redirect)
+- `saas/app/(site)/layout.tsx`, `SiteNav.tsx` — wine nav link consistency
+- `saas/app/(site)/page.tsx` — wine hero button consistency
+- `saas/app/admin/(panel)/statistics/page.tsx` + `StatisticsClient.tsx` — conditional sections
+- `saas/app/admin/(panel)/companies/page.tsx` + `CompaniesClient.tsx` — conditional tab switcher
+- `saas/app/super-admin/tenants/TenantFormClient.tsx` — 3 module checkboxes
+- `saas/app/actions/superAdmin.ts` — module fields in CRUD
+- DB: `modulesWineOrders` backfilled `true` for Nikalas Marani specifically (one-off fix, not a migration file)
+- Vault: `Plan-TenantModules.md` (NEW, full build log), `FeatureLog.md` (#120 row), `SessionLog.md` (this entry)
+
+**#121 — Super admin login defaults to Platform.** Max noticed logging in as super_admin always landed on `/admin` (Tenant Admin), requiring an extra click on "⬡ Platform" every time. Root cause: `proxy.ts`'s login-redirect block sent every logged-in user to `/admin` regardless of role. Split into two branches — `super_admin` → `/super-admin`, tenant admin → `/admin` (unchanged). The reverse links ("← Tenant Admin" in super-admin nav, "⬡ Platform" in admin nav) already existed, so switching either direction still works, just the default landing spot flipped. One file, `saas/proxy.ts`. Browser-verified: visiting `/admin/login` while already authenticated as super_admin now redirects to `/super-admin/tenants`.
+
+**#122 — Cross-tenant Orders/Bookings activity view.** Max asked how much effort a combined orders view in super-admin would be; scoped it as small-to-medium (read-only easy, cross-tenant write actions hard because they'd fight the RLS/`withTenantDb` architecture), wrote the scope to `vault/Plan-SuperAdminOrdersView.md`, got the go-ahead, built it.
+
+New `/super-admin/orders` page — Bookings/Wine Orders tab switcher (kept as two tabs rather than one merged table; the two record types don't share a row shape). `getAllBookings()`/`getAllWineOrders()` in `superAdmin.ts` query `db` directly across every tenant (same RLS-bypass pattern already used by `getTenants()`'s stats) — discovered mid-build that `Order`/`WineOrder` have no Prisma relation to `Tenant`, just a plain `tenantId` string column, so tenant name/domain gets attached via a manual `Map` lookup rather than an `include`. Tenant + status filters, "Upcoming only" toggle (default on) for Bookings. Every row has an "Open ↗" link to that tenant's *real* domain admin page (`https://{domain}/admin/orders/{id}` for bookings — confirmed this route exists; `https://{domain}/admin/wine-orders` for wine orders — confirmed no per-order detail route exists there, so it links to the list) — deliberately no inline edit/status actions on this page itself, by design.
+
+Browser-verified end to end on live Nikalas Marani data: Bookings tab defaulted to "Upcoming only" correctly showed just 1 future booking (03 Sept 2026) out of 60; unchecking showed all 60; Wine Orders tab showed all 9 with correct wine-specific status labels (Pending/Confirmed/Paid/Delivered/Cancelled vs. the booking statuses); both tabs' "Open ↗" links pointed to the correct real URLs.
+
+TypeScript: 0 errors throughout both #121 and #122.
+
+### Files changed (in addition to #120's list above)
+- `saas/proxy.ts` — login redirect split by role (#121)
+- `saas/app/actions/superAdmin.ts` — `getAllBookings`, `getAllWineOrders` (#122)
+- `saas/app/super-admin/orders/page.tsx` — NEW (#122)
+- `saas/app/super-admin/orders/OrdersActivityClient.tsx` — NEW (#122)
+- `saas/app/super-admin/layout.tsx` — "Orders" nav link (#122)
+- Vault: `Plan-SuperAdminOrdersView.md` (NEW), `FeatureLog.md` (#121, #122 rows), `MaintenanceNotes.md` §4 (NEW — tenant resolution is always single-tenant, `DEFAULT_TENANT_ID` localhost trap)
+
+### What's next
+- Max: if you want to see the "coming soon" kill-switch live, toggle Public Website off for Nikalas Marani for a few seconds yourself and check `nikalasmarani.ge` — not something to automate given it's the live site
+- Max: consider whether Test Winery (`winery2.local`) is worth a hosts-file entry for local testing going forward — would make future feature verification on a non-production tenant much easier
+- Bigger follow-up (not started): "full marketing site vs. booking-widget-only" was the other Public Website option Max didn't pick this round — worth revisiting if a future client wants bookings without a full site
+- Bigger follow-up (not started): if the cross-tenant Orders view ever needs write actions (status change, edit) instead of click-through, that's real work against the RLS architecture — not a quick add-on to #122
+
+---
+
+## 2026-07-17 (session 2) — Feature #119 Super-admin panel quick wins (full detail)
+
+### Completed
+
+Reviewed the whole `/super-admin` panel (Tenants, Users, tenant edit form, server actions) and found six no-brainer improvements — implemented all six, plus a real bug found during the review.
+
+**Bug fix — Users page role changes were silently broken.** `setUserTenant`/`setUserSuperAdmin`/`removeUserAdminRole` in `superAdmin.ts` sent `{ role: undefined }` or `{}` to Supabase's admin update API to clear the old role. `JSON.stringify` drops `undefined` keys before the request even goes out, and Supabase's metadata update does a shallow merge (not a replace) — so the old `role`/`tenantId` value was never actually cleared. "Remove access" was a no-op; changing someone from tenant-admin to super-admin (or back) left the stale field in place. Fixed by sending explicit `null` for the field being cleared. This was previously untested (Users page marked "user tested: ❌ No" since it was built).
+
+**Six quick wins:**
+- Wine order count added to `getTenants()` + shown on tenant cards (previously only bookings + companies were visible)
+- `deleteTenant` safety check extended to also block on wine orders/wines, not just orders/companies (a tenant with only wine data could previously be deleted)
+- "Open ↗" link on each tenant card → opens `https://{domain}` in a new tab
+- Tenant ID + Copy button added to the edit form (needed for `set-admin` script and seed scripts; previously had to look it up in the DB)
+- Duplicate domain/slug now shows a friendly error ("That domain is already used by another tenant...") instead of a raw Prisma P2002 error — added a `friendlyUniqueConstraintError` helper in `superAdmin.ts`
+- "Remove access" on the Users page now requires an inline Yes/No confirm, matching the pattern already used for tenant delete
+
+**Verified in browser** (Max logged in as super_admin himself — I don't handle credentials): wine order counts + Open ↗ links visible on Tenants page; Tenant ID field + Copy button confirmed working (button flashes "Copied ✓"); Remove-access confirm step confirmed appearing correctly (clicked Cancel, did not actually remove the real client's access). TypeScript: 0 errors.
+
+### Files changed
+- `saas/app/actions/superAdmin.ts` — metadata null fix, wine order count, delete safety check, friendly P2002 error
+- `saas/app/super-admin/tenants/TenantsClient.tsx` — wine order stat, Open ↗ link, delete button condition
+- `saas/app/super-admin/tenants/TenantFormClient.tsx` — Tenant ID + Copy field
+- `saas/app/super-admin/users/UsersClient.tsx` — confirm step before Remove access
+- Vault: `FeatureLog.md` (#119 row), `MyToDo.md` (test checklist)
+
+### What's next
+- Max: run the 5-step checklist in `MyToDo.md` under #119 — item 5 (verifying the role-clear bug fix) is the important one
+- Proposed next: per-tenant module toggles (Bookings / Wine Orders / Public Website) — see proposal in chat; not yet built, needs Max's decision on scope before starting
+
+---
+
+## 2026-07-17 — Feature #116 Wine hierarchy: WineProduct + WineVintage + WineOrderItem (compressed)
+
+#116 Wine hierarchy (biggest refactor): `WineType`/`Sweetness` enums; Wine → product with `vintages`; new `WineVintage` + `WineOrderItem` (price/name/year snapshots); data migration 6 wines→6 vintages, 8 orders→16 line items (1:1 verified); RLS on both new tables; admin two-level expandable UI; public catalogue = vintage cards + Type/Style filters. TypeScript 0 errors, public flow E2E verified; admin UI needed Max's test. Full notes: `features/Feature 116 - Wine Hierarchy.md`.
+
+---
+
 ## 2026-07-16 (session 3) — Feature #115 company wine % discount (full detail)
 
 ### Completed
@@ -36,34 +142,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-07-16 (session 2) — Feature #118 wine catalogue UX (full detail)
+## 2026-07-16 (session 2) — Feature #118 wine catalogue UX (compressed)
 
-### Completed
-
-**#118 — Wine catalogue UX overhaul**
-- **Drawer checkout**: form removed from inline page; now lives in a right-side drawer opened by a sticky bottom bar. Catalogue stays visible + interactive behind dimmed overlay. X closes drawer; clicking overlay (when not submitted) closes it too.
-- **Sticky bottom bar**: appears as soon as any item is selected; shows bottle count, wine summary (truncated), total, "Place Reservation →" CTA. Bottom padding added to catalogue so bar doesn't obscure last row.
-- **Order summary in drawer**: read-only panel at top of drawer shows line items + total before customer fills in details. Italic hint: *"Company discounts, if applicable, are applied here at checkout."*
-- **Success state inside drawer**: "Order received!" shown inside drawer; "Place another order" closes drawer + resets quantities; catalogue is never replaced.
-- **Qty: `+` only at zero, stepper when selected**: grid cards show just a branded `+` button when qty = 0; clicking sets qty to 1 and renders `− n +`. Eliminates "zero always visible" clutter. Same pattern for list view.
-- **Typed quantity inputs**: `type="text" inputMode="numeric"` (no spinner arrows); `onFocus` selects all so typing replaces value cleanly.
-- **z-index fix**: code popup and "New Company?" popup raised to `z-[60]` so they appear above the `z-50` drawer.
-- **Roadmap**: added "Wine catalogue filters (color, type/style)" entry, blocked behind #116.
-- TypeScript: 0 errors; browser-verified end-to-end.
-
-### Files changed
-- `saas/app/(site)/wines/WineCatalogueClient.tsx` — full rewrite (drawer, sticky bar, qty UX, z-index fix)
-- `vault/Roadmap.md` — wine catalogue filters entry added
-
-### Commits
-- `e950e6f` — TabToggle layout fix (Wine Orders "Add" button on its own line)
-- `d6a5e30` — drawer checkout + typed quantity inputs
-- `9208644` — `+` only at zero, stepper when selected
-- `d2b72b0` — hide spinner arrows; discount hint text
-- `51f0763` — z-index fix for popups above drawer
-
-### What's next
-Build #115 (company wine % discount) — `wineDiscountPercent Float?` on Company; discount applied in `submitWineOrder`; struck-through old price + new price in drawer and on wine cards; "-X%" badge on admin wine order cards.
+#118 Wine catalogue UX overhaul: drawer checkout (sticky bottom bar → right-side drawer, catalogue stays visible); order summary panel + success state inside drawer; `+` only at zero / `− n +` stepper when selected; typed qty inputs without spinners; z-[60] fix so popups sit above drawer. `WineCatalogueClient.tsx` full rewrite. Commits e950e6f, d6a5e30, 9208644, d2b72b0, 51f0763. Browser-verified E2E.
 
 ---
 

@@ -1,10 +1,13 @@
 import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { headers } from 'next/headers'
 import { ensureIndividualsCompany } from '@/app/actions/companies'
 import CompaniesClient from './CompaniesClient'
 
 export default async function CompaniesPage() {
-  const tenantId = await getTenantId()
+  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
   await ensureIndividualsCompany(tenantId)
 
   const companies = await withTenantDb(tenantId, tx =>
@@ -31,6 +34,8 @@ export default async function CompaniesPage() {
         </span>
       </div>
       <CompaniesClient
+        bookingOn={bookingOn}
+        wineOrdersOn={wineOrdersOn}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,

@@ -28,13 +28,13 @@ function SocialIcons({ email, phone, facebook, instagram }: { email: string; pho
   )
 }
 
-export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = '', contactEmail = '', contactPhone = '', contactFacebook = '', contactInstagram = '' }: { locale: string; navContent?: Record<string, string>; logoUrl?: string | null; logoAlt?: string; contactEmail?: string; contactPhone?: string; contactFacebook?: string; contactInstagram?: string }) {
+export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = '', wineOrdersOn = false, contactEmail = '', contactPhone = '', contactFacebook = '', contactInstagram = '' }: { locale: string; navContent?: Record<string, string>; logoUrl?: string | null; logoAlt?: string; wineOrdersOn?: boolean; contactEmail?: string; contactPhone?: string; contactFacebook?: string; contactInstagram?: string }) {
   const [open, setOpen] = useState(false)
 
   const navLinks = [
     { href: '/',        label: navContent['nav_home']    || t(locale, 'nav.home') },
     { href: '/about',   label: navContent['nav_about']   || t(locale, 'nav.about') },
-    { href: '/wines',   label: navContent['nav_wines']   || t(locale, 'nav.wines') },
+    ...(wineOrdersOn ? [{ href: '/wines', label: navContent['nav_wines'] || t(locale, 'nav.wines') }] : []),
     { href: '/contact', label: navContent['nav_contact'] || t(locale, 'nav.contact') },
   ]
   const bookLabel = navContent['nav_book'] || t(locale, 'nav.book')

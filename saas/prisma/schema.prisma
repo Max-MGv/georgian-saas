@@ -16,16 +16,19 @@ model PlatformConfig {
 }
 
 model Tenant {
-  id          String   @id @default(cuid())
-  name        String
-  domain      String   @unique
-  slug        String   @unique
-  theme       Json?
-  logoUrl     String?
-  logoAlt     String?
-  faviconUrl  String?
-  displayName String?
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(cuid())
+  name               String
+  domain             String   @unique
+  slug               String   @unique
+  theme              Json?
+  logoUrl            String?
+  logoAlt            String?
+  faviconUrl         String?
+  displayName        String?
+  modulesBooking     Boolean  @default(true)
+  modulesWineOrders  Boolean  @default(false)
+  modulesPublicSite  Boolean  @default(true)
+  createdAt          DateTime @default(now())
 }
 
 model Company {
@@ -139,7 +142,6 @@ model WineOrder {
   workingHours    String?
   contactName     String
   contactPhone    String
-  wines           Json
   totalAmount     Float?
   discountPercent Float?
   status          String   @default("pending")
@@ -147,6 +149,7 @@ model WineOrder {
   companyId       String?
   company         Company? @relation(fields: [companyId], references: [id])
   createdAt       DateTime @default(now())
+  wineItems       WineOrderItem[]
 }
 
 model Setting {
@@ -183,17 +186,46 @@ model BlockedDate {
 }
 
 model Wine {
-  id          String   @id @default(cuid())
-  name        String
-  type        String
-  description String?
-  price       Float
-  color       String   @default("#7c1d23")
-  imagePath   String?
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  tenantId    String?
-  createdAt   DateTime @default(now())
+  id           String        @id @default(cuid())
+  name         String
+  wineType     WineType      @default(RED)
+  sweetness    Sweetness     @default(DRY)
+  sparkling    Boolean       @default(false)
+  alcoholLevel Float?
+  description  String?
+  color        String        @default("#7c1d23")
+  imagePath    String?
+  active       Boolean       @default(true)
+  sortOrder    Int           @default(0)
+  tenantId     String?
+  createdAt    DateTime      @default(now())
+  vintages     WineVintage[]
+}
+
+model WineVintage {
+  id         String          @id @default(cuid())
+  wineId     String
+  year       Int
+  price      Float
+  imagePath  String?
+  active     Boolean         @default(true)
+  sortOrder  Int             @default(0)
+  tenantId   String?
+  createdAt  DateTime        @default(now())
+  wine       Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  orderItems WineOrderItem[]
+}
+
+model WineOrderItem {
+  id                  String       @id @default(cuid())
+  wineOrderId         String
+  wineVintageId       String?
+  wineNameSnapshot    String
+  vintageYearSnapshot Int
+  priceSnapshot       Float
+  quantity            Int
+  wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
 }
 
 enum OrderStatus {
@@ -213,6 +245,20 @@ enum BookingType {
 enum VisitType {
   TASTING
   TASTING_LUNCH
+}
+
+enum WineType {
+  RED
+  WHITE
+  AMBER
+  ROSE
+}
+
+enum Sweetness {
+  DRY
+  SEMI_DRY
+  SEMI_SWEET
+  SWEET
 }
 
 enum MasterclassUnit {

@@ -7,15 +7,25 @@ const C = {
   border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
-type WineSelection = { id: string; name: string; quantity: number; price?: number }
+export type WineOrderItem = {
+  id: string
+  wineNameSnapshot: string
+  vintageYearSnapshot: number
+  priceSnapshot: number
+  quantity: number
+}
 
 export type PackingOrder = {
   id: string
   businessName: string
   contactName: string
   contactPhone: string
-  wines: unknown
+  wineItems: WineOrderItem[]
   status: string
+}
+
+function itemLabel(i: WineOrderItem) {
+  return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot}`
 }
 
 export type BoxMode = 'six' | 'twelve' | 'optimal'
@@ -75,7 +85,7 @@ function calcBoxes(bottles: number, mode: BoxMode): BoxResult {
 
 type SummaryCompany = {
   order: PackingOrder
-  wines: WineSelection[]
+  wines: WineOrderItem[]
   bottles: number
   boxes: BoxResult
 }
@@ -90,15 +100,14 @@ type Summary = {
 function computeSummary(orders: PackingOrder[], mode: BoxMode): Summary {
   const wineMap: Record<string, number> = {}
   for (const o of orders) {
-    for (const w of o.wines as WineSelection[]) {
-      wineMap[w.name] = (wineMap[w.name] ?? 0) + w.quantity
+    for (const i of o.wineItems) {
+      wineMap[itemLabel(i)] = (wineMap[itemLabel(i)] ?? 0) + i.quantity
     }
   }
   const totalBottles = Object.values(wineMap).reduce((a, b) => a + b, 0)
   const perCompany: SummaryCompany[] = orders.map(o => {
-    const wines = o.wines as WineSelection[]
-    const bottles = wines.reduce((s, w) => s + w.quantity, 0)
-    return { order: o, wines, bottles, boxes: calcBoxes(bottles, mode) }
+    const bottles = o.wineItems.reduce((s, i) => s + i.quantity, 0)
+    return { order: o, wines: o.wineItems, bottles, boxes: calcBoxes(bottles, mode) }
   })
   const totalBoxes = perCompany.reduce((s, c) => s + c.boxes.totalBoxes, 0)
   return { wineMap, totalBottles, totalBoxes, perCompany }
@@ -138,7 +147,7 @@ ${Object.entries(wineMap).map(([n, q]) => `<div class="wine-row"><span>${n}</spa
 ${perCompany.map(({ order: o, wines, bottles, boxes }) =>
   `<div class="company">
 <div class="co-name">${o.businessName}</div>
-<div class="co-wines">${wines.map(w => `${w.name} × ${w.quantity}`).join(' · ')}</div>
+<div class="co-wines">${wines.map(w => `${itemLabel(w)} × ${w.quantity}`).join(' &nbsp;|&nbsp; ')}</div>
 <div class="co-boxes">${bottles} bottles &nbsp;→&nbsp; ${boxes.display}</div>
 <div class="co-contact">${o.contactName} · ${o.contactPhone}</div>
 </div>`).join('')}
@@ -256,7 +265,7 @@ function SummaryContent({ orders, boxMode, onBoxModeChange, onPrint }: {
         <div key={o.id} className="rounded-lg border p-3" style={{ borderColor: C.border, backgroundColor: C.bg }}>
           <p className="font-semibold text-sm" style={{ color: C.text }}>{o.businessName}</p>
           <p className="text-xs my-1" style={{ color: C.muted }}>
-            {wines.map(w => `${w.name} × ${w.quantity}`).join(' · ')}
+            {wines.map(w => `${itemLabel(w)} × ${w.quantity}`).join('  |  ')}
           </p>
           <p className="text-xs font-medium" style={{ color: C.wine }}>
             {bottles} bottles → {boxes.display}

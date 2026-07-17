@@ -447,11 +447,11 @@ function ModuleBadge({ label, active }: { label: string; active: boolean }) {
 }
 
 // ── Tab toggle ─────────────────────────────────────────────────────────────
-function TabToggle({ active, onChange }: { active: Module; onChange: (m: Module) => void }) {
+function TabToggle({ active, onChange, modules }: { active: Module; onChange: (m: Module) => void; modules: Module[] }) {
   return (
     <div className="flex mb-5">
       <div className="inline-flex rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
-        {(['BOOKING', 'WINE_ORDER'] as Module[]).map(m => (
+        {modules.map(m => (
           <button
             key={m}
             onClick={() => onChange(m)}
@@ -471,9 +471,13 @@ function TabToggle({ active, onChange }: { active: Module; onChange: (m: Module)
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial }: { companies: Company[] }) {
+export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean }) {
+  const availableModules: Module[] = [
+    ...(bookingOn ? (['BOOKING'] as const) : []),
+    ...(wineOrdersOn ? (['WINE_ORDER'] as const) : []),
+  ]
   const [companies, setCompanies] = useState(initial)
-  const [activeModule, setActiveModule] = useState<Module>('BOOKING')
+  const [activeModule, setActiveModule] = useState<Module>(availableModules[0] ?? 'BOOKING')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
   const [adding, setAdding] = useState(false)
@@ -570,7 +574,9 @@ export default function CompaniesClient({ companies: initial }: { companies: Com
         />
       )}
 
-      <TabToggle active={activeModule} onChange={m => { setActiveModule(m); setExpandedId(null) }} />
+      {availableModules.length > 1 && (
+        <TabToggle active={activeModule} onChange={m => { setActiveModule(m); setExpandedId(null) }} modules={availableModules} />
+      )}
 
       {/* ── Individuals row — only in Bookings tab ── */}
       {activeModule === 'BOOKING' && individualsRow && (() => {

@@ -32,7 +32,7 @@ async function main() {
 
   // Tables app_user can fully read/write (all tenanted tables)
   const writableTables = [
-    'Order', 'Company', 'Price', 'Wine', 'WineOrder',
+    'Order', 'Company', 'Price', 'Wine', 'WineVintage', 'WineOrder', 'WineOrderItem',
     'MenuItem', 'MasterclassItem', 'OrderMasterclass', 'OrderExtra',
     'BlockedDate', 'SiteContent', 'Setting',
   ]
@@ -47,9 +47,15 @@ async function main() {
   await db.$executeRawUnsafe(`GRANT SELECT ON "Tenant" TO app_user;`)
 
   // ── RLS policies ──────────────────────────────────────────────────────────
+  // Ensure RLS is switched on — existing tables were enabled via the Supabase
+  // dashboard, but tables created later by `prisma db push` start with RLS off
+  for (const t of writableTables) {
+    await db.$executeRawUnsafe(`ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY;`)
+  }
+
   // Tables with a direct tenantId column
   const tenantedTables = [
-    'Order', 'Company', 'Wine', 'WineOrder',
+    'Order', 'Company', 'Wine', 'WineVintage', 'WineOrder',
     'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting',
   ]
 
@@ -129,7 +135,28 @@ async function main() {
       );
   `)
 
-  console.log('\nDone. RLS policies created for all 12 tables.')
+  // WineOrderItem: JOIN to WineOrder
+  console.log('Creating policy on "WineOrderItem" (JOIN to WineOrder)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "WineOrderItem";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "WineOrderItem"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "WineOrder" wo
+          WHERE wo.id = "WineOrderItem"."wineOrderId"
+            AND wo."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "WineOrder" wo
+          WHERE wo.id = "WineOrderItem"."wineOrderId"
+            AND wo."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  console.log('\nDone. RLS policies created for all 14 tables.')
   console.log('Verify with: npx ts-node --compiler-options \'{"module":"CommonJS"}\' scripts/check-rls.ts')
 }
 

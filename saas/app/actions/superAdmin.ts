@@ -4,6 +4,16 @@ import { requireSuperAdmin } from '@/lib/requireSuperAdmin'
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { Prisma } from '@prisma/client'
+
+function friendlyUniqueConstraintError(e: unknown): Error {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+    const target = (e.meta?.target as string[] | undefined)?.[0]
+    const field = target === 'domain' ? 'domain' : target === 'slug' ? 'slug' : 'domain or slug'
+    return new Error(`That ${field} is already used by another tenant. Choose a different one.`)
+  }
+  return e instanceof Error ? e : new Error('Something went wrong')
+}
 
 // ── Tenant actions ───────────────────────────────────────────────
 
@@ -13,11 +23,12 @@ export async function getTenants() {
 
   const stats = await Promise.all(
     tenants.map(async t => {
-      const [orderCount, companyCount] = await Promise.all([
+      const [orderCount, companyCount, wineOrderCount] = await Promise.all([
         db.order.count({ where: { tenantId: t.id } }),
         db.company.count({ where: { tenantId: t.id, isIndividual: false } }),
+        db.wineOrder.count({ where: { tenantId: t.id } }),
       ])
-      return { tenantId: t.id, orderCount, companyCount }
+      return { tenantId: t.id, orderCount, companyCount, wineOrderCount }
     })
   )
 
@@ -34,6 +45,7 @@ export async function getTenants() {
       primaryHover: theme.primaryHover ?? '#9b2429',
       orderCount: s.orderCount,
       companyCount: s.companyCount,
+      wineOrderCount: s.wineOrderCount,
     }
   })
 }
@@ -54,6 +66,9 @@ export async function getTenant(id: string) {
     logoAlt: t.logoAlt ?? '',
     faviconUrl: t.faviconUrl ?? null,
     displayName: t.displayName ?? '',
+    modulesBooking: t.modulesBooking,
+    modulesWineOrders: t.modulesWineOrders,
+    modulesPublicSite: t.modulesPublicSite,
   }
 }
 
@@ -67,20 +82,31 @@ export async function createTenant(data: {
   logoAlt?: string
   faviconUrl?: string | null
   displayName?: string
+  modulesBooking: boolean
+  modulesWineOrders: boolean
+  modulesPublicSite: boolean
 }) {
   await requireSuperAdmin()
-  const tenant = await db.tenant.create({
-    data: {
-      name: data.name,
-      domain: data.domain.toLowerCase().trim(),
-      slug: data.slug.toLowerCase().trim(),
-      theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
-      logoUrl: data.logoUrl ?? null,
-      logoAlt: data.logoAlt ?? null,
-      faviconUrl: data.faviconUrl ?? null,
-      displayName: data.displayName ?? null,
-    },
-  })
+  let tenant
+  try {
+    tenant = await db.tenant.create({
+      data: {
+        name: data.name,
+        domain: data.domain.toLowerCase().trim(),
+        slug: data.slug.toLowerCase().trim(),
+        theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+        logoUrl: data.logoUrl ?? null,
+        logoAlt: data.logoAlt ?? null,
+        faviconUrl: data.faviconUrl ?? null,
+        displayName: data.displayName ?? null,
+        modulesBooking: data.modulesBooking,
+        modulesWineOrders: data.modulesWineOrders,
+        modulesPublicSite: data.modulesPublicSite,
+      },
+    })
+  } catch (e) {
+    throw friendlyUniqueConstraintError(e)
+  }
   revalidatePath('/super-admin/tenants')
   return { id: tenant.id }
 }
@@ -95,33 +121,47 @@ export async function updateTenant(id: string, data: {
   logoAlt?: string
   faviconUrl?: string | null
   displayName?: string
+  modulesBooking: boolean
+  modulesWineOrders: boolean
+  modulesPublicSite: boolean
 }) {
   await requireSuperAdmin()
-  await db.tenant.update({
-    where: { id },
-    data: {
-      name: data.name,
-      domain: data.domain.toLowerCase().trim(),
-      slug: data.slug.toLowerCase().trim(),
-      theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
-      logoUrl: data.logoUrl ?? null,
-      logoAlt: data.logoAlt ?? null,
-      faviconUrl: data.faviconUrl ?? null,
-      displayName: data.displayName ?? null,
-    },
-  })
+  try {
+    await db.tenant.update({
+      where: { id },
+      data: {
+        name: data.name,
+        domain: data.domain.toLowerCase().trim(),
+        slug: data.slug.toLowerCase().trim(),
+        theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+        logoUrl: data.logoUrl ?? null,
+        logoAlt: data.logoAlt ?? null,
+        faviconUrl: data.faviconUrl ?? null,
+        displayName: data.displayName ?? null,
+        modulesBooking: data.modulesBooking,
+        modulesWineOrders: data.modulesWineOrders,
+        modulesPublicSite: data.modulesPublicSite,
+      },
+    })
+  } catch (e) {
+    throw friendlyUniqueConstraintError(e)
+  }
   revalidatePath('/super-admin/tenants')
   revalidatePath(`/super-admin/tenants/${id}`)
 }
 
 export async function deleteTenant(id: string) {
   await requireSuperAdmin()
-  const [orderCount, companyCount] = await Promise.all([
+  const [orderCount, companyCount, wineOrderCount, wineCount] = await Promise.all([
     db.order.count({ where: { tenantId: id } }),
     db.company.count({ where: { tenantId: id } }),
+    db.wineOrder.count({ where: { tenantId: id } }),
+    db.wine.count({ where: { tenantId: id } }),
   ])
-  if (orderCount > 0 || companyCount > 0) {
-    throw new Error(`Cannot delete: tenant has ${orderCount} orders and ${companyCount} companies. Remove all data first.`)
+  if (orderCount > 0 || companyCount > 0 || wineOrderCount > 0 || wineCount > 0) {
+    throw new Error(
+      `Cannot delete: tenant has ${orderCount} orders, ${companyCount} companies, ${wineOrderCount} wine orders, and ${wineCount} wines. Remove all data first.`
+    )
   }
   await db.tenant.delete({ where: { id } })
   revalidatePath('/super-admin/tenants')
@@ -162,7 +202,7 @@ export async function setUserTenant(userId: string, tenantId: string) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
     headers: authHeaders,
-    body: JSON.stringify({ app_metadata: { tenantId, role: undefined } }),
+    body: JSON.stringify({ app_metadata: { tenantId, role: null } }),
   })
   if (!res.ok) throw new Error(`Failed to update user: ${await res.text()}`)
   revalidatePath('/super-admin/users')
@@ -173,7 +213,7 @@ export async function setUserSuperAdmin(userId: string) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
     headers: authHeaders,
-    body: JSON.stringify({ app_metadata: { role: 'super_admin', tenantId: undefined } }),
+    body: JSON.stringify({ app_metadata: { role: 'super_admin', tenantId: null } }),
   })
   if (!res.ok) throw new Error(`Failed to update user: ${await res.text()}`)
   revalidatePath('/super-admin/users')
@@ -189,7 +229,7 @@ export async function removeUserAdminRole(userId: string) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: 'PUT',
     headers: authHeaders,
-    body: JSON.stringify({ app_metadata: {} }),
+    body: JSON.stringify({ app_metadata: { role: null, tenantId: null } }),
   })
   if (!res.ok) throw new Error(`Failed to update user: ${await res.text()}`)
   revalidatePath('/super-admin/users')
@@ -218,4 +258,72 @@ export async function createAdminUser(data: {
   })
   if (!res.ok) throw new Error(`Failed to create user: ${await res.text()}`)
   revalidatePath('/super-admin/users')
+}
+
+// ── Cross-tenant orders/bookings activity (read-only) ────────────
+// Deliberately bypasses withTenantDb — same pattern as getTenants() stats above.
+// `db` connects as the Postgres superuser, which is exempt from RLS by design.
+// No write actions here on purpose: edit/delete/status-change stay on each
+// tenant's own /admin pages, which the RLS architecture is built around.
+
+export async function getAllBookings() {
+  await requireSuperAdmin()
+  const [orders, tenants] = await Promise.all([
+    db.order.findMany({
+      include: { company: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+      take: 500,
+    }),
+    db.tenant.findMany({ select: { id: true, name: true, domain: true } }),
+  ])
+  const tenantMap = new Map(tenants.map(t => [t.id, t]))
+
+  return orders.map(o => {
+    const tenant = o.tenantId ? tenantMap.get(o.tenantId) : undefined
+    return {
+      id: o.id,
+      status: o.status,
+      date: o.date.toISOString(),
+      timeSlot: o.timeSlot,
+      bookingType: o.bookingType,
+      visitType: o.visitType,
+      guestCount: o.guestCount,
+      name: o.name,
+      surname: o.surname,
+      totalPrice: o.totalPrice,
+      companyName: o.company?.name ?? null,
+      tenantName: tenant?.name ?? 'Unknown',
+      tenantDomain: tenant?.domain ?? null,
+    }
+  })
+}
+
+export async function getAllWineOrders() {
+  await requireSuperAdmin()
+  const [orders, tenants] = await Promise.all([
+    db.wineOrder.findMany({
+      include: { wineItems: true },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    }),
+    db.tenant.findMany({ select: { id: true, name: true, domain: true } }),
+  ])
+  const tenantMap = new Map(tenants.map(t => [t.id, t]))
+
+  return orders.map(o => {
+    const tenant = o.tenantId ? tenantMap.get(o.tenantId) : undefined
+    const displayTotal = o.totalAmount ?? o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
+    const bottleCount = o.wineItems.reduce((sum, i) => sum + i.quantity, 0)
+    return {
+      id: o.id,
+      businessName: o.businessName,
+      contactName: o.contactName,
+      status: o.status,
+      createdAt: o.createdAt.toISOString(),
+      displayTotal: Math.round(displayTotal),
+      bottleCount,
+      tenantName: tenant?.name ?? 'Unknown',
+      tenantDomain: tenant?.domain ?? null,
+    }
+  })
 }

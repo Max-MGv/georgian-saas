@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Roadmap.md",
+                "file": "FeatureLog.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Roadmap"
+              "title": "FeatureLog"
             }
           }
         ]
@@ -53,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "theme",
+                "query": "",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -185,41 +185,41 @@
   },
   "active": "0eae5ecf8a741e4f",
   "lastOpenFiles": [
-    "ClaudeInstructions.md.tmp.14036.1da7382047a0",
+    "Plan-MultiTenantEmail.md",
+    "Roadmap.md.tmp.10116.573477b97d62",
+    "SessionLog.md.tmp.10116.c10f7ccebe35",
+    "Plan-SuperAdminOrdersView.md",
+    "Plan-SuperAdminOrdersView.md.tmp.10116.f3e4592e98f7",
+    "FeatureLog.md.tmp.10116.a8a2221266d2",
+    "SessionLog.md.tmp.16168.d5d550ae1b7d",
+    "SessionLog.md.tmp.16168.c5cb4b87f776",
+    "FeatureLog.md.tmp.16168.60b62f912ab3",
+    "Plan-TenantModules.md.tmp.16168.2af20d9d2437",
+    "Plan-TenantModules.md.tmp.16168.a366eee4b67d",
+    "Plan-TenantModules.md.tmp.16168.495d5e858b19",
+    "Plan-TenantModules.md",
+    "Features/Feature 116 - Wine Hierarchy.md",
+    "Progress Log.md",
+    "Plan-PageBackgrounds.md",
+    "FeatureLog.md",
+    "Features/Feature 113-114 - Hide Company Dropdown and New Company Request.md",
+    "Features/Feature 112 - Guest Price Label.md",
+    "ClaudeInstructions.md",
+    "MyToDo.md",
+    "Roadmap.md",
     "MaintenanceNotes.md",
-    "FeatureLog.md.tmp.11936.db9512843956",
-    "Roadmap.md.tmp.11936.344b5e5d880f",
-    "MyToDo.md.tmp.11936.9d70ddb754d4",
-    "Roadmap.md.tmp.11936.d7269b603054",
-    "MyToDo.md.tmp.11936.a3f63a22e889",
     "Plan-DynamicBranding.md",
     "KnownBugs.md",
-    "Progress Log.md",
     "RLS-Architecture.md",
     "Plan-SecurityAndBugFixes.md",
     "Plan-MultiTenant.md",
     "Plan-EditableSiteContent.md",
     "Plan-4Features.md",
     "Plan-CompanyAccessCodes.md",
-    "MyToDo.md",
-    "SessionLog.md.tmp.18564.fb1939e3ac57",
     "SuperAdmin-Architecture.md",
-    "FeatureLog.md.tmp.2680.cbb7afe423d7",
-    "SessionLog.md.tmp.8320.f86a608c23d4",
-    "KnownBugs.md.tmp.18716.1571a38d2ef9",
-    "KnownBugs.md.tmp.18716.9e91c8a1d05a",
     "migration-progress.md",
     "Decisions.md",
     "Database Schema.md",
-    "Architecture.md",
-    "Business Model.md",
-    "MigrationNotes.md",
-    "Dashboard.md",
-    "Plan-PageBackgrounds.md",
-    "FeatureLog.md",
-    "Features/Add Language/Georgian Translations.md",
-    "Seeding/Seed Wine Orders.md",
-    "Plan-EnhancedCompanyBooking.md",
-    "MVP Features.md"
+    "Architecture.md"
   ]
 }

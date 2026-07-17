@@ -19,6 +19,9 @@ type Props = {
     logoAlt?: string
     faviconUrl?: string | null
     displayName?: string
+    modulesBooking?: boolean
+    modulesWineOrders?: boolean
+    modulesPublicSite?: boolean
   }
 }
 
@@ -68,13 +71,24 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
   const [logoAlt, setLogoAlt] = useState(tenant?.logoAlt ?? '')
   const [faviconUrl, setFaviconUrl] = useState<string | null>(tenant?.faviconUrl ?? null)
+  const [modulesBooking, setModulesBooking] = useState(tenant?.modulesBooking ?? true)
+  const [modulesWineOrders, setModulesWineOrders] = useState(tenant?.modulesWineOrders ?? false)
+  const [modulesPublicSite, setModulesPublicSite] = useState(tenant?.modulesPublicSite ?? true)
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
   const [faviconUploading, setFaviconUploading] = useState(false)
+  const [idCopied, setIdCopied] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
+
+  function copyTenantId() {
+    if (!tenant?.id) return
+    navigator.clipboard.writeText(tenant.id)
+    setIdCopied(true)
+    setTimeout(() => setIdCopied(false), 1800)
+  }
 
   function handleNameChange(val: string) {
     setName(val)
@@ -123,7 +137,11 @@ export default function TenantFormClient({ mode, tenant }: Props) {
 
     startTransition(async () => {
       try {
-        const payload = { name, domain, slug, primaryColor, primaryHover, logoUrl, logoAlt, faviconUrl, displayName: displayName || undefined }
+        const payload = {
+          name, domain, slug, primaryColor, primaryHover, logoUrl, logoAlt, faviconUrl,
+          displayName: displayName || undefined,
+          modulesBooking, modulesWineOrders, modulesPublicSite,
+        }
         if (mode === 'new') {
           await createTenant(payload)
         } else {
@@ -146,6 +164,30 @@ export default function TenantFormClient({ mode, tenant }: Props) {
           backgroundColor: C.bg, border: `1px solid ${C.border}`, borderRadius: 14,
           padding: 24, display: 'flex', flexDirection: 'column', gap: 20,
         }}>
+          {tenant?.id && (
+            <Field label="Tenant ID" hint="Used for the set-admin script and seed scripts">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={tenant.id}
+                  readOnly
+                  style={{ ...inputStyle, fontFamily: 'monospace', color: C.muted, cursor: 'text' }}
+                />
+                <button
+                  type="button"
+                  onClick={copyTenantId}
+                  style={{
+                    padding: '0 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
+                    backgroundColor: idCopied ? '#052e16' : '#1e293b',
+                    border: `1px solid ${idCopied ? '#166534' : '#334155'}`,
+                    color: idCopied ? '#86efac' : C.muted, flexShrink: 0,
+                  }}
+                >
+                  {idCopied ? 'Copied ✓' : 'Copy'}
+                </button>
+              </div>
+            </Field>
+          )}
+
           <Field label="Client name" hint="The winery or business name (e.g. Nikalas Marani)">
             <input
               value={name}
@@ -290,6 +332,35 @@ export default function TenantFormClient({ mode, tenant }: Props) {
             {!tenant?.id && (
               <p style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>Save the tenant first, then upload a favicon.</p>
             )}
+          </div>
+
+          {/* Modules */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
+              Modules
+            </label>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>
+              Which parts of the platform this tenant has access to.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={modulesBooking} onChange={e => setModulesBooking(e.target.checked)} />
+                <span style={{ fontSize: 14, color: C.text }}>Bookings</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={modulesWineOrders} onChange={e => setModulesWineOrders(e.target.checked)} />
+                <span style={{ fontSize: 14, color: C.text }}>Wine Orders</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={modulesPublicSite} onChange={e => setModulesPublicSite(e.target.checked)} />
+                <span style={{ fontSize: 14, color: C.text }}>Public website</span>
+              </label>
+              {!modulesPublicSite && (
+                <p style={{ fontSize: 12, color: '#fbbf24', padding: '8px 12px', backgroundColor: '#451a03', borderRadius: 6 }}>
+                  Public domain will show a &quot;coming soon&quot; page. Admin panel stays fully usable.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Color pickers */}

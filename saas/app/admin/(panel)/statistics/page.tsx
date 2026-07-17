@@ -1,20 +1,29 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { headers } from 'next/headers'
 import StatisticsClient from './StatisticsClient'
 
-type WineSelection = { id: string; name: string; quantity: number; price?: number }
-
 export default async function StatisticsPage() {
-  const tenantId = await getTenantId()
-  const [rawOrders, companies, rawWineOrders, wines] = await Promise.all([
-    withTenantDb(tenantId, tx => tx.order.findMany({
-      where: { tenantId },
-      include: { company: { select: { name: true } } },
-      orderBy: { date: 'asc' },
-    })),
+  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
+
+  const [rawOrders, companies, rawWineOrders] = await Promise.all([
+    bookingOn
+      ? withTenantDb(tenantId, tx => tx.order.findMany({
+          where: { tenantId },
+          include: { company: { select: { name: true } } },
+          orderBy: { date: 'asc' },
+        }))
+      : Promise.resolve([]),
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
-    withTenantDb(tenantId, tx => tx.wineOrder.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } })),
-    withTenantDb(tenantId, tx => tx.wine.findMany({ where: { tenantId }, select: { id: true, price: true } })),
+    wineOrdersOn
+      ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
+          where: { tenantId },
+          include: { wineItems: true },
+          orderBy: { createdAt: 'desc' },
+        }))
+      : Promise.resolve([]),
   ])
 
   const now = new Date()
@@ -74,15 +83,17 @@ export default async function StatisticsPage() {
     companyName: o.company?.name ?? null,
   }))
 
-  // Wine order stats
-  const priceMap = Object.fromEntries(wines.map(w => [w.id, w.price]))
+  // Wine order stats — line items carry price snapshots from order time
   const wineOrders = rawWineOrders.map(o => {
-    const rawItems = o.wines as WineSelection[]
-    // Always resolve price from the catalog fallback so revenue charts have valid values
-    const items = rawItems.map(w => ({ ...w, price: w.price ?? priceMap[w.id] ?? 0 }))
+    const items = o.wineItems.map(i => ({
+      id: i.wineVintageId ?? i.id,
+      name: i.wineNameSnapshot,
+      quantity: i.quantity,
+      price: i.priceSnapshot,
+    }))
     const displayTotal = o.totalAmount != null
       ? o.totalAmount
-      : items.reduce((sum, w) => sum + w.quantity * (w.price as number), 0)
+      : items.reduce((sum, w) => sum + w.quantity * w.price, 0)
     return {
       id: o.id,
       businessName: o.businessName,
@@ -99,6 +110,8 @@ export default async function StatisticsPage() {
         <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Statistics</h1>
       </div>
       <StatisticsClient
+        bookingOn={bookingOn}
+        wineOrdersOn={wineOrdersOn}
         totalOrders={totalOrders}
         totalRevenue={Math.round(totalRevenue)}
         monthOrders={monthOrders}

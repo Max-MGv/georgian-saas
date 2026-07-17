@@ -79,6 +79,7 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
   const [selectedTenantId, setSelectedTenantId] = useState(user.tenantId ?? '')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
   const isMe = user.id === currentUserId
 
   function save() {
@@ -103,9 +104,11 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
     startTransition(async () => {
       try {
         await removeUserAdminRole(user.id)
+        setConfirmingRemove(false)
         onRefresh()
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed')
+        setConfirmingRemove(false)
       }
     })
   }
@@ -142,7 +145,31 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
         <RoleBadge user={user} tenants={tenants} />
 
         {/* Actions */}
-        {!isMe && !editing && (
+        {!isMe && !editing && confirmingRemove && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#f87171' }}>Remove access?</span>
+            <button
+              onClick={removeAccess}
+              disabled={isPending}
+              style={{
+                padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+                backgroundColor: '#7f1d1d', border: '1px solid #991b1b', color: '#fca5a5',
+              }}
+            >
+              {isPending ? 'Removing…' : 'Yes, remove'}
+            </button>
+            <button
+              onClick={() => setConfirmingRemove(false)}
+              style={{
+                padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+                backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {!isMe && !editing && !confirmingRemove && (
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => setEditing(true)}
@@ -155,8 +182,7 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
             </button>
             {(user.role || user.tenantId) && (
               <button
-                onClick={removeAccess}
-                disabled={isPending}
+                onClick={() => setConfirmingRemove(true)}
                 style={{
                   padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
                   backgroundColor: '#1e293b', border: '1px solid #334155', color: '#f87171',

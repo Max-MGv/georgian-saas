@@ -1,27 +1,24 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { requireWineOrdersModule } from '@/lib/requireModule'
 import WineOrdersClient from './WineOrdersClient'
 
-type WineSelection = { id: string; name: string; quantity: number; price?: number }
-
 export default async function WineOrdersPage() {
+  await requireWineOrdersModule()
   const tenantId = await getTenantId()
-  const [orders, wines] = await Promise.all([
-    withTenantDb(tenantId, tx => tx.wineOrder.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } })),
-    withTenantDb(tenantId, tx => tx.wine.findMany({ where: { tenantId }, select: { id: true, price: true } })),
-  ])
+  const orders = await withTenantDb(tenantId, tx =>
+    tx.wineOrder.findMany({
+      where: { tenantId },
+      include: { wineItems: true },
+      orderBy: { createdAt: 'desc' },
+    })
+  )
 
-  const priceMap = Object.fromEntries(wines.map(w => [w.id, w.price]))
-
-  // Compute displayTotal: stored value if present, otherwise estimate from current prices
+  // Compute displayTotal: stored value if present, otherwise estimate from item price snapshots
   const ordersWithTotal = orders.map(o => {
-    if (o.totalAmount != null) return { ...o, discountPercent: o.discountPercent, displayTotal: o.totalAmount, totalEstimated: false }
-    const items = o.wines as WineSelection[]
-    const estimated = items.reduce((sum, w) => {
-      const p = w.price ?? priceMap[w.id] ?? 0
-      return sum + w.quantity * p
-    }, 0)
-    return { ...o, discountPercent: o.discountPercent, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
+    if (o.totalAmount != null) return { ...o, displayTotal: o.totalAmount, totalEstimated: false }
+    const estimated = o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
+    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
   })
 
   return (

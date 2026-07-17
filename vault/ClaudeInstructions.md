@@ -104,6 +104,20 @@ Simple one-file changes (e.g. a label swap) do not need a note.
 
 ---
 
+## 10. Stop dev server before `prisma db push`
+
+On Windows, running `prisma db push` (or `prisma generate`) while the dev server is running will fail silently — schema pushes but the Prisma client is NOT regenerated (EPERM on the DLL rename). This leaves the client broken and causes connection pool exhaustion.
+
+**Before any `prisma db push`:**
+1. Tell Max to stop the dev server, OR kill the node process yourself
+2. Run `prisma db push`
+3. Verify output ends with `✔ Generated Prisma Client`
+4. Tell Max to restart the dev server
+
+See `vault/MaintenanceNotes.md` section 3 for the full explanation.
+
+---
+
 ## 7. Handoff preparation
 
 When Max says "prepare for handoff," update:

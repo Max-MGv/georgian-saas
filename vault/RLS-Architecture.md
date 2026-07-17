@@ -112,6 +112,7 @@ withTenantDb(tenantId, tx => ...)
 | Order | ✅ direct | simple | `"tenantId" = current_setting(...)` |
 | Company | ✅ direct | simple | same |
 | Wine | ✅ direct | simple | same |
+| WineVintage | ✅ direct | simple | same |
 | WineOrder | ✅ direct | simple | same |
 | MenuItem | ✅ direct | simple | same |
 | MasterclassItem | ✅ direct | simple | same |
@@ -121,6 +122,7 @@ withTenantDb(tenantId, tx => ...)
 | Price | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) |
 | OrderMasterclass | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | OrderExtra | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
+| WineOrderItem | ❌ via WineOrder | JOIN | EXISTS (WineOrder where tenantId = ...) |
 | Tenant | N/A | no RLS | Read by proxy.ts as superuser before tenant context exists |
 
 ---
@@ -131,7 +133,7 @@ withTenantDb(tenantId, tx => ...)
 CREATE ROLE app_user NOLOGIN;
 GRANT app_user TO postgres;           -- allows postgres to SET ROLE app_user
 GRANT USAGE ON SCHEMA public TO app_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON <all 12 tables> TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON <all 14 tables> TO app_user;
 GRANT SELECT ON "Tenant" TO app_user; -- read-only on Tenant
 ```
 
@@ -156,7 +158,9 @@ Use `scripts/check-rls.ts` to verify the current state:
 npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/check-rls.ts
 ```
 
-Expected output: 🟢 on all 12 tenanted tables, 🔴 on Tenant (intentional), policies visible for all 12.
+Expected output: 🟢 on all 14 tenanted tables, 🔴 on Tenant and PlatformConfig (intentional), policies visible for all 14.
+
+Note: `setup-rls.ts` now also runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every tenanted table — new tables created by `prisma db push` start with RLS off, so re-running the script after adding a table is enough (no dashboard step needed).
 
 ---
 

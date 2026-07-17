@@ -25,21 +25,28 @@ function qty() { return Math.floor(Math.random() * 10) + 2 }
 async function seedWineOrders() {
   console.log('\n-- Wine Orders --')
 
-  // Pull active wines from DB so names/IDs match the real catalogue
-  const wines = await db.wine.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })
+  // Pull active vintages from DB so names/IDs match the real catalogue
+  const wines = await db.wine.findMany({
+    where: { active: true },
+    orderBy: { sortOrder: 'asc' },
+    include: { vintages: { where: { active: true }, orderBy: { year: 'desc' } } },
+  })
+  const vintages = wines.flatMap(w => w.vintages.map(v => ({
+    vintageId: v.id, name: w.name, year: v.year, price: v.price,
+  })))
 
-  if (wines.length === 0) {
-    console.log('  WARNING: No active wines found — add wines in the admin panel first, then re-run.')
+  if (vintages.length === 0) {
+    console.log('  WARNING: No active vintages found — add wines + vintages in the admin panel first, then re-run.')
     return
   }
 
-  console.log(`  Found ${wines.length} active wine(s): ${wines.map((w: { name: string }) => w.name).join(', ')}`)
+  console.log(`  Found ${vintages.length} active vintage(s): ${vintages.map(v => `${v.name} ${v.year}`).join(', ')}`)
 
-  // Pick 1-3 random wines for an order
+  // Pick 1-3 random vintages for an order
   function pickWines() {
-    const shuffled = [...wines].sort(() => Math.random() - 0.5)
-    const count = Math.min(Math.floor(Math.random() * 3) + 1, wines.length)
-    return shuffled.slice(0, count).map((w: { id: string; name: string }) => ({ id: w.id, name: w.name, quantity: qty() }))
+    const shuffled = [...vintages].sort(() => Math.random() - 0.5)
+    const count = Math.min(Math.floor(Math.random() * 3) + 1, vintages.length)
+    return shuffled.slice(0, count).map(v => ({ ...v, quantity: qty() }))
   }
 
   const BUSINESSES = [
@@ -97,10 +104,20 @@ async function seedWineOrders() {
 
   let created = 0
   for (const biz of BUSINESSES) {
+    const items = pickWines()
     await db.wineOrder.create({
       data: {
         ...biz,
-        wines: pickWines(),
+        totalAmount: items.reduce((sum, i) => sum + i.quantity * i.price, 0),
+        wineItems: {
+          create: items.map(i => ({
+            wineVintageId: i.vintageId,
+            wineNameSnapshot: i.name,
+            vintageYearSnapshot: i.year,
+            priceSnapshot: i.price,
+            quantity: i.quantity,
+          })),
+        },
       },
     })
     created++

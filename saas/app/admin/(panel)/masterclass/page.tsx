@@ -1,8 +1,10 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { requireBookingModule } from '@/lib/requireModule'
 import MasterclassClient from './MasterclassClient'
 
 export default async function MasterclassPage() {
+  await requireBookingModule()
   const tenantId = await getTenantId()
   const items = await withTenantDb(tenantId, tx =>
     tx.masterclassItem.findMany({

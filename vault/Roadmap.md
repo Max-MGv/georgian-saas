@@ -159,9 +159,9 @@ Full plan: `vault/Plan-SecurityAndBugFixes.md`
 - [x] **#2 Auth guard on write server actions** — `lib/requireAdmin.ts` added; all 12 write action files guarded
 - [x] **#3 Masterclass price trusted from client** — `createBooking` now fetches prices from DB by ID
 - [x] **#4 Enhanced booking skips min-guest check** — now validates `tastingGuestCount + lunchGuestCount`
-- [ ] **#5 `hasDbValue` false-negative** — empty-string saves make reset badge disappear; pass explicit prop
-- [ ] **#6 `revalidatePath` missing** — `saveContent`/`deleteContent` don't revalidate `/admin/content` or site pages
-- [ ] **#7 EditableText `<div>` wrapper** — outer wrapper breaks HTML semantics when `as="span"` used inside block elements
+- [x] **#5 `hasDbValue` false-negative** — `children != null` check in `EditableText.tsx` line 36 correctly handles empty string (not `!children`)
+- [x] **#6 `revalidatePath` missing** — `saveContent` and `deleteContent` both call `revalidatePath('/', 'layout')` in `siteContent.ts` lines 40 + 56
+- [x] **#7 EditableText `<div>` wrapper** — `inlineTags` set in `EditableText.tsx` line 97 picks `span` wrapper for inline tags, `div` for block tags
 
 ---
 
@@ -234,6 +234,7 @@ These are rough ideas, not committed features. Scope and approach TBD.
 - [ ] **Printable daily booking sheet** — print/export view for employees; rows grouped by day, each row shows one booking with all relevant info (name, time, guests, visit type, company, notes). *(Draft: format and trigger TBD — browser print or PDF?)*
 - [ ] **Printable wine packing sheet** — print/export view for employees; shows total bottles per wine across all upcoming orders, with breakdown of how to distribute into boxes per company order. *(Draft: box-packing logic TBD)*
 - [ ] **Wine orders — total upcoming bottles banner** — sticky or top-of-page summary on the wine orders admin page showing total bottles per wine across all non-delivered orders, so employees can see packing totals at a glance without printing. *(Draft: filter scope TBD — all pending, or configurable date range?)*
+- [x] **Wine catalogue filters (color, type/style)** — Type (Red/White/Amber/Rosé) + Style (Dry/Semi-dry/Semi-sweet/Sweet/Sparkling) pill rows on the public `/wines` page; AND-combined, client-side. Built with #116 Wine hierarchy (2026-07-17).
 
 ---
 
@@ -285,11 +286,14 @@ Full plan: `vault/Plan-MultiTenant.md`
 - [x] `app/layout.tsx` injects `<style>:root { --color-brand: X; }</style>` per tenant — zero flash, server-side
 - [x] `scripts/seed-theme.ts` — sets nikalasmarani.ge theme in DB (run `npx tsx scripts/seed-theme.ts`)
 
-**Super-admin UI:** ✅ DONE 2026-06-26
+**Super-admin UI:** ✅ DONE 2026-06-26, extended 2026-07-17
 - [x] `/super-admin` route (super_admin only, proxy-guarded) — dark platform-layer theme
-- [x] Tenants list — all tenants with brand color swatches, order/company stats, edit/delete
-- [x] Add/edit tenant — name, domain, slug, brand color picker (react-colorful wheel + hex), live preview
-- [x] Users page — list all Supabase users with role badges; change role; create new admin user
+- [x] Tenants list — all tenants with brand color swatches, order/company/wine-order stats, "Open ↗" live-site link, edit/delete (delete blocked while tenant has any orders/companies/wine orders/wines)
+- [x] Add/edit tenant — name, domain, slug, tenant ID + copy button, brand color picker (react-colorful wheel + hex), live preview, module toggle checkboxes
+- [x] Users page — list all Supabase users with role badges; change role (confirmed working — role-clear bug fixed 2026-07-17); remove access (with confirm step); create new admin user
+- [x] Login redirect — super_admin lands on `/super-admin` by default, not `/admin` (2026-07-17, #121)
+- [x] **Per-tenant module toggles** (#120, 2026-07-17) — `modulesBooking`/`modulesWineOrders`/`modulesPublicSite` booleans on Tenant; enforced via proxy headers, admin nav filtering, and server-side route guards; Public Website module is a kill switch → `/coming-soon` page, not a widget-only mode. See `Plan-TenantModules.md`.
+- [x] **Cross-tenant Orders/Bookings activity view** (#122, 2026-07-17) — `/super-admin/orders`, read-only, Bookings/Wine Orders tabs, click-through to each tenant's real admin for actions. See `Plan-SuperAdminOrdersView.md`.
 
 **Dynamic branding (logo, favicon, display name):** ✅ DONE 2026-06-26
 - [x] Add `logoUrl String?`, `logoAlt String?`, `faviconUrl String?`, `displayName String?` to `Tenant` model → `prisma db push`

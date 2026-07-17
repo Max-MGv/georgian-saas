@@ -10,6 +10,31 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### #121 + #122 — Super admin login default + cross-tenant Orders view (Claude tested 2026-07-17 in browser, needs Max to test)
+1. Log out, log back in as super_admin (or visit `/admin/login` while already logged in) → should land on `/super-admin/tenants` directly, not `/admin`
+2. Confirm "← Tenant Admin" (in super-admin nav) and "⬡ Platform" (in admin nav) still both work to switch views manually
+3. Go to `/super-admin/orders` → "Bookings" tab should default to "Upcoming only" checked, showing only future bookings
+4. Uncheck "Upcoming only" → all 60 Nikalas Marani bookings appear
+5. Click "Wine Orders" tab → all 9 wine orders appear with Pending/Confirmed/Paid/Delivered/Cancelled status labels (different from booking statuses)
+6. Try the tenant dropdown and status pills on both tabs — list should filter correctly
+7. Click any "Open ↗" link → should open the real tenant's own admin page in a new tab (order detail for bookings, wine orders list for wine orders) — not a broken link
+
+### #120 — Per-tenant module toggles (Claude tested 2026-07-17 in browser, needs Max to test)
+1. Go to `/super-admin/tenants` → Edit → Test Winery → "Modules" section shows 3 checkboxes (Bookings / Wine Orders / Public website) — Bookings and Public website checked by default, Wine Orders unchecked
+2. Check "Wine Orders" → Save → reload the page → confirm it's still checked (persistence)
+3. Uncheck "Public website" → an amber note appears explaining the domain will show "coming soon" — **do NOT actually save this on Nikalas Marani**, only test on Test Winery or briefly on Nikalas Marani yourself if you want to see the live redirect (it takes the real public site offline while it's off)
+4. On `nikalasmarani.ge` admin: confirm Wines, Wine Orders, Orders, Menu Items, Masterclass all still show in the nav as normal (all modules are on for the real tenant — this should be completely unchanged from before)
+5. `/admin/statistics` and `/admin/companies` still show the Bookings/Wine Orders tab switchers (both modules on for Nikalas Marani)
+6. If you want to see the "coming soon" page and public-site kill switch working live: toggle "Public website" off for Nikalas Marani for a few seconds, check `nikalasmarani.ge` shows the coming-soon message with the winery logo, then turn it back on immediately
+7. Visit `/coming-soon` directly any time — should show "Nikalas Marani — Our site is coming soon" with the logo, regardless of the toggle state
+
+### #119 — Super-admin panel quick wins (Claude tested 2026-07-17 in browser, needs Max to test)
+1. Go to `/super-admin/tenants` → each card shows a "wine orders" stat and an "Open ↗" link next to the domain that opens the live site in a new tab
+2. Click Edit on a tenant → Tenant ID field appears at top with a Copy button → click it → button flashes "Copied ✓" for ~2s → paste somewhere to confirm the ID copied
+3. Try creating a new tenant with a domain or slug that's already taken → should show a friendly error ("That domain is already used by another tenant...") instead of a raw DB error
+4. Go to `/super-admin/users` → click "Remove access" on a non-you user → confirm row appears ("Remove access? Yes, remove / Cancel") before anything happens
+5. **Important — the actual bug fix to verify**: on Users page, change a tenant admin to "Super admin" (or vice versa), save, then reload the page → the OLD role badge should be gone, not still showing alongside the new one. Before this fix, Supabase's metadata merge meant old roles never actually cleared.
+
 ### #118 — Wine catalogue UX (Claude tested 2026-07-16, needs Max to test on real device)
 1. Go to `/wines` → grid shows only `+` per card (no steppers at rest)
 2. Click `+` on Saperavi → stepper `− 1 +` appears; click into number → type `12` → replaces cleanly (no leading zero)
@@ -34,16 +59,20 @@ Things Max needs to test or do manually. Claude updates this after each session.
 9. Switch to Table view → same `−10%` badge visible
 10. Edit Wine Test Company → set discount to blank → save → repeat order flow → hint text returns, no badge
 
-### #116 — Wine hierarchy: WineProduct + WineVintage schema (Feature #12 from drafts)
-- **Two-level DB schema:**
-  - `Wine` (parent product): `id, tenantId, name, key String (auto-slug from name e.g. "rkatsiteli"), sortOrder, createdAt` — removes `price, color, imagePath, description` (those move to vintage)
-  - `WineVintage` (child): `id, wineId, tenantId, year Int?, color String? (red/white/orange/rosé), dryness String? (dry/semi-dry/semi-sweet/sweet), alcoholPercent Float?, price Float, imagePath String?, active Boolean @default(true), sortOrder Int, description String?`
-- **Migration script needed:** converts existing flat Wine rows → Wine parent + one WineVintage child each
-- **Admin:** expand wine product to see/add vintages; edit vintage opens inline fields for year, color, dryness, alcohol%, price, image, active
-- **Public catalogue:** wine card shows product; if multiple vintages, selector per vintage; order items reference `vintageId`
-- **Scope:** touches schema, admin wines page, public wines page, `submitWineOrder`, wine orders admin display, statistics
-- **Do last** — biggest refactor on this list
-- **Files:** `saas/prisma/schema.prisma`, migration script, `saas/app/admin/(panel)/wines/`, `saas/app/(site)/wines/`, `saas/app/actions/submitWineOrder.ts`, `saas/app/admin/(panel)/wine-orders/`
+### #116 — Wine hierarchy (Claude tested 2026-07-17, needs Max to test — especially admin, which Claude couldn't log into)
+**First: set the real wine types!** Migration defaulted every wine to RED / DRY / year 2026 — fix each one in admin.
+1. Go to `/admin/wines` → each wine row shows badges (RED, DRY) + "1 vintage" → click a row to expand
+2. Expanded row shows the vintage sub-list (2026 · old price) → click Edit on the product → set the real type (e.g. Rkatsiteli Amber → AMBER), sweetness, sparkling, alcohol % → Save
+3. Vintage: Edit → change year to the real year → Save; try "+ Add vintage" with a second year + different price
+4. Vintage image override: edit a vintage → pick a photo → "override image" tag appears on the vintage row → public card for that vintage shows the override photo
+5. Delete a vintage → wine disappears from public catalogue if it has no other active vintage (admin row stays)
+6. Go to `/wines` → each vintage is its own card with a year badge; meta line shows "Red Dry", "Sparkling", alcohol %
+7. Filter pills: Type + Style rows → combinations filter correctly; "All" resets each row
+8. Order 2 different vintages → drawer shows "Name YEAR ×qty" lines → submit → success
+9. `/admin/wine-orders` → new order shows items as "Wine Name · 2026 × 3 bottles"; old (pre-migration) orders still display their wines
+10. Pack mode → summary groups bottles by wine + year; print sheet looks right
+11. `/admin/statistics` → wine charts still render (now read from line items)
+12. Note: a test order "TEST — Feature 116 verification" (pending, 18₾) exists from Claude's verification — cancel it or ignore it
 
 ---
 
@@ -220,7 +249,7 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 ## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
 
 - [x] **Neutral fallback defaults** ✅ — rendering components already clean. Admin login page now uses platform logo (`x-platform-logo`) with no NM fallback. `PlatformConfig` DB table added; super-admin Settings page lets you upload the login page logo. New tenants with no logo set see neutral "Admin Panel" text only.
-- [ ] **Multi-tenant auto emailing** — each tenant needs its own sender address (e.g. `bookings@theirwinery.ge`) or at minimum a branded reply-to. Covers: per-tenant `from` address in Resend, booking confirmation email, invoice email, and any future automated emails. Requires domain verification per tenant in Resend. Depends on NM domain migration being settled first.
+- [ ] **Multi-tenant auto emailing** — decided 2026-07-17: shared platform sending domain (default) + per-tenant custom domain later as opt-in; tenant-supplied SMTP/API credentials explicitly rejected. **Blocked: Max doesn't own a domain yet for the shared platform sender.** Full analysis + rough build steps in [[Plan-MultiTenantEmail]].
 - [ ] **NM domain migration** — Nikalas Marani will eventually move to its own standalone deployment; the current multi-tenant SaaS becomes the platform for all other clients. Plan the migration before onboarding a second tenant.
 
 ---

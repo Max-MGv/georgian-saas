@@ -35,6 +35,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
             <div className="flex gap-0.5">
               {[
                 { href: '/super-admin/tenants', label: 'Tenants' },
+                { href: '/super-admin/orders', label: 'Orders' },
                 { href: '/super-admin/users', label: 'Users' },
                 { href: '/super-admin/settings', label: 'Settings' },
               ].map(l => (

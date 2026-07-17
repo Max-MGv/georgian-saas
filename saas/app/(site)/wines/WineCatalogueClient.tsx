@@ -5,9 +5,39 @@ import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 
-type DbWine = { id: string; name: string; type: string; price: number; color: string; imagePath: string | null }
+type DbWine = {
+  vintageId: string
+  wineId: string
+  name: string
+  wineType: 'RED' | 'WHITE' | 'AMBER' | 'ROSE'
+  sweetness: 'DRY' | 'SEMI_DRY' | 'SEMI_SWEET' | 'SWEET'
+  sparkling: boolean
+  alcoholLevel: number | null
+  description: string | null
+  year: number
+  price: number
+  color: string
+  imagePath: string | null
+}
+// Quantities are keyed by vintageId
 type WineQty = Record<string, number>
 type ViewMode = 'grid' | 'list'
+type TypeFilter = DbWine['wineType'] | null
+type StyleFilter = DbWine['sweetness'] | 'SPARKLING' | null
+
+const TYPE_LABEL: Record<DbWine['wineType'], string> = {
+  RED: 'Red', WHITE: 'White', AMBER: 'Amber', ROSE: 'Rosé',
+}
+const SWEETNESS_LABEL: Record<DbWine['sweetness'], string> = {
+  DRY: 'Dry', SEMI_DRY: 'Semi-dry', SEMI_SWEET: 'Semi-sweet', SWEET: 'Sweet',
+}
+
+function wineMeta(wine: DbWine) {
+  const parts = [`${TYPE_LABEL[wine.wineType]} ${SWEETNESS_LABEL[wine.sweetness]}`]
+  if (wine.sparkling) parts.push('Sparkling')
+  if (wine.alcoholLevel != null) parts.push(`${wine.alcoholLevel}%`)
+  return parts.join(' · ')
+}
 type Company = {
   id: string
   name: string
@@ -50,6 +80,8 @@ export default function WineCatalogueClient({
 }) {
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(null)
+  const [styleFilter, setStyleFilter] = useState<StyleFilter>(null)
   const [showDrawer, setShowDrawer] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -101,7 +133,14 @@ export default function WineCatalogueClient({
   }
 
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
-  const totalPrice = WINES.reduce((s, w) => s + (quantities[w.id] ?? 0) * w.price, 0)
+  const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * w.price, 0)
+
+  const visibleWines = WINES.filter(w => {
+    if (typeFilter && w.wineType !== typeFilter) return false
+    if (styleFilter === 'SPARKLING') return w.sparkling
+    if (styleFilter) return w.sweetness === styleFilter
+    return true
+  })
 
   // Close drawer if cart becomes empty (and not on success screen)
   useEffect(() => {
@@ -204,7 +243,7 @@ export default function WineCatalogueClient({
     setError('')
     const form = e.currentTarget
     const formData = new FormData(form)
-    const wines = WINES.map(w => ({ id: w.id, name: w.name, quantity: quantities[w.id] ?? 0, price: w.price }))
+    const wines = WINES.map(w => ({ vintageId: w.vintageId, name: w.name, year: w.year, quantity: quantities[w.vintageId] ?? 0, price: w.price }))
     formData.set('wines', JSON.stringify(wines))
 
     startTransition(async () => {
@@ -228,7 +267,7 @@ export default function WineCatalogueClient({
   }
 
   const selectedCompany = companies.find(c => c.id === companyId)
-  const selectedWines = WINES.filter(w => (quantities[w.id] ?? 0) > 0)
+  const selectedWines = WINES.filter(w => (quantities[w.vintageId] ?? 0) > 0)
 
   // ── Company selector JSX (shared between drawer and popups) ────────────────
   const companySelectorJsx = (companies.length > 0 || hideCompanyDropdown) && (
@@ -429,7 +468,7 @@ export default function WineCatalogueClient({
                 {totalBottles} bottle{totalBottles !== 1 ? 's' : ''}
               </p>
               <p className="text-xs truncate" style={{ color: C.muted }}>
-                {selectedWines.map(w => `${w.name} ×${quantities[w.id]}`).join(' · ')}
+                {selectedWines.map(w => `${w.name} ${w.year} ×${quantities[w.vintageId]}`).join(' · ')}
               </p>
             </div>
             <span className="text-base font-bold flex-shrink-0" style={{ color: C.wine }}>{totalPrice}₾</span>
@@ -490,11 +529,11 @@ export default function WineCatalogueClient({
                   <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: C.faint }}>Your order</p>
                   <div className="flex flex-col gap-1.5">
                     {selectedWines.map(w => (
-                      <div key={w.id} className="flex items-center justify-between text-sm">
+                      <div key={w.vintageId} className="flex items-center justify-between text-sm">
                         <span style={{ color: C.text }}>
-                          {w.name} <span style={{ color: C.muted }}>×{quantities[w.id]}</span>
+                          {w.name} <span style={{ color: C.faint }}>{w.year}</span> <span style={{ color: C.muted }}>×{quantities[w.vintageId]}</span>
                         </span>
-                        <span style={{ color: C.muted }}>{(quantities[w.id]! * w.price)}₾</span>
+                        <span style={{ color: C.muted }}>{(quantities[w.vintageId]! * w.price)}₾</span>
                       </div>
                     ))}
                   </div>
@@ -602,15 +641,64 @@ export default function WineCatalogueClient({
           </div>
         </div>
 
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-8" style={{ backgroundColor: '#e0d4c0' }} />
+
+        {/* ── Filter pills ── */}
+        <div className="flex flex-col gap-2 mb-8">
+          {([
+            {
+              label: 'Type',
+              options: [
+                { value: null, label: 'All' },
+                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).map(t => ({ value: t as TypeFilter | StyleFilter, label: TYPE_LABEL[t] })),
+              ],
+              active: typeFilter as TypeFilter | StyleFilter,
+              set: (v: TypeFilter | StyleFilter) => setTypeFilter(v as TypeFilter),
+            },
+            {
+              label: 'Style',
+              options: [
+                { value: null, label: 'All' },
+                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
+                { value: 'SPARKLING' as TypeFilter | StyleFilter, label: 'Sparkling' },
+              ],
+              active: styleFilter as TypeFilter | StyleFilter,
+              set: (v: TypeFilter | StyleFilter) => setStyleFilter(v as StyleFilter),
+            },
+          ]).map(row => (
+            <div key={row.label} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wider w-10 flex-shrink-0" style={{ color: C.faint }}>{row.label}</span>
+              {row.options.map(opt => {
+                const isActive = row.active === opt.value
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => row.set(opt.value)}
+                    className="text-xs px-3 py-1.5 rounded-full font-medium border transition-colors"
+                    style={isActive
+                      ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#ffffff' }
+                      : { borderColor: C.border, color: C.muted, backgroundColor: 'transparent' }}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+
+        {visibleWines.length === 0 && (
+          <p className="text-sm text-center py-12" style={{ color: C.faint }}>No wines match these filters.</p>
+        )}
 
         {/* ── GRID VIEW ── */}
         {view === 'grid' && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {WINES.map(wine => {
-              const qty = quantities[wine.id] ?? 0
+            {visibleWines.map(wine => {
+              const qty = quantities[wine.vintageId] ?? 0
               return (
-                <div key={wine.id} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+                <div key={wine.vintageId} className="rounded-xl border overflow-hidden flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
                   <div className="h-44 flex items-center justify-center"
                     style={wine.imagePath ? { backgroundColor: '#faf6f0' } : { background: `linear-gradient(to bottom, ${wine.color}, ${wine.color}99)` }}>
                     {wine.imagePath ? (
@@ -625,13 +713,16 @@ export default function WineCatalogueClient({
                   </div>
                   <div className="p-4 flex flex-col gap-3 flex-1">
                     <div>
-                      <p className="font-bold text-sm" style={{ color: '#1c1008' }}>{wine.name}</p>
-                      <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wine.type}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm" style={{ color: '#1c1008' }}>{wine.name}</p>
+                        <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>{wine.year}</span>
+                      </div>
+                      <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-auto">
                       <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}₾ / bottle</span>
                       {qty === 0 ? (
-                        <button type="button" onClick={() => setQty(wine.id, 1)}
+                        <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                           className="w-8 h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
                           style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
                           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
@@ -639,19 +730,19 @@ export default function WineCatalogueClient({
                         >+</button>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <button type="button" onClick={() => setQty(wine.id, -1)}
+                          <button type="button" onClick={() => setQty(wine.vintageId, -1)}
                             className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
                             style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={qty}
-                            onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
+                            onChange={e => setQtyDirect(wine.vintageId, parseInt(e.target.value) || 0)}
                             onFocus={e => e.target.select()}
                             className="w-9 text-center font-semibold text-sm border rounded outline-none"
                             style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }}
                           />
-                          <button type="button" onClick={() => setQty(wine.id, 1)}
+                          <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                             className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
                             style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
                         </div>
@@ -675,11 +766,11 @@ export default function WineCatalogueClient({
               <span className="text-right">Total</span>
             </div>
 
-            {WINES.map((wine, i) => {
-              const qty = quantities[wine.id] ?? 0
+            {visibleWines.map((wine, i) => {
+              const qty = quantities[wine.vintageId] ?? 0
               const lineTotal = qty * wine.price
               return (
-                <div key={wine.id} className="grid items-center px-4 py-3 border-b last:border-b-0"
+                <div key={wine.vintageId} className="grid items-center px-4 py-3 border-b last:border-b-0"
                   style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', borderColor: '#e0d4c0', backgroundColor: i % 2 === 0 ? '#fff9f3' : '#fdf7ef' }}>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-10 rounded flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: '#f5efe6' }}>
@@ -690,14 +781,17 @@ export default function WineCatalogueClient({
                       )}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.name}</p>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wine.type}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.name}</p>
+                        <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>{wine.year}</span>
+                      </div>
+                      <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wineMeta(wine)}</p>
                     </div>
                   </div>
                   <p className="text-sm font-medium text-center" style={{ color: '#6b5a47' }}>{wine.price}₾</p>
                   <div className="flex items-center justify-center gap-1">
                     {qty === 0 ? (
-                      <button type="button" onClick={() => setQty(wine.id, 1)}
+                      <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                         className="w-7 h-7 rounded border-2 font-bold text-base flex items-center justify-center transition-colors hover:text-white"
                         style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
@@ -705,15 +799,15 @@ export default function WineCatalogueClient({
                       >+</button>
                     ) : (
                       <>
-                        <button type="button" onClick={() => setQty(wine.id, -1)}
+                        <button type="button" onClick={() => setQty(wine.vintageId, -1)}
                           className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
                           style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>−</button>
                         <input type="text" inputMode="numeric" value={qty}
-                          onChange={e => setQtyDirect(wine.id, parseInt(e.target.value) || 0)}
+                          onChange={e => setQtyDirect(wine.vintageId, parseInt(e.target.value) || 0)}
                           onFocus={e => e.target.select()}
                           className="w-10 text-center text-sm font-semibold border rounded outline-none"
                           style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008' }} />
-                        <button type="button" onClick={() => setQty(wine.id, 1)}
+                        <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                           className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
                           style={{ borderColor: '#e0d4c0', color: '#1c1008', backgroundColor: '#f5efe6' }}>+</button>
                       </>

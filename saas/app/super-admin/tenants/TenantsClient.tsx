@@ -15,6 +15,7 @@ type Tenant = {
   primaryHover: string
   orderCount: number
   companyCount: number
+  wineOrderCount: number
 }
 
 const C = {
@@ -103,7 +104,18 @@ export default function TenantsClient({ tenants: initial }: { tenants: Tenant[] 
             {/* Name + domain */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="font-medium" style={{ color: C.text, fontSize: 15 }}>{t.name}</div>
-              <div style={{ color: C.faint, fontSize: 13, marginTop: 2 }}>{t.domain}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <span style={{ color: C.faint, fontSize: 13 }}>{t.domain}</span>
+                <a
+                  href={`https://${t.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#818cf8', fontSize: 12, textDecoration: 'none' }}
+                  title="Open live site"
+                >
+                  Open ↗
+                </a>
+              </div>
             </div>
 
             {/* Slug */}
@@ -124,6 +136,10 @@ export default function TenantsClient({ tenants: initial }: { tenants: Tenant[] 
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: C.text, fontSize: 16, fontWeight: 600 }}>{t.companyCount}</div>
                 <div style={{ color: C.faint, fontSize: 11 }}>companies</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: C.text, fontSize: 16, fontWeight: 600 }}>{t.wineOrderCount}</div>
+                <div style={{ color: C.faint, fontSize: 11 }}>wine orders</div>
               </div>
             </div>
 
@@ -168,7 +184,7 @@ export default function TenantsClient({ tenants: initial }: { tenants: Tenant[] 
                 >
                   Edit
                 </Link>
-                {t.orderCount === 0 && t.companyCount === 0 && (
+                {t.orderCount === 0 && t.companyCount === 0 && t.wineOrderCount === 0 && (
                   <button
                     onClick={() => handleDeleteClick(t.id)}
                     style={{

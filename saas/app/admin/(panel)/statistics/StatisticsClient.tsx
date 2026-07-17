@@ -17,6 +17,8 @@ type MonthData = { month: string; orders: number; revenue: number }
 type Order = { id: string; date: string; totalPrice: number; companyId: string | null; companyName: string | null }
 type Company = { id: string; name: string }
 type Props = {
+  bookingOn: boolean
+  wineOrdersOn: boolean
   totalOrders: number
   totalRevenue: number
   monthOrders: number
@@ -74,41 +76,52 @@ const tooltipStyle = {
 type Mode = 'bookings' | 'wine'
 
 export default function StatisticsClient({
+  bookingOn, wineOrdersOn,
   totalOrders, totalRevenue, monthOrders, monthRevenue,
   byMonth, byVisitType, byBookingType, topCompanies,
   orders, companies, wineOrders,
 }: Props) {
-  const [mode, setMode] = useState<Mode>('bookings')
+  const [mode, setMode] = useState<Mode>(bookingOn ? 'bookings' : 'wine')
   const [showV1, setShowV1] = useState(false)
   const avgRevenue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
+
+  if (!bookingOn && !wineOrdersOn) {
+    return (
+      <p className="text-sm" style={{ color: C.faint }}>
+        No modules enabled for this tenant — nothing to show statistics for.
+      </p>
+    )
+  }
 
   return (
     <div className="space-y-6">
 
-      {/* Mode switcher */}
-      <div className="flex items-center gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: C.border }}>
-        {([['bookings', 'Bookings'], ['wine', 'Wine Orders']] as [Mode, string][]).map(([m, label]) => (
-          <button
-            key={m}
-            onClick={() => { setMode(m); setShowV1(false) }}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-            style={{
-              backgroundColor: mode === m ? C.wine : 'transparent',
-              color: mode === m ? '#fff' : C.muted,
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Mode switcher — only when both modules are on */}
+      {bookingOn && wineOrdersOn && (
+        <div className="flex items-center gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: C.border }}>
+          {([['bookings', 'Bookings'], ['wine', 'Wine Orders']] as [Mode, string][]).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => { setMode(m); setShowV1(false) }}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+              style={{
+                backgroundColor: mode === m ? C.wine : 'transparent',
+                color: mode === m ? '#fff' : C.muted,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Wine Orders view */}
-      {mode === 'wine' && (
+      {wineOrdersOn && mode === 'wine' && (
         <WineStatistics orders={wineOrders} />
       )}
 
       {/* Bookings view */}
-      {mode === 'bookings' && !showV1 && (
+      {bookingOn && mode === 'bookings' && !showV1 && (
         <>
           <StatisticsV2 orders={orders} companies={companies} />
           <div className="flex justify-center pt-2">

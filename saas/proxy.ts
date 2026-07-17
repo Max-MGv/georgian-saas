@@ -10,6 +10,9 @@ interface TenantInfo {
   logoAlt: string
   faviconUrl: string | null
   displayName: string
+  modulesBooking: boolean
+  modulesWineOrders: boolean
+  modulesPublicSite: boolean
   cachedAt: number
 }
 
@@ -62,6 +65,9 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     logoAlt: tenant?.logoAlt ?? tenant?.displayName ?? tenant?.name ?? '',
     faviconUrl: tenant?.faviconUrl ?? null,
     displayName: tenant?.displayName ?? tenant?.name ?? 'Your Winery',
+    modulesBooking: tenant?.modulesBooking ?? true,
+    modulesWineOrders: tenant?.modulesWineOrders ?? false,
+    modulesPublicSite: tenant?.modulesPublicSite ?? true,
     cachedAt: Date.now(),
   }
   tenantCache.set(cacheKey, info)
@@ -71,8 +77,10 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
 export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
-  const [{ tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName }, platform] =
-    await Promise.all([resolveTenant(host), resolvePlatform()])
+  const [
+    { tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
+    platform,
+  ] = await Promise.all([resolveTenant(host), resolvePlatform()])
 
   // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
@@ -85,6 +93,8 @@ export async function proxy(request: NextRequest) {
   if (faviconUrl) requestHeaders.set('x-tenant-favicon', faviconUrl)
   if (platform.logoUrl) requestHeaders.set('x-platform-logo', platform.logoUrl)
   requestHeaders.set('x-platform-logo-alt', platform.logoAlt)
+  requestHeaders.set('x-tenant-modules-booking', String(modulesBooking))
+  requestHeaders.set('x-tenant-modules-wine-orders', String(modulesWineOrders))
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },
@@ -133,10 +143,19 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isLoginPage && user) {
-    const belongsHere = isSuperAdmin || user.app_metadata?.tenantId === tenantId
-    if (belongsHere) {
+    if (isSuperAdmin) {
+      return NextResponse.redirect(new URL('/super-admin', request.url))
+    }
+    if (user.app_metadata?.tenantId === tenantId) {
       return NextResponse.redirect(new URL('/admin', request.url))
     }
+  }
+
+  // Public Website module off — send all public-facing routes to a coming-soon page.
+  // Admin/super-admin panels stay fully usable regardless of this flag.
+  const isComingSoonPage = request.nextUrl.pathname === '/coming-soon'
+  if (!modulesPublicSite && !isAdminRoute && !isSuperAdminRoute && !isComingSoonPage) {
+    return NextResponse.redirect(new URL('/coming-soon', request.url))
   }
 
   return response

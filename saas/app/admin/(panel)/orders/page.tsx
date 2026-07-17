@@ -2,6 +2,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
+import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrdersFilters from './OrdersFilters'
@@ -20,6 +21,7 @@ type SearchParams = {
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  await requireBookingModule()
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'

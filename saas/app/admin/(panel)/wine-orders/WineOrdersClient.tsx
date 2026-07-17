@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
-import PackingView, { type PackingOrder, type PackingLayoutType, type BoxMode } from './PackingView'
+import PackingView, { type WineOrderItem, type PackingLayoutType, type BoxMode } from './PackingView'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -18,8 +18,6 @@ const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: str
   cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', label: 'Cancelled' },
 }
 
-type WineSelection = { id: string; name: string; quantity: number; price?: number }
-
 type WineOrder = {
   id: string
   businessName: string
@@ -29,13 +27,17 @@ type WineOrder = {
   workingHours: string | null
   contactName: string
   contactPhone: string
-  wines: unknown
+  wineItems: WineOrderItem[]
   totalAmount: number | null
   discountPercent: number | null
   displayTotal: number | null
   totalEstimated: boolean
   status: string
   createdAt: Date | string
+}
+
+function itemLabel(i: WineOrderItem) {
+  return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot} × ${i.quantity} bottle${i.quantity !== 1 ? 's' : ''}`
 }
 
 const STAGES = ['pending', 'confirmed', 'paid', 'delivered'] as const
@@ -313,7 +315,6 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
         </thead>
         <tbody style={{ backgroundColor: '#ffffff' }}>
           {orders.map((order, i) => {
-            const wines = order.wines as WineSelection[]
             const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
             const isInactive = order.status === 'delivered' || order.status === 'cancelled'
             const isPending = pendingChange?.orderId === order.id
@@ -334,10 +335,10 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                 <td className="px-4 py-3">
                   <p className="font-semibold" style={{ color: C.text }}>{order.businessName}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {wines.map(w => (
-                      <span key={w.id} className="text-xs px-1.5 py-0.5 rounded border"
+                    {order.wineItems.map(item => (
+                      <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
                         style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                        {w.name} × {w.quantity}
+                        {itemLabel(item)}
                       </span>
                     ))}
                   </div>
@@ -455,8 +456,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll }: {
         </thead>
         <tbody style={{ backgroundColor: '#ffffff' }}>
           {orders.map((order, i) => {
-            const wines = order.wines as WineSelection[]
-            const bottles = wines.reduce((s, w) => s + w.quantity, 0)
+            const bottles = order.wineItems.reduce((s, item) => s + item.quantity, 0)
             const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
             const isSelected = selected.has(order.id)
             const isLast = i === orders.length - 1
@@ -478,10 +478,10 @@ function PackingTable({ orders, selected, onToggle, onToggleAll }: {
                 <td className="px-4 py-3">
                   <p className="font-semibold" style={{ color: C.text }}>{order.businessName}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {wines.map(w => (
-                      <span key={w.id} className="text-xs px-1.5 py-0.5 rounded border"
+                    {order.wineItems.map(item => (
+                      <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
                         style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                        {w.name} × {w.quantity}
+                        {itemLabel(item)}
                       </span>
                     ))}
                   </div>
@@ -547,7 +547,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
   }), [filteredOrders, recentlyInactive])
 
   const selectedOrders = useMemo(() =>
-    orders.filter(o => selected.has(o.id)) as unknown as PackingOrder[],
+    orders.filter(o => selected.has(o.id)),
     [orders, selected]
   )
 
@@ -642,7 +642,6 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         )}
         <div className="flex flex-col gap-4" ref={listRef}>
           {cardsVisible.map(order => {
-            const wines = order.wines as WineSelection[]
             const isInactive = order.status === 'cancelled' || order.status === 'delivered'
             const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
             const isPending = pendingChange?.orderId === order.id
@@ -665,10 +664,10 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {wines.map(w => (
-                        <span key={w.id} className="text-xs px-2 py-1 rounded border"
+                      {order.wineItems.map(item => (
+                        <span key={item.id} className="text-xs px-2 py-1 rounded border"
                           style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
-                          {w.name} &times; {w.quantity}
+                          {itemLabel(item)}
                         </span>
                       ))}
                     </div>

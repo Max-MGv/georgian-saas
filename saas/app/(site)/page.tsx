@@ -23,6 +23,7 @@ export default async function Home({ searchParams }: PageProps) {
   const [cookieStore, defaultLocale, h] = await Promise.all([cookies(), getSetting('default_locale'), headers()])
   const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const locale = sp.locale ?? cookieLocale
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
@@ -241,26 +242,28 @@ export default async function Home({ searchParams }: PageProps) {
                 </EditableText>
               ) : (c['home_book_btn'] || t(locale, 'nav.book'))}
             </a>
-            <a href="/wines" className="hero-btn hero-btn-wine" style={{
-              backgroundColor: 'rgba(10,5,2,0.52)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              border: '2px solid rgba(255,255,255,0.65)',
-              borderRadius: '8px',
-              padding: '12px 32px',
-              color: 'white',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              textDecoration: 'none',
-              display: 'inline-block',
-            }}>
-              {isAdmin ? (
-                <EditableText contentKey="home_order_wine_btn" section="home" label='"Order Wine" button'
-                  locale={locale} fallback={t(locale, 'home.order_wine')} isAdmin as="span">
-                  {c['home_order_wine_btn'] ?? null}
-                </EditableText>
-              ) : (c['home_order_wine_btn'] || t(locale, 'home.order_wine'))}
-            </a>
+            {wineOrdersOn && (
+              <a href="/wines" className="hero-btn hero-btn-wine" style={{
+                backgroundColor: 'rgba(10,5,2,0.52)',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                border: '2px solid rgba(255,255,255,0.65)',
+                borderRadius: '8px',
+                padding: '12px 32px',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '0.95rem',
+                textDecoration: 'none',
+                display: 'inline-block',
+              }}>
+                {isAdmin ? (
+                  <EditableText contentKey="home_order_wine_btn" section="home" label='"Order Wine" button'
+                    locale={locale} fallback={t(locale, 'home.order_wine')} isAdmin as="span">
+                    {c['home_order_wine_btn'] ?? null}
+                  </EditableText>
+                ) : (c['home_order_wine_btn'] || t(locale, 'home.order_wine'))}
+              </a>
+            )}
           </div>
 
         </section>

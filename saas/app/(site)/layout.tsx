@@ -19,6 +19,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const navContent = await getContentMap('nav', locale)
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
   const email    = contactEmail    || ''
   const phone    = contactPhone    || ''
@@ -28,7 +29,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
-      <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt}
+      <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt} wineOrdersOn={wineOrdersOn}
         contactEmail={email} contactPhone={phone} contactFacebook={facebook} contactInstagram={instagram} />
 
       <main className="flex-1">

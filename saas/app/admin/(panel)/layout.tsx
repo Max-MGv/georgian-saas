@@ -7,6 +7,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: { user } } = await supabase.auth.getUser()
   const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#f0ebe3' }}>
@@ -38,16 +40,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Nav links row — scrollable on mobile */}
         <div className="flex gap-1 overflow-x-auto px-4 pb-2" style={{ scrollbarWidth: 'none' }}>
           {[
-            { href: '/admin/orders', label: 'Orders' },
-            { href: '/admin/companies', label: 'Companies' },
-            { href: '/admin/statistics', label: 'Statistics' },
-            { href: '/admin/wines', label: 'Wines' },
-            { href: '/admin/wine-orders', label: 'Wine Orders' },
-            { href: '/admin/menu-items', label: 'Menu Items' },
-            { href: '/admin/masterclass', label: 'Masterclass' },
-            { href: '/admin/content', label: 'Site Content' },
-            { href: '/admin/settings', label: 'Settings' },
-          ].map(link => (
+            { href: '/admin/orders', label: 'Orders', show: bookingOn },
+            { href: '/admin/companies', label: 'Companies', show: true },
+            { href: '/admin/statistics', label: 'Statistics', show: true },
+            { href: '/admin/wines', label: 'Wines', show: wineOrdersOn },
+            { href: '/admin/wine-orders', label: 'Wine Orders', show: wineOrdersOn },
+            { href: '/admin/menu-items', label: 'Menu Items', show: bookingOn },
+            { href: '/admin/masterclass', label: 'Masterclass', show: bookingOn },
+            { href: '/admin/content', label: 'Site Content', show: true },
+            { href: '/admin/settings', label: 'Settings', show: true },
+          ].filter(link => link.show).map(link => (
             <a
               key={link.href}
               href={link.href}

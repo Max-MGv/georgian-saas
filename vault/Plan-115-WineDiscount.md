@@ -20,4 +20,4 @@ Progress tracker. If context runs out mid-task, resume here.
 - [x] 10. `admin/(panel)/wine-orders/WineOrdersClient.tsx` — discountPercent type + −X% badge
 - [x] 11. `admin/(panel)/wine-orders/page.tsx` — pass discountPercent in ordersWithTotal
 - [x] 12. Update vault docs (SessionLog, FeatureLog, MyToDo — Roadmap had no #115 entry)
-- [ ] 13. Git commit
+- [x] 13. Git commit — `fe86d14`

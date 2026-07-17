@@ -4,8 +4,9 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 
 export type WineSelection = {
-  id: string
+  vintageId: string
   name: string
+  year: number
   quantity: number
   price: number
 }
@@ -41,22 +42,33 @@ export async function submitWineOrder(formData: FormData) {
   const tenantId = await getTenantId()
 
   try {
-    await withTenantDb(tenantId, tx => tx.wineOrder.create({
-      data: {
-        businessName,
-        llcName: llcName || null,
-        llcId: llcId || null,
-        address,
-        workingHours: workingHours || null,
-        contactName,
-        contactPhone,
-        wines: selectedWines,
-        totalAmount,
-        discountPercent: discountPercent || null,
-        tenantId,
-        companyId: companyId || null,
-      },
-    }))
+    await withTenantDb(tenantId, async (tx) => {
+      const order = await tx.wineOrder.create({
+        data: {
+          businessName,
+          llcName: llcName || null,
+          llcId: llcId || null,
+          address,
+          workingHours: workingHours || null,
+          contactName,
+          contactPhone,
+          totalAmount,
+          discountPercent: discountPercent || null,
+          tenantId,
+          companyId: companyId || null,
+        },
+      })
+      await tx.wineOrderItem.createMany({
+        data: selectedWines.map(w => ({
+          wineOrderId: order.id,
+          wineVintageId: w.vintageId,
+          wineNameSnapshot: w.name,
+          vintageYearSnapshot: w.year,
+          priceSnapshot: w.price,
+          quantity: w.quantity,
+        })),
+      })
+    })
     return { success: true }
   } catch {
     return { error: 'Something went wrong. Please try again.' }

@@ -45,3 +45,11 @@ A record of key choices made and why — useful when revisiting or explaining tr
 **Chose:** ~150–200 GEL setup + 50 GEL/month
 **Rejected:** Pure monthly SaaS, per-booking commission
 **Why:** Setup fee covers onboarding time and filters out non-serious clients. Monthly is low enough (≈$18) to be a no-brainer for any active business. Commission model is hard to track and invasive.
+
+---
+
+## 2026-07-17 — Multi-tenant email: shared platform domain, not tenant-supplied credentials
+
+**Chose:** One shared platform sending domain, per-tenant display name + reply-to (default); per-tenant custom domain later as an opt-in for tenants who own their own domain
+**Rejected:** Letting each tenant enter their own SMTP/email-provider credentials for the platform to send through
+**Why:** Tenant-supplied credentials mean storing third-party secrets per tenant (breach risk), poor fit for non-technical users (Gmail/Outlook SMTP throttles hard and needs app-password workarounds), and deliverability/support becomes tenant-dependent and hard to debug. A shared verified domain needs zero setup per client and is the standard SaaS pattern. **Blocked:** Max doesn't yet own a domain to verify as the platform's shared sender — nothing here can be built until one is acquired. See [[Plan-MultiTenantEmail]] for full options analysis and the rough shape of the work.
