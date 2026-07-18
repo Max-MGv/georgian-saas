@@ -112,5 +112,13 @@ When you hit ~25–30 clients on a single Supabase account, open a new account a
 
 | Name | Slug | Domain | Tenant ID |
 |---|---|---|---|
-| Nikalas Marani | nikalasmrani | nikalasmarani.ge | `cmqou94er0000vl1sl9v0yv54` |
+| Nikalas Marani | nikalasmrani | nikalasmarani.vercel.app | `cmqou94er0000vl1sl9v0yv54` |
 | Test Winery | winery2 | winery2.local | `cmqou94sx0001vl1sga705ltt` |
+
+> Nikalas Marani moved from `nikalasmarani.ge` to `nikalasmarani.vercel.app` on 2026-07-18 (Max doesn't control the .ge domain yet — swap back via the Step 1–2 procedure above once he gains it).
+
+---
+
+## Unknown domains = no tenant (since 2026-07-18, #123)
+
+A domain with no `Tenant.domain` match resolves to **no tenant** — public routes redirect to the `/welcome` platform pitch page; `/super-admin` and `/admin/login` still work there (the bare `georgian-saas.vercel.app` doubles as platform HQ). There is no longer a global `DEFAULT_TENANT_ID` fallback for unknown domains — that env var now only affects localhost dev. Consequence for migrations: if you update `Tenant.domain` but forget to add the new domain in Vercel (or typo it), visitors see the placeholder page, not a half-broken tenant site.

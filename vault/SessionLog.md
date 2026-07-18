@@ -8,6 +8,39 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-18 — Push #116–#122, no-tenant state + domain migration (#123) (full detail)
+
+### Completed
+
+**Pushed the backlog of uncommitted work.** 8 unpushed commits plus ~48 files of uncommitted changes (#115–#122 sessions) committed as `8a07888` and pushed. Production build verified clean first (0 TS errors; initial `EPERM` build failure was just the dev server holding the Prisma DLL lock — killed it, rebuilt, fine).
+
+**Bug found by Max after deploy: wine orders section missing on the live site.** Root cause turned out to be a pre-existing split-brain in `resolveTenant()` (`saas/proxy.ts`): `tenantId` fell back to `DEFAULT_TENANT_ID` (NM's ID) for *any* unknown domain, but every other `TenantInfo` field (displayName, brand colors, module flags) fell back to generic hardcoded defaults. `georgian-saas.vercel.app` has never been a `Tenant.domain` row, so it served NM's real data under the name "Your Winery" with default module flags — invisible until #120 made `modulesWineOrders` (default **false**) actually hide things. Brand color matched by pure coincidence (default hex = NM's seeded hex).
+
+**#123 — True no-tenant state + `/welcome` placeholder + NM domain migration** (plan approved by Max before any edits):
+- `proxy.ts`: `DEFAULT_TENANT_ID` fallback now scoped to localhost dev only; unknown domains → `tenantId: null`
+- No-tenant routing: public routes → redirect to new `/welcome`; `/super-admin` + `/admin/login` keep working (platform domain = HQ, Max's choice); tenant `/admin` → redirects to login (or `/super-admin` for super_admin); `/welcome` on a *real* tenant domain redirects to `/`
+- `saas/app/welcome/page.tsx` — NEW: static KA+EN pitch page ("ეს შეიძლება იყოს თქვენი მარნის საიტი / This could be your winery's website"), 3 feature cards (bookings / wine orders / admin panel), contact email; dark platform style; reads only the `x-platform-logo` header, no DB
+- DB: NM `Tenant.domain` → `nikalasmarani.vercel.app` (one-off script, deleted after; Max had already added the domain in Vercel). Per `MigrationNotes.md` the domain is only a lookup key — nothing else needed; admin auth keyed to tenant ID
+- Hardcoded-reference sweep: no live refs to `nikalasmarani.ge` in runtime code — only one-off seed scripts (fail loudly if rerun, acceptable), email comments, UI placeholder text
+
+**Verified live in browser after deploy** (`d7cf205`): `georgian-saas.vercel.app` → `/welcome` placeholder renders; `/super-admin` → login form. `nikalasmarani.vercel.app` → full NM site, correct title, **Order Wine restored in nav + hero**, `/wines` renders. Localhost still resolves NM via the (now localhost-only) `DEFAULT_TENANT_ID`.
+
+**Also this session:** clarified two backlog items in `Roadmap.md` — "printable wine packing sheet" is actually **per-bottle/case stickers** (wine + ordering company), distinct from the existing Pack-mode print; "printable daily booking sheet" is an **A4 staff printout**. Neither started.
+
+### Files changed
+- `saas/proxy.ts` — localhost-only fallback + no-tenant routing block
+- `saas/app/welcome/page.tsx` — NEW
+- DB: NM tenant domain updated (no schema change)
+- Vault: `FeatureLog.md` (#123), `Roadmap.md` (#123 row + backlog clarifications), `MigrationNotes.md` (tenant table, no-tenant section), `MaintenanceNotes.md` (§4 wording), `SessionLog.md` (this entry)
+
+### What's next / for Max
+- **Tell the Nikalas Marani family**: public site + admin login both live at `nikalasmarani.vercel.app` now; credentials unchanged; old `georgian-saas.vercel.app` shows the platform placeholder
+- Minor cosmetic: the login page on the platform domain still titles the tab "Your Winery — Book a Visit" (root layout metadata default) — worth a small tidy sometime
+- When Max gains `nikalasmarani.ge`: swap domains via `MigrationNotes.md` Steps 1–2
+- Next features queued: printable daily booking sheet (A4) + wine packing stickers — scope notes in Roadmap backlog
+
+---
+
 ## 2026-07-17 (session 3) — Feature #120 Per-tenant module toggles (full detail)
 
 ### Completed
@@ -77,34 +110,9 @@ TypeScript: 0 errors throughout both #121 and #122.
 
 ---
 
-## 2026-07-17 (session 2) — Feature #119 Super-admin panel quick wins (full detail)
+## 2026-07-17 (session 2) — Feature #119 Super-admin panel quick wins (compressed)
 
-### Completed
-
-Reviewed the whole `/super-admin` panel (Tenants, Users, tenant edit form, server actions) and found six no-brainer improvements — implemented all six, plus a real bug found during the review.
-
-**Bug fix — Users page role changes were silently broken.** `setUserTenant`/`setUserSuperAdmin`/`removeUserAdminRole` in `superAdmin.ts` sent `{ role: undefined }` or `{}` to Supabase's admin update API to clear the old role. `JSON.stringify` drops `undefined` keys before the request even goes out, and Supabase's metadata update does a shallow merge (not a replace) — so the old `role`/`tenantId` value was never actually cleared. "Remove access" was a no-op; changing someone from tenant-admin to super-admin (or back) left the stale field in place. Fixed by sending explicit `null` for the field being cleared. This was previously untested (Users page marked "user tested: ❌ No" since it was built).
-
-**Six quick wins:**
-- Wine order count added to `getTenants()` + shown on tenant cards (previously only bookings + companies were visible)
-- `deleteTenant` safety check extended to also block on wine orders/wines, not just orders/companies (a tenant with only wine data could previously be deleted)
-- "Open ↗" link on each tenant card → opens `https://{domain}` in a new tab
-- Tenant ID + Copy button added to the edit form (needed for `set-admin` script and seed scripts; previously had to look it up in the DB)
-- Duplicate domain/slug now shows a friendly error ("That domain is already used by another tenant...") instead of a raw Prisma P2002 error — added a `friendlyUniqueConstraintError` helper in `superAdmin.ts`
-- "Remove access" on the Users page now requires an inline Yes/No confirm, matching the pattern already used for tenant delete
-
-**Verified in browser** (Max logged in as super_admin himself — I don't handle credentials): wine order counts + Open ↗ links visible on Tenants page; Tenant ID field + Copy button confirmed working (button flashes "Copied ✓"); Remove-access confirm step confirmed appearing correctly (clicked Cancel, did not actually remove the real client's access). TypeScript: 0 errors.
-
-### Files changed
-- `saas/app/actions/superAdmin.ts` — metadata null fix, wine order count, delete safety check, friendly P2002 error
-- `saas/app/super-admin/tenants/TenantsClient.tsx` — wine order stat, Open ↗ link, delete button condition
-- `saas/app/super-admin/tenants/TenantFormClient.tsx` — Tenant ID + Copy field
-- `saas/app/super-admin/users/UsersClient.tsx` — confirm step before Remove access
-- Vault: `FeatureLog.md` (#119 row), `MyToDo.md` (test checklist)
-
-### What's next
-- Max: run the 5-step checklist in `MyToDo.md` under #119 — item 5 (verifying the role-clear bug fix) is the important one
-- Proposed next: per-tenant module toggles (Bookings / Wine Orders / Public Website) — see proposal in chat; not yet built, needs Max's decision on scope before starting
+#119 Six super-admin quick wins (wine order count on tenant cards; deleteTenant blocks on wine data; Open ↗ links; Tenant ID + Copy in edit form; friendly P2002 duplicate-domain error; Remove-access inline confirm) + real bug fix: role changes were silently no-ops because `{ role: undefined }` is dropped by JSON.stringify and Supabase metadata updates shallow-merge — fixed with explicit `null`. Browser-verified. Max's checklist in `MyToDo.md` (#119, item 5 matters most).
 
 ---
 

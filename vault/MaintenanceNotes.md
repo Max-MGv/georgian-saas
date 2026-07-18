@@ -82,7 +82,7 @@ This is Windows-only. On Mac/Linux the rename succeeds even with the file open, 
 `proxy.ts` resolves the tenant from the `Host` header on every request and forwards it as `x-tenant-id`. Every admin page reads that single ID and filters its DB queries by it. The `super_admin` role only changes the **access check** — "is this user allowed to view this tenant's admin" — it does not aggregate data across tenants. There is no cross-tenant view anywhere in the app today.
 
 **The localhost trap:**
-`localhost` isn't a real tenant domain, so `resolveTenant()` falls back to a fixed `DEFAULT_TENANT_ID` env var instead of a domain lookup:
+`localhost` isn't a real tenant domain, so `resolveTenant()` falls back to a fixed `DEFAULT_TENANT_ID` env var instead of a domain lookup. (Since #123, 2026-07-18, this fallback applies **only** to localhost — any other unrecognized domain resolves to no tenant at all and shows the `/welcome` placeholder. Previously `tenantId` fell back to `DEFAULT_TENANT_ID` on every unknown domain while branding/module flags fell back to generic defaults, causing a split-brain state.)
 ```ts
 if (isLocal) {
   const defaultId = process.env.DEFAULT_TENANT_ID
