@@ -27,6 +27,8 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 **Also this session:** clarified two backlog items in `Roadmap.md` — "printable wine packing sheet" is actually **per-bottle/case stickers** (wine + ordering company), distinct from the existing Pack-mode print; "printable daily booking sheet" is an **A4 staff printout**. Neither started.
 
+**#124 — Domain check tool in super-admin tenant form.** Max asked for a UI tool to assign a tenant to a domain — turned out the Domain field in the tenant edit form already does the assignment (it's the same `Tenant.domain` write the #123 migration script performed); what was missing was *feedback*. Clarified the two-layer model for Max (Vercel dashboard = "domain reaches our app at all"; our DB = "which tenant the domain belongs to" — Vercel never knows about tenants). Built: `proxy.ts` stamps `x-resolved-tenant` (slug or `none`) on every response; `checkTenantDomain` server action (super-admin gated, HEAD fetch, 8s timeout) interprets it; **Check** button next to the Domain field shows 5 states (this tenant ✓ / different tenant / platform-but-unassigned / not-our-app → "is it in Vercel?" / unreachable); hint text documents the Vercel-first two-step + 5-min cache. Full Vercel-API auto-add (one-click domain attach) considered and deliberately deferred — not worth it until client onboarding is frequent. Verified `x-resolved-tenant: nikalasmarani` on localhost; commit `959c554`. **Max still needs to test the Check button itself** (requires super-admin login).
+
 ### Files changed
 - `saas/proxy.ts` — localhost-only fallback + no-tenant routing block
 - `saas/app/welcome/page.tsx` — NEW
