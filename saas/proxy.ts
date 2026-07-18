@@ -58,7 +58,10 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
 
   const theme = (tenant?.theme as { primaryColor?: string; primaryHover?: string } | null) ?? {}
   const info: TenantInfo = {
-    tenantId: tenant?.id ?? process.env.DEFAULT_TENANT_ID ?? null,
+    // No global DEFAULT_TENANT_ID fallback here — an unknown domain is a real
+    // "no tenant" state (placeholder page). Localhost dev is covered by the
+    // isLocal branch above, which loads the DEFAULT_TENANT_ID tenant row itself.
+    tenantId: tenant?.id ?? null,
     brandColor: theme.primaryColor ?? '#7c1d23',
     brandHover: theme.primaryHover ?? '#9b2429',
     logoUrl: tenant?.logoUrl ?? null,
@@ -149,6 +152,25 @@ export async function proxy(request: NextRequest) {
     if (user.app_metadata?.tenantId === tenantId) {
       return NextResponse.redirect(new URL('/admin', request.url))
     }
+  }
+
+  // ── No-tenant domain (platform HQ) ─────────────────────────────────────────
+  // Unknown domains resolve to no tenant. Public routes show the /welcome
+  // placeholder; /super-admin and /admin/login stay usable so the platform
+  // domain doubles as HQ. Tenant admin pages can't render without a tenant.
+  const isWelcomePage = request.nextUrl.pathname === '/welcome'
+  if (!tenantId) {
+    if (isAdminRoute && !isLoginPage) {
+      return NextResponse.redirect(new URL(isSuperAdmin ? '/super-admin' : '/admin/login', request.url))
+    }
+    if (!isAdminRoute && !isSuperAdminRoute && !isWelcomePage) {
+      return NextResponse.redirect(new URL('/welcome', request.url))
+    }
+    return response
+  }
+  // On real tenant domains the placeholder has no business rendering
+  if (isWelcomePage) {
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
   // Public Website module off — send all public-facing routes to a coming-soon page.
