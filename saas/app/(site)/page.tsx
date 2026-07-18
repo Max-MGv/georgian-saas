@@ -343,6 +343,8 @@ export default async function Home({ searchParams }: PageProps) {
             minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
             blockedDates={blockedDates.map(d => d.date)}
             formContent={formContent}
+            displayPriceTasting={displayPriceTasting}
+            displayPriceLunch={displayPriceLunch}
           />
           {isEditMode && isAdmin && <BookingFormEditOverlay />}
         </div>

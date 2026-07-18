@@ -40,9 +40,11 @@ type Props = {
   minGuestsTastingLunch?: number
   blockedDates?: string[]
   formContent?: Record<string, string>
+  displayPriceTasting?: number | null
+  displayPriceLunch?: number | null
 }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {} }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -236,10 +238,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     ? selectedCompany.prices.find(p => guestCount >= p.minGuests && guestCount <= p.maxGuests) ?? null
     : null
   const tierGap = !isEnhanced && selectedCompany && selectedCompany.prices.length > 0 && !matchedTier
-  const basePrice = visitType === 'TASTING' ? 50 : 100
+  // No invented default rates — when the tenant has no display price set,
+  // the estimate is unknown and the form says "price confirmed after submission"
+  const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
   const estimatedTotal = matchedTier
     ? matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice
-    : basePrice * guestCount
+    : basePrice != null ? basePrice * guestCount : null
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
   const meatItems = menuItems.filter(m => m.type === 'MEAT')
@@ -296,7 +300,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   }
 
   if (status === 'success') {
-    const showPrice = confirmedType === 'INDIVIDUAL' || (confirmedType === 'COMPANY' && showCompanyPrice)
+    // Hide the price on the success screen when it's 0 — that means the tenant
+    // has no pricing configured and the real price will be confirmed manually
+    const showPrice = (confirmedType === 'INDIVIDUAL' || (confirmedType === 'COMPANY' && showCompanyPrice)) && confirmedPrice != null && confirmedPrice > 0
     return (
       <div className="rounded-xl border p-10 text-center" style={{ backgroundColor: C.bg, borderColor: C.border }}>
         <div className="text-4xl mb-4">🍷</div>
@@ -549,16 +555,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           <label style={labelStyle}>{fc('form_visit_type', 'form.visit_type')}</label>
           <div className="grid grid-cols-2 gap-3">
             {([
-              { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: 50 },
-              { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: 100 },
+              { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: displayPriceTasting },
+              { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: displayPriceLunch },
             ] as const).map(opt => (
               <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
                 className="py-3 px-4 rounded-lg border text-left transition-colors"
                 style={{ backgroundColor: visitType === opt.value ? '#fff3ef' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
                 <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
-                <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                  {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price}₾ ${t(locale, 'form.per_pp')}`}
-                </div>
+                {(bookingType === 'COMPANY' || opt.price != null) && (
+                  <div className="text-sm mt-0.5" style={{ color: C.wine }}>
+                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price}₾ ${t(locale, 'form.per_pp')}`}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -768,13 +776,19 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             </div>
           )
         ) : bookingType === 'INDIVIDUAL' ? (
-          <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
-            <div>
-              <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-              <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
+          estimatedTotal != null ? (
+            <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
+              <div>
+                <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
+              </div>
+              <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
             </div>
-            <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
-          </div>
+          ) : (
+            <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
+              <p className="text-sm" style={{ color: C.muted }}>{t(locale, 'form.price_after_submit')}</p>
+            </div>
+          )
         ) : tierGap ? (
           <div className="rounded-lg border p-4" style={{ backgroundColor: '#fff8f0', borderColor: '#fca5a5' }}>
             <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
