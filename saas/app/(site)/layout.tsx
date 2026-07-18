@@ -19,6 +19,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const navContent = await getContentMap('nav', locale)
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const tenantName = h.get('x-tenant-name') ?? ''
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
   const email    = contactEmail    || ''
@@ -26,10 +27,11 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const address  = contactAddress  || ''
   const facebook = contactFacebook || ''
   const instagram = contactInstagram || ''
+  const footerParts = [address, phone, email].filter(Boolean)
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
-      <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt} wineOrdersOn={wineOrdersOn}
+      <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt} tenantName={tenantName} wineOrdersOn={wineOrdersOn}
         contactEmail={email} contactPhone={phone} contactFacebook={facebook} contactInstagram={instagram} />
 
       <main className="flex-1">
@@ -37,7 +39,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </main>
 
       <footer className="border-t px-6 py-8 text-center text-sm" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>
-        <p>{address} · {phone} · {email}</p>
+        {footerParts.length > 0 && <p>{footerParts.join(' · ')}</p>}
         <p className="mt-1">{t(locale, 'footer.cancel')}</p>
       </footer>
     </div>

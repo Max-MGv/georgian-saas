@@ -34,8 +34,12 @@ export default async function ContactPage({ searchParams }: PageProps) {
     getSetting('maps_embed_url'),
   ])
 
-  const activeBgPath       = bgPath || '/images/winery3.jpg'
+  const activeBgPath       = bgPath || null
   const activeMobileBgPath = bgMobilePath || activeBgPath
+  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
+  const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
+  const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
 
   const dx = bgX || '50'
   const dy = bgY || '50'
@@ -44,8 +48,8 @@ export default async function ContactPage({ searchParams }: PageProps) {
   const my = bgMobileY || '50'
   const mz = (parseInt(bgMobileZoom || '') || 100) / 100
 
-  preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
-  if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
+  if (activeBgPath) preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
+  if (activeMobileBgPath && activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
   // Inline-or-editable helper — captured over locale, isAdmin, c
   function ET({ k, s, lbl, fb, as: Tag, className, style }: {
@@ -76,7 +80,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
       {isEditMode && isAdmin && <EditModeSuppressor />}
       <style>{`
         .contact-hero-bg {
-          background-image: url("${activeMobileBgPath}");
+          background-image: ${mobileBgCss};
           background-position: ${mx}% ${my}%;
           background-size: cover;
           transform: scale(${mz});
@@ -84,7 +88,7 @@ export default async function ContactPage({ searchParams }: PageProps) {
         }
         @media (min-width: 640px) {
           .contact-hero-bg {
-            background-image: url("${activeBgPath}");
+            background-image: ${desktopBgCss};
             background-position: ${dx}% ${dy}%;
             transform: scale(${dz});
             transform-origin: ${dx}% ${dy}%;

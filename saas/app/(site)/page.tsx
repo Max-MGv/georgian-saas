@@ -52,15 +52,21 @@ export default async function Home({ searchParams }: PageProps) {
 
   const individualsRow = allCompanies.find(c => c.isIndividual)
   const companies = allCompanies.filter(c => !c.isIndividual)
+  // No invented default prices — the price line is hidden until the tenant sets a display tier
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
-  const displayPriceTasting = displayTier?.pricePerPerson ?? 50
-  const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? 100
+  const displayPriceTasting = displayTier?.pricePerPerson ?? null
+  const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? null
 
-  const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
+  const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const tenantName = h.get('x-tenant-name') ?? ''
 
-  const activeBgPath       = heroBgPath || '/images/winery1.jpg'
+  const activeBgPath       = heroBgPath || null
   const activeMobileBgPath = heroBgMobilePath || activeBgPath
+  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
+  const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
+  const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
 
   const dx = heroBgX || '50'
   const dy = heroBgY || '50'
@@ -69,8 +75,8 @@ export default async function Home({ searchParams }: PageProps) {
   const my = heroBgMobileY || '50'
   const mz = (parseInt(heroBgMobileZoom || '') || 100) / 100
 
-  preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
-  if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
+  if (activeBgPath) preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
+  if (activeMobileBgPath && activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
   // Inline-or-editable helper — captured over locale, isAdmin, c
   function ET({ k, s, lbl, fb, as: Tag, className, style }: {
@@ -118,7 +124,7 @@ export default async function Home({ searchParams }: PageProps) {
           .hero-banner { height: 480px; }
         }
         .home-hero-bg {
-          background-image: url("${activeMobileBgPath}");
+          background-image: ${mobileBgCss};
           background-position: ${mx}% ${my}%;
           background-size: cover;
           transform: scale(${mz});
@@ -126,7 +132,7 @@ export default async function Home({ searchParams }: PageProps) {
         }
         @media (min-width: 640px) {
           .home-hero-bg {
-            background-image: url("${activeBgPath}");
+            background-image: ${desktopBgCss};
             background-position: ${dx}% ${dy}%;
             transform: scale(${dz});
             transform-origin: ${dx}% ${dy}%;
@@ -141,22 +147,28 @@ export default async function Home({ searchParams }: PageProps) {
 
         <section className="relative px-6 pt-24 pb-20 sm:pt-0 sm:pb-0 sm:h-full sm:justify-center text-center max-w-xl mx-auto flex flex-col items-center gap-6">
 
-          {/* Logo on cream pill */}
+          {/* Logo on cream pill — tenant name as text when no logo is set */}
           <div style={{
             backgroundColor: 'rgba(245,239,230,0.92)',
             borderRadius: '22px',
             padding: '14px 28px',
             display: 'inline-block',
           }}>
-            <img src={logoUrl} alt={logoAlt}
-              style={{ height: '72px', width: 'auto', display: 'block' }} />
+            {logoUrl ? (
+              <img src={logoUrl} alt={logoAlt}
+                style={{ height: '72px', width: 'auto', display: 'block' }} />
+            ) : (
+              <span className="font-serif text-3xl font-semibold tracking-wide" style={{ color: 'var(--color-brand)', display: 'block', lineHeight: '72px' }}>
+                {tenantName}
+              </span>
+            )}
           </div>
 
           {/* Eyebrow */}
           <p className="text-xs font-semibold tracking-widest uppercase text-center">
             {isAdmin ? (
               <EditableText contentKey="home_location_eyebrow" section="home" label="Location eyebrow"
-                locale={locale} fallback="Kakheti, Georgia" isAdmin as="span"
+                locale={locale} fallback="Georgia" isAdmin as="span"
                 style={{
                   backgroundColor: 'rgba(10,5,2,0.58)',
                   backdropFilter: 'blur(4px)',
@@ -184,7 +196,7 @@ export default async function Home({ searchParams }: PageProps) {
                 display: 'inline',
                 lineHeight: '2',
               }}>
-                {c['home_location_eyebrow'] || 'Kakheti, Georgia'}
+                {c['home_location_eyebrow'] || 'Georgia'}
               </span>
             )}
           </p>
@@ -194,7 +206,7 @@ export default async function Home({ searchParams }: PageProps) {
             {isAdmin ? (
               <EditableText contentKey="home_hero_subtitle" section="home" label="Hero subtitle"
                 locale={locale}
-                fallback="Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle."
+                fallback="Wine tastings and visits at our family winery."
                 isAdmin as="span"
                 style={{
                   backgroundColor: 'rgba(10,5,2,0.65)',
@@ -215,7 +227,7 @@ export default async function Home({ searchParams }: PageProps) {
                 display: 'block',
                 lineHeight: '1.6',
               }}>
-                {c['home_hero_subtitle'] || 'Family winery in the heart of Kakheti. Wine tastings, traditional meals, and the stories behind every bottle.'}
+                {c['home_hero_subtitle'] || 'Wine tastings and visits at our family winery.'}
               </span>
             )}
           </p>
@@ -277,13 +289,13 @@ export default async function Home({ searchParams }: PageProps) {
           {
             tk: 'home_package1_title', dk: 'home_package1_desc',
             tFb: t(locale, 'form.tasting'),
-            dFb: '2 red wines, 1 white, chacha — guided by the winemaker',
+            dFb: 'A guided tasting of our house wines.',
             price: displayPriceTasting, min: parseInt(minGuestsTasting) || 4,
           },
           {
             tk: 'home_package2_title', dk: 'home_package2_desc',
             tFb: t(locale, 'form.tasting_lunch'),
-            dFb: '3 wines, chacha brandy, and a full traditional Georgian meal',
+            dFb: 'Wine tasting followed by a full traditional meal.',
             price: displayPriceLunch, min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
@@ -292,9 +304,11 @@ export default async function Home({ searchParams }: PageProps) {
               as="h3" className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }} />
             <ET k={pkg.dk} s="home" lbl={pkg.tFb + ' — description'} fb={pkg.dFb}
               as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
-            <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
-              {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
-            </p>
+            {pkg.price != null && (
+              <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
+                {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
+              </p>
+            )}
             <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#a89070' }}>
               <svg width="10" height="13" viewBox="0 0 10 13" fill="none" aria-hidden="true">
                 <circle cx="5" cy="3.5" r="2.5" fill="var(--color-brand)" opacity="0.75" />

@@ -33,8 +33,12 @@ export default async function AboutPage({ searchParams }: PageProps) {
     getSetting('about_hero_bg_mobile_zoom'),
   ])
 
-  const activeBgPath       = bgPath || '/images/winery2.jpg'
+  const activeBgPath       = bgPath || null
   const activeMobileBgPath = bgMobilePath || activeBgPath
+  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
+  const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
+  const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
 
   const dx = bgX || '50'
   const dy = bgY || '50'
@@ -43,8 +47,8 @@ export default async function AboutPage({ searchParams }: PageProps) {
   const my = bgMobileY || '50'
   const mz = (parseInt(bgMobileZoom || '') || 100) / 100
 
-  preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
-  if (activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
+  if (activeBgPath) preload(activeBgPath, { as: 'image', fetchPriority: 'high' })
+  if (activeMobileBgPath && activeMobileBgPath !== activeBgPath) preload(activeMobileBgPath, { as: 'image' })
 
   // Inline-or-editable helper — captured over locale, isAdmin, c
   function ET({ k, s, lbl, fb, as: Tag, className, style }: {
@@ -68,7 +72,7 @@ export default async function AboutPage({ searchParams }: PageProps) {
       {isEditMode && isAdmin && <EditModeSuppressor />}
       <style>{`
         .about-hero-bg {
-          background-image: url("${activeMobileBgPath}");
+          background-image: ${mobileBgCss};
           background-position: ${mx}% ${my}%;
           background-size: cover;
           transform: scale(${mz});
@@ -76,7 +80,7 @@ export default async function AboutPage({ searchParams }: PageProps) {
         }
         @media (min-width: 640px) {
           .about-hero-bg {
-            background-image: url("${activeBgPath}");
+            background-image: ${desktopBgCss};
             background-position: ${dx}% ${dy}%;
             transform: scale(${dz});
             transform-origin: ${dx}% ${dy}%;
@@ -109,11 +113,11 @@ export default async function AboutPage({ searchParams }: PageProps) {
 
         <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
           <ET k="about_story_p1" s="about" lbl="Story — paragraph 1" as="p"
-            fb="A family winery producing traditional Georgian wine." />
+            fb="A family winery producing traditional wines." />
           <ET k="about_story_p2" s="about" lbl="Story — paragraph 2" as="p"
-            fb="For generations, our family has grown Rkatsiteli and Saperavi grapes on the same land, using traditional Kakhetian methods passed down through the years. Our wines are made with minimal intervention — the grapes, the sun, and the clay vessels do most of the work." />
+            fb="We grow our grapes with care and make our wines with minimal intervention, following methods passed down through generations." />
           <ET k="about_story_p3" s="about" lbl="Story — paragraph 3" as="p"
-            fb="We welcome visitors to experience Georgian wine culture firsthand — at the table, with food, conversation, and the winemaker." />
+            fb="We welcome visitors to experience our wine culture firsthand." />
         </section>
 
         <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
@@ -124,9 +128,9 @@ export default async function AboutPage({ searchParams }: PageProps) {
             className="text-xl font-bold mb-6" style={{ color: '#1c1008' }} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
-              { lk: 'about_expect1_label', tk: 'about_expect1_text', lFb: 'Wine Tasting',     tFb: 'Guided tasting of 2–3 house wines and chacha, explained by the winemaker himself.' },
-              { lk: 'about_expect2_label', tk: 'about_expect2_text', lFb: 'Traditional Meal', tFb: 'Optional lunch with classic Kakhetian dishes — mtsvadi, lobiani, fresh bread from the oven.' },
-              { lk: 'about_expect3_label', tk: 'about_expect3_text', lFb: 'Vineyard Walk',    tFb: 'A short walk through the vineyard and a look at our qvevri (clay vessel) cellar.' },
+              { lk: 'about_expect1_label', tk: 'about_expect1_text', lFb: 'Wine Tasting',     tFb: 'A guided tasting of our house wines, presented by the winemaker.' },
+              { lk: 'about_expect2_label', tk: 'about_expect2_text', lFb: 'Traditional Meal', tFb: 'An optional meal of traditional local dishes.' },
+              { lk: 'about_expect3_label', tk: 'about_expect3_text', lFb: 'Vineyard Walk',    tFb: 'A short walk through the vineyard and our cellar.' },
             ].map(card => (
               <div key={card.lk} className="rounded-xl p-5 border flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
                 <ET k={card.lk} s="about" lbl="Expect card — label" fb={card.lFb}

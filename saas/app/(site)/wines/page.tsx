@@ -20,8 +20,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function WinesPage() {
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   if (h.get('x-tenant-modules-wine-orders') !== 'true') redirect('/')
-  const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
+  const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const tenantName = h.get('x-tenant-name') ?? ''
   const [wineProducts, companies, hideCompanyDropdownStr] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
@@ -55,6 +56,7 @@ export default async function WinesPage() {
       companies={companies}
       logoUrl={logoUrl}
       logoAlt={logoAlt}
+      tenantName={tenantName}
       hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
     />
   )
