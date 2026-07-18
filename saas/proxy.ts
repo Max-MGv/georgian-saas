@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 
 interface TenantInfo {
   tenantId: string | null
+  slug: string | null
   brandColor: string
   brandHover: string
   logoUrl: string | null
@@ -62,6 +63,7 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     // "no tenant" state (placeholder page). Localhost dev is covered by the
     // isLocal branch above, which loads the DEFAULT_TENANT_ID tenant row itself.
     tenantId: tenant?.id ?? null,
+    slug: tenant?.slug ?? null,
     brandColor: theme.primaryColor ?? '#7c1d23',
     brandHover: theme.primaryHover ?? '#9b2429',
     logoUrl: tenant?.logoUrl ?? null,
@@ -81,7 +83,7 @@ export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
   const [
-    { tenantId, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
+    { tenantId, slug, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
     platform,
   ] = await Promise.all([resolveTenant(host), resolvePlatform()])
 
@@ -166,6 +168,7 @@ export async function proxy(request: NextRequest) {
     if (!isAdminRoute && !isSuperAdminRoute && !isWelcomePage) {
       return NextResponse.redirect(new URL('/welcome', request.url))
     }
+    response.headers.set('x-resolved-tenant', 'none')
     return response
   }
   // On real tenant domains the placeholder has no business rendering
@@ -180,6 +183,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/coming-soon', request.url))
   }
 
+  // Which tenant this domain resolved to — read by the super-admin "Check domain"
+  // tool (checkTenantDomain in superAdmin.ts). Slugs are not sensitive.
+  response.headers.set('x-resolved-tenant', slug ?? 'none')
   return response
 }
 

@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColorPicker } from '../ColorPicker'
-import { createTenant, updateTenant } from '@/app/actions/superAdmin'
+import { createTenant, updateTenant, checkTenantDomain, type DomainCheckResult } from '@/app/actions/superAdmin'
 import { uploadTenantLogoAdmin, uploadTenantFaviconAdmin } from '@/app/actions/uploadLogo'
 
 type Props = {
@@ -80,8 +80,38 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [logoUploading, setLogoUploading] = useState(false)
   const [faviconUploading, setFaviconUploading] = useState(false)
   const [idCopied, setIdCopied] = useState(false)
+  const [domainCheck, setDomainCheck] = useState<DomainCheckResult | null>(null)
+  const [domainChecking, setDomainChecking] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const faviconInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleDomainCheck() {
+    if (!tenant?.id || !domain.trim()) return
+    setDomainChecking(true)
+    setDomainCheck(null)
+    try {
+      setDomainCheck(await checkTenantDomain(domain, tenant.id))
+    } catch (err) {
+      setDomainCheck({ status: 'unreachable', message: err instanceof Error ? err.message : 'Check failed' })
+    } finally {
+      setDomainChecking(false)
+    }
+  }
+
+  function domainCheckDisplay(r: DomainCheckResult): { color: string; text: string } {
+    switch (r.status) {
+      case 'ok':
+        return { color: '#86efac', text: `✓ Domain reaches the platform and resolves to this tenant (${r.resolvedSlug})` }
+      case 'wrong-tenant':
+        return { color: '#fca5a5', text: `✗ Domain resolves to a different tenant: ${r.resolvedSlug}` }
+      case 'no-tenant':
+        return { color: '#fcd34d', text: '⚠ Domain reaches the platform but no tenant is assigned to it yet — save this form first, then re-check (changes can take up to 5 min due to caching)' }
+      case 'not-our-app':
+        return { color: '#fca5a5', text: `✗ Domain responds (HTTP ${r.httpStatus}) but is not serving this platform — is it added to the Vercel project?` }
+      case 'unreachable':
+        return { color: '#fca5a5', text: `✗ ${r.message}` }
+    }
+  }
 
   function copyTenantId() {
     if (!tenant?.id) return
@@ -198,14 +228,35 @@ export default function TenantFormClient({ mode, tenant }: Props) {
             />
           </Field>
 
-          <Field label="Domain" hint="The custom domain this tenant will use (e.g. nikalasmarani.ge)">
-            <input
-              value={domain}
-              onChange={e => setDomain(e.target.value)}
-              placeholder="nikalasmarani.ge"
-              required
-              style={inputStyle}
-            />
+          <Field label="Domain" hint="The domain this tenant answers on. Two steps: 1) add the domain to the Vercel project (Settings → Domains), 2) save it here. Changes can take up to 5 min to go live (routing cache).">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={domain}
+                onChange={e => { setDomain(e.target.value); setDomainCheck(null) }}
+                placeholder="nikalasmarani.vercel.app"
+                required
+                style={inputStyle}
+              />
+              {tenant?.id && (
+                <button
+                  type="button"
+                  onClick={handleDomainCheck}
+                  disabled={domainChecking || !domain.trim()}
+                  style={{
+                    padding: '0 16px', borderRadius: 8, fontSize: 13, cursor: domainChecking ? 'wait' : 'pointer',
+                    backgroundColor: '#1e293b', border: '1px solid #334155',
+                    color: C.muted, flexShrink: 0,
+                  }}
+                >
+                  {domainChecking ? 'Checking…' : 'Check'}
+                </button>
+              )}
+            </div>
+            {domainCheck && (
+              <p style={{ fontSize: 12, marginTop: 6, color: domainCheckDisplay(domainCheck).color }}>
+                {domainCheckDisplay(domainCheck).text}
+              </p>
+            )}
           </Field>
 
           <Field label="Slug" hint="Short URL-safe identifier used internally (auto-filled from name)">

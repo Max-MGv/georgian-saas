@@ -167,6 +167,47 @@ export async function deleteTenant(id: string) {
   revalidatePath('/super-admin/tenants')
 }
 
+export type DomainCheckResult =
+  | { status: 'ok'; resolvedSlug: string }
+  | { status: 'wrong-tenant'; resolvedSlug: string }
+  | { status: 'no-tenant' }
+  | { status: 'not-our-app'; httpStatus: number }
+  | { status: 'unreachable'; message: string }
+
+// Fetches https://{domain}/ and reads the x-resolved-tenant response header
+// that proxy.ts stamps on every page, so the super-admin form can show whether
+// a domain actually reaches this platform and which tenant it resolves to.
+export async function checkTenantDomain(domain: string, expectedTenantId: string): Promise<DomainCheckResult> {
+  await requireSuperAdmin()
+
+  const tenant = await db.tenant.findUnique({ where: { id: expectedTenantId }, select: { slug: true } })
+  if (!tenant) throw new Error('Tenant not found')
+
+  const cleaned = domain.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  if (!cleaned) throw new Error('Enter a domain first')
+
+  let res: Response
+  try {
+    res = await fetch(`https://${cleaned}/`, {
+      method: 'HEAD',
+      redirect: 'follow',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch (e) {
+    const message = e instanceof Error && e.name === 'TimeoutError'
+      ? 'Timed out after 8s — domain may not exist or is not responding'
+      : 'Could not connect — check the domain is spelled correctly and exists in Vercel'
+    return { status: 'unreachable', message }
+  }
+
+  const resolved = res.headers.get('x-resolved-tenant')
+  if (!resolved) return { status: 'not-our-app', httpStatus: res.status }
+  if (resolved === 'none') return { status: 'no-tenant' }
+  if (resolved !== tenant.slug) return { status: 'wrong-tenant', resolvedSlug: resolved }
+  return { status: 'ok', resolvedSlug: resolved }
+}
+
 // ── User actions (Supabase Admin API) ───────────────────────────
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
