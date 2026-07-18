@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
   return {
     title: `${displayName} — Book a Visit`,
-    description: `Book a wine tasting experience at ${displayName} winery in Kakheti, Georgia.`,
+    description: `Book a wine tasting experience at ${displayName}.`,
   }
 }
 
