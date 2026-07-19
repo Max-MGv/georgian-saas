@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  setUserTenant, setUserSuperAdmin, removeUserAdminRole, createAdminUser,
+  setUserTenant, setUserSuperAdmin, removeUserAdminRole, createAdminUser, setUserPassword,
 } from '@/app/actions/superAdmin'
 
 type User = {
@@ -80,7 +80,28 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [settingPassword, setSettingPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordSaved, setPasswordSaved] = useState(false)
   const isMe = user.id === currentUserId
+
+  function savePassword() {
+    setError(null)
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters.'); return }
+    startTransition(async () => {
+      try {
+        await setUserPassword(user.id, newPassword)
+        setPasswordSaved(true)
+        setTimeout(() => {
+          setPasswordSaved(false)
+          setSettingPassword(false)
+          setNewPassword('')
+        }, 2000)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to set password')
+      }
+    })
+  }
 
   function save() {
     setError(null)
@@ -169,18 +190,29 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
             </button>
           </div>
         )}
-        {!isMe && !editing && !confirmingRemove && (
+        {!editing && !confirmingRemove && !settingPassword && (
           <div style={{ display: 'flex', gap: 8 }}>
+            {!isMe && (
+              <button
+                onClick={() => setEditing(true)}
+                style={{
+                  padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+                  backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
+                }}
+              >
+                Change role
+              </button>
+            )}
             <button
-              onClick={() => setEditing(true)}
+              onClick={() => { setSettingPassword(true); setError(null) }}
               style={{
                 padding: '5px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
                 backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
               }}
             >
-              Change role
+              Set password
             </button>
-            {(user.role || user.tenantId) && (
+            {!isMe && (user.role || user.tenantId) && (
               <button
                 onClick={() => setConfirmingRemove(true)}
                 style={{
@@ -194,6 +226,54 @@ function UserRow({ user, tenants, currentUserId, onRefresh }: {
           </div>
         )}
       </div>
+
+      {settingPassword && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+          <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 5 }}>
+            New password for {user.email}
+          </label>
+          <input
+            type="text"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Minimum 6 characters"
+            autoComplete="off"
+            style={{ ...inputStyle, fontFamily: 'monospace', marginBottom: 10 }}
+          />
+          <p style={{ fontSize: 11, color: C.faint, marginBottom: 10 }}>
+            Shown in plain text so you can copy it and pass it to the user — it cannot be viewed again after saving.
+          </p>
+
+          {error && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 8 }}>{error}</p>}
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={savePassword}
+              disabled={isPending || passwordSaved}
+              style={{
+                padding: '7px 18px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                backgroundColor: passwordSaved ? '#052e16' : '#6366f1',
+                color: passwordSaved ? '#86efac' : '#fff',
+                border: passwordSaved ? '1px solid #166534' : 'none',
+                opacity: isPending ? 0.7 : 1,
+              }}
+            >
+              {passwordSaved ? 'Password updated ✓' : isPending ? 'Saving…' : 'Set password'}
+            </button>
+            {!passwordSaved && (
+              <button
+                onClick={() => { setSettingPassword(false); setNewPassword(''); setError(null) }}
+                style={{
+                  padding: '7px 14px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                  backgroundColor: '#1e293b', border: '1px solid #334155', color: C.muted,
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>

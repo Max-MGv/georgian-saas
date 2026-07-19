@@ -276,6 +276,18 @@ export async function removeUserAdminRole(userId: string) {
   revalidatePath('/super-admin/users')
 }
 
+export async function setUserPassword(userId: string, newPassword: string) {
+  await requireSuperAdmin()
+  if (newPassword.length < 6) throw new Error('Password must be at least 6 characters.')
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: authHeaders,
+    body: JSON.stringify({ password: newPassword }),
+  })
+  if (!res.ok) throw new Error(`Failed to set password: ${await res.text()}`)
+  revalidatePath('/super-admin/users')
+}
+
 export async function createAdminUser(data: {
   email: string
   password: string
