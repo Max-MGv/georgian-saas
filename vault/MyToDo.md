@@ -10,6 +10,17 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### #123–#126 — Domain migration, no-tenant state, neutral fallbacks, set password (Claude tested 2026-07-18 live, needs Max to test)
+
+**Reminder first:** tell the Nikalas Marani family their site + admin login both moved to `nikalasmarani.vercel.app` (same credentials; old `georgian-saas.vercel.app` now shows the platform placeholder).
+
+1. **#126 Set password (untested by any human):** `/super-admin/users` → "Set password" on a test account (e.g. Test Winery's admin, or create one) → type a new password (min 6 chars, shown in plain text so you can copy it) → "Password updated ✓" → log in with the new password to confirm it took
+2. **#124 Check button:** `/super-admin/tenants` → Edit Nikalas Marani → click "Check" next to Domain → green ✓ "resolves to this tenant"; same for Test Winery
+3. **#125 Neutral blank tenant:** open `testwinery.vercel.app` → should show "Test Winery" as text logo, blue-gradient hero (its brand color), generic copy, NO prices anywhere (package cards and booking form both), booking form says "Price will be confirmed after submission", no dead social icons
+4. **#125 NM regression check:** open `nikalasmarani.vercel.app` (EN and KA) → everything identical to before: logo, photos, Kakheti texts, 50₾/100₾ prices, contact info — plus the EN Contact page now shows phone/email/address (they were blank before, bonus fix)
+5. **#123 Platform HQ:** `georgian-saas.vercel.app` → placeholder pitch page; `/super-admin` there → login → lands in the platform panel
+6. Optional: submit a test booking on `testwinery.vercel.app` → order should save with 0₾ total (no invented price) and appear in its admin
+
 ### #121 + #122 — Super admin login default + cross-tenant Orders view (Claude tested 2026-07-17 in browser, needs Max to test)
 1. Log out, log back in as super_admin (or visit `/admin/login` while already logged in) → should land on `/super-admin/tenants` directly, not `/admin`
 2. Confirm "← Tenant Admin" (in super-admin nav) and "⬡ Platform" (in admin nav) still both work to switch views manually
