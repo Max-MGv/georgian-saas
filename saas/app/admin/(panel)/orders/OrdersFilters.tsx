@@ -6,6 +6,7 @@ import type { Company } from '@prisma/client'
 import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE, type ColumnId } from './columnDefs'
 import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   border: '#e0d4c0',
@@ -18,23 +19,25 @@ const C = {
 }
 
 const STATUSES = [
-  { value: 'NEW',          label: 'New' },
-  { value: 'CONFIRMED',    label: 'Confirmed' },
-  { value: 'INVOICE_SENT', label: 'Invoice sent' },
-  { value: 'PAID',         label: 'Paid' },
-  { value: 'COMPLETED',    label: 'Completed' },
-  { value: 'CANCELLED',    label: 'Cancelled' },
+  { value: 'NEW',          labelKey: 'orders.status.new' },
+  { value: 'CONFIRMED',    labelKey: 'orders.status.confirmed' },
+  { value: 'INVOICE_SENT', labelKey: 'orders.status.invoiceSent' },
+  { value: 'PAID',         labelKey: 'orders.status.paid' },
+  { value: 'COMPLETED',    labelKey: 'orders.status.completed' },
+  { value: 'CANCELLED',    labelKey: 'orders.status.cancelled' },
 ]
 
 type Props = {
   companies: Company[]
   params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
   statusCounts: Record<string, number>
+  locale?: string
 }
 
-export default function OrdersFilters({ companies, params, statusCounts }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, locale = 'en' }: Props) {
   const router = useRouter()
   const pathname = usePathname()
+  const at = (key: string) => adminT(locale, key)
   const [isExporting, startExport] = useTransition()
   const [isNavigating, setIsNavigating] = useState(false)
   const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`
@@ -163,7 +166,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
           fontWeight: isUpcoming ? 600 : 400,
         }}
       >
-        Upcoming
+        {at('orders.filters.upcoming')}
       </button>
       <button
         onClick={() => setMobileFiltersOpen(o => !o)}
@@ -175,7 +178,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
           fontWeight: activeFilterCount > 0 ? 600 : 400,
         }}
       >
-        Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : '▾'}
+        {at('orders.filters.filters')} {activeFilterCount > 0 ? `(${activeFilterCount})` : '▾'}
       </button>
       {hasFilters && (
         <button
@@ -185,7 +188,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
             border: `1px solid ${C.wine}`, color: C.wine, backgroundColor: '#fdf2f3', fontWeight: 500,
           }}
         >
-          Clear ×
+          {at('orders.filters.clear')}
         </button>
       )}
     </div>
@@ -195,37 +198,37 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
       <div className="md:hidden flex flex-col gap-3 p-3 rounded-xl border mt-2" style={{ borderColor: C.border, backgroundColor: C.bg }}>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>From</label>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.from')}</label>
             <DateInput value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={{ ...inputStyle, minHeight: 40 }} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>To</label>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.to')}</label>
             <DateInput value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={{ ...inputStyle, minHeight: 40 }} />
           </div>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Filter by</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.filterBy')}</label>
           <select
             value={params.companyId ?? ''}
             onChange={e => update('companyId', e.target.value)}
             style={{ ...inputStyle, width: '100%', minHeight: 40 }}
           >
-            <option value="">All bookings</option>
-            <option value="__individual__">Individuals only</option>
+            <option value="">{at('orders.filters.allBookings')}</option>
+            <option value="__individual__">{at('orders.filters.individualsOnly')}</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Status</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.status')}</label>
           <select
             value={params.status ?? ''}
             onChange={e => update('status', e.target.value)}
             style={{ ...inputStyle, width: '100%', minHeight: 40 }}
           >
-            <option value="">All statuses ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})</option>
+            <option value="">{at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})</option>
             {STATUSES.map(s => {
               const count = statusCounts[s.value] ?? 0
-              return <option key={s.value} value={s.value} disabled={count === 0}>{s.label} ({count})</option>
+              return <option key={s.value} value={s.value} disabled={count === 0}>{at(s.labelKey)} ({count})</option>
             })}
           </select>
         </div>
@@ -237,7 +240,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
 
       {/* Quick */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Quick</label>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.quick')}</label>
         <button
           onClick={setUpcoming}
           style={{
@@ -249,30 +252,30 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
             cursor: 'pointer',
           }}
         >
-          Upcoming
+          {at('orders.filters.upcoming')}
         </button>
       </div>
 
       {/* Date range */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>From</label>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.from')}</label>
         <DateInput value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={inputStyle} />
       </div>
       <div>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>To</label>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.to')}</label>
         <DateInput value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={inputStyle} />
       </div>
 
       {/* Booking type / company */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Filter by</label>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.filterBy')}</label>
         <select
           value={params.companyId ?? ''}
           onChange={e => update('companyId', e.target.value)}
           style={{ ...inputStyle, minWidth: 180 }}
         >
-          <option value="">All bookings</option>
-          <option value="__individual__">Individuals only</option>
+          <option value="">{at('orders.filters.allBookings')}</option>
+          <option value="__individual__">{at('orders.filters.individualsOnly')}</option>
           {companies.map(c => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -281,20 +284,20 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
 
       {/* Status */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Status</label>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.status')}</label>
         <select
           value={params.status ?? ''}
           onChange={e => update('status', e.target.value)}
           style={{ ...inputStyle, minWidth: 160 }}
         >
           <option value="">
-            All statuses ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})
+            {at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})
           </option>
           {STATUSES.map(s => {
             const count = statusCounts[s.value] ?? 0
             return (
               <option key={s.value} value={s.value} disabled={count === 0}>
-                {s.label} ({count})
+                {at(s.labelKey)} ({count})
               </option>
             )
           })}
@@ -316,7 +319,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
               cursor: 'pointer',
             }}
           >
-            Clear filters ×
+            {at('orders.filters.clearFilters')}
           </button>
         </div>
       )}
@@ -337,7 +340,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
           }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          {isExporting ? 'Exporting…' : 'Export CSV'}
+          {isExporting ? at('orders.filters.exporting') : at('orders.filters.exportCsv')}
         </button>
       </div>
 
@@ -350,7 +353,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
           style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-          Columns ▾
+          {at('orders.filters.columns')}
         </button>
         {columnsOpen && (
           <div
@@ -359,7 +362,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
             onClick={e => e.stopPropagation()}
           >
             <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
-              <span className="text-xs font-semibold" style={{ color: C.faint }}>SHOW / HIDE COLUMNS</span>
+              <span className="text-xs font-semibold" style={{ color: C.faint }}>{at('orders.filters.showHideColumns')}</span>
             </div>
             {COLUMN_DEFS.map(c => (
               <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-amber-50">
@@ -369,7 +372,7 @@ export default function OrdersFilters({ companies, params, statusCounts }: Props
                   onChange={() => toggleCol(c.id)}
                   style={{ accentColor: C.wine }}
                 />
-                <span className="text-xs" style={{ color: C.text }}>{c.label}</span>
+                <span className="text-xs" style={{ color: C.text }}>{at(c.labelKey)}</span>
               </label>
             ))}
           </div>

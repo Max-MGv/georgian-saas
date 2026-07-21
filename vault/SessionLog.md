@@ -8,6 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-21 — Wine Orders Pack cleanup, backlog audit, Georgian admin layer Phase 0 (full detail)
+
+### Completed
+
+**Wine Orders Pack view: layout A only.** Max preferred layout A (right-side split panel summary) of the 3 packing-view layouts; removed B (sticky bottom bar) and C (top collapsible) entirely from `PackingView.tsx` along with the now-unused A/B/C toggle and `PackingLayoutType`. `WineOrdersClient.tsx` simplified to match (dropped `packingLayout` state/props).
+
+**Explained the "every wine shows 2026" question.** Root cause: `scripts/migrate-wine-hierarchy.ts` (the one-off #116 Wine Hierarchy migration) hardcoded `year: 2026` when converting old flat `Wine` rows (no vintage concept) into the new `WineVintage` model, since there was no real vintage year to migrate from. Not a display bug — every wine's vintage year defaults to 2026 until someone edits it in `/admin/wines`. Wines Max has already corrected (Saperavi 2022, Rkatsiteli 2023, etc.) show correctly.
+
+**Backlog audit** — Max reported 4 backlog items as done; verified each against the actual code before touching the vault (per Rule 1, vault must stay accurate):
+- ✅ Google Maps embed (`maps_embed_url` setting) — confirmed
+- ✅ Editable social/contact links (`contact_facebook`/`contact_instagram`/etc. settings) — confirmed
+- ✅ Feature flags (`modulesBooking`/`modulesWineOrders`/`modulesPublicSite` from #120) — confirmed, though granularity is per-module not per-section
+- ❌ Forgot password — **not found** in code (no `resetPasswordForEmail`, no reset route anywhere). Flagged to Max; he confirmed it was super-admin's manual "Set password" override (#126) he was thinking of, not a self-service `/admin/login` flow — that's still genuinely unbuilt. `Roadmap.md` updated to reflect the distinction precisely instead of marking it done.
+
+**Georgian layer for admin panel — planned, Phase 0 built.** Max wants the client-facing `/admin` panel translatable to Georgian, set once from Settings (no in-panel runtime switcher — per-tenant, not per-session). Asked clarifying questions first (scope/phasing, translation authorship, super-admin inclusion) via AskUserQuestion. Decisions: `/admin` only (not `/super-admin`); Claude drafts Georgian text, Max reviews per phase; phased rollout rather than one 40-file pass, because one giant diff has no review checkpoint and mixes daily-use pages with rarely-touched ones. Full plan + living progress tracker: `Plan-AdminGeorgian.md`.
+
+**Architecture** (discovered mid-plan, better than the original Context-based design): the codebase already has this exact pattern for the public site's EN/KA content — `lib/t.ts` exports `t(locale, key, vars?)` reading from a flat `{en, ka}` dictionary, and pages fetch `default_locale` server-side and pass it down as a prop, no Context. Copied that pattern exactly instead of introducing a new provider abstraction: new `lib/adminT.ts` (`adminT(locale, key)`), new `Setting` key `admin_language` (reuses the existing generic `Setting` model, default `'en'`, `getSetting`/`updateSetting` unchanged apart from also revalidating `/admin` layout-wide on save).
+
+**Phase 0 built and browser-verified**: Settings gained an "Admin Panel Language" section (mirrors the existing "Default site language" section's styling) with an EN/KA toggle; `(panel)/layout.tsx` fetches the setting and translates all nav labels, the "Admin" tag, "Platform" link, and Sign out button. Verified live: flipping to KA instantly updates the section itself and the nav (via `revalidatePath('/admin', 'layout')`, no manual refresh needed on the next navigation); flipping back to EN reverts cleanly. TypeScript: 0 errors.
+
+**Phase 1 — Core daily-use pages, built same session on "proceed, will batch check later."** Covered the rest of Settings (Booking toggles, Payment Details, Emails, Booking Rules, Contact Page/map, Branding, Contact Info, Closed Days), all of Orders (table/filters/view-toggle/calendar incl. month+day names and hover popover, `columnDefs.ts` labels converted to `labelKey`s), Order Detail (1120 lines) + New Order (678 lines — reuses most of Order Detail's keys since the forms are nearly identical), Wine Orders (`WineOrdersClient.tsx` cards/table/pack modes + vertical stepper; `PackingView.tsx` box-mode picker + print sheet), and Companies (733 lines — edit slide-over, price tiers, tab toggle). ~400 new dictionary entries added to `lib/adminT.ts` across the session, mostly reusing shared keys (`orders.status.*`, `orders.col.*`) across files that show the same concepts (e.g. New Order form's masterclass/extras sections are byte-identical in English to Order Detail's, so they just call the same `orderDetail.masterclass.*` keys rather than duplicating).
+
+**One deliberate non-generalization**: the wine packing box-count sentences (e.g. "6 full + 1 partial (4) — 7 boxes of 6") don't map word-for-word into Georgian grammar, so rather than building a generic pluralization/interpolation system, `calcBoxes()` in `PackingView.tsx` now branches on `locale` and constructs the whole sentence per-language directly. Simpler than the alternative for ~5 sentences.
+
+Every page browser-verified in both languages, including nested modals (send-invoice-by-email, edit slide-overs, price-tier add/edit forms) and the hover preview card. Toggling back to EN after all of Phase 1 reverts every page cleanly with no regressions (spot-checked Orders list). TypeScript: 0 errors throughout.
+
+### Files changed
+- `saas/app/admin/(panel)/wine-orders/PackingView.tsx` — removed layouts B/C, `PackingLayoutType`; later fully translated (box-mode picker, print sheet, per-locale box-count sentences)
+- `saas/app/admin/(panel)/wine-orders/WineOrdersClient.tsx` — dropped `packingLayout` state/props; later fully translated
+- `saas/app/actions/settings.ts` — `admin_language` default + revalidate `/admin` layout
+- `saas/lib/adminT.ts` — NEW, grew to ~400 keys across the session (nav, settings.*, orders.*, orderDetail.*, newOrder.*, packing.*, wineOrders.*, companies.*)
+- `saas/app/admin/(panel)/layout.tsx` — nav translated
+- `saas/app/admin/(panel)/LogoutButton.tsx` — takes `label` prop
+- `saas/app/admin/(panel)/settings/page.tsx`, `SettingsClient.tsx` — fully translated
+- `saas/app/admin/(panel)/orders/page.tsx`, `OrdersTable.tsx`, `OrdersFilters.tsx`, `ViewToggle.tsx`, `CalendarView.tsx`, `columnDefs.ts` — fully translated
+- `saas/app/admin/(panel)/orders/[id]/page.tsx`, `OrderDetail.tsx` — fully translated
+- `saas/app/admin/(panel)/orders/new/page.tsx`, `NewOrderForm.tsx` — fully translated
+- `saas/app/admin/(panel)/wine-orders/page.tsx` — fully translated
+- `saas/app/admin/(panel)/companies/page.tsx`, `CompaniesClient.tsx` — fully translated
+- Vault: `Plan-AdminGeorgian.md` (Phase 0 + Phase 1 marked done), `Roadmap.md` (backlog corrections), `FeatureLog.md` (#130), `SessionLog.md` (this entry)
+
+### What's next
+- **Phase 2** of the Georgian layer: Wines (`WinesClient.tsx`), Statistics (`StatisticsClient.tsx`, `StatisticsV2.tsx`, `WineStatistics.tsx`, `SearchableSelect.tsx`), Menu Items, Masterclass. See `Plan-AdminGeorgian.md` progress tracker.
+- **Phase 3**: Site Content editor's own chrome (`ContentClient.tsx`, `BackgroundsTab.tsx`, `BookingFormVisualPanel.tsx`) — deliberately last since it's architecturally distinct (an editor for the public site's own EN/KA content).
+- Max should batch-review all the Georgian wording written this session (Settings, Orders, Order Detail, New Order, Wine Orders, Companies) — flagged as pending per his "will batch check later."
+- Vintage-year cleanup (2026 default) in `/admin/wines` is a data-entry task for Max, not code — not tracked as a bug.
+
+---
+
 ## 2026-07-18 — Push #116–#122, no-tenant state + domain migration (#123) (full detail)
 
 ### Completed
@@ -51,72 +100,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-07-17 (session 3) — Feature #120 Per-tenant module toggles (full detail)
+## 2026-07-17 (session 3) — Features #120–122 Module toggles, super-admin login, cross-tenant orders view (compressed)
 
-### Completed
-
-Built the larger feature Max asked for after the #119 quick-wins review: per-tenant module toggles for Bookings / Wine Orders / Public Website. Full step-by-step build log lives in `vault/Plan-TenantModules.md` (created at the start so work could resume if the session ended mid-build — all 11 steps completed in one session, plan file left in place as a reference rather than deleted).
-
-**Design** — 3 booleans on `Tenant` (`modulesBooking` default true, `modulesWineOrders` default false, `modulesPublicSite` default true), mirroring the existing Company-level `isBookingCompany`/`isWineOrderCompany` pattern (#117). Public Website module is a kill switch (redirects to a "coming soon" page), not a widget-only mode — Max explicitly chose this over the bigger "full site vs. booking-widget" alternative when asked.
-
-**Enforcement (3 layers)**:
-- `proxy.ts` resolves the 3 flags alongside the existing tenant fetch, forwards as headers (`x-tenant-modules-booking`, `x-tenant-modules-wine-orders`); redirects all public `(site)` routes to new `/coming-soon` page when Public Website is off (admin/super-admin routes explicitly excluded from this redirect)
-- Admin nav (`admin/(panel)/layout.tsx`) filters hidden links by module
-- New `lib/requireModule.ts` (`requireBookingModule`/`requireWineOrdersModule`) added as a server-side guard at the top of every gated page — Orders, Menu Items, Masterclass (booking); Wines, Wine Orders (wine); public `/wines` redirects inline to `/`. This matters because hiding a nav link doesn't stop someone deep-linking directly.
-
-**Consistency fixes beyond the original plan** (small, done while in the area): public `SiteNav.tsx` hides the "Order Wine" link when wine module is off (threaded `wineOrdersOn` prop through `(site)/layout.tsx`); home page hero's "Order Wine" button same treatment. Without these, a disabled module would still show dead links that just bounce back.
-
-**Shared pages made conditional instead of gated**: Statistics (`page.tsx` skips the DB query for whichever module is off; `StatisticsClient.tsx` only shows the Bookings/Wine Orders mode switcher when both are on, defaults to whichever single module is enabled) and Companies (tab switcher same treatment — hidden when only one module active). These two pages already mixed booking + wine data before this feature (statistics queries both `Order` and `WineOrder`; Companies already has Bookings/Wine Orders tabs from #117), so they got conditional sections rather than an all-or-nothing page guard.
-
-**Super-admin tenant form** — 3 checkboxes added between Favicon and Brand colors sections in `TenantFormClient.tsx`; amber warning note when Public Website is unchecked; `getTenant`/`createTenant`/`updateTenant` in `superAdmin.ts` read/write all 3 fields.
-
-**Critical catch during verification** — the new `modulesWineOrders` column defaulted to `false` on `db push`, and Postgres backfills that default onto existing rows too. This meant the LIVE Nikalas Marani tenant (9 real wine orders, fully active feature) would have had Wines/Wine Orders silently disappear from its own admin nav the moment this shipped, until someone manually flipped the toggle. Caught by querying the DB directly with a one-off `npx tsx` script (deleted after use) before assuming anything was fine, and fixed by setting `modulesWineOrders: true` specifically for Nikalas Marani. Restarted the dev server to clear `proxy.ts`'s in-memory tenant cache and re-verified nav/Orders/Wine Orders/Statistics/Companies all render exactly as before. **Lesson**: any new `@default` boolean on a shared table needs its value checked against existing tenants' actual usage, not just assumed safe because "it's just a new column."
-
-**Verification boundary** — did not toggle Nikalas Marani's real `modulesPublicSite` off to test the coming-soon redirect live, even briefly, because this project has no separate dev/staging DB yet (single shared Supabase instance — see Roadmap backlog "Development / staging environment", still unchecked) and that tenant is the actual production site with real customer traffic. Verified everything else that could be checked safely: `/coming-soon` renders correctly with tenant branding when visited directly; the redirect logic itself is a 4-line boolean check following the exact pattern of 3 other route guards already live in the same `proxy.ts` function. If Max wants to see the kill-switch redirect happen live, he should trigger it himself for a few seconds when convenient.
-
-TypeScript: 0 errors throughout.
-
-### Files changed
-- `saas/prisma/schema.prisma` — 3 new Tenant fields
-- `saas/proxy.ts` — module flags resolved + forwarded, public-site kill switch redirect
-- `saas/app/coming-soon/page.tsx` — NEW
-- `saas/lib/requireModule.ts` — NEW
-- `saas/app/admin/(panel)/layout.tsx` — nav filtered by module
-- `saas/app/admin/(panel)/orders/page.tsx`, `menu-items/page.tsx`, `masterclass/page.tsx` — booking guard
-- `saas/app/admin/(panel)/wines/page.tsx`, `wine-orders/page.tsx` — wine guard
-- `saas/app/(site)/wines/page.tsx` — wine guard (inline redirect)
-- `saas/app/(site)/layout.tsx`, `SiteNav.tsx` — wine nav link consistency
-- `saas/app/(site)/page.tsx` — wine hero button consistency
-- `saas/app/admin/(panel)/statistics/page.tsx` + `StatisticsClient.tsx` — conditional sections
-- `saas/app/admin/(panel)/companies/page.tsx` + `CompaniesClient.tsx` — conditional tab switcher
-- `saas/app/super-admin/tenants/TenantFormClient.tsx` — 3 module checkboxes
-- `saas/app/actions/superAdmin.ts` — module fields in CRUD
-- DB: `modulesWineOrders` backfilled `true` for Nikalas Marani specifically (one-off fix, not a migration file)
-- Vault: `Plan-TenantModules.md` (NEW, full build log), `FeatureLog.md` (#120 row), `SessionLog.md` (this entry)
-
-**#121 — Super admin login defaults to Platform.** Max noticed logging in as super_admin always landed on `/admin` (Tenant Admin), requiring an extra click on "⬡ Platform" every time. Root cause: `proxy.ts`'s login-redirect block sent every logged-in user to `/admin` regardless of role. Split into two branches — `super_admin` → `/super-admin`, tenant admin → `/admin` (unchanged). The reverse links ("← Tenant Admin" in super-admin nav, "⬡ Platform" in admin nav) already existed, so switching either direction still works, just the default landing spot flipped. One file, `saas/proxy.ts`. Browser-verified: visiting `/admin/login` while already authenticated as super_admin now redirects to `/super-admin/tenants`.
-
-**#122 — Cross-tenant Orders/Bookings activity view.** Max asked how much effort a combined orders view in super-admin would be; scoped it as small-to-medium (read-only easy, cross-tenant write actions hard because they'd fight the RLS/`withTenantDb` architecture), wrote the scope to `vault/Plan-SuperAdminOrdersView.md`, got the go-ahead, built it.
-
-New `/super-admin/orders` page — Bookings/Wine Orders tab switcher (kept as two tabs rather than one merged table; the two record types don't share a row shape). `getAllBookings()`/`getAllWineOrders()` in `superAdmin.ts` query `db` directly across every tenant (same RLS-bypass pattern already used by `getTenants()`'s stats) — discovered mid-build that `Order`/`WineOrder` have no Prisma relation to `Tenant`, just a plain `tenantId` string column, so tenant name/domain gets attached via a manual `Map` lookup rather than an `include`. Tenant + status filters, "Upcoming only" toggle (default on) for Bookings. Every row has an "Open ↗" link to that tenant's *real* domain admin page (`https://{domain}/admin/orders/{id}` for bookings — confirmed this route exists; `https://{domain}/admin/wine-orders` for wine orders — confirmed no per-order detail route exists there, so it links to the list) — deliberately no inline edit/status actions on this page itself, by design.
-
-Browser-verified end to end on live Nikalas Marani data: Bookings tab defaulted to "Upcoming only" correctly showed just 1 future booking (03 Sept 2026) out of 60; unchecking showed all 60; Wine Orders tab showed all 9 with correct wine-specific status labels (Pending/Confirmed/Paid/Delivered/Cancelled vs. the booking statuses); both tabs' "Open ↗" links pointed to the correct real URLs.
-
-TypeScript: 0 errors throughout both #121 and #122.
-
-### Files changed (in addition to #120's list above)
-- `saas/proxy.ts` — login redirect split by role (#121)
-- `saas/app/actions/superAdmin.ts` — `getAllBookings`, `getAllWineOrders` (#122)
-- `saas/app/super-admin/orders/page.tsx` — NEW (#122)
-- `saas/app/super-admin/orders/OrdersActivityClient.tsx` — NEW (#122)
-- `saas/app/super-admin/layout.tsx` — "Orders" nav link (#122)
-- Vault: `Plan-SuperAdminOrdersView.md` (NEW), `FeatureLog.md` (#121, #122 rows), `MaintenanceNotes.md` §4 (NEW — tenant resolution is always single-tenant, `DEFAULT_TENANT_ID` localhost trap)
-
-### What's next
-- Max: if you want to see the "coming soon" kill-switch live, toggle Public Website off for Nikalas Marani for a few seconds yourself and check `nikalasmarani.ge` — not something to automate given it's the live site
-- Max: consider whether Test Winery (`winery2.local`) is worth a hosts-file entry for local testing going forward — would make future feature verification on a non-production tenant much easier
-- Bigger follow-up (not started): "full marketing site vs. booking-widget-only" was the other Public Website option Max didn't pick this round — worth revisiting if a future client wants bookings without a full site
-- Bigger follow-up (not started): if the cross-tenant Orders view ever needs write actions (status change, edit) instead of click-through, that's real work against the RLS architecture — not a quick add-on to #122
+#120 Per-tenant module toggles: 3 booleans on `Tenant` (booking/wineOrders/publicSite), enforced 3 layers deep (`proxy.ts` headers + redirect, admin nav filter, `lib/requireModule.ts` page guards); Public Website is a hard kill-switch to `/coming-soon`. Caught pre-ship that `modulesWineOrders` defaulting `false` would've silently hidden NM's live wine-orders feature — fixed before deploy. #121 super_admin login now defaults to `/super-admin` instead of `/admin`. #122 new read-only `/super-admin/orders` cross-tenant activity view (Bookings/Wine Orders tabs, click-through to each tenant's real admin — no cross-tenant write actions, that fights the RLS architecture). Full notes: `Plan-TenantModules.md`, `Plan-SuperAdminOrdersView.md`.
 
 ---
 

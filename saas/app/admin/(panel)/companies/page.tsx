@@ -2,10 +2,13 @@ import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { headers } from 'next/headers'
 import { ensureIndividualsCompany } from '@/app/actions/companies'
+import { getSetting } from '@/app/actions/settings'
+import { adminT } from '@/lib/adminT'
 import CompaniesClient from './CompaniesClient'
 
 export default async function CompaniesPage() {
-  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
+  const locale = adminLanguage || 'en'
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
   await ensureIndividualsCompany(tenantId)
@@ -28,14 +31,15 @@ export default async function CompaniesPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Companies</h1>
+        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(locale, 'nav.companies')}</h1>
         <span className="text-sm" style={{ color: '#a89070' }}>
-          {bookingCount} booking · {wineCount} wine orders
+          {bookingCount} {adminT(locale, 'companies.summary.booking')} · {wineCount} {adminT(locale, 'companies.summary.wineOrders')}
         </span>
       </div>
       <CompaniesClient
         bookingOn={bookingOn}
         wineOrdersOn={wineOrdersOn}
+        locale={locale}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,

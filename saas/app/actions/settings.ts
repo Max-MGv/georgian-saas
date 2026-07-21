@@ -18,6 +18,7 @@ const DEFAULTS: Record<string, string> = {
   min_guests_tasting: '4',
   min_guests_tasting_lunch: '4',
   maps_embed_url: '',
+  admin_language: 'en',
 }
 
 export async function getSetting(key: string): Promise<string> {
@@ -38,6 +39,7 @@ export async function updateSetting(key: string, value: string) {
       create: { key, value, tenantId },
     })
   )
+  revalidatePath('/admin', 'layout')
   revalidatePath('/admin/settings')
   revalidatePath('/admin/content')
   revalidatePath('/')

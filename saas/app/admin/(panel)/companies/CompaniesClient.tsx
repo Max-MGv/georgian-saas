@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -59,10 +60,11 @@ function SmallInput({ label, value, onChange, type = 'text', width = 80 }: {
 }
 
 function PriceForm({
-  initial, onSave, onCancel, loading,
+  initial, onSave, onCancel, loading, locale,
 }: {
-  initial?: Price; onSave: (data: Omit<Price, 'id' | 'isDisplayPrice'>) => void; onCancel: () => void; loading: boolean
+  initial?: Price; onSave: (data: Omit<Price, 'id' | 'isDisplayPrice'>) => void; onCancel: () => void; loading: boolean; locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
   const [pricePerPerson, setPricePerPerson] = useState(String(initial?.pricePerPerson ?? ''))
@@ -71,11 +73,11 @@ function PriceForm({
 
   return (
     <div className="flex flex-wrap items-end gap-3 mt-3">
-      <SmallInput label="Min guests" value={minGuests} onChange={setMinGuests} type="number" width={72} />
-      <SmallInput label="Max guests" value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
-      <SmallInput label="Tasting ₾/person" value={pricePerPerson} onChange={setPricePerPerson} type="number" width={110} />
-      <SmallInput label="Tasting+Lunch ₾/person" value={tastingLunchPrice} onChange={setTastingLunchPrice} type="number" width={140} />
-      <SmallInput label="Flat fee ₾ (optional)" value={registrationPrice} onChange={setRegistrationPrice} type="number" width={120} />
+      <SmallInput label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} type="number" width={72} />
+      <SmallInput label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
+      <SmallInput label={at('companies.priceForm.tastingPP')} value={pricePerPerson} onChange={setPricePerPerson} type="number" width={110} />
+      <SmallInput label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPrice} onChange={setTastingLunchPrice} type="number" width={140} />
+      <SmallInput label={at('companies.priceForm.flatFee')} value={registrationPrice} onChange={setRegistrationPrice} type="number" width={120} />
       <div className="flex gap-2 pb-0.5">
         <button
           onClick={() => onSave({
@@ -86,19 +88,21 @@ function PriceForm({
           })}
           disabled={loading}
           className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
-        >Save</button>
-        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+        >{at('settings.common.save')}</button>
+        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
       </div>
     </div>
   )
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved }: {
+function EditPanel({ company, onClose, onSaved, locale }: {
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
+  locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   const [name, setName] = useState(company.name)
   const [idCode, setIdCode] = useState(company.identificationCode ?? '')
   const [contactName, setContactName] = useState(company.contactName ?? '')
@@ -116,7 +120,7 @@ function EditPanel({ company, onClose, onSaved }: {
 
   async function handleSave() {
     if (!isBooking && !isWineOrder) {
-      setError('Company must belong to at least one module.')
+      setError(at('companies.editPanel.mustHaveModule'))
       return
     }
     setLoading(true); setError('')
@@ -186,7 +190,7 @@ function EditPanel({ company, onClose, onSaved }: {
         style={{ width: '420px', maxWidth: '100vw', backgroundColor: '#fffdf9', borderLeft: `1px solid ${C.border}` }}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.border }}>
-          <h2 className="font-semibold text-base" style={{ color: C.text }}>Edit Company</h2>
+          <h2 className="font-semibold text-base" style={{ color: C.text }}>{at('companies.editPanel.title')}</h2>
           <button onClick={onClose} style={{ color: C.faint }} className="hover:opacity-70 text-xl leading-none">×</button>
         </div>
         <div className="flex flex-col gap-5 px-6 py-6 flex-1">
@@ -194,7 +198,7 @@ function EditPanel({ company, onClose, onSaved }: {
 
           {/* Modules */}
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Modules</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.modules')}</p>
             <div className="flex gap-3">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -203,7 +207,7 @@ function EditPanel({ company, onClose, onSaved }: {
                   onChange={e => setIsBooking(e.target.checked)}
                   className="rounded"
                 />
-                <span className="text-sm" style={{ color: C.text }}>Bookings</span>
+                <span className="text-sm" style={{ color: C.text }}>{at('companies.editPanel.bookings')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -212,7 +216,7 @@ function EditPanel({ company, onClose, onSaved }: {
                   onChange={e => setIsWineOrder(e.target.checked)}
                   className="rounded"
                 />
-                <span className="text-sm" style={{ color: C.text }}>Wine Orders</span>
+                <span className="text-sm" style={{ color: C.text }}>{at('nav.wineOrders')}</span>
               </label>
             </div>
           </div>
@@ -223,8 +227,8 @@ function EditPanel({ company, onClose, onSaved }: {
           {isWineOrder && (
             <>
               <div className="flex flex-col gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Wine discount</p>
-                <p className="text-xs" style={{ color: C.muted }}>Applied to all wine order totals for this company.</p>
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.wineDiscount')}</p>
+                <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.wineDiscountHint')}</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -236,7 +240,7 @@ function EditPanel({ company, onClose, onSaved }: {
                     placeholder="0"
                     style={{ ...inputStyle, width: 80, padding: '9px 12px', fontSize: '0.875rem', textAlign: 'right' }}
                   />
-                  <span className="text-sm font-medium" style={{ color: C.muted }}>% off all wines</span>
+                  <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
                 </div>
               </div>
               <div className="h-px" style={{ backgroundColor: C.border }} />
@@ -244,22 +248,22 @@ function EditPanel({ company, onClose, onSaved }: {
           )}
 
           <div className="flex flex-col gap-4">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Company info</p>
-            {field('Company name', name, setName, 'Company name')}
-            {field('Identification code (ID)', idCode, setIdCode, 'Optional')}
-            {field('Address', address, setAddress, 'Company address')}
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.companyInfo')}</p>
+            {field(at('companies.editPanel.companyName'), name, setName, at('companies.editPanel.companyName'))}
+            {field(at('companies.editPanel.idCode'), idCode, setIdCode, at('companies.editPanel.optional'))}
+            {field(at('companies.editPanel.address'), address, setAddress, at('companies.editPanel.addressPh'))}
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-4">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Contact person (auto-fills forms)</p>
-            {field('Full name', contactName, setContactName, 'First and last name')}
-            {field('Phone', contactPhone, setContactPhone, '+995 5XX XXX XXX')}
-            {field('Email', contactEmail, setContactEmail, 'contact@company.ge')}
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.contactPerson')}</p>
+            {field(at('companies.editPanel.fullName'), contactName, setContactName, at('companies.editPanel.fullNamePh'))}
+            {field(at('orderDetail.bookingInfo.phone'), contactPhone, setContactPhone, at('companies.editPanel.phonePh'))}
+            {field(at('orderDetail.bookingInfo.email'), contactEmail, setContactEmail, at('companies.editPanel.emailPh'))}
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>Access code</p>
-            <p className="text-xs" style={{ color: C.muted }}>Companies enter this on booking or wine order forms to auto-fill their details.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.accessCode')}</p>
+            <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.accessCodeHint')}</p>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -267,14 +271,14 @@ function EditPanel({ company, onClose, onSaved }: {
                   value={code}
                   onChange={e => setCode(e.target.value.toUpperCase())}
                   onBlur={handleSetCode}
-                  placeholder="No code set"
+                  placeholder={at('companies.editPanel.noCodeSet')}
                   style={{ ...inputStyle, width: '100%', padding: '9px 36px 9px 12px', fontSize: '0.875rem', fontFamily: 'monospace', letterSpacing: showCode ? '0.1em' : undefined }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowCode(s => !s)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
-                  title={showCode ? 'Hide' : 'Show'}
+                  title={showCode ? at('companies.editPanel.hide') : at('companies.editPanel.show')}
                 >
                   {showCode ? (
                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -291,11 +295,11 @@ function EditPanel({ company, onClose, onSaved }: {
               <button
                 onClick={handleCopy}
                 disabled={!code}
-                title="Copy code"
+                title={at('companies.editPanel.copyCode')}
                 className="px-3 py-2 rounded-lg border text-xs font-medium"
                 style={{ borderColor: C.border, color: copied ? '#15803d' : C.muted, minWidth: 60 }}
               >
-                {copied ? 'Copied!' : 'Copy'}
+                {copied ? at('companies.editPanel.copied') : at('companies.editPanel.copy')}
               </button>
             </div>
             <button
@@ -304,16 +308,16 @@ function EditPanel({ company, onClose, onSaved }: {
               className="text-xs px-3 py-2 rounded-lg border w-fit"
               style={{ borderColor: C.border, color: C.muted }}
             >
-              ↻ Generate new code
+              {at('companies.editPanel.generateNewCode')}
             </button>
           </div>
         </div>
         <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: C.border }}>
           <button onClick={handleSave} disabled={loading} className="btn-wine flex-1 py-2.5 rounded-lg text-sm font-medium">
-            {loading ? 'Saving…' : 'Save changes'}
+            {loading ? at('settings.common.saving') : at('orders.editPanel.save')}
           </button>
           <button onClick={onClose} className="px-5 py-2.5 rounded-lg border text-sm" style={{ borderColor: C.border, color: C.muted }}>
-            Cancel
+            {at('settings.common.cancel')}
           </button>
         </div>
       </div>
@@ -337,6 +341,7 @@ function PriceTiersSection({
   setAddingPriceFor,
   setEditingPriceId,
   setDeletingPriceId,
+  locale,
 }: {
   company: Company
   isIndividual: boolean
@@ -352,22 +357,24 @@ function PriceTiersSection({
   setAddingPriceFor: (id: string | null) => void
   setEditingPriceId: (id: string | null) => void
   setDeletingPriceId: (id: string | null) => void
+  locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   return (
     <div className="px-5 pb-5" style={{ backgroundColor: isIndividual ? '#fffbf2' : '#faf5ef', borderTop: `1px solid ${C.border}` }}>
-      <p className="text-xs font-medium mt-4 mb-3" style={{ color: C.muted }}>Price tiers</p>
+      <p className="text-xs font-medium mt-4 mb-3" style={{ color: C.muted }}>{at('companies.priceTiers.title')}</p>
 
       {isIndividual && (
         <p className="text-xs mb-3" style={{ color: C.faint }}>
-          Tick <span style={{ color: '#b45309' }}>★ Show on site</span> on the tier to display on the public home page. Falls back to 50₾ / 100₾ if none selected.
+          {at('companies.priceTiers.showOnSiteHint')}
         </p>
       )}
 
       {company.prices.length === 0 && addingPriceFor !== company.id && (
         <p className="text-xs mb-3" style={{ color: C.faint }}>
           {isIndividual
-            ? 'No custom tiers. Public site shows 50₾ / 100₾ defaults.'
-            : 'No price tiers yet. Individual booking rates will apply.'}
+            ? at('companies.priceTiers.noCustomTiersIndividual')
+            : at('companies.priceTiers.noTiersCompany')}
         </p>
       )}
 
@@ -379,25 +386,26 @@ function PriceTiersSection({
               onSave={data => onUpdateTier(company.id, price.id, data)}
               onCancel={() => setEditingPriceId(null)}
               loading={loading}
+              locale={locale}
             />
           ) : deletingPriceId === price.id ? (
             <div className="flex items-center gap-3 text-sm">
-              <span style={{ color: C.muted }}>Delete this tier?</span>
-              <button onClick={() => onDeleteTier(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes'}</button>
-              <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+              <span style={{ color: C.muted }}>{at('companies.priceTiers.deleteConfirm')}</span>
+              <button onClick={() => onDeleteTier(company.id, price.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{loading ? at('companies.priceTiers.deleting') : at('orders.yes')}</button>
+              <button onClick={() => setDeletingPriceId(null)} disabled={loading} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
             </div>
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} guests</span>
-              <span className="text-xs" style={{ color: C.faint }}>Tasting: <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
-              <span className="text-xs" style={{ color: C.faint }}>+Lunch: <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
-              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ flat fee</span>}
+              <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
+              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ {at('companies.priceTiers.flatFeeSuffix')}</span>}
 
               {isIndividual && (
                 <button
                   onClick={() => !price.isDisplayPrice && onSetDisplayPrice(price.id)}
                   disabled={loading || price.isDisplayPrice}
-                  title={price.isDisplayPrice ? 'Shown on public site' : 'Show this tier on public site'}
+                  title={price.isDisplayPrice ? at('companies.priceTiers.shownOnSiteTitle') : at('companies.priceTiers.showThisOnSiteTitle')}
                   className="flex items-center gap-1 text-xs px-2 py-1 rounded border"
                   style={{
                     borderColor: price.isDisplayPrice ? '#d97706' : C.border,
@@ -406,12 +414,12 @@ function PriceTiersSection({
                     cursor: price.isDisplayPrice ? 'default' : 'pointer',
                   }}
                 >
-                  ★ {price.isDisplayPrice ? 'Shown on site' : 'Show on site'}
+                  ★ {price.isDisplayPrice ? at('companies.priceTiers.shownOnSiteBadge') : at('companies.priceTiers.showOnSiteBadge')}
                 </button>
               )}
 
-              <button onClick={() => setEditingPriceId(price.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
-              <button onClick={() => setDeletingPriceId(price.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
+              <button onClick={() => setEditingPriceId(price.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+              <button onClick={() => setDeletingPriceId(price.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
             </div>
           )}
         </div>
@@ -422,6 +430,7 @@ function PriceTiersSection({
           onSave={data => onAddTier(company.id, data)}
           onCancel={() => setAddingPriceFor(null)}
           loading={loading}
+          locale={locale}
         />
       ) : (
         <button
@@ -429,7 +438,7 @@ function PriceTiersSection({
           className="text-xs mt-2 px-3 py-1.5 rounded-lg border"
           style={{ borderColor: C.border, color: C.muted }}
         >
-          + Add tier
+          {at('companies.priceTiers.addTier')}
         </button>
       )}
     </div>
@@ -447,7 +456,8 @@ function ModuleBadge({ label, active }: { label: string; active: boolean }) {
 }
 
 // ── Tab toggle ─────────────────────────────────────────────────────────────
-function TabToggle({ active, onChange, modules }: { active: Module; onChange: (m: Module) => void; modules: Module[] }) {
+function TabToggle({ active, onChange, modules, locale }: { active: Module; onChange: (m: Module) => void; modules: Module[]; locale: string }) {
+  const at = (key: string) => adminT(locale, key)
   return (
     <div className="flex mb-5">
       <div className="inline-flex rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
@@ -462,7 +472,7 @@ function TabToggle({ active, onChange, modules }: { active: Module; onChange: (m
               borderRight: m === 'BOOKING' ? `1px solid ${C.border}` : undefined,
             }}
           >
-            {m === 'BOOKING' ? 'Bookings' : 'Wine Orders'}
+            {m === 'BOOKING' ? at('companies.editPanel.bookings') : at('nav.wineOrders')}
           </button>
         ))}
       </div>
@@ -471,7 +481,8 @@ function TabToggle({ active, onChange, modules }: { active: Module; onChange: (m
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean }) {
+export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false, locale = 'en' }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean; locale?: string }) {
+  const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
     ...(wineOrdersOn ? (['WINE_ORDER'] as const) : []),
@@ -562,6 +573,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
     onDeleteTier: handleDeletePrice,
     onSetDisplayPrice: handleSetDisplayPrice,
     setAddingPriceFor, setEditingPriceId, setDeletingPriceId,
+    locale,
   }
 
   return (
@@ -571,11 +583,12 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           company={editingCompany}
           onClose={() => setEditingCompany(null)}
           onSaved={updated => setCompanies(prev => prev.map(c => c.id === editingCompany.id ? { ...c, ...updated } : c))}
+          locale={locale}
         />
       )}
 
       {availableModules.length > 1 && (
-        <TabToggle active={activeModule} onChange={m => { setActiveModule(m); setExpandedId(null) }} modules={availableModules} />
+        <TabToggle active={activeModule} onChange={m => { setActiveModule(m); setExpandedId(null) }} modules={availableModules} locale={locale} />
       )}
 
       {/* ── Individuals row — only in Bookings tab ── */}
@@ -592,17 +605,17 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 <svg className="w-4 h-4 transition-transform" style={{ color: '#b45309', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
                   <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span className="font-semibold" style={{ color: '#92400e' }}>Individuals</span>
+                <span className="font-semibold" style={{ color: '#92400e' }}>{at('companies.individuals.title')}</span>
                 <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
-                  Public pricing
+                  {at('companies.individuals.publicPricing')}
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {displayTier.pricePerPerson}₾ / {displayTier.tastingLunchPricePerPerson}₾ shown on site
+                    {displayTier.pricePerPerson}₾ / {displayTier.tastingLunchPricePerPerson}₾ {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>
-                    50₾ / 100₾ defaults · {individualsRow.prices.length} tier{individualsRow.prices.length !== 1 ? 's' : ''}
+                    {at('companies.individuals.defaults')} · {individualsRow.prices.length} {individualsRow.prices.length !== 1 ? at('companies.individuals.tier.plural') : at('companies.individuals.tier.singular')}
                   </span>
                 )}
               </button>
@@ -621,7 +634,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
       {/* ── Add company ── */}
       {!adding && (
         <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium mb-4">
-          + Add {activeModule === 'BOOKING' ? 'Booking' : 'Wine Order'} Company
+          {activeModule === 'BOOKING' ? at('companies.addCompanyBooking') : at('companies.addCompanyWineOrder')}
         </button>
       )}
       {adding && (
@@ -629,10 +642,10 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           <input
             autoFocus value={newName} onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }}
-            placeholder="Company name…" style={{ ...inputStyle, width: 280, padding: '8px 12px' }}
+            placeholder={at('companies.newCompanyPh')} style={{ ...inputStyle, width: 280, padding: '8px 12px' }}
           />
-          <button onClick={handleAdd} disabled={loading} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium">{loading ? 'Saving…' : 'Save'}</button>
-          <button onClick={() => { setAdding(false); setNewName('') }} className="text-sm px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+          <button onClick={handleAdd} disabled={loading} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium">{loading ? at('settings.common.saving') : at('settings.common.save')}</button>
+          <button onClick={() => { setAdding(false); setNewName('') }} className="text-sm px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
         </div>
       )}
       {error && <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{error}</p>}
@@ -641,7 +654,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
       {visibleCompanies.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
           <p style={{ color: C.faint }}>
-            No {activeModule === 'BOOKING' ? 'booking' : 'wine order'} companies yet. Add one above.
+            {activeModule === 'BOOKING' ? at('companies.noCompaniesBooking') : at('companies.noCompaniesWineOrder')}
           </p>
         </div>
       ) : (
@@ -660,29 +673,29 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                       <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
-                    {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>ID: {company.identificationCode}</span>}
+                    {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>{at('companies.idLabel')} {company.identificationCode}</span>}
                     {company.accessCode && (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
-                        Code set
+                        {at('companies.codeSet')}
                       </span>
                     )}
                     {isInBoth && (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
-                        Both modules
+                        {at('companies.bothModules')}
                       </span>
                     )}
                     <span className="text-xs" style={{ color: C.faint }}>
                       {activeModule === 'BOOKING'
-                        ? `${company.prices.length} tier${company.prices.length !== 1 ? 's' : ''} · `
-                        : ''}{company.orderCount} order{company.orderCount !== 1 ? 's' : ''}
+                        ? `${company.prices.length} ${company.prices.length !== 1 ? at('companies.individuals.tier.plural') : at('companies.individuals.tier.singular')} · `
+                        : ''}{company.orderCount} {company.orderCount !== 1 ? at('packing.order.plural') : at('packing.order.singular')}
                     </span>
                   </button>
 
                   {deletingId === company.id ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm" style={{ color: C.muted }}>Delete?</span>
-                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? 'Deleting…' : 'Yes, delete'}</button>
-                      <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                      <span className="text-sm" style={{ color: C.muted }}>{at('companies.deleteConfirm')}</span>
+                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? at('companies.deleting') : at('companies.yesDelete')}</button>
+                      <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -690,8 +703,8 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                         onClick={() => setEditingCompany(company)}
                         className="text-sm px-3 py-1.5 rounded-lg border"
                         style={{ borderColor: C.border, color: C.muted }}
-                      >Edit</button>
-                      <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
+                      >{at('companies.priceTiers.edit')}</button>
+                      <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
                     </div>
                   )}
                 </div>
@@ -709,16 +722,16 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 {expanded && activeModule === 'WINE_ORDER' && (
                   <div className="px-5 pb-5 pt-3" style={{ backgroundColor: '#faf5ef', borderTop: `1px solid ${C.border}` }}>
                     <div className="flex flex-wrap gap-4 text-xs" style={{ color: C.muted }}>
-                      {company.contactName && <span>Contact: <span style={{ color: C.text }}>{company.contactName}</span></span>}
-                      {company.contactPhone && <span>Phone: <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
-                      {company.contactEmail && <span>Email: <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
+                      {company.contactName && <span>{at('companies.wineOrdersTab.contact')} <span style={{ color: C.text }}>{company.contactName}</span></span>}
+                      {company.contactPhone && <span>{at('companies.wineOrdersTab.phone')} <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
+                      {company.contactEmail && <span>{at('companies.wineOrdersTab.email')} <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
                       {company.wineDiscountPercent != null && company.wineDiscountPercent > 0 && (
                         <span className="px-2 py-0.5 rounded font-semibold" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
-                          −{company.wineDiscountPercent}% wine discount
+                          −{company.wineDiscountPercent}% {at('companies.wineOrdersTab.wineDiscount')}
                         </span>
                       )}
                       {!company.contactName && !company.contactPhone && !company.contactEmail && !company.wineDiscountPercent && (
-                        <p style={{ color: C.faint }}>No contact info set. Click Edit to add.</p>
+                        <p style={{ color: C.faint }}>{at('companies.wineOrdersTab.noContact')}</p>
                       )}
                     </div>
                   </div>

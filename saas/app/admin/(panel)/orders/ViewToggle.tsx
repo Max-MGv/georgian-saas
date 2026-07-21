@@ -1,17 +1,20 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
+import { adminT } from '@/lib/adminT'
 
 const C = { border: '#e0d4c0', muted: '#6b5a47', wine: 'var(--color-brand)', inputBg: '#fffdf9' }
 
 type Props = {
   view: 'table' | 'calendar'
   params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
+  locale?: string
 }
 
-export default function ViewToggle({ view, params }: Props) {
+export default function ViewToggle({ view, params, locale = 'en' }: Props) {
   const router = useRouter()
   const pathname = usePathname()
+  const at = (key: string) => adminT(locale, key)
 
   function switchTo(v: 'table' | 'calendar') {
     const sp = new URLSearchParams()
@@ -36,7 +39,7 @@ export default function ViewToggle({ view, params }: Props) {
           backgroundColor: view === 'table' ? C.wine : C.inputBg,
           color: view === 'table' ? '#fff' : C.muted }}
       >
-        Table
+        {at('orders.view.table')}
       </button>
       <button
         onClick={() => switchTo('calendar')}
@@ -44,7 +47,7 @@ export default function ViewToggle({ view, params }: Props) {
           backgroundColor: view === 'calendar' ? C.wine : C.inputBg,
           color: view === 'calendar' ? '#fff' : C.muted }}
       >
-        Calendar
+        {at('orders.view.calendar')}
       </button>
     </div>
   )

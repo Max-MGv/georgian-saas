@@ -1,12 +1,15 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import Link from 'next/link'
+import { getSetting } from '@/app/actions/settings'
+import { adminT } from '@/lib/adminT'
 import NewOrderForm from './NewOrderForm'
 
 const C = { wine: 'var(--color-brand)', faint: '#a89070' }
 
 export default async function NewOrderPage() {
-  const tenantId = await getTenantId()
+  const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
+  const locale = adminLanguage || 'en'
   const [companies, menuItems, masterclassItems] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({
       where: { tenantId },
@@ -24,14 +27,15 @@ export default async function NewOrderPage() {
         className="inline-flex items-center gap-1 text-sm mb-5"
         style={{ color: C.wine }}
       >
-        ← Back to orders
+        {adminT(locale, 'orderDetail.backToOrders')}
       </Link>
 
       <h1 className="text-lg font-bold mb-5" style={{ color: '#1c1008' }}>
-        New Order
+        {adminT(locale, 'newOrder.pageTitle')}
       </h1>
 
       <NewOrderForm
+        locale={locale}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,

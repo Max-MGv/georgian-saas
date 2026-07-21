@@ -1,6 +1,7 @@
 import { getSetting } from '@/app/actions/settings'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { headers } from 'next/headers'
+import { adminT } from '@/lib/adminT'
 import SettingsClient from './SettingsClient'
 
 export default async function SettingsPage() {
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
     contactAddress,
     contactFacebook,
     contactInstagram,
+    adminLanguage,
     h,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
@@ -47,6 +49,7 @@ export default async function SettingsPage() {
     getSetting('contact_address'),
     getSetting('contact_facebook'),
     getSetting('contact_instagram'),
+    getSetting('admin_language'),
     headers(),
   ])
 
@@ -57,7 +60,7 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Settings</h1>
+        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(adminLanguage || 'en', 'nav.settings')}</h1>
       </div>
 
       <SettingsClient
@@ -88,6 +91,7 @@ export default async function SettingsPage() {
         contactAddress={contactAddress}
         contactFacebook={contactFacebook}
         contactInstagram={contactInstagram}
+        adminLanguage={adminLanguage || 'en'}
       />
     </div>
   )

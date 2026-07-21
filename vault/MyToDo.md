@@ -10,6 +10,16 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### Georgian admin panel layer — Phase 0 + 1 (Claude tested in browser 2026-07-21, needs Max to review wording)
+
+Not a bug-test — this is a wording review. Full plan + progress tracker: `Plan-AdminGeorgian.md`.
+
+1. Go to `/admin/settings` → "Admin Panel Language" section (top of page) → switch to KA
+2. Click through every admin page and read the Georgian for anything that sounds off: nav, Settings (all sections), Orders (list/filters/calendar, click a row for Order Detail, try "+ New Order"), Wine Orders (all 3 view modes — Cards/Table/Pack, try the packing sheet Print), Companies (expand a row, click Edit)
+3. Specifically worth a close look: wine order status names (Pending/Confirmed/Paid/Delivered), booking status names (New/Confirmed/Invoice Sent/Paid/Completed/Cancelled), and the packing-sheet box-count sentences (e.g. "1 ნახევრადი (4) — სულ 7 ყუთი (6-ბოთლიანი)") — these were hand-translated per-locale rather than word-substituted, so worth confirming they read naturally
+4. Switch back to EN in Settings when done — confirms the toggle reverts cleanly (already Claude-verified, but good to see live)
+5. Not yet translated (Phase 2/3, still English by design): Wines, Statistics, Menu Items, Masterclass, Site Content editor's own buttons/labels
+
 ### #123–#126 — Domain migration, no-tenant state, neutral fallbacks, set password (Claude tested 2026-07-18 live, needs Max to test)
 
 **Reminder first:** tell the Nikalas Marani family their site + admin login both moved to `nikalasmarani.vercel.app` (same credentials; old `georgian-saas.vercel.app` now shows the platform placeholder).

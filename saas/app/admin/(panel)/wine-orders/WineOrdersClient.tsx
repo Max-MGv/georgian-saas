@@ -3,19 +3,20 @@
 import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
-import PackingView, { type WineOrderItem, type PackingLayoutType, type BoxMode } from './PackingView'
+import { adminT } from '@/lib/adminT'
+import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
-const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: string; label: string }> = {
-  pending:   { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', label: 'Pending' },
-  confirmed: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', label: 'Confirmed' },
-  paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', label: 'Paid' },
-  delivered: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', label: 'Delivered' },
-  cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', label: 'Cancelled' },
+const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: string; labelKey: string }> = {
+  pending:   { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', labelKey: 'wineOrders.status.pending' },
+  confirmed: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', labelKey: 'orders.status.confirmed' },
+  paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
+  delivered: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', labelKey: 'wineOrders.status.delivered' },
+  cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', labelKey: 'orders.status.cancelled' },
 }
 
 type WineOrder = {
@@ -42,8 +43,8 @@ function itemLabel(i: WineOrderItem) {
 
 const STAGES = ['pending', 'confirmed', 'paid', 'delivered'] as const
 type Stage = typeof STAGES[number]
-const STAGE_LABELS: Record<string, string> = {
-  pending: 'Pending', confirmed: 'Confirmed', paid: 'Paid', delivered: 'Delivered',
+const STAGE_LABEL_KEYS: Record<string, string> = {
+  pending: 'wineOrders.status.pending', confirmed: 'orders.status.confirmed', paid: 'orders.status.paid', delivered: 'wineOrders.status.delivered',
 }
 
 const ALL_STATUSES = ['pending', 'confirmed', 'paid', 'delivered', 'cancelled'] as const
@@ -115,17 +116,19 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
 
 // ── VerticalStepper (cards only) ───────────────────────────────────────
 
-function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, onConfirm, onCancel }: {
+function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, onConfirm, onCancel, locale }: {
   orderId: string
   status: string
   onRequestChange: (toStatus: string) => void
   pendingToStatus?: string
   onConfirm: () => void
   onCancel: () => void
+  locale: string
 }) {
   const [panelHovered, setPanelHovered] = useState(false)
   const isCancelled = status === 'cancelled'
   const currentIdx = STAGES.indexOf(status as Stage)
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
 
   return (
     <div
@@ -144,7 +147,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
                     style={{ borderColor: '#d1b9a0', backgroundColor: '#f5efe6' }}>
                     <span className="text-xs" style={{ color: '#d1b9a0' }}>{i + 1}</span>
                   </div>
-                  <span className="text-xs" style={{ color: '#d1b9a0' }}>{STAGE_LABELS[stage]}</span>
+                  <span className="text-xs" style={{ color: '#d1b9a0' }}>{at(STAGE_LABEL_KEYS[stage])}</span>
                 </div>
                 {i < STAGES.length - 1 && (
                   <div className="w-0.5 h-4 ml-3 my-0.5" style={{ backgroundColor: '#e8ddd0' }} />
@@ -157,7 +160,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
             className="mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
-            <UndoIcon /> Undo
+            <UndoIcon /> {at('wineOrders.undo')}
           </button>
         </>
       ) : (
@@ -169,7 +172,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
             return (
               <div key={stage} className="flex flex-col items-start">
                 <StepButton
-                  label={STAGE_LABELS[stage]}
+                  label={at(STAGE_LABEL_KEYS[stage])}
                   index={i}
                   isDone={isDone}
                   isActive={isActive}
@@ -177,7 +180,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
                   panelHovered={panelHovered}
                   onClick={() => isClickable && onRequestChange(stage)}
                   tooltip={isClickable
-                    ? (i < currentIdx ? `Revert to ${STAGE_LABELS[stage]}` : `Advance to ${STAGE_LABELS[stage]}`)
+                    ? (i < currentIdx ? at('wineOrders.revertTo', { label: at(STAGE_LABEL_KEYS[stage]) }) : at('wineOrders.advanceTo', { label: at(STAGE_LABEL_KEYS[stage]) }))
                     : undefined}
                 />
                 {i < STAGES.length - 1 && (
@@ -194,7 +197,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
       {pendingToStatus && (
         <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
           <span style={{ color: C.muted, flex: 1 }}>
-            → {STATUS_COLOR[pendingToStatus]?.label ?? pendingToStatus}?
+            → {STATUS_COLOR[pendingToStatus] ? at(STATUS_COLOR[pendingToStatus].labelKey) : pendingToStatus}?
           </span>
           <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
           <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
@@ -206,12 +209,14 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
 
 // ── FilterBar ──────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo }: {
+function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo, locale }: {
   filters: Set<string>; onToggleFilter: (f: string) => void; onClearFilters: () => void
   search: string; onSearch: (s: string) => void
   dateFrom: string; onDateFrom: (d: string) => void
   dateTo: string; onDateTo: (d: string) => void
+  locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   const hasExtra = search || dateFrom || dateTo
   return (
     <div className="flex flex-col gap-2 mb-4">
@@ -227,7 +232,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
             padding: filters.size === 0 ? '0.3rem 0.85rem' : '0.2rem 0.7rem',
           }}
         >
-          All
+          {at('wineOrders.filter.all')}
         </button>
         {STATUS_FILTER_OPTIONS.map(f => {
           const isActive = filters.has(f)
@@ -245,7 +250,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
                 padding: isActive ? '0.3rem 0.85rem' : '0.2rem 0.7rem',
               }}
             >
-              {sc.label}
+              {at(sc.labelKey)}
             </button>
           )
         })}
@@ -253,18 +258,18 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
       <div className="flex gap-2 flex-wrap items-center">
         <input
           type="text"
-          placeholder="Search company…"
+          placeholder={at('wineOrders.filter.searchPlaceholder')}
           value={search}
           onChange={e => onSearch(e.target.value)}
           className="rounded-lg border px-3 py-1.5 text-sm"
           style={{ borderColor: C.border, color: C.text, backgroundColor: '#fff', minWidth: 160 }}
         />
-        <input type="date" value={dateFrom} onChange={e => onDateFrom(e.target.value)} title="From"
+        <input type="date" value={dateFrom} onChange={e => onDateFrom(e.target.value)} title={at('orders.filters.from')}
           className="rounded-lg border px-3 py-1.5 text-sm"
           style={{ borderColor: C.border, color: dateFrom ? C.text : C.faint, backgroundColor: '#fff' }}
         />
         <span className="text-xs" style={{ color: C.faint }}>→</span>
-        <input type="date" value={dateTo} onChange={e => onDateTo(e.target.value)} title="To"
+        <input type="date" value={dateTo} onChange={e => onDateTo(e.target.value)} title={at('orders.filters.to')}
           className="rounded-lg border px-3 py-1.5 text-sm"
           style={{ borderColor: C.border, color: dateTo ? C.text : C.faint, backgroundColor: '#fff' }}
         />
@@ -272,7 +277,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
           <button onClick={() => { onSearch(''); onDateFrom(''); onDateTo('') }}
             className="text-xs px-2.5 py-1.5 rounded-lg border"
             style={{ borderColor: C.border, color: C.faint, backgroundColor: '#fff' }}>
-            Clear
+            {at('wineOrders.filter.clear')}
           </button>
         )}
       </div>
@@ -282,14 +287,16 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
 
 // ── TableView (Orders-page style) ──────────────────────────────────────
 
-function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel }: {
+function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
   orders: WineOrder[]
   pendingChange: PendingChange | null
   onRequestChange: (orderId: string, toStatus: string) => void
   onConfirm: () => void
   onCancel: () => void
+  locale: string
 }) {
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
+  const at = (key: string) => adminT(locale, key)
 
   useEffect(() => {
     if (!statusMenuId) return
@@ -299,7 +306,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
   }, [statusMenuId])
 
   if (orders.length === 0) {
-    return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>No orders match the filters.</p>
+    return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('wineOrders.noOrdersMatch')}</p>
   }
 
   return (
@@ -307,10 +314,10 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
       <table className="w-full text-sm border-collapse" style={{ minWidth: 580 }}>
         <thead>
           <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
-            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Company</th>
-            <th className="text-right px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Amount</th>
-            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Date</th>
-            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Status</th>
+            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('orders.col.company')}</th>
+            <th className="text-right px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('wineOrders.table.amount')}</th>
+            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('orders.col.date')}</th>
+            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('orders.col.status')}</th>
           </tr>
         </thead>
         <tbody style={{ backgroundColor: '#ffffff' }}>
@@ -371,7 +378,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
                       style={{ backgroundColor: sc.pill, color: sc.pillText, border: `1px solid ${sc.border}44` }}
                     >
-                      {sc.label} ▾
+                      {at(sc.labelKey)} ▾
                     </button>
                     {statusMenuId === order.id && (
                       <div
@@ -392,7 +399,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                           >
                             <span className="w-2 h-2 rounded-full flex-shrink-0"
                               style={{ backgroundColor: STATUS_COLOR[s].border }} />
-                            {STATUS_COLOR[s].label}
+                            {at(STATUS_COLOR[s].labelKey)}
                           </button>
                         ))}
                       </div>
@@ -400,7 +407,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                     {isPending && (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                         <span style={{ color: C.muted }}>
-                          → {STATUS_COLOR[pendingChange.toStatus]?.label ?? pendingChange.toStatus}?
+                          → {STATUS_COLOR[pendingChange.toStatus] ? at(STATUS_COLOR[pendingChange.toStatus].labelKey) : pendingChange.toStatus}?
                         </span>
                         <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white"
                           style={{ backgroundColor: '#16a34a' }}>✓</button>
@@ -421,17 +428,19 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
 
 // ── PackingTable ───────────────────────────────────────────────────────
 
-function PackingTable({ orders, selected, onToggle, onToggleAll }: {
+function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
   orders: WineOrder[]
   selected: Set<string>
   onToggle: (id: string) => void
   onToggleAll: (check: boolean) => void
+  locale: string
 }) {
   const allChecked = orders.length > 0 && orders.every(o => selected.has(o.id))
   const someChecked = !allChecked && orders.some(o => selected.has(o.id))
+  const at = (key: string) => adminT(locale, key)
 
   if (orders.length === 0) {
-    return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>No orders match the filters.</p>
+    return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('wineOrders.noOrdersMatch')}</p>
   }
 
   return (
@@ -448,10 +457,10 @@ function PackingTable({ orders, selected, onToggle, onToggleAll }: {
                 className="cursor-pointer"
               />
             </th>
-            <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>Company</th>
-            <th className="text-right px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Bottles</th>
-            <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>Status</th>
-            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>Date</th>
+            <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>{at('orders.col.company')}</th>
+            <th className="text-right px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('wineOrders.table.bottles')}</th>
+            <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted }}>{at('orders.col.status')}</th>
+            <th className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at('orders.col.date')}</th>
           </tr>
         </thead>
         <tbody style={{ backgroundColor: '#ffffff' }}>
@@ -490,7 +499,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll }: {
                 <td className="px-4 py-3">
                   <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                     style={{ backgroundColor: sc.pill, color: sc.pillText }}>
-                    {sc.label}
+                    {at(sc.labelKey)}
                   </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted, fontSize: '0.8rem' }}>
@@ -507,7 +516,8 @@ function PackingTable({ orders, selected, onToggle, onToggleAll }: {
 
 // ── Main component ─────────────────────────────────────────────────────
 
-export default function WineOrdersClient({ orders: initial }: { orders: WineOrder[] }) {
+export default function WineOrdersClient({ orders: initial, locale = 'en' }: { orders: WineOrder[]; locale?: string }) {
+  const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState<WineOrder[]>(initial)
   const [mode, setMode] = useState<Mode>('cards')
   const [filters, setFilters] = useState<Set<string>>(new Set())
@@ -516,7 +526,6 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
   const [dateTo, setDateTo] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [boxMode, setBoxMode] = useState<BoxMode>('six')
-  const [packingLayout, setPackingLayout] = useState<PackingLayoutType>('a')
   const [recentlyInactive, setRecentlyInactive] = useState<Set<string>>(new Set())
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -590,8 +599,10 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
   }
 
   if (orders.length === 0) {
-    return <div className="text-center py-20 text-sm" style={{ color: '#a89070' }}>No wine orders yet.</div>
+    return <div className="text-center py-20 text-sm" style={{ color: '#a89070' }}>{at('wineOrders.noOrdersYet')}</div>
   }
+
+  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : at('wineOrders.mode.pack')
 
   const modeToggle = (
     <div className="flex gap-0.5 rounded-lg p-0.5 mb-5 self-start" style={{ backgroundColor: '#f0e8dc' }}>
@@ -607,7 +618,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
             boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.1)' : undefined,
           }}
         >
-          {m === 'pack' ? '📦 Pack' : m.charAt(0).toUpperCase() + m.slice(1)}
+          {modeLabel(m)}
         </button>
       ))}
     </div>
@@ -627,6 +638,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
       search={search} onSearch={setSearch}
       dateFrom={dateFrom} onDateFrom={setDateFrom}
       dateTo={dateTo} onDateTo={setDateTo}
+      locale={locale}
     />
   )
 
@@ -638,7 +650,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         {modeToggle}
         {filterBar}
         {cardsVisible.length === 0 && (
-          <p className="text-center py-12 text-sm" style={{ color: C.faint }}>No orders match the filters.</p>
+          <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('wineOrders.noOrdersMatch')}</p>
         )}
         <div className="flex flex-col gap-4" ref={listRef}>
           {cardsVisible.map(order => {
@@ -702,7 +714,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                       borderColor: isSelected ? C.wine : C.border,
                     }}
                   >
-                    {isSelected ? '✓ In pack' : '+ Pack'}
+                    {isSelected ? at('wineOrders.card.inPack') : at('wineOrders.card.addPack')}
                   </button>
                 </div>
 
@@ -718,6 +730,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
                     pendingToStatus={isPending ? pendingChange.toStatus : undefined}
                     onConfirm={confirmChange}
                     onCancel={cancelChange}
+                    locale={locale}
                   />
                 </div>
               </div>
@@ -741,6 +754,7 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
           onRequestChange={requestChange}
           onConfirm={confirmChange}
           onCancel={cancelChange}
+          locale={locale}
         />
       </div>
     )
@@ -756,14 +770,14 @@ export default function WineOrdersClient({ orders: initial }: { orders: WineOrde
         selectedOrders={selectedOrders}
         boxMode={boxMode}
         onBoxModeChange={setBoxMode}
-        layout={packingLayout}
-        onLayoutChange={setPackingLayout}
+        locale={locale}
       >
         <PackingTable
           orders={filteredOrders.filter(o => o.status !== 'cancelled' && o.status !== 'delivered')}
           selected={selected}
           onToggle={toggleOrder}
           onToggleAll={toggleAll}
+          locale={locale}
         />
       </PackingView>
     </div>

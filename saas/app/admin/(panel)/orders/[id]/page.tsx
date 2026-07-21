@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
+import { adminT } from '@/lib/adminT'
 
 const C = { wine: 'var(--color-brand)', faint: '#a89070' }
 
@@ -17,7 +18,7 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed] = await Promise.all([
+  const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -43,9 +44,11 @@ export default async function OrderDetailPage({
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
+    getSetting('admin_language'),
   ])
 
   if (!order) notFound()
+  const locale = adminLanguage || 'en'
 
   return (
     <div className="max-w-2xl">
@@ -55,13 +58,14 @@ export default async function OrderDetailPage({
         className="inline-flex items-center gap-1 text-sm mb-5"
         style={{ color: C.wine }}
       >
-        ← Back to orders
+        {adminT(locale, 'orderDetail.backToOrders')}
       </Link>
 
       <OrderDetail
         payment={{ recipientName, personalNumber, bankName, bankCode, iban }}
         detailed={invoiceDetailed === 'true'}
         displayName={displayName}
+        locale={locale}
         order={{
           id: order.id,
           status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',

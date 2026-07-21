@@ -4,6 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
 import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavicon } from '@/app/actions/uploadLogo'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -33,6 +34,7 @@ type Props = {
   contactAddress: string
   contactFacebook: string
   contactInstagram: string
+  adminLanguage: string
 }
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
@@ -62,8 +64,10 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
+  const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
+  const at = (key: string) => adminT(adminLanguage, key)
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
@@ -105,6 +109,15 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting('default_locale', locale)
       setSavedKey('default_locale')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleAdminLanguage(locale: string) {
+    setAdminLanguage(locale)
+    startTransition(async () => {
+      await updateSetting('admin_language', locale)
+      setSavedKey('admin_language')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -174,7 +187,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   function handleMapsSave() {
     const trimmed = mapsDraft.trim()
     if (!trimmed.startsWith('https://www.google.com/maps/embed')) {
-      setMapsError('Must be a Google Maps embed URL starting with https://www.google.com/maps/embed')
+      setMapsError(at('settings.contactPage.mapError'))
       return
     }
     setMapsError(null)
@@ -321,30 +334,65 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   }
 
   const paymentRows: { key: keyof typeof paymentFields; label: string; placeholder: string }[] = [
-    { key: 'payment_recipient_name',   label: 'Recipient name',    placeholder: 'e.g. I/E Elene Khundadze' },
-    { key: 'payment_personal_number',  label: 'Personal ID number', placeholder: 'e.g. 01001040828' },
-    { key: 'payment_bank_name',        label: 'Recipient bank',     placeholder: 'e.g. JSC TBC Bank' },
-    { key: 'payment_bank_code',        label: 'Bank code',          placeholder: 'e.g. TBCBGE22' },
-    { key: 'payment_iban',             label: 'Recipient IBAN',     placeholder: 'e.g. GE65TB7183445064300079' },
+    { key: 'payment_recipient_name',   label: at('settings.payment.recipientName'),   placeholder: at('settings.payment.recipientNamePh') },
+    { key: 'payment_personal_number',  label: at('settings.payment.personalNumber'),  placeholder: at('settings.payment.personalNumberPh') },
+    { key: 'payment_bank_name',        label: at('settings.payment.bankName'),        placeholder: at('settings.payment.bankNamePh') },
+    { key: 'payment_bank_code',        label: at('settings.payment.bankCode'),        placeholder: at('settings.payment.bankCodePh') },
+    { key: 'payment_iban',             label: at('settings.payment.iban'),            placeholder: at('settings.payment.ibanPh') },
   ]
 
   return (
     <div className="space-y-6">
 
-      {/* Default Language */}
+      {/* Admin Panel Language */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Language</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Default language shown to visitors who have not set a preference.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.adminLanguage.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.adminLanguage.sectionHint')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.text }}>Default site language</p>
-            <p className="text-xs mt-0.5" style={{ color: C.faint }}>Visitors can still switch language using the EN / KA toggle in the nav.</p>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.adminLanguage.fieldLabel')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.adminLanguage.fieldHint')}</p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'admin_language' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+            )}
+            <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: C.border }}>
+              {(['en', 'ka'] as const).map(l => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => handleAdminLanguage(l)}
+                  className="px-4 py-1.5 text-sm font-semibold uppercase transition-colors"
+                  style={{
+                    backgroundColor: adminLanguage === l ? 'var(--color-brand)' : C.bg,
+                    color: adminLanguage === l ? '#fff' : C.muted,
+                  }}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Default Language */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.language.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.language.sectionHint')}</p>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.language.fieldLabel')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.language.fieldHint')}</p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {savedKey === 'default_locale' && !isPending && (
-              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: C.border }}>
               {(['en', 'ka'] as const).map(l => (
@@ -369,19 +417,19 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Booking toggles */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Booking</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.booking.sectionTitle')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
           style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.text }}>Show price after company booking</p>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.booking.showPrice.label')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              When on, the booking confirmation screen shows the total price for company bookings. Turn off to keep rates private.
+              {at('settings.booking.showPrice.hint')}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {savedKey === 'show_company_price_after_booking' && !isPending && (
-              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <Toggle enabled={showPrice} onChange={handleToggle} />
           </div>
@@ -389,14 +437,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
           style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.text }}>Enhanced company booking form</p>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.booking.enhanced.label')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              When on, company bookings on the public site show split guest counts, hot dish selection, and masterclass add-ons.
+              {at('settings.booking.enhanced.hint')}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {savedKey === 'enable_enhanced_company_booking' && !isPending && (
-              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <Toggle enabled={enhancedBooking} onChange={handleEnhancedToggle} />
           </div>
@@ -404,14 +452,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
           style={{ backgroundColor: C.bg, borderColor: C.border }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.text }}>Detailed invoice</p>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.booking.detailedInvoice.label')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              When on, printed invoices show split guest counts, masterclass lines, and extras. When off, invoices show the total only.
+              {at('settings.booking.detailedInvoice.hint')}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {savedKey === 'invoice_detailed' && !isPending && (
-              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <Toggle enabled={invoiceDetailed} onChange={handleInvoiceDetailedToggle} />
           </div>
@@ -419,14 +467,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         <div className="flex items-center justify-between gap-6 px-5 py-4"
           style={{ backgroundColor: C.bg }}>
           <div>
-            <p className="text-sm font-medium" style={{ color: C.text }}>Hide company dropdown (use code instead)</p>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.booking.hideDropdown.label')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              When on, both booking and wine order forms replace the company dropdown with a direct code entry field. A "New Company?" button also appears.
+              {at('settings.booking.hideDropdown.hint')}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {savedKey === 'hide_company_dropdown' && !isPending && (
-              <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <Toggle enabled={hideCompanyDropdown} onChange={handleHideDropdownToggle} />
           </div>
@@ -436,8 +484,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Payment details */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Payment Details</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Shown on printed invoices. Changes apply to all future prints.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.payment.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.payment.sectionHint')}</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
           {paymentRows.map(({ key, label, placeholder }) => {
@@ -464,14 +512,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     </div>
                   )}
                   {isEditing ? (
-                    <button type="button" onClick={() => handlePaymentSave(key)} title="Save"
+                    <button type="button" onClick={() => handlePaymentSave(key)} title={at('settings.common.save')}
                       className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setPaymentEditing(key)} title="Edit"
+                    <button type="button" onClick={() => setPaymentEditing(key)} title={at('settings.common.edit')}
                       className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -480,7 +528,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     </button>
                   )}
                   {savedKey === key && !isPending && (
-                    <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>Saved</span>
+                    <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
                   )}
                 </div>
               </div>
@@ -492,19 +540,19 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Emails */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Emails</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.emails.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Default message included in invoice emails. You can edit it before each send.
+            {at('settings.emails.sectionHint')}
           </p>
         </div>
         <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
-          <label className="text-sm block mb-2" style={{ color: C.muted }}>Default invoice message</label>
+          <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('settings.emails.fieldLabel')}</label>
           <div className="flex items-start gap-2">
             <textarea
               rows={4}
               style={{ ...inputStyle, resize: 'vertical' }}
               value={emailMessage}
-              placeholder="e.g. Thank you for your visit! Please find your invoice below."
+              placeholder={at('settings.emails.placeholder')}
               onChange={e => setEmailMessage(e.target.value)}
               onBlur={handleEmailMessageBlur}
             />
@@ -518,13 +566,13 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Booking Rules */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Booking Rules</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Minimum guest counts enforced on the public booking form.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.bookingRules.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.bookingRules.sectionHint')}</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
           {([
-            { key: 'min_guests_tasting' as const,       label: 'Wine Tasting minimum',    value: minTasting,     set: setMinTasting },
-            { key: 'min_guests_tasting_lunch' as const, label: 'Tasting + Lunch minimum', value: minTastingLunch, set: setMinTastingLunch },
+            { key: 'min_guests_tasting' as const,       label: at('settings.bookingRules.tastingMin'),     value: minTasting,     set: setMinTasting },
+            { key: 'min_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMin'), value: minTastingLunch, set: setMinTastingLunch },
           ]).map(row => {
             const isEditing = bookingRulesEditing === row.key
             return (
@@ -545,16 +593,16 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       <span style={{ color: C.text }}>{row.value}</span>
                     </div>
                   )}
-                  <span className="text-xs" style={{ color: C.faint }}>guests</span>
+                  <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
                   {isEditing ? (
-                    <button type="button" onClick={() => handleBookingRuleSave(row.key)} title="Save"
+                    <button type="button" onClick={() => handleBookingRuleSave(row.key)} title={at('settings.common.save')}
                       className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setBookingRulesEditing(row.key)} title="Edit"
+                    <button type="button" onClick={() => setBookingRulesEditing(row.key)} title={at('settings.common.edit')}
                       className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -563,7 +611,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     </button>
                   )}
                   {savedKey === row.key && !isPending && (
-                    <span className="text-xs" style={{ color: '#16a34a' }}>Saved</span>
+                    <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
                   )}
                 </div>
               </div>
@@ -575,17 +623,17 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Contact Page */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Contact Page</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.contactPage.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Map shown in the &ldquo;How to Find Us&rdquo; section. Click Edit to change it.
+            {at('settings.contactPage.sectionHint')}
           </p>
         </div>
         <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm" style={{ color: C.muted }}>Google Maps embed URL</label>
+            <label className="text-sm" style={{ color: C.muted }}>{at('settings.contactPage.mapLabel')}</label>
             <div className="flex items-center gap-2">
               {savedKey === 'maps_embed_url' && !isPending && (
-                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
               )}
               {!mapsEditMode && (
                 <button
@@ -594,7 +642,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   className="text-xs px-3 py-1 rounded-lg font-medium"
                   style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted }}
                 >
-                  Edit
+                  {at('settings.common.edit')}
                 </button>
               )}
             </div>
@@ -608,14 +656,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.75rem',
                   borderColor: mapsError ? '#b91c1c' : C.border }}
                 value={mapsDraft}
-                placeholder="https://www.google.com/maps/embed?pb=..."
+                placeholder={at('settings.contactPage.mapPlaceholder')}
                 onChange={e => { setMapsDraft(e.target.value); setMapsError(null) }}
               />
               {mapsError && (
                 <p className="text-xs" style={{ color: '#b91c1c' }}>{mapsError}</p>
               )}
               <p className="text-xs" style={{ color: C.faint }}>
-                Get this from Google Maps → Share → Embed a map → copy the <code style={{ fontSize: '0.7rem' }}>src="…"</code> value.
+                {at('settings.contactPage.mapHelp').split('{src}')[0]}<code style={{ fontSize: '0.7rem' }}>src="…"</code>{at('settings.contactPage.mapHelp').split('{src}')[1]}
               </p>
               <div className="flex gap-2 pt-1">
                 <button
@@ -625,7 +673,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
                   style={{ backgroundColor: C.wine, opacity: isPending ? 0.6 : 1 }}
                 >
-                  {isPending ? 'Saving…' : 'Save'}
+                  {isPending ? at('settings.common.saving') : at('settings.common.save')}
                 </button>
                 <button
                   type="button"
@@ -633,7 +681,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   className="text-xs px-3 py-1.5 rounded-lg font-medium"
                   style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: '#fffdf9' }}
                 >
-                  Cancel
+                  {at('settings.common.cancel')}
                 </button>
               </div>
             </div>
@@ -643,7 +691,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`,
                 fontFamily: 'monospace', color: C.faint, lineHeight: 1.6 }}
             >
-              {mapsEmbedUrl || <span style={{ fontStyle: 'italic' }}>No URL set</span>}
+              {mapsEmbedUrl || <span style={{ fontStyle: 'italic' }}>{at('settings.contactPage.noUrlSet')}</span>}
             </div>
           )}
         </div>
@@ -652,9 +700,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Branding */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Branding</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.branding.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Logo shown in the site navigation and admin panel. Favicon shown in browser tabs.
+            {at('settings.branding.sectionHint')}
           </p>
         </div>
         <div className="px-5 py-4 space-y-5" style={{ backgroundColor: C.bg }}>
@@ -666,8 +714,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
           {/* Logo */}
           <div>
-            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>Logo</p>
-            <p className="text-xs mb-3" style={{ color: C.faint }}>SVG or PNG. Must work on a light background.</p>
+            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>{at('settings.branding.logoLabel')}</p>
+            <p className="text-xs mb-3" style={{ color: C.faint }}>{at('settings.branding.logoHint')}</p>
             <div className="flex items-center gap-3 flex-wrap">
               {logoUrl && (
                 <div className="rounded-lg px-3 py-2 border" style={{ backgroundColor: '#fffdf9', borderColor: C.border }}>
@@ -683,21 +731,21 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 className="text-xs px-3 py-1.5 rounded-lg font-medium"
                 style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: logoUploading ? 0.6 : 1 }}
               >
-                {logoUploading ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+                {logoUploading ? at('settings.branding.uploading') : logoUrl ? at('settings.branding.replaceLogo') : at('settings.branding.uploadLogo')}
               </button>
               {savedKey === 'logo' && !logoUploading && (
-                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
               )}
             </div>
             {logoUrl && (
               <div className="mt-3">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs flex-shrink-0" style={{ color: C.muted }}>Alt text</label>
+                  <label className="text-xs flex-shrink-0" style={{ color: C.muted }}>{at('settings.branding.altTextLabel')}</label>
                   {altEditing ? (
                     <input
                       style={{ ...inputStyle, flex: 1 }}
                       value={logoAlt}
-                      placeholder="e.g. Nikalas Marani"
+                      placeholder={at('settings.branding.altTextPh')}
                       autoFocus
                       onChange={e => setLogoAlt(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Escape') setAltEditing(false) }}
@@ -706,19 +754,19 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
                       {logoAlt
                         ? <span style={{ color: C.text }}>{logoAlt}</span>
-                        : <span style={{ color: C.faint, fontStyle: 'italic' }}>your logo description here</span>
+                        : <span style={{ color: C.faint, fontStyle: 'italic' }}>{at('settings.branding.altTextDefaultPh')}</span>
                       }
                     </div>
                   )}
                   {altEditing ? (
-                    <button type="button" onClick={handleAltTextSave} title="Save"
+                    <button type="button" onClick={handleAltTextSave} title={at('settings.common.save')}
                       className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setAltEditing(true)} title="Edit"
+                    <button type="button" onClick={() => setAltEditing(true)} title={at('settings.common.edit')}
                       className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -728,7 +776,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   )}
                 </div>
                 {savedKey === 'logo_alt' && !isPending && (
-                  <p className="text-xs mt-1" style={{ color: '#16a34a' }}>Saved</p>
+                  <p className="text-xs mt-1" style={{ color: '#16a34a' }}>{at('settings.saved')}</p>
                 )}
               </div>
             )}
@@ -736,8 +784,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
           {/* Favicon */}
           <div>
-            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>Favicon</p>
-            <p className="text-xs mb-3" style={{ color: C.faint }}>ICO or 32×32 PNG shown in browser tabs.</p>
+            <p className="text-sm font-medium mb-1" style={{ color: C.text }}>{at('settings.branding.faviconLabel')}</p>
+            <p className="text-xs mb-3" style={{ color: C.faint }}>{at('settings.branding.faviconHint')}</p>
             <div className="flex items-center gap-3 flex-wrap">
               {faviconUrl && (
                 <img src={faviconUrl} alt="Favicon" style={{ width: 32, height: 32, borderRadius: 4 }} />
@@ -751,10 +799,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 className="text-xs px-3 py-1.5 rounded-lg font-medium"
                 style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: faviconUploading ? 0.6 : 1 }}
               >
-                {faviconUploading ? 'Uploading…' : faviconUrl ? 'Replace favicon' : 'Upload favicon'}
+                {faviconUploading ? at('settings.branding.uploading') : faviconUrl ? at('settings.branding.replaceFavicon') : at('settings.branding.uploadFavicon')}
               </button>
               {savedKey === 'favicon' && !faviconUploading && (
-                <span className="text-xs" style={{ color: '#16a34a' }}>✓ Saved</span>
+                <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
               )}
             </div>
           </div>
@@ -770,8 +818,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           style={{ backgroundColor: '#f5efe6', borderColor: C.border }}
         >
           <div className="text-left">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Contact Info</p>
-            <p className="text-xs mt-0.5" style={{ color: C.faint }}>Email, phone, address and social links shown in the site nav and footer.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.contactInfo.sectionTitle')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.contactInfo.sectionHint')}</p>
           </div>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, transform: contactOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: C.faint }}>
             <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -781,11 +829,11 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
 
             {([
-              { key: 'contact_email',     label: 'Email address', hint: 'Shown in the nav bar and footer.',          placeholder: 'your email here',        value: contactEmail,     set: setContactEmail },
-              { key: 'contact_phone',     label: 'Phone number',  hint: 'Shown in the footer.',                      placeholder: 'your phone number here', value: contactPhone,     set: setContactPhone },
-              { key: 'contact_address',   label: 'Address',       hint: 'Shown in the footer.',                      placeholder: 'your address here',      value: contactAddress,   set: setContactAddress },
-              { key: 'contact_facebook',  label: 'Facebook URL',  hint: 'Link behind the Facebook icon in the nav.', placeholder: 'your Facebook URL here', value: contactFacebook,  set: setContactFacebook },
-              { key: 'contact_instagram', label: 'Instagram URL', hint: 'Link behind the Instagram icon in the nav.',placeholder: 'your Instagram URL here',value: contactInstagram, set: setContactInstagram },
+              { key: 'contact_email',     label: at('settings.contactInfo.email'),     hint: at('settings.contactInfo.emailHint'),     placeholder: at('settings.contactInfo.emailPh'),     value: contactEmail,     set: setContactEmail },
+              { key: 'contact_phone',     label: at('settings.contactInfo.phone'),     hint: at('settings.contactInfo.phoneHint'),     placeholder: at('settings.contactInfo.phonePh'),     value: contactPhone,     set: setContactPhone },
+              { key: 'contact_address',   label: at('settings.contactInfo.address'),   hint: at('settings.contactInfo.addressHint'),   placeholder: at('settings.contactInfo.addressPh'),   value: contactAddress,   set: setContactAddress },
+              { key: 'contact_facebook',  label: at('settings.contactInfo.facebook'),  hint: at('settings.contactInfo.facebookHint'),  placeholder: at('settings.contactInfo.facebookPh'),  value: contactFacebook,  set: setContactFacebook },
+              { key: 'contact_instagram', label: at('settings.contactInfo.instagram'), hint: at('settings.contactInfo.instagramHint'), placeholder: at('settings.contactInfo.instagramPh'), value: contactInstagram, set: setContactInstagram },
             ] as const).map(({ key, label, hint, placeholder, value, set }) => {
               const isEditing = contactEditing === key
               return (
@@ -813,7 +861,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       <button
                         type="button"
                         onClick={() => handleContactSave(key, value)}
-                        title="Save"
+                        title={at('settings.common.save')}
                         className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
                         style={{ color: '#9b090c' }}
                       >
@@ -827,7 +875,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       <button
                         type="button"
                         onClick={() => setContactEditing(key)}
-                        title="Edit"
+                        title={at('settings.common.edit')}
                         className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
                         style={{ color: '#9b090c' }}
                       >
@@ -839,7 +887,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     )}
                   </div>
                   {savedKey === key && !isPending
-                    ? <p className="text-xs mt-1" style={{ color: '#16a34a' }}>Saved</p>
+                    ? <p className="text-xs mt-1" style={{ color: '#16a34a' }}>{at('settings.saved')}</p>
                     : <p className="text-xs mt-1" style={{ color: C.faint }}>{hint}</p>
                   }
                 </div>
@@ -853,8 +901,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Closed Days */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>Closed Days</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>Dates when the winery is closed. Customers cannot book these dates.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.closedDays.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.closedDays.sectionHint')}</p>
         </div>
         <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
           {/* Add form */}
@@ -867,7 +915,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             />
             <input
               type="text"
-              placeholder="Reason (optional)"
+              placeholder={at('settings.closedDays.reasonPh')}
               style={{ ...inputStyle, flex: 1, minWidth: 140 }}
               value={newBlockReason}
               onChange={e => setNewBlockReason(e.target.value)}
@@ -879,12 +927,12 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity"
               style={{ backgroundColor: 'var(--color-brand)', opacity: !newBlockDate || isPending ? 0.5 : 1 }}
             >
-              Block date
+              {at('settings.closedDays.blockDate')}
             </button>
           </div>
           {/* List */}
           {blockedDates.length === 0 ? (
-            <p className="text-xs" style={{ color: C.faint }}>No closed days set.</p>
+            <p className="text-xs" style={{ color: C.faint }}>{at('settings.closedDays.none')}</p>
           ) : (
             <div className="rounded-lg border divide-y overflow-hidden" style={{ borderColor: C.border }}>
               {blockedDates.map(d => (

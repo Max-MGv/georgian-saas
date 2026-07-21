@@ -199,6 +199,13 @@
   },
   "active": "0eae5ecf8a741e4f",
   "lastOpenFiles": [
+    "MyToDo.md.tmp.884.aff90d7f4cfd",
+    "SessionLog.md.tmp.884.05043487e1d6",
+    "SessionLog.md.tmp.884.b163872f4636",
+    "SessionLog.md.tmp.884.b8786f91dc12",
+    "FeatureLog.md.tmp.884.100c9ff1a208",
+    "Plan-AdminGeorgian.md.tmp.884.5f8805cfc21d",
+    "Plan-AdminGeorgian.md",
     "FeatureLog.md.tmp.12924.81e0d68fa92d",
     "SessionLog.md.tmp.12924.f618240dfd78",
     "FeatureLog.md.tmp.12924.cb4a06289595",
@@ -209,13 +216,7 @@
     "FeatureLog.md.tmp.17036.de6421947f81",
     "Plan-NeutralFallbacks.md",
     "Plan-MultiTenantEmail.md",
-    "Roadmap.md.tmp.10116.573477b97d62",
-    "SessionLog.md.tmp.10116.c10f7ccebe35",
     "Plan-SuperAdminOrdersView.md",
-    "Plan-SuperAdminOrdersView.md.tmp.10116.f3e4592e98f7",
-    "FeatureLog.md.tmp.10116.a8a2221266d2",
-    "SessionLog.md.tmp.16168.d5d550ae1b7d",
-    "SessionLog.md.tmp.16168.c5cb4b87f776",
     "Plan-TenantModules.md",
     "Features/Feature 116 - Wine Hierarchy.md",
     "Progress Log.md",
@@ -233,7 +234,6 @@
     "Plan-MultiTenant.md",
     "Plan-EditableSiteContent.md",
     "Plan-4Features.md",
-    "Plan-CompanyAccessCodes.md",
-    "SuperAdmin-Architecture.md"
+    "Plan-CompanyAccessCodes.md"
   ]
 }

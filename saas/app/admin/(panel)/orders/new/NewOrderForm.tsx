@@ -6,6 +6,7 @@ import { createOrderAdmin } from '@/app/actions/orders'
 import { findTier } from '@/lib/pricingUtils'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -74,12 +75,15 @@ export default function NewOrderForm({
   companies,
   menuItems,
   masterclassItems,
+  locale = 'en',
 }: {
   companies: CompanyOption[]
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  locale?: string
 }) {
   const router = useRouter()
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
 
   // Booking details
   const [companyId, setCompanyId] = useState('')
@@ -259,9 +263,9 @@ export default function NewOrderForm({
   return (
     <div>
       {/* ── Booking Details ── */}
-      <Card title="Booking Details">
+      <Card title={at('newOrder.bookingDetails.title')}>
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <Field label="Date" half>
+          <Field label={at('orderDetail.bookingInfo.date')} half>
             <input
               type="date"
               value={date}
@@ -269,23 +273,23 @@ export default function NewOrderForm({
               style={inputStyle}
             />
           </Field>
-          <Field label="Time" half>
+          <Field label={at('orderDetail.bookingInfo.time')} half>
             <select value={timeSlot} onChange={e => setTimeSlot(e.target.value)} style={inputStyle}>
               {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </Field>
         </div>
 
-        <Field label="Visit type">
+        <Field label={at('orderDetail.bookingInfo.visitType')}>
           <select value={visitType} onChange={e => setVisitType(e.target.value as 'TASTING' | 'TASTING_LUNCH')} style={inputStyle}>
-            <option value="TASTING">Wine Tasting</option>
-            <option value="TASTING_LUNCH">Tasting + Lunch</option>
+            <option value="TASTING">{at('orders.visit.tasting')}</option>
+            <option value="TASTING_LUNCH">{at('orders.visit.tastingLunch')}</option>
           </select>
         </Field>
 
-        <Field label="Company">
+        <Field label={at('newOrder.bookingDetails.company')}>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={inputStyle}>
-            <option value="">— Individual —</option>
+            <option value="">{at('newOrder.bookingDetails.individual')}</option>
             {companies.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -293,7 +297,7 @@ export default function NewOrderForm({
         </Field>
 
         {!isCompany && (
-          <Field label="Guest count">
+          <Field label={at('newOrder.bookingDetails.guestCount')}>
             <input
               type="text"
               inputMode="numeric"
@@ -308,27 +312,27 @@ export default function NewOrderForm({
       </Card>
 
       {/* ── Contact ── */}
-      <Card title="Contact">
+      <Card title={at('newOrder.contact.title')}>
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <Field label="First name" half>
+          <Field label={at('newOrder.contact.firstName')} half>
             <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
           </Field>
-          <Field label="Last name" half>
+          <Field label={at('newOrder.contact.lastName')} half>
             <input value={surname} onChange={e => setSurname(e.target.value)} style={inputStyle} />
           </Field>
         </div>
-        <Field label="Phone">
+        <Field label={at('orderDetail.bookingInfo.phone')}>
           <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} />
         </Field>
-        <Field label="Email">
+        <Field label={at('orderDetail.bookingInfo.email')}>
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
         </Field>
-        <Field label="Notes">
+        <Field label={at('orderDetail.bookingInfo.notes')}>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
             rows={2}
-            placeholder="Internal notes…"
+            placeholder={at('orders.editPanel.notesPlaceholder')}
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </Field>
@@ -336,17 +340,17 @@ export default function NewOrderForm({
 
       {/* ── Guest Breakdown & Dishes (company only) ── */}
       {isCompany && (
-        <Card title="Guest Breakdown & Dishes">
+        <Card title={at('orderDetail.guestBreakdown.title')}>
           {prices.length === 0 && (
             <div className="text-xs rounded-lg p-3 mb-4" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
-              <strong>No price tiers for {selectedCompany?.name}.</strong>{' '}
-              Guest counts won&apos;t auto-calculate a price.{' '}
-              <a href="/admin/companies" style={{ textDecoration: 'underline' }}>Add tiers in Companies admin</a>.
+              <strong>{at('newOrder.guestBreakdown.noTiers', { name: selectedCompany?.name ?? '' })}</strong>{' '}
+              {at('newOrder.guestBreakdown.wontCalc')}{' '}
+              <a href="/admin/companies" style={{ textDecoration: 'underline' }}>{at('newOrder.guestBreakdown.addTiersLink')}</a>.
             </div>
           )}
 
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <Field label="Tasting guests" half>
+            <Field label={at('orderDetail.guestBreakdown.tastingGuests')} half>
               <input
                 type="text" inputMode="numeric" pattern="[0-9]*"
                 value={tastingGuestsStr}
@@ -355,7 +359,7 @@ export default function NewOrderForm({
                 style={inputStyle}
               />
             </Field>
-            <Field label="Lunch guests" half>
+            <Field label={at('orderDetail.guestBreakdown.lunchGuests')} half>
               <input
                 type="text" inputMode="numeric" pattern="[0-9]*"
                 value={lunchGuestsStr}
@@ -365,7 +369,7 @@ export default function NewOrderForm({
               />
             </Field>
             <div>
-              <Field label="Free guests" half>
+              <Field label={at('orderDetail.guestBreakdown.freeGuests')} half>
                 <input
                   type="text" inputMode="numeric" pattern="[0-9]*"
                   value={freeGuestsStr}
@@ -374,33 +378,33 @@ export default function NewOrderForm({
                   style={inputStyle}
                 />
               </Field>
-              <p className="text-xs mt-0.5" style={{ color: C.faint }}>guide / driver / under-12</p>
+              <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.freeGuestsHint')}</p>
             </div>
           </div>
 
           {vegItems.length > 0 && (
-            <Field label="Hot dish — Vegetable">
+            <Field label={at('orderDetail.guestBreakdown.hotDishVeg')}>
               <select value={hotDishVeg} onChange={e => setHotDishVeg(e.target.value)} style={inputStyle}>
-                <option value="">— None —</option>
+                <option value="">{at('orderDetail.guestBreakdown.none')}</option>
                 {vegItems.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
               </select>
             </Field>
           )}
           {meatItems.length > 0 && (
-            <Field label="Hot dish — Meat">
+            <Field label={at('orderDetail.guestBreakdown.hotDishMeat')}>
               <select value={hotDishMeat} onChange={e => setHotDishMeat(e.target.value)} style={inputStyle}>
-                <option value="">— None —</option>
+                <option value="">{at('orderDetail.guestBreakdown.none')}</option>
                 {meatItems.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
               </select>
             </Field>
           )}
 
-          <Field label="Food notes">
+          <Field label={at('orderDetail.guestBreakdown.foodNotes')}>
             <textarea
               value={foodNotes}
               onChange={e => setFoodNotes(e.target.value)}
               rows={2}
-              placeholder="Allergies, preferences, kitchen notes…"
+              placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
               style={{ ...inputStyle, resize: 'vertical' }}
             />
           </Field>
@@ -408,13 +412,13 @@ export default function NewOrderForm({
       )}
 
       {/* ── Masterclass Add-ons ── */}
-      <Card title="Masterclass Add-ons">
+      <Card title={at('orderDetail.masterclass.title')}>
         {lines.length > 0 && (
           <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: '#f5efe6', borderBottom: `1px solid ${C.border}` }}>
-                  {['Item', 'Unit', 'Qty', '₾/unit', 'Total', ''].map(h => (
+                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ''].map(h => (
                     <th key={h} className="text-left px-3 py-2 text-xs font-medium" style={{ color: '#8b4513' }}>{h}</th>
                   ))}
                 </tr>
@@ -439,7 +443,7 @@ export default function NewOrderForm({
                         className="text-xs px-2 py-1 rounded border"
                         style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
                       >
-                        Remove
+                        {at('orderDetail.masterclass.remove')}
                       </button>
                     </td>
                   </tr>
@@ -450,15 +454,15 @@ export default function NewOrderForm({
         )}
 
         {lines.length === 0 && !addingLine && (
-          <p className="text-sm mb-3" style={{ color: C.faint }}>No masterclass items added yet.</p>
+          <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.masterclass.none')}</p>
         )}
 
         {addingLine ? (
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 160px' }}>
-              <label className="text-xs block mb-1" style={{ color: C.faint }}>Item</label>
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colItem')}</label>
               <select value={newLineItemId} onChange={e => handleNewLineItemChange(e.target.value)} style={inputStyle}>
-                <option value="">Select item…</option>
+                <option value="">{at('orderDetail.masterclass.selectItem')}</option>
                 {masterclassItems.map(i => (
                   <option key={i.id} value={i.id}>
                     {i.name} ({UNIT_LABELS[i.unitType as MasterclassUnit]})
@@ -468,7 +472,7 @@ export default function NewOrderForm({
             </div>
             {!isFlatUnit && (
               <div style={{ width: 80 }}>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>Qty</label>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colQty')}</label>
                 <input type="number" min={1} value={newLineQty} onChange={e => setNewLineQty(e.target.value)} style={inputStyle} />
               </div>
             )}
@@ -481,30 +485,30 @@ export default function NewOrderForm({
               className="px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: C.wine }}
             >
-              Add
+              {at('orderDetail.masterclass.add')}
             </button>
             <button
               onClick={() => { setAddingLine(false); setNewLineItemId(''); setNewLineQty('1') }}
               className="px-3 py-2 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}
             >
-              Cancel
+              {at('orderDetail.masterclass.cancel')}
             </button>
           </div>
         ) : masterclassItems.length > 0 ? (
           <button onClick={() => setAddingLine(true)} className="text-sm font-medium" style={{ color: C.wine }}>
-            + Add masterclass
+            {at('orderDetail.masterclass.addBtn')}
           </button>
         ) : (
           <p className="text-xs" style={{ color: C.faint }}>
-            No active masterclass items.{' '}
-            <a href="/admin/masterclass" style={{ color: C.wine }}>Add some in Masterclass admin</a>.
+            {at('orderDetail.masterclass.noActiveItems')}{' '}
+            <a href="/admin/masterclass" style={{ color: C.wine }}>{at('orderDetail.masterclass.addSomeLink')}</a>.
           </p>
         )}
       </Card>
 
       {/* ── Extra Charges ── */}
-      <Card title="Extra Charges">
+      <Card title={at('orderDetail.extras.title')}>
         {extras.length > 0 && (
           <div className="space-y-2 mb-3">
             {extras.map(e => (
@@ -516,29 +520,29 @@ export default function NewOrderForm({
                   className="text-xs px-2 py-1 rounded border"
                   style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
                 >
-                  Remove
+                  {at('orderDetail.extras.remove')}
                 </button>
               </div>
             ))}
           </div>
         )}
         {extras.length === 0 && !addingExtra && (
-          <p className="text-sm mb-3" style={{ color: C.faint }}>No extra charges added yet.</p>
+          <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.extras.none')}</p>
         )}
         {addingExtra ? (
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 140px' }}>
-              <label className="text-xs block mb-1" style={{ color: C.faint }}>Description</label>
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.extras.description')}</label>
               <input
                 value={newExtraLabel}
                 onChange={e => setNewExtraLabel(e.target.value)}
-                placeholder="e.g. Additional wine"
+                placeholder={at('orderDetail.extras.descriptionPh')}
                 style={inputStyle}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddExtra() }}
               />
             </div>
             <div style={{ width: 110 }}>
-              <label className="text-xs block mb-1" style={{ color: C.faint }}>Amount (₾)</label>
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.extras.amount')}</label>
               <input
                 type="number" min={0} step="0.01"
                 value={newExtraAmount}
@@ -553,46 +557,46 @@ export default function NewOrderForm({
               className="px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: C.wine }}
             >
-              Add
+              {at('orderDetail.extras.add')}
             </button>
             <button
               onClick={() => { setAddingExtra(false); setNewExtraLabel(''); setNewExtraAmount('') }}
               className="px-3 py-2 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}
             >
-              Cancel
+              {at('orderDetail.extras.cancel')}
             </button>
           </div>
         ) : (
           <button onClick={() => setAddingExtra(true)} className="text-sm font-medium" style={{ color: C.wine }}>
-            + Add extra charge
+            {at('orderDetail.extras.addBtn')}
           </button>
         )}
       </Card>
 
       {/* ── Order Total ── */}
-      <Card title="Order Total">
+      <Card title={at('orderDetail.total.title')}>
         {/* Tier banner */}
         {tier && (
           <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}>
-            <span className="font-semibold">Tier in use:</span>{' '}
-            {tier.minGuests}–{tier.maxGuests} guests ·{' '}
-            Tasting <strong>{tier.pricePerPerson}₾/pp</strong>
+            <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
+            {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
+            {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
             {' · '}
-            Lunch <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
             {' · '}
-            Reg fee <strong>{tier.registrationPrice}₾</strong>
+            {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
           </div>
         )}
         {/* Manual rate inputs */}
         {showManualRates && (
           <div className="mb-3">
             <p className="text-xs mb-2" style={{ color: C.muted }}>
-              {isCompany ? 'No price tiers — enter rates manually:' : 'Enter rates:'}
+              {isCompany ? at('newOrder.total.manualRatesCompany') : at('newOrder.total.manualRatesIndividual')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>Tasting ₾/pp</label>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.tastingRatePP')}</label>
                 <input
                   type="text" inputMode="decimal"
                   value={manualTastingRateStr}
@@ -602,7 +606,7 @@ export default function NewOrderForm({
                 />
               </div>
               <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>Lunch ₾/pp</label>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchRatePP')}</label>
                 <input
                   type="text" inputMode="decimal"
                   value={manualLunchRateStr}
@@ -620,7 +624,7 @@ export default function NewOrderForm({
           {(tier || (!isCompany && manualTastingRate > 0) || (isCompany && tastingGuests > 0 && manualTastingRate > 0)) && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting ({isCompany ? tastingGuests : guestCount} × {tier ? tier.pricePerPerson : manualTastingRate}₾)
+                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {tier ? tier.pricePerPerson : manualTastingRate}₾)
               </span>
               <span style={{ color: C.text }}>{tastingAmt.toFixed(2)}₾</span>
             </div>
@@ -628,14 +632,14 @@ export default function NewOrderForm({
           {(lunchGuests > 0 || (!isCompany && manualLunchRate > 0)) && (lunchAmt > 0) && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting+Lunch ({lunchGuests} × {tier ? tier.tastingLunchPricePerPerson : manualLunchRate}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier ? tier.tastingLunchPricePerPerson : manualLunchRate}₾)
               </span>
               <span style={{ color: C.text }}>{lunchAmt.toFixed(2)}₾</span>
             </div>
           )}
           {tier && tier.registrationPrice > 0 && (
             <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>Registration fee</span>
+              <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
               <span style={{ color: C.text }}>{tier.registrationPrice.toFixed(2)}₾</span>
             </div>
           )}
@@ -654,7 +658,7 @@ export default function NewOrderForm({
         </div>
 
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
-          <span className="text-sm font-semibold" style={{ color: C.muted }}>Total</span>
+          <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
             {computedTotal.toFixed(2)}₾
           </span>
@@ -670,7 +674,7 @@ export default function NewOrderForm({
           className="mt-4 w-full py-3 rounded-lg text-sm font-semibold text-white"
           style={{ backgroundColor: C.wine, opacity: submitting ? 0.7 : 1 }}
         >
-          {submitting ? 'Creating order…' : 'Create order'}
+          {submitting ? at('newOrder.total.creating') : at('newOrder.total.create')}
         </button>
       </Card>
     </div>

@@ -8,6 +8,7 @@ import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMa
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
+import { adminT } from '@/lib/adminT'
 import InvoicePrint from '../InvoicePrint'
 
 const C = {
@@ -30,13 +31,13 @@ const inputStyle: React.CSSProperties = {
 
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
-const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; color: string }> = {
-  NEW:          { label: 'New',          bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:    { label: 'Confirmed',    bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT: { label: 'Invoice Sent', bg: '#fef3c7', color: '#92400e' },
-  PAID:         { label: 'Paid',         bg: '#dcfce7', color: '#166534' },
-  COMPLETED:    { label: 'Completed',    bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:    { label: 'Cancelled',    bg: '#fee2e2', color: '#b91c1c' },
+const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
+  NEW:          { labelKey: 'orders.status.new',        bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED:    { labelKey: 'orders.status.confirmed',   bg: '#dbeafe', color: '#1d4ed8' },
+  INVOICE_SENT: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  PAID:         { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
+  COMPLETED:    { labelKey: 'orders.status.completed',   bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED:    { labelKey: 'orders.status.cancelled',   bg: '#fee2e2', color: '#b91c1c' },
 }
 
 const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
@@ -152,6 +153,7 @@ export default function OrderDetail({
   displayName = 'Your Winery',
   menuItems,
   masterclassItems,
+  locale = 'en',
 }: {
   order: OrderProp
   payment: Payment
@@ -159,7 +161,9 @@ export default function OrderDetail({
   displayName?: string
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  locale?: string
 }) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   // ── Guest / dish / notes state ─────────────────────────────────────────────
   // String state so the user can clear the field and type a new number freely
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
@@ -213,9 +217,9 @@ export default function OrderDetail({
     const result = await sendOrderInvoice(order.id, '')
     setSending(false)
     if ('error' in result) {
-      setSendMsg('Failed to send.')
+      setSendMsg(at('orderDetail.sendFailed'))
     } else {
-      setSendMsg('Sent ✓')
+      setSendMsg(at('orders.emailModal.sent'))
       if (status === 'NEW' || status === 'CONFIRMED') setStatus('INVOICE_SENT')
       setTimeout(() => setSendMsg(''), 3000)
     }
@@ -314,7 +318,7 @@ export default function OrderDetail({
     if ('error' in result) {
       setSaveMsg(result.error)
     } else {
-      setSaveMsg('Saved ✓')
+      setSaveMsg(at('orderDetail.guestBreakdown.savedOk'))
       setCustomRates(false)
       setTimeout(() => setSaveMsg(''), 3000)
     }
@@ -406,7 +410,7 @@ export default function OrderDetail({
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
                 >
-                  {cfg.label} ▾
+                  {at(cfg.labelKey)} ▾
                 </button>
               )
             })()}
@@ -424,7 +428,7 @@ export default function OrderDetail({
                     style={{ color: s === status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === status ? 600 : 400 }}
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                    {STATUS_CONFIG[s].label}
+                    {at(STATUS_CONFIG[s].labelKey)}
                   </button>
                 ))}
               </div>
@@ -434,7 +438,7 @@ export default function OrderDetail({
           {/* Print invoice */}
           <button
             onClick={() => { printPending.current = true; setPrintReady(true) }}
-            title="Print invoice"
+            title={at('orders.printInvoice')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
             style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
           >
@@ -443,14 +447,14 @@ export default function OrderDetail({
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
               <rect x="6" y="14" width="12" height="8"/>
             </svg>
-            Print
+            {at('orderDetail.print')}
           </button>
 
           {/* Send invoice */}
           <button
             onClick={handleSendInvoice}
             disabled={sending || !order.email}
-            title={order.email ? 'Send invoice by email' : 'No email address on file'}
+            title={order.email ? at('orderDetail.sendInvoiceTitle') : at('orderDetail.noEmailTitle')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
             style={{ backgroundColor: order.email ? C.wine : '#c8b89a', cursor: order.email ? 'pointer' : 'not-allowed' }}
           >
@@ -458,7 +462,7 @@ export default function OrderDetail({
               <rect x="2" y="4" width="20" height="16" rx="2"/>
               <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
             </svg>
-            {sending ? 'Sending…' : 'Send Invoice'}
+            {sending ? at('orders.emailModal.sending') : at('orders.emailModal.sendInvoice')}
           </button>
 
           {sendMsg && (
@@ -498,15 +502,15 @@ export default function OrderDetail({
       )}
 
       {/* ── Booking Info (read-only) ── */}
-      <Card title="Booking Info">
-        <InfoRow label="Date" value={formatDate(order.date)} />
-        <InfoRow label="Time" value={order.timeSlot} />
+      <Card title={at('orderDetail.bookingInfo.title')}>
+        <InfoRow label={at('orderDetail.bookingInfo.date')} value={formatDate(order.date)} />
+        <InfoRow label={at('orderDetail.bookingInfo.time')} value={order.timeSlot} />
         <InfoRow
-          label="Visit type"
-          value={order.visitType === 'TASTING' ? 'Wine Tasting' : 'Tasting + Lunch'}
+          label={at('orderDetail.bookingInfo.visitType')}
+          value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : at('orders.visit.tastingLunch')}
         />
         <InfoRow
-          label="Booking type"
+          label={at('orderDetail.bookingInfo.bookingType')}
           value={
             <span
               className="text-xs px-2 py-0.5 rounded-full"
@@ -515,30 +519,30 @@ export default function OrderDetail({
                 color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
               }}
             >
-              {order.bookingType === 'COMPANY' ? 'Company' : 'Individual'}
+              {order.bookingType === 'COMPANY' ? at('orders.type.company') : at('orders.type.individual')}
             </span>
           }
         />
-        {order.company && <InfoRow label="Company" value={order.company.name} />}
-        <InfoRow label="Total guests" value={order.guestCount} />
-        <InfoRow label="Phone" value={order.phone} />
-        <InfoRow label="Email" value={order.email} />
-        {order.notes && <InfoRow label="Notes" value={order.notes} />}
+        {order.company && <InfoRow label={at('orderDetail.bookingInfo.company')} value={order.company.name} />}
+        <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
+        <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
+        <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
+        {order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
       </Card>
 
       {/* ── Guest Breakdown & Dishes ── */}
-      <Card title="Guest Breakdown & Dishes">
+      <Card title={at('orderDetail.guestBreakdown.title')}>
         {order.bookingType === 'COMPANY' && prices.length === 0 && (
           <div
             className="text-xs rounded-lg p-3 mb-4"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}
           >
-            <strong>No price tiers found for {order.company?.name ?? 'this company'}.</strong>{' '}
-            Guest counts cannot affect the total without rates.{' '}
+            <strong>{at('orderDetail.guestBreakdown.noTiers', { name: order.company?.name ?? 'this company' })}</strong>{' '}
+            {at('orderDetail.guestBreakdown.noTiersDetail')}{' '}
             <a href="/admin/companies" style={{ textDecoration: 'underline' }}>
-              Add price tiers in Companies admin
+              {at('orderDetail.guestBreakdown.addTiersLink')}
             </a>{' '}
-            then come back to save the guest breakdown.
+            {at('orderDetail.guestBreakdown.thenComeBack')}
           </div>
         )}
 
@@ -546,7 +550,7 @@ export default function OrderDetail({
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div>
             <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              Tasting guests
+              {at('orderDetail.guestBreakdown.tastingGuests')}
             </label>
             <input
               type="text"
@@ -560,7 +564,7 @@ export default function OrderDetail({
           </div>
           <div>
             <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              Lunch guests
+              {at('orderDetail.guestBreakdown.lunchGuests')}
             </label>
             <input
               type="text"
@@ -574,7 +578,7 @@ export default function OrderDetail({
           </div>
           <div>
             <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              Free guests
+              {at('orderDetail.guestBreakdown.freeGuests')}
             </label>
             <input
               type="text"
@@ -586,7 +590,7 @@ export default function OrderDetail({
               style={inputStyle}
             />
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              guide / driver / under-12
+              {at('orderDetail.guestBreakdown.freeGuestsHint')}
             </p>
           </div>
         </div>
@@ -596,19 +600,19 @@ export default function OrderDetail({
           <div className="mb-4 pt-1">
             {!customRates ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: C.faint }}>Rate</span>
+                <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.rate')}</span>
                 <span
                   className="text-xs px-2.5 py-1 rounded-full font-medium"
                   style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
                 >
-                  Tasting {manualTastingRate}₾/pp · Lunch {manualLunchRate}₾/pp
+                  {at('orderDetail.guestBreakdown.rateBadge', { t: manualTastingRate, l: manualLunchRate })}
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
                   className="text-xs px-3 py-1 rounded-lg font-medium text-white"
                   style={{ backgroundColor: C.wine }}
                 >
-                  Edit rates ✎
+                  {at('orderDetail.guestBreakdown.editRates')}
                 </button>
               </div>
             ) : (
@@ -617,7 +621,7 @@ export default function OrderDetail({
                 style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium" style={{ color: C.muted }}>Custom rates</span>
+                  <span className="text-xs font-medium" style={{ color: C.muted }}>{at('orderDetail.guestBreakdown.customRates')}</span>
                   <button
                     onClick={() => {
                       setManualTastingRateStr('50')
@@ -627,12 +631,12 @@ export default function OrderDetail({
                     className="text-xs"
                     style={{ color: C.faint }}
                   >
-                    ← Standard (50₾)
+                    {at('orderDetail.guestBreakdown.standardRate')}
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs block mb-1" style={{ color: C.faint }}>Tasting ₾/pp</label>
+                    <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.tastingRatePP')}</label>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -643,7 +647,7 @@ export default function OrderDetail({
                     />
                   </div>
                   <div>
-                      <label className="text-xs block mb-1" style={{ color: C.faint }}>Lunch ₾/pp</label>
+                      <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchRatePP')}</label>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -663,14 +667,14 @@ export default function OrderDetail({
         {vegItems.length > 0 && (
           <div className="mb-3">
             <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              Hot dish — Vegetable
+              {at('orderDetail.guestBreakdown.hotDishVeg')}
             </label>
             <select
               value={hotDishVeg}
               onChange={e => setHotDishVeg(e.target.value)}
               style={inputStyle}
             >
-              <option value="">— None —</option>
+              <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {vegItems.map(i => (
                 <option key={i.id} value={i.name}>{i.name}</option>
               ))}
@@ -681,14 +685,14 @@ export default function OrderDetail({
         {meatItems.length > 0 && (
           <div className="mb-3">
             <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              Hot dish — Meat
+              {at('orderDetail.guestBreakdown.hotDishMeat')}
             </label>
             <select
               value={hotDishMeat}
               onChange={e => setHotDishMeat(e.target.value)}
               style={inputStyle}
             >
-              <option value="">— None —</option>
+              <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {meatItems.map(i => (
                 <option key={i.id} value={i.name}>{i.name}</option>
               ))}
@@ -698,9 +702,9 @@ export default function OrderDetail({
 
         {vegItems.length === 0 && meatItems.length === 0 && (
           <p className="text-xs mb-3" style={{ color: C.faint }}>
-            No active menu items. Add them in{' '}
+            {at('orderDetail.guestBreakdown.noMenuItems')}{' '}
             <a href="/admin/menu-items" style={{ color: C.wine }}>
-              Menu Items admin
+              {at('orderDetail.guestBreakdown.menuItemsAdminLink')}
             </a>
             .
           </p>
@@ -709,13 +713,13 @@ export default function OrderDetail({
         {/* Food notes */}
         <div className="mb-4">
           <label className="text-xs block mb-1" style={{ color: C.faint }}>
-            Food notes
+            {at('orderDetail.guestBreakdown.foodNotes')}
           </label>
           <textarea
             value={foodNotes}
             onChange={e => setFoodNotes(e.target.value)}
             rows={2}
-            placeholder="Allergies, preferences, kitchen notes…"
+            placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </div>
@@ -727,7 +731,7 @@ export default function OrderDetail({
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
             style={{ backgroundColor: C.wine }}
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? at('orderDetail.guestBreakdown.saving') : at('orderDetail.guestBreakdown.saveChanges')}
           </button>
           {saveMsg && (
             <span
@@ -741,7 +745,7 @@ export default function OrderDetail({
       </Card>
 
       {/* ── Masterclass Add-ons ── */}
-      <Card title="Masterclass Add-ons">
+      <Card title={at('orderDetail.masterclass.title')}>
         {lines.length > 0 && (
           <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
             <table className="w-full text-sm">
@@ -752,7 +756,7 @@ export default function OrderDetail({
                     borderBottom: `1px solid ${C.border}`,
                   }}
                 >
-                  {['Item', 'Unit', 'Qty', '₾/unit', 'Total', ''].map(h => (
+                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ''].map(h => (
                     <th
                       key={h}
                       className="text-left px-3 py-2 text-xs font-medium"
@@ -800,7 +804,7 @@ export default function OrderDetail({
                         className="text-xs px-2 py-1 rounded border"
                         style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
                       >
-                        Remove
+                        {at('orderDetail.masterclass.remove')}
                       </button>
                     </td>
                   </tr>
@@ -812,7 +816,7 @@ export default function OrderDetail({
 
         {lines.length === 0 && !addingLine && (
           <p className="text-sm mb-3" style={{ color: C.faint }}>
-            No masterclass items added yet.
+            {at('orderDetail.masterclass.none')}
           </p>
         )}
 
@@ -821,14 +825,14 @@ export default function OrderDetail({
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 160px' }}>
               <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                Item
+                {at('orderDetail.masterclass.colItem')}
               </label>
               <select
                 value={newLineItemId}
                 onChange={e => handleNewLineItemChange(e.target.value)}
                 style={inputStyle}
               >
-                <option value="">Select item…</option>
+                <option value="">{at('orderDetail.masterclass.selectItem')}</option>
                 {masterclassItems.map(i => (
                   <option key={i.id} value={i.id}>
                     {i.name} ({UNIT_LABELS[i.unitType as MasterclassUnit]})
@@ -840,7 +844,7 @@ export default function OrderDetail({
             {!isFlatUnit && (
               <div style={{ width: 80 }}>
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                  Qty
+                  {at('orderDetail.masterclass.colQty')}
                 </label>
                 <input
                   type="number"
@@ -864,7 +868,7 @@ export default function OrderDetail({
               className="px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: C.wine }}
             >
-              {lineLoading ? '…' : 'Add'}
+              {lineLoading ? '…' : at('orderDetail.masterclass.add')}
             </button>
             <button
               onClick={() => {
@@ -875,7 +879,7 @@ export default function OrderDetail({
               className="px-3 py-2 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}
             >
-              Cancel
+              {at('orderDetail.masterclass.cancel')}
             </button>
           </div>
         ) : masterclassItems.length > 0 ? (
@@ -884,13 +888,13 @@ export default function OrderDetail({
             className="text-sm font-medium"
             style={{ color: C.wine }}
           >
-            + Add masterclass
+            {at('orderDetail.masterclass.addBtn')}
           </button>
         ) : (
           <p className="text-xs" style={{ color: C.faint }}>
-            No active masterclass items.{' '}
+            {at('orderDetail.masterclass.noActiveItems')}{' '}
             <a href="/admin/masterclass" style={{ color: C.wine }}>
-              Add some in Masterclass admin
+              {at('orderDetail.masterclass.addSomeLink')}
             </a>
             .
           </p>
@@ -898,7 +902,7 @@ export default function OrderDetail({
       </Card>
 
       {/* ── Extra Charges ── */}
-      <Card title="Extra Charges">
+      <Card title={at('orderDetail.extras.title')}>
         {extras.length > 0 && (
           <div className="space-y-2 mb-3">
             {extras.map(e => (
@@ -915,7 +919,7 @@ export default function OrderDetail({
                   className="text-xs px-2 py-1 rounded border"
                   style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
                 >
-                  Remove
+                  {at('orderDetail.extras.remove')}
                 </button>
               </div>
             ))}
@@ -924,7 +928,7 @@ export default function OrderDetail({
 
         {extras.length === 0 && !addingExtra && (
           <p className="text-sm mb-3" style={{ color: C.faint }}>
-            No extra charges added yet.
+            {at('orderDetail.extras.none')}
           </p>
         )}
 
@@ -933,19 +937,19 @@ export default function OrderDetail({
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 140px' }}>
               <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                Description
+                {at('orderDetail.extras.description')}
               </label>
               <input
                 value={newExtraLabel}
                 onChange={e => setNewExtraLabel(e.target.value)}
-                placeholder="e.g. Additional wine"
+                placeholder={at('orderDetail.extras.descriptionPh')}
                 style={inputStyle}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddExtra() }}
               />
             </div>
             <div style={{ width: 110 }}>
               <label className="text-xs block mb-1" style={{ color: C.faint }}>
-                Amount (₾)
+                {at('orderDetail.extras.amount')}
               </label>
               <input
                 type="number"
@@ -963,7 +967,7 @@ export default function OrderDetail({
               className="px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: C.wine }}
             >
-              {extraLoading ? '…' : 'Add'}
+              {extraLoading ? '…' : at('orderDetail.extras.add')}
             </button>
             <button
               onClick={() => {
@@ -974,7 +978,7 @@ export default function OrderDetail({
               className="px-3 py-2 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}
             >
-              Cancel
+              {at('orderDetail.extras.cancel')}
             </button>
           </div>
         ) : (
@@ -983,26 +987,26 @@ export default function OrderDetail({
             className="text-sm font-medium"
             style={{ color: C.wine }}
           >
-            + Add extra charge
+            {at('orderDetail.extras.addBtn')}
           </button>
         )}
       </Card>
 
       {/* ── Order Total ── */}
-      <Card title="Order Total">
+      <Card title={at('orderDetail.total.title')}>
         {/* Active tier info */}
         {tier && payingGuests > 0 && (
           <div
             className="text-xs rounded-lg px-3 py-2 mb-3"
             style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
           >
-            <span className="font-semibold">Tier in use:</span>{' '}
-            {tier.minGuests}–{tier.maxGuests} guests ·{' '}
-            Tasting <strong>{tier.pricePerPerson}₾/pp</strong>
+            <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
+            {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
+            {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
             {' · '}
-            Lunch <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
             {' · '}
-            Reg fee <strong>{tier.registrationPrice}₾</strong>
+            {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
           </div>
         )}
         {/* Lunch rate = 0 warning */}
@@ -1011,12 +1015,11 @@ export default function OrderDetail({
             className="text-xs rounded-lg px-3 py-2 mb-3"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}
           >
-            <strong>Lunch rate is 0₾/pp</strong> — {lunchGuests} lunch guest
-            {lunchGuests !== 1 ? 's' : ''} will not add to the total.{' '}
+            <strong>{at('orderDetail.total.lunchRateZero')}</strong> — {lunchGuests} {at(lunchGuests !== 1 ? 'orders.guest.plural' : 'orders.guest.singular')} {at('orderDetail.total.lunchGuestWontAdd')}{' '}
             <a href="/admin/companies" style={{ textDecoration: 'underline' }}>
-              Set the Lunch ₾/pp in Companies admin
+              {at('orderDetail.total.setLunchRateLink')}
             </a>{' '}
-            and reload this page.
+            {at('orderDetail.total.andReload')}
           </div>
         )}
         <div className="space-y-1.5">
@@ -1024,7 +1027,7 @@ export default function OrderDetail({
           {tier && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting ({tastingGuests} × {tier.pricePerPerson}₾)
+                {at('orders.col.tasting')} ({tastingGuests} × {tier.pricePerPerson}₾)
               </span>
               <span style={{ color: C.text }}>{tastingAmt!.toFixed(2)}₾</span>
             </div>
@@ -1032,14 +1035,14 @@ export default function OrderDetail({
           {tier && lunchGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting+Lunch ({lunchGuests} × {tier.tastingLunchPricePerPerson}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier.tastingLunchPricePerPerson}₾)
               </span>
               <span style={{ color: C.text }}>{lunchAmt!.toFixed(2)}₾</span>
             </div>
           )}
           {tier && tier.registrationPrice > 0 && (
             <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>Registration fee</span>
+              <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
               <span style={{ color: C.text }}>{tier.registrationPrice.toFixed(2)}₾</span>
             </div>
           )}
@@ -1047,7 +1050,7 @@ export default function OrderDetail({
           {!tier && payingGuests > 0 && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting ({tastingGuests} × {manualTastingRate}₾)
+                {at('orders.col.tasting')} ({tastingGuests} × {manualTastingRate}₾)
               </span>
               <span style={{ color: C.text }}>
                 {(tastingGuests * manualTastingRate).toFixed(2)}₾
@@ -1057,7 +1060,7 @@ export default function OrderDetail({
           {!tier && payingGuests > 0 && lunchGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                Tasting+Lunch ({lunchGuests} × {manualLunchRate}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {manualLunchRate}₾)
               </span>
               <span style={{ color: C.text }}>
                 {(lunchGuests * manualLunchRate).toFixed(2)}₾
@@ -1069,8 +1072,8 @@ export default function OrderDetail({
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
                 {legacyTier
-                  ? `${order.visitType === 'TASTING_LUNCH' ? 'Tasting+Lunch' : 'Tasting'} (${order.guestCount} guests)`
-                  : 'Base price (original)'}
+                  ? `${order.visitType === 'TASTING_LUNCH' ? at('orderDetail.total.tastingLunch') : at('orders.col.tasting')} (${order.guestCount} ${at('orderDetail.total.guests')})`
+                  : at('orderDetail.total.basePriceOriginal')}
               </span>
               <span style={{ color: C.text }}>{legacyBase.toFixed(2)}₾</span>
             </div>
@@ -1098,7 +1101,7 @@ export default function OrderDetail({
           style={{ borderColor: C.border }}
         >
           <span className="text-sm font-semibold" style={{ color: C.muted }}>
-            Total
+            {at('orderDetail.total.totalLabel')}
           </span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
             {computedTotal != null
@@ -1111,7 +1114,7 @@ export default function OrderDetail({
 
         {payingGuests > 0 && (tier || prices.length === 0) && (
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
-            Live preview — click "Save changes" above to persist.
+            {at('orderDetail.total.livePreview')}
           </p>
         )}
       </Card>

@@ -5,6 +5,7 @@ import { getSetting } from '@/app/actions/settings'
 import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
 import Link from 'next/link'
+import { adminT } from '@/lib/adminT'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
@@ -25,7 +26,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage, adminLanguage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -34,7 +35,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
     getSetting('invoice_email_message'),
+    getSetting('admin_language'),
   ])
+  const locale = adminLanguage || 'en'
+  const at = (key: string) => adminT(locale, key)
 
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
   const detailed = invoiceDetailed === 'true'
@@ -120,16 +124,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: C.text }}>Orders</h1>
+        <h1 className="text-xl font-bold" style={{ color: C.text }}>{at('orders.pageTitle')}</h1>
         <div className="flex items-center gap-3">
-          {view === 'table' && <span className="text-sm" style={{ color: C.faint }}>{orders.length} booking{orders.length !== 1 ? 's' : ''}</span>}
-          <ViewToggle view={view} params={params} />
+          {view === 'table' && <span className="text-sm" style={{ color: C.faint }}>{orders.length} {orders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}</span>}
+          <ViewToggle view={view} params={params} locale={locale} />
           <Link
             href="/admin/orders/new"
             className="px-3 py-1.5 rounded-lg text-sm font-medium text-white"
             style={{ backgroundColor: C.wine }}
           >
-            + New Order
+            {at('orders.newOrder')}
           </Link>
         </div>
       </div>
@@ -140,18 +144,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           ordersByDate={ordersByDate}
           initialYear={now.getFullYear()}
           initialMonth={now.getMonth()}
+          locale={locale}
         />
       ) : (
         <>
-      <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} />
+      <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} />
 
       {orders.length === 0 ? (
         <div className="rounded-xl border p-12 text-center mt-4" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-          <p style={{ color: C.faint }}>No orders found.</p>
+          <p style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         </div>
       ) : (
         <>
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,
@@ -183,7 +188,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <div className="mt-4 flex justify-end">
             <div className="rounded-lg border px-6 py-3 flex items-center gap-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
               <span className="text-sm" style={{ color: C.muted }}>
-                Total revenue {params.dateFrom || params.dateTo || params.companyId ? '(filtered)' : ''}
+                {at('orders.totalRevenue')} {params.dateFrom || params.dateTo || params.companyId ? at('orders.filtered') : ''}
               </span>
               <span className="font-bold text-lg" style={{ color: C.wine }}>{totalRevenue}₾</span>
             </div>

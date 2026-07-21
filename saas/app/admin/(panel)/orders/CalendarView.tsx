@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   border: '#e0d4c0', muted: '#6b5a47', faint: '#a89070',
@@ -11,6 +12,11 @@ const C = {
 const STATUS_COLORS: Record<string, string> = {
   NEW: '#ca8a04', CONFIRMED: '#2563eb', INVOICE_SENT: '#7c3aed',
   PAID: '#16a34a', COMPLETED: '#16a34a', CANCELLED: '#dc2626',
+}
+
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  NEW: 'orders.status.new', CONFIRMED: 'orders.status.confirmed', INVOICE_SENT: 'orders.status.invoiceSent',
+  PAID: 'orders.status.paid', COMPLETED: 'orders.status.completed', CANCELLED: 'orders.status.cancelled',
 }
 
 type CalendarOrder = {
@@ -26,15 +32,17 @@ type Props = {
   ordersByDate: Record<string, CalendarOrder[]>
   initialYear: number
   initialMonth: number
+  locale?: string
 }
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December']
+const DAY_KEYS = ['orders.calendar.mon', 'orders.calendar.tue', 'orders.calendar.wed', 'orders.calendar.thu', 'orders.calendar.fri', 'orders.calendar.sat', 'orders.calendar.sun']
+const MONTH_KEYS = ['orders.calendar.jan', 'orders.calendar.feb', 'orders.calendar.mar', 'orders.calendar.apr', 'orders.calendar.may', 'orders.calendar.jun',
+  'orders.calendar.jul', 'orders.calendar.aug', 'orders.calendar.sep', 'orders.calendar.oct', 'orders.calendar.nov', 'orders.calendar.dec']
 
-export default function CalendarView({ daySummaries, ordersByDate, initialYear, initialMonth }: Props) {
+export default function CalendarView({ daySummaries, ordersByDate, initialYear, initialMonth, locale = 'en' }: Props) {
   const router = useRouter()
   const pathname = usePathname()
+  const at = (key: string) => adminT(locale, key)
   const [year, setYear] = useState(initialYear)
   const [month, setMonth] = useState(initialMonth)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
@@ -110,15 +118,15 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
       <div className="flex items-center justify-between px-5 py-3 border-b rounded-t-xl" style={{ borderColor: C.border }}>
         <button onClick={prevMonth} className="rounded-lg border px-3 py-1 text-sm transition-opacity hover:opacity-70"
           style={{ borderColor: C.border, color: C.muted, backgroundColor: C.inputBg }}>‹</button>
-        <p className="font-semibold text-sm" style={{ color: C.text }}>{MONTHS[month]} {year}</p>
+        <p className="font-semibold text-sm" style={{ color: C.text }}>{at(MONTH_KEYS[month])} {year}</p>
         <button onClick={nextMonth} className="rounded-lg border px-3 py-1 text-sm transition-opacity hover:opacity-70"
           style={{ borderColor: C.border, color: C.muted, backgroundColor: C.inputBg }}>›</button>
       </div>
 
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b" style={{ borderColor: C.border }}>
-        {DAYS.map(d => (
-          <div key={d} className="py-2 text-center text-xs font-medium" style={{ color: C.faint }}>{d}</div>
+        {DAY_KEYS.map(d => (
+          <div key={d} className="py-2 text-center text-xs font-medium" style={{ color: C.faint }}>{at(d)}</div>
         ))}
       </div>
 
@@ -180,7 +188,7 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
             <div className="px-3 pb-1.5 mb-1 border-b" style={{ borderColor: C.border }}>
               <p className="text-xs font-semibold" style={{ color: C.faint }}>
                 {new Date(hoveredDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                {' · '}{hoveredOrders.length} booking{hoveredOrders.length !== 1 ? 's' : ''}
+                {' · '}{hoveredOrders.length} {hoveredOrders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}
               </p>
             </div>
             <div className="max-h-64 overflow-y-auto divide-y" style={{ borderColor: C.border }}>
@@ -192,16 +200,16 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                     </p>
                     <span className="text-xs font-semibold flex-shrink-0"
                       style={{ color: STATUS_COLORS[o.status] ?? C.muted }}>
-                      {o.status}
+                      {at(STATUS_LABEL_KEYS[o.status] ?? 'orders.status.new')}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs" style={{ color: C.faint }}>{o.timeSlot}</span>
                     <span className="text-xs" style={{ color: C.faint }}>·</span>
-                    <span className="text-xs" style={{ color: C.faint }}>{o.guestCount} guests</span>
+                    <span className="text-xs" style={{ color: C.faint }}>{o.guestCount} {at('orders.guest.plural')}</span>
                     <span className="text-xs" style={{ color: C.faint }}>·</span>
                     <span className="text-xs" style={{ color: C.faint }}>
-                      {o.visitType === 'TASTING' ? 'Tasting' : 'Tasting+Lunch'}
+                      {o.visitType === 'TASTING' ? at('orders.col.tasting') : at('orders.visit.tastingLunch')}
                     </span>
                   </div>
                   {o.companyName && (
