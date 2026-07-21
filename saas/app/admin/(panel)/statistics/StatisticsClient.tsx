@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import StatisticsV2 from './StatisticsV2'
 import WineStatistics, { type WineOrderStat } from './WineStatistics'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -36,6 +37,7 @@ type Props = {
   orders: Order[]
   companies: Company[]
   wineOrders: WineOrderStat[]
+  locale?: string
 }
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -79,8 +81,9 @@ export default function StatisticsClient({
   bookingOn, wineOrdersOn,
   totalOrders, totalRevenue, monthOrders, monthRevenue,
   byMonth, byVisitType, byBookingType, topCompanies,
-  orders, companies, wineOrders,
+  orders, companies, wineOrders, locale = 'en',
 }: Props) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const [mode, setMode] = useState<Mode>(bookingOn ? 'bookings' : 'wine')
   const [showV1, setShowV1] = useState(false)
   const avgRevenue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
@@ -88,7 +91,7 @@ export default function StatisticsClient({
   if (!bookingOn && !wineOrdersOn) {
     return (
       <p className="text-sm" style={{ color: C.faint }}>
-        No modules enabled for this tenant — nothing to show statistics for.
+        {at('statistics.noModulesEnabled')}
       </p>
     )
   }
@@ -99,7 +102,7 @@ export default function StatisticsClient({
       {/* Mode switcher — only when both modules are on */}
       {bookingOn && wineOrdersOn && (
         <div className="flex items-center gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: C.border }}>
-          {([['bookings', 'Bookings'], ['wine', 'Wine Orders']] as [Mode, string][]).map(([m, label]) => (
+          {([['bookings', at('statistics.modeSwitcher.bookings')], ['wine', at('nav.wineOrders')]] as [Mode, string][]).map(([m, label]) => (
             <button
               key={m}
               onClick={() => { setMode(m); setShowV1(false) }}
@@ -117,20 +120,20 @@ export default function StatisticsClient({
 
       {/* Wine Orders view */}
       {wineOrdersOn && mode === 'wine' && (
-        <WineStatistics orders={wineOrders} />
+        <WineStatistics orders={wineOrders} locale={locale} />
       )}
 
       {/* Bookings view */}
       {bookingOn && mode === 'bookings' && !showV1 && (
         <>
-          <StatisticsV2 orders={orders} companies={companies} />
+          <StatisticsV2 orders={orders} companies={companies} locale={locale} />
           <div className="flex justify-center pt-2">
             <button
               onClick={() => setShowV1(true)}
               className="text-sm px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
               style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
             >
-              Show historical breakdown →
+              {at('statistics.showHistorical')}
             </button>
           </div>
         </>
@@ -145,29 +148,29 @@ export default function StatisticsClient({
               className="text-sm px-4 py-2 rounded-lg border transition-opacity hover:opacity-70"
               style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
             >
-              ← Back to overview
+              {at('statistics.backToOverview')}
             </button>
-            <p className="text-sm" style={{ color: C.faint }}>Historical breakdown — all time</p>
+            <p className="text-sm" style={{ color: C.faint }}>{at('statistics.historicalAllTime')}</p>
           </div>
 
           {/* Summary cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card label="Total Orders" value={String(totalOrders)} sub="all time" />
-            <Card label="Total Revenue" value={`${totalRevenue.toLocaleString()}₾`} sub="all time" />
-            <Card label="This Month" value={String(monthOrders)} sub={`${monthRevenue.toLocaleString()}₾ revenue`} />
-            <Card label="Avg. Order Value" value={`${avgRevenue}₾`} sub="per booking" />
+            <Card label={at('statistics.card.totalOrders')} value={String(totalOrders)} sub={at('statistics.card.allTime')} />
+            <Card label={at('statistics.card.totalRevenue')} value={`${totalRevenue.toLocaleString()}₾`} sub={at('statistics.card.allTime')} />
+            <Card label={at('statistics.card.thisMonth')} value={String(monthOrders)} sub={`${monthRevenue.toLocaleString()}₾ ${at('statistics.card.revenueSuffix')}`} />
+            <Card label={at('statistics.card.avgOrderValue')} value={`${avgRevenue}₾`} sub={at('statistics.card.perBooking')} />
           </div>
 
           {/* Charts */}
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>Bookings — last 6 months</p>
+              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>{at('statistics.chart.bookingsLast6Months')}</p>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byMonth} barSize={28} margin={{ top: 20 }}>
                   <CartesianGrid vertical={false} stroke={C.border} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={28} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [v ?? 0, 'bookings']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [v ?? 0, at('statistics.tooltip.bookings')]} />
                   <Bar dataKey="orders" fill={C.wine} radius={[4, 4, 0, 0]}>
                     <LabelList dataKey="orders" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? String(v) : ''} />
                   </Bar>
@@ -176,13 +179,13 @@ export default function StatisticsClient({
             </div>
 
             <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>Revenue ₾ — last 6 months</p>
+              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>{at('statistics.chart.revenueLast6Months')}</p>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byMonth} barSize={28} margin={{ top: 20 }}>
                   <CartesianGrid vertical={false} stroke={C.border} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={48} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v ?? 0).toLocaleString()}₾`, 'revenue']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v ?? 0).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[4, 4, 0, 0]}>
                     <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? `${Number(v).toLocaleString()}₾` : ''} />
                   </Bar>
@@ -194,41 +197,41 @@ export default function StatisticsClient({
           {/* Breakdowns + top companies */}
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-              <p className="text-sm font-semibold mb-5" style={{ color: C.text }}>Breakdown</p>
+              <p className="text-sm font-semibold mb-5" style={{ color: C.text }}>{at('statistics.breakdown.title')}</p>
               <SplitRow
-                label="By visit type (orders)"
+                label={at('statistics.breakdown.byVisitTypeOrders')}
                 a={byVisitType.tastingOrders}
                 b={byVisitType.tastingLunchOrders}
-                aLabel="Tasting"
-                bLabel="Tasting + Lunch"
+                aLabel={at('statistics.tasting')}
+                bLabel={at('orders.visit.tastingLunch')}
               />
               <SplitRow
-                label="By visit type (revenue ₾)"
+                label={at('statistics.breakdown.byVisitTypeRevenue')}
                 a={byVisitType.tastingRevenue}
                 b={byVisitType.tastingLunchRevenue}
-                aLabel={`Tasting ${byVisitType.tastingRevenue.toLocaleString()}₾`}
-                bLabel={`+Lunch ${byVisitType.tastingLunchRevenue.toLocaleString()}₾`}
+                aLabel={`${at('statistics.tasting')} ${byVisitType.tastingRevenue.toLocaleString()}₾`}
+                bLabel={`+${at('orders.col.lunch')} ${byVisitType.tastingLunchRevenue.toLocaleString()}₾`}
               />
               <SplitRow
-                label="By booking type (orders)"
+                label={at('statistics.breakdown.byBookingTypeOrders')}
                 a={byBookingType.individualOrders}
                 b={byBookingType.companyOrders}
-                aLabel="Individual"
-                bLabel="Company"
+                aLabel={at('orders.type.individual')}
+                bLabel={at('orders.type.company')}
               />
               <SplitRow
-                label="By booking type (revenue ₾)"
+                label={at('statistics.breakdown.byBookingTypeRevenue')}
                 a={byBookingType.individualRevenue}
                 b={byBookingType.companyRevenue}
-                aLabel={`Individual ${byBookingType.individualRevenue.toLocaleString()}₾`}
-                bLabel={`Company ${byBookingType.companyRevenue.toLocaleString()}₾`}
+                aLabel={`${at('orders.type.individual')} ${byBookingType.individualRevenue.toLocaleString()}₾`}
+                bLabel={`${at('orders.type.company')} ${byBookingType.companyRevenue.toLocaleString()}₾`}
               />
             </div>
 
             <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>Top Companies</p>
+              <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>{at('statistics.topCompanies.title')}</p>
               {topCompanies.length === 0 ? (
-                <p className="text-sm" style={{ color: C.faint }}>No company bookings yet.</p>
+                <p className="text-sm" style={{ color: C.faint }}>{at('statistics.topCompanies.none')}</p>
               ) : (
                 <div className="space-y-3">
                   {topCompanies.map((c, i) => (
@@ -248,7 +251,7 @@ export default function StatisticsClient({
                             }}
                           />
                         </div>
-                        <p className="text-xs mt-0.5" style={{ color: C.faint }}>{c.orders} booking{c.orders !== 1 ? 's' : ''}</p>
+                        <p className="text-xs mt-0.5" style={{ color: C.faint }}>{c.orders} {c.orders !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}</p>
                       </div>
                     </div>
                   ))}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createMenuItem, updateMenuItem, deleteMenuItem } from '@/app/actions/menuItems'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -26,23 +27,20 @@ type MenuItem = {
   sortOrder: number
 }
 
-type Props = { items: MenuItem[] }
+type Props = { items: MenuItem[]; locale?: string }
 
 type SectionType = 'VEGETABLE' | 'MEAT'
 
-const SECTIONS: { type: SectionType; label: string; emoji: string }[] = [
-  { type: 'VEGETABLE', label: 'Vegetable Dishes', emoji: '🥦' },
-  { type: 'MEAT',      label: 'Meat Dishes',      emoji: '🥩' },
-]
-
 function Section({
-  type, label, emoji, items,
+  type, label, emoji, items, locale,
 }: {
   type: SectionType
   label: string
   emoji: string
   items: MenuItem[]
+  locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editSort, setEditSort] = useState('')
@@ -92,13 +90,13 @@ function Section({
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>
           {emoji} {label}
         </p>
-        <span className="text-xs" style={{ color: C.faint }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs" style={{ color: C.faint }}>{items.length} {items.length !== 1 ? at('menuItems.item.plural') : at('menuItems.item.singular')}</span>
       </div>
 
       {/* Items */}
       {items.length === 0 && !adding && (
         <div className="px-5 py-4 text-sm" style={{ color: C.faint, backgroundColor: C.bg }}>
-          No items yet. Add one below.
+          {at('menuItems.noItemsYet')}
         </div>
       )}
 
@@ -126,8 +124,8 @@ function Section({
                 type="number"
                 value={editSort}
                 onChange={e => setEditSort(e.target.value)}
-                placeholder="Order"
-                title="Sort order"
+                placeholder={at('menuItems.orderPh')}
+                title={at('menuItems.sortOrderTitle')}
               />
               <button
                 onClick={() => handleSave(item.id)}
@@ -135,14 +133,14 @@ function Section({
                 className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
                 style={{ backgroundColor: C.wine }}
               >
-                Save
+                {at('settings.common.save')}
               </button>
               <button
                 onClick={() => setEditingId(null)}
                 className="text-xs px-3 py-1.5 rounded-lg border"
                 style={{ borderColor: C.border, color: C.muted }}
               >
-                Cancel
+                {at('settings.common.cancel')}
               </button>
             </div>
           ) : (
@@ -151,7 +149,7 @@ function Section({
               {/* Active toggle */}
               <button
                 onClick={() => handleToggleActive(item)}
-                title={item.active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                title={item.active ? at('menuItems.activeTitle') : at('menuItems.inactiveTitle')}
                 className="flex-shrink-0 w-2 h-2 rounded-full"
                 style={{ backgroundColor: item.active ? '#16a34a' : '#d1c4b0' }}
               />
@@ -165,18 +163,18 @@ function Section({
 
               {deletingId === item.id ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: C.muted }}>Delete?</span>
+                  <span className="text-xs" style={{ color: C.muted }}>{at('orders.deleteConfirm')}</span>
                   <button
                     onClick={() => handleDelete(item.id)}
                     disabled={loading}
                     className="text-xs px-2 py-1 rounded font-medium text-white"
                     style={{ backgroundColor: '#b91c1c' }}
-                  >Yes</button>
+                  >{at('orders.yes')}</button>
                   <button
                     onClick={() => setDeletingId(null)}
                     className="text-xs px-2 py-1 rounded border"
                     style={{ borderColor: C.border, color: C.muted }}
-                  >No</button>
+                  >{at('orders.no')}</button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -184,12 +182,12 @@ function Section({
                     onClick={() => openEdit(item)}
                     className="text-xs px-2 py-1 rounded border"
                     style={{ borderColor: C.border, color: C.muted }}
-                  >Edit</button>
+                  >{at('settings.common.edit')}</button>
                   <button
                     onClick={() => setDeletingId(item.id)}
                     className="text-xs px-2 py-1 rounded border"
                     style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
-                  >Delete</button>
+                  >{at('companies.priceTiers.delete')}</button>
                 </div>
               )}
             </div>
@@ -205,7 +203,7 @@ function Section({
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') { setAdding(false); setNewName('') } }}
-            placeholder="Dish name…"
+            placeholder={at('menuItems.dishNamePh')}
             autoFocus
           />
           <button
@@ -213,12 +211,12 @@ function Section({
             disabled={loading || !newName.trim()}
             className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
             style={{ backgroundColor: C.wine }}
-          >Add</button>
+          >{at('orderDetail.masterclass.add')}</button>
           <button
             onClick={() => { setAdding(false); setNewName('') }}
             className="text-xs px-3 py-1.5 rounded-lg border"
             style={{ borderColor: C.border, color: C.muted }}
-          >Cancel</button>
+          >{at('settings.common.cancel')}</button>
         </div>
       ) : (
         <div className="px-5 py-3" style={{ backgroundColor: C.bg }}>
@@ -226,19 +224,23 @@ function Section({
             onClick={() => setAdding(true)}
             className="text-xs font-medium"
             style={{ color: C.wine }}
-          >+ Add dish</button>
+          >+ {at('menuItems.addDish')}</button>
         </div>
       )}
     </div>
   )
 }
 
-export default function MenuItemsClient({ items }: Props) {
+export default function MenuItemsClient({ items, locale = 'en' }: Props) {
+  const at = (key: string) => adminT(locale, key)
+  const SECTIONS: { type: SectionType; label: string; emoji: string }[] = [
+    { type: 'VEGETABLE', label: at('menuItems.sections.vegetable'), emoji: '🥦' },
+    { type: 'MEAT',      label: at('menuItems.sections.meat'),      emoji: '🥩' },
+  ]
   return (
     <div>
       <p className="text-sm mb-6" style={{ color: C.muted }}>
-        Manage hot dish options for the company booking form. Active items appear as dropdown choices.
-        Use the sort order number to control the display order.
+        {at('menuItems.description')}
       </p>
       {SECTIONS.map(s => (
         <Section
@@ -247,6 +249,7 @@ export default function MenuItemsClient({ items }: Props) {
           label={s.label}
           emoji={s.emoji}
           items={items.filter(i => i.type === s.type)}
+          locale={locale}
         />
       ))}
     </div>

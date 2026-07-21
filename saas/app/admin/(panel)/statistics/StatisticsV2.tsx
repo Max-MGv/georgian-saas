@@ -7,13 +7,14 @@ import {
 } from 'recharts'
 import SearchableSelect from './SearchableSelect'
 import { useContainerWidth } from './useContainerWidth'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
 const tooltipStyle = {
   contentStyle: { backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
@@ -24,7 +25,7 @@ const tooltipStyle = {
 type Order = { id: string; date: string; totalPrice: number; companyId: string | null; companyName: string | null }
 type Company = { id: string; name: string }
 
-type Props = { orders: Order[]; companies: Company[] }
+type Props = { orders: Order[]; companies: Company[]; locale?: string }
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -46,7 +47,9 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
-export default function StatisticsV2({ orders, companies }: Props) {
+export default function StatisticsV2({ orders, companies, locale = 'en' }: Props) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+  const MONTH_LABELS = MONTH_KEYS.map(k => at(`statistics.month.${k}`))
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const currentYear = today.getFullYear()
 
@@ -83,8 +86,12 @@ export default function StatisticsV2({ orders, companies }: Props) {
   const nextOrder = upcomingOrders.length > 0
     ? upcomingOrders.reduce((min, o) => new Date(o.date) < new Date(min.date) ? o : min)
     : null
+  const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
   const nextOrderDate = nextOrder
-    ? new Date(nextOrder.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    ? (() => {
+        const d = new Date(nextOrder.date)
+        return `${at(`orders.calendar.${WEEKDAY_KEYS[d.getDay()]}`)}, ${d.getDate()} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`
+      })()
     : '—'
 
   // Revenue by month or by day (if exactly 1 month selected)
@@ -119,14 +126,14 @@ export default function StatisticsV2({ orders, companies }: Props) {
     const map: Record<string, { name: string; revenue: number }> = {}
     filteredOrders.forEach(o => {
       const key = o.companyId ?? '__individual__'
-      const name = o.companyName ?? 'Individual'
+      const name = o.companyName ?? at('orders.type.individual')
       if (!map[key]) map[key] = { name, revenue: 0 }
       map[key].revenue += o.totalPrice
     })
     return Object.values(map)
       .map(c => ({ ...c, revenue: Math.round(c.revenue) }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [filteredOrders])
+  }, [filteredOrders, locale])
 
   const periodLabel = selectedMonth !== '' ? `${MONTH_LABELS[selectedMonth as number]} ${selectedYear}` : `${selectedYear}`
 
@@ -136,45 +143,46 @@ export default function StatisticsV2({ orders, companies }: Props) {
       {/* Top cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card
-          label="Upcoming Orders"
+          label={at('statistics.card.upcomingOrders')}
           value={String(upcomingCount)}
-          sub={upcomingCount === 1 ? '1 booking ahead' : `${upcomingCount} bookings ahead`}
+          sub={upcomingCount === 1 ? at('statistics.bookingAhead.singular') : at('statistics.bookingAhead.plural', { n: upcomingCount })}
         />
         <Card
-          label="Future Revenue"
+          label={at('statistics.card.futureRevenue')}
           value={`${futureRevenue.toLocaleString()}₾`}
-          sub={`in ${periodLabel}`}
+          sub={at('statistics.inPeriod', { period: periodLabel })}
         />
         <Card
-          label="Next Order"
+          label={at('statistics.card.nextOrder')}
           value={nextOrderDate}
-          sub={nextOrder?.companyName ?? (nextOrder ? 'Individual' : 'No upcoming orders')}
+          sub={nextOrder?.companyName ?? (nextOrder ? at('orders.type.individual') : at('statistics.noUpcomingOrders'))}
         />
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Year</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.year')}</label>
           <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} style={selectStyle}>
             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Month</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.month')}</label>
           <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value === '' ? '' : Number(e.target.value))} style={selectStyle}>
-            <option value="">All months</option>
+            <option value="">{at('statistics.filters.allMonths')}</option>
             {MONTH_LABELS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Company</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.col.company')}</label>
           <SearchableSelect
             value={selectedCompanyId}
             onChange={setSelectedCompanyId}
-            options={[{ value: '', label: 'All companies' }, ...companies.map(c => ({ value: c.id, label: c.name }))]}
-            placeholder="All companies"
+            options={[{ value: '', label: at('statistics.filters.allCompanies') }, ...companies.map(c => ({ value: c.id, label: c.name }))]}
+            placeholder={at('statistics.filters.allCompanies')}
             minWidth={180}
+            locale={locale}
           />
         </div>
         {(selectedMonth !== '' || selectedCompanyId) && (
@@ -183,7 +191,7 @@ export default function StatisticsV2({ orders, companies }: Props) {
             className="text-sm px-3 py-2 rounded-lg"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
-            Clear filters
+            {at('statistics.clearFilters')}
           </button>
         )}
       </div>
@@ -194,10 +202,10 @@ export default function StatisticsV2({ orders, companies }: Props) {
         {/* Revenue by month / day */}
         <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
           <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>
-            {selectedMonth !== '' ? `Revenue by day — ${MONTH_LABELS[selectedMonth as number]} ${selectedYear}` : `Revenue by month — ${selectedYear}`}
+            {selectedMonth !== '' ? at('statistics.revenueByDay', { month: MONTH_LABELS[selectedMonth as number], year: selectedYear }) : at('statistics.revenueByMonth', { year: selectedYear })}
           </p>
           {revenueByPeriod.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
+            <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataPeriod')}</p>
           ) : (
             <div ref={revenueChartRef}>
               <ResponsiveContainer width="100%" height={Math.max(200, revenueByPeriod.length * 36)}>
@@ -205,7 +213,7 @@ export default function StatisticsV2({ orders, companies }: Props) {
                   <CartesianGrid horizontal={false} stroke={C.border} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
                   <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={36} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props
@@ -221,9 +229,9 @@ export default function StatisticsV2({ orders, companies }: Props) {
 
         {/* Revenue by company */}
         <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-          <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>Revenue by company — {periodLabel}</p>
+          <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>{at('statistics.revenueByCompany', { period: periodLabel })}</p>
           {revenueByCompany.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
+            <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataPeriod')}</p>
           ) : (
             <div ref={companyChartRef}>
               <ResponsiveContainer width="100%" height={Math.max(200, revenueByCompany.length * 48)}>
@@ -231,7 +239,7 @@ export default function StatisticsV2({ orders, companies }: Props) {
                   <CartesianGrid horizontal={false} stroke={C.border} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={90} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props

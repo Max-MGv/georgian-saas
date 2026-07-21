@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -15,9 +16,11 @@ type Props = {
   options: SelectOption[]   // first option should be { value: '', label: 'All …' }
   placeholder?: string
   minWidth?: number
+  locale?: string
 }
 
-export default function SearchableSelect({ value, onChange, options, placeholder = 'All', minWidth = 160 }: Props) {
+export default function SearchableSelect({ value, onChange, options, placeholder = 'All', minWidth = 160, locale = 'en' }: Props) {
+  const at = (key: string) => adminT(locale, key)
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [hovered, setHovered] = useState('')
@@ -71,7 +74,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           ref={inputRef}
           type="text"
           value={open ? search : selectedLabel}
-          placeholder={open ? 'Search…' : placeholder}
+          placeholder={open ? at('statistics.search') : placeholder}
           onChange={e => { setSearch(e.target.value); setOpen(true) }}
           onFocus={handleFocus}
           style={{
@@ -96,7 +99,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
           zIndex: 200, maxHeight: 220, overflowY: 'auto',
         }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 12px', fontSize: '0.875rem', color: C.faint }}>No matches</div>
+            <div style={{ padding: '10px 12px', fontSize: '0.875rem', color: C.faint }}>{at('statistics.noMatches')}</div>
           ) : (
             filtered.map(opt => {
               const isSelected = opt.value === value

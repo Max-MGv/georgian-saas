@@ -1,10 +1,13 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { headers } from 'next/headers'
+import { getSetting } from '@/app/actions/settings'
+import { adminT } from '@/lib/adminT'
 import StatisticsClient from './StatisticsClient'
 
 export default async function StatisticsPage() {
-  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
+  const locale = adminLanguage || 'en'
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
@@ -35,10 +38,11 @@ export default async function StatisticsPage() {
   const monthOrders = rawOrders.filter(o => o.date >= monthStart).length
   const monthRevenue = rawOrders.filter(o => o.date >= monthStart).reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 
+  const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
   const months: { label: string; year: number; month: number }[] = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push({ label: d.toLocaleString('en', { month: 'short' }), year: d.getFullYear(), month: d.getMonth() })
+    months.push({ label: adminT(locale, `statistics.month.${MONTH_KEYS[d.getMonth()]}`), year: d.getFullYear(), month: d.getMonth() })
   }
   const byMonth = months.map(({ label, year, month }) => {
     const bucket = rawOrders.filter(o => { const d = new Date(o.date); return d.getFullYear() === year && d.getMonth() === month })
@@ -107,7 +111,7 @@ export default async function StatisticsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>Statistics</h1>
+        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(locale, 'nav.statistics')}</h1>
       </div>
       <StatisticsClient
         bookingOn={bookingOn}
@@ -123,6 +127,7 @@ export default async function StatisticsPage() {
         orders={orders}
         companies={companies.map(c => ({ id: c.id, name: c.name }))}
         wineOrders={wineOrders}
+        locale={locale}
       />
     </div>
   )

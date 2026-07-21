@@ -8,13 +8,14 @@ import {
 } from 'recharts'
 import SearchableSelect from './SearchableSelect'
 import { useContainerWidth } from './useContainerWidth'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
   border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
 const WINE_LINE_COLORS = [
   'var(--color-brand)', '#2563eb', '#16a34a', '#ca8a04',
@@ -79,7 +80,9 @@ function TrendIcon({ active }: { active: boolean }) {
 
 type WineChartMode = 'bar' | 'trend'
 
-export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) {
+export default function WineStatistics({ orders, locale = 'en' }: { orders: WineOrderStat[]; locale?: string }) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+  const MONTH_LABELS = MONTH_KEYS.map(k => at(`statistics.month.${k}`))
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const currentYear = today.getFullYear()
 
@@ -102,8 +105,8 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
   // Unique business names for the customer combobox
   const customerOptions = useMemo(() => {
     const names = Array.from(new Set(orders.map(o => o.businessName))).sort()
-    return [{ value: '', label: 'All customers' }, ...names.map(n => ({ value: n, label: n }))]
-  }, [orders])
+    return [{ value: '', label: at('statistics.filters.allCustomers') }, ...names.map(n => ({ value: n, label: n }))]
+  }, [orders, locale])
 
   // Orders filtered by year + month + customer for most charts
   const filtered = useMemo(() => orders.filter(o => {
@@ -229,7 +232,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
   if (orders.length === 0) {
     return (
       <div className="text-center py-20 text-sm" style={{ color: C.faint }}>
-        No wine orders yet.
+        {at('wineOrders.noOrdersYet')}
       </div>
     )
   }
@@ -246,35 +249,36 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
     <div className="space-y-6">
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card label="Total Orders" value={String(totalOrders)} sub={periodLabel} />
-        <Card label="Total Revenue" value={`${totalRevenue.toLocaleString()}₾`} sub={periodLabel} />
-        <Card label="Active Orders" value={String(activeOrders)} sub="pending · confirmed · paid" />
-        <Card label="Avg Order Value" value={`${avgOrder.toLocaleString()}₾`} sub="per wine order" />
+        <Card label={at('statistics.card.totalOrders')} value={String(totalOrders)} sub={periodLabel} />
+        <Card label={at('statistics.card.totalRevenue')} value={`${totalRevenue.toLocaleString()}₾`} sub={periodLabel} />
+        <Card label={at('statistics.card.activeOrders')} value={String(activeOrders)} sub={at('statistics.activeOrdersSub')} />
+        <Card label={at('statistics.card.avgOrderValueWine')} value={`${avgOrder.toLocaleString()}₾`} sub={at('statistics.perWineOrder')} />
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Year</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.year')}</label>
           <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} style={selectStyle}>
             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Month</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.month')}</label>
           <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value === '' ? '' : Number(e.target.value))} style={selectStyle}>
-            <option value="">All months</option>
+            <option value="">{at('statistics.filters.allMonths')}</option>
             {MONTH_LABELS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>Customer</label>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.customer')}</label>
           <SearchableSelect
             value={selectedCustomer}
             onChange={setSelectedCustomer}
             options={customerOptions}
-            placeholder="All customers"
+            placeholder={at('statistics.filters.allCustomers')}
             minWidth={180}
+            locale={locale}
           />
         </div>
         {(selectedMonth !== '' || selectedCustomer) && (
@@ -283,7 +287,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
             className="text-sm px-3 py-2 rounded-lg"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
-            Clear filters
+            {at('statistics.clearFilters')}
           </button>
         )}
       </div>
@@ -293,14 +297,14 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
         {/* Header row */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold" style={{ color: C.text }}>
-            {wineChartMode === 'bar' ? 'Top wines — revenue' : `Wine trends — ${selectedYear}`}
+            {wineChartMode === 'bar' ? at('statistics.topWinesRevenue') : at('statistics.wineTrends', { year: selectedYear })}
           </p>
           <div className="flex gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: C.border }}>
             <button style={modeBtnStyle(wineChartMode === 'bar')} onClick={() => setWineChartMode('bar')}>
-              <BarIcon active={wineChartMode === 'bar'} /> Bars
+              <BarIcon active={wineChartMode === 'bar'} /> {at('statistics.bars')}
             </button>
             <button style={modeBtnStyle(wineChartMode === 'trend')} onClick={() => setWineChartMode('trend')}>
-              <TrendIcon active={wineChartMode === 'trend'} /> Trend
+              <TrendIcon active={wineChartMode === 'trend'} /> {at('statistics.trend')}
             </button>
           </div>
         </div>
@@ -308,7 +312,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
         {/* Bar mode */}
         {wineChartMode === 'bar' && (
           topWines.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
+            <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataPeriod')}</p>
           ) : (
             <div ref={topWinesRef}>
               <ResponsiveContainer width="100%" height={Math.max(200, topWines.length * 44)}>
@@ -324,7 +328,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
                         <div style={{ backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
                           <p style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>{d.name}</p>
                           <p style={{ color: C.wine }}>{(d.revenue ?? 0).toLocaleString()}₾</p>
-                          <p style={{ color: C.muted }}>{d.bottles} bottle{d.bottles !== 1 ? 's' : ''}</p>
+                          <p style={{ color: C.muted }}>{d.bottles} {d.bottles !== 1 ? at('statistics.bottle.plural') : at('statistics.bottle.singular')}</p>
                         </div>
                       )
                     }}
@@ -345,7 +349,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
         {/* Trend mode */}
         {wineChartMode === 'trend' && (
           allWineNames.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for {selectedYear}</p>
+            <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataForYear', { year: selectedYear })}</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2 mb-4">
@@ -380,12 +384,12 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
 
               {selectedWines.size === 0 ? (
                 <p className="text-sm text-center py-8" style={{ color: C.faint }}>
-                  Select at least one wine above
+                  {at('statistics.selectAtLeastOneWine')}
                 </p>
               ) : (
                 <>
                   <p className="text-xs mb-3" style={{ color: C.faint }}>
-                    Showing full year · bottles ordered per month
+                    {at('statistics.showingFullYear')}
                   </p>
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={trendData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
@@ -394,7 +398,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
                       <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} width={28} />
                       <Tooltip
                         {...tooltipStyle}
-                        formatter={(v: unknown, name: unknown) => [`${Number(v)} bottle${Number(v) !== 1 ? 's' : ''}`, String(name ?? '')]}
+                        formatter={(v: unknown, name: unknown) => [`${Number(v)} ${Number(v) !== 1 ? at('statistics.bottle.plural') : at('statistics.bottle.singular')}`, String(name ?? '')]}
                       />
                       {Array.from(selectedWines).map(name => (
                         <Line
@@ -421,9 +425,9 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
 
         {/* Top customers */}
         <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-          <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>Top customers — {periodLabel}</p>
+          <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>{at('statistics.topCustomers', { period: periodLabel })}</p>
           {topCustomers.length === 0 ? (
-            <p className="text-sm" style={{ color: C.faint }}>No orders for this period.</p>
+            <p className="text-sm" style={{ color: C.faint }}>{at('statistics.noOrdersPeriod')}</p>
           ) : (
             <div className="space-y-3">
               {topCustomers.map((c, i) => (
@@ -441,7 +445,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
                         height: '100%',
                       }} />
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: C.faint }}>{c.orders} order{c.orders !== 1 ? 's' : ''}</p>
+                    <p className="text-xs mt-0.5" style={{ color: C.faint }}>{c.orders} {c.orders !== 1 ? at('packing.order.plural') : at('packing.order.singular')}</p>
                   </div>
                 </div>
               ))}
@@ -453,11 +457,11 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
         <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
           <p className="text-sm font-semibold mb-4" style={{ color: C.text }}>
             {selectedMonth !== ''
-              ? `Revenue by day — ${MONTH_LABELS[selectedMonth as number]} ${selectedYear}`
-              : `Revenue by month — ${selectedYear}`}
+              ? at('statistics.revenueByDay', { month: MONTH_LABELS[selectedMonth as number], year: selectedYear })
+              : at('statistics.revenueByMonth', { year: selectedYear })}
           </p>
           {revenueByPeriod.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: C.faint }}>No data for this period</p>
+            <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataPeriod')}</p>
           ) : (
             <div ref={revenueRef}>
               <ResponsiveContainer width="100%" height={Math.max(200, revenueByPeriod.length * 36)}>
@@ -465,7 +469,7 @@ export default function WineStatistics({ orders }: { orders: WineOrderStat[] }) 
                   <CartesianGrid horizontal={false} stroke={C.border} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
                   <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={36} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, 'revenue']} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props

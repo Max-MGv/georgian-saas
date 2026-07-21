@@ -8,7 +8,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-07-21 — Wine Orders Pack cleanup, backlog audit, Georgian admin layer Phase 0 (full detail)
+## 2026-07-21 — Wine Orders Pack cleanup, backlog audit, Georgian admin layer Phases 0-2 (full detail)
 
 ### Completed
 
@@ -34,6 +34,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 Every page browser-verified in both languages, including nested modals (send-invoice-by-email, edit slide-overs, price-tier add/edit forms) and the hover preview card. Toggling back to EN after all of Phase 1 reverts every page cleanly with no regressions (spot-checked Orders list). TypeScript: 0 errors throughout.
 
+**Phase 2 — Secondary pages, built in a follow-up continuation of the same day.** Wines (`WinesClient.tsx`, 842 lines) — product fields, vintage sub-list, image picker, add-wine form; also translated the wine type (Red/White/Amber/Rosé) and sweetness (Dry/Semi-dry/Semi-sweet/Sweet) enum labels, which is an upgrade over the raw `RED`/`SEMI_DRY` badges the English UI showed before (matches the human-readable labels the public catalogue already uses). Statistics (`StatisticsClient.tsx`, `StatisticsV2.tsx`, `WineStatistics.tsx`, `SearchableSelect.tsx`) — mode switcher, summary cards, filters, chart titles/tooltips/axis labels, historical breakdown, wine bar/trend charts, top companies/customers; month abbreviations (`statistics.month.*`) and reused `orders.calendar.*` weekday abbreviations used to build the localized "Next Order" date string instead of `toLocaleDateString('en-GB', …)`. Menu Items and Masterclass (smaller files) — section/column headers, item rows, edit/delete sub-states, add forms.
+
+**Caught one hardcoded fallback via browser testing, not code review**: `StatisticsV2.tsx`'s `revenueByCompany` computation had a bare `?? 'Individual'` fallback baked into chart *data* (not JSX), so it slipped past the first editing pass — only surfaced because the Georgian revenue-by-company chart bar showed "Individual" in English while everything around it was Georgian. Fixed by routing it through `at('orders.type.individual')` and adding `locale` to the `useMemo` dependency array (the fallback wouldn't have picked up a locale change otherwise, since `at` isn't memoized itself).
+
+**One deliberate non-translation for consistency**: `MasterclassClient.tsx` uses shared `UNIT_LABELS`/`UNIT_DESCRIPTIONS` constants from `lib/masterclass.ts` (e.g. "per person", "per piece") that are also displayed, untranslated, in Phase 1's `OrderDetail.tsx`. Left them in English here too rather than translating only on the Masterclass admin page — translating just one of two pages showing the same data field would have created a language mismatch between them, which is worse than being consistently English until both get done together in a later pass.
+
+All of Phase 2 browser-verified in both languages, including nested states (Wines vintage edit forms, Statistics historical breakdown + wine trend mode + `SearchableSelect` dropdown, Menu Items/Masterclass edit and delete-confirm rows). Spot-checked Orders list after Phase 2 changes — no regressions. TypeScript: 0 errors throughout.
+
 ### Files changed
 - `saas/app/admin/(panel)/wine-orders/PackingView.tsx` — removed layouts B/C, `PackingLayoutType`; later fully translated (box-mode picker, print sheet, per-locale box-count sentences)
 - `saas/app/admin/(panel)/wine-orders/WineOrdersClient.tsx` — dropped `packingLayout` state/props; later fully translated
@@ -47,13 +55,18 @@ Every page browser-verified in both languages, including nested modals (send-inv
 - `saas/app/admin/(panel)/orders/new/page.tsx`, `NewOrderForm.tsx` — fully translated
 - `saas/app/admin/(panel)/wine-orders/page.tsx` — fully translated
 - `saas/app/admin/(panel)/companies/page.tsx`, `CompaniesClient.tsx` — fully translated
-- Vault: `Plan-AdminGeorgian.md` (Phase 0 + Phase 1 marked done), `Roadmap.md` (backlog corrections), `FeatureLog.md` (#130), `SessionLog.md` (this entry)
+- `saas/app/admin/(panel)/wines/page.tsx`, `WinesClient.tsx` — fully translated (Phase 2), incl. wine type/sweetness enum labels
+- `saas/app/admin/(panel)/statistics/page.tsx`, `StatisticsClient.tsx`, `StatisticsV2.tsx`, `WineStatistics.tsx`, `SearchableSelect.tsx` — fully translated (Phase 2); `StatisticsV2.tsx` also fixed a hardcoded `'Individual'` fallback found during verification
+- `saas/app/admin/(panel)/menu-items/page.tsx`, `MenuItemsClient.tsx` — fully translated (Phase 2)
+- `saas/app/admin/(panel)/masterclass/page.tsx`, `MasterclassClient.tsx` — fully translated (Phase 2); unit-type labels deliberately left English for consistency with Order Detail
+- `saas/lib/adminT.ts` — grew to ~550 keys across the full session (added `wines.*`, `statistics.*`, `menuItems.*`, `masterclass.*` blocks in this continuation)
+- Vault: `Plan-AdminGeorgian.md` (Phases 0-2 marked done), `Roadmap.md` (backlog corrections), `FeatureLog.md` (#130), `SessionLog.md` (this entry)
 
 ### What's next
-- **Phase 2** of the Georgian layer: Wines (`WinesClient.tsx`), Statistics (`StatisticsClient.tsx`, `StatisticsV2.tsx`, `WineStatistics.tsx`, `SearchableSelect.tsx`), Menu Items, Masterclass. See `Plan-AdminGeorgian.md` progress tracker.
-- **Phase 3**: Site Content editor's own chrome (`ContentClient.tsx`, `BackgroundsTab.tsx`, `BookingFormVisualPanel.tsx`) — deliberately last since it's architecturally distinct (an editor for the public site's own EN/KA content).
-- Max should batch-review all the Georgian wording written this session (Settings, Orders, Order Detail, New Order, Wine Orders, Companies) — flagged as pending per his "will batch check later."
+- **Phase 3** of the Georgian layer: Site Content editor's own chrome (`ContentClient.tsx`, `BackgroundsTab.tsx`, `BookingFormVisualPanel.tsx`) — deliberately last since it's architecturally distinct (an editor for the public site's own EN/KA content). See `Plan-AdminGeorgian.md` progress tracker.
+- Max should batch-review all the Georgian wording written this session (Settings, Orders, Order Detail, New Order, Wine Orders, Companies, Wines, Statistics, Menu Items, Masterclass) — flagged as pending per his "will batch check later."
 - Vintage-year cleanup (2026 default) in `/admin/wines` is a data-entry task for Max, not code — not tracked as a bug.
+- Once Phase 3 lands, consider a follow-up pass to translate `UNIT_LABELS`/`UNIT_DESCRIPTIONS` (`lib/masterclass.ts`) consistently across both `OrderDetail.tsx` and `MasterclassClient.tsx` together, since both were deliberately left English for consistency with each other rather than translated ad hoc.
 
 ---
 

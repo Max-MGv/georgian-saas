@@ -6,6 +6,7 @@ import {
   createVintage, updateVintage, deleteVintage, assignVintageImage, toggleVintageActive,
 } from '@/app/actions/wines'
 import { uploadWineImage, deleteWineImage } from '@/app/actions/uploadImage'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -135,13 +136,15 @@ function storagePathFromUrl(url: string) {
   return idx === -1 ? '' : url.slice(idx + marker.length)
 }
 
-function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUpload, onDelete }: {
+function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUpload, onDelete, locale }: {
   current: string | null; disabled: boolean
   onPick: (path: string) => void; onClear: () => void
   extraImages: string[]
   onUpload: (urls: string[]) => void
   onDelete: (url: string) => void
+  locale: string
 }) {
+  const at = (key: string) => adminT(locale, key)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
@@ -158,7 +161,7 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
       }))
       onUpload(urls)
     } catch (err) {
-      alert('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      alert(at('wines.uploadFailed') + ' ' + (err instanceof Error ? err.message : at('wines.unknownError')))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -206,7 +209,7 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
               type="button"
               onClick={() => onPick(url)}
               disabled={disabled}
-              title="Uploaded photo"
+              title={at('wines.uploadedPhoto')}
               className="rounded-lg border overflow-hidden transition-all"
               style={{
                 width: 52, height: 52,
@@ -223,7 +226,7 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
                 onClick={e => handleDeleteUploaded(url, e)}
                 className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-white"
                 style={{ backgroundColor: 'rgba(0,0,0,0.65)', fontSize: 10, lineHeight: 1 }}
-                title="Delete uploaded photo"
+                title={at('wines.deleteUploadedPhoto')}
               >
                 ×
               </button>
@@ -236,7 +239,7 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={disabled || uploading}
-        title="Upload one or more photos"
+        title={at('wines.uploadOnePhoto')}
         className="rounded-lg border-2 border-dashed flex items-center justify-center text-lg leading-none"
         style={{ width: 52, height: 52, borderColor: C.border, color: C.faint }}
       >
@@ -252,14 +255,21 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
           className="rounded-lg border px-2 text-xs h-[52px]"
           style={{ borderColor: C.border, color: C.faint }}
         >
-          Clear
+          {at('wines.clear')}
         </button>
       )}
     </div>
   )
 }
 
-export default function WinesClient({ wines: initial, uploadedImages: initialUploaded }: { wines: Wine[]; uploadedImages: string[] }) {
+export default function WinesClient({ wines: initial, uploadedImages: initialUploaded, locale = 'en' }: { wines: Wine[]; uploadedImages: string[]; locale?: string }) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+  const TYPE_LABEL: Record<WineTypeValue, string> = {
+    RED: at('wines.type.RED'), WHITE: at('wines.type.WHITE'), AMBER: at('wines.type.AMBER'), ROSE: at('wines.type.ROSE'),
+  }
+  const SWEETNESS_LABEL: Record<SweetnessValue, string> = {
+    DRY: at('wines.sweetness.DRY'), SEMI_DRY: at('wines.sweetness.SEMI_DRY'), SEMI_SWEET: at('wines.sweetness.SEMI_SWEET'), SWEET: at('wines.sweetness.SWEET'),
+  }
   const [wines, setWines] = useState<Wine[]>(initial)
   const [extraImages, setExtraImages] = useState<string[]>(initialUploaded)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -472,23 +482,23 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
       <>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: C.faint }}>Name</label>
-            <input className={inputCls} style={inputStyle} placeholder="e.g. Saperavi" value={draft.name}
+            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.name')}</label>
+            <input className={inputCls} style={inputStyle} placeholder={at('wines.namePh')} value={draft.name}
               onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs mb-1 block" style={{ color: C.faint }}>Type</label>
+              <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.type')}</label>
               <select className={inputCls} style={inputStyle} value={draft.wineType}
                 onChange={e => setDraft(d => ({ ...d, wineType: e.target.value as WineTypeValue }))}>
-                {WINE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {WINE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: C.faint }}>Sweetness</label>
+              <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.sweetness')}</label>
               <select className={inputCls} style={inputStyle} value={draft.sweetness}
                 onChange={e => setDraft(d => ({ ...d, sweetness: e.target.value as SweetnessValue }))}>
-                {SWEETNESS_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
+                {SWEETNESS_LEVELS.map(s => <option key={s} value={s}>{SWEETNESS_LABEL[s]}</option>)}
               </select>
             </div>
           </div>
@@ -497,27 +507,27 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
           <div className="flex items-center gap-2 pt-5">
             <input type="checkbox" id={`sparkling-${draft.name}`} checked={draft.sparkling}
               onChange={e => setDraft(d => ({ ...d, sparkling: e.target.checked }))} />
-            <label htmlFor={`sparkling-${draft.name}`} className="text-sm" style={{ color: C.muted }}>Sparkling</label>
+            <label htmlFor={`sparkling-${draft.name}`} className="text-sm" style={{ color: C.muted }}>{at('wines.sparkling')}</label>
           </div>
           <div>
-            <label className="text-xs mb-1 block" style={{ color: C.faint }}>Alcohol level % (optional)</label>
-            <input className={inputCls} style={inputStyle} type="number" min={0} step={0.1} placeholder="e.g. 13.5"
+            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.alcoholLevel')}</label>
+            <input className={inputCls} style={inputStyle} type="number" min={0} step={0.1} placeholder={at('wines.alcoholLevelPh')}
               value={draft.alcoholLevel}
               onChange={e => setDraft(d => ({ ...d, alcoholLevel: e.target.value }))} />
           </div>
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: C.faint }}>Description / tasting notes</label>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.description')}</label>
           <textarea
             className={inputCls} style={{ ...inputStyle, resize: 'vertical', minHeight: 64 }}
-            placeholder="e.g. Deep ruby colour. Notes of dark cherry, plum, and spice."
+            placeholder={at('wines.descriptionPh')}
             value={draft.description}
             onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
             rows={3}
           />
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: C.faint }}>Colour (hex)</label>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.colorHex')}</label>
           <div className="flex gap-2 items-center sm:max-w-[50%]">
             <input className={inputCls} style={inputStyle} value={draft.color}
               onChange={e => setDraft(d => ({ ...d, color: e.target.value }))} />
@@ -560,46 +570,46 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold truncate" style={{ color: C.text }}>{wine.name}</p>
-                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>Hidden</span>}
+                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>{at('wines.hidden')}</span>}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                  <Badge>{wine.wineType}</Badge>
-                  <Badge>{wine.sweetness.replace('_', '-')}</Badge>
-                  {wine.sparkling && <Badge>Sparkling</Badge>}
+                  <Badge>{TYPE_LABEL[wine.wineType]}</Badge>
+                  <Badge>{SWEETNESS_LABEL[wine.sweetness]}</Badge>
+                  {wine.sparkling && <Badge>{at('wines.sparkling')}</Badge>}
                   {wine.alcoholLevel != null && <Badge>{wine.alcoholLevel}%</Badge>}
                 </div>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <span className="text-xs whitespace-nowrap" style={{ color: C.faint }}>
-                  {wine.vintages.length} vintage{wine.vintages.length !== 1 ? 's' : ''}
+                  {wine.vintages.length} {wine.vintages.length !== 1 ? at('wines.vintage.plural') : at('wines.vintage.singular')}
                 </span>
                 <button onClick={() => handleToggleProductActive(wine)} disabled={isSaving}
-                  title={wine.active ? 'Hide from catalogue' : 'Show in catalogue'}
+                  title={wine.active ? at('wines.hideFromCatalogue') : at('wines.showInCatalogue')}
                   className="p-1 rounded border"
                   style={{ borderColor: C.border, color: C.muted }}>
                   {wine.active ? <IconEye /> : <IconEyeOff />}
                 </button>
-                <button onClick={() => startEditProduct(wine)} title="Edit wine"
+                <button onClick={() => startEditProduct(wine)} title={at('wines.editWine')}
                   className="p-1 rounded border"
                   style={{ borderColor: C.border, color: C.muted }}>
                   <IconPencil />
                 </button>
                 {deleteConfirm === wine.id ? (
                   <>
-                    <button onClick={() => handleDeleteProduct(wine.id)} disabled={isSaving} title="Confirm delete"
+                    <button onClick={() => handleDeleteProduct(wine.id)} disabled={isSaving} title={at('wines.confirmDelete')}
                       className="p-1 rounded border"
                       style={{ borderColor: '#86efac', color: '#16a34a' }}>
                       <IconCheck />
                     </button>
-                    <button onClick={() => setDeleteConfirm(null)} title="Cancel"
+                    <button onClick={() => setDeleteConfirm(null)} title={at('wines.cancel')}
                       className="p-1 rounded border"
                       style={{ borderColor: C.border, color: C.faint }}>
                       <IconX />
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setDeleteConfirm(wine.id)} title="Delete wine"
+                  <button onClick={() => setDeleteConfirm(wine.id)} title={at('wines.deleteWine')}
                     className="p-1 rounded border"
                     style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
                     <IconTrash />
@@ -609,7 +619,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                   onClick={() => toggleExpand(wine.id)}
                   className="p-1 rounded transition-transform"
                   style={{ color: C.faint, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-                  title={isExpanded ? 'Collapse' : 'Expand'}
+                  title={isExpanded ? at('wines.collapse') : at('wines.expand')}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 5.5L7 9.5L11 5.5" />
@@ -628,7 +638,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
                     <div>
                       <label className="text-xs mb-2 block" style={{ color: C.faint }}>
-                        Product photo {isImgSaving ? <span style={{ color: C.faint }}>— saving…</span> : wine.imagePath ? <span style={{ color: '#5a7c14' }}>— assigned ✓</span> : <span>— none</span>}
+                        {at('wines.productPhoto')} {isImgSaving ? <span style={{ color: C.faint }}>— {at('wines.savingSuffix')}</span> : wine.imagePath ? <span style={{ color: '#5a7c14' }}>— {at('wines.assignedSuffix')}</span> : <span>— {at('wines.noneSuffix')}</span>}
                       </label>
                       <ImagePickerGrid
                         current={wine.imagePath}
@@ -638,6 +648,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                         extraImages={extraImages}
                         onUpload={handleImagesUploaded}
                         onDelete={handleImageDeleted}
+                        locale={locale}
                       />
                     </div>
 
@@ -645,12 +656,12 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                       <button onClick={() => handleSaveProduct(wine.id)} disabled={isSaving}
                         className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white"
                         style={{ backgroundColor: C.wine }}>
-                        {isSaving ? 'Saving…' : 'Save'}
+                        {isSaving ? at('wines.saving') : at('wines.save')}
                       </button>
                       <button onClick={() => setEditingProductId(null)} disabled={isSaving}
                         className="px-4 py-1.5 rounded-lg text-sm border"
                         style={{ borderColor: C.border, color: C.muted }}>
-                        Cancel
+                        {at('wines.cancel')}
                       </button>
                     </div>
                   </div>
@@ -658,10 +669,10 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
                 {/* ── Vintage sub-list ── */}
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint }}>Vintages</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint }}>{at('wines.vintagesTitle')}</p>
                   <div className="space-y-2">
                     {wine.vintages.length === 0 && (
-                      <p className="text-xs italic" style={{ color: C.faint }}>No vintages yet — add one below so this wine appears in the catalogue.</p>
+                      <p className="text-xs italic" style={{ color: C.faint }}>{at('wines.noVintagesYet')}</p>
                     )}
                     {wine.vintages.map(v => {
                       const isVEditing = editingVintageId === v.id
@@ -674,19 +685,19 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                             <div className="p-3 space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <label className="text-xs mb-1 block" style={{ color: C.faint }}>Year</label>
+                                  <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.year')}</label>
                                   <input className={inputCls} style={inputStyle} type="number" value={vintageDraft.year}
                                     onChange={e => setVintageDraft(d => ({ ...d, year: e.target.value }))} />
                                 </div>
                                 <div>
-                                  <label className="text-xs mb-1 block" style={{ color: C.faint }}>Price per bottle (₾)</label>
+                                  <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.pricePerBottle')}</label>
                                   <input className={inputCls} style={inputStyle} type="number" min={0} step={0.5} value={vintageDraft.price}
                                     onChange={e => setVintageDraft(d => ({ ...d, price: e.target.value }))} />
                                 </div>
                               </div>
                               <div>
                                 <label className="text-xs mb-2 block" style={{ color: C.faint }}>
-                                  Vintage photo (overrides product photo) {isVImgSaving ? <span>— saving…</span> : v.imagePath ? <span style={{ color: '#5a7c14' }}>— override set ✓</span> : <span>— using product photo</span>}
+                                  {at('wines.vintagePhotoOverride')} {isVImgSaving ? <span>— {at('wines.savingSuffix')}</span> : v.imagePath ? <span style={{ color: '#5a7c14' }}>— {at('wines.overrideSetSuffix')}</span> : <span>— {at('wines.usingProductPhotoSuffix')}</span>}
                                 </label>
                                 <ImagePickerGrid
                                   current={v.imagePath}
@@ -696,63 +707,64 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                                   extraImages={extraImages}
                                   onUpload={handleImagesUploaded}
                                   onDelete={handleImageDeleted}
+                                  locale={locale}
                                 />
                               </div>
                               <div className="flex items-center gap-2">
                                 <input type="checkbox" id={`v-active-${v.id}`} checked={vintageDraft.active}
                                   onChange={e => setVintageDraft(d => ({ ...d, active: e.target.checked }))} />
-                                <label htmlFor={`v-active-${v.id}`} className="text-sm" style={{ color: C.muted }}>Visible in catalogue</label>
+                                <label htmlFor={`v-active-${v.id}`} className="text-sm" style={{ color: C.muted }}>{at('wines.visibleInCatalogue')}</label>
                               </div>
                               <div className="flex gap-2">
                                 <button onClick={() => handleSaveVintage(wine.id, v.id)} disabled={isVSaving}
                                   className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
                                   style={{ backgroundColor: C.wine }}>
-                                  {isVSaving ? 'Saving…' : 'Save'}
+                                  {isVSaving ? at('wines.saving') : at('wines.save')}
                                 </button>
                                 <button onClick={() => setEditingVintageId(null)} disabled={isVSaving}
                                   className="px-3 py-1.5 rounded-lg text-xs border"
                                   style={{ borderColor: C.border, color: C.muted }}>
-                                  Cancel
+                                  {at('wines.cancel')}
                                 </button>
                               </div>
                             </div>
                           ) : (
                             <div className="flex items-center gap-3 px-3 py-2">
                               <p className="text-sm font-bold" style={{ color: C.text }}>{v.year}</p>
-                              <p className="text-sm" style={{ color: C.muted }}>{v.price}₾ / bottle</p>
+                              <p className="text-sm" style={{ color: C.muted }}>{v.price}₾ / {at('wines.bottle')}</p>
                               {v.imagePath && (
-                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>override image</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.overrideImageBadge')}</span>
                               )}
                               {!v.active && (
-                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>Hidden</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>{at('wines.hidden')}</span>
                               )}
                               <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                                 <button onClick={() => handleToggleVintageActive(wine.id, v)} disabled={isVSaving}
-                                  title={v.active ? 'Hide from catalogue' : 'Show in catalogue'}
+                                  title={v.active ? at('wines.hideFromCatalogue') : at('wines.showInCatalogue')}
                                   className="p-1 rounded border"
                                   style={{ borderColor: C.border, color: C.muted }}>
                                   {v.active ? <IconEye /> : <IconEyeOff />}
                                 </button>
-                                <button onClick={() => startEditVintage(v)} title="Edit vintage"
+                                <button onClick={() => startEditVintage(v)} title={at('wines.editVintage')}
                                   className="p-1 rounded border"
                                   style={{ borderColor: C.border, color: C.muted }}>
                                   <IconPencil />
                                 </button>
                                 {deleteVintageConfirm === v.id ? (
                                   <>
-                                    <button onClick={() => handleDeleteVintage(wine.id, v.id)} disabled={isVSaving} title="Confirm delete"
+                                    <button onClick={() => handleDeleteVintage(wine.id, v.id)} disabled={isVSaving} title={at('wines.confirmDelete')}
                                       className="p-1 rounded border"
                                       style={{ borderColor: '#86efac', color: '#16a34a' }}>
                                       <IconCheck />
                                     </button>
-                                    <button onClick={() => setDeleteVintageConfirm(null)} title="Cancel"
+                                    <button onClick={() => setDeleteVintageConfirm(null)} title={at('wines.cancel')}
                                       className="p-1 rounded border"
                                       style={{ borderColor: C.border, color: C.faint }}>
                                       <IconX />
                                     </button>
                                   </>
                                 ) : (
-                                  <button onClick={() => setDeleteVintageConfirm(v.id)} title="Delete vintage"
+                                  <button onClick={() => setDeleteVintageConfirm(v.id)} title={at('wines.deleteVintage')}
                                     className="p-1 rounded border"
                                     style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
                                     <IconTrash />
@@ -770,12 +782,12 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                       <div className="rounded-lg border p-3 space-y-3" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="text-xs mb-1 block" style={{ color: C.faint }}>Year</label>
+                            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.year')}</label>
                             <input className={inputCls} style={inputStyle} type="number" value={newVintageDraft.year}
                               onChange={e => setNewVintageDraft(d => ({ ...d, year: e.target.value }))} />
                           </div>
                           <div>
-                            <label className="text-xs mb-1 block" style={{ color: C.faint }}>Price per bottle (₾)</label>
+                            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.pricePerBottle')}</label>
                             <input className={inputCls} style={inputStyle} type="number" min={0} step={0.5} placeholder="0" value={newVintageDraft.price}
                               onChange={e => setNewVintageDraft(d => ({ ...d, price: e.target.value }))} />
                           </div>
@@ -785,12 +797,12 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                             disabled={isPending || !newVintageDraft.year || !newVintageDraft.price}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
                             style={{ backgroundColor: C.wine }}>
-                            {saving === `new-vintage-${wine.id}` ? 'Adding…' : 'Add vintage'}
+                            {saving === `new-vintage-${wine.id}` ? at('wines.adding') : at('wines.addVintage')}
                           </button>
                           <button onClick={() => setAddingVintageFor(null)}
                             className="px-3 py-1.5 rounded-lg text-xs border"
                             style={{ borderColor: C.border, color: C.muted }}>
-                            Cancel
+                            {at('wines.cancel')}
                           </button>
                         </div>
                       </div>
@@ -799,7 +811,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                         onClick={() => { setAddingVintageFor(wine.id); setNewVintageDraft(BLANK_VINTAGE) }}
                         className="w-full rounded-lg border-2 border-dashed py-2 text-xs font-medium transition-opacity hover:opacity-70"
                         style={{ borderColor: C.border, color: C.faint }}>
-                        + Add vintage
+                        + {at('wines.addVintage')}
                       </button>
                     )}
                   </div>
@@ -813,19 +825,19 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
       {/* Add new wine */}
       {showAdd ? (
         <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
-          <p className="text-sm font-semibold" style={{ color: C.text }}>New wine</p>
+          <p className="text-sm font-semibold" style={{ color: C.text }}>{at('wines.newWine')}</p>
           {productFields(addDraft, setAddDraft)}
-          <p className="text-xs italic" style={{ color: C.faint }}>Prices are set per vintage — add a vintage after saving.</p>
+          <p className="text-xs italic" style={{ color: C.faint }}>{at('wines.pricesPerVintageHint')}</p>
           <div className="flex gap-2 pt-1">
             <button onClick={handleAddProduct} disabled={isPending || !addDraft.name.trim()}
               className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: C.wine }}>
-              {saving === 'new' ? 'Adding…' : 'Add wine'}
+              {saving === 'new' ? at('wines.adding') : at('wines.addWine')}
             </button>
             <button onClick={() => { setShowAdd(false); setAddDraft(BLANK_PRODUCT) }}
               className="px-4 py-1.5 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}>
-              Cancel
+              {at('wines.cancel')}
             </button>
           </div>
         </div>
@@ -833,7 +845,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
         <button onClick={() => setShowAdd(true)}
           className="w-full rounded-xl border-2 border-dashed py-3 text-sm font-medium transition-opacity hover:opacity-70"
           style={{ borderColor: C.border, color: C.faint }}>
-          + Add wine
+          + {at('wines.addWine')}
         </button>
       )}
 

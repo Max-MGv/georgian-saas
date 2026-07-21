@@ -59,11 +59,13 @@ All of Phase 1 browser-verified in both EN and KA, including nested modals/panel
 
 **Note on scope discipline:** did *not* fully grammatically localize every generated sentence (e.g. packing box-count strings) with a generic templating system — built natural-sounding Georgian variants directly in code per locale branch instead, since a fully generic pluralization/interpolation system is more machinery than ~5 sentences justify.
 
-### Phase 2 — Secondary pages
-- ⬜ Wines: `WinesClient.tsx`
-- ⬜ Statistics: `StatisticsClient.tsx`, `StatisticsV2.tsx`, `WineStatistics.tsx`, `SearchableSelect.tsx`
-- ⬜ Menu Items: `MenuItemsClient.tsx`
-- ⬜ Masterclass: `MasterclassClient.tsx`
+### Phase 2 — Secondary pages ✅ Done 2026-07-21, Claude-tested
+- ✅ Wines (`wines/page.tsx` + `WinesClient.tsx`) — product fields, vintage sub-list (add/edit/delete), image picker (upload/clear/delete-uploaded), add-wine form. Wine type (Red/White/Amber/Rosé) and sweetness (Dry/Semi-dry/Semi-sweet/Sweet) enum labels translated too — an upgrade over the raw `RED`/`SEMI_DRY` badges the English UI showed before, matching the human-readable labels the public site already uses in `WineCatalogueClient.tsx`
+- ✅ Statistics (`statistics/page.tsx` + `StatisticsClient.tsx` + `StatisticsV2.tsx` + `WineStatistics.tsx` + `SearchableSelect.tsx`) — mode switcher, summary cards, filters, chart titles/tooltips, historical breakdown, wine bar/trend charts, top companies/customers. Month abbreviations (`statistics.month.*`) and weekday abbreviations (reused `orders.calendar.*`) used to build the localized "Next Order" date string instead of `toLocaleDateString('en-GB', …)`. Caught and fixed one hardcoded `'Individual'` fallback baked into `StatisticsV2.tsx`'s chart-data computation (not JSX, so it was easy to miss on a first pass — found via browser verification, not code review)
+- ✅ Menu Items (`menu-items/page.tsx` + `MenuItemsClient.tsx`) — section headers, item rows, edit/delete sub-states, add-dish form
+- ✅ Masterclass (`masterclass/page.tsx` + `MasterclassClient.tsx`) — column headers, item rows, edit/delete sub-states, add-item form. Deliberately left `UNIT_LABELS`/`UNIT_DESCRIPTIONS` (from shared `lib/masterclass.ts`, e.g. "per person", "per piece") in English — Phase 1's `OrderDetail.tsx` already displays these same shared constants untranslated, so translating them only here would create a mismatch between two admin pages showing the same data field in different languages
+
+All of Phase 2 browser-verified in both EN and KA, including nested states (Wines vintage edit forms, Statistics historical breakdown + wine trend mode, Menu Items/Masterclass edit and delete-confirm rows). Spot-checked Orders list after Phase 2 changes — no regressions. TypeScript: 0 errors throughout.
 
 ### Phase 3 — Site Content editor chrome
 - ⬜ `ContentClient.tsx`, `BackgroundsTab.tsx`, `BookingFormVisualPanel.tsx` (editor UI only — not the EN/KA site content it manages)

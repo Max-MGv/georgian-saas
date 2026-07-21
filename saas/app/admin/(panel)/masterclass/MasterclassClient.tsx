@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem } from '@/app/actions/masterclassItems'
 import { UNIT_LABELS, UNIT_DESCRIPTIONS, MASTERCLASS_UNITS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
+import { adminT } from '@/lib/adminT'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -30,7 +31,8 @@ type MasterclassItem = {
   sortOrder: number
 }
 
-export default function MasterclassClient({ items: initial }: { items: MasterclassItem[] }) {
+export default function MasterclassClient({ items: initial, locale = 'en' }: { items: MasterclassItem[]; locale?: string }) {
+  const at = (key: string) => adminT(locale, key)
   const [items, setItems] = useState(initial)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
@@ -97,12 +99,12 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
   return (
     <div>
       <p className="text-sm mb-4" style={{ color: C.muted }}>
-        Manage masterclass options for company bookings. The unit type controls how pricing is calculated on each order.
+        {at('masterclass.description')}
       </p>
 
       {/* Unit type legend */}
       <div className="rounded-xl border p-4 mb-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b4513' }}>Unit types</p>
+        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b4513' }}>{at('masterclass.unitTypes')}</p>
         <div className="space-y-1">
           {MASTERCLASS_UNITS.map(u => (
             <div key={u} className="flex items-baseline gap-2">
@@ -117,16 +119,16 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
         {/* Column headers */}
         <div className="grid px-5 py-2 border-b text-xs font-semibold uppercase tracking-wider"
           style={{ backgroundColor: '#f5efe6', borderColor: C.border, color: '#8b4513', gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
-          <span>Name</span>
-          <span>Unit type</span>
-          <span>Price</span>
-          <span>Order</span>
+          <span>{at('masterclass.col.name')}</span>
+          <span>{at('masterclass.col.unitType')}</span>
+          <span>{at('masterclass.col.price')}</span>
+          <span>{at('menuItems.orderPh')}</span>
           <span></span>
         </div>
 
         {items.length === 0 && !adding && (
           <div className="px-5 py-6 text-sm text-center" style={{ color: C.faint, backgroundColor: C.bg }}>
-            No masterclass items yet. Add one below.
+            {at('masterclass.noItemsYet')}
           </div>
         )}
 
@@ -146,16 +148,16 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
                 <input style={inputStyle} type="number" value={editSort} onChange={e => setEditSort(e.target.value)} placeholder="0" />
                 <div className="flex gap-1">
                   <button onClick={() => handleSave(item.id)} disabled={loading}
-                    className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>Save</button>
+                    className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>{at('settings.common.save')}</button>
                   <button onClick={() => setEditingId(null)}
-                    className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                    className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
                 </div>
               </div>
             ) : (
               <div className="grid items-center gap-2 px-5 py-3"
                 style={{ gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleToggleActive(item)} title={item.active ? 'Active' : 'Inactive'}
+                  <button onClick={() => handleToggleActive(item)} title={item.active ? at('masterclass.active') : at('masterclass.inactive')}
                     className="flex-shrink-0 w-2 h-2 rounded-full"
                     style={{ backgroundColor: item.active ? '#16a34a' : '#d1c4b0' }} />
                   <span className="text-sm" style={{
@@ -170,18 +172,18 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
                 <span className="text-xs" style={{ color: C.faint }}>#{item.sortOrder}</span>
                 {deletingId === item.id ? (
                   <div className="flex gap-1">
-                    <span className="text-xs" style={{ color: C.muted }}>Delete?</span>
+                    <span className="text-xs" style={{ color: C.muted }}>{at('orders.deleteConfirm')}</span>
                     <button onClick={() => handleDelete(item.id)} disabled={loading}
-                      className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>Yes</button>
+                      className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
                     <button onClick={() => setDeletingId(null)}
-                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>No</button>
+                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('orders.no')}</button>
                   </div>
                 ) : (
                   <div className="flex gap-1">
                     <button onClick={() => openEdit(item)}
-                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>Edit</button>
+                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.edit')}</button>
                     <button onClick={() => setDeletingId(item.id)}
-                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>Delete</button>
+                      className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
                   </div>
                 )}
               </div>
@@ -194,7 +196,7 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
           <div className="grid items-center gap-2 px-5 py-3"
             style={{ backgroundColor: C.bg, gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
             <input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)}
-              placeholder="e.g. Churchkhela" autoFocus
+              placeholder={at('masterclass.namePh')} autoFocus
               onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false) }} />
             <select style={inputStyle} value={newUnit} onChange={e => setNewUnit(e.target.value as MasterclassUnit)}>
               {MASTERCLASS_UNITS.map(u => <option key={u} value={u}>{UNIT_LABELS[u]}</option>)}
@@ -203,15 +205,15 @@ export default function MasterclassClient({ items: initial }: { items: Mastercla
             <span />
             <div className="flex gap-1">
               <button onClick={handleAdd} disabled={loading || !newName.trim()}
-                className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>Add</button>
+                className="text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: C.wine }}>{at('orderDetail.masterclass.add')}</button>
               <button onClick={() => { setAdding(false); setNewName(''); setNewUnit('PER_PIECE'); setNewPrice('') }}
-                className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>Cancel</button>
+                className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
             </div>
           </div>
         ) : (
           <div className="px-5 py-3" style={{ backgroundColor: C.bg }}>
             <button onClick={() => setAdding(true)} className="text-xs font-medium" style={{ color: C.wine }}>
-              + Add masterclass item
+              + {at('masterclass.addItem')}
             </button>
           </div>
         )}
