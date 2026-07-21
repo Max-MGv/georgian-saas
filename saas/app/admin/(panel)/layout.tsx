@@ -5,8 +5,9 @@ import LogoutButton from './LogoutButton'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [supabase, h] = await Promise.all([createClient(), headers()])
   const { data: { user } } = await supabase.auth.getUser()
-  const logoUrl = h.get('x-tenant-logo') ?? '/icons/logo-dark.svg'
+  const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
+  const tenantName = h.get('x-tenant-name') ?? ''
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
@@ -20,7 +21,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Top row: brand + logout */}
         <div className="px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={logoUrl} alt={logoAlt} style={{ height: '28px', width: 'auto' }} />
+            {logoUrl ? (
+              <img src={logoUrl} alt={logoAlt} style={{ height: '28px', width: 'auto' }} />
+            ) : (
+              <span className="font-serif text-base font-semibold tracking-wide" style={{ color: 'var(--color-brand)' }}>
+                {tenantName}
+              </span>
+            )}
             <span className="text-xs font-medium" style={{ color: '#a89070' }}>Admin</span>
           </div>
           <div className="flex items-center gap-3">

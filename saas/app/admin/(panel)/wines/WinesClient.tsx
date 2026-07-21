@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import {
   createWine, updateWine, deleteWine, assignWineImage,
   createVintage, updateVintage, deleteVintage, assignVintageImage, toggleVintageActive,
 } from '@/app/actions/wines'
+import { uploadWineImage, deleteWineImage } from '@/app/actions/uploadImage'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -67,10 +68,112 @@ function Badge({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ImagePickerGrid({ current, disabled, onPick, onClear }: {
+// Icon set matches the orders admin page (OrdersTable.tsx) for consistency across the panel.
+const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+
+function IconEye() {
+  return (
+    <svg {...iconProps}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function IconEyeOff() {
+  return (
+    <svg {...iconProps}>
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  )
+}
+
+function IconPencil() {
+  return (
+    <svg {...iconProps}>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  )
+}
+
+function IconTrash() {
+  return (
+    <svg {...iconProps}>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  )
+}
+
+function IconCheck() {
+  return (
+    <svg {...iconProps}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function IconX() {
+  return (
+    <svg {...iconProps}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+
+// Extracts the bucket-relative storage path from a Supabase public URL
+// e.g. https://xxx.supabase.co/.../wine-photos/tenantId/file.webp → "tenantId/file.webp"
+function storagePathFromUrl(url: string) {
+  const marker = '/wine-photos/'
+  const idx = url.indexOf(marker)
+  return idx === -1 ? '' : url.slice(idx + marker.length)
+}
+
+function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUpload, onDelete }: {
   current: string | null; disabled: boolean
   onPick: (path: string) => void; onClear: () => void
+  extraImages: string[]
+  onUpload: (urls: string[]) => void
+  onDelete: (url: string) => void
 }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
+
+  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    setUploading(true)
+    try {
+      const urls = await Promise.all(files.map(async file => {
+        const fd = new FormData()
+        fd.append('file', file)
+        return uploadWineImage(fd)
+      }))
+      onUpload(urls)
+    } catch (err) {
+      alert('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function handleDeleteUploaded(url: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    const storagePath = storagePathFromUrl(url)
+    if (!storagePath) return
+    await deleteWineImage(storagePath)
+    onDelete(url)
+    if (current === url) onClear()
+  }
+
   return (
     <div className="flex flex-wrap gap-2 items-center">
       {PRODUCT_IMAGES.map(img => {
@@ -94,6 +197,53 @@ function ImagePickerGrid({ current, disabled, onPick, onClear }: {
           </button>
         )
       })}
+
+      {extraImages.map(url => {
+        const isActive = current === url
+        return (
+          <div key={url} className="relative" onMouseEnter={() => setHoveredUrl(url)} onMouseLeave={() => setHoveredUrl(null)}>
+            <button
+              type="button"
+              onClick={() => onPick(url)}
+              disabled={disabled}
+              title="Uploaded photo"
+              className="rounded-lg border overflow-hidden transition-all"
+              style={{
+                width: 52, height: 52,
+                borderColor: isActive ? C.wine : C.border,
+                borderWidth: isActive ? 2 : 1,
+                backgroundColor: '#faf6f0',
+              }}
+            >
+              <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
+            </button>
+            {hoveredUrl === url && !disabled && (
+              <button
+                type="button"
+                onClick={e => handleDeleteUploaded(url, e)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-white"
+                style={{ backgroundColor: 'rgba(0,0,0,0.65)', fontSize: 10, lineHeight: 1 }}
+                title="Delete uploaded photo"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )
+      })}
+
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={disabled || uploading}
+        title="Upload one or more photos"
+        className="rounded-lg border-2 border-dashed flex items-center justify-center text-lg leading-none"
+        style={{ width: 52, height: 52, borderColor: C.border, color: C.faint }}
+      >
+        {uploading ? <span className="text-xs">…</span> : '+'}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+
       {current && (
         <button
           type="button"
@@ -109,8 +259,9 @@ function ImagePickerGrid({ current, disabled, onPick, onClear }: {
   )
 }
 
-export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
+export default function WinesClient({ wines: initial, uploadedImages: initialUploaded }: { wines: Wine[]; uploadedImages: string[] }) {
   const [wines, setWines] = useState<Wine[]>(initial)
+  const [extraImages, setExtraImages] = useState<string[]>(initialUploaded)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [editingVintageId, setEditingVintageId] = useState<string | null>(null)
@@ -300,6 +451,20 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
     })
   }
 
+  // ── Uploaded photo library (shared across all product + vintage pickers) ──
+
+  function handleImagesUploaded(urls: string[]) {
+    setExtraImages(prev => {
+      const merged = [...prev]
+      for (const u of urls) if (!merged.includes(u)) merged.push(u)
+      return merged
+    })
+  }
+
+  function handleImageDeleted(url: string) {
+    setExtraImages(prev => prev.filter(u => u !== url))
+  }
+
   // ── Shared product form (add + edit) ──────────────────────────────────
 
   function productFields(draft: ProductDraft, setDraft: (fn: (d: ProductDraft) => ProductDraft) => void) {
@@ -410,33 +575,34 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                   {wine.vintages.length} vintage{wine.vintages.length !== 1 ? 's' : ''}
                 </span>
                 <button onClick={() => handleToggleProductActive(wine)} disabled={isSaving}
-                  className="text-xs px-2 py-1 rounded border"
-                  style={{ borderColor: C.border, color: C.faint }}>
-                  {isSaving ? '…' : wine.active ? 'Hide' : 'Show'}
-                </button>
-                <button onClick={() => startEditProduct(wine)}
-                  className="text-xs px-2 py-1 rounded border"
+                  title={wine.active ? 'Hide from catalogue' : 'Show in catalogue'}
+                  className="p-1 rounded border"
                   style={{ borderColor: C.border, color: C.muted }}>
-                  Edit
+                  {wine.active ? <IconEye /> : <IconEyeOff />}
+                </button>
+                <button onClick={() => startEditProduct(wine)} title="Edit wine"
+                  className="p-1 rounded border"
+                  style={{ borderColor: C.border, color: C.muted }}>
+                  <IconPencil />
                 </button>
                 {deleteConfirm === wine.id ? (
                   <>
-                    <button onClick={() => handleDeleteProduct(wine.id)} disabled={isSaving}
-                      className="text-xs px-2 py-1 rounded border font-semibold"
-                      style={{ borderColor: '#e53e3e', color: '#e53e3e' }}>
-                      {isSaving ? 'Deleting…' : 'Confirm'}
+                    <button onClick={() => handleDeleteProduct(wine.id)} disabled={isSaving} title="Confirm delete"
+                      className="p-1 rounded border"
+                      style={{ borderColor: '#86efac', color: '#16a34a' }}>
+                      <IconCheck />
                     </button>
-                    <button onClick={() => setDeleteConfirm(null)}
-                      className="text-xs px-2 py-1 rounded border"
+                    <button onClick={() => setDeleteConfirm(null)} title="Cancel"
+                      className="p-1 rounded border"
                       style={{ borderColor: C.border, color: C.faint }}>
-                      Cancel
+                      <IconX />
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setDeleteConfirm(wine.id)}
-                    className="text-xs px-2 py-1 rounded border"
-                    style={{ borderColor: C.border, color: C.faint }}>
-                    Delete
+                  <button onClick={() => setDeleteConfirm(wine.id)} title="Delete wine"
+                    className="p-1 rounded border"
+                    style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
+                    <IconTrash />
                   </button>
                 )}
                 <button
@@ -469,6 +635,9 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                         disabled={isImgSaving}
                         onPick={path => handleAssignProductImage(wine, path)}
                         onClear={() => handleAssignProductImage(wine, wine.imagePath!)}
+                        extraImages={extraImages}
+                        onUpload={handleImagesUploaded}
+                        onDelete={handleImageDeleted}
                       />
                     </div>
 
@@ -524,6 +693,9 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                                   disabled={isVImgSaving}
                                   onPick={path => handleAssignVintageImage(wine.id, v, path)}
                                   onClear={() => handleAssignVintageImage(wine.id, v, null)}
+                                  extraImages={extraImages}
+                                  onUpload={handleImagesUploaded}
+                                  onDelete={handleImageDeleted}
                                 />
                               </div>
                               <div className="flex items-center gap-2">
@@ -556,33 +728,34 @@ export default function WinesClient({ wines: initial }: { wines: Wine[] }) {
                               )}
                               <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                                 <button onClick={() => handleToggleVintageActive(wine.id, v)} disabled={isVSaving}
-                                  className="text-xs px-2 py-1 rounded border"
-                                  style={{ borderColor: C.border, color: C.faint }}>
-                                  {isVSaving ? '…' : v.active ? 'Hide' : 'Show'}
-                                </button>
-                                <button onClick={() => startEditVintage(v)}
-                                  className="text-xs px-2 py-1 rounded border"
+                                  title={v.active ? 'Hide from catalogue' : 'Show in catalogue'}
+                                  className="p-1 rounded border"
                                   style={{ borderColor: C.border, color: C.muted }}>
-                                  Edit
+                                  {v.active ? <IconEye /> : <IconEyeOff />}
+                                </button>
+                                <button onClick={() => startEditVintage(v)} title="Edit vintage"
+                                  className="p-1 rounded border"
+                                  style={{ borderColor: C.border, color: C.muted }}>
+                                  <IconPencil />
                                 </button>
                                 {deleteVintageConfirm === v.id ? (
                                   <>
-                                    <button onClick={() => handleDeleteVintage(wine.id, v.id)} disabled={isVSaving}
-                                      className="text-xs px-2 py-1 rounded border font-semibold"
-                                      style={{ borderColor: '#e53e3e', color: '#e53e3e' }}>
-                                      {isVSaving ? 'Deleting…' : 'Confirm'}
+                                    <button onClick={() => handleDeleteVintage(wine.id, v.id)} disabled={isVSaving} title="Confirm delete"
+                                      className="p-1 rounded border"
+                                      style={{ borderColor: '#86efac', color: '#16a34a' }}>
+                                      <IconCheck />
                                     </button>
-                                    <button onClick={() => setDeleteVintageConfirm(null)}
-                                      className="text-xs px-2 py-1 rounded border"
+                                    <button onClick={() => setDeleteVintageConfirm(null)} title="Cancel"
+                                      className="p-1 rounded border"
                                       style={{ borderColor: C.border, color: C.faint }}>
-                                      Cancel
+                                      <IconX />
                                     </button>
                                   </>
                                 ) : (
-                                  <button onClick={() => setDeleteVintageConfirm(v.id)}
-                                    className="text-xs px-2 py-1 rounded border"
-                                    style={{ borderColor: C.border, color: C.faint }}>
-                                    Delete
+                                  <button onClick={() => setDeleteVintageConfirm(v.id)} title="Delete vintage"
+                                    className="p-1 rounded border"
+                                    style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
+                                    <IconTrash />
                                   </button>
                                 )}
                               </div>

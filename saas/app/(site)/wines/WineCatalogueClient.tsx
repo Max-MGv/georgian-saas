@@ -137,6 +137,10 @@ export default function WineCatalogueClient({
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * w.price, 0)
 
+  const availableTypes = new Set(WINES.map(w => w.wineType))
+  const availableSweetness = new Set(WINES.map(w => w.sweetness))
+  const hasSparkling = WINES.some(w => w.sparkling)
+
   const visibleWines = WINES.filter(w => {
     if (typeFilter && w.wineType !== typeFilter) return false
     if (styleFilter === 'SPARKLING') return w.sparkling
@@ -656,7 +660,7 @@ export default function WineCatalogueClient({
               label: 'Type',
               options: [
                 { value: null, label: 'All' },
-                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).map(t => ({ value: t as TypeFilter | StyleFilter, label: TYPE_LABEL[t] })),
+                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(t => availableTypes.has(t)).map(t => ({ value: t as TypeFilter | StyleFilter, label: TYPE_LABEL[t] })),
               ],
               active: typeFilter as TypeFilter | StyleFilter,
               set: (v: TypeFilter | StyleFilter) => setTypeFilter(v as TypeFilter),
@@ -665,8 +669,8 @@ export default function WineCatalogueClient({
               label: 'Style',
               options: [
                 { value: null, label: 'All' },
-                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
-                { value: 'SPARKLING' as TypeFilter | StyleFilter, label: 'Sparkling' },
+                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
+                ...(hasSparkling ? [{ value: 'SPARKLING' as TypeFilter | StyleFilter, label: 'Sparkling' }] : []),
               ],
               active: styleFilter as TypeFilter | StyleFilter,
               set: (v: TypeFilter | StyleFilter) => setStyleFilter(v as StyleFilter),

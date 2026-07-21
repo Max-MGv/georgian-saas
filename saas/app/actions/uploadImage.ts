@@ -56,3 +56,52 @@ export async function deleteBgImage(storagePath: string): Promise<void> {
   const supabase = createServiceClient()
   await supabase.storage.from(BUCKET).remove([storagePath])
 }
+
+const WINE_BUCKET = 'wine-photos'
+
+export async function uploadWineImage(formData: FormData): Promise<string> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const file = formData.get('file') as File
+  if (!file || !file.type.startsWith('image/')) throw new Error('Invalid file')
+  if (file.size > 10 * 1024 * 1024) throw new Error('File too large (max 10 MB)')
+
+  const supabase = createServiceClient()
+  await supabase.storage.createBucket(WINE_BUCKET, { public: true }).catch(() => {})
+
+  const raw = Buffer.from(await file.arrayBuffer())
+  const compressed = await sharp(raw)
+    .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer()
+
+  // Random suffix avoids collisions when multiple files are uploaded in the same batch
+  const storagePath = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`
+  const { error } = await supabase.storage.from(WINE_BUCKET).upload(storagePath, compressed, {
+    contentType: 'image/webp',
+    upsert: false,
+  })
+  if (error) throw error
+
+  const { data } = supabase.storage.from(WINE_BUCKET).getPublicUrl(storagePath)
+  return data.publicUrl
+}
+
+// storagePath is the bucket-relative path, e.g. "tenantId/1234567890-ab12cd.webp"
+export async function deleteWineImage(storagePath: string): Promise<void> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  if (
+    !storagePath ||
+    storagePath.includes('..') ||
+    !storagePath.startsWith(`${tenantId}/`) ||
+    storagePath.split('/').length !== 2
+  ) {
+    throw new Error('Invalid path')
+  }
+
+  const supabase = createServiceClient()
+  await supabase.storage.from(WINE_BUCKET).remove([storagePath])
+}
