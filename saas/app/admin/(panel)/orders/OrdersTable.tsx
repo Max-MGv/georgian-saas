@@ -29,6 +29,12 @@ import { COLUMN_DEFS, DEFAULT_VISIBLE, COLUMNS_STORAGE_KEY, type ColumnId } from
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
+// Actions column (print/email/edit/delete) is pinned to the right edge. Status is
+// pinned right next to it, so both stay visible while scrolling a wide table —
+// this width must comfortably fit the actions column in both its normal (icons)
+// and delete-confirmation states, since Status's sticky offset is anchored to it.
+const ACTIONS_COL_WIDTH = 190
+
 const inputStyle = {
   backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
   borderRadius: '8px', padding: '8px 12px', fontSize: '0.875rem',
@@ -374,14 +380,25 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
       {/* ── Desktop table (hidden on mobile) ──────────────────── */}
       <div className="hidden md:block">
-      <div className="rounded-xl border overflow-x-auto mt-4" style={{ borderColor: C.border }}>
+      <div className="rounded-xl border overflow-auto max-h-[70vh] mt-4" style={{ borderColor: C.border }}>
         <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
             <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
               {COLUMN_DEFS.filter(c => visibleCols.has(c.id)).map(c => (
-                <th key={c.id} className="text-left px-4 py-3 font-medium whitespace-nowrap" style={{ color: C.muted }}>{at(c.labelKey)}</th>
+                c.id === 'status' ? (
+                  <th key={c.id} className="text-left px-4 py-3 font-medium whitespace-nowrap sticky-status"
+                    style={{ color: C.muted, position: 'sticky', top: 0, right: ACTIONS_COL_WIDTH, zIndex: 30, backgroundColor: C.bg, boxShadow: `-1px 0 0 ${C.border}, 0 1px 0 ${C.border}` }}>
+                    {at(c.labelKey)}
+                  </th>
+                ) : (
+                  <th key={c.id} className="text-left px-4 py-3 font-medium whitespace-nowrap"
+                    style={{ color: C.muted, position: 'sticky', top: 0, zIndex: 20, backgroundColor: C.bg, boxShadow: `0 1px 0 ${C.border}` }}>
+                    {at(c.labelKey)}
+                  </th>
+                )
               ))}
-              <th className="text-left px-4 py-3 font-medium" style={{ color: C.muted, position: 'sticky', right: 0, backgroundColor: C.bg, boxShadow: '-1px 0 0 ' + C.border }}></th>
+              <th className="text-left px-4 py-3 font-medium"
+                style={{ color: C.muted, position: 'sticky', top: 0, right: 0, zIndex: 30, width: ACTIONS_COL_WIDTH, minWidth: ACTIONS_COL_WIDTH, backgroundColor: C.bg, boxShadow: `-1px 0 0 ${C.border}, 0 1px 0 ${C.border}` }}></th>
             </tr>
           </thead>
           <tbody style={{ backgroundColor: '#ffffff' }}>
@@ -502,9 +519,25 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   </td>
                 )}
 
-                {/* Status */}
+                {/* Additional */}
+                {col('additional') && (
+                  <td className="px-4 py-3" style={{ fontSize: 12 }}>
+                    {(order.extras.length > 0 || order.notes)
+                      ? <div className="flex flex-col gap-0.5">
+                          {order.extras.map((e, idx) => (
+                            <span key={idx} style={{ color: C.muted }}>{e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span></span>
+                          ))}
+                          {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.notes}</span>}
+                        </div>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
+
+                {/* Status — pinned next to the sticky actions column */}
                 {col('status') && (
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()}>
+                  <td className="px-4 py-3 sticky-status" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()}
+                    style={{ position: 'sticky', right: ACTIONS_COL_WIDTH, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
                     <div className="relative">
                       {(() => {
                         const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
@@ -543,22 +576,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     </div>
                   </td>
                 )}
-
-                {/* Additional */}
-                {col('additional') && (
-                  <td className="px-4 py-3" style={{ fontSize: 12 }}>
-                    {(order.extras.length > 0 || order.notes)
-                      ? <div className="flex flex-col gap-0.5">
-                          {order.extras.map((e, idx) => (
-                            <span key={idx} style={{ color: C.muted }}>{e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span></span>
-                          ))}
-                          {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.notes}</span>}
-                        </div>
-                      : <span style={{ color: C.faint }}>—</span>
-                    }
-                  </td>
-                )}
-                <td className="px-4 py-3 sticky-actions" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()} style={{ position: 'sticky', right: 0, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
+                <td className="px-4 py-3 sticky-actions" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()} style={{ position: 'sticky', right: 0, width: ACTIONS_COL_WIDTH, minWidth: ACTIONS_COL_WIDTH, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
                   {deletingId === order.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: C.muted }}>{at('orders.deleteConfirm')}</span>

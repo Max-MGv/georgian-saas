@@ -12,8 +12,8 @@ export const COLUMN_DEFS = [
   { id: 'masterclass', labelKey: 'orders.col.masterclass', defaultVisible: true  },
   { id: 'food',        labelKey: 'orders.col.food',        defaultVisible: true  },
   { id: 'total',       labelKey: 'orders.col.total',       defaultVisible: true  },
-  { id: 'status',      labelKey: 'orders.col.status',      defaultVisible: true  },
   { id: 'additional',  labelKey: 'orders.col.additional',  defaultVisible: false },
+  { id: 'status',      labelKey: 'orders.col.status',      defaultVisible: true  },
 ] as const
 
 export type ColumnId = typeof COLUMN_DEFS[number]['id']
