@@ -8,6 +8,15 @@ const db = new PrismaClient()
 const TENANT_ID = process.env.DEFAULT_TENANT_ID ?? ''
 
 const rows = [
+  // Navigation (admin Site Content editor's "Navigation" tab preview only — the live
+  // SiteNav.tsx already falls back to lib/t.ts 'nav.*' Georgian strings on its own;
+  // these rows just make the editor's own KA toggle show the same text instead of English)
+  { key: 'nav_home',    section: 'nav', label: 'Home link',             locale: 'ka', value: 'მთავარი' },
+  { key: 'nav_about',   section: 'nav', label: 'About link',            locale: 'ka', value: 'ჩვენ შესახებ' },
+  { key: 'nav_wines',   section: 'nav', label: 'Order Wine link',       locale: 'ka', value: 'ღვინის შეკვეთა' },
+  { key: 'nav_contact', section: 'nav', label: 'Contact link',          locale: 'ka', value: 'კონტაქტი' },
+  { key: 'nav_book',    section: 'nav', label: '"Book a Visit" button', locale: 'ka', value: 'ჯავშანი' },
+
   // Home
   { key: 'home_hero_subtitle',   section: 'home',    label: 'Hero subtitle',           locale: 'ka', value: 'ოჯახური მარანი კახეთის გულში. ღვინის დეგუსტაცია, ტრადიციული სუფრა და ყოველი ბოთლის ამბავი.' },
   { key: 'home_package1_title',  section: 'home',    label: 'Wine Tasting title',      locale: 'ka', value: 'ღვინის დეგუსტაცია' },

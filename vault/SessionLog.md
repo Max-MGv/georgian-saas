@@ -36,6 +36,20 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - Max to do a wording review of the 23 newly-seeded Georgian strings (same "batch review" bucket as the rest of the Georgian admin layer work, still pending from prior sessions).
 - Add to `MyToDo.md`: spot-check the Detailed variant preview + Georgian toggle live.
 
+### Same-day follow-up: "are we done translating, front and back?" audit
+
+Max asked directly whether the whole site (public + admin) is now fully translated. Rather than answer from memory, audited it: wrote a one-off script querying `SiteContent` directly for `ka` row coverage against every `FIELDS.*` key across all 5 Site Content sections, then read the actual page components (`app/(site)/page.tsx`, `about/page.tsx`, `contact/page.tsx`, `SiteNav.tsx`) to check *how* missing keys are handled.
+
+**Finding: the public site is fully bilingual regardless of SiteContent gaps.** Nav/Home/About/Contact/Booking Form all pass `t(locale, key)` — not a static English string — as the fallback into `EditableText`/`ET`, so even fields with zero `ka` `SiteContent` rows (most of About/Contact, 2 of Home) already render correct Georgian to visitors via `lib/t.ts`. `SiteContent` `ka` rows are a per-tenant *override* layer on top of an already-bilingual default, not a requirement for correctness. Confirmed this is real by checking each component's `fb={t(locale, '...')}` call directly, not just assuming from the DB query.
+
+**Found one genuine remaining gap: the Site Content editor's own Navigation tab.** Unlike Home/About/Contact (previewed via a live iframe of the real page — inherently locale-aware), Nav and Form are previewed through static components (`FieldsPanel` / `BookingFormVisualPanel`) that only show Georgian if a `SiteContent` `ka` row exists. Nav had zero — same exact symptom Max originally reported for Booking Form, just never caught for Nav since Max's original report was Booking-Form-specific. Fixed the same way: seeded the 5 `nav_*` keys (`mtavari`/`chven shesakheb`/etc., matching `SiteNav.tsx`'s own `t.ts` fallback text exactly) via `seed-ka.ts`. Browser-verified the Navigation tab now shows Georgian on toggle. No live-site behavior changed — `SiteNav.tsx` was already correct; this only fixes the admin editor's own preview.
+
+**Answer given to Max:** front-facing = complete (verified, not assumed); admin panel chrome = complete (#130 + #131); the one thing that wasn't complete (Nav tab preview) is now fixed too. Deliberately out of scope, not gaps: `/super-admin` (English-only by design) and printed invoices (hardcoded Georgian-only, never was a toggle). Still outstanding: Max's wording/quality review of the Georgian text — a QA pass, not a completeness gap.
+
+### Files changed (this addendum)
+- `saas/scripts/seed-ka.ts` — 5 new `nav_*` Georgian rows
+- Vault: `FeatureLog.md` (#131 entry extended), `SessionLog.md` (this entry)
+
 ---
 
 ## 2026-07-22 — Georgian admin layer Phase 3 (done, #130 fully complete), #131 diagnosed (full detail)
