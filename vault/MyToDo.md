@@ -10,15 +10,24 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
-### Georgian admin panel layer — Phase 0 + 1 (Claude tested in browser 2026-07-21, needs Max to review wording)
+### #131 — Booking Form editor: Georgian seed + Detailed variant (Claude tested in browser 2026-07-23, needs Max to review)
 
-Not a bug-test — this is a wording review. Full plan + progress tracker: `Plan-AdminGeorgian.md`.
+1. Go to `/admin/content` → Booking Form tab → you'll now see a **Simple / Detailed** toggle above the preview. Click **Detailed** → confirm you see Guest Counts (Tasting/Lunch/Free-Guide), Hot Dish Selection, and Masterclass Add-ons sections that weren't there before.
+2. Switch content-locale to **Georgian** (top toggle, not the admin panel language) → confirm every field on both Simple and Detailed now shows Georgian text — this was the original "Georgian button does nothing" bug, now fixed.
+3. Click into the 3 new Detailed-only headers (Guest Counts / Hot Dish Selection / Masterclass Add-ons) → confirm they're editable the same way as the other fields (Save/Cancel/Reset).
+4. Live site regression: go to the home page → Book a Visit → Tour Company → pick a company → confirm the form still works normally (this was already working before, just double-checking nothing broke).
+5. Wording review: the 23 newly-seeded Georgian strings for the Booking Form tab reuse the same translations already live on the public site, so they should read naturally — but worth a look alongside the rest of the still-pending Georgian wording review below.
+
+### Georgian admin panel layer — ALL 4 PHASES DONE (Claude tested in browser 2026-07-21 + 2026-07-22, needs Max to review wording)
+
+Not a bug-test — this is a wording review. Full plan + progress tracker: `Plan-AdminGeorgian.md`. #130 is now fully built — nothing left to code, just your read-through.
 
 1. Go to `/admin/settings` → "Admin Panel Language" section (top of page) → switch to KA
-2. Click through every admin page and read the Georgian for anything that sounds off: nav, Settings (all sections), Orders (list/filters/calendar, click a row for Order Detail, try "+ New Order"), Wine Orders (all 3 view modes — Cards/Table/Pack, try the packing sheet Print), Companies (expand a row, click Edit)
+2. Click through every admin page and read the Georgian for anything that sounds off: nav, Settings (all sections), Orders (list/filters/calendar, click a row for Order Detail, try "+ New Order"), Wine Orders (all 3 view modes — Cards/Table/Pack, try the packing sheet Print), Companies (expand a row, click Edit), Wines (product + vintage editors), Statistics (both modes, historical breakdown), Menu Items, Masterclass
 3. Specifically worth a close look: wine order status names (Pending/Confirmed/Paid/Delivered), booking status names (New/Confirmed/Invoice Sent/Paid/Completed/Cancelled), and the packing-sheet box-count sentences (e.g. "1 ნახევრადი (4) — სულ 7 ყუთი (6-ბოთლიანი)") — these were hand-translated per-locale rather than word-substituted, so worth confirming they read naturally
-4. Switch back to EN in Settings when done — confirms the toggle reverts cleanly (already Claude-verified, but good to see live)
-5. Not yet translated (Phase 2/3, still English by design): Wines, Statistics, Menu Items, Masterclass, Site Content editor's own buttons/labels
+4. **New (Phase 3, 2026-07-22):** go to `/admin/content` (Site Content editor) → page title/subtitle, the Visual/Backgrounds mode switcher, the section tabs (Home/About/Contact/Booking Form/Navigation), and the small uppercase field-description labels above each editable box should all be Georgian. Click into a field to edit it → Save/Cancel buttons should read "შენახვა"/"გაუქმება". Switch to the Backgrounds tab → intro text, page names, Desktop/Mobile toggle, sliders, Save button should all be Georgian too.
+5. On the Site Content editor: the actual content you're editing (Home/About/Contact text, the Booking Form preview) is controlled by a **separate** EN/KA toggle right below the mode switcher — that one is unaffected by the admin-language setting, by design. Don't confuse the two.
+6. Switch back to EN in Settings when done — confirms the toggle reverts cleanly everywhere including Site Content (already Claude-verified, but good to see live)
 
 ### #123–#126 — Domain migration, no-tenant state, neutral fallbacks, set password (Claude tested 2026-07-18 live, needs Max to test)
 

@@ -2,12 +2,14 @@
 
 import { useState, useRef, useTransition } from 'react'
 import { saveContent, deleteContent } from '@/app/actions/siteContent'
+import { adminT } from '@/lib/adminT'
 
 type Props = {
   contentKey: string
   section: string
   label: string
   locale: string
+  adminLocale?: string
   fallback: string
   isAdmin: boolean
   as?: keyof React.JSX.IntrinsicElements
@@ -17,9 +19,10 @@ type Props = {
 }
 
 export default function EditableText({
-  contentKey, section, label, locale, fallback, isAdmin,
+  contentKey, section, label, locale, adminLocale = 'en', fallback, isAdmin,
   as: Tag = 'span', className, style, children,
 }: Props) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(adminLocale, key, vars)
   const [editing, setEditing]         = useState(false)
   const [value, setValue]             = useState(children ?? fallback)
   const [hovered, setHovered]         = useState(false)
@@ -106,7 +109,7 @@ export default function EditableText({
       {/* Reset badge — appears left of pencil when a DB value exists */}
       {hovered && !editing && hasDbValue && (
         <span
-          aria-label={`Reset to default: ${fallback}`}
+          aria-label={at('editable.resetAriaLabel', { fallback })}
           onMouseEnter={() => setShowResetTip(true)}
           onMouseLeave={() => setShowResetTip(false)}
           onClick={handleReset}
@@ -149,7 +152,7 @@ export default function EditableText({
                 boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
               }}
             >
-              Reset to: &ldquo;{tipText}&rdquo;
+              {at('editable.resetTooltip', { tip: tipText })}
             </span>
           )}
         </span>
@@ -185,7 +188,7 @@ export default function EditableText({
         contentEditable={editing}
         suppressContentEditableWarning
         onClick={handleClick}
-        title={editing ? undefined : `Edit: ${label}`}
+        title={editing ? undefined : at('editable.editTitle', { label })}
       >
         {value}
       </T>
@@ -199,7 +202,7 @@ export default function EditableText({
             className="text-xs px-2.5 py-1 rounded font-medium text-white"
             style={{ backgroundColor: 'var(--color-brand)', opacity: isPending ? 0.6 : 1 }}
           >
-            {isPending ? '…' : 'Save'}
+            {isPending ? '…' : at('editable.save')}
           </button>
           <button
             type="button"
@@ -207,16 +210,16 @@ export default function EditableText({
             className="text-xs px-2 py-1 rounded font-medium"
             style={{ color: '#6b5a47', border: '1px solid #e0d4c0', backgroundColor: '#fff9f3' }}
           >
-            Cancel
+            {at('editable.cancel')}
           </button>
         </div>
       )}
 
       {saved && !editing && (
-        <span className="text-xs mt-0.5 block" style={{ color: '#16a34a' }}>✓ Saved</span>
+        <span className="text-xs mt-0.5 block" style={{ color: '#16a34a' }}>{at('editable.saved')}</span>
       )}
       {resetDone && !editing && (
-        <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>↺ Reset to default</span>
+        <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>{at('editable.resetToDefault')}</span>
       )}
     </Wrapper>
   )

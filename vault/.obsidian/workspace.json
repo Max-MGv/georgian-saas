@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "FeatureLog.md",
-                "mode": "source",
+                "file": "Plan-BookingFormContentEditor.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "FeatureLog"
+              "title": "Plan-BookingFormContentEditor"
             }
           },
           {
@@ -27,15 +27,16 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Business Ideas & Notes.md",
+                "file": "FeatureLog.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Business Ideas & Notes"
+              "title": "FeatureLog"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -197,23 +198,27 @@
       "bases:Create new base": false
     }
   },
-  "active": "0eae5ecf8a741e4f",
+  "active": "6c50af3ed4b8f1f6",
   "lastOpenFiles": [
+    "FeatureLog.md.tmp.10572.173f8bf19fa8",
+    "Plan-DynamicBranding.md",
+    "Plan-4Features.md",
+    "Business Ideas & Notes.md",
+    "Plan-BookingFormContentEditor.md",
+    "FeatureLog.md",
+    "FeatureLog.md.tmp.10572.ce42ba1d8699",
+    "MultiTenantSiteContent.md",
+    "MultiTenantSiteContent.md.tmp.19508.f76637129ec7",
+    "MyToDo.md.tmp.19508.038e3b069417",
+    "FeatureLog.md.tmp.19508.184564fbde5d",
+    "Plan-AdminGeorgian.md.tmp.19508.dc7ec687a6cf",
     "SessionLog.md.tmp.2540.3ca32336a224",
     "SessionLog.md.tmp.2540.41299821f8b5",
     "FeatureLog.md.tmp.2540.8f333de5a50c",
     "FeatureLog.md.tmp.2540.c403769ae3d4",
     "SessionLog.md.tmp.2540.8bc8dd7816c3",
-    "SessionLog.md.tmp.2540.c3f23faa1a96",
-    "FeatureLog.md.tmp.2540.c18a78ea8831",
-    "SessionLog.md.tmp.2540.d0c2cd97d5ea",
-    "SessionLog.md.tmp.15824.188625e49465",
-    "SessionLog.md.tmp.15824.416de37529b8",
-    "MyToDo.md.tmp.884.aff90d7f4cfd",
     "Plan-AdminGeorgian.md",
     "Database Schema.md",
-    "FeatureLog.md",
-    "Business Ideas & Notes.md",
     "Plan-NeutralFallbacks.md",
     "Plan-MultiTenantEmail.md",
     "Plan-SuperAdminOrdersView.md",
@@ -227,13 +232,9 @@
     "MyToDo.md",
     "Roadmap.md",
     "MaintenanceNotes.md",
-    "Plan-DynamicBranding.md",
     "KnownBugs.md",
     "RLS-Architecture.md",
     "Plan-SecurityAndBugFixes.md",
-    "Plan-MultiTenant.md",
-    "Plan-EditableSiteContent.md",
-    "Plan-4Features.md",
-    "Plan-CompanyAccessCodes.md"
+    "Plan-MultiTenant.md"
   ]
 }

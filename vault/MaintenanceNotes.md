@@ -17,18 +17,21 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 
 **If you change the form's visual structure** (add a new field, rename a section, add a new label):
 - Add the new key + fallback to `FIELDS.form` in `ContentClient.tsx` so it appears in the admin panel
-- Make sure `BookingForm.tsx` reads that key from `formContent` (or uses the fallback from `t()`)
-- Optionally seed the new key in `saas/prisma/seed-ka.ts` for the Georgian locale
+- Make sure `BookingForm.tsx` reads that key via the `fc(key, tKey)` helper (line ~48: `formContent[key] || t(locale, tKey)`) instead of calling `t()` directly
+- Seed the new key in `saas/scripts/seed-ka.ts` for the Georgian locale — a key with no `ka` row there makes the content-locale KA toggle a silent no-op for that field (this exact bug was issue #131 part 1: 20 fields existed in `FIELDS.form` for months with zero `ka` rows)
 
 **If you remove a field from the form:**
 - Remove its `FIELDS.form` entry in `ContentClient.tsx` to avoid orphaned admin controls
 - Remove any DB seed rows for that key if present
 
+**Two variants — Simple vs. Detailed (added for #131 part 2, 2026-07-23):**
+`BookingForm.tsx` has an `isEnhanced` branch (real toggle = `enable_enhanced_company_booking` setting + a company booking selected) that adds: split guest counts (Tasting/Lunch/Free-Guide, replacing the single "Number of Guests" field), a Hot Dish Selection block, a Masterclass Add-ons block, and Food Notes (Food Notes is **only** rendered inside `isEnhanced` — never in the simple/individual form). `BookingFormVisualPanel.tsx` mirrors both variants behind a `variant: 'simple' | 'detailed'` prop, toggled independently of the tenant's live setting so admins can preview/edit either one at any time. Only the 3 detailed-variant **section headers** are tenant-editable (`form_guest_counts_header`/`form_hot_dish_header`/`form_masterclass_header`) — deliberately not the guest sub-labels, dropdown option text, or masterclass item rows, since those are tied to or populated by other admin-managed data (`minGuestsTasting`/`minGuestsTastingLunch` settings, `MenuItem`/`MasterclassItem` records at `/admin/menu-items` and `/admin/masterclass`), not SiteContent. If you add a 4th detailed-only section, decide the same "is this a fixed label or backed by other admin data" question before deciding whether it gets a `FIELDS.form` entry.
+
 **Files involved:**
-- `saas/components/BookingForm.tsx` — public form, reads labels from `formContent` prop
-- `saas/app/admin/content/ContentClient.tsx` — `FIELDS.form` array defines which keys appear in admin panel
-- `saas/app/admin/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor; layout must stay in sync with `BookingForm.tsx`
-- `saas/prisma/seed-ka.ts` — Georgian locale seed data
+- `saas/components/BookingForm.tsx` — public form, reads labels via the `fc()` helper (falls back to `lib/t.ts` when no SiteContent override exists)
+- `saas/app/admin/(panel)/content/ContentClient.tsx` — `FIELDS.form` array defines which keys appear in admin panel; also owns the Simple/Detailed toggle state (`formVariant`) for the Booking Form tab
+- `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor, takes a `variant` prop; layout must stay in sync with `BookingForm.tsx`
+- `saas/scripts/seed-ka.ts` — Georgian locale seed data; run with `npx tsx scripts/seed-ka.ts` from `saas/` after adding new `form_*` keys
 
 ---
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { adminT } from '@/lib/adminT'
 import EditableText from '@/components/EditableText'
 import BackgroundsTab from './BackgroundsTab'
 import BookingFormVisualPanel from './BookingFormVisualPanel'
@@ -19,7 +20,7 @@ type ModeKey = 'visual' | 'backgrounds'
 type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact'
 
 const IFRAME_SECTIONS = new Set<SectionKey>(['home', 'about', 'contact'])
-type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[] }
+type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[]; adminLocale: string }
 type FieldDef = { key: string; label: string; fallback: string }
 
 function buildMap(rows: ContentRow[]) {
@@ -71,6 +72,11 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'form_cancel_policy',         label: 'Cancellation policy text',   fallback: '48-hour cancellation policy. We will contact you to confirm.' },
     { key: 'form_success_heading',       label: 'Success heading',            fallback: 'Booking received!' },
     { key: 'form_success_body',          label: 'Success body text',          fallback: 'Thank you. We will contact you shortly to confirm your visit.' },
+    // Detailed-variant-only headers — shown when enable_enhanced_company_booking is on.
+    // See vault/MaintenanceNotes.md §1: keep in sync with BookingForm.tsx's isEnhanced block.
+    { key: 'form_guest_counts_header',   label: 'Guest Counts header',        fallback: 'Guest Counts' },
+    { key: 'form_hot_dish_header',       label: 'Hot Dish Selection header',  fallback: 'Hot Dish Selection' },
+    { key: 'form_masterclass_header',    label: 'Masterclass Add-ons header', fallback: 'Masterclass Add-ons' },
   ],
   about: [
     { key: 'about_eyebrow',        label: 'Eyebrow text',              fallback: 'Our Story' },
@@ -112,13 +118,13 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
 
 // ── Fields panel (used for Form + Nav tabs in Visual mode) ───────────────────
 
-function FieldsPanel({ section, c, locale }: { section: SectionKey; c: Record<string, string>; locale: string }) {
+function FieldsPanel({ section, c, locale, adminLocale }: { section: SectionKey; c: Record<string, string>; locale: string; adminLocale: string }) {
   return (
     <div className="space-y-4 max-w-2xl">
       {FIELDS[section].map(f => (
         <div key={f.key}>
           <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: C.rust }}>
-            {f.label}
+            {adminT(adminLocale, `content.field.${f.key}`)}
           </p>
           <div className="rounded-lg border px-3 py-2.5" style={{ borderColor: C.border, backgroundColor: C.bg }}>
             <EditableText
@@ -126,6 +132,7 @@ function FieldsPanel({ section, c, locale }: { section: SectionKey; c: Record<st
               section={section}
               label={f.label}
               locale={locale}
+              adminLocale={adminLocale}
               fallback={f.fallback}
               isAdmin
               as="p"
@@ -146,10 +153,15 @@ function FieldsPanel({ section, c, locale }: { section: SectionKey; c: Record<st
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ContentClient({ rows, bgSettings, uploadedImages }: Props) {
+export default function ContentClient({ rows, bgSettings, uploadedImages, adminLocale }: Props) {
   const [mode, setMode]       = useState<ModeKey>('visual')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
+  // Which real BookingForm.tsx layout to preview — mirrors its isEnhanced branch
+  // (driven live by the enable_enhanced_company_booking setting; here it's a manual
+  // toggle so both variants can be previewed/edited regardless of the tenant's setting).
+  const [formVariant, setFormVariant] = useState<'simple' | 'detailed'>('simple')
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(adminLocale, key, vars)
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -169,35 +181,35 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
   const c = maps[locale]
 
   const allSections: { id: SectionKey; label: string }[] = [
-    { id: 'home',    label: 'Home' },
-    { id: 'about',   label: 'About' },
-    { id: 'contact', label: 'Contact' },
-    { id: 'form',    label: 'Booking Form' },
-    { id: 'nav',     label: 'Navigation' },
+    { id: 'home',    label: at('content.section.home') },
+    { id: 'about',   label: at('content.section.about') },
+    { id: 'contact', label: at('content.section.contact') },
+    { id: 'form',    label: at('content.section.form') },
+    { id: 'nav',     label: at('content.section.nav') },
   ]
 
   const subtitle = mode === 'visual'
     ? IFRAME_SECTIONS.has(section)
-      ? 'Hover any text on the page preview to edit it inline. Changes save per field.'
-      : 'Click any field below to edit it. Changes save per field.'
-    : 'Choose a background image for each page. Adjust position and zoom, then save.'
+      ? at('content.subtitle.iframeHover')
+      : at('content.subtitle.clickField')
+    : at('content.subtitle.backgrounds')
 
   return (
     <div className="space-y-6" style={{ maxWidth: IFRAME_SECTIONS.has(section) && mode === 'visual' ? '900px' : '672px' }}>
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold" style={{ color: C.text }}>Site Content</h1>
+        <h1 className="text-2xl font-bold" style={{ color: C.text }}>{at('content.pageTitle')}</h1>
         <p className="text-sm mt-1" style={{ color: C.faint }}>{subtitle}</p>
       </div>
 
       {/* Mode switcher */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>View</span>
+        <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>{at('content.view')}</span>
         <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: '#ede5d8' }}>
           {([
-            { id: 'visual',      label: 'Visual' },
-            { id: 'backgrounds', label: 'Backgrounds' },
+            { id: 'visual',      label: at('content.mode.visual') },
+            { id: 'backgrounds', label: at('content.mode.backgrounds') },
           ] as { id: ModeKey; label: string }[]).map(m => (
             <button key={m.id} type="button" onClick={() => setMode(m.id)}
               className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
@@ -213,7 +225,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
       </div>
 
       {/* Backgrounds mode */}
-      {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} uploadedImages={uploadedImages} />}
+      {mode === 'backgrounds' && <BackgroundsTab settings={bgSettings} uploadedImages={uploadedImages} adminLocale={adminLocale} />}
 
       {/* Visual mode */}
       {mode === 'visual' && (
@@ -228,7 +240,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
                   color: locale === l ? C.wine : C.muted,
                   boxShadow: locale === l ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 }}>
-                {l === 'en' ? 'English' : 'Georgian'}
+                {l === 'en' ? at('content.localeToggle.english') : at('content.localeToggle.georgian')}
               </button>
             ))}
           </div>
@@ -260,14 +272,34 @@ export default function ContentClient({ rows, bgSettings, uploadedImages }: Prop
                 />
               </div>
             ) : section === 'form' ? (
-              <div className="rounded-xl border overflow-hidden"
-                style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', backgroundColor: '#f5efe6' }}>
-                <div className="p-8">
-                  <BookingFormVisualPanel c={c} locale={locale} />
+              <div className="space-y-3">
+                {/* Simple/Detailed toggle — Detailed mirrors what BookingForm.tsx shows
+                    when enable_enhanced_company_booking is on for a company booking. */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>{at('content.view')}</span>
+                  <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ backgroundColor: '#ede5d8' }}>
+                    {(['simple', 'detailed'] as const).map(v => (
+                      <button key={v} type="button" onClick={() => setFormVariant(v)}
+                        className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
+                        style={{
+                          backgroundColor: formVariant === v ? '#fff9f3' : 'transparent',
+                          color: formVariant === v ? C.wine : C.muted,
+                          boxShadow: formVariant === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        }}>
+                        {v === 'simple' ? at('content.formVariant.simple') : at('content.formVariant.detailed')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border overflow-hidden"
+                  style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', backgroundColor: '#f5efe6' }}>
+                  <div className="p-8">
+                    <BookingFormVisualPanel c={c} locale={locale} adminLocale={adminLocale} variant={formVariant} />
+                  </div>
                 </div>
               </div>
             ) : (
-              <FieldsPanel section={section} c={c} locale={locale} />
+              <FieldsPanel section={section} c={c} locale={locale} adminLocale={adminLocale} />
             )}
           </div>
         </>

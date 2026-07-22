@@ -3,6 +3,19 @@
 // MAINTENANCE: This is a visual replica of BookingForm.tsx for the admin content editor.
 // If BookingForm.tsx layout changes (new fields, renamed labels, removed sections),
 // mirror those changes here. See vault/MaintenanceNotes.md §1.
+//
+// Two variants, matching BookingForm.tsx's `isEnhanced` branch (real toggle there is the
+// enable_enhanced_company_booking setting + a company booking selected; here it's a manual
+// preview toggle so both can be viewed/edited regardless of the tenant's live setting):
+// - simple:   single "Number of Guests" field; no hot dish / masterclass / food notes
+//             (the real form only renders Food Notes inside the isEnhanced block — never
+//             in simple mode, so it must not appear here either)
+// - detailed: split guest counts (Tasting/Lunch/Free-Guide), Hot Dish Selection, Masterclass
+//             Add-ons, then Food Notes. Only the 3 new section headers are tenant-editable
+//             here (see FIELDS.form in ContentClient.tsx) — the guest sub-labels, dropdown
+//             option text, and masterclass item row are illustrative mockups, not editable
+//             content: the real values come from the minGuestsTasting/Lunch settings and
+//             the MenuItem/MasterclassItem admin pages, not from SiteContent.
 
 import EditableText from '@/components/EditableText'
 
@@ -11,15 +24,16 @@ const C = {
   muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)', inputBg: '#fffdf9',
 }
 
-type Props = { c: Record<string, string>; locale: string }
+type Props = { c: Record<string, string>; locale: string; adminLocale: string; variant: 'simple' | 'detailed' }
 
-export default function BookingFormVisualPanel({ c, locale }: Props) {
+export default function BookingFormVisualPanel({ c, locale, adminLocale, variant }: Props) {
   const labelStyle: React.CSSProperties = { color: C.muted, fontSize: '0.875rem', fontWeight: 500, marginBottom: '6px', display: 'block' }
   const inputShell: React.CSSProperties = { backgroundColor: C.inputBg, borderColor: C.border, color: C.faint }
+  const isDetailed = variant === 'detailed'
 
   function ET({ k, fb }: { k: string; fb: string }) {
     return (
-      <EditableText contentKey={k} section="form" label={fb} locale={locale} fallback={fb} isAdmin as="span">
+      <EditableText contentKey={k} section="form" label={fb} locale={locale} adminLocale={adminLocale} fallback={fb} isAdmin as="span">
         {c[k] ?? null}
       </EditableText>
     )
@@ -68,11 +82,61 @@ export default function BookingFormVisualPanel({ c, locale }: Props) {
         </div>
       </div>
 
-      {/* Guests */}
-      <div>
-        <label style={labelStyle}><ET k="form_num_guests" fb="Number of Guests" /></label>
-        <div className="rounded-lg border px-3 py-2.5 w-28 text-sm" style={inputShell}>4</div>
-      </div>
+      {/* Guest count — simple: single field / detailed: split Tasting+Lunch+Free-Guide */}
+      {isDetailed ? (
+        <div>
+          <label style={labelStyle}><ET k="form_guest_counts_header" fb="Guest Counts" /></label>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Tasting', value: '2' },
+              { label: 'Lunch', value: '2' },
+              { label: 'Free / Guide', value: '0' },
+            ].map(g => (
+              <div key={g.label}>
+                <p className="text-xs mb-1" style={{ color: C.faint }}>{g.label}</p>
+                <div className="rounded-lg border px-3 py-2 text-sm" style={inputShell}>{g.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label style={labelStyle}><ET k="form_num_guests" fb="Number of Guests" /></label>
+          <div className="rounded-lg border px-3 py-2.5 w-28 text-sm" style={inputShell}>4</div>
+        </div>
+      )}
+
+      {/* Detailed only: Hot Dish Selection */}
+      {isDetailed && (
+        <div>
+          <label style={labelStyle}><ET k="form_hot_dish_header" fb="Hot Dish Selection" /></label>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs mb-1" style={{ color: C.faint }}>Vegetable dish</p>
+              <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputShell}>— choose —</div>
+            </div>
+            <div>
+              <p className="text-xs mb-1" style={{ color: C.faint }}>Meat dish</p>
+              <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputShell}>— choose —</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed only: Masterclass Add-ons */}
+      {isDetailed && (
+        <div>
+          <label style={labelStyle}><ET k="form_masterclass_header" fb="Masterclass Add-ons" /></label>
+          <div className="rounded-lg border divide-y" style={{ borderColor: C.border }}>
+            <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: C.bg }}>
+              <div className="w-4 h-4 rounded border flex-shrink-0" style={{ borderColor: C.border }} />
+              <span className="flex-1 text-sm" style={{ color: C.text }}>
+                Wine Blending Workshop <span className="text-xs" style={{ color: C.faint }}>25₾/pp</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Name */}
       <div className="grid sm:grid-cols-2 gap-4">
@@ -98,17 +162,19 @@ export default function BookingFormVisualPanel({ c, locale }: Props) {
         </div>
       </div>
 
-      {/* Food notes */}
-      <div>
-        <label style={labelStyle}>
-          <ET k="form_food_notes" fb="Food Notes" />
-          {' '}
-          <span style={{ color: C.faint, fontWeight: 400 }}>(<ET k="form_food_notes_sub" fb="allergies, dietary requirements" />)</span>
-        </label>
-        <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, minHeight: '76px' }}>
-          <ET k="form_food_notes_placeholder" fb="Any dietary restrictions or special requests for the kitchen…" />
+      {/* Food notes — detailed only, matches BookingForm.tsx's isEnhanced gating */}
+      {isDetailed && (
+        <div>
+          <label style={labelStyle}>
+            <ET k="form_food_notes" fb="Food Notes" />
+            {' '}
+            <span style={{ color: C.faint, fontWeight: 400 }}>(<ET k="form_food_notes_sub" fb="allergies, dietary requirements" />)</span>
+          </label>
+          <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, minHeight: '76px' }}>
+            <ET k="form_food_notes_placeholder" fb="Any dietary restrictions or special requests for the kitchen…" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Submit */}
       <div className="w-full font-semibold py-3 rounded-lg text-white text-center text-sm cursor-default select-none" style={{ backgroundColor: C.wine }}>

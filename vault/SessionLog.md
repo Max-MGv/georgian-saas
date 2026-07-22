@@ -8,6 +8,71 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-23 — #131 built and browser-verified (Booking Form editor: Georgian seed + Detailed variant) (full detail)
+
+### Completed
+
+**Planned, then built, both parts of #131 in one pass.** Re-verified the 2026-07-22 diagnosis against current code (unchanged): `seed-ka.ts` had zero `form_*` rows; `BookingFormVisualPanel.tsx` only mirrored the simple variant; the 3 detailed-variant section headers (`form.guest_counts`/`form.hot_dish`/`form.masterclass`) were hardcoded in `lib/t.ts`, not in `FIELDS.form`/`SiteContent`. Found the exact wiring needed: `BookingForm.tsx:48` already has an `fc(key, tKey)` fallback helper (`formContent[key] || t(locale, tKey)`) used for all 20 existing editable fields — the 3 new headers just needed the same substitution at lines 608/652/681/769.
+
+**Decisions confirmed via AskUserQuestion:** combine both parts into one pass; add a Simple/Detailed toggle to the admin Booking Form tab (mirrors the invoice toggle, #41), independent of the tenant's actual setting; new editable scope is **headers only** (`form_guest_counts_header`/`form_hot_dish_header`/`form_masterclass_header`) — sub-labels, dropdown chrome, and rate messages deliberately left non-editable since they're tied to or populated by other admin-managed data (`MenuItem`/`MasterclassItem` records, computed numbers). Full plan captured in `Plan-BookingFormContentEditor.md` before writing any code.
+
+**Built exactly per plan**, plus one accuracy fix discovered along the way: `BookingFormVisualPanel.tsx` was always showing Food Notes regardless of variant, but the real `BookingForm.tsx` only renders Food Notes inside the `isEnhanced` (company + enhanced-setting) branch — never in the simple/individual form. Moved Food Notes to render Detailed-only so the preview stops lying about the simple variant. Per Max's explicit reminder this session, kept/added dependency comments in the code itself (not just the vault) at every coupling point: `FIELDS.form` in `ContentClient.tsx` already had a MAINTENANCE comment pointing at `BookingForm.tsx` + `MaintenanceNotes.md` §1 — extended it for the 3 new keys; `BookingFormVisualPanel.tsx`'s existing MAINTENANCE header comment expanded to explain the simple/detailed split and exactly which parts are/aren't tenant-editable and why; `BookingForm.tsx`'s own MAINTENANCE comment was already generic enough to not need changes. `MaintenanceNotes.md` §1 (the doc all of those comments point to) rewritten to match — now documents the `fc()` helper pattern, the two-variant split, and the "fixed label vs. backed by other admin data" test for deciding what's editable.
+
+**Browser-verified in `/admin/content` → Booking Form tab:**
+- Simple/Detailed toggle switches between the two layouts correctly (Detailed shows Guest Counts split Tasting/Lunch/Free-Guide, Hot Dish Selection, Masterclass Add-ons, then Food Notes; Simple shows none of those).
+- EN/KA content-locale toggle now switches all 23 `form_*` fields correctly in both variants (previously a no-op for every one of them).
+- Live public site regression check: with `enable_enhanced_company_booking` already ON for Nikalas Marani, selected a company on the real booking form — "Guest Counts" and "Masterclass Add-ons" headers render correctly (Masterclass showing real `MasterclassItem` rows from the DB), "Hot Dish Selection" correctly stays hidden for Wine Tasting visit type (only shows for Tasting + Lunch, matching real conditional logic) — confirms the `fc()` swaps didn't break the live form.
+- TypeScript: 0 errors throughout.
+
+### Files changed
+- `saas/lib/adminT.ts` — 3 new `content.field.form_*` entries + 2 new `content.formVariant.*` toggle labels (en + ka)
+- `saas/app/admin/(panel)/content/ContentClient.tsx` — 3 new `FIELDS.form` entries; `formVariant` state + Simple/Detailed toggle UI for the Booking Form tab
+- `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — new `variant` prop; Detailed-only Guest Counts split / Hot Dish Selection / Masterclass Add-ons sections; Food Notes moved to Detailed-only (accuracy fix); expanded MAINTENANCE comment
+- `saas/components/BookingForm.tsx` — 4 call sites (lines 608/652/681/769) switched from `t()` to `fc()` for the 3 new keys
+- `saas/scripts/seed-ka.ts` — 23 new `form_*` Georgian rows (20 previously-missing + 3 new)
+- Vault: `Plan-BookingFormContentEditor.md` (NEW, plan), `MaintenanceNotes.md` §1 (rewritten to match), `FeatureLog.md` (#131 → ✅ Done), `SessionLog.md` (this entry)
+
+### What's next
+- Max to do a wording review of the 23 newly-seeded Georgian strings (same "batch review" bucket as the rest of the Georgian admin layer work, still pending from prior sessions).
+- Add to `MyToDo.md`: spot-check the Detailed variant preview + Georgian toggle live.
+
+---
+
+## 2026-07-22 — Georgian admin layer Phase 3 (done, #130 fully complete), #131 diagnosed (full detail)
+
+### Completed
+
+**Georgian layer Phase 3 — Site Content editor chrome. #130 is now fully done (all 4 phases).** Scoped precisely by reading the actual files rather than assuming the plan doc's file list was complete:
+- `ContentClient.tsx` — page title/subtitle (3 variants), Visual/Backgrounds mode switcher, locale-toggle labels, all 5 section tabs, and all 66 `FIELDS` descriptor labels (Nav/Home/Booking Form/About/Contact — the small uppercase captions telling the admin which piece of content each box edits) — new `content.*` keys.
+- `BackgroundsTab.tsx` — intro text, page hero labels, Desktop/Mobile toggle, Choose/Upload image, preview caption (with `{viewport}`/`{vw}` interpolation), slider labels, mobile hint, unsaved-changes banner, Save button states — new `backgrounds.*` keys. Reused existing `wines.uploadFailed`/`wines.unknownError` for the upload-error alert instead of duplicating.
+- `BookingFormVisualPanel.tsx` — turned out to need **no new chrome strings at all**: every visible label in this file is itself mirrored form content (already covered by the existing content-locale EN/KA toggle), not admin chrome. Only needed to thread the new `adminLocale` prop through to its `EditableText` calls.
+- **`components/EditableText.tsx`** — found during investigation, not in the original Phase 3 file list. This shared component has real hardcoded chrome (Save/Cancel/✓ Saved/↺ Reset to default/reset tooltip/Edit-title) and is used in 6 places: the 2 admin-direct callers above, plus 3 **public-site** pages (`app/(site)/page.tsx`, `about/page.tsx`, `contact/page.tsx`) via their iframe-embedded edit mode. Added an optional `adminLocale?: string` prop defaulting to `'en'` so only the 2 admin callers pass the real tenant setting — the 3 public-site call sites are untouched, correctly keeping the public site's own i18n system separate per the plan's explicit scope note.
+- **Naming decision:** `ContentClient.tsx` already used `locale` for the *content* language being edited (which language's text you're viewing/editing — en/ka toggle). The chrome-language prop threaded through this session is a separate, deliberately differently-named `adminLocale` everywhere, to avoid confusing the two concepts in this one file where both exist side by side.
+- ~140 new keys added to `lib/adminT.ts` (both `en` and `ka`), bringing the dictionary to ~700 keys total.
+- Browser-verified end to end: toggled Settings → Admin Panel Language to Georgian, confirmed Site Content's title/subtitle/tabs/field labels/Backgrounds tab all switch; opened a field into edit mode and confirmed Save/Cancel render as "შენახვა"/"გაუქმება"; confirmed the content-locale EN/KA toggle and actual field content were unaffected (still shows English content correctly, since content-locale was still set to EN). Reverted Settings to English — Site Content reverted cleanly, no regressions. TypeScript: 0 errors throughout.
+
+**#131 (Site Content editor review) investigated and split into two distinct problems, not yet fixed:**
+1. **"Georgian button does nothing" for the Booking Form tab** — root cause confirmed by inspection: `scripts/seed-ka.ts` seeds Georgian content for Home/About/Contact but has **zero rows for any `form_*` key**. The content-locale switcher itself works correctly (same code path as the other sections) — there's simply no Georgian text saved yet to switch *to*, so toggling shows the same English fallback either way. Cheap fix (~18 strings to translate + seed), no design decisions needed.
+2. **Missing "detailed" (enhanced company) form variant** — bigger. The real setting is `enable_enhanced_company_booking` (Settings → Booking → "Enhanced company booking form"); when on, the live `BookingForm.tsx` shows split guest counts, hot dish selection, and masterclass add-ons for company bookings — but those strings live hardcoded in `lib/t.ts`, never wired into `SiteContent`/`FIELDS.form`, so the admin can't edit them and the Site Content editor's Booking Form tab has no way to preview that variant. Needs a design decision (which strings become tenant-editable) + a second mock variant in `BookingFormVisualPanel.tsx`, and touches the live public form per `MaintenanceNotes.md` §1 — deliberately deferred to its own planning pass rather than folded in here.
+
+Recommended (and agreed) order: #130 Phase 3 (done above) → #131 part 1 (cheap, no design work) → #131 part 2 (separate plan).
+
+### Files changed
+- `saas/lib/adminT.ts` — added `content.*`, `backgrounds.*`, `editable.*` blocks (en + ka), ~140 new keys
+- `saas/app/admin/(panel)/content/page.tsx` — fetches `admin_language`, passes `adminLocale` to `ContentClient`
+- `saas/app/admin/(panel)/content/ContentClient.tsx` — chrome translated, `adminLocale` threaded to `FieldsPanel`/`BackgroundsTab`/`BookingFormVisualPanel`/`EditableText`
+- `saas/app/admin/(panel)/content/BackgroundsTab.tsx` — chrome translated, `adminLocale` threaded through `PageBgEditor`/`ImagePicker`/`BgPreview`
+- `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — `adminLocale` prop added, passed to `EditableText` only
+- `saas/components/EditableText.tsx` — new optional `adminLocale` prop (default `'en'`), chrome strings translated
+- Vault: `Plan-AdminGeorgian.md` (Phase 3 + overall status → done), `FeatureLog.md` (#130 → ✅ Done), `SessionLog.md` (this entry)
+
+### What's next
+- Confirm with Max whether to proceed with #131 part 1 (seed Georgian translations for the ~18 `form_*` keys) in a follow-up.
+- #131 part 2 (enhanced/detailed booking form variant) needs its own plan — touches live `BookingForm.tsx`, not just admin chrome.
+- Max still owes a batch review of all the Georgian wording written across Phases 0-3 (flagged previously, still pending).
+
+---
+
 ## 2026-07-21 — Wine Orders Pack cleanup, backlog audit, Georgian admin layer Phases 0-2 (full detail)
 
 ### Completed

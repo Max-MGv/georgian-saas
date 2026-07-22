@@ -31,6 +31,34 @@ const rows = [
   { key: 'contact_phone',        section: 'contact', label: 'Phone',                   locale: 'ka', value: '+995 599 96 33 17' },
   { key: 'contact_email',        section: 'contact', label: 'Email',                   locale: 'ka', value: 'nikalasmarani@gmail.com' },
   { key: 'contact_address',      section: 'contact', label: 'Address',                 locale: 'ka', value: 'კარდანახი, გურჯაანი' },
+
+  // Booking Form (#131 part 1 — previously unseeded; values match the equivalent
+  // lib/t.ts 'form.*' Georgian strings so toggling KA here doesn't change what the
+  // live public form already shows, it just makes the text independently editable)
+  { key: 'form_booking_type',           section: 'form', label: 'Booking Type label',         locale: 'ka', value: 'ჯავშნის ტიპი' },
+  { key: 'form_individual',             section: 'form', label: 'Individual Booking button',  locale: 'ka', value: 'ინდივიდუალური' },
+  { key: 'form_company_type',           section: 'form', label: 'Tour Company button',        locale: 'ka', value: 'ტური კომპანია' },
+  { key: 'form_visit_type',             section: 'form', label: 'Visit Type label',           locale: 'ka', value: 'ვიზიტის ტიპი' },
+  { key: 'form_tasting',                section: 'form', label: 'Wine Tasting option',        locale: 'ka', value: 'ღვინის დეგუსტაცია' },
+  { key: 'form_tasting_lunch',          section: 'form', label: 'Tasting + Lunch option',     locale: 'ka', value: 'დეგუსტაცია + სადილი' },
+  { key: 'form_date',                   section: 'form', label: 'Date label',                 locale: 'ka', value: 'თარიღი' },
+  { key: 'form_time_slot',              section: 'form', label: 'Time Slot label',            locale: 'ka', value: 'დრო' },
+  { key: 'form_num_guests',             section: 'form', label: 'Number of Guests label',     locale: 'ka', value: 'სტუმრების რაოდენობა' },
+  { key: 'form_first_name',             section: 'form', label: 'First Name label',           locale: 'ka', value: 'სახელი' },
+  { key: 'form_last_name',              section: 'form', label: 'Last Name label',            locale: 'ka', value: 'გვარი' },
+  { key: 'form_phone',                  section: 'form', label: 'Phone label',                locale: 'ka', value: 'ტელეფონი' },
+  { key: 'form_email',                  section: 'form', label: 'Email label',                locale: 'ka', value: 'ელ-ფოსტა' },
+  { key: 'form_food_notes',             section: 'form', label: 'Food Notes label',           locale: 'ka', value: 'შენიშვნები კვებაზე' },
+  { key: 'form_food_notes_sub',         section: 'form', label: 'Food Notes subtitle',        locale: 'ka', value: 'ალერგია, დიეტური მოთხოვნები' },
+  { key: 'form_food_notes_placeholder', section: 'form', label: 'Food Notes placeholder',     locale: 'ka', value: 'ნებისმიერი დიეტური შეზღუდვა ან სპეციალური მოთხოვნა სამზარეულოსთვის…' },
+  { key: 'form_submit',                 section: 'form', label: 'Submit button',              locale: 'ka', value: 'ჯავშნის მოთხოვნა' },
+  { key: 'form_cancel_policy',          section: 'form', label: 'Cancellation policy text',   locale: 'ka', value: 'გაუქმება შესაძლებელია 48 საათამდე. ჩვენ დაგიკავშირდებით დასადასტურებლად.' },
+  { key: 'form_success_heading',        section: 'form', label: 'Success heading',            locale: 'ka', value: 'ჯავშანი მიღებულია!' },
+  { key: 'form_success_body',           section: 'form', label: 'Success body text',          locale: 'ka', value: 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.' },
+  // New in #131 part 2 — Detailed-variant section headers
+  { key: 'form_guest_counts_header',    section: 'form', label: 'Guest Counts header',        locale: 'ka', value: 'სტუმრების რაოდენობა' },
+  { key: 'form_hot_dish_header',        section: 'form', label: 'Hot Dish Selection header',  locale: 'ka', value: 'ცხელი კერძის შერჩევა' },
+  { key: 'form_masterclass_header',     section: 'form', label: 'Masterclass Add-ons header', locale: 'ka', value: 'მასტერკლასის დამატებები' },
 ]
 
 async function main() {

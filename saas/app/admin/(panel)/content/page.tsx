@@ -1,5 +1,6 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { getSetting } from '@/app/actions/settings'
 import { createServiceClient } from '@/lib/supabase/service'
 import ContentClient from './ContentClient'
 
@@ -28,15 +29,17 @@ async function listUploadedImages(tenantId: string): Promise<string[]> {
 
 export default async function ContentPage() {
   const tenantId = await getTenantId()
-  const [allRows, bgRows, uploadedImages] = await Promise.all([
+  const [allRows, bgRows, uploadedImages, adminLanguage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.siteContent.findMany({ where: { tenantId } })),
     withTenantDb(tenantId, tx => tx.setting.findMany({ where: { tenantId, key: { in: BG_KEYS } } })),
     listUploadedImages(tenantId),
+    getSetting('admin_language'),
   ])
 
   const en = allRows.filter(r => r.locale === 'en')
   const ka = allRows.filter(r => r.locale === 'ka')
   const bgSettings = Object.fromEntries(bgRows.map(r => [r.key, r.value]))
+  const adminLocale = adminLanguage || 'en'
 
-  return <ContentClient rows={{ en, ka }} bgSettings={bgSettings} uploadedImages={uploadedImages} />
+  return <ContentClient rows={{ en, ka }} bgSettings={bgSettings} uploadedImages={uploadedImages} adminLocale={adminLocale} />
 }

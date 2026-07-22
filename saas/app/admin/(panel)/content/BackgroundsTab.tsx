@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { uploadBgImage, deleteBgImage } from '@/app/actions/uploadImage'
+import { adminT } from '@/lib/adminT'
 
 const BUILTIN_IMAGES = [
   { path: '/images/winery1.jpg',        label: 'Winery 1' },
@@ -30,14 +31,16 @@ function storagePathFromUrl(url: string) {
 }
 
 function ImagePicker({
-  selected, onSelect, extraImages, onUpload, onDelete,
+  selected, onSelect, extraImages, onUpload, onDelete, adminLocale,
 }: {
   selected: string
   onSelect: (path: string) => void
   extraImages: string[]
   onUpload: (url: string) => void
   onDelete: (url: string) => void
+  adminLocale: string
 }) {
+  const at = (key: string) => adminT(adminLocale, key)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
@@ -53,7 +56,7 @@ function ImagePicker({
       onUpload(url)
       onSelect(url)
     } catch (err) {
-      alert('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      alert(`${adminT(adminLocale, 'wines.uploadFailed')} ` + (err instanceof Error ? err.message : adminT(adminLocale, 'wines.unknownError')))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -73,7 +76,7 @@ function ImagePicker({
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: C.rust }}>
-        Choose image
+        {at('backgrounds.chooseImage')}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {/* Built-in images */}
@@ -118,7 +121,7 @@ function ImagePicker({
                 onClick={(e) => handleDelete(url, e)}
                 className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-white transition-opacity hover:opacity-80"
                 style={{ backgroundColor: 'rgba(0,0,0,0.6)', fontSize: 12, lineHeight: 1 }}
-                title="Remove image">
+                title={at('backgrounds.removeImage')}>
                 ×
               </button>
             )}
@@ -132,13 +135,13 @@ function ImagePicker({
           className="rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors hover:border-opacity-70 disabled:opacity-50"
           style={{ aspectRatio: '16/9', borderColor: C.border, color: C.faint }}>
           {uploading ? (
-            <span className="text-xs">Uploading…</span>
+            <span className="text-xs">{at('backgrounds.uploading')}</span>
           ) : (
             <>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <span className="text-xs">Upload</span>
+              <span className="text-xs">{at('backgrounds.upload')}</span>
             </>
           )}
         </button>
@@ -149,9 +152,10 @@ function ImagePicker({
   )
 }
 
-function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
-  path: string; x: number; y: number; size: string; scale?: number; pageKey: string; isMobile: boolean
+function BgPreview({ path, x, y, size, scale, pageKey, isMobile, adminLocale }: {
+  path: string; x: number; y: number; size: string; scale?: number; pageKey: string; isMobile: boolean; adminLocale: string
 }) {
+  const at = (key: string, vars?: Record<string, string | number>) => adminT(adminLocale, key, vars)
   // Mirror the actual site viewport width so cover-scaling crops identically
   const [vw, setVw] = useState(1280)
   useEffect(() => {
@@ -171,7 +175,7 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile }: {
   return (
     <div className={isPortrait ? 'flex flex-col items-center w-full' : 'w-full'}>
       <p className="text-xs mb-1.5 w-full" style={{ color: C.muted }}>
-        Preview — {isMobile ? 'mobile (390px)' : `desktop at ${vw}px viewport`} — adjust sliders then Save to apply
+        {at('backgrounds.previewCaption', { viewport: isMobile ? at('backgrounds.previewMobile') : at('backgrounds.previewDesktop', { vw }) })}
       </p>
 
       <div style={{
@@ -249,7 +253,7 @@ function bgEqual(a: DesktopBg | MobileBg, b: DesktopBg | MobileBg) {
   return a.path === b.path && a.x === b.x && a.y === b.y && a.zoom === b.zoom
 }
 
-function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImages, onUpload, onDelete }: {
+function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImages, onUpload, onDelete, adminLocale }: {
   pageKey: string
   label: string
   initialDesktop: DesktopBg
@@ -257,7 +261,9 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
   extraImages: string[]
   onUpload: (url: string) => void
   onDelete: (url: string) => void
+  adminLocale: string
 }) {
+  const at = (key: string) => adminT(adminLocale, key)
   const [mode, setMode]       = useState<'desktop' | 'mobile'>('desktop')
   const [desktop, setDesktop] = useState<DesktopBg>(initialDesktop)
   const [mobile, setMobile]   = useState<MobileBg>(initialMobile)
@@ -321,7 +327,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
           <button type="button" onClick={clear} disabled={saving}
             className="text-xs px-3 py-1 rounded-md border transition-opacity hover:opacity-70 disabled:opacity-40"
             style={{ borderColor: C.border, color: C.faint }}>
-            Remove image
+            {at('backgrounds.removeImage')}
           </button>
         )}
       </div>
@@ -336,7 +342,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
               backgroundColor: mode === m ? C.wine : 'transparent',
               color: mode === m ? 'white' : C.muted,
             }}>
-            {m === 'desktop' ? '🖥 Desktop' : '📱 Mobile'}
+            {m === 'desktop' ? at('backgrounds.desktop') : at('backgrounds.mobile')}
           </button>
         ))}
       </div>
@@ -349,12 +355,13 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
             extraImages={extraImages}
             onUpload={onUpload}
             onDelete={onDelete}
+            adminLocale={adminLocale}
           />
-          <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} isMobile={false} />
+          <BgPreview path={desktop.path} x={desktop.x} y={desktop.y} size="cover" scale={desktop.zoom / 100} pageKey={pageKey} isMobile={false} adminLocale={adminLocale} />
           <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Horizontal position</span><span>{desktop.x}%</span>
+                  <span>{at('backgrounds.horizontalPosition')}</span><span>{desktop.x}%</span>
                 </div>
                 <input type="range" min={0} max={100} value={desktop.x}
                   onChange={e => setDesktop(d => ({ ...d, x: +e.target.value }))}
@@ -362,7 +369,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Vertical position</span><span>{desktop.y}%</span>
+                  <span>{at('backgrounds.verticalPosition')}</span><span>{desktop.y}%</span>
                 </div>
                 <input type="range" min={0} max={100} value={desktop.y}
                   onChange={e => setDesktop(d => ({ ...d, y: +e.target.value }))}
@@ -370,7 +377,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Zoom</span><span>{desktop.zoom}%</span>
+                  <span>{at('backgrounds.zoom')}</span><span>{desktop.zoom}%</span>
                 </div>
                 <input type="range" min={100} max={200} value={desktop.zoom}
                   onChange={e => setDesktop(d => ({ ...d, zoom: +e.target.value }))}
@@ -381,7 +388,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
       ) : (
         <>
           <p className="text-xs" style={{ color: C.muted }}>
-            Mobile always fills the screen first (no grey boxes), then zoom magnifies on top of that.
+            {at('backgrounds.mobileHint')}
           </p>
           <ImagePicker
             selected={mobile.path}
@@ -389,12 +396,13 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
             extraImages={extraImages}
             onUpload={onUpload}
             onDelete={onDelete}
+            adminLocale={adminLocale}
           />
-          <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} isMobile={true} />
+          <BgPreview path={mobile.path} x={mobile.x} y={mobile.y} size="cover" scale={mobile.zoom / 100} pageKey={pageKey} isMobile={true} adminLocale={adminLocale} />
           <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Horizontal position</span><span>{mobile.x}%</span>
+                  <span>{at('backgrounds.horizontalPosition')}</span><span>{mobile.x}%</span>
                 </div>
                 <input type="range" min={0} max={100} value={mobile.x}
                   onChange={e => setMobile(m => ({ ...m, x: +e.target.value }))}
@@ -402,7 +410,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Vertical position</span><span>{mobile.y}%</span>
+                  <span>{at('backgrounds.verticalPosition')}</span><span>{mobile.y}%</span>
                 </div>
                 <input type="range" min={0} max={100} value={mobile.y}
                   onChange={e => setMobile(m => ({ ...m, y: +e.target.value }))}
@@ -410,7 +418,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1.5" style={{ color: C.muted }}>
-                  <span>Zoom</span><span>{mobile.zoom}%</span>
+                  <span>{at('backgrounds.zoom')}</span><span>{mobile.zoom}%</span>
                 </div>
                 <input type="range" min={100} max={200} value={mobile.zoom}
                   onChange={e => setMobile(m => ({ ...m, zoom: +e.target.value }))}
@@ -426,7 +434,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          Preview shows unsaved changes — live site still shows previous settings
+          {at('backgrounds.unsavedChanges')}
         </div>
       )}
       <button type="button" onClick={save} disabled={saving || !hasImage}
@@ -435,7 +443,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
           backgroundColor: C.wine,
           boxShadow: isDirty ? '0 0 0 2px rgba(124,29,35,0.35)' : 'none',
         }}>
-        {saving ? 'Saving…' : isDirty ? 'Save to apply →' : '✓ Saved (live)'}
+        {saving ? at('backgrounds.saving') : isDirty ? at('backgrounds.saveToApply') : at('backgrounds.savedLive')}
       </button>
     </div>
   )
@@ -444,7 +452,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
 type DesktopBg = { path: string; x: number; y: number; zoom: number }
 type MobileBg  = { path: string; x: number; y: number; zoom: number }
 
-type Props = { settings: Record<string, string>; uploadedImages: string[] }
+type Props = { settings: Record<string, string>; uploadedImages: string[]; adminLocale: string }
 
 const D_DEFAULTS: DesktopBg = { path: '', x: 50, y: 50, zoom: 110 }
 const M_DEFAULTS: MobileBg  = { path: '', x: 50, y: 50, zoom: 100 }
@@ -467,7 +475,8 @@ function getMobileInitial(settings: Record<string, string>, key: string): Mobile
   }
 }
 
-export default function BackgroundsTab({ settings, uploadedImages: initialUploaded }: Props) {
+export default function BackgroundsTab({ settings, uploadedImages: initialUploaded, adminLocale }: Props) {
+  const at = (key: string) => adminT(adminLocale, key)
   const [extraImages, setExtraImages] = useState<string[]>(initialUploaded)
 
   function handleUpload(url: string) {
@@ -479,15 +488,15 @@ export default function BackgroundsTab({ settings, uploadedImages: initialUpload
   }
 
   const pages = [
-    { key: 'home',    label: 'Home page hero' },
-    { key: 'about',   label: 'About page hero' },
-    { key: 'contact', label: 'Contact page hero' },
+    { key: 'home',    label: at('backgrounds.page.home') },
+    { key: 'about',   label: at('backgrounds.page.about') },
+    { key: 'contact', label: at('backgrounds.page.contact') },
   ]
 
   return (
     <div className="space-y-6 max-w-2xl">
       <p className="text-sm" style={{ color: C.muted }}>
-        Choose a background image for each page hero. Switch between Desktop and Mobile to set each independently.
+        {at('backgrounds.intro')}
       </p>
       {pages.map(p => (
         <PageBgEditor
@@ -499,6 +508,7 @@ export default function BackgroundsTab({ settings, uploadedImages: initialUpload
           extraImages={extraImages}
           onUpload={handleUpload}
           onDelete={handleDelete}
+          adminLocale={adminLocale}
         />
       ))}
     </div>

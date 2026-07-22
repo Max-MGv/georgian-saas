@@ -1,6 +1,6 @@
 ---
 tags: [plan, admin, i18n]
-status: planning
+status: done
 ---
 
 # Plan — Georgian Language Layer for Admin Panel
@@ -67,8 +67,15 @@ All of Phase 1 browser-verified in both EN and KA, including nested modals/panel
 
 All of Phase 2 browser-verified in both EN and KA, including nested states (Wines vintage edit forms, Statistics historical breakdown + wine trend mode, Menu Items/Masterclass edit and delete-confirm rows). Spot-checked Orders list after Phase 2 changes — no regressions. TypeScript: 0 errors throughout.
 
-### Phase 3 — Site Content editor chrome
-- ⬜ `ContentClient.tsx`, `BackgroundsTab.tsx`, `BookingFormVisualPanel.tsx` (editor UI only — not the EN/KA site content it manages)
+### Phase 3 — Site Content editor chrome ✅ Done 2026-07-22, Claude-tested
+- ✅ `ContentClient.tsx` — page title/subtitle, Visual/Backgrounds mode switcher, locale-toggle labels, all 5 section tabs, and all 66 `FIELDS` descriptor labels (Nav/Home/Booking Form/About/Contact) translated via new `content.*` keys in `adminT.ts`
+- ✅ `BackgroundsTab.tsx` — intro text, page hero labels, Desktop/Mobile toggle, Choose/Upload image, preview caption (with viewport interpolation), Horizontal/Vertical/Zoom slider labels, mobile hint, unsaved-changes banner, Save button states — new `backgrounds.*` keys
+- ✅ `BookingFormVisualPanel.tsx` — turned out to have **no separate chrome strings**: every visible label mirrors real form content (already covered by the content-locale EN/KA toggle, not admin chrome). Only needed to thread the new `adminLocale` prop through to its `EditableText` calls.
+- ✅ **`components/EditableText.tsx`** (not in original scope, added after inspection) — this shared component (used by both the Site Content editor and, via `isAdmin`, the public-site iframe previews) had hardcoded Save/Cancel/Saved/Reset/Edit-tooltip chrome. Added optional `adminLocale?: string` prop (defaults to `'en'`) so the 3 public-site call sites (`app/(site)/page.tsx`, `about/page.tsx`, `contact/page.tsx`) are unaffected — only the two Site-Content-editor call sites (`FieldsPanel`, `BookingFormVisualPanel`) pass the real tenant `adminLocale` — new `editable.*` keys.
+- **Naming decision:** `ContentClient.tsx` already used `locale` for the *content* language being edited (en/ka toggle). The new admin-chrome language is a separate prop named `adminLocale` throughout, to avoid confusing the two concepts.
+- Browser-verified: toggled Settings → Admin Panel Language to Georgian; Site Content page title/subtitle/tabs/field labels/Backgrounds tab all switched correctly; clicked a field into edit mode and confirmed Save/Cancel show "შენახვა"/"გაუქმება"; content-locale EN/KA toggle and actual field content (still English, correctly — no ka data seeded yet, see #131) were unaffected. Reverted to English — clean, no regressions. TypeScript: 0 errors.
+
+**#130 is now fully done — all 4 phases complete.**
 
 ### Explicitly excluded
 - `/super-admin` (all files)

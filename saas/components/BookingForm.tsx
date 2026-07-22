@@ -605,7 +605,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {/* Guest count — enhanced vs simple */}
         {isEnhanced ? (
           <div>
-            <label style={labelStyle}>{t(locale, 'form.guest_counts')}</label>
+            <label style={labelStyle}>{fc('form_guest_counts_header', 'form.guest_counts')}</label>
             <div className="grid grid-cols-3 gap-3">
               {([
                 { labelKey: 'form.guests_tasting', value: tastingGuestsStr, set: setTastingGuestsStr, hidden: false },
@@ -649,7 +649,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {/* Enhanced: Hot dishes (only for TASTING_LUNCH) */}
         {isEnhanced && visitType === 'TASTING_LUNCH' && (vegItems.length > 0 || meatItems.length > 0) && (
           <div>
-            <label style={labelStyle}>{t(locale, 'form.hot_dish')}</label>
+            <label style={labelStyle}>{fc('form_hot_dish_header', 'form.hot_dish')}</label>
             <div className="grid sm:grid-cols-2 gap-3">
               {vegItems.length > 0 && (
                 <div>
@@ -678,7 +678,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {/* Enhanced: Masterclass add-ons */}
         {isEnhanced && masterclassItems.length > 0 && (
           <div>
-            <label style={labelStyle}>{t(locale, 'form.masterclass')}</label>
+            <label style={labelStyle}>{fc('form_masterclass_header', 'form.masterclass')}</label>
             <div className="rounded-lg border divide-y" style={{ borderColor: C.border }}>
               {masterclassItems.map(m => {
                 const sel = mcSelections[m.id]
@@ -766,7 +766,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {enhancedTier.registrationPrice}₾</p>
                 )}
                 {masterclassAmt > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.masterclass')}: {masterclassAmt}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {masterclassAmt}₾</p>
                 )}
               </div>
             </div>
