@@ -200,6 +200,10 @@
   },
   "active": "6c50af3ed4b8f1f6",
   "lastOpenFiles": [
+    "Roadmap.md.tmp.12784.82385f2fc67d",
+    "SessionLog.md.tmp.12784.24b4b8028eec",
+    "SessionLog.md.tmp.12784.31519fefd441",
+    "Plan-DevProdEnvironments.md",
     "SessionLog.md.tmp.10572.978469b30ac5",
     "FeatureLog.md.tmp.10572.173f8bf19fa8",
     "Plan-DynamicBranding.md",
@@ -214,9 +218,6 @@
     "FeatureLog.md.tmp.19508.184564fbde5d",
     "Plan-AdminGeorgian.md.tmp.19508.dc7ec687a6cf",
     "SessionLog.md.tmp.2540.3ca32336a224",
-    "SessionLog.md.tmp.2540.41299821f8b5",
-    "FeatureLog.md.tmp.2540.8f333de5a50c",
-    "FeatureLog.md.tmp.2540.c403769ae3d4",
     "Plan-AdminGeorgian.md",
     "Database Schema.md",
     "Plan-NeutralFallbacks.md",
@@ -234,7 +235,6 @@
     "MaintenanceNotes.md",
     "KnownBugs.md",
     "RLS-Architecture.md",
-    "Plan-SecurityAndBugFixes.md",
-    "Plan-MultiTenant.md"
+    "Plan-SecurityAndBugFixes.md"
   ]
 }

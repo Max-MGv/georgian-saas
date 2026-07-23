@@ -162,6 +162,7 @@ Full plan: `vault/Plan-SecurityAndBugFixes.md`
 - [x] **#5 `hasDbValue` false-negative** — `children != null` check in `EditableText.tsx` line 36 correctly handles empty string (not `!children`)
 - [x] **#6 `revalidatePath` missing** — `saveContent` and `deleteContent` both call `revalidatePath('/', 'layout')` in `siteContent.ts` lines 40 + 56
 - [x] **#7 EditableText `<div>` wrapper** — `inlineTags` set in `EditableText.tsx` line 97 picks `span` wrapper for inline tags, `div` for block tags
+- [x] **#8 Tenant/PlatformConfig exposed via public REST API** (found + fixed 2026-07-23) — RLS enabled + anon/authenticated grants revoked on both tables; verified live. Backlog follow-up: revoke PostgREST grants on the 12 tenant tables too (policy-protected today, but the API is unused for DB access entirely)
 
 ---
 

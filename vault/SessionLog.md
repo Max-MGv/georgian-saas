@@ -8,6 +8,32 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-23 (session 2) — Feature #79 dev/prod plan approved + Supabase/Vercel MCP capability audit (full detail)
+
+### Completed
+
+**#79 plan finalized and recorded** in `Plan-DevProdEnvironments.md` — 7 steps: dev Supabase project → prisma migrate baseline → remove Test Winery from prod → staging tenant cloned from NM → env wiring (local+Preview→dev, Production→prod) → stable `staging` branch URL with a dev-DB Tenant row → staging-first workflow. Decisions: single stable staging URL (not per-branch), staging tenant = NM clone, switch `db push` → `prisma migrate`. Nothing built yet.
+
+**Max connected the official Supabase + Vercel MCP servers; audited them read-only.** Verified working against the real accounts:
+- Supabase: org `ttkkmvhlzffxttfpddhk` ("Max-MGv's Org"), one project `dshsfkffcsgerdqinqst` ("Nikalas Marani", eu-central-1, PG 17, healthy). New project cost confirmed **$0/month** via `get_cost`. Tools include create_project, execute_sql, apply_migration, list_tables, logs, advisors.
+- Vercel: team `team_YoGrXMcjXga0y919jXsSV82z` ("MG_Productions' projects"), one project `prj_6r0Ge02yFdu3y6XfPPTB42LIOg8I` (georgian-saas). Tools include deployments, build/runtime logs, deploy trigger, docs search. **No env-var management tools** — Vercel Preview env vars stay a manual dashboard step for Max.
+- Remaining manual gap on Supabase side: MCP never exposes the Postgres **database password**, so after Claude creates the dev project, Max must copy the DB password from the dashboard for local `.env` (Claude can fetch project URL + anon key via MCP).
+
+**⚠️→✅ Security advisory: RESOLVED same session (Max approved).** `Tenant` and `PlatformConfig` had RLS disabled AND `anon`/`authenticated` (the public PostgREST API roles) held **full privileges** (SELECT/INSERT/UPDATE/DELETE/TRUNCATE) — anyone with the public anon key could have read, rewritten, or deleted tenant rows (domains, branding, module flags) via Supabase's auto-generated REST API. Verified safe to fix before touching anything: (1) codebase grep — the Supabase JS client is used ONLY for Storage (logos/backgrounds/wine photos), zero PostgREST DB calls; (2) all `db.tenant`/`db.platformConfig` queries use the plain Prisma client as `postgres`, which **owns** both tables (owner bypasses RLS; `relforcerowsecurity` confirmed false); (3) no `withTenantDb`/`app_user` path or relation-include reaches either table. Fix applied via MCP `apply_migration` (`lock_platform_tables_rls`): `ENABLE ROW LEVEL SECURITY` on both + `REVOKE ALL ... FROM anon, authenticated` on both. Verified after: pg_class shows RLS on, grants table shows zero anon/authenticated privileges, `get_advisors` critical warning cleared (only expected INFO "RLS enabled no policy" notices remain — deny-all is the intended state), and live regression passed: `nikalasmarani.vercel.app` renders fully (tenant resolution = heaviest Tenant path) and `/admin/login` renders ("Admin Panel" + form; PlatformConfig empty so text fallback is correct). Rollback if ever needed: `DISABLE ROW LEVEL SECURITY` + re-grant.
+
+**Remaining advisor findings (non-critical, not acted on):** (1) `anon`/`authenticated` still hold full grants on the 12 tenant-scoped tables — protected today by `tenant_isolation` policies, but revoking them entirely would be cleaner (backlog: "revoke PostgREST grants schema-wide"); (2) WARN: Supabase Auth "leaked password protection" (HaveIBeenPwned check) is disabled — one-toggle fix in the Supabase dashboard under Auth settings, Max's call.
+
+**Also noticed:** prod has a `_prisma_migrations` table with 1 row (some early `prisma migrate` use before the `db push` era) — relevant to how the step-2 baseline gets marked; check its contents before running `migrate resolve`.
+
+### Files changed
+- Vault: `Plan-DevProdEnvironments.md` (NEW), `SessionLog.md` (this entry)
+
+### What's next
+- On Max's go: execute the 7-step plan (Claude can now do most infra via MCP; Max needed for Vercel Preview env vars + dev DB password)
+- Decide on the Tenant/PlatformConfig RLS advisory (recommend fixing before onboarding more tenants)
+
+---
+
 ## 2026-07-23 — #131 built and browser-verified (Booking Form editor: Georgian seed + Detailed variant) (full detail)
 
 ### Completed
