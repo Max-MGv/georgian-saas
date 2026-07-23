@@ -10,6 +10,17 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### #79 — Dev/staging environment (built + Claude-tested 2026-07-23, needs Max to try the workflow)
+
+Everything is live; full reference: `Plan-DevProdEnvironments.md`. Your checks:
+
+1. Open the staging site: `georgian-saas-git-staging-mg-productions-projects.vercel.app` → full Nikalas Marani site renders, browser tab says "Nikalas Marani (Staging)" (~6s load is normal — same as prod)
+2. Open `nikalasmarani.vercel.app` → real site unchanged, still 60 orders in admin
+3. Local dev now runs against the DEV database — start the dev server as usual, localhost shows the staging clone; break anything you like, NM is untouchable from here
+4. **One small task for you (blocks staging admin login):** dev Supabase dashboard → Authentication → Add user (e.g. `staging@test.ge` + a password) → tell Claude → Claude wires its role so `/admin` works on staging
+5. Optional (2 min, dashboard): raise dev pooler size 15→30 — Supabase georgian-saas-dev → Settings → Database → Connection pooling → Pool Size. Makes staging/local snappier under load
+6. Optional: also still pending from the security session — Supabase (PROD project) → Authentication → Settings → enable "leaked password protection"
+
 ### #131 — Booking Form editor: Georgian seed + Detailed variant (Claude tested in browser 2026-07-23, needs Max to review)
 
 1. Go to `/admin/content` → Booking Form tab → you'll now see a **Simple / Detailed** toggle above the preview. Click **Detailed** → confirm you see Guest Counts (Tasting/Lunch/Free-Guide), Hot Dish Selection, and Masterclass Add-ons sections that weren't there before.
@@ -246,7 +257,7 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 ## 🔍 Explore — Needs research + brainstorm before building
 
-- [ ] **Dev/prod environments** — explore options for separating development from production. We have one Vercel deployment + one Supabase project right now. Brainstormed options below:
+- [x] **Dev/prod environments** — ✅ BUILT 2026-07-23 as #79 (Option A+B as recommended below, plus prisma migrate switch). See `Plan-DevProdEnvironments.md`. Historical brainstorm kept for reference:
 
   **Option A — Separate Supabase project for dev (recommended base)**
   Create a free second Supabase project (`georgian-saas-dev`). Local `.env` points at dev DB; Vercel production env vars point at live DB. Schema migrations (`prisma db push`) run against dev first, then prod.

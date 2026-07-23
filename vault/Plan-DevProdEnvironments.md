@@ -2,45 +2,49 @@
 tags: [plan, infra, feature-79]
 ---
 
-# Plan — Dev/Prod Environments (Feature #79)
+# Feature #79 — Dev/Prod Environments ✅ BUILT 2026-07-23
 
-Approved in discussion 2026-07-23. Not yet started. Goal: separate rehearsal from performance — today all testing, seed scripts, and experiments share one database with Nikalas Marani's real bookings (Test Winery lives in the prod DB right now).
+All 7 steps executed 2026-07-23 (one session). This doc is now the **reference for the environment setup and daily workflow**.
 
-## What we're achieving (business terms)
+## The two lanes
 
-A second, private stage: a full copy of the site on its own URL, backed by its own database with test data. Anything can be tried there without any risk to real customer data. Only checked work moves to the live site. $0 cost (free tiers).
+| | URL | Database | Deploys from |
+|---|---|---|---|
+| **Production** | nikalasmarani.vercel.app | prod Supabase (`dshsfkffcsgerdqinqst`) | `master` branch |
+| **Staging** | georgian-saas-git-staging-mg-productions-projects.vercel.app | dev Supabase (`jpbkkngpgtvqmsocitjx`) | `staging` branch |
+| **Local dev** | localhost:3000 | dev Supabase (same as staging) | `saas/.env` |
 
-## Decisions made (via AskUserQuestion 2026-07-23)
+- Env split lives in Vercel: Production-scoped vars → prod DB; Preview-scoped vars → dev DB. All values in `credentials.txt` (repo root, gitignored).
+- Localhost resolves the **Staging Winery** tenant via `DEFAULT_TENANT_ID` in `.env`; the staging URL resolves it via its `Tenant.domain` row **in the dev DB**.
+- Staging Winery (`cmrxb85wo0000vlc0d964nzf8`) = snapshot clone of NM content (36 settings, 64 SiteContent, 6 companies+tiers, 6 wines+vintages, 6 menu items, 5 masterclass items; NO orders). displayName = "Nikalas Marani (Staging)" so browser tabs are distinguishable. **Snapshot goes stale** — refresh = wipe staging tenant rows in dev + rerun `scripts/clone-nm-to-staging.ts` (script refuses to run over an existing staging tenant).
+- Prod `.env` backup: `saas/.env.prod.backup` (gitignored).
 
-- Max currently pushes straight to `master` → new habit: work goes through a `staging` branch first
-- Staging tenant = **copy of Nikalas Marani's** real content/settings (most realistic testing), not a generic dummy
-- One stable staging URL (single `staging` branch), NOT per-feature preview URLs — simpler mental model
-- Switch from `prisma db push` to `prisma migrate` as part of this work (closes the "two schemas drift apart" gap)
+## Daily workflow
 
-## The 7 steps
+1. Develop locally (against dev DB — safe to break).
+2. Schema change? `npx prisma migrate dev --name <change>` (dev server stopped — Rule 10). This records a migration file AND applies it to dev.
+3. Commit to `staging` branch → push → check the staging URL.
+4. Happy? Merge `staging` → `master` → push → prod deploys.
+5. If the change had a migration: `npx prisma migrate deploy` **with prod URLs** (put prod DATABASE_URL/DIRECT_URL from credentials.txt into the command env or temporarily into .env — deploy does NOT run migrations automatically; build is only `prisma generate && next build`).
 
-1. **Create dev database** — new free Supabase project `georgian-saas-dev`
-2. **Establish migration history** — baseline migration matching current prod schema exactly; mark as already-applied on prod (`prisma migrate resolve`) WITHOUT running anything. ⚠️ Riskiest step — dry-run against dev first. Get it wrong and Prisma tries to reconcile prod schema.
-3. **Clean up production** — remove Test Winery tenant from the live DB
-4. **Build staging tenant** — clone NM's content/settings (SiteContent, Setting, branding, module flags) into dev DB. NOTE: this is a one-time snapshot; it will NOT auto-sync with future NM changes — refreshing it later is a manual task.
-5. **Wire environments** — local `.env` → dev DB; Vercel Production env vars → prod DB (unchanged); Vercel Preview env vars → dev DB (new)
-6. **Staging URL** — push `staging` branch → Vercel generates its stable preview URL → add a `Tenant` row in the DEV db with `domain` = that exact URL (otherwise it shows the /welcome placeholder — tenant resolution is domain-based)
-7. **New workflow** — `prisma migrate dev` locally against dev → push to `staging` → verify on staging URL → merge to `master` → `prisma migrate deploy` against prod
+## Migration state (baseline, 2026-07-23)
 
-## Known cons / gotchas
+- Old `20260517121307_init` deleted (file + prod `_prisma_migrations` row); replaced by squashed `20260723000000_baseline` = exact current schema (verified drift-free against prod via `migrate diff` before anything was recorded).
+- Baseline marked `--applied` on BOTH DBs; `migrate status` clean on both.
+- Dev DB also got the full RLS layer (app_user role, 14 tenant_isolation policies, platform-table lock) via MCP migration `rls_setup_and_platform_lock` — dev matches prod's security posture, incl. the 2026-07-23 Tenant/PlatformConfig lockdown.
+- Storage buckets `logos` / `backgrounds` / `wine-photos` created (public) in dev.
 
-- Staging discipline is manual forever; easy to slip back to direct-to-master under pressure
-- Staging tenant content is a snapshot, goes stale unless manually refreshed
-- Schema changes now run twice (dev then prod)
-- Supabase free tier auto-pauses after ~1 week idle → staging may show a DB error until manually resumed in dashboard (don't panic)
-- Windows EPERM rule (ClaudeInstructions Rule 10) applies to `prisma migrate` exactly as to `db push` — stop dev server first
-- Cloned test data ≠ real traffic; some bugs still only appear in prod
+## Gotchas learned during setup (important!)
 
-## MCP status (2026-07-23)
+- **Dev pooler `pool_size` = 15** (Supabase default). The home page fires ~26 parallel `withTenantDb` transactions per render (18 in `page.tsx` Promise.all + layout's own); under session pooling this EXCEEDED the cap (`EMAXCONNSESSION`). Fixes applied: local `DATABASE_URL` uses the **transaction pooler (6543)** with `connection_limit=20&pool_timeout=30`. Optional dashboard improvement: raise dev pool_size 15 → 30 (Settings → Database → Connection pooling).
+- **~6s page renders are NORMAL for this app on BOTH prod and staging** (force-dynamic + many sequential transactions; measured identical 2026-07-23). Not a staging regression. Perf optimization = separate backlog item.
+- **Streamed pages look "empty" to naive checks**: the HTML arrives as shell+skeleton first, content chunk after. When browser-verifying, wait for full render; a `curl | grep` for real content is the reliable server-side check. (A hidden Claude browser pane freezes pages mid-stream — display the pane.)
+- New Supabase projects: pooler host was `aws-0-eu-central-1` (prod is `aws-1`) — always copy the exact string from Dashboard → Connect. Pooler takes a few minutes to provision after project creation; direct `db.*.supabase.co` host is IPv6-only (unreachable from Max's network).
+- Supabase free tier pauses idle projects after ~1 week — if staging errors after a quiet stretch, resume the dev project in the dashboard.
 
-Max connected both official MCP servers (Supabase + Vercel) — capability audit in SessionLog 2026-07-23. Most infra steps are now doable by Claude directly; see that entry for the exact can/can't list.
+## Still open (small)
 
-## Division of labor (pre-MCP baseline; MCP shifts most of this to Claude)
-
-- Max: account-level auth (one-time), staging-first habit ongoing
-- Claude: migrations, clone script, Test Winery removal, branch/push, tenant row for staging URL
+- [ ] **Staging admin login**: dev Supabase project has NO auth users yet — `/admin/login` on staging can't log in. Create a user in dev dashboard (Auth → Add user) then set `app_metadata` via `npm run set-admin` with dev env vars.
+- [ ] Optional: raise dev pooler pool_size 15 → 30 (dashboard).
+- [ ] Optional: assign a friendlier alias domain (e.g. `georgian-saas-staging.vercel.app`) to the `staging` branch in Vercel → Settings → Domains, then update the staging Tenant.domain in dev DB to match.
+- [ ] The one test order in dev (`STAGING TEST-79`) can stay as evidence or be deleted from staging admin once login works.

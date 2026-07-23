@@ -28,9 +28,33 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 ### Files changed
 - Vault: `Plan-DevProdEnvironments.md` (NEW), `SessionLog.md` (this entry)
 
+### Same day: #79 EXECUTED IN FULL — dev/prod environments live
+
+All 7 chunks built and verified in one sitting (Max approved "lets do it"). `Plan-DevProdEnvironments.md` rewritten as the living reference (two-lane table, daily workflow, gotchas). Highlights and things future sessions must know:
+
+- **Dev project** `jpbkkngpgtvqmsocitjx` (georgian-saas-dev, eu-central-1, $0). Pooler host is `aws-0` (prod is `aws-1`); pooler took minutes to provision after creation; direct db host is IPv6-only from Max's network. Dev DB password = same as prod (Max's choice), recorded in credentials.txt with all dev keys/URLs.
+- **Migration baseline (squash)**: old lone `20260517121307_init` (from day 1; everything since was `db push`) deleted — file + prod bookkeeping row (row deleted by Max in SQL editor; the auto-mode classifier blocked Claude's DELETE on prod). New `20260723000000_baseline` generated via `migrate diff --from-empty`, **verified drift-free against prod first** (`migrate diff --from-schema-datasource` → empty), applied to dev via MCP, marked `--applied` on both DBs. `migrate status` clean on both. Rule 10 updated: `prisma migrate dev` replaces `db push` in the workflow.
+- **Dev got full security parity** via MCP migration `rls_setup_and_platform_lock` (app_user role, 14 policies, platform lock) + 3 public storage buckets created by SQL insert into storage.buckets.
+- **Test Winery deleted from prod** (tenant row + testwinery@email.ge auth user; it owned ZERO data rows). Its slug had drifted from the vault's record (`winery2` → `test-winery`) — MigrationNotes tenant table corrected + now carries a Database column.
+- **Staging Winery** `cmrxb85wo0000vlc0d964nzf8` in dev = clone of NM content via NEW `scripts/clone-nm-to-staging.ts` (36 settings / 64 content / 6 companies+tiers / 6 wines+vintages / 6+5 items; no orders). displayName "Nikalas Marani (Staging)" for tab distinguishability.
+- **Env wiring**: local `.env` → dev (prod backup `.env.prod.backup`); Vercel Production vars restricted to Production-only, Preview-scoped dev vars added by Max (walkthrough incl. exact values; service_role key hunt needed the "Legacy API keys" tab). `DEFAULT_TENANT_ID` (localhost-only fallback) → staging tenant.
+- **Staging URL live**: commit `b1b5624` pushed to new `staging` branch + master (pushes run by Max — classifier blocked Claude's push). Vercel Deployment Protection had to be disabled by Max (preview URLs default to a Vercel login wall). Staging domain row set in dev DB → site resolves.
+- **The scare and its resolution**: staging/local pages initially appeared as an empty shell + shimmer skeleton. Root-cause chain: (1) REAL local errors — P2024/P2028 pool starvation: home page = ~26 parallel `withTenantDb` txs (18 in page.tsx Promise.all + layout), dev pooler `pool_size=15`, session mode capped (`EMAXCONNSESSION`), amplified by the Claude preview pane's HEAD pinger re-rendering the force-dynamic page every ~2s. Fixed locally: DATABASE_URL → transaction pooler 6543 + `connection_limit=20&pool_timeout=30`. (2) The REMAINING "empty page" was an artifact: curl proved both staging AND prod stream complete HTML (~6s warm, identical perf — prod measured 1.28s/tx, dev 0.58s/tx, dev is FASTER); the hidden Claude browser pane freezes pages mid-stream so suspense content never swapped in. Once the pane was displayed: full renders, screenshots taken (localhost + staging). Max confirmed prod renders normally in his own Chrome.
+- **E2E isolation proof**: booking submitted on the staging URL → "Booking received!", order `STAGING TEST-79` (4 guests, 200₾) exists in DEV under the staging tenant; prod Order count still exactly 60.
+- **Perf note for the backlog**: ~6s warm page render is the app's normal on BOTH environments (force-dynamic + many sequential txs per render) — candidate for a future optimization pass (fewer/batched txs, ISR path per MultiTenantSiteContent.md).
+
+### Files changed (execution)
+- `saas/prisma/migrations/` — init deleted, `20260723000000_baseline/` NEW (committed `b1b5624`)
+- `saas/scripts/clone-nm-to-staging.ts` — NEW
+- `saas/.env` — now DEV; `saas/.env.prod.backup` NEW (both gitignored)
+- `credentials.txt` — dev section added (URLs, keys, staging tenant, env mapping)
+- DB prod: Test Winery tenant + auth user deleted; `_prisma_migrations` = baseline only
+- DB dev: full schema + RLS + buckets + staging tenant + 1 test order
+- Vault: `Plan-DevProdEnvironments.md` (rewritten as reference), `FeatureLog.md` (#79 ✅), `Roadmap.md` (backlog tick), `MigrationNotes.md` (tenant table), `ClaudeInstructions.md` (Rule 10), `MyToDo.md` (#79 checklist), `SessionLog.md` (this)
+
 ### What's next
-- On Max's go: execute the 7-step plan (Claude can now do most infra via MCP; Max needed for Vercel Preview env vars + dev DB password)
-- Decide on the Tenant/PlatformConfig RLS advisory (recommend fixing before onboarding more tenants)
+- Max: try the workflow (checklist in MyToDo #79); create a dev auth user so staging `/admin` login works; optional pool_size raise + leaked-password toggle
+- Backlog candidates spawned today: page-render perf pass; revoke PostgREST grants schema-wide; friendlier staging alias domain
 
 ---
 

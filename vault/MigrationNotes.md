@@ -110,12 +110,14 @@ When you hit ~25–30 clients on a single Supabase account, open a new account a
 
 ## Tenant IDs (current clients)
 
-| Name | Slug | Domain | Tenant ID |
-|---|---|---|---|
-| Nikalas Marani | nikalasmrani | nikalasmarani.vercel.app | `cmqou94er0000vl1sl9v0yv54` |
-| Test Winery | winery2 | winery2.local | `cmqou94sx0001vl1sga705ltt` |
+| Name | Slug | Domain | Tenant ID | Database |
+|---|---|---|---|---|
+| Nikalas Marani | nikalasmarani | nikalasmarani.vercel.app | `cmqou94er0000vl1sl9v0yv54` | **prod** |
+| Staging Winery | staging-winery | georgian-saas-git-staging-mg-productions-projects.vercel.app | `cmrxb85wo0000vlc0d964nzf8` | **dev** |
 
 > Nikalas Marani moved from `nikalasmarani.ge` to `nikalasmarani.vercel.app` on 2026-07-18 (Max doesn't control the .ge domain yet — swap back via the Step 1–2 procedure above once he gains it).
+> Test Winery (`cmqou94sx0001vl1sga705ltt`, slug had drifted to `test-winery`) was **deleted from prod** 2026-07-23 (#79) along with its `testwinery@email.ge` auth user — test tenants now belong in the dev DB only. `testwinery.vercel.app` still attached in Vercel; shows the platform placeholder.
+> Staging Winery lives in the **dev** Supabase project (`jpbkkngpgtvqmsocitjx`) — it will never appear in prod queries. See `Plan-DevProdEnvironments.md`.
 
 ---
 

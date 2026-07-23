@@ -104,11 +104,13 @@ Simple one-file changes (e.g. a label swap) do not need a note.
 
 ---
 
-## 10. Stop dev server before `prisma db push`
+## 10. Stop dev server before `prisma db push` / `prisma migrate dev`
 
-On Windows, running `prisma db push` (or `prisma generate`) while the dev server is running will fail silently — schema pushes but the Prisma client is NOT regenerated (EPERM on the DLL rename). This leaves the client broken and causes connection pool exhaustion.
+On Windows, running `prisma db push`, `prisma migrate dev`, (or `prisma generate`) while the dev server is running will fail silently — schema pushes but the Prisma client is NOT regenerated (EPERM on the DLL rename). This leaves the client broken and causes connection pool exhaustion.
 
-**Before any `prisma db push`:**
+> **Since #79 (2026-07-23): schema changes use `prisma migrate dev` (against the dev DB) instead of `db push` — see `Plan-DevProdEnvironments.md` for the full dev→staging→prod workflow. This rule applies identically.**
+
+**Before any `prisma db push` / `prisma migrate dev`:**
 1. Tell Max to stop the dev server, OR kill the node process yourself
 2. Run `prisma db push`
 3. Verify output ends with `✔ Generated Prisma Client`
