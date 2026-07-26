@@ -8,6 +8,28 @@ Rules for how Claude should behave on this project. Read at the start of every s
 
 ---
 
+## 0. GIT WORKFLOW — STAGING FIRST, MASTER AFTER (strict, since #79, 2026-07-23)
+
+**`master` is production.** It deploys straight to `nikalasmarani.vercel.app` — the real site, with Nikalas Marani's real customer bookings. Nothing goes there without being checked first.
+
+**The rule, no exceptions:**
+1. Every code change is committed and pushed to the **`staging`** branch first — never push a change directly to `master`.
+2. `staging` auto-deploys to a preview URL (`georgian-saas-git-staging-...vercel.app`) that reads from the **dev** Supabase database, not the real one. Verify the change there.
+3. Only merge `staging` → `master` (and push) once Max has confirmed the staging check is good. This merge is the one action that actually ships to real customers — treat it with the same care as any other risky/hard-to-reverse action per the standing safety rules.
+
+**Database schema changes follow the same shape:** run `prisma migrate dev` against the **dev** database first (never `prisma db push` — see Rule 10), verify on staging, and only then run `prisma migrate deploy` against **production** as its own deliberate, separate step.
+
+**Local development always points at the dev database** (`saas/.env`) — never at production credentials. This is what makes "break things locally" safe.
+
+**Practical guardrails:**
+- Check the current branch (`git branch --show-current`) before committing if there's any doubt — never assume.
+- After merging `staging` → `master` and pushing, switch back to `staging` for the next round of work, so the next commit doesn't land on `master` by accident.
+- Never force-push either branch.
+
+Full reference, environment map, and the exact commands: `vault/Plan-DevProdEnvironments.md`.
+
+---
+
 ## 1. Always update the vault
 
 After any meaningful work (feature built, decision made, architecture changed), update the relevant vault file:

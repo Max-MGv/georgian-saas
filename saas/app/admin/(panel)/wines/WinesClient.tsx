@@ -34,21 +34,21 @@ type Vintage = {
 }
 
 type Wine = {
-  id: string; name: string; wineType: WineTypeValue; sweetness: SweetnessValue
+  id: string; name: string; nameKa: string | null; wineType: WineTypeValue; sweetness: SweetnessValue
   sparkling: boolean; alcoholLevel: number | null; description: string | null
   color: string; imagePath: string | null; sortOrder: number; active: boolean
   vintages: Vintage[]
 }
 
 type ProductDraft = {
-  name: string; wineType: WineTypeValue; sweetness: SweetnessValue
+  name: string; nameKa: string; wineType: WineTypeValue; sweetness: SweetnessValue
   sparkling: boolean; alcoholLevel: string; description: string; color: string
 }
 
 type VintageDraft = { year: string; price: string; active: boolean }
 
 const BLANK_PRODUCT: ProductDraft = {
-  name: '', wineType: 'RED', sweetness: 'DRY', sparkling: false,
+  name: '', nameKa: '', wineType: 'RED', sweetness: 'DRY', sparkling: false,
   alcoholLevel: '', description: '', color: '#7c1d23',
 }
 
@@ -286,6 +286,8 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
   const [saving, setSaving] = useState<string | null>(null)
   const [imgSaving, setImgSaving] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [addNameLocale, setAddNameLocale] = useState<'en' | 'ka'>('en')
+  const [editNameLocale, setEditNameLocale] = useState<'en' | 'ka'>('en')
 
   function parseAlcohol(raw: string): number | null {
     const n = parseFloat(raw)
@@ -306,8 +308,10 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
   function startEditProduct(wine: Wine) {
     setExpandedId(wine.id)
     setEditingProductId(wine.id)
+    setEditNameLocale('en')
     setProductDraft({
       name: wine.name,
+      nameKa: wine.nameKa ?? '',
       wineType: wine.wineType,
       sweetness: wine.sweetness,
       sparkling: wine.sparkling,
@@ -324,6 +328,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     startTransition(async () => {
       await createWine({
         name: addDraft.name.trim(),
+        nameKa: addDraft.nameKa.trim() || undefined,
         wineType: addDraft.wineType,
         sweetness: addDraft.sweetness,
         sparkling: addDraft.sparkling,
@@ -339,6 +344,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     setSaving(id)
     const data = {
       name: productDraft.name,
+      nameKa: productDraft.nameKa.trim() || null,
       wineType: productDraft.wineType,
       sweetness: productDraft.sweetness,
       sparkling: productDraft.sparkling,
@@ -477,14 +483,41 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   // ── Shared product form (add + edit) ──────────────────────────────────
 
-  function productFields(draft: ProductDraft, setDraft: (fn: (d: ProductDraft) => ProductDraft) => void) {
+  function productFields(
+    draft: ProductDraft, setDraft: (fn: (d: ProductDraft) => ProductDraft) => void,
+    nameLocale: 'en' | 'ka', setNameLocale: (l: 'en' | 'ka') => void
+  ) {
     return (
       <>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.name')}</label>
-            <input className={inputCls} style={inputStyle} placeholder={at('wines.namePh')} value={draft.name}
-              onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs block" style={{ color: C.faint }}>{at('wines.name')}</label>
+              <div className="flex gap-0.5 p-0.5 rounded-md" style={{ backgroundColor: '#ede5d8' }}>
+                {(['en', 'ka'] as const).map(l => (
+                  <button key={l} type="button" onClick={() => setNameLocale(l)}
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase transition-all"
+                    style={{
+                      backgroundColor: nameLocale === l ? '#fff9f3' : 'transparent',
+                      color: nameLocale === l ? C.wine : C.muted,
+                    }}>
+                    {l === 'en' ? at('content.localeToggle.english') : at('content.localeToggle.georgian')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {nameLocale === 'en' ? (
+              <input className={inputCls} style={inputStyle} placeholder={at('wines.namePh')} value={draft.name}
+                onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
+            ) : (
+              <>
+                <input className={inputCls} style={inputStyle} placeholder={at('wines.nameKaPh')} value={draft.nameKa}
+                  onChange={e => setDraft(d => ({ ...d, nameKa: e.target.value }))} />
+                {!draft.nameKa.trim() && (
+                  <p className="text-[11px] italic mt-1" style={{ color: C.faint }}>{at('wines.nameKaFallbackHint')}</p>
+                )}
+              </>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -634,7 +667,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
                 {isEditing && (
                   <div className="space-y-4">
-                    {productFields(productDraft, setProductDraft)}
+                    {productFields(productDraft, setProductDraft, editNameLocale, setEditNameLocale)}
 
                     <div>
                       <label className="text-xs mb-2 block" style={{ color: C.faint }}>
@@ -826,7 +859,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
       {showAdd ? (
         <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
           <p className="text-sm font-semibold" style={{ color: C.text }}>{at('wines.newWine')}</p>
-          {productFields(addDraft, setAddDraft)}
+          {productFields(addDraft, setAddDraft, addNameLocale, setAddNameLocale)}
           <p className="text-xs italic" style={{ color: C.faint }}>{at('wines.pricesPerVintageHint')}</p>
           <div className="flex gap-2 pt-1">
             <button onClick={handleAddProduct} disabled={isPending || !addDraft.name.trim()}
@@ -834,7 +867,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
               style={{ backgroundColor: C.wine }}>
               {saving === 'new' ? at('wines.adding') : at('wines.addWine')}
             </button>
-            <button onClick={() => { setShowAdd(false); setAddDraft(BLANK_PRODUCT) }}
+            <button onClick={() => { setShowAdd(false); setAddDraft(BLANK_PRODUCT); setAddNameLocale('en') }}
               className="px-4 py-1.5 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}>
               {at('wines.cancel')}

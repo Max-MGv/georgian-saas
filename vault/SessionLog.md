@@ -8,6 +8,80 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-26 — Bilingual wine name (#143 built) + recovered stuck #79 vault docs (full detail)
+
+### Completed
+
+**Investigated how EN/KA translation currently works for wines**, at Max's request. Confirmed: wine type/sweetness (`WineType`/`Sweetness` enums) are stored as a single value and already correctly translate in the admin panel via `adminT()` — but the public `/wines` ordering page never fetches the tenant's `default_locale` at all and has its own separate, hardcoded-English copy of those labels, so a Georgian-language tenant's wine catalogue still showed "Dry"/"Sweet"/"Red" in English regardless of site language. Missed by the earlier "front-facing = complete" translation audit (2026-07-23), which covered Nav/Home/About/Contact/Booking Form but not Wines. Separately confirmed `Wine.name` (e.g. "Rkatsiteli") is a single required field with no locale variant — admin's understanding was correct, that's by design today.
+
+**Max proposed adding an optional Georgian wine name** (e.g. "რქაწითელი"), entered via a toggle, falling back to English if blank — reasoned it's a real translation (different script) unlike a pure proper noun, and helps SEO for Georgian-script search queries. Agreed, and bundled in the type/sweetness label fix since it's the same underlying gap (site language never reaching the wines page).
+
+**Full plan written and approved** before any edits: `Plan-BilingualWineName.md`. An `Explore` subagent first mapped every place `Wine.name`/`WineOrderItem.wineNameSnapshot` are read or written (admin editor, public catalogue, order submission, packing view, statistics, seed/clone scripts) to scope the change correctly — confirmed the order snapshot and downstream admin views (packing sheets, statistics aggregation) need zero changes, since they just display whatever string was already resolved upstream.
+
+**Repo detour before building:** switching from `master` to `staging` surfaced a real merge conflict — `FeatureLog.md`/`MyToDo.md`/`Plan-DevProdEnvironments.md`/`workspace.json` had a newer, uncommitted, post-#79-completion version stuck on `master` (never made it to `staging`) that collided with `staging`'s own older, pre-completion version of the same files. Showed Max the actual diffs rather than guessing; confirmed via git log timestamps that the stuck master version was written *after* the staging version, so it was the correct one to keep. Resolved in its favor, committed separately (`b716557`) before starting the feature.
+
+**Built #143** exactly per the plan: `Wine.nameKa String?` (migration `20260726093339_add_wine_name_ka`, applied to **dev** DB only, dev server was already stopped); `lib/wineName.ts` (`wineDisplayName(wine, locale)`, fallback computed at read time, nothing copied into the DB); admin `WinesClient.tsx` gained an EN/KA toggle on the Name field (separate toggle state for the add-form and inline edit-form, since both can be open independently) with a fallback hint when the Georgian field is empty; `lib/t.ts` gained `wine.type.*`/`wine.sweetness.*`/`wine.sparkling` keys (the public-site counterpart to the admin dictionary's existing wine enum labels); public `app/(site)/wines/page.tsx` now fetches `default_locale` (+ `site_locale` cookie override, matching Home/About/Contact's exact resolution order) and resolves each wine's name server-side before handing data to the client component, which now takes a `locale` prop instead of hardcoding English labels. Deliberately left out (per plan scope): the rest of the wines page's chrome (headings, filter labels, form placeholders) is still English-only — a separate, larger gap, not this pass.
+
+**Browser-verified on staging tenant (Staging Winery) via localhost, logged in as `maxb2bsaas@gmail.com`:** toggled Rkatsiteli's Name field to Georgian in `/admin/wines`, saw the empty-state fallback hint, entered "რქაწითელი", saved. Public `/wines` with no locale cookie still showed "Rkatsiteli" (English) — baseline unchanged. With `site_locale=ka` cookie set: showed "რქაწითელი" for the one wine with a Georgian name, and correct English fallback for the other 5 (no Georgian name yet); type/sweetness/sparkling filter pills and badges all switched to Georgian. Confirmed the resolved name also reaches the cart/order-summary line (traced in code that this is exactly what becomes `wineNameSnapshot` on submit — didn't submit a live test order). TypeScript: 0 errors throughout. Noted one stale doc found along the way, not fixed: `MaintenanceNotes.md` §4 still says `DEFAULT_TENANT_ID` points at Nikalas Marani's real tenant, but it currently resolves to Staging Winery (observed directly this session) — worth a quick correction next time that section is touched.
+
+**Vault:** `FeatureLog.md` (#143 → ✅ Done, Claude tested), `MaintenanceNotes.md` (new §5 — resolve wine names through `wineDisplayName()`, don't read `wine.name` directly on customer-facing surfaces), `Plan-BilingualWineName.md` (updated with what was actually built + verification results), `SessionLog.md` (this entry).
+
+### Files changed
+- `saas/prisma/schema.prisma` — `Wine.nameKa String?`
+- `saas/prisma/migrations/20260726093339_add_wine_name_ka/` — NEW
+- `saas/lib/wineName.ts` — NEW
+- `saas/lib/adminT.ts` — `wines.nameKaPh`, `wines.nameKaFallbackHint` (en+ka)
+- `saas/lib/t.ts` — `wine.type.*`, `wine.sweetness.*`, `wine.sparkling` (en+ka)
+- `saas/app/actions/wines.ts` — `createWine`/`updateWine`/`getWinesWithVintages` extended for `nameKa`
+- `saas/app/admin/(panel)/wines/WinesClient.tsx` — EN/KA name toggle (add + edit forms)
+- `saas/app/(site)/wines/page.tsx` — fetches `default_locale`, resolves names server-side
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — `locale` prop, `t()`-driven type/sweetness/sparkling labels
+- Vault: `Plan-BilingualWineName.md` (NEW), `FeatureLog.md`, `MaintenanceNotes.md`, `SessionLog.md` (this entry)
+- Also recovered onto `staging` (separate commit `b716557`): `FeatureLog.md`, `MyToDo.md`, `Plan-DevProdEnvironments.md`, `ClaudeInstructions.md`, `workspace.json`, `SessionLog.md` — the stuck #79 wrap-up docs described above
+
+### What's next
+- Push this work to `staging`, verify on the staging preview URL, then `prisma migrate deploy` to **production** + merge to `master` once Max confirms staging looks right (per Rule 0).
+- Max: add Georgian names for the other 5 wines when convenient — data entry, not code.
+- Flagged, not done: rest of the wines page chrome is still English-only (same shape of gap, separate scope); `MaintenanceNotes.md` §4's stale `DEFAULT_TENANT_ID` description.
+
+---
+
+## 2026-07-23 (session 3) — Feature #79 BUILT: dev/prod environments live + strict staging-first rule recorded (full detail)
+
+### Completed
+
+**Executed the full 7-step #79 plan** approved earlier the same day (see session 2 entry below). All infra built via Supabase + Vercel MCP, verified in browser, nothing done to prod except the two intentional cleanup writes (Test Winery removal, already-approved).
+
+1. **Dev Supabase project created** (`georgian-saas-dev`, `jpbkkngpgtvqmsocitjx`, eu-central-1, $0/month confirmed via `get_cost`+`confirm_cost`).
+2. **Migration baseline established on both DBs.** Generated a squashed baseline from current `schema.prisma`, verified drift-free against prod first (`migrate diff` came back empty), deleted the stale `20260517121307_init` migration, replaced with `20260723000000_baseline`, marked `--applied` on dev and prod via `prisma migrate resolve`. `migrate status` clean on both afterward. Also ran the RLS setup (app_user role + 14 tenant_isolation policies + the same Tenant/PlatformConfig lockdown from earlier today) against dev via MCP so dev's security posture matches prod exactly.
+3. **Test Winery removed from production** — verified first via SQL that it had zero rows in every data table (booking/company/wine/etc. all 0) before deleting; also removed its orphaned `testwinery@email.ge` auth user. Prod now has exactly one tenant.
+4. **Staging tenant built** — wrote `scripts/clone-nm-to-staging.ts`, cloned NM's 36 settings + 64 SiteContent rows + 6 companies with price tiers + 6 wines with vintages + menu/masterclass items into a new "Staging Winery" tenant in the dev DB (displayName suffixed "(Staging)" so browser tabs are distinguishable).
+5. **Environments wired** — `saas/.env` repointed to dev (prod backed up to `.env.prod.backup`, gitignored); Max split Vercel's env vars (Production→prod DB, Preview→dev DB) by hand since the Vercel MCP has no env-var tools; all values recorded in `credentials.txt` including the dev `service_role` key Max retrieved from the dashboard.
+6. **Staging branch + URL stood up** — pushed `staging` and `master` (permission-gated, Max ran both `git push` commands); Vercel auto-built the Preview at `georgian-saas-git-staging-mg-productions-projects.vercel.app`; set that as the Staging Winery `Tenant.domain`; Max disabled Vercel's "Deployment Protection" (Vercel Authentication) so the URL is reachable without a Vercel login.
+7. **Vault documentation** — this entry, plus `Plan-DevProdEnvironments.md` (new), `Roadmap.md`, `FeatureLog.md` (#79 → ✅ Done, Claude tested), `MyToDo.md`.
+
+**Bug found and fixed during verification: connection pool exhaustion on the new dev DB.** First browser check of both the staging URL and localhost showed the page shell/nav loading but the main content never appearing — looked like a broken deploy. Investigated properly rather than guessing: Vercel runtime logs showed nothing (error surfaced client-side via streaming, not as a clean 500 in most cases); reproduced locally via the dev server's own logs, which showed the real error — `PrismaClientKnownRequestError: Timed out fetching a new connection from the connection pool (connection_limit: 9)`. Wrote two small throwaway repro scripts (deleted after) to isolate it: confirmed `withTenantDb`'s `SET LOCAL ROLE` + RLS mechanism itself worked fine (identical to prod), then fired 30 parallel tenant transactions and got `EMAXCONNSESSION: max clients reached in session mode — pool_size: 15` — the home page fires ~26 parallel `withTenantDb` transactions per render (existing app behavior, same on prod), and the new dev project's session-mode pooler (port 5432) has a lower default cap (15) than what that many parallel session-mode connections need. Fix: switched local `DATABASE_URL` to the **transaction pooler** (port 6543, `pgbouncer=true`) with explicit `connection_limit=20&pool_timeout=30` — matches how prod's `.env` was already configured (verified against the existing prod file, wasn't a new pattern). Re-tested: staging and localhost both render fully. Root cause was purely a new-project default, not a bug in the app or the #79 setup design.
+
+**Second issue: `<main>` looking permanently empty during agent-side verification even after the pool fix — turned out to be a false alarm in my own tooling, not the app.** Server logs showed clean 200 responses and `curl` confirmently returned full real content ("Wine Tasting", real prices) at ~59KB, but my in-pane page reads kept showing only the loading skeleton. Root cause (confirmed via Max pointing it out and reproducing after making the pane visible): **a hidden/backgrounded browser pane freezes React's streaming hydration mid-render** — the page was correctly finishing server-side the whole time, my checks were just reading a frozen client. Logged as a gotcha in `Plan-DevProdEnvironments.md` so future verification isn't fooled by the same thing.
+
+**Staging admin login wired and fixed.** Max created `maxb2bsaas@gmail.com` in the dev Supabase auth; ran `npm run set-admin -- --email maxb2bsaas@gmail.com --tenantId cmrxb85wo0000vlc0d964nzf8` to lock it to Staging Winery. First login attempt failed ("Incorrect email or password") despite the account looking correct in the DB (confirmed, has_password, email_confirmed_at set, not banned) — rather than guess at the cause, force-reset the password via Supabase's Admin API to the exact value recorded in `credentials.txt`, eliminating any copy/paste mismatch. Second attempt succeeded — landed in Orders, correctly showing only the `STAGING TEST-79` booking (200₾), confirming tenant scoping end-to-end.
+
+**Recorded the strict workflow rule, at Max's explicit request.** Added a new **Rule 0** at the very top of `ClaudeInstructions.md` (read before all other rules): every code change goes to `staging` first, never straight to `master`; `master` is production and only gets updated after Max confirms what's on staging; schema changes follow the same shape (`migrate dev` on dev → verify → `migrate deploy` on prod as its own deliberate step); local dev always points at the dev DB. Added matching practical guardrails (check current branch before committing, switch back to `staging` after every master merge, never force-push). Mirrored the same flow, as a diagram, at the top of `Plan-DevProdEnvironments.md` so both the strict rule and the full operational detail live in sync.
+
+### Files changed
+- `saas/prisma/migrations/` — deleted `20260517121307_init`, added `20260723000000_baseline`
+- `saas/scripts/clone-nm-to-staging.ts` — NEW (one-off NM→staging snapshot tool)
+- `saas/.env` — repointed to dev DB (transaction pooler, explicit connection_limit); `saas/.env.prod.backup` NEW (prod values preserved, gitignored)
+- `credentials.txt` (repo root, gitignored) — DEV/STAGING section added: DB password, both pooler URLs, anon key, service_role key, staging tenant ID/domain, admin login, environment mapping table
+- Vault: `Plan-DevProdEnvironments.md` (NEW, then restructured to lead with the flow diagram), `ClaudeInstructions.md` (new Rule 0), `Roadmap.md`, `FeatureLog.md`, `MyToDo.md`, `SessionLog.md` (this entry)
+
+### What's next
+- Optional, not blocking: raise dev pooler `pool_size` 15→30 in the Supabase dashboard (current explicit connection_limit workaround is sufficient); a friendlier staging domain alias; decide whether to keep or delete the `STAGING TEST-79` test booking.
+- Max to actually try the new flow once on a real small change, to build the staging-first habit muscle memory.
+- FeatureLog #79 "User tested" column still ❌ — all testing so far was Claude via MCP/browser; worth a real pass from Max at some point, low urgency since the mechanics are fully verified.
+
+---
+
 ## 2026-07-23 (session 2) — Feature #79 dev/prod plan approved + Supabase/Vercel MCP capability audit (full detail)
 
 ### Completed

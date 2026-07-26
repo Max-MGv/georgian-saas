@@ -188,6 +188,7 @@ model BlockedDate {
 model Wine {
   id           String        @id @default(cuid())
   name         String
+  nameKa       String?
   wineType     WineType      @default(RED)
   sweetness    Sweetness     @default(DRY)
   sparkling    Boolean       @default(false)
