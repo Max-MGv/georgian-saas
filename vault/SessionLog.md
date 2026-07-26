@@ -8,6 +8,51 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-26 (session 2) — Orders admin bug review: #140/#141/#142 fixed, #138 items 1-2 fixed, #139 scoped (full detail)
+
+### Completed
+
+**Reviewed 5 backlog items Max flagged** (#138-142 in FeatureLog.md / [[known bugs and comment]]). For each: investigated root cause in code before proposing a fix, per usual practice.
+
+**#140 — status dropdown clipped** (screenshot showed only "New" visible). Root cause: the dropdown lived inside a `position: sticky` `<td>` within the Orders table's bounded-scroll wrapper (`overflow-auto max-h-[70vh]`, added by #133/#134 on 2026-07-23) — the exact kind of sticky/overflow interaction that session's notes already flagged as fragile, resurfacing in the vertical direction this time. Fixed by rendering the dropdown via `createPortal` into `document.body` as a `position: fixed` overlay, positioned from the trigger's `getBoundingClientRect()` with viewport-edge flipping (opens above the button if it would overflow the bottom of the screen) and a scroll-close guard (fixed-position menu can't track the button while the table scrolls under it). Same escape hatch already used in `OrdersTable.tsx` for the hover-preview card and invoice print.
+
+**#142 — Columns picker closed itself on every checkbox toggle.** The panel relied on `stopPropagation()` inside its own `onClick` to shield itself from a document-level outside-click listener; replaced with a ref-based containment check (`!containerRef.current.contains(e.target)`), which can't misfire regardless of event-propagation timing.
+
+**#138 — Georgian translation gaps + locale switcher UX.** Two of three sub-items fixed: (1) `LocaleSwitcher.tsx` rebuilt as a real pill toggle (bordered container, solid brand-colored active state) with visible dimming + `cursor: wait` while the `setLocale`+`router.refresh()` round-trip is pending — previously it was plain colored text with zero pending-state feedback, explaining "unclear if it's clickable" and "feels like it didn't work." (2) Confirmed via code read that 6 strings on `/wines` were still hardcoded English even after #143 (which only fixed the type/sweetness *values*, not the surrounding chrome): filter group labels ("Type"/"Style"/"All"), the "Order Wine" eyebrow, the subtitle, and the "bottle"/"bottles"/"/ bottle" unit text. Added `wine.filter.*`/`wine.orderSubtitle`/`wine.bottle.*`/`wine.perBottle` keys to `lib/t.ts` (EN+KA) and wired them through. Item 3 ("Order Wine section -") is a cut-off note in Max's own file — flagged back to him rather than guessing.
+
+**#141 — corrected mid-session.** Originally logged as a Wine Orders CSV-export-preview request; Max clarified it was actually about the **bookings Orders page**, which already has CSV export (with no preview — the original complaint) but no print export. Built a full booking-sheet print feature: new "Print Sheet" button next to Export CSV opens a preview modal, then prints a landscape-A4 table (`BookingSheetPrint.tsx`) — date/time, tasting/lunch/extra guest counts, hot dish veg/meat, food notes, notes, company, contact name/phone — matching the reference screenshot Max shared, sorted chronologically (kitchen/staff use, unlike the admin table's newest-first order), scoped to whatever filters are active. `OrdersFilters` (which has the button, no order data) signals `OrdersTable` (which has the filtered data) via the same cross-component `CustomEvent` pattern already used for column visibility. Print isolation reuses the existing `#invoice-portal` `@media print` mechanism, given its own CSS named page (`page: booking-sheet` / `@page booking-sheet { size: A4 landscape }`) so it doesn't fight the portrait invoice layout. Also completes the long-open Roadmap item **"Printable daily booking sheet."**
+
+**#139 — scoped, not built.** Reviewed as a design question (per-page info/help tooltips for non-technical admins); recommended a small pilot (~8-10 genuinely non-obvious settings) rather than building it everywhere at once, mirroring how the Georgian admin layer was phased. Max hasn't greenlit a build yet.
+
+### Testing (why this entry has more verification detail than usual)
+
+Max asked to "check your work, test it" before shipping. Live-tested all four fixes end-to-end against the local dev server (not just code review): opened the Columns picker, toggled a checkbox, confirmed it stayed open and the state updated; opened a status dropdown, confirmed via `getBoundingClientRect()` that the portal renders as a direct `document.body` child with real (non-zero) fixed-position coordinates outside the table's scroll/sticky DOM, selected a new status, confirmed the menu closed and the badge updated, then reverted the test change; opened the Print Sheet preview, confirmed the modal + underlying print portal both render with the correct headers and are correctly `display:none` on screen. Confirmed EN+KA translation output via `curl` (this project's documented reliable check — the review browser's backgrounded tab intermittently freezes layout/compositing and throttles React's scheduler, a known issue already noted in `Plan-DevProdEnvironments.md`). `npm run build` and `npx tsc --noEmit` both clean.
+
+**Found, not fixed (pre-existing, unrelated):** toggling a column checkbox triggers a React dev-mode warning — "Cannot update a component (`OrdersTable`) while rendering a different component (`OrdersFilters`)" — caused by `toggleCol`'s `window.dispatchEvent(...)` call sitting inside the `setVisibleCols` functional updater instead of after it. Confirmed via `git diff` this code predates this session. Doesn't appear in production builds (React strips this dev-only check), so it didn't block shipping. Flagged as a separate background task rather than fixed inline, since it's unrelated to what was asked this session.
+
+**Shipped to `staging` then `master` per Rule 0**, both with Max's explicit go-ahead ("if all correct push to staging and master"). Re-verified the exact same suite (Columns picker, status dropdown portal, Print Sheet preview, EN/KA translations) against the live `staging` URL before merging — all matched local results, zero console errors (production build strips the dev warning above). After merging to `master`, verified read-only via `curl` against `nikalasmarani.vercel.app` (deliberately did **not** click through the real admin panel on production — that's live customer data) — EN/KA translations and the new `LocaleSwitcher` markup both confirmed live.
+
+### Vault
+`FeatureLog.md` (#138 → 🚧 In progress detail, #140/#141/#142 → ✅ Done/Claude tested), `Roadmap.md` ("Printable daily booking sheet" → checked off), `known bugs and comment.md` (items 1-2 marked fixed, item 3 flagged back to Max), `SessionLog.md` (this entry).
+
+### Files changed
+- `saas/app/admin/(panel)/orders/OrdersTable.tsx` — status dropdown → portal + fixed positioning; booking-sheet preview modal + print portal; listens for `ordersPrintRequested`
+- `saas/app/admin/(panel)/orders/OrdersFilters.tsx` — Columns picker ref-based outside-click fix; new "Print Sheet" button
+- `saas/app/admin/(panel)/orders/BookingSheetPrint.tsx` — NEW, the print-formatted table component
+- `saas/app/globals.css` — `#booking-sheet-portal` print isolation + named landscape page
+- `saas/components/LocaleSwitcher.tsx` — rebuilt as pill toggle with pending-state feedback
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — 6 remaining hardcoded strings → `t()`
+- `saas/lib/t.ts` — `wine.filter.*`, `wine.orderSubtitle`, `wine.bottle.*`, `wine.perBottle` (en+ka)
+- `saas/lib/adminT.ts` — `orders.filters.printSheet`, `orders.sheet.*` (en+ka)
+
+### What's next
+- Max: user-test all four fixes for real (Claude-tested only, per FeatureLog convention) — Columns picker, status dropdown on a genuinely wide/scrolled table, Print Sheet on a real multi-day range, EN/KA switcher feel.
+- `known bugs and comment.md` item 3 — needs Max's input, note cuts off mid-sentence.
+- #139 (info tooltips) — needs a go-ahead on the pilot-scope approach before building.
+- Spawned background task to fix the pre-existing `toggleCol` cross-component setState warning (not urgent, dev-mode-only).
+
+---
+
 ## 2026-07-26 — Bilingual wine name (#143 built) + recovered stuck #79 vault docs (full detail)
 
 ### Completed
