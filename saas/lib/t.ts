@@ -110,6 +110,13 @@ const en: Translations = {
   'wine.sweetness.SEMI_SWEET': 'Semi-sweet',
   'wine.sweetness.SWEET': 'Sweet',
   'wine.sparkling': 'Sparkling',
+  'wine.filter.type': 'Type',
+  'wine.filter.style': 'Style',
+  'wine.filter.all': 'All',
+  'wine.orderSubtitle': 'Select wines, set quantities, and place a reservation.',
+  'wine.bottle.singular': 'bottle',
+  'wine.bottle.plural': 'bottles',
+  'wine.perBottle': '/ bottle',
 }
 
 const ka: Translations = {
@@ -222,6 +229,13 @@ const ka: Translations = {
   'wine.sweetness.SEMI_SWEET': 'ნახევრად ტკბილი',
   'wine.sweetness.SWEET': 'ტკბილი',
   'wine.sparkling': 'ცქრიალა',
+  'wine.filter.type': 'ტიპი',
+  'wine.filter.style': 'სტილი',
+  'wine.filter.all': 'ყველა',
+  'wine.orderSubtitle': 'აირჩიეთ ღვინოები, მიუთითეთ რაოდენობა და გააფორმეთ ჯავშანი.',
+  'wine.bottle.singular': 'ბოთლი',
+  'wine.bottle.plural': 'ბოთლი',
+  'wine.perBottle': '/ ბოთლი',
 }
 
 const dict: Record<string, Translations> = { en, ka }

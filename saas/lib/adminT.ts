@@ -237,6 +237,26 @@ const en: Translations = {
   'orders.filters.exporting': 'Exporting…',
   'orders.filters.columns': 'Columns ▾',
   'orders.filters.showHideColumns': 'SHOW / HIDE COLUMNS',
+  'orders.filters.printSheet': 'Print Sheet',
+
+  // Orders — booking sheet print
+  'orders.sheet.title': 'Booking Sheet',
+  'orders.sheet.generatedAt': 'Generated',
+  'orders.sheet.dateRange': 'Covers',
+  'orders.sheet.noOrders': 'No bookings in this range.',
+  'orders.sheet.tastingGuests': 'Tasting',
+  'orders.sheet.lunchGuests': 'Lunch (12+)',
+  'orders.sheet.extraGuests': 'Extra (guide/driver/under 12)',
+  'orders.sheet.hotDishVeg': 'Hot dish — vegetable',
+  'orders.sheet.hotDishMeat': 'Hot dish — meat',
+  'orders.sheet.foodNotes': 'Food notes',
+  'orders.sheet.notes': 'Notes',
+  'orders.sheet.contactName': 'Contact',
+  'orders.sheet.contactPhone': 'Phone',
+  'orders.sheet.previewTitle': 'Booking sheet preview',
+  'orders.sheet.print': 'Print',
+  'orders.sheet.close': 'Close',
+  'orders.sheet.individual': 'Individual',
 
   // Orders — view toggle
   'orders.view.table': 'Table',
@@ -1016,6 +1036,26 @@ const ka: Translations = {
   'orders.filters.exporting': 'გადის ექსპორტი…',
   'orders.filters.columns': 'სვეტები ▾',
   'orders.filters.showHideColumns': 'სვეტების ჩვენება/დამალვა',
+  'orders.filters.printSheet': 'ცხრილის ბეჭდვა',
+
+  // Orders — booking sheet print
+  'orders.sheet.title': 'ჯავშნების ცხრილი',
+  'orders.sheet.generatedAt': 'შექმნილია',
+  'orders.sheet.dateRange': 'მოიცავს',
+  'orders.sheet.noOrders': 'ამ პერიოდში ჯავშნები არ არის.',
+  'orders.sheet.tastingGuests': 'დეგუსტაცია',
+  'orders.sheet.lunchGuests': 'სადილი (12+)',
+  'orders.sheet.extraGuests': 'დამატებითი (გიდი/მძღოლი/12 წლამდე)',
+  'orders.sheet.hotDishVeg': 'ცხელი კერძი — ბოსტნეული',
+  'orders.sheet.hotDishMeat': 'ცხელი კერძი — ხორცი',
+  'orders.sheet.foodNotes': 'შენიშვნა კვებაზე',
+  'orders.sheet.notes': 'შენიშვნა',
+  'orders.sheet.contactName': 'საკონტაქტო პირი',
+  'orders.sheet.contactPhone': 'ტელეფონი',
+  'orders.sheet.previewTitle': 'ჯავშნების ცხრილის გადახედვა',
+  'orders.sheet.print': 'ბეჭდვა',
+  'orders.sheet.close': 'დახურვა',
+  'orders.sheet.individual': 'ინდივიდუალური',
 
   // Orders — view toggle
   'orders.view.table': 'ცხრილი',

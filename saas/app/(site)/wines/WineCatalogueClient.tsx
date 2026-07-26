@@ -476,7 +476,7 @@ export default function WineCatalogueClient({
           <div className="max-w-4xl mx-auto px-6 py-3 flex items-center gap-4">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium" style={{ color: C.faint }}>
-                {totalBottles} bottle{totalBottles !== 1 ? 's' : ''}
+                {totalBottles} {totalBottles === 1 ? t(locale, 'wine.bottle.singular') : t(locale, 'wine.bottle.plural')}
               </p>
               <p className="text-xs truncate" style={{ color: C.muted }}>
                 {selectedWines.map(w => `${w.name} ${w.year} ×${quantities[w.vintageId]}`).join(' · ')}
@@ -621,7 +621,7 @@ export default function WineCatalogueClient({
         style={{ paddingBottom: totalBottles > 0 ? '96px' : undefined }}
       >
         {/* Heading */}
-        <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>Order Wine</p>
+        <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: '#8b4513' }}>{t(locale, 'home.order_wine')}</p>
         <div className="flex items-start justify-between gap-4 mb-10">
           <div>
             {logoUrl ? (
@@ -629,7 +629,7 @@ export default function WineCatalogueClient({
             ) : (
               <p className="font-serif text-2xl font-semibold tracking-wide" style={{ color: 'var(--color-brand)' }}>{tenantName}</p>
             )}
-            <p className="text-base" style={{ color: '#6b5a47' }}>Select wines, set quantities, and place a reservation.</p>
+            <p className="text-base" style={{ color: '#6b5a47' }}>{t(locale, 'wine.orderSubtitle')}</p>
           </div>
           {/* View toggle */}
           <div className="flex items-center gap-1 rounded-lg border p-0.5 flex-shrink-0" style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3' }}>
@@ -662,18 +662,18 @@ export default function WineCatalogueClient({
         <div className="flex flex-col gap-2 mb-8">
           {([
             {
-              label: 'Type',
+              label: t(locale, 'wine.filter.type'),
               options: [
-                { value: null, label: 'All' },
-                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(t => availableTypes.has(t)).map(t => ({ value: t as TypeFilter | StyleFilter, label: TYPE_LABEL[t] })),
+                { value: null, label: t(locale, 'wine.filter.all') },
+                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(tp => availableTypes.has(tp)).map(tp => ({ value: tp as TypeFilter | StyleFilter, label: TYPE_LABEL[tp] })),
               ],
               active: typeFilter as TypeFilter | StyleFilter,
               set: (v: TypeFilter | StyleFilter) => setTypeFilter(v as TypeFilter),
             },
             {
-              label: 'Style',
+              label: t(locale, 'wine.filter.style'),
               options: [
-                { value: null, label: 'All' },
+                { value: null, label: t(locale, 'wine.filter.all') },
                 ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
                 ...(hasSparkling ? [{ value: 'SPARKLING' as TypeFilter | StyleFilter, label: SPARKLING_LABEL }] : []),
               ],
@@ -735,7 +735,7 @@ export default function WineCatalogueClient({
                       <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-auto">
-                      <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}₾ / bottle</span>
+                      <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}₾ {t(locale, 'wine.perBottle')}</span>
                       {qty === 0 ? (
                         <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                           className="w-8 h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"

@@ -19,23 +19,26 @@ export default function LocaleSwitcher({ locale }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-0.5">
-      {(['en', 'ka'] as const).map((l, i) => (
-        <span key={l} className="flex items-center">
-          {i > 0 && <span className="mx-1 text-xs" style={{ color: '#c9b99a' }}>|</span>}
-          <button
-            type="button"
-            onClick={() => handleLocale(l)}
-            disabled={isPending}
-            className="text-xs font-semibold uppercase transition-opacity hover:opacity-70"
-            style={{
-              color: locale === l ? 'var(--color-brand)' : '#a89070',
-              fontWeight: locale === l ? 700 : 400,
-            }}
-          >
-            {l}
-          </button>
-        </span>
+    <div
+      className="flex items-center gap-0.5 rounded-full border transition-opacity"
+      style={{ borderColor: '#e0d4c0', padding: 2, opacity: isPending ? 0.5 : 1 }}
+    >
+      {(['en', 'ka'] as const).map(l => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => handleLocale(l)}
+          disabled={isPending}
+          className="text-xs font-semibold uppercase rounded-full transition-colors"
+          style={{
+            padding: '3px 9px',
+            backgroundColor: locale === l ? 'var(--color-brand)' : 'transparent',
+            color: locale === l ? '#fff9f3' : '#a89070',
+            cursor: isPending ? 'wait' : 'pointer',
+          }}
+        >
+          {l}
+        </button>
       ))}
     </div>
   )

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, updateOrderStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
 import InvoicePrint from './InvoicePrint'
+import BookingSheetPrint from './BookingSheetPrint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -105,6 +106,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [error, setError] = useState('')
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
+  const [showBookingSheet, setShowBookingSheet] = useState(false)
+
+  useEffect(() => {
+    function openSheet() { setShowBookingSheet(true) }
+    window.addEventListener('ordersPrintRequested', openSheet)
+    return () => window.removeEventListener('ordersPrintRequested', openSheet)
+  }, [])
 
   // Column visibility — state lives in OrdersFilters (same row as filter bar)
   // Table listens for changes via a custom event + re-reads localStorage
@@ -122,8 +130,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     return () => window.removeEventListener('ordersColumnsChanged', readCols)
   }, [])
 
-  // Status menu
+  // Status menu — menu itself renders in a portal (see bottom of component) so it
+  // can't be clipped by the table's sticky columns / scroll container; position is
+  // captured from the trigger button's rect when opened.
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
+  const [statusMenuRect, setStatusMenuRect] = useState<{ top: number; bottom: number; left: number } | null>(null)
 
   // Hover preview
   const [hoverOrder, setHoverOrder] = useState<Order | null>(null)
@@ -146,12 +157,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
 
-  // Close status dropdown on outside click
+  // Close status dropdown on outside click, or if the table scrolls under it
+  // (the menu is a fixed-position portal, so it won't track the trigger button on scroll)
   useEffect(() => {
     if (!statusMenuId) return
-    function handleClick() { setStatusMenuId(null) }
+    function handleClick() { setStatusMenuId(null); setStatusMenuRect(null) }
+    function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null) }
     document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
+    document.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('click', handleClick)
+      document.removeEventListener('scroll', handleScroll, true)
+    }
   }, [statusMenuId])
 
   useEffect(() => {
@@ -227,8 +244,20 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   async function handleStatusChange(orderId: string, newStatus: OrderStatus) {
     setStatusMenuId(null)
+    setStatusMenuRect(null)
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
     await updateOrderStatus(orderId, newStatus)
+  }
+
+  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
+    if (statusMenuId === orderId) {
+      setStatusMenuId(null)
+      setStatusMenuRect(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setStatusMenuRect({ top: rect.top, bottom: rect.bottom, left: rect.left })
+    setStatusMenuId(orderId)
   }
 
   function openEdit(order: Order) {
@@ -543,7 +572,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                         const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
                         return (
                           <button
-                            onClick={() => setStatusMenuId(statusMenuId === order.id ? null : order.id)}
+                            onClick={e => toggleStatusMenu(order.id, e)}
                             className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
                             style={{
                               backgroundColor: cfg.bg,
@@ -555,24 +584,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                           </button>
                         )
                       })()}
-                      {statusMenuId === order.id && (
-                        <div
-                          className="absolute z-30 rounded-lg shadow-lg border py-1"
-                          style={{ top: '110%', left: 0, minWidth: 140, backgroundColor: '#fff9f3', borderColor: C.border }}
-                        >
-                          {ALL_STATUSES.map(s => (
-                            <button
-                              key={s}
-                              onClick={() => handleStatusChange(order.id, s)}
-                              className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
-                              style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
-                            >
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                              {at(STATUS_CONFIG[s].labelKey)}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </td>
                 )}
@@ -642,10 +653,86 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       </div>
       </div>{/* end hidden md:block */}
 
+      {/* Status dropdown portal — renders into <body> as a fixed-position overlay so it
+          can never be clipped by the table's sticky columns / scroll container (#140) */}
+      {statusMenuId && statusMenuRect && typeof document !== 'undefined' && (() => {
+        const order = orders.find(o => o.id === statusMenuId)
+        if (!order) return null
+        const menuW = 140
+        const menuH = ALL_STATUSES.length * 33 + 8
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        const left = Math.min(statusMenuRect.left, vw - menuW - 8)
+        const top = statusMenuRect.bottom + 4 + menuH > vh
+          ? Math.max(statusMenuRect.top - menuH - 4, 8)
+          : statusMenuRect.bottom + 4
+        return createPortal(
+          <div
+            className="rounded-lg shadow-lg border py-1"
+            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: '#fff9f3', borderColor: C.border }}
+            onClick={e => e.stopPropagation()}
+          >
+            {ALL_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={() => handleStatusChange(order.id, s)}
+                className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
+                style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
+                {at(STATUS_CONFIG[s].labelKey)}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )
+      })()}
+
       {/* Invoice portal — renders directly into <body> so print CSS can isolate it */}
       {printOrder && typeof document !== 'undefined' && createPortal(
         <div id="invoice-portal">
           <InvoicePrint order={printOrder} payment={payment} detailed={detailed} displayName={displayName} />
+        </div>,
+        document.body
+      )}
+
+      {/* Booking sheet preview modal — shows what will print before committing to it */}
+      {showBookingSheet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(28,16,8,0.45)' }}>
+          <div className="w-full max-w-4xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: C.border, maxHeight: '90vh' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
+              <h2 className="font-semibold text-base" style={{ color: C.text }}>{at('orders.sheet.previewTitle')}</h2>
+              <button onClick={() => setShowBookingSheet(false)} style={{ color: C.faint, fontSize: '1.25rem', lineHeight: 1 }}>×</button>
+            </div>
+            <div className="px-6 py-5 overflow-auto">
+              <div className="rounded-lg border overflow-auto" style={{ borderColor: C.border, backgroundColor: '#fff' }}>
+                <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} />
+              </div>
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => window.print()}
+                  className="btn-wine flex-1 py-2 rounded-lg text-sm font-medium"
+                >
+                  {at('orders.sheet.print')}
+                </button>
+                <button
+                  onClick={() => setShowBookingSheet(false)}
+                  className="px-4 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: C.border, color: C.muted }}
+                >
+                  {at('orders.sheet.close')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Booking sheet print portal — only mounted while the preview is open, so
+          window.print() (triggered from the modal above) picks up the same content (#141) */}
+      {showBookingSheet && typeof document !== 'undefined' && createPortal(
+        <div id="booking-sheet-portal">
+          <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} />
         </div>,
         document.body
       )}

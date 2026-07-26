@@ -168,14 +168,23 @@ input, select, textarea {
 
 @media screen {
   #invoice-portal { display: none; }
+  #booking-sheet-portal { display: none; }
 }
 @media print {
   @page {
     size: A4 portrait;
     margin: 10mm 14mm;
   }
+  /* Booking sheet is wide (11 columns) — print it on its own landscape page
+     via CSS named pages, independent of the default @page rule above. */
+  .booking-sheet-print { page: booking-sheet; }
+  @page booking-sheet {
+    size: A4 landscape;
+    margin: 10mm;
+  }
   body > * { display: none !important; }
   #invoice-portal { display: block !important; }
+  #booking-sheet-portal { display: block !important; }
   .invoice-print {
     padding: 12px 16px !important;
     max-width: none !important;
@@ -188,6 +197,8 @@ input, select, textarea {
   /* Prevent WebKit data-detector links (phone numbers, IBANs) from turning blue */
   .invoice-print a { color: inherit !important; text-decoration: none !important; -webkit-text-fill-color: inherit !important; }
   .invoice-print span { -webkit-text-fill-color: inherit !important; }
+  .booking-sheet-print tr { page-break-inside: avoid; }
+  .booking-sheet-print thead { display: table-header-group; }
 }
 
 /* Same fix for screen (print preview uses screen rendering) */

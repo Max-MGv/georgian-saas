@@ -61,6 +61,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const columnsPickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     try {
@@ -71,7 +72,11 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
 
   useEffect(() => {
     if (!columnsOpen) return
-    function close() { setColumnsOpen(false) }
+    function close(e: MouseEvent) {
+      if (columnsPickerRef.current && !columnsPickerRef.current.contains(e.target as Node)) {
+        setColumnsOpen(false)
+      }
+    }
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [columnsOpen])
@@ -344,11 +349,29 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
         </button>
       </div>
 
-      {/* Columns picker — right-aligned in the same row */}
-      <div className="relative ml-auto">
+      {/* Print booking sheet — OrdersTable holds the filtered order data, so this just
+          asks it to open the print preview via a same-page custom event. */}
+      <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
         <button
-          onClick={e => { e.stopPropagation(); setColumnsOpen(o => !o) }}
+          onClick={() => window.dispatchEvent(new CustomEvent('ordersPrintRequested'))}
+          className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
+          style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          {at('orders.filters.printSheet')}
+        </button>
+      </div>
+
+      {/* Columns picker — right-aligned in the same row */}
+      <div className="relative ml-auto" ref={columnsPickerRef}>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
+        <button
+          onClick={() => setColumnsOpen(o => !o)}
           className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
           style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
         >
@@ -359,7 +382,6 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
           <div
             className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
             style={{ backgroundColor: C.bg, borderColor: C.border, minWidth: 180 }}
-            onClick={e => e.stopPropagation()}
           >
             <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
               <span className="text-xs font-semibold" style={{ color: C.faint }}>{at('orders.filters.showHideColumns')}</span>
