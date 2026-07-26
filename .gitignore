@@ -13,3 +13,6 @@ saas/.env*.local
 credentials.txt
 
 .vercel
+
+# Obsidian local UI state (open tabs, pane sizes) — not meaningful to track
+vault/.obsidian/workspace.json
