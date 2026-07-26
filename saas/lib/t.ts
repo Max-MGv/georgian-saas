@@ -99,6 +99,17 @@ const en: Translations = {
   'form.success_heading': 'Booking received!',
   'form.success_body': 'Thank you. We will contact you shortly to confirm your visit.',
   'form.est_total_label': 'Estimated total',
+
+  // Wine catalogue — type/sweetness badges
+  'wine.type.RED': 'Red',
+  'wine.type.WHITE': 'White',
+  'wine.type.AMBER': 'Amber',
+  'wine.type.ROSE': 'Rosé',
+  'wine.sweetness.DRY': 'Dry',
+  'wine.sweetness.SEMI_DRY': 'Semi-dry',
+  'wine.sweetness.SEMI_SWEET': 'Semi-sweet',
+  'wine.sweetness.SWEET': 'Sweet',
+  'wine.sparkling': 'Sparkling',
 }
 
 const ka: Translations = {
@@ -200,6 +211,17 @@ const ka: Translations = {
   'form.success_heading': 'ჯავშანი მიღებულია!',
   'form.success_body': 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.',
   'form.est_total_label': 'სავარაუდო ჯამი',
+
+  // Wine catalogue — type/sweetness badges
+  'wine.type.RED': 'წითელი',
+  'wine.type.WHITE': 'თეთრი',
+  'wine.type.AMBER': 'ქარვისფერი',
+  'wine.type.ROSE': 'ვარდისფერი',
+  'wine.sweetness.DRY': 'მშრალი',
+  'wine.sweetness.SEMI_DRY': 'ნახევრად მშრალი',
+  'wine.sweetness.SEMI_SWEET': 'ნახევრად ტკბილი',
+  'wine.sweetness.SWEET': 'ტკბილი',
+  'wine.sparkling': 'ცქრიალა',
 }
 
 const dict: Record<string, Translations> = { en, ka }

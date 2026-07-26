@@ -8,6 +8,44 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-26 — Bilingual wine name (#143 built) + recovered stuck #79 vault docs (full detail)
+
+### Completed
+
+**Investigated how EN/KA translation currently works for wines**, at Max's request. Confirmed: wine type/sweetness (`WineType`/`Sweetness` enums) are stored as a single value and already correctly translate in the admin panel via `adminT()` — but the public `/wines` ordering page never fetches the tenant's `default_locale` at all and has its own separate, hardcoded-English copy of those labels, so a Georgian-language tenant's wine catalogue still showed "Dry"/"Sweet"/"Red" in English regardless of site language. Missed by the earlier "front-facing = complete" translation audit (2026-07-23), which covered Nav/Home/About/Contact/Booking Form but not Wines. Separately confirmed `Wine.name` (e.g. "Rkatsiteli") is a single required field with no locale variant — admin's understanding was correct, that's by design today.
+
+**Max proposed adding an optional Georgian wine name** (e.g. "რქაწითელი"), entered via a toggle, falling back to English if blank — reasoned it's a real translation (different script) unlike a pure proper noun, and helps SEO for Georgian-script search queries. Agreed, and bundled in the type/sweetness label fix since it's the same underlying gap (site language never reaching the wines page).
+
+**Full plan written and approved** before any edits: `Plan-BilingualWineName.md`. An `Explore` subagent first mapped every place `Wine.name`/`WineOrderItem.wineNameSnapshot` are read or written (admin editor, public catalogue, order submission, packing view, statistics, seed/clone scripts) to scope the change correctly — confirmed the order snapshot and downstream admin views (packing sheets, statistics aggregation) need zero changes, since they just display whatever string was already resolved upstream.
+
+**Repo detour before building:** switching from `master` to `staging` surfaced a real merge conflict — `FeatureLog.md`/`MyToDo.md`/`Plan-DevProdEnvironments.md`/`workspace.json` had a newer, uncommitted, post-#79-completion version stuck on `master` (never made it to `staging`) that collided with `staging`'s own older, pre-completion version of the same files. Showed Max the actual diffs rather than guessing; confirmed via git log timestamps that the stuck master version was written *after* the staging version, so it was the correct one to keep. Resolved in its favor, committed separately (`b716557`) before starting the feature.
+
+**Built #143** exactly per the plan: `Wine.nameKa String?` (migration `20260726093339_add_wine_name_ka`, applied to **dev** DB only, dev server was already stopped); `lib/wineName.ts` (`wineDisplayName(wine, locale)`, fallback computed at read time, nothing copied into the DB); admin `WinesClient.tsx` gained an EN/KA toggle on the Name field (separate toggle state for the add-form and inline edit-form, since both can be open independently) with a fallback hint when the Georgian field is empty; `lib/t.ts` gained `wine.type.*`/`wine.sweetness.*`/`wine.sparkling` keys (the public-site counterpart to the admin dictionary's existing wine enum labels); public `app/(site)/wines/page.tsx` now fetches `default_locale` (+ `site_locale` cookie override, matching Home/About/Contact's exact resolution order) and resolves each wine's name server-side before handing data to the client component, which now takes a `locale` prop instead of hardcoding English labels. Deliberately left out (per plan scope): the rest of the wines page's chrome (headings, filter labels, form placeholders) is still English-only — a separate, larger gap, not this pass.
+
+**Browser-verified on staging tenant (Staging Winery) via localhost, logged in as `maxb2bsaas@gmail.com`:** toggled Rkatsiteli's Name field to Georgian in `/admin/wines`, saw the empty-state fallback hint, entered "რქაწითელი", saved. Public `/wines` with no locale cookie still showed "Rkatsiteli" (English) — baseline unchanged. With `site_locale=ka` cookie set: showed "რქაწითელი" for the one wine with a Georgian name, and correct English fallback for the other 5 (no Georgian name yet); type/sweetness/sparkling filter pills and badges all switched to Georgian. Confirmed the resolved name also reaches the cart/order-summary line (traced in code that this is exactly what becomes `wineNameSnapshot` on submit — didn't submit a live test order). TypeScript: 0 errors throughout. Noted one stale doc found along the way, not fixed: `MaintenanceNotes.md` §4 still says `DEFAULT_TENANT_ID` points at Nikalas Marani's real tenant, but it currently resolves to Staging Winery (observed directly this session) — worth a quick correction next time that section is touched.
+
+**Vault:** `FeatureLog.md` (#143 → ✅ Done, Claude tested), `MaintenanceNotes.md` (new §5 — resolve wine names through `wineDisplayName()`, don't read `wine.name` directly on customer-facing surfaces), `Plan-BilingualWineName.md` (updated with what was actually built + verification results), `SessionLog.md` (this entry).
+
+### Files changed
+- `saas/prisma/schema.prisma` — `Wine.nameKa String?`
+- `saas/prisma/migrations/20260726093339_add_wine_name_ka/` — NEW
+- `saas/lib/wineName.ts` — NEW
+- `saas/lib/adminT.ts` — `wines.nameKaPh`, `wines.nameKaFallbackHint` (en+ka)
+- `saas/lib/t.ts` — `wine.type.*`, `wine.sweetness.*`, `wine.sparkling` (en+ka)
+- `saas/app/actions/wines.ts` — `createWine`/`updateWine`/`getWinesWithVintages` extended for `nameKa`
+- `saas/app/admin/(panel)/wines/WinesClient.tsx` — EN/KA name toggle (add + edit forms)
+- `saas/app/(site)/wines/page.tsx` — fetches `default_locale`, resolves names server-side
+- `saas/app/(site)/wines/WineCatalogueClient.tsx` — `locale` prop, `t()`-driven type/sweetness/sparkling labels
+- Vault: `Plan-BilingualWineName.md` (NEW), `FeatureLog.md`, `MaintenanceNotes.md`, `SessionLog.md` (this entry)
+- Also recovered onto `staging` (separate commit `b716557`): `FeatureLog.md`, `MyToDo.md`, `Plan-DevProdEnvironments.md`, `ClaudeInstructions.md`, `workspace.json`, `SessionLog.md` — the stuck #79 wrap-up docs described above
+
+### What's next
+- Push this work to `staging`, verify on the staging preview URL, then `prisma migrate deploy` to **production** + merge to `master` once Max confirms staging looks right (per Rule 0).
+- Max: add Georgian names for the other 5 wines when convenient — data entry, not code.
+- Flagged, not done: rest of the wines page chrome is still English-only (same shape of gap, separate scope); `MaintenanceNotes.md` §4's stale `DEFAULT_TENANT_ID` description.
+
+---
+
 ## 2026-07-23 (session 3) — Feature #79 BUILT: dev/prod environments live + strict staging-first rule recorded (full detail)
 
 ### Completed

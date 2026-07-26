@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
+import { t } from '@/lib/t'
 
 type DbWine = {
   vintageId: string
@@ -25,16 +26,9 @@ type ViewMode = 'grid' | 'list'
 type TypeFilter = DbWine['wineType'] | null
 type StyleFilter = DbWine['sweetness'] | 'SPARKLING' | null
 
-const TYPE_LABEL: Record<DbWine['wineType'], string> = {
-  RED: 'Red', WHITE: 'White', AMBER: 'Amber', ROSE: 'Rosé',
-}
-const SWEETNESS_LABEL: Record<DbWine['sweetness'], string> = {
-  DRY: 'Dry', SEMI_DRY: 'Semi-dry', SEMI_SWEET: 'Semi-sweet', SWEET: 'Sweet',
-}
-
-function wineMeta(wine: DbWine) {
-  const parts = [`${TYPE_LABEL[wine.wineType]} ${SWEETNESS_LABEL[wine.sweetness]}`]
-  if (wine.sparkling) parts.push('Sparkling')
+function wineMeta(wine: DbWine, typeLabel: Record<DbWine['wineType'], string>, sweetnessLabel: Record<DbWine['sweetness'], string>, sparklingLabel: string) {
+  const parts = [`${typeLabel[wine.wineType]} ${sweetnessLabel[wine.sweetness]}`]
+  if (wine.sparkling) parts.push(sparklingLabel)
   if (wine.alcoholLevel != null) parts.push(`${wine.alcoholLevel}%`)
   return parts.join(' · ')
 }
@@ -72,6 +66,7 @@ export default function WineCatalogueClient({
   logoAlt = '',
   tenantName = '',
   hideCompanyDropdown = false,
+  locale = 'en',
 }: {
   wines: DbWine[]
   companies?: Company[]
@@ -79,7 +74,17 @@ export default function WineCatalogueClient({
   logoAlt?: string
   tenantName?: string
   hideCompanyDropdown?: boolean
+  locale?: string
 }) {
+  const TYPE_LABEL: Record<DbWine['wineType'], string> = {
+    RED: t(locale, 'wine.type.RED'), WHITE: t(locale, 'wine.type.WHITE'),
+    AMBER: t(locale, 'wine.type.AMBER'), ROSE: t(locale, 'wine.type.ROSE'),
+  }
+  const SWEETNESS_LABEL: Record<DbWine['sweetness'], string> = {
+    DRY: t(locale, 'wine.sweetness.DRY'), SEMI_DRY: t(locale, 'wine.sweetness.SEMI_DRY'),
+    SEMI_SWEET: t(locale, 'wine.sweetness.SEMI_SWEET'), SWEET: t(locale, 'wine.sweetness.SWEET'),
+  }
+  const SPARKLING_LABEL = t(locale, 'wine.sparkling')
   const [quantities, setQuantities] = useState<WineQty>({})
   const [view, setView] = useState<ViewMode>('grid')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null)
@@ -670,7 +675,7 @@ export default function WineCatalogueClient({
               options: [
                 { value: null, label: 'All' },
                 ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
-                ...(hasSparkling ? [{ value: 'SPARKLING' as TypeFilter | StyleFilter, label: 'Sparkling' }] : []),
+                ...(hasSparkling ? [{ value: 'SPARKLING' as TypeFilter | StyleFilter, label: SPARKLING_LABEL }] : []),
               ],
               active: styleFilter as TypeFilter | StyleFilter,
               set: (v: TypeFilter | StyleFilter) => setStyleFilter(v as StyleFilter),
@@ -727,7 +732,7 @@ export default function WineCatalogueClient({
                         <p className="font-bold text-sm" style={{ color: '#1c1008' }}>{wine.name}</p>
                         <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>{wine.year}</span>
                       </div>
-                      <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine)}</p>
+                      <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-auto">
                       <span className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.price}₾ / bottle</span>
@@ -795,7 +800,7 @@ export default function WineCatalogueClient({
                         <p className="text-sm font-semibold" style={{ color: '#1c1008' }}>{wine.name}</p>
                         <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>{wine.year}</span>
                       </div>
-                      <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wineMeta(wine)}</p>
+                      <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                   </div>
                   <p className="text-sm font-medium text-center" style={{ color: '#6b5a47' }}>{wine.price}₾</p>

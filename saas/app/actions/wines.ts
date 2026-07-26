@@ -21,7 +21,7 @@ export async function getWinesWithVintages() {
       where: { tenantId },
       orderBy: { sortOrder: 'asc' },
       select: {
-        id: true, name: true, wineType: true, sweetness: true, sparkling: true,
+        id: true, name: true, nameKa: true, wineType: true, sweetness: true, sparkling: true,
         alcoholLevel: true, description: true, color: true, imagePath: true,
         sortOrder: true, active: true,
         vintages: { orderBy: [{ sortOrder: 'asc' }, { year: 'desc' }] },
@@ -31,7 +31,7 @@ export async function getWinesWithVintages() {
 }
 
 export async function createWine(data: {
-  name: string; wineType: WineType; sweetness: Sweetness; sparkling: boolean
+  name: string; nameKa?: string; wineType: WineType; sweetness: Sweetness; sparkling: boolean
   alcoholLevel?: number; description?: string; color: string
 }) {
   await requireAdmin()
@@ -46,7 +46,7 @@ export async function createWine(data: {
 }
 
 export async function updateWine(id: string, data: Partial<{
-  name: string; wineType: WineType; sweetness: Sweetness; sparkling: boolean
+  name: string; nameKa: string | null; wineType: WineType; sweetness: Sweetness; sparkling: boolean
   alcoholLevel: number | null; description: string; color: string
   active: boolean; sortOrder: number
 }>) {

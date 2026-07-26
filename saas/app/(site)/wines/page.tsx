@@ -1,7 +1,8 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
-import { headers } from 'next/headers'
+import { wineDisplayName } from '@/lib/wineName'
+import { headers, cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { type Metadata } from 'next'
 import WineCatalogueClient from './WineCatalogueClient'
@@ -18,8 +19,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function WinesPage() {
-  const [tenantId, h] = await Promise.all([getTenantId(), headers()])
+  const [tenantId, h, cookieStore, defaultLocale] = await Promise.all([
+    getTenantId(), headers(), cookies(), getSetting('default_locale'),
+  ])
   if (h.get('x-tenant-modules-wine-orders') !== 'true') redirect('/')
+  const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
@@ -39,7 +43,7 @@ export default async function WinesPage() {
   const wines = wineProducts.flatMap(wine => wine.vintages.map(v => ({
     vintageId: v.id,
     wineId: wine.id,
-    name: wine.name,
+    name: wineDisplayName(wine, locale),
     wineType: wine.wineType,
     sweetness: wine.sweetness,
     sparkling: wine.sparkling,
@@ -58,6 +62,7 @@ export default async function WinesPage() {
       logoAlt={logoAlt}
       tenantName={tenantName}
       hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
+      locale={locale}
     />
   )
 }

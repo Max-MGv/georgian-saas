@@ -98,4 +98,21 @@ if (isLocal) {
 - `saas/proxy.ts` — `resolveTenant()`, the `DEFAULT_TENANT_ID` fallback
 - Every page under `saas/app/admin/(panel)/` — reads `x-tenant-id` via `getTenantId()`, scopes all queries to it
 
+---
+
+## 5. Wine name (EN/KA) — resolve through `wineDisplayName()`, don't read `wine.name` directly on customer-facing surfaces
+
+**What the dependency is:**
+`Wine` has two name fields: `name` (required, English/canonical) and `nameKa` (optional, Georgian override). `saas/lib/wineName.ts` exports `wineDisplayName(wine, locale)`, which returns `nameKa` when the locale is `'ka'` and `nameKa` is non-empty, otherwise falls back to `name`.
+
+**Where resolution happens (once, server-side):** `saas/app/(site)/wines/page.tsx` resolves the name before it ever reaches the client — the flattened wine list handed to `WineCatalogueClient` already has the correct string in its `name` field. From there it flows unchanged into the cart, the order-summary drawer, the `submitWineOrder` payload, and `WineOrderItem.wineNameSnapshot`. **If you add a new customer-facing surface that reads wine names from the DB directly** (a new page, an email template, a CSV export), route it through `wineDisplayName()` too — reading `wine.name` straight from Prisma will silently ignore any Georgian names admins have entered.
+
+**Where it doesn't apply:** the admin panel (`WinesClient.tsx`) always shows/edits the raw `name`/`nameKa` pair directly — there's no resolution there, since the admin needs to see and edit both values, not a resolved single string.
+
+**Files involved:**
+- `saas/lib/wineName.ts` — the resolver
+- `saas/app/(site)/wines/page.tsx` — the one place resolution happens for the live app
+- `saas/app/admin/(panel)/wines/WinesClient.tsx` — admin editor, EN/KA toggle on the Name field
+- Full design + what's still English-only on the public wines page: `Plan-BilingualWineName.md`
+
 **If you ever want a real cross-tenant reporting view** (e.g. "total revenue across all clients" on the super-admin Tenants page), that has to be built explicitly — it doesn't fall out of the existing per-tenant admin pages.
