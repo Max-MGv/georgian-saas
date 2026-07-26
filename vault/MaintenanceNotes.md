@@ -92,7 +92,7 @@ if (isLocal) {
   if (defaultId) tenant = await db.tenant.findUnique({ where: { id: defaultId } })
 }
 ```
-`DEFAULT_TENANT_ID` in `.env` is currently set to **Nikalas Marani's** ID. So on `localhost:3000`, every admin page shows Nikalas Marani's data — for any logged-in user, super_admin or not. This is easy to mistake for "super_admin sees everything," which it does not. To locally preview a different tenant's admin, you'd need to either change `DEFAULT_TENANT_ID` or give that tenant a real resolvable domain (`winery2.local` currently has no hosts-file entry, so it isn't reachable locally — see `SessionLog.md` 2026-07-17 session 3).
+`DEFAULT_TENANT_ID` in `.env` was originally set to **Nikalas Marani's** ID; since the #79 dev/staging environment work (2026-07-23), local `.env` points at the **dev** DB and `DEFAULT_TENANT_ID` there is **Staging Winery**'s ID instead (confirmed directly 2026-07-26). So on `localhost:3000`, every admin page currently shows Staging Winery's data — for any logged-in user, super_admin or not. This is easy to mistake for "super_admin sees everything," which it does not. To locally preview a different tenant's admin, you'd need to either change `DEFAULT_TENANT_ID` or give that tenant a real resolvable domain (`winery2.local` currently has no hosts-file entry, so it isn't reachable locally — see `SessionLog.md` 2026-07-17 session 3).
 
 **Files involved:**
 - `saas/proxy.ts` — `resolveTenant()`, the `DEFAULT_TENANT_ID` fallback
