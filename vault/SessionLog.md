@@ -8,6 +8,42 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-23 (session 3) — Feature #79 BUILT: dev/prod environments live + strict staging-first rule recorded (full detail)
+
+### Completed
+
+**Executed the full 7-step #79 plan** approved earlier the same day (see session 2 entry below). All infra built via Supabase + Vercel MCP, verified in browser, nothing done to prod except the two intentional cleanup writes (Test Winery removal, already-approved).
+
+1. **Dev Supabase project created** (`georgian-saas-dev`, `jpbkkngpgtvqmsocitjx`, eu-central-1, $0/month confirmed via `get_cost`+`confirm_cost`).
+2. **Migration baseline established on both DBs.** Generated a squashed baseline from current `schema.prisma`, verified drift-free against prod first (`migrate diff` came back empty), deleted the stale `20260517121307_init` migration, replaced with `20260723000000_baseline`, marked `--applied` on dev and prod via `prisma migrate resolve`. `migrate status` clean on both afterward. Also ran the RLS setup (app_user role + 14 tenant_isolation policies + the same Tenant/PlatformConfig lockdown from earlier today) against dev via MCP so dev's security posture matches prod exactly.
+3. **Test Winery removed from production** — verified first via SQL that it had zero rows in every data table (booking/company/wine/etc. all 0) before deleting; also removed its orphaned `testwinery@email.ge` auth user. Prod now has exactly one tenant.
+4. **Staging tenant built** — wrote `scripts/clone-nm-to-staging.ts`, cloned NM's 36 settings + 64 SiteContent rows + 6 companies with price tiers + 6 wines with vintages + menu/masterclass items into a new "Staging Winery" tenant in the dev DB (displayName suffixed "(Staging)" so browser tabs are distinguishable).
+5. **Environments wired** — `saas/.env` repointed to dev (prod backed up to `.env.prod.backup`, gitignored); Max split Vercel's env vars (Production→prod DB, Preview→dev DB) by hand since the Vercel MCP has no env-var tools; all values recorded in `credentials.txt` including the dev `service_role` key Max retrieved from the dashboard.
+6. **Staging branch + URL stood up** — pushed `staging` and `master` (permission-gated, Max ran both `git push` commands); Vercel auto-built the Preview at `georgian-saas-git-staging-mg-productions-projects.vercel.app`; set that as the Staging Winery `Tenant.domain`; Max disabled Vercel's "Deployment Protection" (Vercel Authentication) so the URL is reachable without a Vercel login.
+7. **Vault documentation** — this entry, plus `Plan-DevProdEnvironments.md` (new), `Roadmap.md`, `FeatureLog.md` (#79 → ✅ Done, Claude tested), `MyToDo.md`.
+
+**Bug found and fixed during verification: connection pool exhaustion on the new dev DB.** First browser check of both the staging URL and localhost showed the page shell/nav loading but the main content never appearing — looked like a broken deploy. Investigated properly rather than guessing: Vercel runtime logs showed nothing (error surfaced client-side via streaming, not as a clean 500 in most cases); reproduced locally via the dev server's own logs, which showed the real error — `PrismaClientKnownRequestError: Timed out fetching a new connection from the connection pool (connection_limit: 9)`. Wrote two small throwaway repro scripts (deleted after) to isolate it: confirmed `withTenantDb`'s `SET LOCAL ROLE` + RLS mechanism itself worked fine (identical to prod), then fired 30 parallel tenant transactions and got `EMAXCONNSESSION: max clients reached in session mode — pool_size: 15` — the home page fires ~26 parallel `withTenantDb` transactions per render (existing app behavior, same on prod), and the new dev project's session-mode pooler (port 5432) has a lower default cap (15) than what that many parallel session-mode connections need. Fix: switched local `DATABASE_URL` to the **transaction pooler** (port 6543, `pgbouncer=true`) with explicit `connection_limit=20&pool_timeout=30` — matches how prod's `.env` was already configured (verified against the existing prod file, wasn't a new pattern). Re-tested: staging and localhost both render fully. Root cause was purely a new-project default, not a bug in the app or the #79 setup design.
+
+**Second issue: `<main>` looking permanently empty during agent-side verification even after the pool fix — turned out to be a false alarm in my own tooling, not the app.** Server logs showed clean 200 responses and `curl` confirmently returned full real content ("Wine Tasting", real prices) at ~59KB, but my in-pane page reads kept showing only the loading skeleton. Root cause (confirmed via Max pointing it out and reproducing after making the pane visible): **a hidden/backgrounded browser pane freezes React's streaming hydration mid-render** — the page was correctly finishing server-side the whole time, my checks were just reading a frozen client. Logged as a gotcha in `Plan-DevProdEnvironments.md` so future verification isn't fooled by the same thing.
+
+**Staging admin login wired and fixed.** Max created `maxb2bsaas@gmail.com` in the dev Supabase auth; ran `npm run set-admin -- --email maxb2bsaas@gmail.com --tenantId cmrxb85wo0000vlc0d964nzf8` to lock it to Staging Winery. First login attempt failed ("Incorrect email or password") despite the account looking correct in the DB (confirmed, has_password, email_confirmed_at set, not banned) — rather than guess at the cause, force-reset the password via Supabase's Admin API to the exact value recorded in `credentials.txt`, eliminating any copy/paste mismatch. Second attempt succeeded — landed in Orders, correctly showing only the `STAGING TEST-79` booking (200₾), confirming tenant scoping end-to-end.
+
+**Recorded the strict workflow rule, at Max's explicit request.** Added a new **Rule 0** at the very top of `ClaudeInstructions.md` (read before all other rules): every code change goes to `staging` first, never straight to `master`; `master` is production and only gets updated after Max confirms what's on staging; schema changes follow the same shape (`migrate dev` on dev → verify → `migrate deploy` on prod as its own deliberate step); local dev always points at the dev DB. Added matching practical guardrails (check current branch before committing, switch back to `staging` after every master merge, never force-push). Mirrored the same flow, as a diagram, at the top of `Plan-DevProdEnvironments.md` so both the strict rule and the full operational detail live in sync.
+
+### Files changed
+- `saas/prisma/migrations/` — deleted `20260517121307_init`, added `20260723000000_baseline`
+- `saas/scripts/clone-nm-to-staging.ts` — NEW (one-off NM→staging snapshot tool)
+- `saas/.env` — repointed to dev DB (transaction pooler, explicit connection_limit); `saas/.env.prod.backup` NEW (prod values preserved, gitignored)
+- `credentials.txt` (repo root, gitignored) — DEV/STAGING section added: DB password, both pooler URLs, anon key, service_role key, staging tenant ID/domain, admin login, environment mapping table
+- Vault: `Plan-DevProdEnvironments.md` (NEW, then restructured to lead with the flow diagram), `ClaudeInstructions.md` (new Rule 0), `Roadmap.md`, `FeatureLog.md`, `MyToDo.md`, `SessionLog.md` (this entry)
+
+### What's next
+- Optional, not blocking: raise dev pooler `pool_size` 15→30 in the Supabase dashboard (current explicit connection_limit workaround is sufficient); a friendlier staging domain alias; decide whether to keep or delete the `STAGING TEST-79` test booking.
+- Max to actually try the new flow once on a real small change, to build the staging-first habit muscle memory.
+- FeatureLog #79 "User tested" column still ❌ — all testing so far was Claude via MCP/browser; worth a real pass from Max at some point, low urgency since the mechanics are fully verified.
+
+---
+
 ## 2026-07-23 (session 2) — Feature #79 dev/prod plan approved + Supabase/Vercel MCP capability audit (full detail)
 
 ### Completed
