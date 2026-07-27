@@ -82,14 +82,13 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   }, [columnsOpen])
 
   function toggleCol(id: ColumnId) {
-    setVisibleCols(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      try { localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...next])) } catch {}
-      // Notify OrdersTable on the same page
-      window.dispatchEvent(new CustomEvent('ordersColumnsChanged'))
-      return next
-    })
+    const next = new Set(visibleCols)
+    next.has(id) ? next.delete(id) : next.add(id)
+    try { localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...next])) } catch {}
+    // Notify OrdersTable on the same page (fired here, not inside a setState
+    // updater, so it doesn't run mid-render of this component)
+    window.dispatchEvent(new CustomEvent('ordersColumnsChanged'))
+    setVisibleCols(next)
   }
 
   // ── Filters ──────────────────────────────────────────────────────────────────

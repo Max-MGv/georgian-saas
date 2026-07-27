@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "set-admin": "tsx scripts/set-admin-metadata.ts"
+    "set-admin": "tsx scripts/set-admin-metadata.ts",
+    "create-super-admin-dev": "tsx scripts/create-super-admin-dev.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
