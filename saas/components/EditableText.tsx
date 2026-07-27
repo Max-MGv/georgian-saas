@@ -85,7 +85,7 @@ export default function EditableText({
     outline: editing
       ? '2px solid var(--color-brand)'
       : hovered
-      ? '1px dashed #c9a090'
+      ? '1px dashed var(--site-secondary)'
       : '1px dashed transparent',
     outlineOffset: 3,
     borderRadius: 3,
@@ -118,7 +118,7 @@ export default function EditableText({
             top: -6,
             right: 18,
             color: '#fff',
-            backgroundColor: '#a89070',
+            backgroundColor: 'var(--site-secondary)',
             fontSize: '0.65rem',
             lineHeight: 1,
             padding: '2px 4px',
@@ -139,8 +139,8 @@ export default function EditableText({
                 top: '100%',
                 right: 0,
                 marginTop: 4,
-                backgroundColor: '#1c1008',
-                color: '#f5efe6',
+                backgroundColor: 'var(--site-text)',
+                color: 'var(--site-bg)',
                 fontSize: '0.7rem',
                 lineHeight: 1.4,
                 padding: '5px 8px',
@@ -208,7 +208,7 @@ export default function EditableText({
             type="button"
             onClick={handleCancel}
             className="text-xs px-2 py-1 rounded font-medium"
-            style={{ color: '#6b5a47', border: '1px solid #e0d4c0', backgroundColor: '#fff9f3' }}
+            style={{ color: 'var(--site-muted)', border: '1px solid var(--site-border)', backgroundColor: 'var(--site-surface)' }}
           >
             {at('editable.cancel')}
           </button>
@@ -219,7 +219,7 @@ export default function EditableText({
         <span className="text-xs mt-0.5 block" style={{ color: '#16a34a' }}>{at('editable.saved')}</span>
       )}
       {resetDone && !editing && (
-        <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>{at('editable.resetToDefault')}</span>
+        <span className="text-xs mt-0.5 block" style={{ color: 'var(--site-secondary)' }}>{at('editable.resetToDefault')}</span>
       )}
     </Wrapper>
   )

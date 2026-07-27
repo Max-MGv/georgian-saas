@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ColorPicker } from '../ColorPicker'
 import { createTenant, updateTenant, checkTenantDomain, type DomainCheckResult } from '@/app/actions/superAdmin'
 import { uploadTenantLogoAdmin, uploadTenantFaviconAdmin } from '@/app/actions/uploadLogo'
+import { THEME_PRESETS, resolveTenantTheme, DEFAULT_PRESET_ID, type PresetId } from '@/lib/themePresets'
 
 type Props = {
   mode: 'new' | 'edit'
@@ -13,8 +14,8 @@ type Props = {
     name: string
     domain: string
     slug: string
-    primaryColor: string
-    primaryHover: string
+    presetId: PresetId
+    primaryColorOverride?: string
     logoUrl?: string | null
     logoAlt?: string
     faviconUrl?: string | null
@@ -66,8 +67,14 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [domain, setDomain] = useState(tenant?.domain ?? '')
   const [slug, setSlug] = useState(tenant?.slug ?? '')
   const [displayName, setDisplayName] = useState(tenant?.displayName ?? '')
-  const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? '#7c1d23')
-  const [primaryHover, setPrimaryHover] = useState(tenant?.primaryHover ?? '#9b2429')
+  const [presetId, setPresetId] = useState<PresetId>(tenant?.presetId ?? DEFAULT_PRESET_ID)
+  const [overrideEnabled, setOverrideEnabled] = useState(!!tenant?.primaryColorOverride)
+  const [primaryColorOverride, setPrimaryColorOverride] = useState(
+    tenant?.primaryColorOverride ?? THEME_PRESETS[tenant?.presetId ?? DEFAULT_PRESET_ID].tokens.brand
+  )
+  const resolvedTheme = resolveTenantTheme({
+    v: 1, presetId, primaryColorOverride: overrideEnabled ? primaryColorOverride : undefined,
+  })
   const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
   const [logoAlt, setLogoAlt] = useState(tenant?.logoAlt ?? '')
   const [faviconUrl, setFaviconUrl] = useState<string | null>(tenant?.faviconUrl ?? null)
@@ -168,7 +175,10 @@ export default function TenantFormClient({ mode, tenant }: Props) {
     startTransition(async () => {
       try {
         const payload = {
-          name, domain, slug, primaryColor, primaryHover, logoUrl, logoAlt, faviconUrl,
+          name, domain, slug,
+          presetId,
+          primaryColorOverride: overrideEnabled ? primaryColorOverride : undefined,
+          logoUrl, logoAlt, faviconUrl,
           displayName: displayName || undefined,
           modulesBooking, modulesWineOrders, modulesPublicSite,
         }
@@ -414,23 +424,58 @@ export default function TenantFormClient({ mode, tenant }: Props) {
             </div>
           </div>
 
-          {/* Color pickers */}
+          {/* Theme preset picker */}
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 14 }}>
-              Brand colors
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 10 }}>
+              Theme
             </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 13, color: C.faint, width: 80, flexShrink: 0 }}>Primary</span>
-                <ColorPicker color={primaryColor} onChange={setPrimaryColor} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 13, color: C.faint, width: 80, flexShrink: 0 }}>Hover</span>
-                <ColorPicker color={primaryHover} onChange={setPrimaryHover} />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {(Object.keys(THEME_PRESETS) as PresetId[]).map(id => {
+                const preset = THEME_PRESETS[id]
+                const selected = id === presetId
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setPresetId(id)
+                      if (!overrideEnabled) setPrimaryColorOverride(preset.tokens.brand)
+                    }}
+                    style={{
+                      textAlign: 'left', padding: 10, borderRadius: 10, cursor: 'pointer',
+                      backgroundColor: preset.tokens.bg,
+                      border: `2px solid ${selected ? preset.tokens.brand : C.border}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                      {[preset.tokens.surface, preset.tokens.border, preset.tokens.secondary, preset.tokens.brand].map((sw, i) => (
+                        <div key={i} style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: sw, border: `1px solid ${preset.tokens.border}` }} />
+                      ))}
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: preset.tokens.text }}>{preset.name}</span>
+                  </button>
+                )
+              })}
             </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={overrideEnabled}
+                onChange={e => {
+                  setOverrideEnabled(e.target.checked)
+                  if (e.target.checked) setPrimaryColorOverride(THEME_PRESETS[presetId].tokens.brand)
+                }}
+              />
+              <span style={{ fontSize: 13, color: C.text }}>Override brand color</span>
+            </label>
+            {overrideEnabled && (
+              <div style={{ marginTop: 10 }}>
+                <ColorPicker color={primaryColorOverride} onChange={setPrimaryColorOverride} />
+              </div>
+            )}
             <p style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>
-              Hover is usually a slightly darker shade of the primary color.
+              Everything but the brand color is fixed by the theme. Enable the override to match a client&apos;s existing brand color within the chosen theme.
             </p>
           </div>
 
@@ -481,69 +526,72 @@ export default function TenantFormClient({ mode, tenant }: Props) {
       {/* Live Preview */}
       <div style={{ flex: '0 0 280px', minWidth: 240 }}>
         <p style={{ fontSize: 12, fontWeight: 500, color: C.faint, marginBottom: 12, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          Brand Preview
+          Theme Preview
         </p>
         <div style={{
-          backgroundColor: '#fff9f3', borderRadius: 12, border: '1px solid #e0d4c0',
+          backgroundColor: resolvedTheme.bg, borderRadius: 12, border: `1px solid ${resolvedTheme.border}`,
           overflow: 'hidden',
         }}>
           {/* Mock nav strip */}
           <div style={{
-            height: 44, backgroundColor: primaryColor,
+            height: 40, backgroundColor: resolvedTheme.header,
+            borderBottom: `1px solid ${resolvedTheme.border}`,
             display: 'flex', alignItems: 'center', paddingInline: 16, gap: 12,
           }}>
-            <div style={{ width: 70, height: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 4 }} />
+            <div style={{ width: 70, height: 8, backgroundColor: resolvedTheme.text, opacity: 0.6, borderRadius: 4 }} />
             <div style={{ flex: 1 }} />
             <div style={{
-              padding: '4px 12px', borderRadius: 6, fontSize: 11,
-              backgroundColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.9)',
+              padding: '4px 12px', borderRadius: 6, fontSize: 11, color: '#fff',
+              backgroundColor: resolvedTheme.brand,
             }}>Book</div>
           </div>
 
           {/* Mock content */}
           <div style={{ padding: '20px 16px' }}>
-            <div style={{ fontSize: 11, color: primaryColor, fontWeight: 600, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: resolvedTheme.brand, fontWeight: 600, marginBottom: 8 }}>
               {name || 'Client Name'}
             </div>
-            <div style={{ fontSize: 13, color: '#1c1008', marginBottom: 6 }}>
+            <div style={{ fontSize: 13, color: resolvedTheme.text, marginBottom: 6 }}>
               {domain || 'yourdomain.ge'}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
               <button style={{
                 padding: '8px 18px', borderRadius: 7, fontSize: 12,
-                backgroundColor: primaryColor, color: '#fff', border: 'none', cursor: 'default',
+                backgroundColor: resolvedTheme.brand, color: '#fff', border: 'none', cursor: 'default',
               }}>
                 Book a Visit
               </button>
               <button style={{
                 padding: '8px 18px', borderRadius: 7, fontSize: 12,
-                backgroundColor: '#fff', color: primaryColor,
-                border: `1.5px solid ${primaryColor}`, cursor: 'default',
+                backgroundColor: resolvedTheme.surface, color: resolvedTheme.brand,
+                border: `1.5px solid ${resolvedTheme.brand}`, cursor: 'default',
               }}>
                 Learn More
               </button>
             </div>
             <div style={{
               marginTop: 14, padding: '8px 12px', borderRadius: 8,
-              backgroundColor: `${primaryColor}18`,
-              borderLeft: `3px solid ${primaryColor}`,
-              fontSize: 12, color: '#6b5a47',
+              backgroundColor: resolvedTheme.surface,
+              border: `1px solid ${resolvedTheme.border}`,
+              borderLeft: `3px solid ${resolvedTheme.brand}`,
+              fontSize: 12, color: resolvedTheme.muted,
             }}>
               Booking confirmation text in brand color accent.
             </div>
           </div>
         </div>
 
-        {/* Color info */}
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1, padding: '8px 10px', borderRadius: 7, backgroundColor: '#111827', border: '1px solid #1e293b' }}>
-            <div style={{ width: '100%', height: 20, borderRadius: 4, backgroundColor: primaryColor, marginBottom: 4 }} />
-            <div style={{ fontSize: 11, color: C.faint, fontFamily: 'monospace' }}>{primaryColor}</div>
-          </div>
-          <div style={{ flex: 1, padding: '8px 10px', borderRadius: 7, backgroundColor: '#111827', border: '1px solid #1e293b' }}>
-            <div style={{ width: '100%', height: 20, borderRadius: 4, backgroundColor: primaryHover, marginBottom: 4 }} />
-            <div style={{ fontSize: 11, color: C.faint, fontFamily: 'monospace' }}>{primaryHover}</div>
-          </div>
+        {/* Token info */}
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {([
+            ['brand', resolvedTheme.brand], ['text', resolvedTheme.text],
+            ['surface', resolvedTheme.surface], ['secondary', resolvedTheme.secondary],
+          ] as const).map(([label, hex]) => (
+            <div key={label} style={{ padding: '8px 10px', borderRadius: 7, backgroundColor: '#111827', border: '1px solid #1e293b' }}>
+              <div style={{ width: '100%', height: 16, borderRadius: 4, backgroundColor: hex, marginBottom: 4, border: '1px solid rgba(255,255,255,0.08)' }} />
+              <div style={{ fontSize: 10, color: C.faint, fontFamily: 'monospace' }}>{label} {hex}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

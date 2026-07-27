@@ -36,7 +36,8 @@ export default async function ContactPage({ searchParams }: PageProps) {
 
   const activeBgPath       = bgPath || null
   const activeMobileBgPath = bgMobilePath || activeBgPath
-  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  // Neutral hero when no background image is set: gradient from brand into a fixed
+  // near-black — intentionally not a theme token, see app/(site)/page.tsx for why.
   const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
   const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
   const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
@@ -117,27 +118,27 @@ export default async function ContactPage({ searchParams }: PageProps) {
       </div>
 
       <div className="max-w-2xl mx-auto px-6 py-16">
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: 'var(--site-border)' }} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
           {cards.map(card => (
-            <div key={card.vk} className="rounded-xl p-5 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+            <div key={card.vk} className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}>
               <ET k={card.hk} s="contact" lbl={card.hFb + ' card — header'} fb={card.hFb}
-                as="p" className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#8b4513' }} />
+                as="p" className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--site-secondary)' }} />
               <ET k={card.vk} s="contact" lbl={card.hFb + ' — value'} fb={card.vFb}
-                as="p" className="font-semibold mb-1" style={{ color: '#1c1008' }} />
+                as="p" className="font-semibold mb-1" style={{ color: 'var(--site-text)' }} />
               <ET k={card.nk} s="contact" lbl={card.hFb + ' — note'} fb={card.nFb}
-                as="p" className="text-sm" style={{ color: '#a89070' }} />
+                as="p" className="text-sm" style={{ color: 'var(--site-secondary)' }} />
             </div>
           ))}
         </div>
 
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: 'var(--site-border)' }} />
 
         <section className="mb-12">
           <ET k="contact_find_us" s="contact" lbl='"How to Find Us" heading'
             fb={t(locale, 'contact.find_us')} as="h2"
-            className="text-lg font-bold mb-4" style={{ color: '#1c1008' }} />
+            className="text-lg font-bold mb-4" style={{ color: 'var(--site-text)' }} />
           <iframe
             title="Winery location"
             src={mapsEmbedUrl}
@@ -150,12 +151,12 @@ export default async function ContactPage({ searchParams }: PageProps) {
           />
           <ET k="contact_map_directions" s="contact" lbl="Map directions text"
             fb={t(locale, 'contact.map_directions')} as="p"
-            className="text-sm mt-3" style={{ color: '#6b5a47' }} />
+            className="text-sm mt-3" style={{ color: 'var(--site-muted)' }} />
         </section>
 
         <div className="text-center">
           <ET k="contact_book_cta" s="contact" lbl="CTA text" fb={t(locale, 'contact.book_cta')}
-            as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
+            as="p" className="text-sm mb-4" style={{ color: 'var(--site-muted)' }} />
           <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
             {isAdmin ? (
               <EditableText contentKey="contact_book_btn" section="contact" label="CTA button"

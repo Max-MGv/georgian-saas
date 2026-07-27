@@ -8,6 +8,53 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-27 (session 4) — #136 theming: built and QA'd (not yet pushed)
+
+Max said "go ahead" on the Phase 2 technical plan from session 3. Built the whole thing in one pass: `lib/themePresets.ts` (4 presets, `resolveTenantTheme`/`parseTenantTheme`, HSL-based brand-hover derivation), extended `proxy.ts`/`layout.tsx` to carry all 8 tokens via a single `x-tenant-theme` header, swapped all 12 public-site/component files plus the 2 admin preview surfaces from hardcoded hex to `var(--site-*)`, themed both guest-facing emails, rebuilt the superadmin form with a 4-card preset picker + brand-override toggle, wrote a backfill script, and QA'd on the dev DB.
+
+**Corrections made while building, not just following the written plan:**
+- Cream & wine's hex values were approximations from the chat mockup (`#FBF3EA`/`#FFFDF9`) — ground-truthed against the actual live code and corrected to the real values (`#F5EFE6`/`#FFF9F3`) so migrating the existing tenant is a true zero-diff. Confirmed via browser screenshot: identical to pre-change.
+- Brand-hover: the written plan said "darken ~12-15%". Reverse-engineered the app's actual existing default (`#7c1d23 → #9b2429`) and found it's a **lighten**, not a darken (HSL lightness +0.075, hue/saturation unchanged) — the old UI copy calling it "darker" was simply wrong. Implemented the derivation to match the real behavior, verified it reproduces `#9b2429` almost exactly (`#9b242c`).
+- The hero's dark overlay/gradient/logo-pill and its white text are **intentionally not tokenized** — they must stay dark-with-white-text for every preset (including Midnight cellar, whose `--site-text` is light), or the dark preset's hero would invert and become illegible. Left fixed on purpose, documented in code comments so a future pass doesn't "fix" it into a bug.
+- Found and fixed a pre-existing gap while touching the hero: the "Book a visit" button and a few form-state colors (visit-type selection tint, disabled-submit color) were hardcoded to the *original* default brand red regardless of a tenant's actual brand override — they never actually followed the existing single-color picker either. Now genuinely brand-reactive via `color-mix()`.
+- `BackgroundsTab.tsx` ended up fully themed, not just its hero-preview mockup as scoped — it already mirrored the site's cream palette rather than the admin panel's own neutral tokens, so a partial swap would have left a visually inconsistent hybrid.
+
+QA: `tsc --noEmit` clean. Browser-verified all 4 presets live on the dev tenant (Home/About/Contact/Wines/booking form) by temporarily writing each preset to the DB and restarting the dev server (proxy's 5-min cache otherwise hides changes) — all four coherent, restored to `cream` after. Ran the backfill script against the dev DB (1 tenant migrated cleanly). Sent both themed transactional emails for real via a standalone script (Resend sandbox → Max's own inbox) under Midnight cellar — **Max should check max.mghvdliashvili@gmail.com to confirm the dark email actually renders right**, since inbox rendering can't be checked from the browser.
+
+**Follow-up same session**: Max checked the two test emails and confirmed the Midnight cellar theme renders correctly in his real Gmail inbox — but spotted the contact email showing as Gmail's default blue link instead of the themed muted-gray (Gmail's data-detector auto-linkifying bare email/phone text, overriding inline color — a pre-existing gap unrelated to theming, not something the color-token work introduced). Fixed by wrapping phone/email in explicit `<a>` tags with forced `color`/`-webkit-text-fill-color` in `bookingConfirmation.ts`, and locking the same property on `invoiceEmail.ts`'s personal-number/bank-code/IBAN cells (same auto-detection risk class already flagged in `InvoicePrint.tsx`). Re-sent both emails, Max confirmed the fix worked.
+
+Nothing committed — sitting as uncommitted changes on `staging` per the standard workflow, pending Max's go-ahead to commit/push. Full step-by-step detail in [[Themes/Plan-Themes]].
+
+---
+
+## 2026-07-27 (session 3) — #136 theming: Phase 1 locked, Phase 2 scoped
+
+Max reacted well to the full booking-page mockup comparison from session 2 ("i like them, nice job") — locked Phase 1: 8-token tier, all 4 families (Cream & wine, Sage & stone, Terracotta & clay, Midnight cellar) ship in v1. Asked to proceed to Phase 2 technical scoping with one instruction: "make sure you dont miss out any dependencies."
+
+Did a second, deeper dependency sweep across the whole `saas/` tree before writing the plan (not just the public-site files already catalogued) and found 4 things the first pass missed: (1) the home hero's no-image gradient fallback hardcodes its dark stop to `#1c1008` even though it already uses `var(--color-brand)` for the light stop — looks themed, isn't; (2) ~14 call sites of `rgba(28,16,8,...)`/`rgba(10,5,2,...)` overlay tints across the hero/about/contact pages and the admin `BackgroundsTab.tsx` preview, which are literally the text color at reduced opacity, baked in as literals; (3) admin-panel *operational* chrome (`OrdersTable.tsx` modals, `SearchableSelect.tsx` dropdown shadow, `BookingFormEditOverlay.tsx`) reuses the same color literals but is internal staff UI, not public brand; (4) transactional emails (`lib/emails/bookingConfirmation.ts`, `invoiceEmail.ts`) and print documents (`InvoicePrint.tsx`, `BookingSheetPrint.tsx`) are a fully separate rendering path — CSS variables don't resolve in email clients, so these are 100% hardcoded hex today and don't even receive the *existing* single brand-color picker.
+
+Wrote up the full findings in [[Themes/Presets-Proposal]] and the technical plan in [[Themes/Plan-Themes]]: `color-mix(in srgb, var(--site-text) 32%, transparent)` for the overlay tints (modern CSS, no extra token needed), a single `x-tenant-theme` JSON proxy header instead of 8+ separate headers, brand-hover derived by darkening brand rather than authored per-preset (keeps it at exactly 8 tokens), and a recommended v1 scope boundary excluding admin chrome/print/email from theming (matches the existing `AdminBar.tsx` exclusion and `Plan-DynamicBranding.md`'s precedent of excluding invoices from the logo rollout) — flagged to Max as a default call rather than deciding it unilaterally.
+
+**Follow-up same session:** Max overrode the email exclusion — confirmed guest-facing emails should carry the theme. Asked back whether that meant just booking confirmation or the invoice email too (real ambiguity worth confirming rather than guessing); Max chose both. Checked both send-sites (`createBooking.ts:179`, `orders.ts:265`) — both already fetch the tenant row immediately before sending, so adding `theme: true` to the existing `select` and running it through `resolveTenantTheme()` is a small addition, not new plumbing. Print documents (`InvoicePrint.tsx`/`BookingSheetPrint.tsx`) stay excluded — no request was made for those. Plan docs updated accordingly; still no code touched.
+
+---
+
+## 2026-07-27 (session 2) — #136 theming kicked off as a two-phase engagement
+
+Max wants full per-tenant visual themes (not just the existing single brand-color picker), but suspects it's a bigger project — asked to treat it like client work: business/design phase first, technical scoping second, with room to cut anything not worth the implementation cost. Set up `vault/Themes/` for ongoing notes ([[Themes/Themes]] hub note, linked from `FeatureLog.md` row 136).
+
+Did the dependency review first: today's theming is one CSS-var pair (`--color-brand`/`--color-brand-hover`) piped through `proxy.ts` headers into `app/layout.tsx`'s injected `<style>` block — but everything else on the public site (background, text, borders, secondary tones) is hardcoded hex, repeated across 12 files (`app/(site)/*`, `components/EditableText.tsx`/`BookingForm.tsx`/`DateInput.tsx`/`LocaleSwitcher.tsx`, plus two admin preview surfaces that mimic the public look). Full inventory in [[Themes/Presets-Proposal]].
+
+Decisions locked for Phase 1: presets defined in code (`lib/themePresets.ts`), not database-editable (ups/downs written up in [[Themes/Presets-Proposal]] per Max's ask); per-tenant override of just the brand color allowed on top of a chosen preset; existing tenants migrate forward onto a default preset with no visual change. Token richness (how many color variables per preset) deliberately left open — proposed 4 candidate color families (Cream & wine / Sage & stone / Terracotta & clay / Midnight cellar) each shown to Max at 3 levels of richness (3/6/8 tokens) as an in-chat visual comparison, so the schema gets derived from what actually looks good rather than decided in the abstract. Awaiting Max's reaction before locking the tier and which families ship in v1 — no code touched yet, Phase 2 (technical plan) doesn't start until Phase 1 is settled.
+
+---
+
+## 2026-07-27 — #138 review and close-out
+
+Re-verified #138 items 1 and 2 against current code (not just git log): `LocaleSwitcher.tsx` still has the pill toggle + pending feedback, and `wine.filter.*`/`wine.orderSubtitle`/`wine.bottle.*`/`wine.perBottle` keys are present in `lib/t.ts` (EN+KA) and wired into `WineCatalogueClient.tsx`. Both confirmed still fixed. Asked Max about item 3's cut-off note ("Order Wine section -") — he no longer recalls what it was flagging, so dropped it as stale. #138 is now fully closed. Updated `FeatureLog.md` (row 138 → ✅ Done) and `known bugs and comment.md` (item 3 struck through).
+
+---
+
 ## 2026-07-26 (session 2) — Orders admin bug review: #140/#141/#142 fixed, #138 items 1-2 fixed, #139 scoped (full detail)
 
 ### Completed

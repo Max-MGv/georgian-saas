@@ -3,6 +3,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { BookingType, VisitType } from '@prisma/client'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
+import { resolveTenantTheme } from '@/lib/themePresets'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getTenantId } from '@/lib/tenant'
@@ -174,7 +175,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         getSetting('contact_phone'),
         getSetting('contact_email'),
         getSetting('contact_address'),
-        db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true } }),
+        db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
       ])
       sendBookingConfirmation({
         name: data.name,
@@ -189,6 +190,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         wineryAddress,
         wineryPhone,
         wineryEmail,
+        theme: resolveTenantTheme(tenant?.theme ?? null),
       }).catch(err => console.error('Email send failed:', err))
     }
 

@@ -21,7 +21,7 @@ export default function LocaleSwitcher({ locale }: Props) {
   return (
     <div
       className="flex items-center gap-0.5 rounded-full border transition-opacity"
-      style={{ borderColor: '#e0d4c0', padding: 2, opacity: isPending ? 0.5 : 1 }}
+      style={{ borderColor: 'var(--site-border)', padding: 2, opacity: isPending ? 0.5 : 1 }}
     >
       {(['en', 'ka'] as const).map(l => (
         <button
@@ -33,7 +33,7 @@ export default function LocaleSwitcher({ locale }: Props) {
           style={{
             padding: '3px 9px',
             backgroundColor: locale === l ? 'var(--color-brand)' : 'transparent',
-            color: locale === l ? '#fff9f3' : '#a89070',
+            color: locale === l ? 'var(--site-surface)' : 'var(--site-secondary)',
             cursor: isPending ? 'wait' : 'pointer',
           }}
         >

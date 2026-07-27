@@ -87,7 +87,7 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
         style={{
           position: 'absolute', right: '0.625rem',
           background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-          color: '#a89070', display: 'flex', alignItems: 'center',
+          color: 'var(--site-secondary)', display: 'flex', alignItems: 'center',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

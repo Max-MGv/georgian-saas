@@ -50,7 +50,7 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
   const bookLabel = navContent['nav_book'] || t(locale, 'nav.book')
 
   return (
-    <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: '#f5efe6', borderColor: '#e0d4c0' }}>
+    <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: 'var(--site-header)', borderColor: 'var(--site-border)' }}>
       <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
 
         {/* Logo — falls back to the tenant's name as styled text, never another brand's mark */}
@@ -67,16 +67,16 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
         {/* Desktop nav */}
         <nav className={`hidden md:flex items-center ${locale === 'ka' ? 'gap-4' : 'gap-6'}`}>
           {navLinks.map(l => (
-            <Link key={l.href} href={l.href} className="text-sm font-medium hover:opacity-70 transition-opacity" style={{ color: '#6b5a47' }}>
+            <Link key={l.href} href={l.href} className="text-sm font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--site-muted)' }}>
               {l.label}
             </Link>
           ))}
           <Link href="/#book" className="btn-wine text-sm font-semibold px-5 py-2 rounded-lg">
             {bookLabel}
           </Link>
-          <span className="w-px h-5" style={{ backgroundColor: '#e0d4c0' }} />
+          <span className="w-px h-5" style={{ backgroundColor: 'var(--site-border)' }} />
           <LocaleSwitcher locale={locale} />
-          <span className="w-px h-5" style={{ backgroundColor: '#e0d4c0' }} />
+          <span className="w-px h-5" style={{ backgroundColor: 'var(--site-border)' }} />
           <SocialIcons email={contactEmail} phone={contactPhone} facebook={contactFacebook} instagram={contactInstagram} />
         </nav>
 
@@ -87,7 +87,7 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
             onClick={() => setOpen(o => !o)}
             aria-label="Menu"
             className="p-1 rounded transition-opacity hover:opacity-70"
-            style={{ color: '#1c1008' }}
+            style={{ color: 'var(--site-text)' }}
           >
             {open ? (
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -104,14 +104,14 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
 
       {/* Mobile dropdown menu */}
       {open && (
-        <div className="md:hidden border-t px-6 py-4 flex flex-col gap-4" style={{ backgroundColor: '#f5efe6', borderColor: '#e0d4c0' }}>
+        <div className="md:hidden border-t px-6 py-4 flex flex-col gap-4" style={{ backgroundColor: 'var(--site-header)', borderColor: 'var(--site-border)' }}>
           {navLinks.map(l => (
             <Link
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
               className="text-base font-medium py-1"
-              style={{ color: '#6b5a47' }}
+              style={{ color: 'var(--site-muted)' }}
             >
               {l.label}
             </Link>

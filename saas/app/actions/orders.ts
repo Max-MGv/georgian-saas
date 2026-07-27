@@ -8,6 +8,7 @@ import { getTenantId } from '@/lib/tenant'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
+import { resolveTenantTheme } from '@/lib/themePresets'
 import { OrderStatus } from '@prisma/client'
 
 export async function deleteOrder(id: string) {
@@ -259,7 +260,7 @@ export async function sendOrderInvoice(
       getSetting('payment_bank_code'),
       getSetting('payment_iban'),
       getSetting('contact_address'),
-      db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true } }),
+      db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     ])
 
     await sendInvoiceEmail({
@@ -286,6 +287,7 @@ export async function sendOrderInvoice(
       customMessage,
       wineryName: tenant?.displayName ?? tenant?.name ?? '',
       wineryAddress,
+      theme: resolveTenantTheme(tenant?.theme ?? null),
     })
 
     const advanceStatuses = ['NEW', 'CONFIRMED']

@@ -30,7 +30,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const footerParts = [address, phone, email].filter(Boolean)
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#f5efe6', color: '#1c1008' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-text)' }}>
       <SiteNav locale={locale} navContent={navContent} logoUrl={logoUrl} logoAlt={logoAlt} tenantName={tenantName} wineOrdersOn={wineOrdersOn}
         contactEmail={email} contactPhone={phone} contactFacebook={facebook} contactInstagram={instagram} />
 
@@ -38,7 +38,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         {children}
       </main>
 
-      <footer className="border-t px-6 py-8 text-center text-sm" style={{ borderColor: '#e0d4c0', color: '#a89070' }}>
+      <footer className="border-t px-6 py-8 text-center text-sm" style={{ borderColor: 'var(--site-border)', color: 'var(--site-secondary)' }}>
         {footerParts.length > 0 && <p>{footerParts.join(' · ')}</p>}
         <p className="mt-1">{t(locale, 'footer.cancel')}</p>
       </footer>

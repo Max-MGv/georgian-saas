@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { Prisma } from '@prisma/client'
+import { parseTenantTheme, resolveTenantTheme, type PresetId } from '@/lib/themePresets'
 
 function friendlyUniqueConstraintError(e: unknown): Error {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -34,15 +35,13 @@ export async function getTenants() {
 
   return tenants.map(t => {
     const s = stats.find(s => s.tenantId === t.id)!
-    const theme = (t.theme as { primaryColor?: string; primaryHover?: string } | null) ?? {}
     return {
       id: t.id,
       name: t.name,
       domain: t.domain,
       slug: t.slug,
       createdAt: t.createdAt.toISOString(),
-      primaryColor: theme.primaryColor ?? '#7c1d23',
-      primaryHover: theme.primaryHover ?? '#9b2429',
+      primaryColor: resolveTenantTheme(t.theme).brand,
       orderCount: s.orderCount,
       companyCount: s.companyCount,
       wineOrderCount: s.wineOrderCount,
@@ -54,14 +53,14 @@ export async function getTenant(id: string) {
   await requireSuperAdmin()
   const t = await db.tenant.findUnique({ where: { id } })
   if (!t) return null
-  const theme = (t.theme as { primaryColor?: string; primaryHover?: string } | null) ?? {}
+  const { presetId, primaryColorOverride } = parseTenantTheme(t.theme)
   return {
     id: t.id,
     name: t.name,
     domain: t.domain,
     slug: t.slug,
-    primaryColor: theme.primaryColor ?? '#7c1d23',
-    primaryHover: theme.primaryHover ?? '#9b2429',
+    presetId,
+    primaryColorOverride,
     logoUrl: t.logoUrl ?? null,
     logoAlt: t.logoAlt ?? '',
     faviconUrl: t.faviconUrl ?? null,
@@ -76,8 +75,8 @@ export async function createTenant(data: {
   name: string
   domain: string
   slug: string
-  primaryColor: string
-  primaryHover: string
+  presetId: PresetId
+  primaryColorOverride?: string
   logoUrl?: string | null
   logoAlt?: string
   faviconUrl?: string | null
@@ -94,7 +93,7 @@ export async function createTenant(data: {
         name: data.name,
         domain: data.domain.toLowerCase().trim(),
         slug: data.slug.toLowerCase().trim(),
-        theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+        theme: { v: 1, presetId: data.presetId, primaryColorOverride: data.primaryColorOverride },
         logoUrl: data.logoUrl ?? null,
         logoAlt: data.logoAlt ?? null,
         faviconUrl: data.faviconUrl ?? null,
@@ -115,8 +114,8 @@ export async function updateTenant(id: string, data: {
   name: string
   domain: string
   slug: string
-  primaryColor: string
-  primaryHover: string
+  presetId: PresetId
+  primaryColorOverride?: string
   logoUrl?: string | null
   logoAlt?: string
   faviconUrl?: string | null
@@ -133,7 +132,7 @@ export async function updateTenant(id: string, data: {
         name: data.name,
         domain: data.domain.toLowerCase().trim(),
         slug: data.slug.toLowerCase().trim(),
-        theme: { primaryColor: data.primaryColor, primaryHover: data.primaryHover },
+        theme: { v: 1, presetId: data.presetId, primaryColorOverride: data.primaryColorOverride },
         logoUrl: data.logoUrl ?? null,
         logoAlt: data.logoAlt ?? null,
         faviconUrl: data.faviconUrl ?? null,

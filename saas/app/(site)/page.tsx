@@ -63,7 +63,11 @@ export default async function Home({ searchParams }: PageProps) {
 
   const activeBgPath       = heroBgPath || null
   const activeMobileBgPath = heroBgMobilePath || activeBgPath
-  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  // Neutral hero when no background image is set: gradient from the tenant's brand
+  // color into a fixed near-black. The dark end is intentionally NOT a theme token
+  // (e.g. --site-text) — it must stay dark for every preset, including Midnight
+  // cellar where --site-text is a light cream, to keep the hero's white overlay
+  // text legible and the hero reading as "dark and moody" regardless of preset.
   const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
   const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
   const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
@@ -113,7 +117,8 @@ export default async function Home({ searchParams }: PageProps) {
           transform: scale(1.04);
         }
         .hero-btn-book:hover {
-          box-shadow: 0 0 18px rgba(180,40,50,0.75), 0 0 40px rgba(180,40,50,0.35);
+          box-shadow: 0 0 18px color-mix(in srgb, var(--color-brand) 75%, transparent),
+                      0 0 40px color-mix(in srgb, var(--color-brand) 35%, transparent);
           transform: scale(1.06) !important;
         }
         .hero-btn-wine:hover {
@@ -142,7 +147,9 @@ export default async function Home({ searchParams }: PageProps) {
 
       <div className="hero-banner relative overflow-hidden">
         <div className="home-hero-bg absolute inset-0" />
-        {/* Light tint — darkens on hover via CSS */}
+        {/* Light tint — darkens on hover via CSS. Fixed dark rgba, not a theme
+            token, for the same reason as heroGradient above: this section is
+            always dark-with-white-text by design, independent of preset. */}
         <div className="hero-overlay absolute inset-0" style={{ backgroundColor: 'rgba(28,16,8,0.32)' }} />
 
         <section className="relative px-6 pt-24 pb-20 sm:pt-0 sm:pb-0 sm:h-full sm:justify-center text-center max-w-xl mx-auto flex flex-col items-center gap-6">
@@ -235,7 +242,10 @@ export default async function Home({ searchParams }: PageProps) {
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 mt-3">
             <a href="#book" className="hero-btn hero-btn-book" style={{
-              backgroundColor: 'rgba(124,29,35,0.92)',
+              // Was a hardcoded rgba matching only the original default brand
+              // color — didn't actually follow a tenant's brand override. Now
+              // genuinely brand-tinted via color-mix.
+              backgroundColor: 'color-mix(in srgb, var(--color-brand) 92%, transparent)',
               backdropFilter: 'blur(4px)',
               WebkitBackdropFilter: 'blur(4px)',
               border: '2px solid rgba(255,255,255,0.65)',
@@ -281,7 +291,7 @@ export default async function Home({ searchParams }: PageProps) {
         </section>
       </div>
 
-      <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: '#e0d4c0' }} /></div>
+      <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: 'var(--site-border)' }} /></div>
 
       {/* Packages */}
       <section className="px-6 py-14 max-w-2xl mx-auto grid sm:grid-cols-2 gap-4">
@@ -299,17 +309,17 @@ export default async function Home({ searchParams }: PageProps) {
             price: displayPriceLunch, min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
-          <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+          <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}>
             <ET k={pkg.tk} s="home" lbl={pkg.tFb + ' — title'} fb={pkg.tFb}
-              as="h3" className="font-semibold text-lg mb-1" style={{ color: '#1c1008' }} />
+              as="h3" className="font-semibold text-lg mb-1" style={{ color: 'var(--site-text)' }} />
             <ET k={pkg.dk} s="home" lbl={pkg.tFb + ' — description'} fb={pkg.dFb}
-              as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
+              as="p" className="text-sm mb-4" style={{ color: 'var(--site-muted)' }} />
             {pkg.price != null && (
               <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
-                {pkg.price}₾ <span className="font-normal text-sm" style={{ color: '#a89070' }}>{t(locale, 'form.per_pp')}</span>
+                {pkg.price}₾ <span className="font-normal text-sm" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'form.per_pp')}</span>
               </p>
             )}
-            <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#a89070' }}>
+            <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--site-secondary)' }}>
               <svg width="10" height="13" viewBox="0 0 10 13" fill="none" aria-hidden="true">
                 <circle cx="5" cy="3.5" r="2.5" fill="var(--color-brand)" opacity="0.75" />
                 <path d="M1 12.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="var(--color-brand)" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.75" />
@@ -320,16 +330,16 @@ export default async function Home({ searchParams }: PageProps) {
         ))}
       </section>
 
-      <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: '#e0d4c0' }} /></div>
+      <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: 'var(--site-border)' }} /></div>
 
       {/* Booking form */}
       <section id="book" className="px-6 py-16 max-w-2xl mx-auto">
         <ET k="home_book_heading" s="home" lbl="Booking section heading"
           fb={t(locale, 'home.book_heading')} as="h2"
-          className="text-2xl font-bold mb-2" style={{ color: '#1c1008' }} />
+          className="text-2xl font-bold mb-2" style={{ color: 'var(--site-text)' }} />
         <ET k="home_booking_intro" s="home" lbl="Booking intro text"
           fb="Fill in the form and we will confirm your booking shortly." as="p"
-          className="text-sm mb-8" style={{ color: '#6b5a47' }} />
+          className="text-sm mb-8" style={{ color: 'var(--site-muted)' }} />
         <div style={{ position: 'relative' }}>
           <BookingForm
             locale={locale}

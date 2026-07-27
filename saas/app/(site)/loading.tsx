@@ -1,7 +1,7 @@
 // Skeleton shown while any public page loads (home, about, contact)
 export default function SiteLoading() {
-  const border = '#e0d4c0'
-  const cardBg = '#fff9f3'
+  const border = 'var(--site-border)'
+  const cardBg = 'var(--site-surface)'
 
   return (
     <div>

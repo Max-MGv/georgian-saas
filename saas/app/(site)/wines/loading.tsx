@@ -1,6 +1,6 @@
 export default function WinesLoading() {
-  const border = '#e0d4c0'
-  const cardBg = '#fff9f3'
+  const border = 'var(--site-border)'
+  const cardBg = 'var(--site-surface)'
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">

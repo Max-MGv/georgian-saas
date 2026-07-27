@@ -51,6 +51,18 @@
 :root {
   --color-brand: #7c1d23;
   --color-brand-hover: #9b2429;
+  /* Tenant public-site theme tokens — defaults are the Cream & wine preset.
+     Overridden per-request by the <style> block in app/layout.tsx, sourced
+     from proxy.ts's x-tenant-theme header. Kept separate from the
+     shadcn/admin tokens below so tenant theming can never leak into the
+     admin panel. */
+  --site-bg: #f5efe6;
+  --site-surface: #fff9f3;
+  --site-header: #f5efe6;
+  --site-text: #1c1008;
+  --site-muted: #6b5a47;
+  --site-border: #e0d4c0;
+  --site-secondary: #a89070;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -137,10 +149,13 @@
   to   { background-position: 200% 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, #f0e8de 25%, #fdf6ee 50%, #f0e8de 75%);
+  background: linear-gradient(90deg, var(--site-border) 25%, var(--site-surface) 50%, var(--site-border) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
+/* Fixed dark tones, not theme tokens — used only for the always-dark hero
+   skeleton (app/(site)/loading.tsx), which stays dark-with-white-content for
+   every preset. See the heroGradient comment in app/(site)/page.tsx. */
 .shimmer-dark {
   background: linear-gradient(90deg, #1a0b04 25%, #2e1508 50%, #1a0b04 75%);
   background-size: 200% 100%;

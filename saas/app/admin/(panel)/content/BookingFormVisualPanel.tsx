@@ -20,8 +20,8 @@
 import EditableText from '@/components/EditableText'
 
 const C = {
-  bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
-  muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)', inputBg: '#fffdf9',
+  bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
+  muted: 'var(--site-muted)', faint: 'var(--site-secondary)', wine: 'var(--color-brand)', inputBg: 'var(--site-surface)',
 }
 
 type Props = { c: Record<string, string>; locale: string; adminLocale: string; variant: 'simple' | 'detailed' }
@@ -59,7 +59,7 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
       <div>
         <label style={labelStyle}><ET k="form_visit_type" fb="Visit Type" /></label>
         <div className="grid grid-cols-2 gap-3">
-          <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: '#fff3ef', borderColor: C.wine }}>
+          <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))', borderColor: C.wine }}>
             <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_tasting" fb="Wine Tasting" /></div>
             <div className="text-sm mt-0.5" style={{ color: C.wine }}>50₾ / pp</div>
           </div>

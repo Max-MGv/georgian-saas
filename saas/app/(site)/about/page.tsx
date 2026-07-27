@@ -35,7 +35,8 @@ export default async function AboutPage({ searchParams }: PageProps) {
 
   const activeBgPath       = bgPath || null
   const activeMobileBgPath = bgMobilePath || activeBgPath
-  // Neutral hero when no background image is set: gradient in the tenant's brand color
+  // Neutral hero when no background image is set: gradient from brand into a fixed
+  // near-black — intentionally not a theme token, see app/(site)/page.tsx for why.
   const heroGradient = 'linear-gradient(160deg, var(--color-brand) 0%, #1c1008 100%)'
   const desktopBgCss = activeBgPath ? `url("${activeBgPath}")` : heroGradient
   const mobileBgCss  = activeMobileBgPath ? `url("${activeMobileBgPath}")` : heroGradient
@@ -109,9 +110,9 @@ export default async function AboutPage({ searchParams }: PageProps) {
       </div>
 
       <div className="max-w-2xl mx-auto px-6 py-16">
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: 'var(--site-border)' }} />
 
-        <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: '#4a3728' }}>
+        <section className="mb-12 space-y-4 text-base leading-relaxed" style={{ color: 'var(--site-text)' }}>
           <ET k="about_story_p1" s="about" lbl="Story — paragraph 1" as="p"
             fb="A family winery producing traditional wines." />
           <ET k="about_story_p2" s="about" lbl="Story — paragraph 2" as="p"
@@ -120,33 +121,33 @@ export default async function AboutPage({ searchParams }: PageProps) {
             fb="We welcome visitors to experience our wine culture firsthand." />
         </section>
 
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: 'var(--site-border)' }} />
 
         <section className="mb-12">
           <ET k="about_expect_heading" s="about" lbl='"What to Expect" heading'
             fb={t(locale, 'about.expect_heading')} as="h2"
-            className="text-xl font-bold mb-6" style={{ color: '#1c1008' }} />
+            className="text-xl font-bold mb-6" style={{ color: 'var(--site-text)' }} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
               { lk: 'about_expect1_label', tk: 'about_expect1_text', lFb: 'Wine Tasting',     tFb: 'A guided tasting of our house wines, presented by the winemaker.' },
               { lk: 'about_expect2_label', tk: 'about_expect2_text', lFb: 'Traditional Meal', tFb: 'An optional meal of traditional local dishes.' },
               { lk: 'about_expect3_label', tk: 'about_expect3_text', lFb: 'Vineyard Walk',    tFb: 'A short walk through the vineyard and our cellar.' },
             ].map(card => (
-              <div key={card.lk} className="rounded-xl p-5 border flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}>
+              <div key={card.lk} className="rounded-xl p-5 border flex flex-col" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}>
                 <ET k={card.lk} s="about" lbl="Expect card — label" fb={card.lFb}
-                  as="p" className="font-semibold mb-2" style={{ color: '#1c1008' }} />
+                  as="p" className="font-semibold mb-2" style={{ color: 'var(--site-text)' }} />
                 <ET k={card.tk} s="about" lbl="Expect card — text" fb={card.tFb}
-                  as="p" className="text-sm leading-relaxed" style={{ color: '#6b5a47' }} />
+                  as="p" className="text-sm leading-relaxed" style={{ color: 'var(--site-muted)' }} />
               </div>
             ))}
           </div>
         </section>
 
-        <div className="h-px mb-10" style={{ backgroundColor: '#e0d4c0' }} />
+        <div className="h-px mb-10" style={{ backgroundColor: 'var(--site-border)' }} />
 
         <div className="text-center">
           <ET k="about_cta_text" s="about" lbl="CTA text" fb={t(locale, 'about.cta_text')}
-            as="p" className="text-sm mb-4" style={{ color: '#6b5a47' }} />
+            as="p" className="text-sm mb-4" style={{ color: 'var(--site-muted)' }} />
           <a href="/#book" className="btn-wine font-semibold px-8 py-3 rounded-lg inline-block">
             {isAdmin ? (
               <EditableText contentKey="about_cta_btn" section="about" label="CTA button"

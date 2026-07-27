@@ -12,7 +12,6 @@ type Tenant = {
   slug: string
   createdAt: string
   primaryColor: string
-  primaryHover: string
   orderCount: number
   companyCount: number
   wineOrderCount: number

@@ -17,8 +17,8 @@ const BUILTIN_IMAGES = [
 ]
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)', rust: '#8b4513',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)', rust: 'var(--site-secondary)',
 }
 
 // Extracts the bucket-relative storage path from a Supabase public URL
@@ -88,7 +88,7 @@ function ImagePicker({
             <img src={img.path} alt={img.label} className="w-full h-full object-cover" />
             {selected === img.path && (
               <div className="absolute inset-0 flex items-center justify-center"
-                style={{ backgroundColor: 'rgba(124,29,35,0.3)' }}>
+                style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 30%, transparent)' }}>
                 <svg className="w-5 h-5" fill="white" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -109,7 +109,7 @@ function ImagePicker({
               <img src={url} alt={storagePathFromUrl(url).split('/').pop() ?? 'Uploaded image'} className="w-full h-full object-cover" />
               {selected === url && (
                 <div className="absolute inset-0 flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(124,29,35,0.3)' }}>
+                  style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 30%, transparent)' }}>
                   <svg className="w-5 h-5" fill="white" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
@@ -180,7 +180,7 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile, adminLocale }: 
 
       <div style={{
         width: isPortrait ? 260 : '100%',
-        backgroundColor: '#f5efe6',
+        backgroundColor: 'var(--site-header)',
         border: `1px solid ${C.border}`,
         borderBottom: 'none',
         borderRadius: '8px 8px 0 0',
@@ -188,14 +188,14 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile, adminLocale }: 
         height: 32,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ width: 28, height: 8, backgroundColor: '#c8b090', borderRadius: 3 }} />
+        <div style={{ width: 28, height: 8, backgroundColor: 'var(--site-secondary)', borderRadius: 3 }} />
         {isMobile ? (
           <div style={{ width: 14, height: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {[0,1,2].map(i => <div key={i} style={{ height: 2, backgroundColor: '#a89070', borderRadius: 1 }} />)}
+            {[0,1,2].map(i => <div key={i} style={{ height: 2, backgroundColor: 'var(--site-secondary)', borderRadius: 1 }} />)}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {[44, 36, 44].map((w, i) => <div key={i} style={{ width: w, height: 6, backgroundColor: '#c8b090', borderRadius: 3 }} />)}
+            {[44, 36, 44].map((w, i) => <div key={i} style={{ width: w, height: 6, backgroundColor: 'var(--site-secondary)', borderRadius: 3 }} />)}
             <div style={{ width: 48, height: 18, backgroundColor: C.wine, borderRadius: 4, opacity: 0.8 }} />
           </div>
         )}
@@ -210,7 +210,7 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile, adminLocale }: 
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: path ? `url(${path})` : 'none',
-          backgroundColor: path ? undefined : '#e0d4c0',
+          backgroundColor: path ? undefined : 'var(--site-border)',
           backgroundPosition: `${x}% ${y}%`,
           backgroundSize: size,
           transform: scale && scale !== 1 ? `scale(${scale})` : undefined,
@@ -228,7 +228,7 @@ function BgPreview({ path, x, y, size, scale, pageKey, isMobile, adminLocale }: 
             <div style={{ backgroundColor: 'rgba(10,5,2,0.58)', borderRadius: 999, width: 64, height: 9 }} />
             <div style={{ backgroundColor: 'rgba(10,5,2,0.65)', borderRadius: 4, width: '65%', height: 24 }} />
             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginTop: 4, alignItems: 'center' }}>
-              <div style={{ backgroundColor: 'rgba(124,29,35,0.92)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 80, height: 20 }} />
+              <div style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 92%, transparent)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 80, height: 20 }} />
               <div style={{ backgroundColor: 'rgba(10,5,2,0.52)', border: '1.5px solid rgba(255,255,255,0.65)', borderRadius: 5, width: 80, height: 20 }} />
             </div>
           </div>
@@ -441,7 +441,7 @@ function PageBgEditor({ pageKey, label, initialDesktop, initialMobile, extraImag
         className="px-6 py-2 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
         style={{
           backgroundColor: C.wine,
-          boxShadow: isDirty ? '0 0 0 2px rgba(124,29,35,0.35)' : 'none',
+          boxShadow: isDirty ? '0 0 0 2px color-mix(in srgb, var(--color-brand) 35%, transparent)' : 'none',
         }}>
         {saving ? at('backgrounds.saving') : isDirty ? at('backgrounds.saveToApply') : at('backgrounds.savedLive')}
       </button>

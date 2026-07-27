@@ -23,8 +23,8 @@ type MasterclassItem = { id: string; name: string; unitType: string; pricePerUni
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
 const C = {
-  bg: '#fff9f3', border: '#e0d4c0', text: '#1c1008',
-  muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)', inputBg: '#fffdf9',
+  bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
+  muted: 'var(--site-muted)', faint: 'var(--site-secondary)', wine: 'var(--color-brand)', inputBg: 'var(--site-surface)',
 }
 
 
@@ -309,7 +309,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <h3 className="text-xl font-bold mb-2" style={{ color: C.text }}>{fc('form_success_heading', 'form.success_heading')}</h3>
         <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
         {showPrice && confirmedPrice != null && (
-          <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: '#fdf6ee', borderColor: C.border }}>
+          <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
             <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}₾</p>
           </div>
@@ -339,7 +339,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           <form
             onSubmit={handleCodeSubmit}
             className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4"
-            style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}
+            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}
           >
             <div>
               <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
@@ -415,7 +415,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       {showNewCompanyPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
-            style={{ backgroundColor: '#fffdf9', border: `1px solid ${C.border}` }}>
+            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
             <div>
               <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
               <p className="text-sm" style={{ color: C.muted }}>Fill in your details and we'll get in touch to set up your account.</p>
@@ -560,7 +560,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             ] as const).map(opt => (
               <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
                 className="py-3 px-4 rounded-lg border text-left transition-colors"
-                style={{ backgroundColor: visitType === opt.value ? '#fff3ef' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
+                style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
                 <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
                 {(bookingType === 'COMPANY' || opt.price != null) && (
                   <div className="text-sm mt-0.5" style={{ color: C.wine }}>
@@ -810,7 +810,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <button type="submit"
           disabled={status === 'loading' || (!isEnhanced && !!tierGap)}
           className="w-full font-semibold py-3 rounded-lg transition-colors text-white"
-          style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? '#a0392a' : C.wine }}>
+          style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? 'color-mix(in srgb, var(--color-brand) 60%, var(--site-muted))' : C.wine }}>
           {status === 'loading' ? t(locale, 'form.submitting') : fc('form_submit', 'form.submit')}
         </button>
 

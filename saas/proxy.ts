@@ -1,12 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 
 interface TenantInfo {
   tenantId: string | null
   slug: string | null
-  brandColor: string
-  brandHover: string
+  theme: ResolvedTheme
   logoUrl: string | null
   logoAlt: string
   faviconUrl: string | null
@@ -57,15 +57,13 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     tenant = await db.tenant.findUnique({ where: { domain } })
   }
 
-  const theme = (tenant?.theme as { primaryColor?: string; primaryHover?: string } | null) ?? {}
   const info: TenantInfo = {
     // No global DEFAULT_TENANT_ID fallback here — an unknown domain is a real
     // "no tenant" state (placeholder page). Localhost dev is covered by the
     // isLocal branch above, which loads the DEFAULT_TENANT_ID tenant row itself.
     tenantId: tenant?.id ?? null,
     slug: tenant?.slug ?? null,
-    brandColor: theme.primaryColor ?? '#7c1d23',
-    brandHover: theme.primaryHover ?? '#9b2429',
+    theme: resolveTenantTheme(tenant?.theme ?? null),
     logoUrl: tenant?.logoUrl ?? null,
     logoAlt: tenant?.logoAlt ?? tenant?.displayName ?? tenant?.name ?? '',
     faviconUrl: tenant?.faviconUrl ?? null,
@@ -83,15 +81,14 @@ export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
   const [
-    { tenantId, slug, brandColor, brandHover, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
+    { tenantId, slug, theme, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
     platform,
   ] = await Promise.all([resolveTenant(host), resolvePlatform()])
 
   // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
   if (tenantId) requestHeaders.set('x-tenant-id', tenantId)
-  requestHeaders.set('x-tenant-brand', brandColor)
-  requestHeaders.set('x-tenant-brand-hover', brandHover)
+  requestHeaders.set('x-tenant-theme', encodeURIComponent(JSON.stringify(theme)))
   requestHeaders.set('x-tenant-name', displayName)
   requestHeaders.set('x-tenant-logo-alt', logoAlt)
   if (logoUrl) requestHeaders.set('x-tenant-logo', logoUrl)

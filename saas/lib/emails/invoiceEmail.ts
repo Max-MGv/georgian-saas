@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 
 type InvoiceEmailData = {
   name: string
@@ -26,33 +27,41 @@ type InvoiceEmailData = {
   customMessage: string
   wineryName?: string
   wineryAddress?: string
+  theme?: ResolvedTheme
 }
 
-function tableRow(label: string, value: string) {
+function tableRow(th: ResolvedTheme, label: string, value: string) {
   return `<tr>
-    <td style="color:#6b5a47 !important;padding:5px 0;font-size:13px;vertical-align:top;">${label}</td>
-    <td style="color:#1c1008 !important;text-align:right;font-size:13px;padding-left:12px;">${value}</td>
+    <td style="color:${th.muted} !important;padding:5px 0;font-size:13px;vertical-align:top;">${label}</td>
+    <td style="color:${th.text} !important;text-align:right;font-size:13px;padding-left:12px;">${value}</td>
   </tr>`
 }
 
-function codeTableRow(label: string, value: string) {
+function codeTableRow(th: ResolvedTheme, label: string, value: string) {
+  // Personal numbers, bank codes, IBANs — WebKit/Gmail data detectors can flag these
+  // as phone numbers or reference codes and override the color with link-blue.
+  // -webkit-text-fill-color pins it, same technique as InvoicePrint.tsx / globals.css.
   return `<tr>
-    <td style="color:#6b5a47 !important;padding:5px 0;font-size:13px;vertical-align:top;">${label}</td>
-    <td style="color:#1c1008 !important;text-align:right;font-size:12px;padding-left:12px;font-family:'Courier New',Courier,monospace;letter-spacing:0.04em;">${value}</td>
+    <td style="color:${th.muted} !important;padding:5px 0;font-size:13px;vertical-align:top;">${label}</td>
+    <td style="color:${th.text} !important;-webkit-text-fill-color:${th.text} !important;text-align:right;font-size:12px;padding-left:12px;font-family:'Courier New',Courier,monospace;letter-spacing:0.04em;">${value}</td>
   </tr>`
 }
 
-function section(title: string, content: string) {
+function section(th: ResolvedTheme, title: string, content: string) {
   return `
     <div style="margin-bottom:20px;">
-      <div style="border-left:3px solid #7c1d23;padding-left:10px;margin-bottom:8px;">
-        <strong style="font-size:14px;color:#1c1008 !important;">${title}</strong>
+      <div style="border-left:3px solid ${th.brand};padding-left:10px;margin-bottom:8px;">
+        <strong style="font-size:14px;color:${th.text} !important;">${title}</strong>
       </div>
       <table style="width:100%;border-collapse:collapse;">${content}</table>
     </div>`
 }
 
 export async function sendInvoiceEmail(data: InvoiceEmailData) {
+  // CSS variables don't resolve in email clients — colors are interpolated as
+  // literal hex here, a genuinely separate mechanism from the --site-* pipeline
+  // the rest of the app uses.
+  const th = data.theme ?? resolveTenantTheme(null)
   const dateStr = new Date(data.date)
     .toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' })
     .replace(/\//g, '.')
@@ -68,71 +77,71 @@ export async function sendInvoiceEmail(data: InvoiceEmailData) {
   // Guest rows
   let guestContent = ''
   if (hasSplit) {
-    if (data.tastingGuestCount > 0) guestContent += tableRow('დეგუსტაცია', `${data.tastingGuestCount} კაცი`)
-    if (data.lunchGuestCount > 0) guestContent += tableRow('სადილი', `${data.lunchGuestCount} კაცი`)
-    if (data.freeGuestCount > 0) guestContent += tableRow('თავისუფალი (გიდი/მძღოლი)', `${data.freeGuestCount} კაცი`)
-    guestContent += tableRow('სულ', `${data.guestCount} კაცი`)
+    if (data.tastingGuestCount > 0) guestContent += tableRow(th, 'დეგუსტაცია', `${data.tastingGuestCount} კაცი`)
+    if (data.lunchGuestCount > 0) guestContent += tableRow(th, 'სადილი', `${data.lunchGuestCount} კაცი`)
+    if (data.freeGuestCount > 0) guestContent += tableRow(th, 'თავისუფალი (გიდი/მძღოლი)', `${data.freeGuestCount} კაცი`)
+    guestContent += tableRow(th, 'სულ', `${data.guestCount} კაცი`)
   } else {
-    guestContent += tableRow(isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${data.guestCount} კაცი`)
+    guestContent += tableRow(th, isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${data.guestCount} კაცი`)
   }
 
   // Amount rows
-  let amountContent = tableRow(isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${bookingAmt} ₾`)
+  let amountContent = tableRow(th, isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${bookingAmt} ₾`)
   for (const l of data.masterclassLines) {
-    amountContent += tableRow(l.name, `${l.quantity * l.pricePerUnit} ₾`)
+    amountContent += tableRow(th, l.name, `${l.quantity * l.pricePerUnit} ₾`)
   }
   for (const e of data.extras) {
-    amountContent += tableRow(e.label, `${e.amount} ₾`)
+    amountContent += tableRow(th, e.label, `${e.amount} ₾`)
   }
-  amountContent += `<tr><td colspan="2" style="padding:4px 0;border-top:1px solid #c8b89a;"></td></tr>`
-  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:#7c1d23 !important;padding-top:6px;">ჯამური თანხა: ${data.totalPrice} ₾</td></tr>`
+  amountContent += `<tr><td colspan="2" style="padding:4px 0;border-top:1px solid ${th.border};"></td></tr>`
+  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">ჯამური თანხა: ${data.totalPrice} ₾</td></tr>`
 
   const customMessageHtml = data.customMessage.trim()
-    ? `<p style="font-size:15px;color:#4a3728 !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`
+    ? `<p style="font-size:15px;color:${th.text} !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`
     : ''
 
   const masterclassSection = data.masterclassLines.length > 0
-    ? section('მასტერკლასი', data.masterclassLines.map(l =>
-        tableRow(`${l.name} × ${l.quantity}`, `${l.quantity * l.pricePerUnit} ₾`)
+    ? section(th, 'მასტერკლასი', data.masterclassLines.map(l =>
+        tableRow(th, `${l.name} × ${l.quantity}`, `${l.quantity * l.pricePerUnit} ₾`)
       ).join(''))
     : ''
 
   const html = `
-    <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#1c1008 !important;background-color:#ffffff !important;">
+    <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:${th.text} !important;background-color:${th.bg} !important;">
 
-      <div style="background-color:#7c1d23 !important;padding:32px 40px;border-radius:8px 8px 0 0;text-align:center;">
+      <div style="background-color:${th.brand} !important;padding:32px 40px;border-radius:8px 8px 0 0;text-align:center;">
         <h1 style="color:#ffffff !important;margin:0;font-size:22px;font-weight:bold;">${data.wineryName || ''}</h1>
-        ${data.wineryAddress ? `<p style="color:#c9a0a4 !important;margin:4px 0 0;font-size:11px;">${data.wineryAddress}</p>` : ''}
+        ${data.wineryAddress ? `<p style="color:rgba(255,255,255,0.85) !important;margin:4px 0 0;font-size:11px;">${data.wineryAddress}</p>` : ''}
       </div>
 
-      <div style="background-color:#fff9f3 !important;padding:32px 40px;border-radius:0 0 8px 8px;border:1px solid #e0d4c0;border-top:none;">
+      <div style="background-color:${th.surface} !important;padding:32px 40px;border-radius:0 0 8px 8px;border:1px solid ${th.border};border-top:none;">
 
-        <h2 style="font-size:20px;font-weight:bold;margin:0 0 4px;color:#1c1008 !important;">ინვოისი</h2>
-        <p style="font-size:12px;color:#888888 !important;margin:0 0 24px;">${dateStr} · ${data.timeSlot}</p>
+        <h2 style="font-size:20px;font-weight:bold;margin:0 0 4px;color:${th.text} !important;">ინვოისი</h2>
+        <p style="font-size:12px;color:${th.muted} !important;margin:0 0 24px;">${dateStr} · ${data.timeSlot}</p>
 
         ${customMessageHtml}
 
-        ${section('კომპანია',
-          tableRow('დასახელება', companyDisplay) +
-          tableRow('საიდენტიფიკაციო კოდი', data.identificationCode ?? '—')
+        ${section(th, 'კომპანია',
+          tableRow(th, 'დასახელება', companyDisplay) +
+          tableRow(th, 'საიდენტიფიკაციო კოდი', data.identificationCode ?? '—')
         )}
 
-        ${section('სტუმრები', guestContent)}
+        ${section(th, 'სტუმრები', guestContent)}
 
         ${masterclassSection}
 
-        ${section('თანხა', amountContent)}
+        ${section(th, 'თანხა', amountContent)}
 
-        <div style="border:1px solid #e0d4c0;border-radius:8px;padding:16px;background-color:#fff9f3 !important;">
-          <div style="border-left:3px solid #7c1d23;padding-left:10px;margin-bottom:10px;">
-            <strong style="font-size:14px;color:#1c1008 !important;">გადახდის რეკვიზიტები</strong>
+        <div style="border:1px solid ${th.border};border-radius:8px;padding:16px;background-color:${th.surface} !important;">
+          <div style="border-left:3px solid ${th.brand};padding-left:10px;margin-bottom:10px;">
+            <strong style="font-size:14px;color:${th.text} !important;">გადახდის რეკვიზიტები</strong>
           </div>
           <table style="width:100%;border-collapse:collapse;">
-            ${tableRow('მიმღების სახელი', data.payment.recipientName || '—')}
-            ${codeTableRow('პირადი ნომერი', data.payment.personalNumber || '—')}
-            ${tableRow('მიმღები ბანკი', data.payment.bankName || '—')}
-            ${codeTableRow('ბანკის კოდი', data.payment.bankCode || '—')}
-            ${codeTableRow('მიმღების ანგარიში', data.payment.iban || '—')}
+            ${tableRow(th, 'მიმღების სახელი', data.payment.recipientName || '—')}
+            ${codeTableRow(th, 'პირადი ნომერი', data.payment.personalNumber || '—')}
+            ${tableRow(th, 'მიმღები ბანკი', data.payment.bankName || '—')}
+            ${codeTableRow(th, 'ბანკის კოდი', data.payment.bankCode || '—')}
+            ${codeTableRow(th, 'მიმღების ანგარიში', data.payment.iban || '—')}
           </table>
         </div>
 
