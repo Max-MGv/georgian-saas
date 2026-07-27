@@ -429,34 +429,41 @@ export default function TenantFormClient({ mode, tenant }: Props) {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 10 }}>
               Theme
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {(Object.keys(THEME_PRESETS) as PresetId[]).map(id => {
-                const preset = THEME_PRESETS[id]
-                const selected = id === presetId
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setPresetId(id)
-                      if (!overrideEnabled) setPrimaryColorOverride(preset.tokens.brand)
-                    }}
-                    style={{
-                      textAlign: 'left', padding: 10, borderRadius: 10, cursor: 'pointer',
-                      backgroundColor: preset.tokens.bg,
-                      border: `2px solid ${selected ? preset.tokens.brand : C.border}`,
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                      {[preset.tokens.surface, preset.tokens.border, preset.tokens.secondary, preset.tokens.brand].map((sw, i) => (
-                        <div key={i} style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: sw, border: `1px solid ${preset.tokens.border}` }} />
-                      ))}
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 500, color: preset.tokens.text }}>{preset.name}</span>
-                  </button>
-                )
-              })}
-            </div>
+            {(['light', 'dark'] as const).map(category => (
+              <div key={category} style={{ marginBottom: category === 'light' ? 14 : 0 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: C.faint, margin: '0 0 6px' }}>
+                  {category === 'light' ? 'Light' : 'Dark'}
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {(Object.keys(THEME_PRESETS) as PresetId[]).filter(id => THEME_PRESETS[id].category === category).map(id => {
+                    const preset = THEME_PRESETS[id]
+                    const selected = id === presetId
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setPresetId(id)
+                          if (!overrideEnabled) setPrimaryColorOverride(preset.tokens.brand)
+                        }}
+                        style={{
+                          textAlign: 'left', padding: 10, borderRadius: 10, cursor: 'pointer',
+                          backgroundColor: preset.tokens.bg,
+                          border: `2px solid ${selected ? preset.tokens.brand : C.border}`,
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                          {[preset.tokens.surface, preset.tokens.border, preset.tokens.secondary, preset.tokens.brand].map((sw, i) => (
+                            <div key={i} style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: sw, border: `1px solid ${preset.tokens.border}` }} />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: preset.tokens.text }}>{preset.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, cursor: 'pointer' }}>
               <input
