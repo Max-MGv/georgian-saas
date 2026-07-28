@@ -116,3 +116,27 @@ if (isLocal) {
 - Full design + what's still English-only on the public wines page: `Plan-BilingualWineName.md`
 
 **If you ever want a real cross-tenant reporting view** (e.g. "total revenue across all clients" on the super-admin Tenants page), that has to be built explicitly — it doesn't fall out of the existing per-tenant admin pages.
+
+---
+
+## 6. Legal page content — `lib/legalContent.ts` is not live-linked to already-seeded tenants
+
+**What the dependency is:**
+`saas/lib/legalContent.ts` (`LEGAL_CONTENT_EN`/`LEGAL_CONTENT_KA`) is the source text for the 3 legal documents (Feature #128), but it's only consulted at two moments: as the English code-fallback in `ContentClient.tsx` (shown only when a tenant has no DB row for that key), and when a tenant's rows are first created — either automatically in `createTenant()` for new tenants, or by running `scripts/seed-legal-content.ts` once for existing ones. Once a `SiteContent` row exists for a tenant, that row is what renders — editing `legalContent.ts` afterward does **not** retroactively change it.
+
+**What this means in practice:** if the legal wording needs a correction after tenants already have it seeded (e.g. the native Georgian/legal review flagged in `Plan-LegalPages.md` turns up a needed fix), editing the constants file alone isn't enough — you also need to either re-run the backfill script after clearing the affected rows for each tenant (loses any tenant-specific edits an admin may have made in the meantime), or push the correction through each tenant's admin panel by hand. There is no "push this update to everyone" mechanism, by design — the same reason `EditableText` fallback edits never retroactively touch existing tenant rows for any other content field either.
+
+**Files involved:**
+- `saas/lib/legalContent.ts` — the source text
+- `saas/app/actions/superAdmin.ts` — `createTenant()`'s seed-on-creation hook
+- `saas/scripts/seed-legal-content.ts` — the create-only backfill for existing tenants
+- Full feature reference: `Features/Feature 128 - Legal Pages.md`
+
+---
+
+## 7. `EditableLongText` duplicates `EditableText`'s save/cancel/reset logic — not a shared base
+
+**What the dependency is:**
+`components/EditableLongText.tsx` (textarea-based, used only by the Legal tab) was built as a parallel implementation of `components/EditableText.tsx` (contentEditable-based, used everywhere else), not a shared abstraction — same Save/Cancel/Reset behavior and the same `saveContent`/`deleteContent` server actions underneath, but two separate component bodies.
+
+**What this means in practice:** a behavior change to `EditableText.tsx` (e.g. the save button's pending state, the reset confirmation flow, or the `adminT` key names it reads) will not automatically apply to `EditableLongText.tsx` — it has to be updated in both places by hand if you want them to stay in sync. Deliberate tradeoff at the time (the two components' actual DOM/interaction needs — contentEditable span vs. textarea — are different enough that a shared base would have been an early abstraction over two use cases, not a proven pattern yet).

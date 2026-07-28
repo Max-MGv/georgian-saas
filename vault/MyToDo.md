@@ -10,6 +10,17 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### #128 — Legal pages (built + Claude-tested on staging 2026-07-28, needs Max to review wording + confirm prod)
+
+Full reference: `Plan-LegalPages.md` and `Features/Feature 128 - Legal Pages.md`. Pushed to `staging` — verify there before it goes to `master` (production is still pending a deliberate migration + backfill step, see the plan doc).
+
+1. Open the staging site → scroll to the footer → confirm you see **Terms / Privacy / Returns** links
+2. Click each → confirm the page renders (title, breadcrumb "Home / ...", content card) and reads correctly in English
+3. Switch the site to Georgian (locale toggle) → re-check all 3 pages read correctly in Georgian — **this is the wording review that still needs a native/legal read-through**, flagged clause-by-clause in `Plan-LegalPages.md`'s round-2 notes (a few passages are noted as needing a second look, especially the data-subject-rights list in Confidentiality)
+4. Log into `/admin/content` → click the new **Legal** tab (last one) → confirm you can click into any of the 3 boxes, edit, Save, and it persists on reload; try "Reset to default" on one
+5. Log into `/super-admin` → edit the staging tenant → Modules section → confirm a **"Legal pages"** checkbox is there, checked by default → try unchecking + saving → confirm the 3 pages and footer links disappear on the live site (may need a minute — there's a 5-min cache on this, same as the other module toggles)
+6. When satisfied: tell Claude to proceed with the production merge — it needs your explicit go-ahead again specifically for the production database migration step (separate from the "push to master" go-ahead), since that touches real Nikalas Marani data.
+
 ### #79 — Dev/staging environment (built + Claude-tested 2026-07-23, needs Max to try the workflow)
 
 Everything is live; full reference: `Plan-DevProdEnvironments.md`. Your checks:
