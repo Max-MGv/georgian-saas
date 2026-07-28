@@ -4,7 +4,11 @@ tags: [plan, theming, v3]
 
 # Themes — Issue #136
 
-**Status: ✅ Done — built, QA'd, and confirmed by Max, 2026-07-27. Sitting uncommitted on `staging`, not yet pushed.** Full technical build-out and Max's confirmation in [[Plan-Themes]]. Following Max's instruction to treat this like client work: agreed the design direction first (presets, look and feel, how many "knobs"), scoped the technical difficulty second, then built and QA'd it — all in one continuous session once Max said "go ahead" on the technical plan. Only thing left is committing/pushing (Max's call) and, longer-term, checking Midnight cellar's contrast against each future tenant's own logo/photos before offering it to them.
+**Status: ✅ Done — v1 (4 presets) built, QA'd, confirmed by Max, and shipped to `master`/production 2026-07-27.** Full technical build-out and Max's confirmation in [[Plan-Themes]]. Following Max's instruction to treat this like client work: agreed the design direction first (presets, look and feel, how many "knobs"), scoped the technical difficulty second, then built and QA'd it — all in one continuous session once Max said "go ahead" on the technical plan. Longer-term open item: check Midnight cellar's contrast against each future tenant's own logo/photos before offering it to them.
+
+**v2, same day (2026-07-27): expanded 4 → 16 presets, added light/dark categorization.** Max asked for 4 more themes; Claude generated 16 candidates across four mood families (warm/earthy, cool/refined, rich/jewel-toned, dark) as a swatch chart, then a full-homepage-mockup comparison (built live against the dev server, not screenshots). Max picked "keep them all" minus near-duplicates — Claude's pairwise review caught two close pairs (Slate & silver ≈ Harbor blue; Pine & frost ≈ Emerald & moss) and dropped the weaker of each, plus Max cut 2 more (Fog & linen, Garnet & ember) himself, landing on 12 new presets. `THEME_PRESETS` entries now carry `category: 'light' | 'dark'`; the super-admin picker groups by it. Shipped to `master`/production same session. Full preset list and hex values: `saas/lib/themePresets.ts`.
+
+**Reusable catalog page**: every live preset (all 16, light + dark) rendered as a real homepage mockup, kept for client presentations / future preset decisions — https://claude.ai/code/artifact/c50e0f46-d708-4879-b9e5-8c5a634b4f1f (private artifact; ask Claude to update it in place next time a preset changes, rather than re-generating from scratch).
 
 Linked from `FeatureLog.md` row #136.
 
