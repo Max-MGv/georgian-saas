@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { adminT } from '@/lib/adminT'
 import EditableText from '@/components/EditableText'
+import EditableLongText from '@/components/EditableLongText'
 import BackgroundsTab from './BackgroundsTab'
 import BookingFormVisualPanel from './BookingFormVisualPanel'
+import { LEGAL_CONTENT_EN, LEGAL_LABELS } from '@/lib/legalContent'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
@@ -17,7 +19,7 @@ const C = {
 type ContentRow = { key: string; value: string; section: string; label: string; locale: string }
 type LocaleKey = 'en' | 'ka'
 type ModeKey = 'visual' | 'backgrounds'
-type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact'
+type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact' | 'legal'
 
 const IFRAME_SECTIONS = new Set<SectionKey>(['home', 'about', 'contact'])
 type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[]; adminLocale: string }
@@ -114,6 +116,36 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'contact_book_cta',       label: 'CTA text',                 fallback: 'Prefer to just book directly?' },
     { key: 'contact_book_btn',       label: 'CTA button',               fallback: 'Book a Visit' },
   ],
+  legal: [
+    { key: 'legal_terms_body',   label: LEGAL_LABELS.legal_terms_body,   fallback: LEGAL_CONTENT_EN.legal_terms_body },
+    { key: 'legal_privacy_body', label: LEGAL_LABELS.legal_privacy_body, fallback: LEGAL_CONTENT_EN.legal_privacy_body },
+    { key: 'legal_returns_body', label: LEGAL_LABELS.legal_returns_body, fallback: LEGAL_CONTENT_EN.legal_returns_body },
+  ],
+}
+
+// ── Legal panel (Terms/Privacy/Returns — long-form text, textarea editor) ────
+
+function LegalPanel({ c, locale, adminLocale }: { c: Record<string, string>; locale: string; adminLocale: string }) {
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {FIELDS.legal.map(f => (
+        <div key={f.key}>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: C.rust }}>
+            {adminT(adminLocale, `content.field.${f.key}`)}
+          </p>
+          <EditableLongText
+            contentKey={f.key}
+            section="legal"
+            label={f.label}
+            locale={locale}
+            adminLocale={adminLocale}
+            fallback={f.fallback}
+            value={c[f.key] ?? null}
+          />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ── Fields panel (used for Form + Nav tabs in Visual mode) ───────────────────
@@ -186,6 +218,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
     { id: 'contact', label: at('content.section.contact') },
     { id: 'form',    label: at('content.section.form') },
     { id: 'nav',     label: at('content.section.nav') },
+    { id: 'legal',   label: at('content.section.legal') },
   ]
 
   const subtitle = mode === 'visual'
@@ -298,6 +331,8 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
                   </div>
                 </div>
               </div>
+            ) : section === 'legal' ? (
+              <LegalPanel c={c} locale={locale} adminLocale={adminLocale} />
             ) : (
               <FieldsPanel section={section} c={c} locale={locale} adminLocale={adminLocale} />
             )}

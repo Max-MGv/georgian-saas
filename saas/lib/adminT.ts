@@ -685,6 +685,7 @@ const en: Translations = {
   'content.section.contact': 'Contact',
   'content.section.form': 'Booking Form',
   'content.section.nav': 'Navigation',
+  'content.section.legal': 'Legal',
 
   // Site Content editor — field descriptor labels (Nav)
   'content.field.nav_home': 'Home link',
@@ -765,6 +766,11 @@ const en: Translations = {
   'content.field.contact_map_directions': 'Map directions text',
   'content.field.contact_book_cta': 'CTA text',
   'content.field.contact_book_btn': 'CTA button',
+
+  // Site Content editor — field descriptor labels (Legal)
+  'content.field.legal_terms_body': 'Terms and conditions — full text',
+  'content.field.legal_privacy_body': 'Confidentiality policy — full text',
+  'content.field.legal_returns_body': 'Return conditions — full text',
 
   // Backgrounds tab
   'backgrounds.intro': 'Choose a background image for each page hero. Switch between Desktop and Mobile to set each independently.',
@@ -1484,6 +1490,7 @@ const ka: Translations = {
   'content.section.contact': 'კონტაქტი',
   'content.section.form': 'ჯავშნის ფორმა',
   'content.section.nav': 'ნავიგაცია',
+  'content.section.legal': 'იურიდიული',
 
   // Site Content editor — field descriptor labels (Nav)
   'content.field.nav_home': 'ბმული „მთავარი“',
@@ -1564,6 +1571,11 @@ const ka: Translations = {
   'content.field.contact_map_directions': 'რუკის მიმართულებების ტექსტი',
   'content.field.contact_book_cta': 'CTA ტექსტი',
   'content.field.contact_book_btn': 'CTA ღილაკი',
+
+  // Site Content editor — field descriptor labels (Legal)
+  'content.field.legal_terms_body': 'წესები და პირობები — სრული ტექსტი',
+  'content.field.legal_privacy_body': 'კონფიდენციალურობის პოლიტიკა — სრული ტექსტი',
+  'content.field.legal_returns_body': 'დაბრუნების პირობები — სრული ტექსტი',
 
   // Backgrounds tab
   'backgrounds.intro': 'აირჩიეთ ფონის სურათი თითოეული გვერდის hero-სთვის. გადართეთ დესქტოპსა და მობილურს შორის დამოუკიდებლად დასაყენებლად.',

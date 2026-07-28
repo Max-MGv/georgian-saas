@@ -14,6 +14,7 @@ interface TenantInfo {
   modulesBooking: boolean
   modulesWineOrders: boolean
   modulesPublicSite: boolean
+  modulesLegalPages: boolean
   cachedAt: number
 }
 
@@ -71,6 +72,7 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     modulesBooking: tenant?.modulesBooking ?? true,
     modulesWineOrders: tenant?.modulesWineOrders ?? false,
     modulesPublicSite: tenant?.modulesPublicSite ?? true,
+    modulesLegalPages: tenant?.modulesLegalPages ?? true,
     cachedAt: Date.now(),
   }
   tenantCache.set(cacheKey, info)
@@ -81,7 +83,7 @@ export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
   const [
-    { tenantId, slug, theme, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite },
+    { tenantId, slug, theme, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages },
     platform,
   ] = await Promise.all([resolveTenant(host), resolvePlatform()])
 
@@ -97,6 +99,7 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set('x-platform-logo-alt', platform.logoAlt)
   requestHeaders.set('x-tenant-modules-booking', String(modulesBooking))
   requestHeaders.set('x-tenant-modules-wine-orders', String(modulesWineOrders))
+  requestHeaders.set('x-tenant-modules-legal', String(modulesLegalPages))
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },

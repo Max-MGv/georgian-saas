@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { Prisma } from '@prisma/client'
 import { parseTenantTheme, resolveTenantTheme, type PresetId } from '@/lib/themePresets'
+import { LEGAL_CONTENT_EN, LEGAL_CONTENT_KA, LEGAL_LABELS } from '@/lib/legalContent'
 
 function friendlyUniqueConstraintError(e: unknown): Error {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -68,6 +69,7 @@ export async function getTenant(id: string) {
     modulesBooking: t.modulesBooking,
     modulesWineOrders: t.modulesWineOrders,
     modulesPublicSite: t.modulesPublicSite,
+    modulesLegalPages: t.modulesLegalPages,
   }
 }
 
@@ -84,6 +86,7 @@ export async function createTenant(data: {
   modulesBooking: boolean
   modulesWineOrders: boolean
   modulesPublicSite: boolean
+  modulesLegalPages: boolean
 }) {
   await requireSuperAdmin()
   let tenant
@@ -101,11 +104,20 @@ export async function createTenant(data: {
         modulesBooking: data.modulesBooking,
         modulesWineOrders: data.modulesWineOrders,
         modulesPublicSite: data.modulesPublicSite,
+        modulesLegalPages: data.modulesLegalPages,
       },
     })
   } catch (e) {
     throw friendlyUniqueConstraintError(e)
   }
+  // Seed default legal text (both locales) so a brand-new tenant never shows a
+  // blank/English-only Georgian toggle for Terms/Privacy/Returns — see #128.
+  await Promise.all(
+    (Object.keys(LEGAL_CONTENT_EN) as (keyof typeof LEGAL_CONTENT_EN)[]).flatMap(key => [
+      db.siteContent.create({ data: { key, section: 'legal', label: LEGAL_LABELS[key], locale: 'en', value: LEGAL_CONTENT_EN[key], tenantId: tenant.id } }),
+      db.siteContent.create({ data: { key, section: 'legal', label: LEGAL_LABELS[key], locale: 'ka', value: LEGAL_CONTENT_KA[key], tenantId: tenant.id } }),
+    ])
+  )
   revalidatePath('/super-admin/tenants')
   return { id: tenant.id }
 }
@@ -123,6 +135,7 @@ export async function updateTenant(id: string, data: {
   modulesBooking: boolean
   modulesWineOrders: boolean
   modulesPublicSite: boolean
+  modulesLegalPages: boolean
 }) {
   await requireSuperAdmin()
   try {
@@ -140,6 +153,7 @@ export async function updateTenant(id: string, data: {
         modulesBooking: data.modulesBooking,
         modulesWineOrders: data.modulesWineOrders,
         modulesPublicSite: data.modulesPublicSite,
+        modulesLegalPages: data.modulesLegalPages,
       },
     })
   } catch (e) {

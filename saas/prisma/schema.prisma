@@ -28,6 +28,7 @@ model Tenant {
   modulesBooking     Boolean  @default(true)
   modulesWineOrders  Boolean  @default(false)
   modulesPublicSite  Boolean  @default(true)
+  modulesLegalPages  Boolean  @default(true)
   createdAt          DateTime @default(now())
 }
 

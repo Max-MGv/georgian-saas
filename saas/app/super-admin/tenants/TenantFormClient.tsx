@@ -23,6 +23,7 @@ type Props = {
     modulesBooking?: boolean
     modulesWineOrders?: boolean
     modulesPublicSite?: boolean
+    modulesLegalPages?: boolean
   }
 }
 
@@ -81,6 +82,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [modulesBooking, setModulesBooking] = useState(tenant?.modulesBooking ?? true)
   const [modulesWineOrders, setModulesWineOrders] = useState(tenant?.modulesWineOrders ?? false)
   const [modulesPublicSite, setModulesPublicSite] = useState(tenant?.modulesPublicSite ?? true)
+  const [modulesLegalPages, setModulesLegalPages] = useState(tenant?.modulesLegalPages ?? true)
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -180,7 +182,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
           primaryColorOverride: overrideEnabled ? primaryColorOverride : undefined,
           logoUrl, logoAlt, faviconUrl,
           displayName: displayName || undefined,
-          modulesBooking, modulesWineOrders, modulesPublicSite,
+          modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages,
         }
         if (mode === 'new') {
           await createTenant(payload)
@@ -416,6 +418,15 @@ export default function TenantFormClient({ mode, tenant }: Props) {
                 <input type="checkbox" checked={modulesPublicSite} onChange={e => setModulesPublicSite(e.target.checked)} />
                 <span style={{ fontSize: 14, color: C.text }}>Public website</span>
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={modulesLegalPages} onChange={e => setModulesLegalPages(e.target.checked)} />
+                <span style={{ fontSize: 14, color: C.text }}>Legal pages</span>
+              </label>
+              {!modulesLegalPages && (
+                <p style={{ fontSize: 12, color: '#fbbf24', padding: '8px 12px', backgroundColor: '#451a03', borderRadius: 6 }}>
+                  Terms/Privacy/Returns pages and footer links will be hidden. On by default — this is a legal expectation, not an opt-in feature.
+                </p>
+              )}
               {!modulesPublicSite && (
                 <p style={{ fontSize: 12, color: '#fbbf24', padding: '8px 12px', backgroundColor: '#451a03', borderRadius: 6 }}>
                   Public domain will show a &quot;coming soon&quot; page. Admin panel stays fully usable.

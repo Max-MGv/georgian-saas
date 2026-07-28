@@ -37,8 +37,17 @@ const en: Translations = {
   'contact.book_cta': 'Prefer to just book directly?',
   'contact.book_btn': 'Book a Visit',
 
+  // Legal pages static
+  'legal.breadcrumb_home': 'Home',
+  'legal.terms_title': 'Terms and conditions',
+  'legal.privacy_title': 'Confidentiality policy',
+  'legal.returns_title': 'Return conditions',
+
   // Footer
   'footer.cancel': '48-hour cancellation policy applies.',
+  'footer.terms': 'Terms',
+  'footer.privacy': 'Privacy',
+  'footer.returns': 'Returns',
 
   // BookingForm labels
   'form.booking_type': 'Booking Type',
@@ -156,8 +165,17 @@ const ka: Translations = {
   'contact.book_cta': 'გირჩევნიათ პირდაპირ ჯავშანი?',
   'contact.book_btn': 'ვიზიტის ჯავშანი',
 
+  // Legal pages static
+  'legal.breadcrumb_home': 'მთავარი',
+  'legal.terms_title': 'წესები და პირობები',
+  'legal.privacy_title': 'კონფიდენციალურობის პოლიტიკა',
+  'legal.returns_title': 'დაბრუნების პირობები',
+
   // Footer
   'footer.cancel': 'გაუქმების პოლიტიკა: 48 საათი.',
+  'footer.terms': 'წესები და პირობები',
+  'footer.privacy': 'კონფიდენციალურობა',
+  'footer.returns': 'დაბრუნების პირობები',
 
   // BookingForm labels
   'form.booking_type': 'ჯავშნის ტიპი',
