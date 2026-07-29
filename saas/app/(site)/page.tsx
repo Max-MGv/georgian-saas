@@ -1,9 +1,10 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
-import { getSetting } from '@/app/actions/settings'
+import { getAllSettings } from '@/app/actions/settings'
+import { settingValue } from '@/lib/settings'
 import { getSiteContext } from '@/lib/siteContext'
 import { getBlockedDates } from '@/app/actions/blockedDates'
-import { getContentMap } from '@/app/actions/siteContent'
+import { getAllContent } from '@/app/actions/siteContent'
 import { cookies, headers } from 'next/headers'
 import BookingForm from '@/components/BookingForm'
 import BookingFormEditOverlay from '@/components/BookingFormEditOverlay'
@@ -20,35 +21,46 @@ export default async function Home({ searchParams }: PageProps) {
   const sp = await searchParams
   const isEditMode = sp.editMode === 'true'
 
-  const [cookieStore, defaultLocale, h] = await Promise.all([cookies(), getSetting('default_locale'), headers()])
+  const [cookieStore, h, tenantId] = await Promise.all([cookies(), headers(), getTenantId()])
+
+  // Was 14 separate getSetting() calls, each opening its own DB transaction.
+  // Now one query for the whole map. ⚠️ `settings` is SERVER-ONLY — it includes
+  // payment details (IBAN etc). Read individual keys below and pass those as
+  // props; never hand the map itself to a client component.
+  const settings = await getAllSettings(tenantId)
+
+  const defaultLocale = settingValue(settings, 'default_locale')
   const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const locale = sp.locale ?? cookieLocale
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
 
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
-  const tenantId = await getTenantId()
-  const [allCompanies, showCompanyPrice, enhancedBookingStr, hideCompanyDropdownStr, menuItems, masterclassItems, minGuestsTasting, minGuestsTastingLunch, blockedDates, c, formContent, heroBgPath, heroBgX, heroBgY, heroBgZoom, heroBgMobilePath, heroBgMobileX, heroBgMobileY, heroBgMobileZoom] = await Promise.all([
+  const [allCompanies, menuItems, masterclassItems, blockedDates, content] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
-    getSetting('show_company_price_after_booking'),
-    getSetting('enable_enhanced_company_booking'),
-    getSetting('hide_company_dropdown'),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
-    getSetting('min_guests_tasting'),
-    getSetting('min_guests_tasting_lunch'),
     getBlockedDates(),
-    getContentMap('home', locale),
-    getContentMap('form', locale),
-    getSetting('home_hero_bg_path'),
-    getSetting('home_hero_bg_x'),
-    getSetting('home_hero_bg_y'),
-    getSetting('home_hero_bg_zoom'),
-    getSetting('home_hero_bg_mobile_path'),
-    getSetting('home_hero_bg_mobile_x'),
-    getSetting('home_hero_bg_mobile_y'),
-    getSetting('home_hero_bg_mobile_zoom'),
+    // Was two getContentMap() calls (home + form) = two transactions; now one.
+    getAllContent(tenantId, locale),
   ])
+
+  const c           = content['home'] ?? {}
+  const formContent = content['form'] ?? {}
+
+  const showCompanyPrice        = settingValue(settings, 'show_company_price_after_booking')
+  const enhancedBookingStr      = settingValue(settings, 'enable_enhanced_company_booking')
+  const hideCompanyDropdownStr  = settingValue(settings, 'hide_company_dropdown')
+  const minGuestsTasting        = settingValue(settings, 'min_guests_tasting')
+  const minGuestsTastingLunch   = settingValue(settings, 'min_guests_tasting_lunch')
+  const heroBgPath              = settingValue(settings, 'home_hero_bg_path')
+  const heroBgX                 = settingValue(settings, 'home_hero_bg_x')
+  const heroBgY                 = settingValue(settings, 'home_hero_bg_y')
+  const heroBgZoom              = settingValue(settings, 'home_hero_bg_zoom')
+  const heroBgMobilePath        = settingValue(settings, 'home_hero_bg_mobile_path')
+  const heroBgMobileX           = settingValue(settings, 'home_hero_bg_mobile_x')
+  const heroBgMobileY           = settingValue(settings, 'home_hero_bg_mobile_y')
+  const heroBgMobileZoom        = settingValue(settings, 'home_hero_bg_mobile_zoom')
 
   const individualsRow = allCompanies.find(c => c.isIndividual)
   const companies = allCompanies.filter(c => !c.isIndividual)

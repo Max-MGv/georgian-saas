@@ -1,22 +1,30 @@
 import { cookies, headers } from 'next/headers'
-import { getSetting } from '@/app/actions/settings'
-import { getContentMap } from '@/app/actions/siteContent'
+import { getAllSettings } from '@/app/actions/settings'
+import { getAllContent } from '@/app/actions/siteContent'
+import { settingValue } from '@/lib/settings'
+import { getTenantId } from '@/lib/tenant'
 import SiteNav from './SiteNav'
 import { t } from '@/lib/t'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [cookieStore, defaultLocale, h, contactEmail, contactPhone, contactAddress, contactFacebook, contactInstagram] = await Promise.all([
-    cookies(),
-    getSetting('default_locale'),
-    headers(),
-    getSetting('contact_email'),
-    getSetting('contact_phone'),
-    getSetting('contact_address'),
-    getSetting('contact_facebook'),
-    getSetting('contact_instagram'),
-  ])
-  const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const navContent = await getContentMap('nav', locale)
+  // Was 6 separate getSetting() calls + a getContentMap(), each opening its own
+  // DB transaction. Now one query for all settings, one for all content.
+  const [cookieStore, h, tenantId] = await Promise.all([cookies(), headers(), getTenantId()])
+  const settings = await getAllSettings(tenantId)
+
+  // Locale resolution deliberately unchanged, including the `??` semantics:
+  // settingValue returns '' (not undefined) for an unset default_locale, so an
+  // empty string wins over 'en' here exactly as it did before. Preserved rather
+  // than "fixed" — this refactor is behavior-neutral by design.
+  const locale = cookieStore.get('site_locale')?.value ?? settingValue(settings, 'default_locale') ?? 'en'
+
+  const navContent = (await getAllContent(tenantId, locale))['nav'] ?? {}
+
+  const contactEmail     = settingValue(settings, 'contact_email')
+  const contactPhone     = settingValue(settings, 'contact_phone')
+  const contactAddress   = settingValue(settings, 'contact_address')
+  const contactFacebook  = settingValue(settings, 'contact_facebook')
+  const contactInstagram = settingValue(settings, 'contact_instagram')
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''

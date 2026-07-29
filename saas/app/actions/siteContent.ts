@@ -27,6 +27,36 @@ export async function getContentMap(section: string, locale = 'en'): Promise<Rec
   return Object.fromEntries(rows.map(r => [r.key, r.value]))
 }
 
+/**
+ * Read ALL of a tenant's site content for one locale, grouped by section, in a
+ * single query — replacing N separate `getContentMap()` calls on pages that
+ * need more than one section.
+ *
+ * Takes `tenantId` and `locale` explicitly (rather than resolving the tenant
+ * from `headers()` internally) so this can be wrapped in `unstable_cache` later
+ * — Next 16 forbids `headers()`/`cookies()` inside a cache scope, and both
+ * values need to be part of the cache key anyway. See Plan-Performance chunk 3.
+ *
+ * Returns `{ [section]: { [key]: value } }`. A section with no rows is simply
+ * absent, so callers must handle `undefined` — use `contentSection()` below.
+ */
+export async function getAllContent(
+  tenantId: string,
+  locale = 'en'
+): Promise<Record<string, Record<string, string>>> {
+  const rows = await withTenantDb(tenantId, tx =>
+    tx.siteContent.findMany({
+      where: { locale, tenantId },
+      select: { section: true, key: true, value: true },
+    })
+  )
+  const bySection: Record<string, Record<string, string>> = {}
+  for (const r of rows) {
+    ;(bySection[r.section] ??= {})[r.key] = r.value
+  }
+  return bySection
+}
+
 export async function saveContent(key: string, value: string, section: string, label: string, locale = 'en') {
   await requireAdmin()
   const tenantId = await getTenantId()
