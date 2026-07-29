@@ -24,6 +24,7 @@ type Props = {
     modulesWineOrders?: boolean
     modulesPublicSite?: boolean
     modulesLegalPages?: boolean
+    modulesOnlinePayment?: boolean
   }
 }
 
@@ -83,6 +84,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [modulesWineOrders, setModulesWineOrders] = useState(tenant?.modulesWineOrders ?? false)
   const [modulesPublicSite, setModulesPublicSite] = useState(tenant?.modulesPublicSite ?? true)
   const [modulesLegalPages, setModulesLegalPages] = useState(tenant?.modulesLegalPages ?? true)
+  const [modulesOnlinePayment, setModulesOnlinePayment] = useState(tenant?.modulesOnlinePayment ?? false)
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -182,7 +184,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
           primaryColorOverride: overrideEnabled ? primaryColorOverride : undefined,
           logoUrl, logoAlt, faviconUrl,
           displayName: displayName || undefined,
-          modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages,
+          modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages, modulesOnlinePayment,
         }
         if (mode === 'new') {
           await createTenant(payload)
@@ -422,6 +424,15 @@ export default function TenantFormClient({ mode, tenant }: Props) {
                 <input type="checkbox" checked={modulesLegalPages} onChange={e => setModulesLegalPages(e.target.checked)} />
                 <span style={{ fontSize: 14, color: C.text }}>Legal pages</span>
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={modulesOnlinePayment} onChange={e => setModulesOnlinePayment(e.target.checked)} />
+                <span style={{ fontSize: 14, color: C.text }}>Online payment (Flitt)</span>
+              </label>
+              {modulesOnlinePayment && (
+                <p style={{ fontSize: 12, color: '#fbbf24', padding: '8px 12px', backgroundColor: '#451a03', borderRadius: 6 }}>
+                  Also needs the tenant&apos;s Flitt merchant ID and secret key, entered in their own admin panel under Settings. Until both are set, customers keep seeing the plain reservation flow.
+                </p>
+              )}
               {!modulesLegalPages && (
                 <p style={{ fontSize: 12, color: '#fbbf24', padding: '8px 12px', backgroundColor: '#451a03', borderRadius: 6 }}>
                   Terms/Privacy/Returns pages and footer links will be hidden. On by default — this is a legal expectation, not an opt-in feature.

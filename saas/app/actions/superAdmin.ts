@@ -70,6 +70,7 @@ export async function getTenant(id: string) {
     modulesWineOrders: t.modulesWineOrders,
     modulesPublicSite: t.modulesPublicSite,
     modulesLegalPages: t.modulesLegalPages,
+    modulesOnlinePayment: t.modulesOnlinePayment,
   }
 }
 
@@ -87,6 +88,7 @@ export async function createTenant(data: {
   modulesWineOrders: boolean
   modulesPublicSite: boolean
   modulesLegalPages: boolean
+  modulesOnlinePayment?: boolean
 }) {
   await requireSuperAdmin()
   let tenant
@@ -105,6 +107,7 @@ export async function createTenant(data: {
         modulesWineOrders: data.modulesWineOrders,
         modulesPublicSite: data.modulesPublicSite,
         modulesLegalPages: data.modulesLegalPages,
+        modulesOnlinePayment: data.modulesOnlinePayment ?? false,
       },
     })
   } catch (e) {
@@ -136,6 +139,7 @@ export async function updateTenant(id: string, data: {
   modulesWineOrders: boolean
   modulesPublicSite: boolean
   modulesLegalPages: boolean
+  modulesOnlinePayment?: boolean
 }) {
   await requireSuperAdmin()
   try {
@@ -154,6 +158,9 @@ export async function updateTenant(id: string, data: {
         modulesWineOrders: data.modulesWineOrders,
         modulesPublicSite: data.modulesPublicSite,
         modulesLegalPages: data.modulesLegalPages,
+        // Undefined leaves the flag untouched rather than resetting it — an
+        // older client that doesn't send the field must not switch payment off.
+        modulesOnlinePayment: data.modulesOnlinePayment,
       },
     })
   } catch (e) {

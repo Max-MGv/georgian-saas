@@ -13,18 +13,29 @@ const C = {
   border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
 }
 
-type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
 const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:          { labelKey: 'orders.status.new',          bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:    { labelKey: 'orders.status.confirmed',     bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT: { labelKey: 'orders.status.invoiceSent',   bg: '#fef3c7', color: '#92400e' },
-  PAID:         { labelKey: 'orders.status.paid',          bg: '#dcfce7', color: '#166534' },
-  COMPLETED:    { labelKey: 'orders.status.completed',     bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:    { labelKey: 'orders.status.cancelled',     bg: '#fee2e2', color: '#b91c1c' },
+  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
+  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
+  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
+  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
+  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
 }
 
-const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+/**
+ * Statuses an admin may set by hand. PENDING_PAYMENT is deliberately excluded:
+ * it means "sent to the card gateway, not settled yet" and is only ever written
+ * by the checkout/settle path — a human setting it would claim a payment attempt
+ * that never happened. These orders are never auto-expired (Plan-OnlinePayment
+ * §7.2), so they accumulate for the winery to chase, and are moved on from here
+ * by picking any of the statuses below.
+ */
+type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+
+const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
 import { COLUMN_DEFS, DEFAULT_VISIBLE, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
 
@@ -242,7 +253,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     handleRowMouseLeave()
   }
 
-  async function handleStatusChange(orderId: string, newStatus: OrderStatus) {
+  async function handleStatusChange(orderId: string, newStatus: SettableStatus) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))

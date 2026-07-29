@@ -68,7 +68,7 @@ export default async function OrderDetailPage({
         locale={locale}
         order={{
           id: order.id,
-          status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
+          status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,

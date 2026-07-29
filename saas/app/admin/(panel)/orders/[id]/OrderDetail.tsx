@@ -29,18 +29,22 @@ const inputStyle: React.CSSProperties = {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
 const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:          { labelKey: 'orders.status.new',        bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:    { labelKey: 'orders.status.confirmed',   bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
-  PAID:         { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
-  COMPLETED:    { labelKey: 'orders.status.completed',   bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:    { labelKey: 'orders.status.cancelled',   bg: '#fee2e2', color: '#b91c1c' },
+  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
+  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
+  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
+  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
+  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
 }
 
-const ALL_STATUSES: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+/** Set by hand from the dropdown. PENDING_PAYMENT is machine-set only — see OrdersTable. */
+type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+
+const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
 type Payment = { recipientName: string; personalNumber: string; bankName: string; bankCode: string; iban: string }
 
@@ -205,7 +209,7 @@ export default function OrderDetail({
     }
   }, [printReady])
 
-  async function handleStatusChange(s: OrderStatus) {
+  async function handleStatusChange(s: SettableStatus) {
     setStatusMenuOpen(false)
     setStatus(s)
     await updateOrderStatus(order.id, s)

@@ -44,6 +44,7 @@ type Mode = 'bookings' | 'wine'
 
 const BOOKING_STATUS_LABEL: Record<string, string> = {
   NEW: 'New', CONFIRMED: 'Confirmed', INVOICE_SENT: 'Invoice Sent',
+  PENDING_PAYMENT: 'Awaiting Payment',
   PAID: 'Paid', COMPLETED: 'Completed', CANCELLED: 'Cancelled',
 }
 const WINE_STATUS_LABEL: Record<string, string> = {

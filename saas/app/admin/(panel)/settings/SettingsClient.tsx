@@ -4,6 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
 import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavicon } from '@/app/actions/uploadLogo'
+import { updatePaymentCredentials, clearPaymentSecretKey } from '@/app/actions/paymentCredentials'
 import { adminT } from '@/lib/adminT'
 
 const C = {
@@ -21,6 +22,13 @@ type Props = {
     payment_bank_code: string
     payment_iban: string
   }
+  /**
+   * Flitt card-payment credentials. `null` when the online-payment module is off
+   * for this tenant — the whole section is then not rendered at all.
+   * Deliberately carries `secretKeySet: boolean` and never the key itself: this
+   * object is serialised into the page, so the value must not be in it.
+   */
+  onlinePayment: { merchantId: string; secretKeySet: boolean } | null
   invoiceEmailMessage: string
   minGuestsTasting: string
   minGuestsTastingLunch: string
@@ -64,7 +72,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -73,6 +81,12 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
   const [hideCompanyDropdown, setHideCompanyDropdown] = useState(settings.hide_company_dropdown)
   const [paymentFields, setPaymentFields] = useState(payment)
+  const [flittMerchantId, setFlittMerchantId] = useState(onlinePayment?.merchantId ?? '')
+  const [flittSecretKeySet, setFlittSecretKeySet] = useState(onlinePayment?.secretKeySet ?? false)
+  // Draft only. The stored key is never sent to the browser, so this starts empty
+  // on every load and an empty draft means "leave the saved key alone".
+  const [flittSecretDraft, setFlittSecretDraft] = useState('')
+  const [flittClearConfirm, setFlittClearConfirm] = useState(false)
   const [emailMessage, setEmailMessage] = useState(invoiceEmailMessage)
   const [minTasting, setMinTasting] = useState(minGuestsTasting)
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
@@ -162,6 +176,37 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting(key, paymentFields[key])
       setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleFlittMerchantIdBlur() {
+    startTransition(async () => {
+      await updatePaymentCredentials({ merchantId: flittMerchantId })
+      setSavedKey('flitt_merchant_id')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleFlittSecretSave() {
+    const key = flittSecretDraft.trim()
+    if (!key) return
+    startTransition(async () => {
+      await updatePaymentCredentials({ merchantId: flittMerchantId, secretKey: key })
+      setFlittSecretDraft('')
+      setFlittSecretKeySet(true)
+      setSavedKey('flitt_secret_key')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleFlittSecretClear() {
+    setFlittClearConfirm(false)
+    startTransition(async () => {
+      await clearPaymentSecretKey()
+      setFlittSecretDraft('')
+      setFlittSecretKeySet(false)
+      setSavedKey('flitt_secret_key')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -340,6 +385,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     { key: 'payment_bank_code',        label: at('settings.payment.bankCode'),        placeholder: at('settings.payment.bankCodePh') },
     { key: 'payment_iban',             label: at('settings.payment.iban'),            placeholder: at('settings.payment.ibanPh') },
   ]
+
+  // Both halves are required before anything is ever charged — see
+  // lib/payments/shouldTakePayment. Anything less and the guest just books.
+  const flittReady = Boolean(flittMerchantId.trim()) && flittSecretKeySet
 
   return (
     <div className="space-y-6">
@@ -536,6 +585,128 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           })}
         </div>
       </div>
+
+      {/* Card payments (Flitt). Rendered only for tenants whose online-payment
+          module is on — the page passes null otherwise, so a tenant without the
+          module never sees a payment gateway section at all. */}
+      {onlinePayment && (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+          <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.onlinePayment.sectionTitle')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sectionHint')}</p>
+          </div>
+          <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
+
+            {/* Plain-language state. Never claims payments are live unless both
+                halves are actually stored. */}
+            <div
+              className="rounded-lg px-4 py-3"
+              style={flittReady
+                ? { backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }
+                : { backgroundColor: '#fff7ed', border: '1px solid #fdba74' }}
+            >
+              <p className="text-sm font-medium" style={{ color: flittReady ? '#166534' : '#9a3412' }}>
+                {at(flittReady ? 'settings.onlinePayment.readyTitle' : 'settings.onlinePayment.pendingTitle')}
+              </p>
+              <p className="text-xs mt-1" style={{ color: flittReady ? '#15803d' : '#7c2d12' }}>
+                {at(flittReady ? 'settings.onlinePayment.readyBody' : 'settings.onlinePayment.pendingBody')}
+              </p>
+            </div>
+
+            {/* Merchant ID — ordinary text, saved on blur */}
+            <div>
+              <label className="text-xs block mb-1 font-medium" style={{ color: C.muted }}>{at('settings.onlinePayment.merchantId')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  style={inputStyle}
+                  value={flittMerchantId}
+                  placeholder={at('settings.onlinePayment.merchantIdPh')}
+                  onChange={e => setFlittMerchantId(e.target.value)}
+                  onBlur={handleFlittMerchantIdBlur}
+                />
+                {savedKey === 'flitt_merchant_id' && !isPending && (
+                  <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+                )}
+              </div>
+              <p className="text-xs mt-1" style={{ color: C.faint }}>{at('settings.onlinePayment.merchantIdHint')}</p>
+            </div>
+
+            {/* Secret key — set-only. The stored value is never sent here, so the
+                field always starts empty and blank means "keep what's saved". */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <label className="text-xs font-medium" style={{ color: C.muted }}>{at('settings.onlinePayment.secretKey')}</label>
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full"
+                  style={flittSecretKeySet
+                    ? { backgroundColor: '#dcfce7', color: '#166534' }
+                    : { backgroundColor: '#f5efe6', color: C.faint }}
+                >
+                  {at(flittSecretKeySet ? 'settings.onlinePayment.statusSet' : 'settings.onlinePayment.statusNotSet')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+                  value={flittSecretDraft}
+                  placeholder={at('settings.onlinePayment.secretKeyPh')}
+                  onChange={e => setFlittSecretDraft(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={handleFlittSecretSave}
+                  disabled={!flittSecretDraft.trim() || isPending}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium text-white flex-shrink-0"
+                  style={{ backgroundColor: C.wine, opacity: !flittSecretDraft.trim() || isPending ? 0.5 : 1 }}
+                >
+                  {isPending ? at('settings.common.saving') : at('settings.onlinePayment.saveKey')}
+                </button>
+                {savedKey === 'flitt_secret_key' && !isPending && (
+                  <span className="text-xs flex-shrink-0" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+                )}
+              </div>
+              <p className="text-xs mt-1" style={{ color: C.faint }}>{at('settings.onlinePayment.secretKeyHint')}</p>
+
+              {flittSecretKeySet && (
+                flittClearConfirm ? (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs" style={{ color: '#b91c1c' }}>{at('settings.onlinePayment.clearConfirm')}</span>
+                    <button
+                      type="button"
+                      onClick={handleFlittSecretClear}
+                      disabled={isPending}
+                      className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
+                      style={{ backgroundColor: '#b91c1c', opacity: isPending ? 0.6 : 1 }}
+                    >
+                      {at('settings.onlinePayment.clear')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFlittClearConfirm(false)}
+                      className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                      style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: '#fffdf9' }}
+                    >
+                      {at('settings.common.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setFlittClearConfirm(true)}
+                    className="text-xs mt-2 px-3 py-1.5 rounded-lg font-medium"
+                    style={{ border: `1px solid ${C.border}`, color: '#b91c1c', backgroundColor: '#fffdf9' }}
+                  >
+                    {at('settings.onlinePayment.clear')}
+                  </button>
+                )
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Emails */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>

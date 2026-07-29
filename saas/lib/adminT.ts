@@ -59,6 +59,36 @@ const en: Translations = {
   'settings.payment.iban': 'Recipient IBAN',
   'settings.payment.ibanPh': 'e.g. GE65TB7183445064300079',
 
+  // Settings — Online Payment (card payments via Flitt). Only rendered when the
+  // online-payment module is on for this tenant.
+  'settings.onlinePayment.sectionTitle': 'Card Payments',
+  'settings.onlinePayment.sectionHint': 'Lets guests pay by card at the moment they book, instead of you arranging payment with them afterwards.',
+  'settings.onlinePayment.merchantId': 'Merchant ID',
+  'settings.onlinePayment.merchantIdPh': 'e.g. 4056054',
+  'settings.onlinePayment.merchantIdHint': 'The account number Flitt gave you when your account was opened.',
+  'settings.onlinePayment.secretKey': 'Secret key',
+  'settings.onlinePayment.secretKeyPh': 'Paste the key from Flitt',
+  'settings.onlinePayment.secretKeyHint': 'For safety this is never shown again once saved. Type a new key to replace the saved one, or leave this empty to keep it as it is.',
+  'settings.onlinePayment.statusSet': 'Saved',
+  'settings.onlinePayment.statusNotSet': 'Not set',
+  'settings.onlinePayment.saveKey': 'Save key',
+  'settings.onlinePayment.clear': 'Remove key',
+  'settings.onlinePayment.clearConfirm': 'Remove the saved secret key? Guests will go back to placing normal reservations until you enter a new one.',
+  'settings.onlinePayment.readyTitle': 'Card payments are switched on',
+  'settings.onlinePayment.readyBody': 'Guests are asked to pay by card when they book. Bookings with no price set still come through as normal reservations for you to settle by hand.',
+  'settings.onlinePayment.pendingTitle': 'Card payments are not active yet',
+  'settings.onlinePayment.pendingBody': 'Until both boxes below are filled in, guests book exactly as they do today: they place a reservation and you arrange payment with them yourself. Nothing is broken and nobody is charged.',
+
+  // Admin-wide warning banner — online payment is on but nothing can be charged.
+  // Plan-OnlinePayment §7.3: the fallback is correct for the guest but invisible
+  // to the winery, so it has to be said out loud.
+  'paymentSetup.banner.title': 'Card payments are switched on, but nothing is being charged',
+  'paymentSetup.banner.credentials': 'Your Flitt Merchant ID and secret key are not both filled in, so guests cannot be sent to the payment page.',
+  'paymentSetup.banner.pricing': 'No visit prices are set up, so there is no amount to charge. Add your per-person prices to the "Individuals" row on the Companies page.',
+  'paymentSetup.banner.effect': 'Bookings are still arriving normally as reservations — no money is being taken for them.',
+  'paymentSetup.banner.goToSettings': 'Open Settings',
+  'paymentSetup.banner.goToCompanies': 'Open Companies',
+
   // Settings — Emails
   'settings.emails.sectionTitle': 'Emails',
   'settings.emails.sectionHint': 'Default message included in invoice emails. You can edit it before each send.',
@@ -153,6 +183,7 @@ const en: Translations = {
   'orders.status.new': 'New',
   'orders.status.confirmed': 'Confirmed',
   'orders.status.invoiceSent': 'Invoice Sent',
+  'orders.status.pendingPayment': 'Awaiting Payment',
   'orders.status.paid': 'Paid',
   'orders.status.completed': 'Completed',
   'orders.status.cancelled': 'Cancelled',
@@ -864,6 +895,33 @@ const ka: Translations = {
   'settings.payment.iban': 'მიმღების IBAN',
   'settings.payment.ibanPh': 'მაგ. GE65TB7183445064300079',
 
+  // Settings — ონლაინ გადახდა (Flitt)
+  'settings.onlinePayment.sectionTitle': 'ბარათით გადახდა',
+  'settings.onlinePayment.sectionHint': 'საშუალებას აძლევს სტუმრებს გადაიხადონ ბარათით ჯავშნის გაკეთებისთანავე, იმის ნაცვლად რომ გადახდაზე შემდეგ შეთანხმდეთ.',
+  'settings.onlinePayment.merchantId': 'მერჩანტის ID',
+  'settings.onlinePayment.merchantIdPh': 'მაგ. 4056054',
+  'settings.onlinePayment.merchantIdHint': 'ანგარიშის ნომერი, რომელიც Flitt-მა მოგცათ ანგარიშის გახსნისას.',
+  'settings.onlinePayment.secretKey': 'საიდუმლო გასაღები',
+  'settings.onlinePayment.secretKeyPh': 'ჩასვით Flitt-ის გასაღები',
+  'settings.onlinePayment.secretKeyHint': 'უსაფრთხოებისთვის შენახვის შემდეგ ის აღარ ჩანს. ჩაწერეთ ახალი გასაღები ძველის ჩასანაცვლებლად, ან დატოვეთ ცარიელი, რომ არსებული უცვლელი დარჩეს.',
+  'settings.onlinePayment.statusSet': 'შენახულია',
+  'settings.onlinePayment.statusNotSet': 'არ არის მითითებული',
+  'settings.onlinePayment.saveKey': 'გასაღების შენახვა',
+  'settings.onlinePayment.clear': 'გასაღების წაშლა',
+  'settings.onlinePayment.clearConfirm': 'წავშალოთ შენახული საიდუმლო გასაღები? სტუმრები დაუბრუნდებიან ჩვეულებრივ ჯავშანს, სანამ ახალს არ შეიყვანთ.',
+  'settings.onlinePayment.readyTitle': 'ბარათით გადახდა ჩართულია',
+  'settings.onlinePayment.readyBody': 'სტუმრებს ჯავშნისას ეთხოვებათ ბარათით გადახდა. ჯავშნები, რომლებსაც ფასი არ აქვთ, მაინც ჩვეულებრივ ჯავშნად შემოვა და ხელით უნდა დაარეგულიროთ.',
+  'settings.onlinePayment.pendingTitle': 'ბარათით გადახდა ჯერ არ არის აქტიური',
+  'settings.onlinePayment.pendingBody': 'სანამ ორივე ველი არ შეივსება, სტუმრები ჯავშნიან ისე, როგორც დღეს: აკეთებენ ჯავშანს და გადახდაზე თქვენ თვითონ თანხმდებით. არაფერია გაფუჭებული და არავის ერიცხება თანხა.',
+
+  // ადმინის გაფრთხილება — ონლაინ გადახდა ჩართულია, მაგრამ თანხა არ ირიცხება
+  'paymentSetup.banner.title': 'ბარათით გადახდა ჩართულია, მაგრამ თანხა არ ირიცხება',
+  'paymentSetup.banner.credentials': 'Flitt-ის მერჩანტის ID და საიდუმლო გასაღები ორივე არ არის შევსებული, ამიტომ სტუმრები ვერ გადადიან გადახდის გვერდზე.',
+  'paymentSetup.banner.pricing': 'ვიზიტის ფასები არ არის მითითებული, ამიტომ ჩამოსაჭრელი თანხა არ არსებობს. დაამატეთ ფასები ერთ სტუმარზე „ინდივიდუალურის“ სტრიქონში კომპანიების გვერდზე.',
+  'paymentSetup.banner.effect': 'ჯავშნები კვლავ ჩვეულებრივად შემოდის — მათზე თანხა არ ირიცხება.',
+  'paymentSetup.banner.goToSettings': 'პარამეტრების გახსნა',
+  'paymentSetup.banner.goToCompanies': 'კომპანიების გახსნა',
+
   // Settings — Emails
   'settings.emails.sectionTitle': 'ელ-ფოსტები',
   'settings.emails.sectionHint': 'ნაგულისხმევი შეტყობინება, რომელიც ერთვის ინვოისის ელ-წერილებს. გაგზავნამდე შეგიძლიათ შეასწოროთ.',
@@ -958,6 +1016,7 @@ const ka: Translations = {
   'orders.status.new': 'ახალი',
   'orders.status.confirmed': 'დადასტურებული',
   'orders.status.invoiceSent': 'ინვოისი გაგზავნილია',
+  'orders.status.pendingPayment': 'გადახდის მოლოდინში',
   'orders.status.paid': 'გადახდილი',
   'orders.status.completed': 'დასრულებული',
   'orders.status.cancelled': 'გაუქმებული',

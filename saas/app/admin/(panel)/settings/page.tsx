@@ -1,7 +1,9 @@
 import { getSetting } from '@/app/actions/settings'
 import { getBlockedDates } from '@/app/actions/blockedDates'
+import { getPaymentCredentials } from '@/app/actions/paymentCredentials'
 import { headers } from 'next/headers'
 import { adminT } from '@/lib/adminT'
+import PaymentSetupBanner from '../PaymentSetupBanner'
 import SettingsClient from './SettingsClient'
 
 export default async function SettingsPage() {
@@ -57,11 +59,21 @@ export default async function SettingsPage() {
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const faviconUrl = h.get('x-tenant-favicon') ?? null
 
+  // Module flag comes from the proxy header, same source the site layout uses.
+  // Tenants without the module never get the credentials section — and never get
+  // the lookup either. getPaymentCredentials returns `secretKeySet`, never the key.
+  const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
+  const credentials = onlinePaymentOn ? await getPaymentCredentials() : null
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(adminLanguage || 'en', 'nav.settings')}</h1>
       </div>
+
+      {/* Credentials half is explained in the section below, so this instance only
+          covers the pricing half (Plan-OnlinePayment §7.3). */}
+      <PaymentSetupBanner checks={['pricing']} />
 
       <SettingsClient
         settings={{
@@ -77,6 +89,7 @@ export default async function SettingsPage() {
           payment_bank_code: bankCode,
           payment_iban: iban,
         }}
+        onlinePayment={credentials ? { merchantId: credentials.merchantId, secretKeySet: credentials.secretKeySet } : null}
         invoiceEmailMessage={invoiceEmailMessage}
         minGuestsTasting={minGuestsTasting}
         minGuestsTastingLunch={minGuestsTastingLunch}

@@ -6,6 +6,7 @@ import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import { adminT } from '@/lib/adminT'
+import PaymentSetupBanner from '../PaymentSetupBanner'
 import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
@@ -17,7 +18,7 @@ type SearchParams = {
   dateFrom?: string
   dateTo?: string
   companyId?: string   // a real company ID, or '__individual__' for individual-only
-  status?: string      // NEW | CONFIRMED | INVOICE_SENT | PAID | COMPLETED | CANCELLED
+  status?: string      // NEW | CONFIRMED | INVOICE_SENT | PENDING_PAYMENT | PAID | COMPLETED | CANCELLED
   view?: 'table' | 'calendar'
 }
 
@@ -138,6 +139,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       </div>
 
+      <PaymentSetupBanner />
+
       {view === 'calendar' ? (
         <CalendarView
           daySummaries={daySummaries}
@@ -158,7 +161,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <>
           <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
-            status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
+            status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,
             timeSlot: o.timeSlot,
             bookingType: o.bookingType,

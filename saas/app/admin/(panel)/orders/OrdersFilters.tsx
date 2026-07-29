@@ -22,6 +22,7 @@ const STATUSES = [
   { value: 'NEW',          labelKey: 'orders.status.new' },
   { value: 'CONFIRMED',    labelKey: 'orders.status.confirmed' },
   { value: 'INVOICE_SENT', labelKey: 'orders.status.invoiceSent' },
+  { value: 'PENDING_PAYMENT', labelKey: 'orders.status.pendingPayment' },
   { value: 'PAID',         labelKey: 'orders.status.paid' },
   { value: 'COMPLETED',    labelKey: 'orders.status.completed' },
   { value: 'CANCELLED',    labelKey: 'orders.status.cancelled' },

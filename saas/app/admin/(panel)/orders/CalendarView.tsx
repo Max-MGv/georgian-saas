@@ -10,12 +10,13 @@ const C = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: '#ca8a04', CONFIRMED: '#2563eb', INVOICE_SENT: '#7c3aed',
+  NEW: '#ca8a04', CONFIRMED: '#2563eb', INVOICE_SENT: '#7c3aed', PENDING_PAYMENT: '#ea580c',
   PAID: '#16a34a', COMPLETED: '#16a34a', CANCELLED: '#dc2626',
 }
 
 const STATUS_LABEL_KEYS: Record<string, string> = {
   NEW: 'orders.status.new', CONFIRMED: 'orders.status.confirmed', INVOICE_SENT: 'orders.status.invoiceSent',
+  PENDING_PAYMENT: 'orders.status.pendingPayment',
   PAID: 'orders.status.paid', COMPLETED: 'orders.status.completed', CANCELLED: 'orders.status.cancelled',
 }
 
