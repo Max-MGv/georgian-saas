@@ -109,6 +109,17 @@ const en: Translations = {
   'form.success_body': 'Thank you. We will contact you shortly to confirm your visit.',
   'form.est_total_label': 'Estimated total',
 
+  // Online payment result page
+  'payment.success_heading': 'Payment received',
+  'payment.success_body': 'Thank you — your payment went through and your booking is confirmed. A confirmation has been sent to you.',
+  // Says "not charged" because that is what a declined or abandoned Flitt
+  // checkout means, and it is the first thing a worried customer wants to know.
+  'payment.failed_heading': 'Payment was not completed',
+  'payment.failed_body': 'You have not been charged. Your reservation is still being held — please contact us and we will arrange payment another way.',
+  'payment.pending_heading': 'Checking your payment',
+  'payment.pending_body': 'This can take a moment. If you have already paid, your confirmation will arrive shortly — there is no need to pay again.',
+  'payment.back_home': 'Back to home',
+
   // Wine catalogue — type/sweetness badges
   'wine.type.RED': 'Red',
   'wine.type.WHITE': 'White',
@@ -236,6 +247,15 @@ const ka: Translations = {
   'form.success_heading': 'ჯავშანი მიღებულია!',
   'form.success_body': 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.',
   'form.est_total_label': 'სავარაუდო ჯამი',
+
+  // Online payment result page
+  'payment.success_heading': 'გადახდა მიღებულია',
+  'payment.success_body': 'გმადლობთ — გადახდა წარმატებით შესრულდა და თქვენი ჯავშანი დადასტურებულია. დადასტურება გამოგზავნილია.',
+  'payment.failed_heading': 'გადახდა ვერ დასრულდა',
+  'payment.failed_body': 'თანხა არ ჩამოგეჭრათ. თქვენი ჯავშანი კვლავ ძალაშია — გთხოვთ დაგვიკავშირდეთ და გადახდას სხვა გზით მოვაგვარებთ.',
+  'payment.pending_heading': 'მიმდინარეობს გადახდის შემოწმება',
+  'payment.pending_body': 'ამას შეიძლება ერთი წუთი დასჭირდეს. თუ უკვე გადაიხადეთ, დადასტურება მალე მოგივათ — ხელახლა გადახდა საჭირო არ არის.',
+  'payment.back_home': 'მთავარ გვერდზე დაბრუნება',
 
   // Wine catalogue — type/sweetness badges
   'wine.type.RED': 'წითელი',
