@@ -4,9 +4,13 @@ tags: [plan, performance, caching]
 
 # Plan: Site Performance
 
-**Status:** Chunk 0 done (uncommitted), Chunks 1–5 awaiting approval
-**Started:** 2026-07-29
+**Status:** ✅ **COMPLETE — shipped to production 2026-07-29.** Chunks 0, R and 1 built and live; chunks 2–3 (caching) deliberately dropped; chunk 5 unnecessary.
+**Started / finished:** 2026-07-29 (single session)
 **Trigger:** Max: "website is very slow, takes long to load — run industry-standard tests and build a report on what's causing it"
+
+**Outcome in one line:** the cause was **the Vercel functions running in `iad1` (Washington DC) while the databases live in `eu-central-1` (Frankfurt)** — not caching, not query count. A 4-line `saas/vercel.json` took Home TTFB from ~2.93s to ~0.40s. Before/after numbers: [[Perf-Baseline-2026-07-29]].
+
+> ⚠️ **Read the "ROOT CAUSE FOUND" section below before the caching plan that follows it.** The caching plan (chunks 2–3) was written against a diagnosis that turned out to be wrong and was never built. It is kept only as a record of the reasoning, and because it documents a real Next 16 constraint worth knowing if caching is ever revisited.
 
 ---
 

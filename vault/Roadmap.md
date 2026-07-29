@@ -222,6 +222,23 @@ Full plan: `vault/Plan-CompanyAccessCodes.md`
 
 ---
 
+## v1.8 — Site Performance ✅ COMPLETE (2026-07-29)
+
+Full plan: `vault/Plan-Performance.md` · Before/after measurements: `vault/Perf-Baseline-2026-07-29.md`
+
+Triggered by Max reporting the site felt slow. Audited with Lighthouse + network timing against live production; two independent causes found and fixed the same day.
+
+- [x] **Vercel function region pinned to `fra1`** — the big one. Functions were executing in `iad1` (Washington DC) while both Supabase projects live in `eu-central-1` (Frankfurt), so every DB round trip crossed the Atlantic. Fixed with a 4-line `saas/vercel.json`. **Home TTFB ~2.93s → ~0.40s (7×); full load 5.8s → 0.49s (10×).** See MaintenanceNotes §8 — the file must stay in `saas/`, not the repo root.
+- [x] **Wine product photos compressed** — 6 files in `public/images/products/` were camera-resolution originals (2991×2990px, ~2.15MB each) rendered into a 362×176px thumbnail; 98% wasted bytes. Resized to 750px + max PNG compression. **7.5MB → 1.06MB (86% smaller); `/wines` LCP 15.5s → 2.7s.**
+- [x] **Settings/content reads batched per request** — Home page ~24 DB transactions → ~8. Kept for connection-pool headroom (see KnownBugs #4), **not** as a speed fix — it measurably did not change wall-clock time.
+- [x] ~~**Data-layer caching (`unstable_cache` + `revalidateTag`)**~~ — **deliberately dropped.** Planned and approved, then abandoned once the real cause was found: it was scoped to remove a ~3s database wait that no longer exists, and would have added staleness plus cross-tenant cache-key risk for no gain.
+
+Remaining, not urgent:
+- [ ] **Wine photos → WebP** — Lighthouse estimates a further ~790KB on `/wines`. Kept as PNG deliberately (transparent backgrounds). Only worth it if that page needs more.
+- [ ] **Admin edit mode not directly verified** against the batching refactor — covered by inference (same content map, proven equivalent), not observation. Worth a glance next time the home page text is edited in the admin.
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

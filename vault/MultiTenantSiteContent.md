@@ -101,6 +101,10 @@ Not how most production content sites run at scale — most use ISR or tag-based
 
 **The upgrade path, when it's worth doing:** `saveContent()` already calls `revalidatePath()` on every edit — that's literally the trigger ISR wants. Dropping `force-dynamic` and letting pages cache until an edit revalidates them would keep the "edits show up immediately" behavior *and* add free caching + lower DB load for every request in between. Not urgent at current (winery website) traffic levels — but it's the first lever to pull if a tenant ever gets a real traffic spike, or Supabase connection load becomes a concern.
 
+> **⚠️ Update 2026-07-29 — this was planned, then deliberately NOT built.** When the site was reported as slow, `force-dynamic` was the prime suspect and a full `unstable_cache` plan was written and approved. Measurement then showed the real cause was elsewhere entirely: the Vercel functions ran in `iad1` while the databases live in `eu-central-1`, so the cost was ~90ms of Atlantic latency per round trip, not the absence of caching. Pinning the region took Home TTFB from ~2.93s to ~0.40s and the caching work was dropped as solving a problem that no longer existed.
+>
+> What this means for the paragraph above: **it remains true as a *load* argument, but not as a *latency* one.** `force-dynamic` is a fine default at this traffic level. If caching is ever revisited, two findings from that investigation are worth reusing: Next 16 forbids `headers()`/`cookies()` inside a cache scope (which is why `getAllSettings()`/`getAllContent()` take `tenantId` as an explicit argument today), and any cache key **must** include `tenantId` or a cache hit will serve one tenant's content to another. Full record: [[Plan-Performance]].
+
 ---
 
 ## If this ever needs to change

@@ -25,7 +25,7 @@ Full reference: `Plan-LegalPages.md` and `Features/Feature 128 - Legal Pages.md`
 
 Everything is live; full reference: `Plan-DevProdEnvironments.md`. Your checks:
 
-1. Open the staging site: `georgian-saas-git-staging-mg-productions-projects.vercel.app` → full Nikalas Marani site renders, browser tab says "Nikalas Marani (Staging)" (~6s load is normal — same as prod)
+1. Open the staging site: `georgian-saas-git-staging-mg-productions-projects.vercel.app` → full Nikalas Marani site renders, browser tab says "Nikalas Marani (Staging)" (loads in well under a second since the 2026-07-29 region fix — the old "~6s is normal" note was a misconfiguration, not normal)
 2. Open `nikalasmarani.vercel.app` → real site unchanged, still 60 orders in admin
 3. Local dev now runs against the DEV database — start the dev server as usual, localhost shows the staging clone; break anything you like, NM is untouchable from here
 4. ~~One small task for you (blocks staging admin login)~~ ✅ DONE 2026-07-23 — Max created `maxb2bsaas@gmail.com` in dev Supabase; Claude wired `tenantId` via `set-admin`, verified login on staging → lands in Orders, shows the STAGING TEST-79 booking correctly scoped

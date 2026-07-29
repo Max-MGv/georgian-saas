@@ -140,3 +140,41 @@ if (isLocal) {
 `components/EditableLongText.tsx` (textarea-based, used only by the Legal tab) was built as a parallel implementation of `components/EditableText.tsx` (contentEditable-based, used everywhere else), not a shared abstraction — same Save/Cancel/Reset behavior and the same `saveContent`/`deleteContent` server actions underneath, but two separate component bodies.
 
 **What this means in practice:** a behavior change to `EditableText.tsx` (e.g. the save button's pending state, the reset confirmation flow, or the `adminT` key names it reads) will not automatically apply to `EditableLongText.tsx` — it has to be updated in both places by hand if you want them to stay in sync. Deliberate tradeoff at the time (the two components' actual DOM/interaction needs — contentEditable span vs. textarea — are different enough that a shared base would have been an early abstraction over two use cases, not a proven pattern yet).
+
+---
+
+## 8. `saas/vercel.json` must stay in `saas/`, not the repo root — and it is load-bearing for site speed
+
+**What the dependency is:**
+`saas/vercel.json` pins Vercel Function execution to `fra1` (Frankfurt), matching the `eu-central-1` Supabase projects. Without it, Vercel defaults to `iad1` (Washington DC) and **every database round trip crosses the Atlantic** — which is exactly what made the whole site take ~3s to respond before 2026-07-29.
+
+**The trap:** this repo has `saas/` + `dashboard/` + `vault/` and **no root `package.json`**, so Vercel's Root Directory is `saas`. `vercel.json` is read *relative to the Root Directory*. Moved to the repo root, it is **silently ignored** — no error, no warning, the site just gets slow again.
+
+**What this means in practice:**
+- Don't relocate, rename, or "tidy" this file into the repo root.
+- If page loads ever regress to multiple seconds, check `X-Vercel-Id` before investigating anything else:
+  ```bash
+  curl -s -D - -o /dev/null https://nikalasmarani.vercel.app/ | grep -i x-vercel-id
+  ```
+  Expected `fra1::fra1::…`. A second segment of `iad1` means the pin is gone.
+- If the Supabase projects are ever moved to another region, this file must move with them.
+
+Background and measurements: [[Plan-Performance]], [[Perf-Baseline-2026-07-29]].
+
+---
+
+## 9. `getAllSettings()` returns payment details — server-only, never hand the map to a client component
+
+**What the dependency is:**
+`app/actions/settings.ts` exposes two readers, and they are not interchangeable:
+- `getSetting(key)` — one key, resolves the tenant internally. Right choice for the ~100 call sites needing one or two settings.
+- `getAllSettings(tenantId)` — the tenant's **entire** settings map in one query. Used by the public pages that need many.
+
+**The risk:** that map includes `payment_iban`, `payment_personal_number`, `payment_bank_code`, and `payment_recipient_name`. Passing it wholesale into a client component would serialize the winery's bank details into the page HTML for every visitor. The old per-key pattern made that mistake nearly impossible; the batch version makes it a one-liner.
+
+**What this means in practice:**
+- Read the specific keys you need out of the map and pass **those** as props — the way `(site)/page.tsx` and `(site)/layout.tsx` already do. Never `<Component settings={settings} />`.
+- Don't reimplement `getSetting()` on top of `getAllSettings()`. Uncached, that would make every single-key read fetch the whole table — strictly worse than today.
+- `getAllContent(tenantId, locale)` follows the same shape (all sections, one query) but carries no secrets.
+
+Both take `tenantId` explicitly rather than calling `getTenantId()` (which reads `headers()`) — that was a prerequisite for wrapping them in a cache. Caching was ultimately **not** built (see [[Plan-Performance]]), but the signature is deliberate and worth keeping if it ever is.
