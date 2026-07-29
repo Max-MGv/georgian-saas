@@ -8,6 +8,28 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-29 (later) — Flitt payment integration BUILT, phases 1–7 on `staging`
+
+Max approved the four behaviour defaults and said to build, using subagents to preserve context. Seven commits `4b07b28`…`a24e070`, pushed to `staging`. Phase tracker, decisions and remaining steps live in [[Plan-OnlinePayment]] §7a — **that file is the resume point**, not this entry.
+
+**Nothing is live.** `modulesOnlinePayment` defaults false, so every existing tenant is untouched. Production has not had the migration applied and `master` has not been merged.
+
+**Mid-session disruption worth knowing about:** a background agent building the wine trigger died on a credits error having written zero files, and the session task list was lost. The vault plan tracker was the only surviving record and it worked — but it had drifted (claimed phase 5 in progress when nothing existed, phase 6 not started when work was staged). Lesson: the tracker is only as good as the discipline of updating it *before* delegating, not after.
+
+**Things found by reading the real code that the planning pass had missed or got wrong:**
+- The proxy would have eaten Flitt's callback — `!modulesPublicSite` → `/coming-soon` and no-tenant → `/welcome` both match an `/api` path, turning the inbound POST into a 307. Card charged, order unpaid forever. Fixed with an early `/api/payments/` bypass.
+- The plan's recommendation to store the merchant secret in `Setting` was **reversed** — `getAllSettings()` returns that whole map ([[MaintenanceNotes]] §9). Credentials went on `Tenant` instead, where the leak is structurally impossible.
+- Flitt's docs flagged a signing gotcha the plan missed: a param valued `0` must not be dropped from the hash. A truthiness filter breaks it; a string-length test (matching PHP's `strlen`) is correct.
+- Surfacing `PENDING_PAYMENT` exposed **four pre-existing omissions** where a new enum value renders wrong rather than absent — `OrdersFilters`, `CalendarView`, `OrderDetail`, super-admin `OrdersActivityClient`.
+- `test-rls.ts` silently skips its cross-tenant section on a one-tenant DB, which is the dev database's normal state — so a new table's isolation goes unverified exactly where it matters. Recorded as [[MaintenanceNotes]] §10, with `test-payment-rls.ts` as the pattern to copy.
+- **Go-live blocker, unrelated to this work but exposed by it:** email has been in Resend sandbox mode all along (`isDomainVerified = false`), routing every customer email to Max. Tolerable for booking requests, not once cards are charged. Plan §8a.
+
+**Verification: 62 automated tests green** (16 flow, 9 Payment RLS, 37 signature), module-off regression confirmed live in the browser for both forms, subagent output independently re-checked rather than taken on trust (lint compared against a stashed baseline, adminT EN/KA parity across all 734 keys, every `flittSecretKey` reference audited).
+
+**Next:** Plan §7a phase 8 — admin UI visual check, Resend domain verification, production `migrate deploy`, `staging`→`master`, then one real payment and refund.
+
+---
+
 ## 2026-07-29 — Flitt payment integration: trigger decided, build plan written (nothing built)
 
 Max asked whether the old site's Flitt integration gave us everything needed to implement payments on the new site, then made the outstanding trigger decision and asked for a full plan. **No code written** — plan only, in [[Plan-OnlinePayment.md]] (new).
