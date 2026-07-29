@@ -296,6 +296,53 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 - [ ] **Data migration tool / service** — clients will have existing data in Excel/CSV/other formats (bookings history, company lists, price tiers, wine catalogue). Need to decide: use an existing ETL framework (e.g. Airbyte, Papa Parse + custom scripts, Google Sheets API) vs. build a lightweight in-app import UI. Scope to explore: one-time admin import (CSV upload → map columns → preview → confirm), handling duplicates, what tables are in scope (companies, wines, historical orders), and whether this is a paid onboarding service or self-serve.
 
+### 🧪 Staging test checklist — online payment (2026-07-29)
+
+Staging: `georgian-saas-git-staging-mg-productions-projects.vercel.app` (Staging Winery, **dev** DB — production and Nikalas Marani are untouched).
+
+**⚠️ Two cautions before starting.** (1) The Flitt credentials are the **real** merchant account — finishing a payment charges a real card for real money. Steps 3–4 below deliberately stop at Flitt's payment page without paying, which verifies almost everything for free. Only do step 5 once you have merchant-portal access to refund it. (2) Email is in sandbox mode, so every customer email arrives in **your** inbox — that's how you check them, and it's also why this must not go live yet.
+
+**1. Regression first — with payment still OFF.** This is the one that protects your existing clients; if anything here looks different, stop.
+- [ ] Booking form submit button still says **"Request Booking"** (not "Book & Pay")
+- [ ] Make a test booking → success screen as before, confirmation email arrives as before
+- [ ] `/wines` → cart bar says **"Place Reservation →"**, drawer header "Place a Reservation", submit "Place Reservation"
+- [ ] Wine form's new email field shows **"(optional)"** and submits fine when left blank
+- [ ] Admin → Orders looks unchanged; Settings has **no** "Card Payments" section
+
+**2. Switch it on.**
+- [ ] Super-admin → Tenants → Staging Winery: tick **Online payment (Flitt)**, save. An amber note should appear saying credentials are still needed.
+- [ ] Tenant admin → Settings: a **Card Payments** section now exists, showing "not active yet" in amber
+- [ ] Enter Merchant ID `4056054` and the secret key → panel flips to green "switched on"
+- [ ] Reload the page — the secret must show **"Saved"**, never the actual key. It must not be visible anywhere, including via View Source.
+- [ ] Try saving with the key box empty — the Save button should be disabled, and the stored key must survive
+
+**3. Booking flow (stop before paying).**
+- [ ] Booking button now reads **"Book & Pay"**
+- [ ] Submit → you land on Flitt's payment page
+- [ ] Check the amount shown matches the booking total
+- [ ] **Close the tab without paying.** Admin → Orders: that order shows **"Awaiting Payment"**, and no confirmation email was sent
+- [ ] The status filter and the calendar view both handle "Awaiting Payment" properly
+
+**4. Wine flow (stop before paying).**
+- [ ] Cart bar says **"Checkout →"**, drawer header "Your Order", submit "Order & Pay"
+- [ ] Email field now says "(for your receipt)" and **blocks submission if left empty**
+- [ ] Submit → Flitt page, amount matches the cart total
+- [ ] Abandon → order exists in admin, unpaid
+
+**5. One real payment — only with refund access.**
+- [ ] Set up a cheap booking (smallest amount you can), pay it for real
+- [ ] Order flips to **PAID**; confirmation email arrives (to your inbox) and reads "payment received", not "booking request"
+- [ ] **Refund it in the Flitt portal**
+- [ ] Repeat once for a wine order to check the itemised receipt
+
+**6. The misconfiguration banner.**
+- [ ] Clear the "Individuals" pricing (or use a tenant with none) while payment is on → a warning banner appears on Admin → Orders
+- [ ] With pricing gone, a customer booking still goes through as a normal reservation — **the customer must never be blocked**
+
+**7. Turn it back off when done** — untick the module, clear the secret key, and confirm everything returns to the step-1 behaviour.
+
+---
+
 - [ ] **Nikalas Marani payment system (Flitt) — BUILT 2026-07-29, phases 1–7 on `staging`, nothing live yet.** Full detail and the resume point: [[Plan-OnlinePayment.md]] §7a. Module is off by default, so no existing tenant is affected. **Your turn — 5 things, in this order:**
   1. **Verify Resend domain** — hard go-live blocker. Email is still in sandbox mode, so every customer email goes to your own inbox, not the customer. Fine for booking requests; not fine once a card is charged and the buyer gets no receipt. Plan §8a. Needs a domain verified in the Resend dashboard, then flip `isDomainVerified` in both `bookingConfirmation.ts` and `wineOrderReceipt.ts`.
   2. **Eyeball the admin UI on staging** — Claude can't log in (it doesn't type passwords into forms), so the new Settings "Card Payments" section, the "Awaiting Payment" badges and the setup banner are code-verified but not visually checked.
