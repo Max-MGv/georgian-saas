@@ -178,3 +178,21 @@ Background and measurements: [[Plan-Performance]], [[Perf-Baseline-2026-07-29]].
 - `getAllContent(tenantId, locale)` follows the same shape (all sections, one query) but carries no secrets.
 
 Both take `tenantId` explicitly rather than calling `getTenantId()` (which reads `headers()`) — that was a prerequisite for wrapping them in a cache. Caching was ultimately **not** built (see [[Plan-Performance]]), but the signature is deliberate and worth keeping if it ever is.
+
+---
+
+## 10. `test-rls.ts` silently skips its cross-tenant tests on a one-tenant database
+
+**What the dependency is:**
+`scripts/test-rls.ts` is the 21-test isolation suite referenced throughout [[RLS-Architecture]]. Its section 4, "Cross-tenant isolation", is the part that actually proves RLS works — and it **skips itself** when the database contains fewer than two tenants, printing `⚠️ Cross-tenant tests skipped (only 1 tenant in DB)` and still reporting a clean pass.
+
+The dev database normally holds exactly one tenant (Staging Winery). So the everyday result of running the suite is a green "18 passed, 0 failed" **in which nothing cross-tenant was checked at all**.
+
+**Why it matters:** the RLS checklist's step 7 is "verify with `check-rls.ts`". `check-rls.ts` only confirms a policy *exists* and RLS is *enabled* — it does not exercise it. If a new table's policy were subtly wrong (wrong column, wrong `current_setting` key, missing `WITH CHECK`), both scripts would still come back green on the dev DB. Discovered 2026-07-29 while adding the `Payment` table.
+
+**What to do when adding a tenanted table:** don't rely on the green tick. `scripts/test-payment-rls.ts` is the pattern to copy — it stands up two throwaway tenants, writes a row under each, and asserts both directions (read by direct id returns `null`; cross-tenant `updateMany` affects 0 rows), then deletes them. Roughly 40 lines, and it's the only thing that actually proves the new policy holds.
+
+**Files involved:**
+- `saas/scripts/test-rls.ts` — the suite with the conditional skip
+- `saas/scripts/check-rls.ts` — existence/enabled check only, not a behavioural test
+- `saas/scripts/test-payment-rls.ts` — the two-tenant pattern worth copying

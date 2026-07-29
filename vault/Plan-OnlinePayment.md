@@ -31,7 +31,9 @@ Prior research this builds on: [[MigrationNotes]] → "Old site source (pre-migr
 
 **Merchant account confirmed live — 2026-07-29.** Phase 0 run: a checkout-creation POST with the existing credentials returned `HTTP 200`, `response_status: success`, `payment_id 1002579836` and a real `checkout_url`. Nothing charged (creating a checkout only mints a link). This confirms account `4056054` is active, the merchant password is still valid, GEL is accepted, and the old site's param shape is still accepted by Flitt's current API.
 
-**Bonus result — the signature port is already validated.** Flitt rejects a bad signature, so a `success` response means the PHP→JS port of the signing algorithm (`array_filter` → `ksort` → `array_values` → prepend password → `join('|')` → `sha1`) is correct. That was Phase 2's main technical risk and it is now retired before Phase 1 starts. Working reference implementation: `scratchpad/flitt-check.js` (scratch — reproduce it in `lib/payments/flitt.ts`, don't depend on it).
+**Bonus result — the signature port is already validated.** Flitt rejects a bad signature, so a `success` response means the PHP→JS port of the signing algorithm (`array_filter` → `ksort` → `array_values` → prepend password → `join('|')` → `sha1`) is correct. That was Phase 2's main technical risk and it was retired before Phase 1 started.
+
+> The throwaway script used for that check held the live merchant password in plaintext and has since been **deleted**. The algorithm now lives in `saas/lib/payments/flitt.ts`, cross-checked against the original implementation on 2026-07-29 (identical hashes across four param shapes, including the zero-value and key-order cases). Do not recreate a credential-bearing scratch script — `saas/scripts/test-flitt-signature.ts` covers the same ground with a throwaway password.
 
 **Also outstanding, non-blocking:** rotate the merchant password (it sat in plaintext PHP on shared hosting for years and is now also in a Downloads folder), and get merchant-portal access from the client for refunds and transaction visibility.
 
@@ -242,9 +244,9 @@ Updated as each phase lands, so work can resume here after any interruption. Sta
 | Phase | What | Status | Notes |
 |---|---|---|---|
 | 0 | Verify merchant account live | ✅ | 2026-07-29 — account `4056054` active, signature algorithm validated as a side effect |
-| 1 | Schema + RLS | ⬜ | Tenant cols, `modulesOnlinePayment`, `PENDING_PAYMENT`, `Payment` model, `WineOrder.contactEmail`, setup-rls, check-rls |
-| 2 | `lib/payments/flitt.ts` | ⬜ | Port from the validated `scratchpad/flitt-check.js` reference |
-| 3 | Proxy bypass + route handlers + result page | ⬜ | The proxy fix (§3.1) is the highest-risk item in the build |
+| 1 | Schema + RLS | ✅ | 2026-07-29, commit `4b07b28`. Migration `20260729131800_add_online_payment` applied to **dev**; setup-rls re-run; check-rls shows `Payment` enabled + policy; existing `test-rls.ts` still 18/18. **Not yet applied to production** — `prisma migrate deploy` against prod is its own deliberate step after staging verification (Rule 0). |
+| 2 | `lib/payments/flitt.ts` | ✅ | 2026-07-29. `buildSignature`, `verifyCallbackSignature`, `createCheckout`, `toMinorUnits`. 37 tests in `scripts/test-flitt-signature.ts`, plus an independent cross-check against the original algorithm. Flitt's docs confirmed the callback exclusion set (`signature`, `response_signature_string`) and one gotcha the plan missed: **a param valued `0` must not be dropped** — a truthiness filter would break the hash; the code uses a string-length test, matching PHP's `strlen`. |
+| 3 | Proxy bypass + route handlers + result page | 🚧 | Proxy bypass **done**; `settle.ts`, the two route handlers and the result page remain. The proxy fix (§3.1) is the highest-risk item in the build |
 | 4 | Booking trigger | ⬜ | Return id, conditional checkout, gate the premature email |
 | 5 | Wine order trigger | ⬜ | Depends on Phase 1's `contactEmail` |
 | 6 | Admin UI | ⬜ | Super-admin toggle, merchant credential fields, payment state in orders list |

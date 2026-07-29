@@ -15,6 +15,7 @@ interface TenantInfo {
   modulesWineOrders: boolean
   modulesPublicSite: boolean
   modulesLegalPages: boolean
+  modulesOnlinePayment: boolean
   cachedAt: number
 }
 
@@ -73,6 +74,8 @@ async function resolveTenant(host: string): Promise<TenantInfo> {
     modulesWineOrders: tenant?.modulesWineOrders ?? false,
     modulesPublicSite: tenant?.modulesPublicSite ?? true,
     modulesLegalPages: tenant?.modulesLegalPages ?? true,
+    // Defaults false: an unresolved tenant must never look payment-enabled.
+    modulesOnlinePayment: tenant?.modulesOnlinePayment ?? false,
     cachedAt: Date.now(),
   }
   tenantCache.set(cacheKey, info)
@@ -83,7 +86,7 @@ export async function proxy(request: NextRequest) {
   // ── Tenant resolution ──────────────────────────────────────────────────────
   const host = request.headers.get('host') ?? ''
   const [
-    { tenantId, slug, theme, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages },
+    { tenantId, slug, theme, logoUrl, logoAlt, faviconUrl, displayName, modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages, modulesOnlinePayment },
     platform,
   ] = await Promise.all([resolveTenant(host), resolvePlatform()])
 
@@ -100,6 +103,24 @@ export async function proxy(request: NextRequest) {
   requestHeaders.set('x-tenant-modules-booking', String(modulesBooking))
   requestHeaders.set('x-tenant-modules-wine-orders', String(modulesWineOrders))
   requestHeaders.set('x-tenant-modules-legal', String(modulesLegalPages))
+  requestHeaders.set('x-tenant-modules-online-payment', String(modulesOnlinePayment))
+
+  // ── Payment gateway callbacks — bypass everything below ────────────────────
+  // These are inbound machine-to-machine POSTs from the payment provider, not
+  // browser navigations. Every redirect further down this function would turn
+  // one into a 307 that the provider cannot follow: the `!modulesPublicSite`
+  // → /coming-soon rule and the no-tenant → /welcome rule both match an /api
+  // path. The failure mode is the worst one in the system — the customer's card
+  // is charged, the callback never lands, and the order stays unpaid forever.
+  //
+  // Returning here also skips the Supabase `getUser()` round trip, which is
+  // pure latency on a request that carries no cookies. Tenant headers are still
+  // set above so the handler can cross-check them, but the authoritative tenant
+  // binding is the Payment row itself (looked up by providerPaymentId), which
+  // survives a tenant changing domain mid-payment.
+  if (request.nextUrl.pathname.startsWith('/api/payments/')) {
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
 
   let response = NextResponse.next({
     request: { headers: requestHeaders },
