@@ -244,7 +244,7 @@ Updated as each phase lands, so work can resume here after any interruption. Sta
 | Phase | What | Status | Notes |
 |---|---|---|---|
 | 0 | Verify merchant account live | ✅ | 2026-07-29 — account `4056054` active, signature algorithm validated as a side effect |
-| 1 | Schema + RLS | ✅ | 2026-07-29, commit `4b07b28`. Migration `20260729131800_add_online_payment` applied to **dev**; setup-rls re-run; check-rls shows `Payment` enabled + policy; existing `test-rls.ts` still 18/18. **Not yet applied to production** — `prisma migrate deploy` against prod is its own deliberate step after staging verification (Rule 0). |
+| 1 | Schema + RLS | ✅ | 2026-07-29, commit `4b07b28`. Migration `20260729131800_add_online_payment`. **Applied to dev AND production** (prod done 2026-07-29 — see §1a below). |
 | 2 | `lib/payments/flitt.ts` | ✅ | 2026-07-29. `buildSignature`, `verifyCallbackSignature`, `createCheckout`, `toMinorUnits`. 37 tests in `scripts/test-flitt-signature.ts`, plus an independent cross-check against the original algorithm. Flitt's docs confirmed the callback exclusion set (`signature`, `response_signature_string`) and one gotcha the plan missed: **a param valued `0` must not be dropped** — a truthiness filter would break the hash; the code uses a string-length test, matching PHP's `strlen`. |
 | 3 | Proxy bypass + route handlers + result page | ✅ | 2026-07-29, commits `aaee5fc` + `759b78a`. Verified end-to-end against the live dev server (`scripts/test-payment-flow.ts`, 12/12): proxy bypass works, forged signature rejected, tampered amount rejected, genuine callback settles, idempotent, both content types handled. Result page EN/KA over HTTP. |
 | 4 | Booking trigger | ✅ | 2026-07-29, commit `b51bb29`. `shouldTakePayment` + `startCheckout` helpers; order goes NEW→PENDING_PAYMENT only after a checkout exists; email suppressed on the payment path; "Book & Pay" label through the full MaintenanceNotes §1 chain. Verified live: module-off regression, label flip, and the fallback path (Flitt rejects → customer still books, order NEW, no orphan rows). |
@@ -271,6 +271,24 @@ Updated as each phase lands, so work can resume here after any interruption. Sta
 - Live: one real low-value payment on staging against the real merchant account, then refund it via the portal
 
 RLS verification via `check-rls.ts` after Phase 1, per the [[RLS-Architecture]] checklist.
+
+---
+
+## 1a. Production migration — DONE 2026-07-29
+
+Max's call: run the migration and merge while the feature is still switched off, then iterate on staging if the settlement path needs fixing. Sound — the module defaults false, so nothing reaches a customer, and a dormant deploy de-risks the eventual switch-on.
+
+**Order matters and is not optional.** The migration had to go first: `proxy.ts` looks up the tenant on *every* request, and Prisma selects all scalar columns — so deploying the code against a database lacking `modulesOnlinePayment`/`flittMerchantId`/`flittSecretKey` would have failed every request on the live site, not degraded it. Migration → then merge. Never the reverse.
+
+What was run against `dshsfkffcsgerdqinqst` (prod), each verified before and after:
+1. Read-only identity check — confirmed Nikalas Marani, 61 real orders, migration genuinely pending
+2. `prisma migrate deploy` → `20260729131800_add_online_payment` applied
+3. `setup-rls.ts` — **required, and easy to forget.** The new table arrives with no grants and no RLS, so `app_user` (the role `withTenantDb` switches to) could not have touched `Payment` at all: every payment query would have failed with a permission error the moment the feature was switched on.
+4. `check-rls.ts` — all 17 tables green, `Payment` carrying `tenant_isolation`
+
+Post-state confirmed: 61 orders intact, `Payment` RLS on with the policy, `app_user` holding SELECT/INSERT/UPDATE/DELETE, and **`Nikalas Marani.modulesOnlinePayment = false`** — the feature is present and dormant.
+
+Prod credentials came from `saas/.env.prod.backup`; the runner aborted unless `DIRECT_URL` resolved to the prod project ref, so a mis-pointed run was impossible rather than merely unlikely. Temporary scripts deleted afterwards.
 
 ---
 
