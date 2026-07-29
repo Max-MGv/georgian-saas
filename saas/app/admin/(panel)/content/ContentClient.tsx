@@ -71,6 +71,8 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'form_food_notes_sub',        label: 'Food Notes subtitle',        fallback: 'allergies, dietary requirements' },
     { key: 'form_food_notes_placeholder', label: 'Food Notes placeholder',    fallback: 'Any dietary restrictions or special requests for the kitchen…' },
     { key: 'form_submit',                label: 'Submit button',              fallback: 'Request Booking' },
+    // Shown instead of form_submit when the tenant has online payment configured
+    { key: 'form_submit_pay',            label: 'Submit button (online payment)', fallback: 'Book & Pay' },
     { key: 'form_cancel_policy',         label: 'Cancellation policy text',   fallback: '48-hour cancellation policy. We will contact you to confirm.' },
     { key: 'form_success_heading',       label: 'Success heading',            fallback: 'Booking received!' },
     { key: 'form_success_body',          label: 'Success body text',          fallback: 'Thank you. We will contact you shortly to confirm your visit.' },

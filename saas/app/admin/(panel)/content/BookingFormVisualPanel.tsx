@@ -181,6 +181,13 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         <ET k="form_submit" fb="Request Booking" />
       </div>
 
+      {/* Submit — online-payment variant. The live form shows exactly one of
+          these two labels (payment configured or not); the editor shows both so
+          either can be edited regardless of the tenant's current setup. */}
+      <div className="w-full font-semibold py-3 rounded-lg text-white text-center text-sm cursor-default select-none" style={{ backgroundColor: C.wine }}>
+        <ET k="form_submit_pay" fb="Book & Pay" />
+      </div>
+
       {/* Cancel policy */}
       <p className="text-xs text-center" style={{ color: C.faint }}>
         <ET k="form_cancel_policy" fb="48-hour cancellation policy. We will contact you to confirm." />

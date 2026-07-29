@@ -12,6 +12,7 @@ import { t } from '@/lib/t'
 import { preload } from 'react-dom'
 import EditableText from '@/components/EditableText'
 import EditModeSuppressor from '@/components/EditModeSuppressor'
+import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,8 @@ export default async function Home({ searchParams }: PageProps) {
   const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const locale = sp.locale ?? cookieLocale
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
+  // Booleans only cross to the client — never the credentials themselves.
+  const onlinePaymentEnabled = await isPaymentConfigured(tenantId)
 
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
@@ -367,6 +370,7 @@ export default async function Home({ searchParams }: PageProps) {
             formContent={formContent}
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceLunch}
+            onlinePaymentEnabled={onlinePaymentEnabled}
           />
           {isEditMode && isAdmin && <BookingFormEditOverlay />}
         </div>

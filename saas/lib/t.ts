@@ -105,6 +105,7 @@ const en: Translations = {
   'form.pc': 'pc',
 
   // Success state
+  'form.submit_pay': 'Book & Pay',
   'form.success_heading': 'Booking received!',
   'form.success_body': 'Thank you. We will contact you shortly to confirm your visit.',
   'form.est_total_label': 'Estimated total',
@@ -244,6 +245,7 @@ const ka: Translations = {
   'form.pc': 'ცალი',
 
   // Success state
+  'form.submit_pay': 'დაჯავშნა და გადახდა',
   'form.success_heading': 'ჯავშანი მიღებულია!',
   'form.success_body': 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.',
   'form.est_total_label': 'სავარაუდო ჯამი',

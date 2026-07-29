@@ -1,12 +1,15 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
-import { BookingType, VisitType } from '@prisma/client'
+import { BookingType, OrderStatus, VisitType } from '@prisma/client'
+import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getTenantId } from '@/lib/tenant'
+import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
+import { startCheckout } from '@/lib/payments/startCheckout'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -29,7 +32,13 @@ export type BookingFormData = {
 }
 
 export type BookingResult =
-  | { success: true; totalPrice: number; bookingType: 'INDIVIDUAL' | 'COMPANY' }
+  /**
+   * `checkoutUrl` present means the tenant takes online payment and the client
+   * must redirect there — the booking is saved either way, so a customer who
+   * never completes checkout still exists as PENDING_PAYMENT for the winery to
+   * chase. Absent = today's reservation-only flow, unchanged.
+   */
+  | { success: true; totalPrice: number; bookingType: 'INDIVIDUAL' | 'COMPANY'; checkoutUrl?: string }
   | { success: false; error: string }
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
@@ -137,7 +146,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       totalPrice = masterclassAmt
     }
 
-    await withTenantDb(tenantId, tx => tx.order.create({
+    const createdOrder = await withTenantDb(tenantId, tx => tx.order.create({
       data: {
         bookingType: data.bookingType as BookingType,
         visitType: data.visitType as VisitType,
@@ -166,6 +175,48 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         } : undefined,
       },
     }))
+
+    // ── Online payment branch ──────────────────────────────────────────────
+    // Only after the order safely exists. Every failure inside this block
+    // degrades to the reservation-only flow below — the customer is never
+    // blocked by a payment problem that isn't theirs.
+    const showCompanyPrice = await getSetting('show_company_price_after_booking')
+    const gate = await shouldTakePayment({
+      tenantId,
+      totalPrice,
+      // A COMPANY booking whose price is hidden from the customer must not be
+      // charged an amount they were never shown (§7.4) — invoice instead.
+      priceShown: data.bookingType === 'INDIVIDUAL' || showCompanyPrice === 'true',
+    })
+
+    if (gate.takePayment) {
+      const locale = (await cookies()).get('site_locale')?.value
+      // order_desc from the actual order, not a hardcoded site name.
+      const typeLabel = data.visitType === 'TASTING' ? 'Tasting' : 'Tasting + Lunch'
+      const checkoutUrl = await startCheckout({
+        tenantId,
+        merchantId: gate.merchantId,
+        secretKey: gate.secretKey,
+        orderId: createdOrder.id,
+        amount: totalPrice,
+        orderDesc: `${typeLabel}, ${effectiveGuestCount} guests, ${dateStr} ${data.timeSlot}`,
+        locale,
+      })
+
+      if (checkoutUrl) {
+        // Status moves to PENDING_PAYMENT only once a checkout really exists —
+        // done in this order so a failed checkout leaves a plain NEW order.
+        await withTenantDb(tenantId, tx => tx.order.update({
+          where: { id: createdOrder.id },
+          data: { status: OrderStatus.PENDING_PAYMENT },
+        }))
+        // No confirmation email here: "your booking is confirmed" must not
+        // reach someone who hasn't paid and may abandon checkout. It is sent
+        // by the settlement path once Flitt confirms (phase 7).
+        return { success: true, totalPrice, bookingType: data.bookingType, checkoutUrl }
+      }
+      // fall through: checkout unavailable → reservation-only, email as today
+    }
 
     if (data.email) {
       const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {

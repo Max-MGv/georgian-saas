@@ -42,9 +42,16 @@ type Props = {
   formContent?: Record<string, string>
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
+  /**
+   * Tenant takes online payment (module on + credentials set). Changes the
+   * submit label to the pay variant and redirects to checkout when the server
+   * returns a checkoutUrl. The server decides authoritatively — this prop only
+   * keeps the button honest.
+   */
+  onlinePaymentEnabled?: boolean
 }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, onlinePaymentEnabled = false }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -290,6 +297,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       } : {}),
     })
     if (result.success) {
+      // Payment tenants: the booking is saved; hand the customer to the
+      // gateway. Keep the loading state — this page is about to unload, and
+      // flashing the success screen first would say "booked!" pre-payment.
+      if (result.checkoutUrl) {
+        window.location.assign(result.checkoutUrl)
+        return
+      }
       setConfirmedPrice(result.totalPrice)
       setConfirmedType(result.bookingType)
       setStatus('success')
@@ -811,7 +825,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           disabled={status === 'loading' || (!isEnhanced && !!tierGap)}
           className="w-full font-semibold py-3 rounded-lg transition-colors text-white"
           style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? 'color-mix(in srgb, var(--color-brand) 60%, var(--site-muted))' : C.wine }}>
-          {status === 'loading' ? t(locale, 'form.submitting') : fc('form_submit', 'form.submit')}
+          {status === 'loading'
+            ? t(locale, 'form.submitting')
+            : onlinePaymentEnabled
+              ? fc('form_submit_pay', 'form.submit_pay')
+              : fc('form_submit', 'form.submit')}
         </button>
 
         <p className="text-xs text-center" style={{ color: C.faint }}>

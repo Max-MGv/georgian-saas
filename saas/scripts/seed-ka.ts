@@ -61,6 +61,7 @@ const rows = [
   { key: 'form_food_notes_sub',         section: 'form', label: 'Food Notes subtitle',        locale: 'ka', value: 'ალერგია, დიეტური მოთხოვნები' },
   { key: 'form_food_notes_placeholder', section: 'form', label: 'Food Notes placeholder',     locale: 'ka', value: 'ნებისმიერი დიეტური შეზღუდვა ან სპეციალური მოთხოვნა სამზარეულოსთვის…' },
   { key: 'form_submit',                 section: 'form', label: 'Submit button',              locale: 'ka', value: 'ჯავშნის მოთხოვნა' },
+  { key: 'form_submit_pay',             section: 'form', label: 'Submit button (online payment)', locale: 'ka', value: 'დაჯავშნა და გადახდა' },
   { key: 'form_cancel_policy',          section: 'form', label: 'Cancellation policy text',   locale: 'ka', value: 'გაუქმება შესაძლებელია 48 საათამდე. ჩვენ დაგიკავშირდებით დასადასტურებლად.' },
   { key: 'form_success_heading',        section: 'form', label: 'Success heading',            locale: 'ka', value: 'ჯავშანი მიღებულია!' },
   { key: 'form_success_body',           section: 'form', label: 'Success body text',          locale: 'ka', value: 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.' },
