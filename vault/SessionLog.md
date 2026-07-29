@@ -8,6 +8,29 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-29 — Flitt payment integration: trigger decided, build plan written (nothing built)
+
+Max asked whether the old site's Flitt integration gave us everything needed to implement payments on the new site, then made the outstanding trigger decision and asked for a full plan. **No code written** — plan only, in [[Plan-OnlinePayment.md]] (new).
+
+**Decision made (was the blocking open question since 2026-07-28):** the pay trigger is not a separate screen or an admin-sent link — **the existing submit buttons become purchase buttons** (booking "Confirm", wine "Place Reservation"). Gated by a new per-tenant `modulesOnlinePayment` flag, so tenants without online payment keep today's behaviour exactly: reservation placed, winery contacts the customer to settle payment themselves.
+
+**Answered Max's question:** for Nikala's Marani specifically, nothing further is needed from Flitt. The old `nikalaIntegral/app/Flitt.php` carries the endpoint, merchant_id `4056054`, the password, and the full signature algorithm — and since it's the same merchant on the same `.ge` domain (which Max is migrating), no re-registration applies. Corrected one premise: the old integration is **not currently active** — `OrderController.php:194-201` has the `redirect('pay/'.$app_id)` commented out, so every order saves unpaid and Flitt is never invoked. Consequence: the merchant account may have gone dormant, and that's the one thing files can't answer. Verifying it is Phase 0 of the plan.
+
+**Blockers found by reading the current code (all in the plan, §3):**
+- **`proxy.ts` will eat the callback.** Its matcher covers `/api/*`, and both the `modulesPublicSite=false` → `/coming-soon` redirect (line 182) and the no-tenant → `/welcome` redirect (line 168) would turn Flitt's inbound POST into a 307. Payment succeeds at the bank, order stays unpaid forever. Needs an early `/api/payments/` bypass.
+- Neither `createBooking()` nor `submitWineOrder()` returns the created row's id — Flitt's checkout needs `order_id`.
+- `createBooking.ts:170-195` sends the confirmation email immediately, which would tell an unpaid customer their booking is confirmed.
+- `totalPrice` is legitimately `0` for tenants with no pricing configured — can't send a 0 GEL checkout, so the payment path needs a runtime fallback to reservation-only.
+- `WineOrder` has no email column, so wine-order payments have nowhere to send a receipt.
+- **Revised the earlier recommendation to store the merchant secret in `Setting`** — [[MaintenanceNotes]] §9 documents that `getAllSettings()` returns the whole map including bank details and must never reach a client component. Putting a payment secret there makes the highest-value credential one careless prop from public HTML. Plan puts it on `Tenant` instead, structurally unreachable from that map.
+- Also corrected the earlier assumption that `x-tenant-id` would be unavailable on the callback — `proxy.ts` does set it for API routes. It's still secondary to the `Payment` row lookup, which survives a domain change mid-payment.
+
+**Security gaps in the old code the plan deliberately fixes rather than ports:** no callback signature verification at all (anyone with a `payment_id` could forge `order_status=approved`), no amount verification (a tampered checkout could settle for 1 tetri), and the "mark paid + email" logic duplicated across the redirect and webhook handlers, already drifted apart.
+
+**Next:** Phase 0 (verify the merchant account is live), then Phases 1–4 are buildable without further input from Max. Phases 5/7 need his answers to the four questions in the plan's §7.
+
+---
+
 ## 2026-07-29 — Performance: root cause was the server region, not the queries (shipped)
 
 Max reported the site felt slow and asked for industry-standard testing plus a report on the cause. Ran Google Lighthouse 12.8.2 + `curl` timing against **live production**, read-only. Baseline frozen in [[Perf-Baseline-2026-07-29]] (new); plan, chunks, decisions and progress log in [[Plan-Performance]] (new).

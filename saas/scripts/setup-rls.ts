@@ -34,7 +34,7 @@ async function main() {
   const writableTables = [
     'Order', 'Company', 'Price', 'Wine', 'WineVintage', 'WineOrder', 'WineOrderItem',
     'MenuItem', 'MasterclassItem', 'OrderMasterclass', 'OrderExtra',
-    'BlockedDate', 'SiteContent', 'Setting',
+    'BlockedDate', 'SiteContent', 'Setting', 'Payment',
   ]
   for (const t of writableTables) {
     console.log(`  GRANT SELECT/INSERT/UPDATE/DELETE on "${t}"`)
@@ -56,7 +56,7 @@ async function main() {
   // Tables with a direct tenantId column
   const tenantedTables = [
     'Order', 'Company', 'Wine', 'WineVintage', 'WineOrder',
-    'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting',
+    'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting', 'Payment',
   ]
 
   for (const t of tenantedTables) {

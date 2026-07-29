@@ -16,40 +16,50 @@ model PlatformConfig {
 }
 
 model Tenant {
-  id                 String   @id @default(cuid())
-  name               String
-  domain             String   @unique
-  slug               String   @unique
-  theme              Json?
-  logoUrl            String?
-  logoAlt            String?
-  faviconUrl         String?
-  displayName        String?
-  modulesBooking     Boolean  @default(true)
-  modulesWineOrders  Boolean  @default(false)
-  modulesPublicSite  Boolean  @default(true)
-  modulesLegalPages  Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  id                   String   @id @default(cuid())
+  name                 String
+  domain               String   @unique
+  slug                 String   @unique
+  theme                Json?
+  logoUrl              String?
+  logoAlt              String?
+  faviconUrl           String?
+  displayName          String?
+  modulesBooking       Boolean  @default(true)
+  modulesWineOrders    Boolean  @default(false)
+  modulesPublicSite    Boolean  @default(true)
+  modulesLegalPages    Boolean  @default(true)
+  // Online payment (Flitt). Off by default so every existing tenant is
+  // unaffected — the whole payment path is a no-op unless this is on AND
+  // both credentials below are filled in.
+  modulesOnlinePayment Boolean  @default(false)
+  // Per-tenant Flitt merchant credentials. Deliberately NOT in `Setting`:
+  // `getAllSettings()` returns that whole map and MaintenanceNotes §9 documents
+  // the hazard of it reaching a client component. Keeping the secret here makes
+  // that leak structurally impossible. Never return flittSecretKey to a browser.
+  flittMerchantId      String?
+  flittSecretKey       String?
+  createdAt            DateTime @default(now())
 }
 
 model Company {
-  id                 String       @id @default(cuid())
-  name               String
-  identificationCode String?
-  contactName        String?
-  contactPhone       String?
-  contactEmail       String?
-  address            String?
-  accessCode         String?
-  isIndividual       Boolean      @default(false)
-  isBookingCompany     Boolean      @default(true)
-  isWineOrderCompany   Boolean      @default(false)
-  wineDiscountPercent  Float?
-  tenantId             String?
-  createdAt          DateTime     @default(now())
-  orders             Order[]
-  wineOrders         WineOrder[]
-  prices             Price[]
+  id                  String      @id @default(cuid())
+  name                String
+  identificationCode  String?
+  contactName         String?
+  contactPhone        String?
+  contactEmail        String?
+  address             String?
+  accessCode          String?
+  isIndividual        Boolean     @default(false)
+  isBookingCompany    Boolean     @default(true)
+  isWineOrderCompany  Boolean     @default(false)
+  wineDiscountPercent Float?
+  tenantId            String?
+  createdAt           DateTime    @default(now())
+  orders              Order[]
+  wineOrders          WineOrder[]
+  prices              Price[]
 }
 
 model Order {
@@ -80,6 +90,7 @@ model Order {
   createdAt         DateTime           @default(now())
   masterclassLines  OrderMasterclass[]
   extras            OrderExtra[]
+  payments          Payment[]
 }
 
 model Price {
@@ -97,7 +108,7 @@ model Price {
 model MenuItem {
   id        String   @id @default(cuid())
   name      String
-  type      String   // "VEGETABLE" | "MEAT"
+  type      String // "VEGETABLE" | "MEAT"
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
   tenantId  String?
@@ -121,7 +132,7 @@ model OrderMasterclass {
   orderId           String
   masterclassItemId String
   quantity          Int
-  pricePerUnit      Float           // price snapshot at time of booking
+  pricePerUnit      Float // price snapshot at time of booking
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
 }
@@ -135,7 +146,7 @@ model OrderExtra {
 }
 
 model WineOrder {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   businessName    String
   llcName         String?
   llcId           String?
@@ -143,14 +154,57 @@ model WineOrder {
   workingHours    String?
   contactName     String
   contactPhone    String
+  // Optional in general; the wine order form requires it only when the tenant
+  // has online payment on, since a paying B2B customer needs a receipt.
+  contactEmail    String?
   totalAmount     Float?
   discountPercent Float?
-  status          String   @default("pending")
+  status          String          @default("pending")
   tenantId        String?
   companyId       String?
-  company         Company? @relation(fields: [companyId], references: [id])
-  createdAt       DateTime @default(now())
+  company         Company?        @relation(fields: [companyId], references: [id])
+  createdAt       DateTime        @default(now())
   wineItems       WineOrderItem[]
+  payments        Payment[]
+}
+
+/// One attempt to pay for an Order or a WineOrder through a payment gateway.
+///
+/// Rows are created at checkout time (status "created") and updated when the
+/// gateway settles them. Deliberately a full record rather than a boolean on the
+/// order: `rawResponse` is what lets a human reconcile against the gateway's own
+/// portal when a callback fails, which is the only unrecoverable path in the
+/// payment flow. It is also the landing spot for the 231 historical Flitt/TBC
+/// transaction records from the old site, if that import ever happens.
+model Payment {
+  id                String     @id @default(cuid())
+  tenantId          String?
+  // Exactly one of these is set — a payment belongs to a booking or a wine
+  // order, never both. Not expressible as a DB constraint in Prisma; enforced
+  // at the call site in lib/payments/settle.ts.
+  orderId           String?
+  order             Order?     @relation(fields: [orderId], references: [id])
+  wineOrderId       String?
+  wineOrder         WineOrder? @relation(fields: [wineOrderId], references: [id])
+  provider          String     @default("flitt")
+  providerPaymentId String?
+  checkoutUrl       String?
+  /// The gateway's own status string, stored verbatim (created/approved/declined/…).
+  /// Not an enum: it belongs to the provider, and coercing it would lose detail
+  /// that matters in a dispute.
+  status            String     @default("created")
+  amount            Float
+  currency          String     @default("GEL")
+  rawResponse       Json?
+  createdAt         DateTime   @default(now())
+  settledAt         DateTime?
+
+  /// The lookup key used by the callback handler. Unique per provider so a
+  /// duplicate callback can never create a second row for the same payment.
+  @@unique([provider, providerPaymentId])
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([wineOrderId])
 }
 
 model Setting {
@@ -232,6 +286,11 @@ model WineOrderItem {
 
 enum OrderStatus {
   NEW
+  // Customer was sent to the payment gateway and hasn't settled yet. Distinct
+  // from NEW so an abandoned checkout is never mistaken for a fresh booking.
+  // Deliberately never auto-expired: a late or retried gateway callback would
+  // otherwise land on an order we had already cancelled. See Plan-OnlinePayment §7.2.
+  PENDING_PAYMENT
   CONFIRMED
   INVOICE_SENT
   PAID
@@ -264,7 +323,7 @@ enum Sweetness {
 }
 
 enum MasterclassUnit {
-  PER_PERSON  // multiplied by paying guest count automatically
-  PER_PIECE   // admin enters quantity manually
-  FLAT        // fixed price, no quantity
+  PER_PERSON // multiplied by paying guest count automatically
+  PER_PIECE // admin enters quantity manually
+  FLAT // fixed price, no quantity
 }
