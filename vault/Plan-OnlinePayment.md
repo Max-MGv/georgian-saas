@@ -249,8 +249,8 @@ Updated as each phase lands, so work can resume here after any interruption. Sta
 | 3 | Proxy bypass + route handlers + result page | ✅ | 2026-07-29, commits `aaee5fc` + `759b78a`. Verified end-to-end against the live dev server (`scripts/test-payment-flow.ts`, 12/12): proxy bypass works, forged signature rejected, tampered amount rejected, genuine callback settles, idempotent, both content types handled. Result page EN/KA over HTTP. |
 | 4 | Booking trigger | ✅ | 2026-07-29, commit `b51bb29`. `shouldTakePayment` + `startCheckout` helpers; order goes NEW→PENDING_PAYMENT only after a checkout exists; email suppressed on the payment path; "Book & Pay" label through the full MaintenanceNotes §1 chain. Verified live: module-off regression, label flip, and the fallback path (Flitt rejects → customer still books, order NEW, no orphan rows). |
 | 5 | Wine order trigger | ✅ | 2026-07-29. Mirrors Phase 4. `submitWineOrder` returns `checkoutUrl`; `contactEmail` captured, required only on the paying path (server backstop + `required` attribute); status → `'pending_payment'` only once a checkout exists. On the payment path the client redirects **without** resetting the form or showing a success screen — the order isn't paid yet, and clearing the cart would strand anyone returning from an abandoned checkout. `test-payment-flow.ts` extended to 16/16, now covering wine settlement and cross-tenant rejection. Verified live in both states: module-off is byte-identical ("Place Reservation", email optional); module-on shows "Checkout →" / "Order & Pay" / "Your Order" with email required. |
-| 6 | Admin UI | 🚧 | Done: super-admin `modulesOnlinePayment` plumbing (`superAdmin.ts`, `TenantFormClient.tsx` 5th checkbox + "also needs credentials" warning) and `app/actions/paymentCredentials.ts` (get/update/clear; the secret is write-only — reads return `secretKeySet: boolean`, never the value). Remaining: tenant-admin Settings UI wiring that action, payment-state badge in the orders list, and the §7.3 "payment on but pricing unconfigured" banner. |
-| 7 | Emails | ⬜ | |
+| 6 | Admin UI | ✅ | 2026-07-29, commit `48a0aae`. Super-admin toggle; tenant-admin "Card Payments" section (secret write-only, blank-save disabled, two-step removal); `PENDING_PAYMENT` badge across the orders UI; `PaymentSetupBanner` on `/admin/orders` + Settings. Surfacing the new enum value exposed **four real omissions** where it would have rendered wrong rather than absent — `OrdersFilters` (unfilterable), `CalendarView` (colourless dot, raw key as label), `OrderDetail`, and super-admin `OrdersActivityClient`. Verified independently: lint identical to the stashed baseline, adminT EN/KA parity across all 734 keys, every `flittSecretKey` reference audited (clients see only the boolean). **Not visually checked in a browser** — the admin panel needs a login, which is on Max's side. |
+| 7 | Emails | ✅ | 2026-07-29. `settle.ts` sends from the one shared path, past the idempotency gate so a retried callback can't double-send, and never awaited into the response — a mail failure must not make the callback look failed to Flitt and earn a retry for a payment that already settled. Booking confirmation gained a `paid` flag (swaps "booking request"/"Estimated total" for "payment received"/"Paid") rather than forking the template, which is exactly how the old site's two mail bodies drifted apart. New `wineOrderReceipt.ts`. Settings read via `getAllSettings(tenantId)`, not `getSetting()` — the latter resolves tenant from request headers, and here the authoritative tenant is the payment's own. **Templates are code-reviewed and typecheck but have not been visually rendered** — see the blocker below. |
 | 8 | Testing | ⬜ | §8 — module-off regression is the one protecting existing tenants |
 
 **Working rules for this build** (per [[ClaudeInstructions]]): branch is `staging`, never commit to `master`; stop the dev server before any `prisma migrate dev`/`generate`; update [[FeatureLog]] as phases complete.
@@ -271,6 +271,18 @@ Updated as each phase lands, so work can resume here after any interruption. Sta
 - Live: one real low-value payment on staging against the real merchant account, then refund it via the portal
 
 RLS verification via `check-rls.ts` after Phase 1, per the [[RLS-Architecture]] checklist.
+
+---
+
+## 8a. GO-LIVE BLOCKER — email is still in Resend sandbox mode
+
+Found 2026-07-29 while wiring phase 7. `lib/emails/bookingConfirmation.ts` has had `const isDomainVerified = false` since long before this work, which routes **every** customer email to `max.mghvdliashvili@gmail.com` instead of the actual customer. `wineOrderReceipt.ts` mirrors it deliberately rather than diverging.
+
+That is tolerable for booking *requests* — the winery phones people anyway. It is **not** tolerable once money changes hands: a customer pays by card and receives nothing in writing, while Max's inbox collects strangers' receipts. Chargeback risk and a support burden in one.
+
+**Therefore: do not switch `modulesOnlinePayment` on for a real tenant until the sending domain is verified in Resend and both `isDomainVerified` constants are flipped to `true` (and `from` moved off `onboarding@resend.dev`).** This is independent of everything else in this plan and is not a code problem — it needs a domain verified in the Resend dashboard.
+
+Note this is a *second* reason the `.ge` domain migration matters: the same domain wants verifying in Resend as the mail sender.
 
 ---
 

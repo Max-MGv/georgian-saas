@@ -15,6 +15,13 @@ type BookingEmailData = {
   wineryPhone?: string
   wineryEmail?: string
   theme?: ResolvedTheme
+  /**
+   * Sent from the settlement path, after the customer actually paid by card.
+   * Swaps the copy rather than forking the template — the old Laravel site kept
+   * two near-identical mail bodies for the paid and unpaid paths and they had
+   * already drifted apart. One template, one flag.
+   */
+  paid?: boolean
 }
 
 export async function sendBookingConfirmation(data: BookingEmailData) {
@@ -54,7 +61,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
         <p style="font-size: 16px; margin: 0 0 24px;">Dear ${data.name},</p>
 
         <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6;">
-          Thank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.
+          ${data.paid
+            ? 'Thank you — your payment has been received and your booking is confirmed. We look forward to welcoming you.'
+            : 'Thank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.'}
         </p>
 
         <div style="background-color: ${th.bg}; border-radius: 8px; padding: 20px 24px; margin: 0 0 24px;">
@@ -77,7 +86,7 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${data.guestCount}</td>
             </tr>
             <tr style="border-top: 1px solid ${th.border};">
-              <td style="color: ${th.muted}; padding: 10px 0 5px;">Estimated total</td>
+              <td style="color: ${th.muted}; padding: 10px 0 5px;">${data.paid ? 'Paid' : 'Estimated total'}</td>
               <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${data.totalPrice}₾</td>
             </tr>
           </table>
@@ -107,7 +116,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
     from: 'onboarding@resend.dev',
     to: toAddress,
     replyTo: 'max.mghvdliashvili@gmail.com',
-    subject: `Booking request received — ${data.date} at ${data.timeSlot}`,
+    subject: data.paid
+      ? `Payment received — your booking on ${data.date} at ${data.timeSlot} is confirmed`
+      : `Booking request received — ${data.date} at ${data.timeSlot}`,
     html,
   })
 

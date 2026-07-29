@@ -1,6 +1,11 @@
 import { db, withTenantDb } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
 import { verifyCallbackSignature, toMinorUnits } from '@/lib/payments/flitt'
+import { getAllSettings } from '@/app/actions/settings'
+import { settingValue } from '@/lib/settings'
+import { resolveTenantTheme } from '@/lib/themePresets'
+import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
+import { sendWineOrderReceipt } from '@/lib/emails/wineOrderReceipt'
 
 /**
  * The single place a payment is marked settled.
@@ -112,8 +117,93 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     }
   })
 
-  // Customer and winery notification is wired in phase 7. It belongs here —
-  // after the write, in the one shared path — not in either route handler.
+  // ── Notification ───────────────────────────────────────────────────────────
+  // Deliberately here: one shared path, reached by both the webhook and the
+  // browser return, and only past the idempotency gate above so a retried
+  // callback can't double-send. Never awaited into the response — a mail
+  // failure must not make the callback look failed to Flitt, which would earn
+  // a retry for a payment that already settled correctly.
+  if (approved) {
+    void sendSettlementEmail(tenantId, payment.orderId, payment.wineOrderId).catch(err =>
+      // Logged loudly rather than swallowed: the money moved, so a missing
+      // receipt is a real support issue someone has to chase manually.
+      console.error('[flitt:settle] notification failed —', err instanceof Error ? err.message : err)
+    )
+  }
 
   return { ok: true, outcome: approved ? 'settled' : 'not-approved', tenantId }
+}
+
+/**
+ * Build and send the customer's post-payment email.
+ *
+ * Reads settings via `getAllSettings(tenantId)` rather than `getSetting()`:
+ * the latter resolves the tenant from request headers, and on this path the
+ * authoritative tenant is the payment's own, which need not match the host that
+ * received the callback.
+ */
+async function sendSettlementEmail(
+  tenantId: string,
+  orderId: string | null,
+  wineOrderId: string | null
+): Promise<void> {
+  const [tenant, settings] = await Promise.all([
+    db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
+    getAllSettings(tenantId),
+  ])
+  const common = {
+    wineryName: tenant?.displayName ?? tenant?.name ?? '',
+    wineryAddress: settingValue(settings, 'contact_address'),
+    wineryPhone: settingValue(settings, 'contact_phone'),
+    wineryEmail: settingValue(settings, 'contact_email'),
+    theme: resolveTenantTheme(tenant?.theme ?? null),
+  }
+
+  if (orderId) {
+    const order = await withTenantDb(tenantId, tx => tx.order.findUnique({ where: { id: orderId } }))
+    // No address on file is a legitimate state — phone-only bookings are
+    // allowed (createBooking requires phone OR email), so there is simply
+    // nobody to write to.
+    if (!order?.email) return
+
+    await sendBookingConfirmation({
+      name: order.name,
+      surname: order.surname,
+      email: order.email,
+      date: order.date.toLocaleDateString('en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      }),
+      timeSlot: order.timeSlot,
+      guestCount: order.guestCount,
+      visitType: order.visitType,
+      totalPrice: order.totalPrice ?? 0,
+      // This is the confirmation createBooking deliberately withheld — it only
+      // becomes true here, once the money actually arrived.
+      paid: true,
+      ...common,
+    })
+    return
+  }
+
+  if (wineOrderId) {
+    const wineOrder = await withTenantDb(tenantId, tx =>
+      tx.wineOrder.findUnique({ where: { id: wineOrderId }, include: { wineItems: true } })
+    )
+    if (!wineOrder?.contactEmail) return
+
+    await sendWineOrderReceipt({
+      email: wineOrder.contactEmail,
+      contactName: wineOrder.contactName,
+      businessName: wineOrder.businessName,
+      lines: wineOrder.wineItems.map(i => ({
+        name: i.wineNameSnapshot,
+        year: i.vintageYearSnapshot,
+        quantity: i.quantity,
+        price: i.priceSnapshot,
+      })),
+      totalAmount: wineOrder.totalAmount ?? 0,
+      discountPercent: wineOrder.discountPercent,
+      ...common,
+    })
+  }
 }

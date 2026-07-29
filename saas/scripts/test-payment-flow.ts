@@ -126,10 +126,16 @@ async function main() {
     // 7. Wine orders (phase 5). A different table with a different status
     //    convention — WineOrder.status is a bare String, not the enum — so it
     //    needs its own coverage rather than being assumed from the booking path.
+    // contactEmail is left null by default. RESEND_API_KEY is set in dev, and
+    // settlement now sends a real receipt — which in sandbox mode goes to the
+    // owner's inbox, so an unguarded run would spam a real person every time.
+    // Opt in deliberately with TEST_SEND_EMAILS=1 to exercise the send path.
+    const sendEmails = process.env.TEST_SEND_EMAILS === '1'
     const wo = await db.wineOrder.create({
       data: {
         businessName: 'ZZ Test Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000',
-        contactEmail: 'zz@example.invalid', totalAmount: 120, status: 'pending_payment', tenantId,
+        contactEmail: sendEmails ? 'zz@example.invalid' : null,
+        totalAmount: 120, status: 'pending_payment', tenantId,
       },
     })
     const pid3 = pid + '-wine'
