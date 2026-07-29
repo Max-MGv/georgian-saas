@@ -8,6 +8,83 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-07-29 — Performance: root cause was the server region, not the queries (shipped)
+
+Max reported the site felt slow and asked for industry-standard testing plus a report on the cause. Ran Google Lighthouse 12.8.2 + `curl` timing against **live production**, read-only. Baseline frozen in [[Perf-Baseline-2026-07-29]] (new); plan, chunks, decisions and progress log in [[Plan-Performance]] (new).
+
+**Two causes found, both now fixed and live in production.**
+
+**1. `/wines` images.** 6 product photos in `public/images/products/` were camera-resolution originals (2991×2990px, 2.1–2.2MB each) rendered into a 362×176px thumbnail — Lighthouse measured 98% wasted bytes and a 15.5s LCP on that page vs 3.2s on Home. They predated the `sharp` compression pipeline built for background images (#92) and were never revisited. Resized to 750px max dimension (covers 2× retina at the largest real display context) with max PNG compression, alpha preserved; same filenames and paths, so zero code or DB changes were needed (`Wine.imagePath`/`WineVintage.imagePath` rows and `WinesClient.tsx`'s hardcoded `PRODUCT_IMAGES` list all still resolve). **7.5MB → 1.06MB (86% smaller).** Shipped `31f4d62`.
+
+**2. The real one: the Vercel functions were running on the wrong continent from the database.** `X-Vercel-Id: fra1::iad1::…` on both prod and staging — requests entered Vercel's edge in Frankfurt but the *function executed in `iad1`, Washington DC*, while both Supabase projects live in `eu-central-1` (Frankfurt). No region was pinned anywhere (no `vercel.json`, nothing in `next.config.ts`), so Vercel's US-East default applied and **every database round trip crossed the Atlantic**. Fixed with a 4-line `saas/vercel.json`: `{"regions": ["fra1"]}`. Shipped `d1e97a4`.
+
+**File location was a real trap:** it must be `saas/vercel.json`, not repo root. This repo is `saas/` + `dashboard/` + `vault/` with no root `package.json`, so Vercel's Root Directory is `saas` and `vercel.json` is read relative to it — at the repo root it would have been silently ignored and we'd have concluded the region fix "didn't work."
+
+**Result** (production measured in the same minute as a control, still on `iad1`, so attribution is clean):
+
+| | Before (`iad1`) | After (`fra1`) |
+|---|---|---|
+| Home TTFB | 2.93s | **0.40s** (7×) |
+| Home full load | 5.8s | **0.49s** (10×) |
+| Lighthouse Home | 81 | **96** |
+| Lighthouse `/wines` | 64 | **84** |
+| `/wines` LCP | 15.5s | **3.1s** |
+
+### The wrong turn — worth recording
+
+The first diagnosis was that ~24 per-request DB transactions caused the delay: every public page is `force-dynamic`, and `getSetting()` opens its own transaction per key (14 calls on Home, 6 more in the layout). A plan was written and approved to batch them and then add `unstable_cache`, including reading the Next 16 caching docs and finding a real constraint (`headers()`/`cookies()` can't be touched inside a cache scope, so `getTenantId()` had to be refactored out of the data functions).
+
+**The batching refactor was built — and measurably did nothing**: 1,581ms → ~1,620ms of `application-code` time, despite going from ~24 transactions to ~8. Those queries already ran in parallel via `Promise.all`, so cutting their *count* cut database load but not wall-clock.
+
+Measuring directly is what redirected it: a real 36-row `findMany` cost **666ms** while an *empty* transaction cost **680ms** — i.e. ~100% latency, ~0% database work. That pointed at distance, not query design. (Also measured: the RLS handshake doubles every transaction, 345ms → 680ms, because `set_config` and `SET LOCAL ROLE` are two extra sequential round trips — cheap against a 2ms database, expensive against a 90ms one. Deliberately not "optimized", it's the tenant-isolation boundary.)
+
+**Consequence: the planned caching work (Plan-Performance chunks 2–3) was dropped.** It was scoped to remove a ~3s wait that no longer exists, and would have added staleness risk plus a cross-tenant cache-key risk for nothing. Revisit only if traffic ever makes DB *load* (not latency) the constraint.
+
+### Still open
+- **The batching refactor is uncommitted** — `lib/settings.ts` (new), `getAllSettings()`/`getAllContent()`, and rewired `(site)/layout.tsx` + `(site)/page.tsx`. `tsc` clean, behavior-neutral, cuts DB load 3×. Needs a keep-or-revert call from Max; it's cleanup now, not a fix.
+- Lighthouse still suggests ~790KB more available on `/wines` by moving the product photos to WebP. Kept as PNG deliberately (transparent backgrounds); worth revisiting if `/wines` ever needs more.
+- `/wines` Total Blocking Time rose 210ms → 400ms in the after-run. Single sample, likely noise, but worth a second look if it persists.
+
+### Files changed
+- `saas/public/images/products/*.png` — 6 files resized (`31f4d62`, on `master`)
+- `saas/vercel.json` — NEW, region pin (`d1e97a4`, on `master`)
+- Uncommitted: `saas/lib/settings.ts` (new), `saas/app/actions/settings.ts`, `saas/app/actions/siteContent.ts`, `saas/app/(site)/layout.tsx`, `saas/app/(site)/page.tsx`
+- Vault: `Plan-Performance.md` (NEW), `Perf-Baseline-2026-07-29.md` (NEW), `FeatureLog.md` (#144), `SessionLog.md` (this entry)
+
+---
+
+## 2026-07-28 (session 4) — Payment integration + historical data migration: researched, not yet decided
+
+Two related assessments for the missing-payment-system work, both parked pending Max's decisions — nothing built, no vault-external state changed except read-only DB queries via phpMyAdmin (SELECTs only). Full technical detail in [[MigrationNotes.md]]; this entry is the summary.
+
+**Flitt payment integration**: reviewed the old `nikalaIntegral` Laravel app's Flitt/Fondy integration in depth (checkout params, signature scheme, the never-verified callback signature, hardcoded secrets) and cross-checked Flitt's public API docs. Assessed shared-platform-account vs. per-tenant-account architecture with Max — landed on **per-tenant Flitt accounts** (matches the existing `payment_recipient_name`/IBAN bank-transfer precedent, avoids the platform becoming a payment facilitator). Mapped what's needed: per-tenant `merchant_id` + secret key (first real per-tenant secret this codebase would ever store — currently only the plaintext, non-secret `Setting` table exists as a mechanism), a new Route Handler for the inbound callback (first one in a repo that's 100% Server Actions today), and a fix for the old code's signature-verification gap. Also flagged: client-side dependencies before any of this works (Flitt's own business KYC/approval, "same day to a week"), and an unconfirmed question — whether Flitt permits alcohol sales as a category — that needs asking their support directly, not assumed.
+
+**Historical order data migration**: went beyond code into the actual databases via DirectAdmin's phpMyAdmin (read-only). Corrected an earlier wrong claim — `TBC.php` isn't dead code, `transactions_tbc_old` has 201 real rows, it was the live gateway before Flitt. Found the `booking/laravelCore` app's data (`nalige_booking` DB) is pure dev-test data (4 rows, one person, 14-minute window) — not worth migrating. Found `nikalaIntegral`'s `nalige_db` has **52 real bookings spanning 2022-2026** — genuinely worth migrating, with zero real wine-orders in the mix (that side of the old site had no real usage). Had an agent confirm the admin orders/statistics UI already has legacy-shaped-row fallback rendering built in (not something we'd need to build), then laid out the actual challenges: pricing must be carried over as-is rather than recomputed, company names need deduplication into real records, and — the one requiring Max's input — there's no clean automatic mapping from old `pay_status`/`status` onto the new `OrderStatus` lifecycle enum.
+
+Max's call: "record this for now, I'll get back to it later." Both threads are fully written up in MigrationNotes.md, ready to resume without re-research whenever he's ready.
+
+---
+
+## 2026-07-28 (session 3) — Explored old hosting panel for pre-migration site
+
+Max got access to the old host's DirectAdmin control panel (`nikalasmarani.ge:2222/evo/`) and asked what it was, read-only ("prohibited from making any edits"). Browsed the File Manager to confirm: it's a shared-hosting account (`nalige`) with the full legacy codebase sitting in `domains/nikalasmarani.ge/public_html` — legacy procedural PHP at the root, a `booking/` folder with its own Laravel core + SQL dump, and a standalone Laravel app (`adminIntegral/`) that's almost certainly the real admin/booking/payment backend. No files opened, no edits made. Full structure and reasoning logged in [[MigrationNotes.md]] under "Old site source (pre-migration) — hosting panel access" — that's the file to check before designing the new payment system, since `adminIntegral` likely shows what payment gateway the old site actually used.
+
+---
+
+## 2026-07-28 (session 2) — #128 Legal pages: shipped `staging` → `master` (production)
+
+Handoff session: Max reviewed and approved the staging build (previous entry below) and said to push to master. Followed the staging-first git workflow (Rule 0): merged `staging` (`06c81aa`, fast-forward, no conflicts) into `master` locally first, confirmed the migration SQL was purely additive (`ALTER TABLE "Tenant" ADD COLUMN "modulesLegalPages" BOOLEAN NOT NULL DEFAULT true`), then ran the two production-database steps *before* pushing — order matters, since pushing first would have deployed code expecting a column that didn't exist yet. Paused for Max's explicit confirmation before touching the prod DB, per the standing production-safety rule.
+
+Ran against production (`dshsfkffcsgerdqinqst`, via inline env vars scoped to each command — `saas/.env` untouched): `prisma migrate deploy` applied `20260728094729_add_modules_legal_pages` cleanly, then `scripts/seed-legal-content.ts` created 6 rows (3 pages × 2 locales) for the "Nikalas Marani" tenant, 0 already existed — confirmed this was the prod tenant (not dev's "Staging Winery") from the script's own console output. Pushed `master` (`b7367d9..06c81aa`), Vercel auto-deployed to production (`dpl_FTQSbzAf5SksLXF5JSGDpDtT1A3h`, verified READY via the Vercel MCP), switched back to `staging` per the standard end-of-deploy rule.
+
+Live verification on `nikalasmarani.vercel.app`: `/terms`, `/privacy`, `/returns` all render correctly in both EN and KA (cookie-forced locale switch), footer shows the three links, admin panel's new "Legal" (იურიდიული) tab shows the seeded text in editable textareas. Found one stale credential along the way: `credentials.txt`'s stored NM admin email (`Nikalasmarani@email.com`) was wrong — Max corrected it to `Nikalasmarani@email.ge`, updated in the file. Super-admin "Legal pages" checkbox on the Nikalas Marani tenant checked and confirmed working by Max directly (no prod super-admin credentials exist in `credentials.txt` — dev-only account is explicitly marked not to be recreated against prod).
+
+One discrepancy caught before merging: the handoff prompt described `staging` HEAD as `37deb14`, but it had moved one commit further to `06c81aa` (docs-only — vault Feature note, MaintenanceNotes, MyToDo entries, per Rule 9) since the prompt was written. Flagged to Max before proceeding; harmless, included in the merge as part of `staging`.
+
+No code follow-ups from this deploy — the known follow-ups (native Georgian legal review, "your visit" wine-delivery wording, no effective-date stamp, generic page `<title>`) are unchanged from [[Plan-LegalPages]] and remain non-blocking.
+
+---
+
 ## 2026-07-28 — #128 Legal pages: researched, drafted, reviewed, and built (staging)
 
 Full arc in one session. Started as familiarization on issue #128 ("Legal sections review") — read the FeatureLog entry, browsed the 3 reference legal pages on the old pre-migration nikalasmarani.ge site (not `/ka/text/N` as the FeatureLog links suggest — the real paths are `/text/N`), read `MultiTenantSiteContent.md`/`SuperAdmin-Architecture.md`/`MaintenanceNotes.md`, and had an Explore agent map the Site Content editor and public route structure. Found the existing `EditableText`/`FieldsPanel` pattern is built for short labels, not full documents — new territory needed. Wrote [[Plan-LegalPages]] and got Max's scope call: Georgia-only, reasonable per-tenant customizability, module-toggleable from super-admin like the other 3 module booleans.
