@@ -2,6 +2,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
 import { wineDisplayName } from '@/lib/wineName'
+import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
 import { headers, cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { type Metadata } from 'next'
@@ -27,7 +28,7 @@ export default async function WinesPage() {
   const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
-  const [wineProducts, companies, hideCompanyDropdownStr] = await Promise.all([
+  const [wineProducts, companies, hideCompanyDropdownStr, onlinePaymentEnabled] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
@@ -39,6 +40,7 @@ export default async function WinesPage() {
       select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true },
     })),
     getSetting('hide_company_dropdown'),
+    isPaymentConfigured(tenantId),
   ])
   const wines = wineProducts.flatMap(wine => wine.vintages.map(v => ({
     vintageId: v.id,
@@ -63,6 +65,7 @@ export default async function WinesPage() {
       tenantName={tenantName}
       hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
       locale={locale}
+      onlinePaymentEnabled={onlinePaymentEnabled}
     />
   )
 }

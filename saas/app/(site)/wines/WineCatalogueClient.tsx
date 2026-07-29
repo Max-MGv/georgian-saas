@@ -67,6 +67,7 @@ export default function WineCatalogueClient({
   tenantName = '',
   hideCompanyDropdown = false,
   locale = 'en',
+  onlinePaymentEnabled = false,
 }: {
   wines: DbWine[]
   companies?: Company[]
@@ -75,6 +76,14 @@ export default function WineCatalogueClient({
   tenantName?: string
   hideCompanyDropdown?: boolean
   locale?: string
+  /**
+   * Tenant has the payment module on AND credentials stored. Drives the button
+   * label and whether the email field is required. The server decides
+   * authoritatively — this prop only keeps the UI honest, so a tenant with the
+   * module on but no credentials shows the plain reservation button rather than
+   * promising a payment step the server would then skip.
+   */
+  onlinePaymentEnabled?: boolean
 }) {
   const TYPE_LABEL: Record<DbWine['wineType'], string> = {
     RED: t(locale, 'wine.type.RED'), WHITE: t(locale, 'wine.type.WHITE'),
@@ -127,6 +136,7 @@ export default function WineCatalogueClient({
   const [workingHours, setWorkingHours] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
 
   function setQty(id: string, delta: number) {
     setQuantities(prev => {
@@ -259,16 +269,25 @@ export default function WineCatalogueClient({
 
     startTransition(async () => {
       const result = await submitWineOrder(formData)
-      if (result.error) {
+      if ('error' in result) {
         setError(result.error)
-      } else {
-        setSubmitted(true)
-        form.reset()
-        setQuantities({})
-        setCompanyId('')
-        setDiscountPercent(null)
-        setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
+        return
       }
+      if (result.checkoutUrl) {
+        // Leave the form as it is and hand off to the gateway. Deliberately no
+        // reset and no success screen: the order is placed but not yet paid, so
+        // showing "order received" here would be a lie, and clearing the cart
+        // would strand anyone who comes back after abandoning checkout.
+        window.location.assign(result.checkoutUrl)
+        return
+      }
+      setSubmitted(true)
+      form.reset()
+      setQuantities({})
+      setCompanyId('')
+      setDiscountPercent(null)
+      setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
+      setContactEmail('')
     })
   }
 
@@ -488,7 +507,7 @@ export default function WineCatalogueClient({
               onClick={() => setShowDrawer(true)}
               className="btn-wine font-semibold px-5 py-2.5 rounded-lg text-sm flex-shrink-0"
             >
-              Place Reservation →
+              {onlinePaymentEnabled ? 'Checkout →' : 'Place Reservation →'}
             </button>
           </div>
         </div>
@@ -522,7 +541,9 @@ export default function WineCatalogueClient({
               <>
                 {/* Drawer header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
-                  <h2 className="text-lg font-bold" style={{ color: C.text }}>Place a Reservation</h2>
+                  <h2 className="text-lg font-bold" style={{ color: C.text }}>
+                    {onlinePaymentEnabled ? 'Your Order' : 'Place a Reservation'}
+                  </h2>
                   <button
                     type="button"
                     onClick={() => setShowDrawer(false)}
@@ -600,12 +621,22 @@ export default function WineCatalogueClient({
                     <input name="contactPhone" required placeholder="Contact person phone number"
                       value={contactPhone} onChange={e => setContactPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                    {/* Required only when paying online — that's the one case
+                        where we owe the buyer a receipt and have nowhere else
+                        to send it. Optional otherwise, so tenants on the plain
+                        reservation flow keep the form they have today. */}
+                    <input name="contactEmail" type="email" required={onlinePaymentEnabled}
+                      placeholder={onlinePaymentEnabled ? 'Email address (for your receipt)' : 'Email address (optional)'}
+                      value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
 
                     {error && <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{error}</p>}
 
                     <button type="submit" disabled={isPending}
                       className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">
-                      {isPending ? 'Sending...' : 'Place Reservation'}
+                      {isPending
+                        ? (onlinePaymentEnabled ? 'Redirecting...' : 'Sending...')
+                        : (onlinePaymentEnabled ? 'Order & Pay' : 'Place Reservation')}
                     </button>
                   </form>
                 </div>

@@ -19,6 +19,8 @@ import { buildSignature } from '../lib/payments/flitt'
 const db = new PrismaClient()
 const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000'
 const SECRET = 'zz-test-secret-' + Date.now()
+/** Throwaway second tenant, for the cross-tenant isolation check. */
+const OTHER = 'zz-flow-other-tenant'
 
 let passed = 0
 let failed = 0
@@ -120,9 +122,44 @@ async function main() {
     check('form-encoded callback settles too', j?.outcome === 'settled', JSON.stringify(j))
     const o2 = await db.order.findUnique({ where: { id: order2.id } })
     check('form-encoded order is PAID', o2?.status === OrderStatus.PAID)
+
+    // 7. Wine orders (phase 5). A different table with a different status
+    //    convention — WineOrder.status is a bare String, not the enum — so it
+    //    needs its own coverage rather than being assumed from the booking path.
+    const wo = await db.wineOrder.create({
+      data: {
+        businessName: 'ZZ Test Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000',
+        contactEmail: 'zz@example.invalid', totalAmount: 120, status: 'pending_payment', tenantId,
+      },
+    })
+    const pid3 = pid + '-wine'
+    await db.payment.create({ data: { tenantId, wineOrderId: wo.id, provider: 'flitt', providerPaymentId: pid3, amount: 120, status: 'created' } })
+    const r5 = await postCallback(signedBody({ payment_id: pid3, order_status: 'approved', amount: 12000, currency: 'GEL' }, SECRET))
+    check('wine order callback settles', r5.json?.outcome === 'settled', JSON.stringify(r5.json))
+    const woAfter = await db.wineOrder.findUnique({ where: { id: wo.id } })
+    check('wine order status is paid', woAfter?.status === 'paid', `status=${woAfter?.status}`)
+
+    // 8. Cross-tenant. A payment belonging to another tenant must not settle
+    //    just because the caller signed with a secret we happen to hold — the
+    //    secret is looked up from the payment's OWN tenant, so this must fail.
+    await db.tenant.create({
+      data: { id: OTHER, name: 'ZZ Other', domain: 'zz-other.invalid', slug: OTHER, flittSecretKey: 'zz-other-secret' },
+    })
+    const woOther = await db.wineOrder.create({
+      data: { businessName: 'ZZ Other Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 90, status: 'pending_payment', tenantId: OTHER },
+    })
+    const pid4 = pid + '-cross'
+    await db.payment.create({ data: { tenantId: OTHER, wineOrderId: woOther.id, provider: 'flitt', providerPaymentId: pid4, amount: 90, status: 'created' } })
+    // Signed with THIS tenant's secret, aimed at the other tenant's payment.
+    const r6 = await postCallback(signedBody({ payment_id: pid4, order_status: 'approved', amount: 9000, currency: 'GEL' }, SECRET))
+    check('cross-tenant callback is rejected', r6.json?.status === 'rejected', JSON.stringify(r6.json))
+    const woOtherAfter = await db.wineOrder.findUnique({ where: { id: woOther.id } })
+    check("other tenant's wine order untouched", woOtherAfter?.status === 'pending_payment', `status=${woOtherAfter?.status}`)
   } finally {
     await db.payment.deleteMany({ where: { providerPaymentId: { startsWith: 'zz-flow-' } } })
     await db.order.deleteMany({ where: { name: 'ZZ', surname: { in: ['Test', 'Test2'] } } })
+    await db.wineOrder.deleteMany({ where: { businessName: { in: ['ZZ Test Bar', 'ZZ Other Bar'] } } })
+    await db.tenant.deleteMany({ where: { id: OTHER } })
     await db.tenant.update({ where: { id: tenantId }, data: { flittSecretKey: prevSecret } })
   }
 
