@@ -17,7 +17,27 @@ const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: str
   paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   delivered: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', labelKey: 'wineOrders.status.delivered' },
   cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', labelKey: 'orders.status.cancelled' },
+  // Online payment states. Orange is deliberately not pending's yellow, and the
+  // failed rose is not cancelled's red — "the customer didn't pay" and "we
+  // cancelled this" are different events and shouldn't look alike.
+  pending_payment: { border: '#ea580c', pill: '#ffedd5', pillText: '#c2410c', labelKey: 'wineOrders.status.pendingPayment' },
+  payment_failed:  { border: '#9f1239', pill: '#ffe4e6', pillText: '#881337', labelKey: 'wineOrders.status.paymentFailed' },
 }
+
+/**
+ * Orders that went to the payment gateway and never came back paid.
+ *
+ * Held apart from the fulfilment lifecycle on purpose. They are not orders the
+ * winery is working on, and — since payments are deliberately never auto-expired
+ * (a late gateway callback would otherwise cancel something that did get paid) —
+ * they accumulate forever. Left in the default view they would slowly bury the
+ * real orders, so "All" excludes them and each gets its own tab with a count.
+ *
+ * "Awaiting" is not "failed": the common case is someone closing the tab, and
+ * plenty of those people pay later by transfer. Labelling them all as failures
+ * would invite the winery to write off live business.
+ */
+const PAYMENT_LIMBO_STATUSES = ['pending_payment', 'payment_failed'] as const
 
 type WineOrder = {
   id: string
@@ -48,7 +68,8 @@ const STAGE_LABEL_KEYS: Record<string, string> = {
 }
 
 const ALL_STATUSES = ['pending', 'confirmed', 'paid', 'delivered', 'cancelled'] as const
-const STATUS_FILTER_OPTIONS = [...ALL_STATUSES] as const
+// Limbo tabs come last — they are an exception list, not part of the normal flow.
+const STATUS_FILTER_OPTIONS = [...ALL_STATUSES, ...PAYMENT_LIMBO_STATUSES] as const
 
 type Mode = 'cards' | 'table' | 'pack'
 type PendingChange = { orderId: string; toStatus: string }
@@ -127,8 +148,55 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
 }) {
   const [panelHovered, setPanelHovered] = useState(false)
   const isCancelled = status === 'cancelled'
+  const isLimbo = (PAYMENT_LIMBO_STATUSES as readonly string[]).includes(status)
   const currentIdx = STAGES.indexOf(status as Stage)
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+
+  // Payment limbo replaces the stepper rather than adding a step to it. The
+  // stages are a fulfilment sequence; "the customer never paid" is not a stage
+  // of fulfilling an order, and rendering it as one would imply the winery has
+  // work to do on it.
+  //
+  // "Mark as paid" is the important control here. Without it an order whose
+  // customer abandoned card payment and then paid by bank transfer — which will
+  // be common given how these wineries already work — would be stuck in limbo
+  // permanently with no way back into the normal flow.
+  if (isLimbo) {
+    const sc = STATUS_COLOR[status]
+    return (
+      <div className="flex flex-col gap-2" style={{ minWidth: 115 }}>
+        <div className="rounded-lg px-3 py-2" style={{ backgroundColor: sc.pill, border: `1px solid ${sc.border}` }}>
+          <p className="text-xs font-bold" style={{ color: sc.pillText }}>{at(sc.labelKey)}</p>
+          <p className="text-xs mt-1 leading-snug" style={{ color: sc.pillText }}>
+            {at(status === 'payment_failed' ? 'wineOrders.payment.failedHint' : 'wineOrders.payment.awaitingHint')}
+          </p>
+        </div>
+        <button
+          onClick={() => onRequestChange('paid')}
+          className="text-xs px-3 py-2 rounded-lg font-medium"
+          style={{ backgroundColor: '#dcfce7', color: '#14532d', border: '1px solid #86efac' }}
+        >
+          {at('wineOrders.payment.markPaid')}
+        </button>
+        <button
+          onClick={() => onRequestChange('cancelled')}
+          className="text-xs px-3 py-1.5 rounded-lg"
+          style={{ color: C.faint, border: `1px solid ${C.border}`, backgroundColor: '#fff' }}
+        >
+          {at('orders.status.cancelled')}
+        </button>
+        {pendingToStatus && (
+          <div className="pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
+            <span style={{ color: C.muted, flex: 1 }}>
+              → {STATUS_COLOR[pendingToStatus] ? at(STATUS_COLOR[pendingToStatus].labelKey) : pendingToStatus}?
+            </span>
+            <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
+            <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -209,9 +277,11 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
 
 // ── FilterBar ──────────────────────────────────────────────────────────
 
-function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo, locale }: {
+function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo, locale, statusCounts }: {
   filters: Set<string>; onToggleFilter: (f: string) => void; onClearFilters: () => void
   search: string; onSearch: (s: string) => void
+  /** Per-status totals, used to badge the limbo tabs. */
+  statusCounts: Record<string, number>
   dateFrom: string; onDateFrom: (d: string) => void
   dateTo: string; onDateTo: (d: string) => void
   locale: string
@@ -237,11 +307,16 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         {STATUS_FILTER_OPTIONS.map(f => {
           const isActive = filters.has(f)
           const sc = STATUS_COLOR[f]
+          const isLimbo = (PAYMENT_LIMBO_STATUSES as readonly string[]).includes(f)
+          const count = statusCounts[f] ?? 0
+          // A limbo tab with nothing in it is noise — the common case for any
+          // winery not taking card payments at all. Hide it until it matters.
+          if (isLimbo && count === 0) return null
           return (
             <button
               key={f}
               onClick={() => onToggleFilter(f)}
-              className="font-medium rounded-full transition-all duration-150"
+              className="font-medium rounded-full transition-all duration-150 inline-flex items-center gap-1.5"
               style={{
                 backgroundColor: isActive ? sc.border : '#fff',
                 color: isActive ? '#fff' : C.faint,
@@ -251,6 +326,18 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
               }}
             >
               {at(sc.labelKey)}
+              {isLimbo && (
+                <span
+                  className="rounded-full font-bold"
+                  style={{
+                    backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : sc.pill,
+                    color: isActive ? '#fff' : sc.pillText,
+                    fontSize: '0.65rem', padding: '0.05rem 0.35rem', lineHeight: 1.4,
+                  }}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           )
         })}
@@ -323,7 +410,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
         <tbody style={{ backgroundColor: '#ffffff' }}>
           {orders.map((order, i) => {
             const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
-            const isInactive = order.status === 'delivered' || order.status === 'cancelled'
+            const isInactive = order.status === 'delivered' || order.status === 'cancelled' || order.status === 'payment_failed'
             const isPending = pendingChange?.orderId === order.id
             const isLast = i === orders.length - 1
 
@@ -541,7 +628,18 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
     }
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Counted across every order, not the filtered set — a tab badge has to keep
+  // showing its total while a different tab is selected.
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const o of orders) counts[o.status] = (counts[o.status] ?? 0) + 1
+    return counts
+  }, [orders])
+
   const filteredOrders = useMemo(() => orders.filter(o => {
+    // "All" means all *real* orders. Unpaid gateway leftovers are reachable only
+    // through their own tabs, whose counts keep them from being forgotten.
+    if (filters.size === 0 && (PAYMENT_LIMBO_STATUSES as readonly string[]).includes(o.status)) return false
     if (filters.size > 0 && !filters.has(o.status)) return false
     if (search && !o.businessName.toLowerCase().includes(search.toLowerCase())) return false
     if (dateFrom && new Date(o.createdAt) < new Date(dateFrom + 'T00:00:00')) return false
@@ -639,6 +737,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
       dateFrom={dateFrom} onDateFrom={setDateFrom}
       dateTo={dateTo} onDateTo={setDateTo}
       locale={locale}
+      statusCounts={statusCounts}
     />
   )
 
@@ -654,7 +753,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
         )}
         <div className="flex flex-col gap-4" ref={listRef}>
           {cardsVisible.map(order => {
-            const isInactive = order.status === 'cancelled' || order.status === 'delivered'
+            const isInactive = order.status === 'cancelled' || order.status === 'delivered' || order.status === 'payment_failed'
             const sc = STATUS_COLOR[order.status] ?? STATUS_COLOR.pending
             const isPending = pendingChange?.orderId === order.id
             const isSelected = selected.has(order.id)

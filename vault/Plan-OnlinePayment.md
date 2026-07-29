@@ -274,6 +274,24 @@ RLS verification via `check-rls.ts` after Phase 1, per the [[RLS-Architecture]] 
 
 ---
 
+## 7b. Wine order payment states (added 2026-07-29 after staging testing)
+
+Phase 5 wrote `WineOrder.status = 'pending_payment'` but never taught the wine admin UI about it — `WineOrdersClient.tsx` knew only `pending/confirmed/paid/delivered/cancelled`, so a real abandoned order fell back to pending's colours, matched no stepper stage (Max saw a card with no status at all), and had no filter tab, vanishing the moment any filter was clicked. Same class of bug the phase 6 agent fixed on the *bookings* side; nobody had done the wine side.
+
+Max proposed a "Failed Orders" tab. Half right — these shouldn't sit in the normal flow, but **"failed" is wrong for the common case**: most are *abandoned*, not declined, and plenty of those customers pay later by transfer. Calling them failures invites the winery to write off live business.
+
+**Built (option B of three offered):**
+- Two statuses — `pending_payment` "Awaiting Payment" (sent to gateway, no answer) and `payment_failed` "Payment Failed" (gateway declined). Distinct colours from both `pending` and `cancelled`, because "the customer didn't pay" and "we cancelled this" are different events.
+- Each gets its own filter tab **with a count badge**, and the tab is hidden entirely at count 0 — otherwise every winery not taking card payments carries two dead tabs.
+- **Excluded from "All"**, which now means all *real* orders. Since payments are deliberately never auto-expired (§7.2), these accumulate forever and would slowly bury the working list.
+- **Not a stepper stage.** The stages are a fulfilment sequence; "never paid" isn't a step in fulfilling something. Limbo orders show a notice with the reason instead.
+- **"Mark as paid" action** — the important one. Without it, a customer who abandons card payment then pays by bank transfer leaves the order stuck permanently with no route back into the normal flow. That will be common given how these wineries already operate.
+- `settle.ts` now maps Flitt `declined`/`expired` → `payment_failed`; `processing` deliberately does not, since it may still approve.
+
+Rejected: option A (one combined status — conflates "might still pay" with "definitely declined") and option C (payment as a separate axis from fulfilment — conceptually cleanest, and where to go if card payment becomes the norm, but it rethinks a screen mid-rollout).
+
+---
+
 ## 8a. GO-LIVE BLOCKER — email is still in Resend sandbox mode
 
 Found 2026-07-29 while wiring phase 7. `lib/emails/bookingConfirmation.ts` has had `const isDomainVerified = false` since long before this work, which routes **every** customer email to `max.mghvdliashvili@gmail.com` instead of the actual customer. `wineOrderReceipt.ts` mirrors it deliberately rather than diverging.

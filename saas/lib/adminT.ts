@@ -459,6 +459,11 @@ const en: Translations = {
   // Wine Orders — list/table/cards
   'wineOrders.status.pending': 'Pending',
   'wineOrders.status.delivered': 'Delivered',
+  'wineOrders.status.pendingPayment': 'Awaiting Payment',
+  'wineOrders.status.paymentFailed': 'Payment Failed',
+  'wineOrders.payment.awaitingHint': 'Sent to the payment page but not paid yet. They may still pay, or you can take payment another way.',
+  'wineOrders.payment.failedHint': 'The card payment did not go through. Nothing was charged.',
+  'wineOrders.payment.markPaid': 'Mark as paid',
   'wineOrders.undo': 'Undo',
   'wineOrders.revertTo': 'Revert to {label}',
   'wineOrders.advanceTo': 'Advance to {label}',
@@ -1292,6 +1297,11 @@ const ka: Translations = {
   // Wine Orders — list/table/cards
   'wineOrders.status.pending': 'მოლოდინში',
   'wineOrders.status.delivered': 'მიწოდებული',
+  'wineOrders.status.pendingPayment': 'გადახდის მოლოდინში',
+  'wineOrders.status.paymentFailed': 'გადახდა ვერ შესრულდა',
+  'wineOrders.payment.awaitingHint': 'გადახდის გვერდზე გადავიდა, მაგრამ ჯერ არ გადაუხდია. შესაძლოა მოგვიანებით გადაიხადოს, ან სხვა გზით მიიღოთ თანხა.',
+  'wineOrders.payment.failedHint': 'ბარათით გადახდა ვერ შესრულდა. თანხა არ ჩამოჭრილა.',
+  'wineOrders.payment.markPaid': 'გადახდილად მონიშვნა',
   'wineOrders.undo': 'დაბრუნება',
   'wineOrders.revertTo': 'დაბრუნება {label}-ზე',
   'wineOrders.advanceTo': 'გადასვლა {label}-ზე',

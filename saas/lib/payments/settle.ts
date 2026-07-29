@@ -29,6 +29,12 @@ export type SettleResult =
 /** Flitt's terminal success value. Anything else is not a paid order. */
 const APPROVED = 'approved'
 
+/**
+ * Gateway outcomes that mean this attempt is definitively over and unpaid.
+ * `processing` is not here on purpose — it may still become `approved`.
+ */
+const TERMINAL_FAILURES = new Set(['declined', 'expired'])
+
 export async function settlePayment(body: Record<string, unknown>): Promise<SettleResult> {
   const providerPaymentId = body.payment_id != null ? String(body.payment_id) : ''
   if (!providerPaymentId) return { ok: false, reason: 'callback carried no payment_id' }
@@ -97,7 +103,19 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
       },
     })
 
-    if (!approved) return
+    if (!approved) {
+      // A terminal decline is worth writing onto the order, not just the
+      // payment: otherwise a wine order sits in "Awaiting Payment" forever when
+      // we already know the card was refused. `processing` is deliberately
+      // excluded — that one is still in flight and may yet approve.
+      if (TERMINAL_FAILURES.has(orderStatus) && payment.wineOrderId) {
+        await tx.wineOrder.updateMany({
+          where: { id: payment.wineOrderId, status: 'pending_payment' },
+          data: { status: 'payment_failed' },
+        })
+      }
+      return
+    }
 
     if (payment.orderId) {
       // Guarded on status rather than blindly set: an order a human already

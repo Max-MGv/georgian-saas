@@ -145,6 +145,21 @@ async function main() {
     const woAfter = await db.wineOrder.findUnique({ where: { id: wo.id } })
     check('wine order status is paid', woAfter?.status === 'paid', `status=${woAfter?.status}`)
 
+    // 7b. A declined card must land the wine order in payment_failed, not leave
+    //     it sitting in "Awaiting Payment" forever. `processing` must NOT — it
+    //     can still turn into an approval.
+    const woDeclined = await db.wineOrder.create({
+      data: { businessName: 'ZZ Declined Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 60, status: 'pending_payment', tenantId },
+    })
+    const pidD = pid + '-declined'
+    await db.payment.create({ data: { tenantId, wineOrderId: woDeclined.id, provider: 'flitt', providerPaymentId: pidD, amount: 60, status: 'created' } })
+    await postCallback(signedBody({ payment_id: pidD, order_status: 'processing', amount: 6000, currency: 'GEL' }, SECRET))
+    let wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
+    check("'processing' leaves the order awaiting payment", wd?.status === 'pending_payment', `status=${wd?.status}`)
+    await postCallback(signedBody({ payment_id: pidD, order_status: 'declined', amount: 6000, currency: 'GEL' }, SECRET))
+    wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
+    check("'declined' moves the order to payment_failed", wd?.status === 'payment_failed', `status=${wd?.status}`)
+
     // 8. Cross-tenant. A payment belonging to another tenant must not settle
     //    just because the caller signed with a secret we happen to hold — the
     //    secret is looked up from the payment's OWN tenant, so this must fail.
@@ -164,7 +179,7 @@ async function main() {
   } finally {
     await db.payment.deleteMany({ where: { providerPaymentId: { startsWith: 'zz-flow-' } } })
     await db.order.deleteMany({ where: { name: 'ZZ', surname: { in: ['Test', 'Test2'] } } })
-    await db.wineOrder.deleteMany({ where: { businessName: { in: ['ZZ Test Bar', 'ZZ Other Bar'] } } })
+    await db.wineOrder.deleteMany({ where: { businessName: { in: ['ZZ Test Bar', 'ZZ Other Bar', 'ZZ Declined Bar'] } } })
     await db.tenant.deleteMany({ where: { id: OTHER } })
     await db.tenant.update({ where: { id: tenantId }, data: { flittSecretKey: prevSecret } })
   }
