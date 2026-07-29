@@ -8,7 +8,21 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-07-29 (later) — Flitt payment integration BUILT, phases 1–7 on `staging`
+## 2026-07-29 (latest) — Flitt payment shipped to production, module off; 3 items remain
+
+Max walked the module-on path on staging himself (both checkouts to Flitt's real page, secret-masking confirmed, an abandoned wine checkout's "Awaiting Payment" state and "Mark as paid" recovery confirmed working), found and had fixed a real bug (wine orders had no UI at all for the new payment-limbo status — see below), then said to run the production migration and merge, reasoning that since the module ships off, any remaining bug can be fixed on staging without customer impact. Agreed and executed.
+
+**Bug found via Max's own staging testing, fixed same session:** `WineOrdersClient.tsx` never learned about `pending_payment` — his real abandoned order fell back to `pending`'s colours, matched no stepper stage (a card with no visible status), and had no filter tab, so it vanished under any filter. Same class of gap the phase-6 agent had already fixed on the *bookings* side; the wine side was missed. Max proposed a "Failed Orders" tab; built two statuses instead (Awaiting Payment vs Payment Failed) since most abandonments are people closing a tab, not declines, and calling them all failures would invite writing off live business. Added a "Mark as paid" recovery action — without it, a customer who abandons card payment and pays by transfer instead would be stuck in limbo permanently. `settle.ts` now maps Flitt `declined`/`expired` → `payment_failed`. Flow tests 16 → 18. Commit `ed7d52c`.
+
+**Production migration + RLS, verified before and after (full detail: [[Plan-OnlinePayment]] §1a):** confirmed via a read-only check that prod genuinely needed it (Nikalas Marani, 61 real orders, migration pending) before running anything. Order mattered — `proxy.ts` selects all `Tenant` columns on every request, so deploying the code before the migration would have failed every request on the live site, not degraded it. Migration applied, then `setup-rls.ts` (a new table starts with zero grants — `app_user` could not have touched `Payment` until this ran), then `check-rls.ts` confirmed all 17 tables green. Post-state: 61 orders untouched, `Payment` isolated, `modulesOnlinePayment = false` for the live tenant.
+
+**Merged `staging` → `master`, pushed (`429a16e`).** Fast-forward, no conflicts — production is now running this code. Switched back to `staging` immediately after, per [[ClaudeInstructions]] Rule 0.
+
+**Nothing customer-visible has changed.** The module is off for every tenant. [[Plan-OnlinePayment]] §9a is now the single current list of what's left: (1) verify the Resend sending domain — hard blocker, a paying customer gets no receipt until this is done; (2) one real payment completed and refunded on staging, since no genuine inbound Flitt callback has ever round-tripped; (3) only then, switch the module on for Nikalas Marani for real.
+
+---
+
+## 2026-07-29 (earlier) — Flitt payment integration BUILT, phases 1–7 on `staging`
 
 Max approved the four behaviour defaults and said to build, using subagents to preserve context. Seven commits `4b07b28`…`a24e070`, pushed to `staging`. Phase tracker, decisions and remaining steps live in [[Plan-OnlinePayment]] §7a — **that file is the resume point**, not this entry.
 

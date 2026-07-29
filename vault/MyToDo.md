@@ -343,13 +343,10 @@ Staging: `georgian-saas-git-staging-mg-productions-projects.vercel.app` (Staging
 
 ---
 
-- [ ] **Nikalas Marani payment system (Flitt) — BUILT 2026-07-29, phases 1–7 on `staging`, nothing live yet.** Full detail and the resume point: [[Plan-OnlinePayment.md]] §7a. Module is off by default, so no existing tenant is affected. **Your turn — 5 things, in this order:**
-  1. **Verify Resend domain** — hard go-live blocker. Email is still in sandbox mode, so every customer email goes to your own inbox, not the customer. Fine for booking requests; not fine once a card is charged and the buyer gets no receipt. Plan §8a. Needs a domain verified in the Resend dashboard, then flip `isDomainVerified` in both `bookingConfirmation.ts` and `wineOrderReceipt.ts`.
-  2. **Eyeball the admin UI on staging** — Claude can't log in (it doesn't type passwords into forms), so the new Settings "Card Payments" section, the "Awaiting Payment" badges and the setup banner are code-verified but not visually checked.
-  3. **Run `prisma migrate deploy` against production** — the phase 1 migration has only been applied to **dev**. Its own deliberate step, per Rule 0.
-  4. **Merge `staging` → `master`** once 1–3 look right.
-  5. **One real low-value payment, then refund it** via the Flitt merchant portal.
-  - Still outstanding from before: rotate the merchant password (plaintext in the old PHP, and in your Downloads folder), and get Flitt merchant-portal access from the client — needed for that refund in step 5 anyway, so it's one ask.
+- [ ] **Nikalas Marani payment system (Flitt) — SHIPPED to production 2026-07-29 (`master` @ `429a16e`), module still OFF for every tenant.** Full detail and the resume point: [[Plan-OnlinePayment.md]] §9a — that section is the current source of truth, not this line. Migration + RLS applied to prod, staging→master merged, staging manually walked through both checkout flows (confirmed the secret is never shown once saved, confirmed "Awaiting Payment" + "Mark as paid" recovery works). **3 things left, in this order:**
+  1. **Verify Resend domain, then flip `isDomainVerified`** in `bookingConfirmation.ts` and `wineOrderReceipt.ts` — hard blocker, a paying customer currently gets no receipt (their email goes to you instead). Plan §8a.
+  2. **One real payment completed on staging, then refunded via the Flitt portal** — no genuine inbound Flitt callback has ever round-tripped; every test so far used a forged/self-generated one. Needs Flitt portal access (also needed to rotate the merchant password, still outstanding from before — one ask covers both).
+  3. **Only once 1 and 2 are clear: switch the module on for Nikalas Marani for real.**
 
 - [ ] **NM historical order data (52 real bookings, 2022-2026) — researched, parked 2026-07-28** — real customer data found in the old site's live DB (`nalige_db`), confirmed worth migrating and confirmed the admin UI already tolerates legacy-shaped rows. Still needs from Max: a policy for mapping old `pay_status`/`status` onto the new `OrderStatus` enum (no clean automatic mapping exists), and a decision on whether to also preserve the 231 raw Flitt/TBC payment-transaction records (no table for those exists yet — would piggyback on whatever the Flitt integration above ends up building). Full detail: [[MigrationNotes.md]] → "real production data found via phpMyAdmin" section. Don't re-derive the `nalige_booking` DB (4 test rows, not real data) as a data source — already ruled out.
 
