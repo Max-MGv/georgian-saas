@@ -296,6 +296,10 @@ Same inline edit UX applied to Payment Details, Alt text, and Booking Rules — 
 
 - [ ] **Data migration tool / service** — clients will have existing data in Excel/CSV/other formats (bookings history, company lists, price tiers, wine catalogue). Need to decide: use an existing ETL framework (e.g. Airbyte, Papa Parse + custom scripts, Google Sheets API) vs. build a lightweight in-app import UI. Scope to explore: one-time admin import (CSV upload → map columns → preview → confirm), handling duplicates, what tables are in scope (companies, wines, historical orders), and whether this is a paid onboarding service or self-serve.
 
+- [ ] **Nikalas Marani payment system (Flitt) — researched, parked 2026-07-28** — full assessment done (per-tenant vs. shared merchant accounts, exact API dependencies, what a callback route needs, client onboarding requirements with Flitt) but nothing built and no decision made yet on where the "pay now" trigger lives. Max said he'll come back to this. Full detail: [[MigrationNotes.md]] → "Old site source (pre-migration)" section.
+
+- [ ] **NM historical order data (52 real bookings, 2022-2026) — researched, parked 2026-07-28** — real customer data found in the old site's live DB (`nalige_db`), confirmed worth migrating and confirmed the admin UI already tolerates legacy-shaped rows. Still needs from Max: a policy for mapping old `pay_status`/`status` onto the new `OrderStatus` enum (no clean automatic mapping exists), and a decision on whether to also preserve the 231 raw Flitt/TBC payment-transaction records (no table for those exists yet — would piggyback on whatever the Flitt integration above ends up building). Full detail: [[MigrationNotes.md]] → "real production data found via phpMyAdmin" section. Don't re-derive the `nalige_booking` DB (4 test rows, not real data) as a data source — already ruled out.
+
 ---
 
 ## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
