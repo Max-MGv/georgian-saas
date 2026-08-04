@@ -30,6 +30,8 @@ type WineQty = Record<string, number>
 type ViewMode = 'grid' | 'list'
 type TypeFilter = WineTypeValue | null
 type StyleFilter = SweetnessValue | 'SPARKLING' | null
+type YearFilter = number | null
+type FilterValue = TypeFilter | StyleFilter | YearFilter
 
 // Each piece is shown only if set — an unset vintage field (VINTAGE mode)
 // simply drops out of the line rather than falling back to the wine's value
@@ -111,6 +113,7 @@ export default function WineCatalogueClient({
   const [view, setView] = useState<ViewMode>('grid')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null)
   const [styleFilter, setStyleFilter] = useState<StyleFilter>(null)
+  const [yearFilter, setYearFilter] = useState<YearFilter>(null)
   const [showDrawer, setShowDrawer] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -170,9 +173,13 @@ export default function WineCatalogueClient({
   const availableTypes = new Set(WINES.map(w => w.wineType).filter((t): t is WineTypeValue => t !== null))
   const availableSweetness = new Set(WINES.map(w => w.sweetness).filter((s): s is SweetnessValue => s !== null))
   const hasSparkling = WINES.some(w => w.sparkling === true)
+  // year is never nullable (unlike the VINTAGE-mode characteristic fields),
+  // so every wine always offers one — most recent first.
+  const availableYears = Array.from(new Set(WINES.map(w => w.year))).sort((a, b) => b - a)
 
   const visibleWines = WINES.filter(w => {
     if (typeFilter && w.wineType !== typeFilter) return false
+    if (yearFilter && w.year !== yearFilter) return false
     if (styleFilter === 'SPARKLING') return w.sparkling
     if (styleFilter) return w.sweetness === styleFilter
     return true
@@ -711,20 +718,29 @@ export default function WineCatalogueClient({
               label: t(locale, 'wine.filter.type'),
               options: [
                 { value: null, label: t(locale, 'wine.filter.all') },
-                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(tp => availableTypes.has(tp)).map(tp => ({ value: tp as TypeFilter | StyleFilter, label: TYPE_LABEL[tp] })),
+                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(tp => availableTypes.has(tp)).map(tp => ({ value: tp as FilterValue, label: TYPE_LABEL[tp] })),
               ],
-              active: typeFilter as TypeFilter | StyleFilter,
-              set: (v: TypeFilter | StyleFilter) => setTypeFilter(v as TypeFilter),
+              active: typeFilter as FilterValue,
+              set: (v: FilterValue) => setTypeFilter(v as TypeFilter),
             },
             {
               label: t(locale, 'wine.filter.style'),
               options: [
                 { value: null, label: t(locale, 'wine.filter.all') },
-                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as TypeFilter | StyleFilter, label: SWEETNESS_LABEL[s] })),
-                ...(hasSparkling ? [{ value: 'SPARKLING' as TypeFilter | StyleFilter, label: SPARKLING_LABEL }] : []),
+                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as FilterValue, label: SWEETNESS_LABEL[s] })),
+                ...(hasSparkling ? [{ value: 'SPARKLING' as FilterValue, label: SPARKLING_LABEL }] : []),
               ],
-              active: styleFilter as TypeFilter | StyleFilter,
-              set: (v: TypeFilter | StyleFilter) => setStyleFilter(v as StyleFilter),
+              active: styleFilter as FilterValue,
+              set: (v: FilterValue) => setStyleFilter(v as StyleFilter),
+            },
+            {
+              label: t(locale, 'wine.filter.year'),
+              options: [
+                { value: null, label: t(locale, 'wine.filter.all') },
+                ...availableYears.map(y => ({ value: y as FilterValue, label: String(y) })),
+              ],
+              active: yearFilter as FilterValue,
+              set: (v: FilterValue) => setYearFilter(v as YearFilter),
             },
           ]).map(row => (
             <div key={row.label} className="flex flex-wrap items-center gap-1.5">
