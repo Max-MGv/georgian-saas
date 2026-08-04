@@ -604,6 +604,10 @@ const en: Translations = {
   'wines.sweetness.SEMI_DRY': 'Semi-dry',
   'wines.sweetness.SEMI_SWEET': 'Semi-sweet',
   'wines.sweetness.SWEET': 'Sweet',
+  'wines.notSpecified': 'Not specified',
+  'wines.sparklingYes': 'Sparkling',
+  'wines.sparklingNo': 'Still',
+  'wines.characteristicsPerVintageHint': 'Type, sweetness, sparkling, and alcohol level are set per vintage below — this winery tracks them individually per year rather than once for the whole wine.',
 
   // Statistics page
   'statistics.noModulesEnabled': 'No modules enabled for this tenant — nothing to show statistics for.',
@@ -1442,6 +1446,10 @@ const ka: Translations = {
   'wines.sweetness.SEMI_DRY': 'ნახევრად მშრალი',
   'wines.sweetness.SEMI_SWEET': 'ნახევრად ტკბილი',
   'wines.sweetness.SWEET': 'ტკბილი',
+  'wines.notSpecified': 'არ არის მითითებული',
+  'wines.sparklingYes': 'ცქრიალა',
+  'wines.sparklingNo': 'უბრალო',
+  'wines.characteristicsPerVintageHint': 'ტიპი, სიტკბო, ცქრიალა და ალკოჰოლის დონე დგინდება თითოეული რთველისთვის ცალ-ცალკე, ქვემოთ — ეს ღვინის სახლი ამ მონაცემებს ინახავს წლების მიხედვით, ერთიანად ღვინოზე კი არა.',
 
   // Statistics page
   'statistics.noModulesEnabled': 'ამ ტენანტისთვის მოდულები ჩართული არ არის — სტატისტიკის საჩვენებელი არაფერია.',

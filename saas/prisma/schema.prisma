@@ -33,6 +33,10 @@ model Tenant {
   // unaffected — the whole payment path is a no-op unless this is on AND
   // both credentials below are filled in.
   modulesOnlinePayment Boolean  @default(false)
+  // PRODUCT: wine-level type/sweetness/sparkling/alcohol shared across all vintages (today's behavior).
+  // VINTAGE: those four live per-vintage instead, no fallback to the wine's value when unset.
+  // Tenant-wide, super-admin only — see vault/Plan-WineVintageDetails.md.
+  wineDetailLevel      WineDetailLevel @default(PRODUCT)
   // Per-tenant Flitt merchant credentials. Deliberately NOT in `Setting`:
   // `getAllSettings()` returns that whole map and MaintenanceNotes §9 documents
   // the hazard of it reaching a client component. Keeping the secret here makes
@@ -268,6 +272,14 @@ model WineVintage {
   sortOrder  Int             @default(0)
   tenantId   String?
   createdAt  DateTime        @default(now())
+  // Only meaningful when the tenant's wineDetailLevel is VINTAGE. No fallback
+  // to the parent Wine's value when unset — an unset field means "not
+  // specified", never a guess. sparkling is nullable (not default false) so
+  // "unset" and "explicitly not sparkling" stay distinguishable.
+  wineType     WineType?
+  sweetness    Sweetness?
+  sparkling    Boolean?
+  alcoholLevel Float?
   wine       Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
   orderItems WineOrderItem[]
 }
@@ -320,6 +332,11 @@ enum Sweetness {
   SEMI_DRY
   SEMI_SWEET
   SWEET
+}
+
+enum WineDetailLevel {
+  PRODUCT
+  VINTAGE
 }
 
 enum MasterclassUnit {

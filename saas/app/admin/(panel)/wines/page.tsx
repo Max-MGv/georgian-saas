@@ -4,6 +4,7 @@ import { getTenantId } from '@/lib/tenant'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
+import { db } from '@/lib/db'
 import WinesClient from './WinesClient'
 
 async function listUploadedWineImages(tenantId: string): Promise<string[]> {
@@ -24,10 +25,12 @@ export default async function AdminWinesPage() {
   await requireWineOrdersModule()
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
-  const [wines, uploadedImages] = await Promise.all([
+  const [wines, uploadedImages, tenant] = await Promise.all([
     getWinesWithVintages(),
     listUploadedWineImages(tenantId),
+    db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
   ])
+  const wineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -38,7 +41,7 @@ export default async function AdminWinesPage() {
           </p>
         </div>
       </div>
-      <WinesClient wines={wines} uploadedImages={uploadedImages} locale={locale} />
+      <WinesClient wines={wines} uploadedImages={uploadedImages} locale={locale} wineDetailLevel={wineDetailLevel} />
     </div>
   )
 }

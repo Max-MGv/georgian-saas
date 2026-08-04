@@ -6,13 +6,18 @@ import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
 
+type WineTypeValue = 'RED' | 'WHITE' | 'AMBER' | 'ROSE'
+type SweetnessValue = 'DRY' | 'SEMI_DRY' | 'SEMI_SWEET' | 'SWEET'
+
 type DbWine = {
   vintageId: string
   wineId: string
   name: string
-  wineType: 'RED' | 'WHITE' | 'AMBER' | 'ROSE'
-  sweetness: 'DRY' | 'SEMI_DRY' | 'SEMI_SWEET' | 'SWEET'
-  sparkling: boolean
+  // Nullable in VINTAGE mode: an unset vintage field arrives here as null and
+  // must render as "not specified" / be omitted — never guessed from the wine.
+  wineType: WineTypeValue | null
+  sweetness: SweetnessValue | null
+  sparkling: boolean | null
   alcoholLevel: number | null
   description: string | null
   year: number
@@ -23,11 +28,19 @@ type DbWine = {
 // Quantities are keyed by vintageId
 type WineQty = Record<string, number>
 type ViewMode = 'grid' | 'list'
-type TypeFilter = DbWine['wineType'] | null
-type StyleFilter = DbWine['sweetness'] | 'SPARKLING' | null
+type TypeFilter = WineTypeValue | null
+type StyleFilter = SweetnessValue | 'SPARKLING' | null
 
-function wineMeta(wine: DbWine, typeLabel: Record<DbWine['wineType'], string>, sweetnessLabel: Record<DbWine['sweetness'], string>, sparklingLabel: string) {
-  const parts = [`${typeLabel[wine.wineType]} ${sweetnessLabel[wine.sweetness]}`]
+// Each piece is shown only if set — an unset vintage field (VINTAGE mode)
+// simply drops out of the line rather than falling back to the wine's value
+// or announcing "not specified" to the customer. Can return '' if nothing on
+// this vintage has been filled in yet; that's the intended, honest result.
+function wineMeta(wine: DbWine, typeLabel: Record<WineTypeValue, string>, sweetnessLabel: Record<SweetnessValue, string>, sparklingLabel: string) {
+  const typeSweetness = [
+    wine.wineType ? typeLabel[wine.wineType] : null,
+    wine.sweetness ? sweetnessLabel[wine.sweetness] : null,
+  ].filter(Boolean).join(' ')
+  const parts = typeSweetness ? [typeSweetness] : []
   if (wine.sparkling) parts.push(sparklingLabel)
   if (wine.alcoholLevel != null) parts.push(`${wine.alcoholLevel}%`)
   return parts.join(' · ')
@@ -85,11 +98,11 @@ export default function WineCatalogueClient({
    */
   onlinePaymentEnabled?: boolean
 }) {
-  const TYPE_LABEL: Record<DbWine['wineType'], string> = {
+  const TYPE_LABEL: Record<WineTypeValue, string> = {
     RED: t(locale, 'wine.type.RED'), WHITE: t(locale, 'wine.type.WHITE'),
     AMBER: t(locale, 'wine.type.AMBER'), ROSE: t(locale, 'wine.type.ROSE'),
   }
-  const SWEETNESS_LABEL: Record<DbWine['sweetness'], string> = {
+  const SWEETNESS_LABEL: Record<SweetnessValue, string> = {
     DRY: t(locale, 'wine.sweetness.DRY'), SEMI_DRY: t(locale, 'wine.sweetness.SEMI_DRY'),
     SEMI_SWEET: t(locale, 'wine.sweetness.SEMI_SWEET'), SWEET: t(locale, 'wine.sweetness.SWEET'),
   }
@@ -152,9 +165,11 @@ export default function WineCatalogueClient({
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * w.price, 0)
 
-  const availableTypes = new Set(WINES.map(w => w.wineType))
-  const availableSweetness = new Set(WINES.map(w => w.sweetness))
-  const hasSparkling = WINES.some(w => w.sparkling)
+  // Filter over whatever's actually set — a null wineType/sweetness (unset
+  // vintage field in VINTAGE mode) simply isn't offered as a filter option.
+  const availableTypes = new Set(WINES.map(w => w.wineType).filter((t): t is WineTypeValue => t !== null))
+  const availableSweetness = new Set(WINES.map(w => w.sweetness).filter((s): s is SweetnessValue => s !== null))
+  const hasSparkling = WINES.some(w => w.sparkling === true)
 
   const visibleWines = WINES.filter(w => {
     if (typeFilter && w.wineType !== typeFilter) return false

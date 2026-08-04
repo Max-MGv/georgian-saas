@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import type { WineDetailLevel } from '@prisma/client'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
 import { wineDisplayName } from '@/lib/wineName'
@@ -28,7 +29,7 @@ export default async function WinesPage() {
   const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
-  const [wineProducts, companies, hideCompanyDropdownStr, onlinePaymentEnabled] = await Promise.all([
+  const [wineProducts, companies, hideCompanyDropdownStr, onlinePaymentEnabled, tenant] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
@@ -41,15 +42,20 @@ export default async function WinesPage() {
     })),
     getSetting('hide_company_dropdown'),
     isPaymentConfigured(tenantId),
+    db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
   ])
+  const wineDetailLevel: WineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
+  // PRODUCT: always read the wine's values. VINTAGE: always read the vintage's
+  // values, with no fallback to the wine's — an unset vintage field must reach
+  // the client as null ("not specified"), never as a guessed wine-level value.
   const wines = wineProducts.flatMap(wine => wine.vintages.map(v => ({
     vintageId: v.id,
     wineId: wine.id,
     name: wineDisplayName(wine, locale),
-    wineType: wine.wineType,
-    sweetness: wine.sweetness,
-    sparkling: wine.sparkling,
-    alcoholLevel: wine.alcoholLevel,
+    wineType: wineDetailLevel === 'PRODUCT' ? wine.wineType : v.wineType,
+    sweetness: wineDetailLevel === 'PRODUCT' ? wine.sweetness : v.sweetness,
+    sparkling: wineDetailLevel === 'PRODUCT' ? wine.sparkling : v.sparkling,
+    alcoholLevel: wineDetailLevel === 'PRODUCT' ? wine.alcoholLevel : v.alcoholLevel,
     description: wine.description,
     year: v.year,
     price: v.price,

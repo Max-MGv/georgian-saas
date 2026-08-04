@@ -31,6 +31,8 @@ const SWEETNESS_LEVELS: SweetnessValue[] = ['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SW
 type Vintage = {
   id: string; year: number; price: number; imagePath: string | null
   active: boolean; sortOrder: number
+  wineType: WineTypeValue | null; sweetness: SweetnessValue | null
+  sparkling: boolean | null; alcoholLevel: number | null
 }
 
 type Wine = {
@@ -45,14 +47,24 @@ type ProductDraft = {
   sparkling: boolean; alcoholLevel: string; description: string; color: string
 }
 
-type VintageDraft = { year: string; price: string; active: boolean }
+// wineType/sweetness: '' means "not specified". sparkling: '' = not specified,
+// 'true'/'false' = specified either way — kept distinct from an empty string
+// so "unset" and "explicitly not sparkling" never collapse into each other.
+type VintageDraft = {
+  year: string; price: string; active: boolean
+  wineType: WineTypeValue | ''; sweetness: SweetnessValue | ''
+  sparkling: '' | 'true' | 'false'; alcoholLevel: string
+}
 
 const BLANK_PRODUCT: ProductDraft = {
   name: '', nameKa: '', wineType: 'RED', sweetness: 'DRY', sparkling: false,
   alcoholLevel: '', description: '', color: '#7c1d23',
 }
 
-const BLANK_VINTAGE: VintageDraft = { year: String(new Date().getFullYear()), price: '', active: true }
+const BLANK_VINTAGE: VintageDraft = {
+  year: String(new Date().getFullYear()), price: '', active: true,
+  wineType: '', sweetness: '', sparkling: '', alcoholLevel: '',
+}
 
 const inputCls = 'w-full rounded-lg border px-3 py-2 text-sm outline-none'
 const inputStyle = { backgroundColor: '#fffdf9', borderColor: C.border, color: C.text }
@@ -262,7 +274,8 @@ function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUp
   )
 }
 
-export default function WinesClient({ wines: initial, uploadedImages: initialUploaded, locale = 'en' }: { wines: Wine[]; uploadedImages: string[]; locale?: string }) {
+export default function WinesClient({ wines: initial, uploadedImages: initialUploaded, locale = 'en', wineDetailLevel }: { wines: Wine[]; uploadedImages: string[]; locale?: string; wineDetailLevel: 'PRODUCT' | 'VINTAGE' }) {
+  const isVintageMode = wineDetailLevel === 'VINTAGE'
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const TYPE_LABEL: Record<WineTypeValue, string> = {
     RED: at('wines.type.RED'), WHITE: at('wines.type.WHITE'), AMBER: at('wines.type.AMBER'), ROSE: at('wines.type.ROSE'),
@@ -398,20 +411,37 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   function startEditVintage(v: Vintage) {
     setEditingVintageId(v.id)
-    setVintageDraft({ year: String(v.year), price: String(v.price), active: v.active })
+    setVintageDraft({
+      year: String(v.year), price: String(v.price), active: v.active,
+      wineType: v.wineType ?? '', sweetness: v.sweetness ?? '',
+      sparkling: v.sparkling === null ? '' : v.sparkling ? 'true' : 'false',
+      alcoholLevel: v.alcoholLevel != null ? String(v.alcoholLevel) : '',
+    })
     setDeleteVintageConfirm(null)
+  }
+
+  // Only meaningful in VINTAGE mode — PRODUCT-mode tenants never write these
+  // columns, so the fields stay null forever and are never read back.
+  function vintageCharacteristics(draft: VintageDraft) {
+    return {
+      wineType: draft.wineType || null,
+      sweetness: draft.sweetness || null,
+      sparkling: draft.sparkling === '' ? null : draft.sparkling === 'true',
+      alcoholLevel: parseAlcohol(draft.alcoholLevel),
+    }
   }
 
   function handleSaveVintage(wineId: string, vintageId: string) {
     const year = parseInt(vintageDraft.year)
     const price = parseFloat(vintageDraft.price)
     if (!Number.isFinite(year) || !Number.isFinite(price)) return
+    const extra = isVintageMode ? vintageCharacteristics(vintageDraft) : {}
     setSaving(vintageId)
     startTransition(async () => {
-      await updateVintage(vintageId, { year, price, active: vintageDraft.active })
+      await updateVintage(vintageId, { year, price, active: vintageDraft.active, ...extra })
       setWines(prev => prev.map(w => w.id === wineId ? {
         ...w,
-        vintages: w.vintages.map(v => v.id === vintageId ? { ...v, year, price, active: vintageDraft.active } : v),
+        vintages: w.vintages.map(v => v.id === vintageId ? { ...v, year, price, active: vintageDraft.active, ...extra } : v),
       } : w))
       setEditingVintageId(null)
       setSaving(null)
@@ -422,9 +452,19 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     const year = parseInt(newVintageDraft.year)
     const price = parseFloat(newVintageDraft.price)
     if (!Number.isFinite(year) || !Number.isFinite(price)) return
+    // createVintage's fields are optional-undefined (no explicit-null clearing
+    // needed on a brand-new row), unlike updateVintage's nullable fields — so
+    // "not specified" here means omitted, not null.
+    const c = isVintageMode ? vintageCharacteristics(newVintageDraft) : null
     setSaving(`new-vintage-${wineId}`)
     startTransition(async () => {
-      await createVintage(wineId, { year, price })
+      await createVintage(wineId, {
+        year, price,
+        wineType: c?.wineType ?? undefined,
+        sweetness: c?.sweetness ?? undefined,
+        sparkling: c?.sparkling ?? undefined,
+        alcoholLevel: c?.alcoholLevel ?? undefined,
+      })
       window.location.reload()
     })
   }
@@ -519,36 +559,43 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
               </>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.type')}</label>
-              <select className={inputCls} style={inputStyle} value={draft.wineType}
-                onChange={e => setDraft(d => ({ ...d, wineType: e.target.value as WineTypeValue }))}>
-                {WINE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-              </select>
+          {!isVintageMode && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.type')}</label>
+                <select className={inputCls} style={inputStyle} value={draft.wineType}
+                  onChange={e => setDraft(d => ({ ...d, wineType: e.target.value as WineTypeValue }))}>
+                  {WINE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.sweetness')}</label>
+                <select className={inputCls} style={inputStyle} value={draft.sweetness}
+                  onChange={e => setDraft(d => ({ ...d, sweetness: e.target.value as SweetnessValue }))}>
+                  {SWEETNESS_LEVELS.map(s => <option key={s} value={s}>{SWEETNESS_LABEL[s]}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+        {!isVintageMode && (
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="flex items-center gap-2 pt-5">
+              <input type="checkbox" id={`sparkling-${draft.name}`} checked={draft.sparkling}
+                onChange={e => setDraft(d => ({ ...d, sparkling: e.target.checked }))} />
+              <label htmlFor={`sparkling-${draft.name}`} className="text-sm" style={{ color: C.muted }}>{at('wines.sparkling')}</label>
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.sweetness')}</label>
-              <select className={inputCls} style={inputStyle} value={draft.sweetness}
-                onChange={e => setDraft(d => ({ ...d, sweetness: e.target.value as SweetnessValue }))}>
-                {SWEETNESS_LEVELS.map(s => <option key={s} value={s}>{SWEETNESS_LABEL[s]}</option>)}
-              </select>
+              <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.alcoholLevel')}</label>
+              <input className={inputCls} style={inputStyle} type="number" min={0} step={0.1} placeholder={at('wines.alcoholLevelPh')}
+                value={draft.alcoholLevel}
+                onChange={e => setDraft(d => ({ ...d, alcoholLevel: e.target.value }))} />
             </div>
           </div>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2 pt-5">
-            <input type="checkbox" id={`sparkling-${draft.name}`} checked={draft.sparkling}
-              onChange={e => setDraft(d => ({ ...d, sparkling: e.target.checked }))} />
-            <label htmlFor={`sparkling-${draft.name}`} className="text-sm" style={{ color: C.muted }}>{at('wines.sparkling')}</label>
-          </div>
-          <div>
-            <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.alcoholLevel')}</label>
-            <input className={inputCls} style={inputStyle} type="number" min={0} step={0.1} placeholder={at('wines.alcoholLevelPh')}
-              value={draft.alcoholLevel}
-              onChange={e => setDraft(d => ({ ...d, alcoholLevel: e.target.value }))} />
-          </div>
-        </div>
+        )}
+        {isVintageMode && (
+          <p className="text-xs italic" style={{ color: C.faint }}>{at('wines.characteristicsPerVintageHint')}</p>
+        )}
         <div>
           <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.description')}</label>
           <textarea
@@ -570,6 +617,63 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
           </div>
         </div>
       </>
+    )
+  }
+
+  // ── Per-vintage characteristics fields (VINTAGE mode only) ─────────────
+  // Each field defaults to "not specified" and stays that way until someone
+  // deliberately picks a value — no pre-fill from the wine, ever.
+  function vintageFields(draft: VintageDraft, setDraft: (fn: (d: VintageDraft) => VintageDraft) => void) {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.type')}</label>
+          <select className={inputCls} style={inputStyle} value={draft.wineType}
+            onChange={e => setDraft(d => ({ ...d, wineType: e.target.value as WineTypeValue | '' }))}>
+            <option value="">{at('wines.notSpecified')}</option>
+            {WINE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.sweetness')}</label>
+          <select className={inputCls} style={inputStyle} value={draft.sweetness}
+            onChange={e => setDraft(d => ({ ...d, sweetness: e.target.value as SweetnessValue | '' }))}>
+            <option value="">{at('wines.notSpecified')}</option>
+            {SWEETNESS_LEVELS.map(s => <option key={s} value={s}>{SWEETNESS_LABEL[s]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.sparkling')}</label>
+          <select className={inputCls} style={inputStyle} value={draft.sparkling}
+            onChange={e => setDraft(d => ({ ...d, sparkling: e.target.value as '' | 'true' | 'false' }))}>
+            <option value="">{at('wines.notSpecified')}</option>
+            <option value="true">{at('wines.sparklingYes')}</option>
+            <option value="false">{at('wines.sparklingNo')}</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.alcoholLevel')}</label>
+          <input className={inputCls} style={inputStyle} type="number" min={0} step={0.1} placeholder={at('wines.notSpecified')}
+            value={draft.alcoholLevel}
+            onChange={e => setDraft(d => ({ ...d, alcoholLevel: e.target.value }))} />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Read-only per-vintage characteristics summary (VINTAGE mode only) ──
+  // If nothing has been entered for this vintage, say so plainly rather than
+  // rendering an empty row that looks the same as "deliberately left blank".
+  function vintageMetaBadges(v: Vintage) {
+    const hasAny = v.wineType != null || v.sweetness != null || v.sparkling != null || v.alcoholLevel != null
+    if (!hasAny) return <span className="text-xs italic" style={{ color: C.faint }}>{at('wines.notSpecified')}</span>
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {v.wineType && <Badge>{TYPE_LABEL[v.wineType]}</Badge>}
+        {v.sweetness && <Badge>{SWEETNESS_LABEL[v.sweetness]}</Badge>}
+        {v.sparkling === true && <Badge>{at('wines.sparkling')}</Badge>}
+        {v.alcoholLevel != null && <Badge>{v.alcoholLevel}%</Badge>}
+      </div>
     )
   }
 
@@ -605,12 +709,14 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                   <p className="text-sm font-semibold truncate" style={{ color: C.text }}>{wine.name}</p>
                   {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>{at('wines.hidden')}</span>}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                  <Badge>{TYPE_LABEL[wine.wineType]}</Badge>
-                  <Badge>{SWEETNESS_LABEL[wine.sweetness]}</Badge>
-                  {wine.sparkling && <Badge>{at('wines.sparkling')}</Badge>}
-                  {wine.alcoholLevel != null && <Badge>{wine.alcoholLevel}%</Badge>}
-                </div>
+                {!isVintageMode && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <Badge>{TYPE_LABEL[wine.wineType]}</Badge>
+                    <Badge>{SWEETNESS_LABEL[wine.sweetness]}</Badge>
+                    {wine.sparkling && <Badge>{at('wines.sparkling')}</Badge>}
+                    {wine.alcoholLevel != null && <Badge>{wine.alcoholLevel}%</Badge>}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
@@ -728,6 +834,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                                     onChange={e => setVintageDraft(d => ({ ...d, price: e.target.value }))} />
                                 </div>
                               </div>
+                              {isVintageMode && vintageFields(vintageDraft, setVintageDraft)}
                               <div>
                                 <label className="text-xs mb-2 block" style={{ color: C.faint }}>
                                   {at('wines.vintagePhotoOverride')} {isVImgSaving ? <span>— {at('wines.savingSuffix')}</span> : v.imagePath ? <span style={{ color: '#5a7c14' }}>— {at('wines.overrideSetSuffix')}</span> : <span>— {at('wines.usingProductPhotoSuffix')}</span>}
@@ -762,9 +869,10 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-3 px-3 py-2">
+                            <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
                               <p className="text-sm font-bold" style={{ color: C.text }}>{v.year}</p>
                               <p className="text-sm" style={{ color: C.muted }}>{v.price}₾ / {at('wines.bottle')}</p>
+                              {isVintageMode && vintageMetaBadges(v)}
                               {v.imagePath && (
                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.overrideImageBadge')}</span>
                               )}
@@ -825,6 +933,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                               onChange={e => setNewVintageDraft(d => ({ ...d, price: e.target.value }))} />
                           </div>
                         </div>
+                        {isVintageMode && vintageFields(newVintageDraft, setNewVintageDraft)}
                         <div className="flex gap-2">
                           <button onClick={() => handleAddVintage(wine.id)}
                             disabled={isPending || !newVintageDraft.year || !newVintageDraft.price}

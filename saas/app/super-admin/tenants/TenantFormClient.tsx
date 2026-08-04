@@ -4,6 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ColorPicker } from '../ColorPicker'
 import { createTenant, updateTenant, checkTenantDomain, type DomainCheckResult } from '@/app/actions/superAdmin'
+import type { WineDetailLevel } from '@prisma/client'
 import { uploadTenantLogoAdmin, uploadTenantFaviconAdmin } from '@/app/actions/uploadLogo'
 import { THEME_PRESETS, resolveTenantTheme, DEFAULT_PRESET_ID, type PresetId } from '@/lib/themePresets'
 
@@ -25,6 +26,7 @@ type Props = {
     modulesPublicSite?: boolean
     modulesLegalPages?: boolean
     modulesOnlinePayment?: boolean
+    wineDetailLevel?: WineDetailLevel
   }
 }
 
@@ -85,6 +87,12 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   const [modulesPublicSite, setModulesPublicSite] = useState(tenant?.modulesPublicSite ?? true)
   const [modulesLegalPages, setModulesLegalPages] = useState(tenant?.modulesLegalPages ?? true)
   const [modulesOnlinePayment, setModulesOnlinePayment] = useState(tenant?.modulesOnlinePayment ?? false)
+  // New tenants default to VINTAGE (the detailed option going forward); existing
+  // tenants keep whatever wineDetailLevel they were loaded with (PRODUCT after
+  // migration backfill). See vault/Plan-WineVintageDetails.md.
+  const [wineDetailLevel, setWineDetailLevel] = useState<WineDetailLevel>(
+    tenant?.wineDetailLevel ?? (mode === 'new' ? 'VINTAGE' : 'PRODUCT')
+  )
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -185,6 +193,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
           logoUrl, logoAlt, faviconUrl,
           displayName: displayName || undefined,
           modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages, modulesOnlinePayment,
+          wineDetailLevel,
         }
         if (mode === 'new') {
           await createTenant(payload)
@@ -443,6 +452,42 @@ export default function TenantFormClient({ mode, tenant }: Props) {
                   Public domain will show a &quot;coming soon&quot; page. Admin panel stays fully usable.
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* Wine detail level */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
+              Wine detail level
+            </label>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>
+              Whether type/sweetness/sparkling/alcohol are set once per wine or per vintage for this winery&apos;s whole catalogue. Meant as a long-term choice per client, not a per-wine switch — set here, not editable from the tenant&apos;s own admin panel.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['PRODUCT', 'VINTAGE'] as const).map(level => {
+                const selected = wineDetailLevel === level
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setWineDetailLevel(level)}
+                    style={{
+                      flex: 1, textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                      backgroundColor: selected ? '#1e293b' : C.inputBg,
+                      border: `1px solid ${selected ? C.borderFocus : C.border}`,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 500, color: selected ? C.text : C.muted }}>
+                      {level === 'PRODUCT' ? 'Product-level' : 'Vintage-level'}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 2 }}>
+                      {level === 'PRODUCT'
+                        ? 'Shared across every vintage of a wine'
+                        : 'Set independently for each vintage'}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 

@@ -82,6 +82,7 @@ export async function assignWineImage(wineId: string, imagePath: string | null) 
 
 export async function createVintage(wineId: string, data: {
   year: number; price: number; imagePath?: string
+  wineType?: WineType; sweetness?: Sweetness; sparkling?: boolean; alcoholLevel?: number
 }) {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -100,6 +101,7 @@ export async function createVintage(wineId: string, data: {
 
 export async function updateVintage(id: string, data: Partial<{
   year: number; price: number; imagePath: string | null; active: boolean; sortOrder: number
+  wineType: WineType | null; sweetness: Sweetness | null; sparkling: boolean | null; alcoholLevel: number | null
 }>) {
   await requireAdmin()
   const tenantId = await getTenantId()
