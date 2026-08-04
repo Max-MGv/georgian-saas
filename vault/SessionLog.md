@@ -26,7 +26,9 @@ Same-day continuation: Max asked for a review of the plan doc before building. R
 
 Implemented in `WinesClient.tsx`: replaced the old `editingProductId` toggle with an `activeTab: 'details' | 'vintages'` state and a `selectTab(wine, tab)` entry point — two pill tabs ("Wine Details" / "Vintages (N)") inside the expanded panel, mutually exclusive, Vintages as the default landing tab. The row-level pencil icon now jumps straight to the Details tab. The per-vintage inline edit form got the nested treatment from the mockup: `#fbf1ee` tinted background, 3px left accent border in the brand color, and an "Editing vintage · {year}" breadcrumb (new `wines.editingVintage` key, `{year}` interpolation via `adminT`'s existing `vars` support). Buttons renamed via new keys `wines.saveWineDetails`/`wines.saveVintage` (en/ka both added). Verified live end-to-end: tab switching, mutual exclusivity, nested vintage-edit styling, and — since the tab structure is orthogonal to `wineDetailLevel` — spot-checked both `PRODUCT` and `VINTAGE` mode render correctly (temporarily flipped Staging Winery to `PRODUCT` and back, same pattern as the Year-filter check earlier). `tsc --noEmit` clean. Max reviewed live on localhost and approved.
 
-Pushed to `staging` — see commit for hash.
+Pushed to `staging` (`0a726df`).
+
+**Shipped to production, same session.** Max reviewed and approved. Before merging, ran a read-only `prisma migrate status` against prod and confirmed `20260804100252_add_wine_detail_level` was the one pending migration — then ran `prisma migrate deploy` against prod as its own explicit step (flagged to Max first per [[ClaudeInstructions]] Rule 0, since the code on `master` reads `Tenant.wineDetailLevel` and would break every request if deployed before the column existed — same ordering hazard as the #145 payment migration). Verified post-migration: Nikalas Marani backfilled to `PRODUCT` (zero visual change, as designed), wine/vintage row counts unchanged (6 wines, 7 vintages). Merged `staging` → `master` (fast-forward, no conflicts, `429a16e` → `0a726df`), pushed, switched back to `staging` immediately after per Rule 0.
 
 ---
 
