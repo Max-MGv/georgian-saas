@@ -286,7 +286,10 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
   const [wines, setWines] = useState<Wine[]>(initial)
   const [extraImages, setExtraImages] = useState<string[]>(initialUploaded)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [editingProductId, setEditingProductId] = useState<string | null>(null)
+  // Which tab is showing inside the expanded wine — "Vintages" is the default
+  // landing tab since that's what you're browsing most often; "Wine Details"
+  // is a click away, never stacked underneath it.
+  const [activeTab, setActiveTab] = useState<'details' | 'vintages'>('vintages')
   const [editingVintageId, setEditingVintageId] = useState<string | null>(null)
   const [productDraft, setProductDraft] = useState<ProductDraft>(BLANK_PRODUCT)
   const [vintageDraft, setVintageDraft] = useState<VintageDraft>(BLANK_VINTAGE)
@@ -311,16 +314,14 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   function toggleExpand(id: string) {
     setExpandedId(prev => (prev === id ? null : id))
-    setEditingProductId(null)
+    setActiveTab('vintages')
     setEditingVintageId(null)
     setAddingVintageFor(null)
     setDeleteConfirm(null)
     setDeleteVintageConfirm(null)
   }
 
-  function startEditProduct(wine: Wine) {
-    setExpandedId(wine.id)
-    setEditingProductId(wine.id)
+  function resetProductDraft(wine: Wine) {
     setEditNameLocale('en')
     setProductDraft({
       name: wine.name,
@@ -332,7 +333,17 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
       description: wine.description ?? '',
       color: wine.color,
     })
+  }
+
+  // The single entry point for switching tabs inside an expanded wine. Always
+  // re-syncs the Details draft from the wine's current saved values, so
+  // leaving the tab with unsaved edits and coming back starts clean — same
+  // as re-opening any other edit form.
+  function selectTab(wine: Wine, tab: 'details' | 'vintages') {
+    setExpandedId(wine.id)
+    setActiveTab(tab)
     setDeleteConfirm(null)
+    if (tab === 'details') resetProductDraft(wine)
   }
 
   function handleAddProduct() {
@@ -372,7 +383,6 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
         alcoholLevel: data.alcoholLevel,
         description: data.description ?? null,
       } : w))
-      setEditingProductId(null)
       setSaving(null)
     })
   }
@@ -682,7 +692,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
       {wines.map(wine => {
         const isExpanded = expandedId === wine.id
-        const isEditing = editingProductId === wine.id
+        const isDetailsTab = isExpanded && activeTab === 'details'
         const isSaving = saving === wine.id
         const isImgSaving = imgSaving === wine.id
 
@@ -729,7 +739,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                   style={{ borderColor: C.border, color: C.muted }}>
                   {wine.active ? <IconEye /> : <IconEyeOff />}
                 </button>
-                <button onClick={() => startEditProduct(wine)} title={at('wines.editWine')}
+                <button onClick={() => selectTab(wine, 'details')} title={at('wines.editWine')}
                   className="p-1 rounded border"
                   style={{ borderColor: C.border, color: C.muted }}>
                   <IconPencil />
@@ -769,9 +779,34 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
             {/* ── Expanded panel ── */}
             {isExpanded && (
-              <div className="border-t px-4 py-4 space-y-4" style={{ borderColor: C.border, backgroundColor: '#fdfaf5' }}>
+              <div className="border-t px-4 py-4" style={{ borderColor: C.border, backgroundColor: '#fdfaf5' }}>
 
-                {isEditing && (
+                {/* ── Tabs — the only way in or out of either edit surface, so it's
+                    always visible which one you're in and how to switch. ── */}
+                <div className="flex gap-1 p-1 rounded-lg mb-4 w-fit" style={{ backgroundColor: '#ede5d8' }}>
+                  <button
+                    onClick={() => selectTab(wine, 'details')}
+                    className="px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer"
+                    style={{
+                      backgroundColor: activeTab === 'details' ? '#fffdf9' : 'transparent',
+                      color: activeTab === 'details' ? C.wine : C.muted,
+                      boxShadow: activeTab === 'details' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    }}>
+                    {at('wines.tabDetails')}
+                  </button>
+                  <button
+                    onClick={() => selectTab(wine, 'vintages')}
+                    className="px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer"
+                    style={{
+                      backgroundColor: activeTab === 'vintages' ? '#fffdf9' : 'transparent',
+                      color: activeTab === 'vintages' ? C.wine : C.muted,
+                      boxShadow: activeTab === 'vintages' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    }}>
+                    {at('wines.vintagesTitle')} ({wine.vintages.length})
+                  </button>
+                </div>
+
+                {isDetailsTab && (
                   <div className="space-y-4">
                     {productFields(productDraft, setProductDraft, editNameLocale, setEditNameLocale)}
 
@@ -795,9 +830,9 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                       <button onClick={() => handleSaveProduct(wine.id)} disabled={isSaving}
                         className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white"
                         style={{ backgroundColor: C.wine }}>
-                        {isSaving ? at('wines.saving') : at('wines.save')}
+                        {isSaving ? at('wines.saving') : at('wines.saveWineDetails')}
                       </button>
-                      <button onClick={() => setEditingProductId(null)} disabled={isSaving}
+                      <button onClick={() => selectTab(wine, 'vintages')} disabled={isSaving}
                         className="px-4 py-1.5 rounded-lg text-sm border"
                         style={{ borderColor: C.border, color: C.muted }}>
                         {at('wines.cancel')}
@@ -806,9 +841,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                   </div>
                 )}
 
-                {/* ── Vintage sub-list ── */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint }}>{at('wines.vintagesTitle')}</p>
+                {activeTab === 'vintages' && (
                   <div className="space-y-2">
                     {wine.vintages.length === 0 && (
                       <p className="text-xs italic" style={{ color: C.faint }}>{at('wines.noVintagesYet')}</p>
@@ -819,9 +852,16 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                       const isVImgSaving = imgSaving === v.id
 
                       return (
-                        <div key={v.id} className="rounded-lg border" style={{ borderColor: C.border, backgroundColor: '#ffffff', opacity: v.active ? 1 : 0.6 }}>
+                        <div key={v.id} className="rounded-lg border overflow-hidden" style={{ borderColor: C.border, backgroundColor: '#ffffff', opacity: v.active ? 1 : 0.6 }}>
                           {isVEditing ? (
-                            <div className="p-3 space-y-3">
+                            // Tinted background + left accent border marks this as
+                            // nested under the 2023 row above, not a floating peer
+                            // section — same idea as the wine/vintage tabs above.
+                            <div className="p-3 pl-4 space-y-3" style={{ backgroundColor: '#fbf1ee', borderLeft: `3px solid ${C.wine}` }}>
+                              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide" style={{ color: C.wine }}>
+                                <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: C.wine }} />
+                                {at('wines.editingVintage', { year: v.year })}
+                              </div>
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <label className="text-xs mb-1 block" style={{ color: C.faint }}>{at('wines.year')}</label>
@@ -859,7 +899,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                                 <button onClick={() => handleSaveVintage(wine.id, v.id)} disabled={isVSaving}
                                   className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
                                   style={{ backgroundColor: C.wine }}>
-                                  {isVSaving ? at('wines.saving') : at('wines.save')}
+                                  {isVSaving ? at('wines.saving') : at('wines.saveVintage')}
                                 </button>
                                 <button onClick={() => setEditingVintageId(null)} disabled={isVSaving}
                                   className="px-3 py-1.5 rounded-lg text-xs border"
@@ -957,7 +997,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                       </button>
                     )}
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
