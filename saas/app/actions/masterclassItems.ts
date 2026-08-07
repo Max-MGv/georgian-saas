@@ -6,6 +6,9 @@ import type { MasterclassUnit } from '@/lib/masterclass'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 
+// Returns the created row — additive, mirrors createWine()'s precedent. Existing
+// callers ignore the return value already, so this changes nothing for them; the
+// onboarding wizard's BookingDetailsStep needs the id to build its added-list.
 export async function createMasterclassItem(data: {
   name: string
   unitType: MasterclassUnit
@@ -14,7 +17,7 @@ export async function createMasterclassItem(data: {
 }) {
   await requireAdmin()
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx =>
+  const created = await withTenantDb(tenantId, tx =>
     tx.masterclassItem.create({
       data: {
         name: data.name.trim(),
@@ -26,6 +29,7 @@ export async function createMasterclassItem(data: {
     })
   )
   revalidatePath('/admin/masterclass')
+  return created
 }
 
 export async function updateMasterclassItem(id: string, data: {

@@ -10,6 +10,40 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### ⚠️ Your localhost is currently pointed at a TEST tenant, not Staging Winery
+
+`saas/.env`'s `DEFAULT_TENANT_ID` was temporarily switched to a blank "Test Onboarding Wizard" tenant so you could inspect the wizard from zero. It's still switched — `localhost:3000` won't show Staging Winery's real data until this is reverted. Tell Claude when you're done and it'll flip `DEFAULT_TENANT_ID` back to `cmrxb85wo0000vlc0d964nzf8` (Staging Winery) and restart the dev server — one line, already noted in the `.env` file's comment.
+
+### #127 — Onboarding wizard, now 7 steps + admin-wide nudge banner (built + Claude-tested on localhost, needs Max to review — not yet pushed to staging, nothing committed)
+
+Big change since the last checklist (2026-08-07): the wizard's own philosophy flipped from "bare minimum, defer the rest" to "ask for everything a section needs, upfront, per your instruction." Two new steps (Booking Details, Payment Info), a real bug fix (Contact info was silently saving to the wrong place — see below), and the nudge banner now shows on every admin page, not just Orders. **Then you tested it yourself on a fresh tenant and found two more real bugs, both now fixed** (see items 2 and 10 below). Full reference: `Plan-OnboardingFlow.md` and `SessionLog.md` 2026-08-04 parts 5–9 + 2026-08-07 parts 10–12.
+
+1. Go to `/admin/onboarding` → lands on whichever step is first incomplete, or navigate directly: `?step=companies` / `wines` / `bookingDetails` / `payment` / `contact` / `photos` / `review`. Step row now reads: Companies → Wines → **Booking Details** → **Payment Info** → Contact & Site Info → Photos → Review.
+2. **Companies step — fixed the bug you found:** when a tenant has both Bookings and Wine Orders on, adding a company now shows a "Bookings / Wine Orders" pill selector (pick one or both) — previously it silently created every company as booking-only regardless of your modules. Confirm a company added with both pills selected shows "Both modules" on the real `/admin/companies` page afterward.
+3. **Booking Details (new):** two independent yes/no questions — "Do you offer food add-ons?" and "Do you offer masterclasses?" Answer yes to either → add-item form appears (mirrors the real Menu Items/Masterclass pages); answer no → done, nothing further asked. Confirm an added item shows up as a real, independently editable row on `/admin/menu-items` or `/admin/masterclass` afterward.
+4. **Payment Info (new):** bank-transfer fields (recipient name, personal number, bank name, bank code, IBAN) — always shown, autosave on blur, same as every other field in this wizard. **This step now blocks Launch** (specifically: IBAN must be set) — confirm the Review step shows Payment in red/pending until IBAN has something in it. If your Online Payment module is on, a separate "Card payments (Flitt)" box appears below, clearly marked optional — confirm it does NOT block Launch even if left empty.
+5. **Contact & Site Info (fixed + extended):** this step had a real bug — it was saving to a database table that only fed the `/contact` page, while your actual footer/nav/invoice address come from a different place (Settings page). That's fixed now — confirm the fields here show the SAME values as `/admin/settings` → Contact Info, and that a Maps embed field has been added below (also from Settings).
+6. **Wines/Photos steps** — unchanged from before, no new testing needed there beyond a quick sanity check.
+7. **Review step:** Companies/Wines/Payment now show as required (red warning icon if incomplete); Booking Details/Contact/Photos stay optional (grey circle). Click **Launch** → "Launched [date]," button becomes "Launch again," still doesn't block or unblock anything else in the app — purely a record.
+8. **The nudge banner now shows everywhere, not just Orders** — this was the other real problem fixed this session (a tenant without the booking module would never have seen `/admin/orders` at all). Check any admin page (Companies, Wines, Settings, Menu Items…) — if anything's still outstanding, you should see the same amber banner at the top regardless of which page you're on.
+9. Switch admin language to Georgian (`/admin/settings`) and repeat a pass through the two new steps (Payment Info, Booking Details) plus the banner, especially on your phone or a narrow window — **the Georgian translation for the new copy wasn't checked by a native speaker, this is the one piece I'd most want your eyes on.**
+10. **New — real Companies list page, fixed the other bug you found:** `/admin/companies` now shows a small "⚠ Needs details" badge on any company missing an ID code, contact info, or (booking companies only) pricing — click the "?" next to it to see exactly what's missing. Previously there was no way to tell at a glance, which is what you flagged.
+11. When happy: tell Claude to commit and push to `staging` — nothing has been committed yet, this is all still local (now three sessions' worth: 2026-08-04 parts 4–9, 2026-08-07 parts 10–12).
+
+### Open question from this session — not yet decided
+
+The public site's theming was double-checked and is structurally solid (backgrounds/borders/text/brand color all correctly follow your 10+ super-admin presets). One real, narrower gap found: the enhanced-booking and wine-catalogue flows' green/red status badges (company-code-confirmed, "no rate for this guest count," discount badge) hardcode light colors that would clash on a dark theme preset. Not fixed yet — want this done now, or tracked separately? See [[KnownBugs]] #14.
+
+### #139 — Guide mode / contextual "?" hints (built + Claude-tested on localhost 2026-08-04, needs Max to review — not yet committed)
+
+New feature: small "?" icons next to non-obvious fields across the admin panel. Full reference: `Feature 139 - Guide Mode.md` and `SessionLog.md` 2026-08-04 parts 7–8.
+
+1. Log into any admin page — you should see small grey **"?"** circles next to a handful of fields already: Companies (Modules checkboxes, the Individuals row), Settings (Admin Panel Language section, plus a new **"Guide hints"** toggle further down the page), Orders (next to "Print Sheet"), Wine Orders (next to the Cards/Table/Pack switcher), Site Content → Booking Form (next to the Simple/Detailed preview toggle), Statistics → Historical breakdown, Masterclass (top description line).
+2. Click one — a small note pops up explaining that specific thing. Click elsewhere (or press Escape) → it closes.
+3. Go to `/admin/settings` → **"Guide hints"** section → toggle **"Show helpful (?) hints"** off → reload any page → all the "?" icons should be gone. Toggle back on → reload → they're back. (This is a per-tenant setting, on by default — meant to help a first-time admin, with an easy way to hide them once you know the interface.)
+4. Not every admin page has hints yet — Menu Items and Wines don't, on purpose (Menu Items was already well-explained; Wines wasn't in this first pass).
+5. When happy: tell Claude to commit — nothing has been committed yet.
+
 ### #128 — Legal pages (built + Claude-tested on staging 2026-07-28, needs Max to review wording + confirm prod)
 
 Full reference: `Plan-LegalPages.md` and `Features/Feature 128 - Legal Pages.md`. Pushed to `staging` — verify there before it goes to `master` (production is still pending a deliberate migration + backfill step, see the plan doc).

@@ -36,13 +36,14 @@ export async function createWine(data: {
 }) {
   await requireAdmin()
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, async (tx) => {
+  const wine = await withTenantDb(tenantId, async (tx) => {
     const maxOrder = await tx.wine.aggregate({ where: { tenantId }, _max: { sortOrder: true } })
-    await tx.wine.create({
+    return tx.wine.create({
       data: { ...data, tenantId, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
     })
   })
   revalidateWines()
+  return { success: true as const, wine: { id: wine.id, name: wine.name } }
 }
 
 export async function updateWine(id: string, data: Partial<{

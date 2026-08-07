@@ -98,7 +98,7 @@ On Vercel: add the domain in the dashboard first or you'll get cert errors. On a
 
 5. Coordinate DNS with the client.
 
-6. Seed initial content/settings for the new tenant if needed (copy from an existing tenant or from defaults).
+6. Seed initial content/settings for the new tenant if needed (copy from an existing tenant or from defaults) — for most of what a client needs to fill in themselves (companies, wines, payment/IBAN, contact info, menu items, masterclasses), send them to `/admin/onboarding` after their first login instead of seeding it by hand; see [[Plan-OnboardingFlow]] (#127) for what that wizard now covers.
 
 ---
 

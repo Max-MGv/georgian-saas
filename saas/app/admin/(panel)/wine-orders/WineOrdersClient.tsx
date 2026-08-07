@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
 
 const C = {
@@ -703,22 +704,25 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
   const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : at('wineOrders.mode.pack')
 
   const modeToggle = (
-    <div className="flex gap-0.5 rounded-lg p-0.5 mb-5 self-start" style={{ backgroundColor: '#f0e8dc' }}>
-      {(['cards', 'table', 'pack'] as const).map(m => (
-        <button
-          key={m}
-          onClick={() => setMode(m)}
-          className="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
-          style={{
-            backgroundColor: mode === m ? '#fff' : 'transparent',
-            color: mode === m ? C.wine : C.faint,
-            fontWeight: mode === m ? 700 : 400,
-            boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.1)' : undefined,
-          }}
-        >
-          {modeLabel(m)}
-        </button>
-      ))}
+    <div className="flex items-center gap-1.5 mb-5 self-start">
+      <div className="flex gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: '#f0e8dc' }}>
+        {(['cards', 'table', 'pack'] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
+            style={{
+              backgroundColor: mode === m ? '#fff' : 'transparent',
+              color: mode === m ? C.wine : C.faint,
+              fontWeight: mode === m ? 700 : 400,
+              boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.1)' : undefined,
+            }}
+          >
+            {modeLabel(m)}
+          </button>
+        ))}
+      </div>
+      <HelpHint text={at('help.wineOrders.packMode')} />
     </div>
   )
 

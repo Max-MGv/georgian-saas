@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { adminT } from '@/lib/adminT'
 import EditableText from '@/components/EditableText'
+import HelpHint from '@/components/HelpHint'
 import EditableLongText from '@/components/EditableLongText'
 import BackgroundsTab from './BackgroundsTab'
 import BookingFormVisualPanel from './BookingFormVisualPanel'
@@ -312,6 +313,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
                     when enable_enhanced_company_booking is on for a company booking. */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: C.faint }}>{at('content.view')}</span>
+                  <HelpHint text={at('help.content.formVariant')} />
                   <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ backgroundColor: '#ede5d8' }}>
                     {(['simple', 'detailed'] as const).map(v => (
                       <button key={v} type="button" onClick={() => setFormVariant(v)}

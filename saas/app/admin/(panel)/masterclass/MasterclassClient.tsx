@@ -5,6 +5,7 @@ import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem } f
 import { UNIT_LABELS, UNIT_DESCRIPTIONS, MASTERCLASS_UNITS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -98,9 +99,12 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
 
   return (
     <div>
-      <p className="text-sm mb-4" style={{ color: C.muted }}>
-        {at('masterclass.description')}
-      </p>
+      <div className="flex items-start gap-1.5 mb-4">
+        <p className="text-sm" style={{ color: C.muted }}>
+          {at('masterclass.description')}
+        </p>
+        <HelpHint text={at('help.masterclass.sortOrder')} />
+      </div>
 
       {/* Unit type legend */}
       <div className="rounded-xl border p-4 mb-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>

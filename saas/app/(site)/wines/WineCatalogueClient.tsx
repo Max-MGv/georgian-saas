@@ -64,6 +64,18 @@ const C = {
 }
 const inputStyle = { backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }
 
+// Same rationale as components/BookingForm.tsx's identical STATUS object (this
+// file's company-code UI was originally copy-pasted from there) — keep both in
+// sync if this changes.
+const STATUS = {
+  successBg: 'color-mix(in srgb, #16a34a 12%, var(--site-surface))',
+  successBorder: 'color-mix(in srgb, #16a34a 45%, var(--site-border))',
+  successText: 'color-mix(in srgb, #16a34a 65%, var(--site-text))',
+  errorBg: 'color-mix(in srgb, #dc2626 10%, var(--site-surface))',
+  errorBorder: 'color-mix(in srgb, #dc2626 40%, var(--site-border))',
+  errorText: 'color-mix(in srgb, #dc2626 65%, var(--site-text))',
+}
+
 function WineBottlePlaceholder({ color }: { color: string }) {
   return (
     <svg width="24" height="48" viewBox="0 0 32 64" fill="none">
@@ -335,14 +347,14 @@ export default function WineCatalogueClient({
         </button>
         {directCompanyName ? (
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
-            style={{ backgroundColor: '#f0fdf4', borderColor: '#86efac' }}>
+            style={{ backgroundColor: STATUS.successBg, borderColor: STATUS.successBorder }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <circle cx="6" cy="6" r="5.5" stroke="#16a34a" strokeWidth="1.5" />
-              <path d="M3.5 6l2 2 3-3" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="6" cy="6" r="5.5" stroke={STATUS.successText} strokeWidth="1.5" />
+              <path d="M3.5 6l2 2 3-3" stroke={STATUS.successText} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span className="text-sm font-medium flex-1" style={{ color: '#15803d' }}>{directCompanyName}</span>
+            <span className="text-sm font-medium flex-1" style={{ color: STATUS.successText }}>{directCompanyName}</span>
             <button type="button" onClick={clearDirectCode}
-              className="text-base font-bold leading-none hover:opacity-70" style={{ color: '#16a34a' }}>×</button>
+              className="text-base font-bold leading-none hover:opacity-70" style={{ color: STATUS.successText }}>×</button>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -367,7 +379,7 @@ export default function WineCatalogueClient({
           </div>
         )}
         {directCodeError && (
-          <p className="text-xs" style={{ color: '#b91c1c' }}>{directCodeError}</p>
+          <p className="text-xs" style={{ color: STATUS.errorText }}>{directCodeError}</p>
         )}
       </div>
     ) : (
@@ -438,7 +450,7 @@ export default function WineCatalogueClient({
                 )}
               </button>
             </div>
-            {codeError && <p className="text-sm" style={{ color: '#b91c1c' }}>{codeError}</p>}
+            {codeError && <p className="text-sm" style={{ color: STATUS.errorText }}>{codeError}</p>}
             <button
               type="button"
               onClick={handleCodeSubmit}
@@ -466,7 +478,7 @@ export default function WineCatalogueClient({
             </div>
             {newCoStatus === 'sent' ? (
               <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: '#15803d' }}>Request received!</p>
+                <p className="font-medium" style={{ color: STATUS.successText }}>Request received!</p>
                 <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
@@ -489,7 +501,7 @@ export default function WineCatalogueClient({
                   onChange={e => setNewCoEmail(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
                 {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: '#b91c1c' }}>Something went wrong. Please try again.</p>
+                  <p className="text-xs" style={{ color: STATUS.errorText }}>Something went wrong. Please try again.</p>
                 )}
                 <button type="button" onClick={handleNewCompanySubmit}
                   disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
@@ -596,7 +608,7 @@ export default function WineCatalogueClient({
                     {discountPercent && discountPercent > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs line-through" style={{ color: C.faint }}>{totalPrice}₾</span>
-                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: STATUS.successBg, color: STATUS.successText }}>
                           −{discountPercent}%
                         </span>
                         <span className="text-base font-bold" style={{ color: C.wine }}>

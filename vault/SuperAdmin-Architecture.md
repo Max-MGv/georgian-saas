@@ -181,7 +181,7 @@ These functions call the Supabase Admin REST API directly (`/auth/v1/admin/users
 5. Enter their email + a temporary password + assign to the tenant you just created
 6. Share the password with them — they log in at their domain's `/admin/login`
 7. Add their domain to Vercel (Settings → Domains) and have them point DNS at Vercel
-8. Done — their instance is live
+8. Their instance is live — from here, `/admin/onboarding` walks them through filling in their own business data (companies, wines, payment/IBAN, contact info, menu items, masterclasses, per whichever modules are on); see [[Plan-OnboardingFlow]] (#127)
 
 This replaces all the manual DB inserts and terminal script steps previously required.
 

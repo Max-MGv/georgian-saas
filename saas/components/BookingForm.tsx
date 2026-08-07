@@ -27,6 +27,21 @@ const C = {
   muted: 'var(--site-muted)', faint: 'var(--site-secondary)', wine: 'var(--color-brand)', inputBg: 'var(--site-surface)',
 }
 
+// The theme system (lib/themePresets.ts) has no dedicated success/error tokens —
+// only bg/surface/text/muted/border/secondary/brand. Blending the semantic hue
+// with the theme's own surface/border/text via color-mix() keeps status colors
+// recognizable as green/red while automatically adapting to any preset's actual
+// tone, light or dark, rather than sitting as a fixed light-mode color that looks
+// pasted-in on a dark theme.
+const STATUS = {
+  successBg: 'color-mix(in srgb, #16a34a 12%, var(--site-surface))',
+  successBorder: 'color-mix(in srgb, #16a34a 45%, var(--site-border))',
+  successText: 'color-mix(in srgb, #16a34a 65%, var(--site-text))',
+  errorBg: 'color-mix(in srgb, #dc2626 10%, var(--site-surface))',
+  errorBorder: 'color-mix(in srgb, #dc2626 40%, var(--site-border))',
+  errorText: 'color-mix(in srgb, #dc2626 65%, var(--site-text))',
+}
+
 
 type Props = {
   locale?: string
@@ -402,7 +417,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               </button>
             </div>
 
-            {codeError && <p className="text-sm" style={{ color: '#b91c1c' }}>{codeError}</p>}
+            {codeError && <p className="text-sm" style={{ color: STATUS.errorText }}>{codeError}</p>}
 
             <button
               type="submit"
@@ -436,7 +451,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             </div>
             {newCoStatus === 'sent' ? (
               <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: '#15803d' }}>Request received!</p>
+                <p className="font-medium" style={{ color: STATUS.successText }}>Request received!</p>
                 <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
@@ -459,7 +474,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   onChange={e => setNewCoEmail(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
                 {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: '#b91c1c' }}>Something went wrong. Please try again.</p>
+                  <p className="text-xs" style={{ color: STATUS.errorText }}>Something went wrong. Please try again.</p>
                 )}
                 <button type="button" onClick={handleNewCompanySubmit}
                   disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
@@ -507,14 +522,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               </button>
               {directCompanyName ? (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
-                  style={{ backgroundColor: '#f0fdf4', borderColor: '#86efac' }}>
+                  style={{ backgroundColor: STATUS.successBg, borderColor: STATUS.successBorder }}>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <circle cx="6" cy="6" r="5.5" stroke="#16a34a" strokeWidth="1.5" />
-                    <path d="M3.5 6l2 2 3-3" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="6" cy="6" r="5.5" stroke={STATUS.successText} strokeWidth="1.5" />
+                    <path d="M3.5 6l2 2 3-3" stroke={STATUS.successText} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span className="text-sm font-medium flex-1" style={{ color: '#15803d' }}>{directCompanyName}</span>
+                  <span className="text-sm font-medium flex-1" style={{ color: STATUS.successText }}>{directCompanyName}</span>
                   <button type="button" onClick={clearDirectCode}
-                    className="text-base font-bold leading-none hover:opacity-70" style={{ color: '#16a34a' }}>×</button>
+                    className="text-base font-bold leading-none hover:opacity-70" style={{ color: STATUS.successText }}>×</button>
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -539,7 +554,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 </div>
               )}
               {directCodeError && (
-                <p className="text-xs" style={{ color: '#b91c1c' }}>{directCodeError}</p>
+                <p className="text-xs" style={{ color: STATUS.errorText }}>{directCodeError}</p>
               )}
             </div>
           ) : (
@@ -599,10 +614,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               style={inputStyle}
             />
             {isPastDate && (
-              <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Please choose a future date.</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>Please choose a future date.</p>
             )}
             {selectedDate && !isPastDate && isDateBlocked(selectedDate) && (
-              <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{t(locale, 'form.blocked_date')}</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.blocked_date')}</p>
             )}
           </div>
           <div>
@@ -656,7 +671,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 else { setGuestInput(String(val)); setGuestWarning('') }
               }}
               required className="rounded-lg border px-3 py-2.5 w-28" style={inputStyle} />
-            {guestWarning && <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{guestWarning}</p>}
+            {guestWarning && <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{guestWarning}</p>}
           </div>
         )}
 
@@ -804,8 +819,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             </div>
           )
         ) : tierGap ? (
-          <div className="rounded-lg border p-4" style={{ backgroundColor: '#fff8f0', borderColor: '#fca5a5' }}>
-            <p className="text-sm font-medium" style={{ color: '#b91c1c' }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
+          <div className="rounded-lg border p-4" style={{ backgroundColor: STATUS.errorBg, borderColor: STATUS.errorBorder }}>
+            <p className="text-sm font-medium" style={{ color: STATUS.errorText }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
             <p className="text-xs mt-0.5" style={{ color: C.muted }}>
               {t(locale, 'form.no_rate_detail', { n: guestCount })}
             </p>
@@ -818,7 +833,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         )}
 
         {status === 'error' && (
-          <p className="text-sm" style={{ color: '#b91c1c' }}>{errorMsg}</p>
+          <p className="text-sm" style={{ color: STATUS.errorText }}>{errorMsg}</p>
         )}
 
         <button type="submit"

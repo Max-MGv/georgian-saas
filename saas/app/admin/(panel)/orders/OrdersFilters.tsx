@@ -7,6 +7,7 @@ import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE, type ColumnId } from
 import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 
 const C = {
   border: '#e0d4c0',
@@ -353,18 +354,21 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
           asks it to open the print preview via a same-page custom event. */}
       <div>
         <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
-        <button
-          onClick={() => window.dispatchEvent(new CustomEvent('ordersPrintRequested'))}
-          className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
-          style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 6 2 18 2 18 9"/>
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-            <rect x="6" y="14" width="12" height="8"/>
-          </svg>
-          {at('orders.filters.printSheet')}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('ordersPrintRequested'))}
+            className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
+            style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            {at('orders.filters.printSheet')}
+          </button>
+          <HelpHint text={at('help.orders.printSheet')} />
+        </div>
       </div>
 
       {/* Columns picker — right-aligned in the same row */}

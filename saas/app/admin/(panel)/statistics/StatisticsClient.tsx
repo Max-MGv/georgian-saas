@@ -8,6 +8,7 @@ import {
 import StatisticsV2 from './StatisticsV2'
 import WineStatistics, { type WineOrderStat } from './WineStatistics'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -151,6 +152,7 @@ export default function StatisticsClient({
               {at('statistics.backToOverview')}
             </button>
             <p className="text-sm" style={{ color: C.faint }}>{at('statistics.historicalAllTime')}</p>
+            <HelpHint text={at('help.statistics.includesCancelled')} />
           </div>
 
           {/* Summary cards */}

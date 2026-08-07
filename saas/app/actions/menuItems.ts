@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 
+// Returns the created row — additive, mirrors createWine()'s precedent. Existing
+// callers ignore the return value already, so this changes nothing for them; the
+// onboarding wizard's BookingDetailsStep needs the id/type to build its added-list.
 export async function createMenuItem(data: {
   name: string
   type: 'VEGETABLE' | 'MEAT'
@@ -12,12 +15,13 @@ export async function createMenuItem(data: {
 }) {
   await requireAdmin()
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx =>
+  const created = await withTenantDb(tenantId, tx =>
     tx.menuItem.create({
       data: { name: data.name.trim(), type: data.type, sortOrder: data.sortOrder ?? 0, tenantId },
     })
   )
   revalidatePath('/admin/menu-items')
+  return created
 }
 
 export async function updateMenuItem(id: string, data: {

@@ -6,6 +6,7 @@ import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
 import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavicon } from '@/app/actions/uploadLogo'
 import { updatePaymentCredentials, clearPaymentSecretKey } from '@/app/actions/paymentCredentials'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -13,7 +14,7 @@ const C = {
 }
 
 type Props = {
-  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean; hide_company_dropdown: boolean }
+  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean; hide_company_dropdown: boolean; show_admin_hints: boolean }
   defaultLocale: string
   payment: {
     payment_recipient_name: string
@@ -76,6 +77,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
+  const [showAdminHints, setShowAdminHints] = useState(settings.show_admin_hints)
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
@@ -132,6 +134,15 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting('admin_language', locale)
       setSavedKey('admin_language')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleAdminHintsToggle(value: boolean) {
+    setShowAdminHints(value)
+    startTransition(async () => {
+      await updateSetting('show_admin_hints', value ? 'true' : 'false')
+      setSavedKey('show_admin_hints')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -396,7 +407,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       {/* Admin Panel Language */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.adminLanguage.sectionTitle')}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.adminLanguage.sectionTitle')}</p>
+            <HelpHint text={at('help.settings.languageDistinction')} />
+          </div>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.adminLanguage.sectionHint')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
@@ -459,6 +473,25 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Guide hints */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.guideHints.sectionTitle')}</p>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.guideHints.fieldLabel')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.guideHints.fieldHint')}</p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'show_admin_hints' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+            )}
+            <Toggle enabled={showAdminHints} onChange={handleAdminHintsToggle} />
           </div>
         </div>
       </div>

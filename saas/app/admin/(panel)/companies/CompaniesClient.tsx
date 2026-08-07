@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
 import { adminT } from '@/lib/adminT'
+import HelpHint from '@/components/HelpHint'
 
 const C = {
   text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
@@ -37,6 +38,20 @@ type Company = {
 }
 
 type Module = 'BOOKING' | 'WINE_ORDER'
+
+// Same trigger rule as getFinishDetailsStatus() (app/actions/onboarding.ts) —
+// keep both in sync if this changes. Pricing only counts against a company if
+// it's actually a booking company; wine-order-only companies never use price
+// tiers at all, so flagging them for "no pricing" would be a false positive.
+function missingDetails(at: (key: string) => string, company: Company): string[] {
+  const missing: string[] = []
+  if (company.identificationCode === null) missing.push(at('companies.missing.idCode'))
+  if (!company.contactName && !company.contactPhone && !company.contactEmail && !company.address) {
+    missing.push(at('companies.missing.contact'))
+  }
+  if (company.isBookingCompany && company.prices.length === 0) missing.push(at('companies.missing.pricing'))
+  return missing
+}
 
 const inputStyle = {
   backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
@@ -198,7 +213,10 @@ function EditPanel({ company, onClose, onSaved, locale }: {
 
           {/* Modules */}
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.modules')}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.modules')}</p>
+              <HelpHint text={at('help.companies.modules')} />
+            </div>
             <div className="flex gap-3">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -619,6 +637,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                   </span>
                 )}
               </button>
+              <HelpHint text={at('help.companies.individuals')} />
             </div>
             {expanded && (
               <PriceTiersSection
@@ -662,6 +681,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           {visibleCompanies.map((company, i) => {
             const expanded = expandedId === company.id
             const isInBoth = company.isBookingCompany && company.isWineOrderCompany
+            const missing = missingDetails(at, company)
             return (
               <div key={company.id} style={{ borderBottom: i < visibleCompanies.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
                 <div className="flex items-center px-5 py-4 gap-4">
@@ -682,6 +702,14 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                     {isInBoth && (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
                         {at('companies.bothModules')}
+                      </span>
+                    )}
+                    {missing.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: '#fff7ed', color: '#b45309', border: '1px solid #fdba74' }}>
+                          ⚠ {at('companies.needsDetails')}
+                        </span>
+                        <HelpHint text={`${at('companies.missing.label')} ${missing.join(', ')}`} />
                       </span>
                     )}
                     <span className="text-xs" style={{ color: C.faint }}>

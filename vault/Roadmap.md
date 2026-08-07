@@ -239,6 +239,27 @@ Remaining, not urgent:
 
 ---
 
+## v1.9 — Guided Onboarding & Contextual Help (Active Plan)
+
+Full plan + decisions: `vault/Plan-OnboardingFlow.md` · Feature record: [[Feature 139 - Guide Mode]]
+
+**#127 — Onboarding wizard**
+- [x] Companies/Individuals-pricing step — first vertical slice
+- [x] Multi-step shell (`StepNav`, linear-forward with backward review) + Wine/Contact/Photos/Review steps — full skeleton
+- [x] Independent QC pass (subagent) — one real bug found and fixed (step remount losing in-progress state)
+- [x] Companies step visual redesign — mockup-approved, then shipped (labeled step icons, click-reveal status badges, trimmed copy, pricing shows an amount not just a count)
+- [x] Post-launch "finish full details" nudge (Phase 3 of the original plan) — built and live-verified 2026-08-07
+- [x] Wizard rebuilt 5 → 7 steps (Booking Details, Payment Info added; Contact & Site Info repointed to the correct data store + Maps embed) — comprehensive-upfront philosophy replaces the original minimal-wizard approach, live-verified 2026-08-07
+- [ ] Tenant-admin Supabase login auto-provisioning (Phase 0 — not started, needed before self-serve signup is viable)
+- [ ] Not committed to git yet — still on the local working tree pending Max's push decision
+
+**#139 — Guide mode (contextual "?" hints)**
+- [x] Core mechanism: `show_admin_hints` tenant setting (default on), `AdminHintsContext`, `HelpHint` click-reveal component
+- [x] Rolled out to 7 of 8 admin pages: Companies, Settings, Orders, Wine Orders, Content, Statistics, Masterclass (Menu Items deliberately skipped — already adequately explained; Wines never in scope)
+- [ ] `ReviewStep.tsx`'s own status icons still use the old hover-only pattern — flagged as a follow-on, not required
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

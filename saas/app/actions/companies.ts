@@ -30,7 +30,7 @@ export async function createCompany(name: string, modules: { isBookingCompany?: 
   await requireAdmin()
   if (!name.trim()) return { error: 'Name is required.' }
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx =>
+  const company = await withTenantDb(tenantId, tx =>
     tx.company.create({
       data: {
         name: name.trim(),
@@ -42,7 +42,7 @@ export async function createCompany(name: string, modules: { isBookingCompany?: 
     })
   )
   revalidatePath('/admin/companies')
-  return { success: true }
+  return { success: true, company: { id: company.id, name: company.name, accessCode: company.accessCode } }
 }
 
 export async function updateCompany(id: string, profile: CompanyProfile) {

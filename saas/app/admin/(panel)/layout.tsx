@@ -2,10 +2,15 @@ import { createClient } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
+import { AdminHintsProvider } from '@/components/AdminHintsContext'
 import LogoutButton from './LogoutButton'
+import OnboardingBanner from './OnboardingBanner'
+import FinishDetailsBanner from './FinishDetailsBanner'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [supabase, h, adminLanguage] = await Promise.all([createClient(), headers(), getSetting('admin_language')])
+  const [supabase, h, adminLanguage, showAdminHints] = await Promise.all([
+    createClient(), headers(), getSetting('admin_language'), getSetting('show_admin_hints'),
+  ])
   const { data: { user } } = await supabase.auth.getUser()
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
@@ -73,7 +78,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </nav>
 
       <main className="px-6 py-8 max-w-6xl mx-auto">
-        {children}
+        <OnboardingBanner />
+        <FinishDetailsBanner />
+        <AdminHintsProvider show={showAdminHints === 'true'}>
+          {children}
+        </AdminHintsProvider>
       </main>
     </div>
   )

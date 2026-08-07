@@ -26,6 +26,12 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   min_guests_tasting_lunch: '4',
   maps_embed_url: '',
   admin_language: 'en',
+  // Onboarding wizard (#127) — 'yes' | 'no' | '' (unanswered)
+  onboarding_works_with_companies: '',
+  // Guide mode (#139) — contextual (?) hints throughout the admin panel.
+  // Defaults on: gating help behind an opt-in switch defeats its own purpose
+  // for the first-time/confused admin who wouldn't know to look for it.
+  show_admin_hints: 'true',
 }
 
 /** A tenant's settings as `key → value`, straight from the DB (no defaults applied). */
