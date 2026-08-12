@@ -139,6 +139,8 @@ const en: Translations = {
   'wine.bottle.singular': 'bottle',
   'wine.bottle.plural': 'bottles',
   'wine.perBottle': '/ bottle',
+  'wines.view.grid': 'Grid view',
+  'wines.view.list': 'List view',
 }
 
 const ka: Translations = {
@@ -278,6 +280,8 @@ const ka: Translations = {
   'wine.bottle.singular': 'ბოთლი',
   'wine.bottle.plural': 'ბოთლი',
   'wine.perBottle': '/ ბოთლი',
+  'wines.view.grid': 'ბადის ხედი',
+  'wines.view.list': 'სიის ხედი',
 }
 
 const dict: Record<string, Translations> = { en, ka }

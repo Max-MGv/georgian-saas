@@ -726,7 +726,7 @@ export default function WineCatalogueClient({
           {/* View toggle */}
           <div className="flex items-center gap-1 rounded-lg border p-0.5 flex-shrink-0" style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-surface)' }}>
             <button
-              onClick={() => setView('grid')} title="Grid view"
+              onClick={() => setView('grid')} title={t(locale, 'wines.view.grid')}
               className={`p-2 rounded transition-colors ${view === 'grid' ? 'text-white' : 'hover:opacity-70'}`}
               style={{ backgroundColor: view === 'grid' ? 'var(--color-brand)' : 'transparent', color: view === 'grid' ? 'white' : 'var(--site-muted)' }}
             >
@@ -736,7 +736,7 @@ export default function WineCatalogueClient({
               </svg>
             </button>
             <button
-              onClick={() => setView('list')} title="List view"
+              onClick={() => setView('list')} title={t(locale, 'wines.view.list')}
               className={`p-2 rounded transition-colors ${view === 'list' ? 'text-white' : 'hover:opacity-70'}`}
               style={{ backgroundColor: view === 'list' ? 'var(--color-brand)' : 'transparent', color: view === 'list' ? 'white' : 'var(--site-muted)' }}
             >

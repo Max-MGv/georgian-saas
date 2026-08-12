@@ -413,8 +413,11 @@ export default function TenantFormClient({ mode, tenant }: Props) {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
               Modules
             </label>
-            <p style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 4 }}>
               Which parts of the platform this tenant has access to.
+            </p>
+            <p style={{ fontSize: 11, color: C.faint, marginBottom: 10 }}>
+              Changes may take up to 5 minutes to appear on the live site.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -493,9 +496,12 @@ export default function TenantFormClient({ mode, tenant }: Props) {
 
           {/* Theme preset picker */}
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 10 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 4 }}>
               Theme
             </label>
+            <p style={{ fontSize: 11, color: C.faint, marginBottom: 10 }}>
+              Changes may take up to 5 minutes to appear on the live site.
+            </p>
             {(['light', 'dark'] as const).map(category => (
               <div key={category} style={{ marginBottom: category === 'light' ? 14 : 0 }}>
                 <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: C.faint, margin: '0 0 6px' }}>
