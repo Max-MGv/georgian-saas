@@ -34,18 +34,28 @@ export default async function Home({ searchParams }: PageProps) {
   const cookieLocale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
   const locale = sp.locale ?? cookieLocale
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
-  // Booleans only cross to the client — never the credentials themselves.
-  const onlinePaymentEnabled = await isPaymentConfigured(tenantId)
 
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
-  const [allCompanies, menuItems, masterclassItems, blockedDates, content] = await Promise.all([
+  // Booleans only cross to the client — never the credentials themselves.
+  // Three separate calls (#148), not one: `paymentConfigured` is the hard-block
+  // half (module + credentials) — nothing, not even a company's skipPayment:false
+  // override, can beat it, mirroring shouldTakePayment()'s own precedence. The
+  // two section-scoped calls are the INDIVIDUAL/COMPANY defaults BookingForm
+  // uses when no company override applies. Collapsing these into one scoped
+  // boolean per booking type would make it impossible to tell "module off" apart
+  // from "COMPANY section merely off by default" client-side — the former must
+  // never be overridable, the latter must be (see Feature 148's build-time notes).
+  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     getBlockedDates(),
     // Was two getContentMap() calls (home + form) = two transactions; now one.
     getAllContent(tenantId, locale),
+    isPaymentConfigured(tenantId),
+    isPaymentConfigured(tenantId, { section: 'INDIVIDUAL' }),
+    isPaymentConfigured(tenantId, { section: 'COMPANY' }),
   ])
 
   const c           = content['home'] ?? {}
@@ -370,7 +380,11 @@ export default async function Home({ searchParams }: PageProps) {
             formContent={formContent}
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceLunch}
-            onlinePaymentEnabled={onlinePaymentEnabled}
+            onlinePaymentEnabled={{
+              configured: paymentConfigured,
+              individual: individualsPaymentReady,
+              company: companiesPaymentReady,
+            }}
           />
           {isEditMode && isAdmin && <BookingFormEditOverlay />}
         </div>

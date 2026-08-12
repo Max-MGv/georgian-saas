@@ -10,6 +10,20 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
+### #148 — Granular Payment Controls (built + Claude-tested on dev, needs Max to review — not yet committed, production untouched)
+
+Full reference: `Features/Feature 148 - Granular Payment Controls.md` and `SessionLog.md` 2026-08-11 (build) + 2026-08-11 follow-up (button-label fixes on `/` and `/wines`). Migrated to the **dev** database only — Nikalas Marani (prod) is completely unaffected until this is deliberately migrated there. Needs `modulesOnlinePayment` + Flitt credentials on for the test tenant to see any of this — with the module off, every toggle below is correctly a no-op, same as today.
+
+1. Go to `/admin/settings` → the existing "Card payments" section (below the Flitt credentials fields) → confirm 3 new toggles: **Individuals**, **Companies**, **Wine Orders**. Flip each on/off, reload each time → confirm it persists.
+2. Go to `/admin/companies` → expand a company → confirm a new **Payment** control (Default / Always skip / Always require) appears in the same spot as the existing Wine Discount section, only when the online-payment module is on. Set it, reload → confirm it persists.
+3. **Section toggle:** leave a company's Payment control on "Default," turn the Companies section toggle OFF on Settings → start a company booking for that company on the home page → confirm the button reads plain "Book" (reservation-only), not "Book & Pay."
+4. **Override beats section, direction 1:** turn the Companies section toggle back ON, but set that same company's Payment control to "Always skip" → repeat the booking → confirm it's still reservation-only even though the section is on.
+5. **Override beats section, direction 2:** turn the Companies section toggle OFF, but set a company to "Always require" → confirm that company's booking button now reads "Book & Pay" even though the section default is off.
+6. **Wine orders:** go to `/wines`, select a company with a payment override set → confirm the checkout button label reflects the same override, independent of the Individuals/Wine Orders section toggles.
+7. **Individuals:** on the home page, book as an individual (no company selected) → confirm only the **Individuals** section toggle affects the button label — the Companies toggle and any company's override should have zero effect on an individual booking.
+8. **Regression check:** turn `modulesOnlinePayment` off entirely (super-admin, Edit Tenant) → confirm every booking/wine-order button reverts to plain reservation language regardless of any toggle/override above — the new controls must never override the module being off.
+9. When happy: tell Claude to commit (still uncommitted on `staging`), and separately decide when you want the same schema migration + backfill run against production.
+
 ### ⚠️ Your localhost is currently pointed at a TEST tenant, not Staging Winery
 
 `saas/.env`'s `DEFAULT_TENANT_ID` was temporarily switched to a blank "Test Onboarding Wizard" tenant so you could inspect the wizard from zero. It's still switched — `localhost:3000` won't show Staging Winery's real data until this is reverted. Tell Claude when you're done and it'll flip `DEFAULT_TENANT_ID` back to `cmrxb85wo0000vlc0d964nzf8` (Staging Winery) and restart the dev server — one line, already noted in the `.env` file's comment.

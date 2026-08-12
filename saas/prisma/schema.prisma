@@ -43,6 +43,16 @@ model Tenant {
   // that leak structurally impossible. Never return flittSecretKey to a browser.
   flittMerchantId      String?
   flittSecretKey       String?
+  // Granular payment controls (#148). Independent per-section switches for
+  // whether a tenant takes online payment at all in that section — separate
+  // from modulesOnlinePayment (can the tenant take payment at all) and from
+  // showCompanyPrice (a privacy setting, unrelated to payment intent — see
+  // decision #5). All three default true so a tenant flipping modulesOnlinePayment
+  // on for the first time gets today's "payment everywhere it's structurally
+  // possible" behavior with no extra steps.
+  paymentEnabledIndividuals Boolean @default(true)
+  paymentEnabledCompanies   Boolean @default(true)
+  paymentEnabledWineOrders  Boolean @default(true)
   createdAt            DateTime @default(now())
 }
 
@@ -59,6 +69,13 @@ model Company {
   isBookingCompany    Boolean     @default(true)
   isWineOrderCompany  Boolean     @default(false)
   wineDiscountPercent Float?
+  // Per-company override of the tenant's Companies section toggle (#148).
+  // null = follow paymentEnabledCompanies; true = always skip (trusted,
+  // reservation-only); false = always require (bounded by the hard blocks
+  // in shouldTakePayment — cannot force payment through a missing price or
+  // a module that's off). Applies to this company's bookings and wine
+  // orders alike — see edge case notes in Feature 148 on why it isn't split per-module.
+  skipPayment         Boolean?
   tenantId            String?
   createdAt           DateTime    @default(now())
   orders              Order[]

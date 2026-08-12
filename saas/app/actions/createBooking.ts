@@ -187,6 +187,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       // A COMPANY booking whose price is hidden from the customer must not be
       // charged an amount they were never shown (§7.4) — invoice instead.
       priceShown: data.bookingType === 'INDIVIDUAL' || showCompanyPrice === 'true',
+      // #148: section toggle + company override precedence. Individuals never
+      // carry a companyId (see shouldTakePayment.ts's PaymentSection doc).
+      section: data.bookingType === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY',
+      companyId: data.bookingType === 'COMPANY' ? (data.companyId || null) : null,
     })
 
     if (gate.takePayment) {

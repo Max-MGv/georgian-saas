@@ -1,6 +1,6 @@
 ---
 tags: [plan, payment, flitt, multi-tenant]
-status: proposed — not started
+status: shipped — Flitt integration (#145) live in production since 2026-07-29, module off for every tenant pending §9a's remaining steps; granular payment controls (#148) built on dev, not yet committed
 created: 2026-07-29
 ---
 
@@ -345,3 +345,9 @@ Everything else in this document is history. This is the current state.
 3. **Only once 1 and 2 are both clear: switch `modulesOnlinePayment` on for Nikalas Marani for real**, via super-admin, and enter the tenant's Flitt credentials in Settings.
 
 **Not urgent, no deadline, but still open:** rotate the Flitt merchant password (plaintext in the old PHP and in Max's Downloads folder since the migration research) — needs the same portal access as item 2, so worth doing together.
+
+---
+
+## 10. Granular payment controls (#148) — built 2026-08-11
+
+Built as designed, on top of everything in §9a. Today payment is no longer just one on/off decision for the whole tenant (module + credentials) — #148 added per-section toggles (Individuals / Companies / Wine Orders, tenant-admin, on Settings next to the Flitt fields) plus a per-company "trusted, skip payment" override (tenant-admin, on the Companies edit panel), with the precedence order below (module-off/credentials-missing/price-invalid/price-hidden hard blocks still always win). It also resolves — deliberately, not silently — the former quirk where company *bookings* only took payment as an accidental side effect of the `show_company_price_after_booking` privacy setting, while company *wine orders* always did (see `createBooking.ts` §189 vs. `submitWineOrder.ts` §59) — `paymentEnabledCompanies` is now the single explicit control for that. Schema migrated (`20260811113100_add_granular_payment_controls`) and backfilled on the **dev** database only; not yet on production, not yet committed, not yet reviewed by Max. Full design, build-time notes, and the same-day follow-up that closed the `isPaymentConfigured()` UI-label gap on `/` and `/wines`: [[Feature 148 - Granular Payment Controls]].

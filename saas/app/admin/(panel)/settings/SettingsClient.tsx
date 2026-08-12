@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { updateSetting } from '@/app/actions/settings'
 import { addBlockedDate, removeBlockedDate } from '@/app/actions/blockedDates'
 import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavicon } from '@/app/actions/uploadLogo'
-import { updatePaymentCredentials, clearPaymentSecretKey } from '@/app/actions/paymentCredentials'
+import { updatePaymentCredentials, clearPaymentSecretKey, updatePaymentSectionToggles } from '@/app/actions/paymentCredentials'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
@@ -29,7 +29,13 @@ type Props = {
    * Deliberately carries `secretKeySet: boolean` and never the key itself: this
    * object is serialised into the page, so the value must not be in it.
    */
-  onlinePayment: { merchantId: string; secretKeySet: boolean } | null
+  onlinePayment: {
+    merchantId: string
+    secretKeySet: boolean
+    paymentEnabledIndividuals: boolean
+    paymentEnabledCompanies: boolean
+    paymentEnabledWineOrders: boolean
+  } | null
   invoiceEmailMessage: string
   minGuestsTasting: string
   minGuestsTastingLunch: string
@@ -85,6 +91,12 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [paymentFields, setPaymentFields] = useState(payment)
   const [flittMerchantId, setFlittMerchantId] = useState(onlinePayment?.merchantId ?? '')
   const [flittSecretKeySet, setFlittSecretKeySet] = useState(onlinePayment?.secretKeySet ?? false)
+  // Section toggles (#148) — independent per-section on/off for taking online
+  // payment. Default true matches Tenant's Prisma default: absent onlinePayment
+  // (module off) never renders these, so the fallback value is inert either way.
+  const [paymentEnabledIndividuals, setPaymentEnabledIndividuals] = useState(onlinePayment?.paymentEnabledIndividuals ?? true)
+  const [paymentEnabledCompanies, setPaymentEnabledCompanies] = useState(onlinePayment?.paymentEnabledCompanies ?? true)
+  const [paymentEnabledWineOrders, setPaymentEnabledWineOrders] = useState(onlinePayment?.paymentEnabledWineOrders ?? true)
   // Draft only. The stored key is never sent to the browser, so this starts empty
   // on every load and an empty draft means "leave the saved key alone".
   const [flittSecretDraft, setFlittSecretDraft] = useState('')
@@ -207,6 +219,27 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       setFlittSecretDraft('')
       setFlittSecretKeySet(true)
       setSavedKey('flitt_secret_key')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  // Section toggles (#148) always save all three together — mirrors how
+  // updatePaymentCredentials already saves merchantId+secretKey as one write.
+  function handlePaymentSectionToggle(
+    field: 'paymentEnabledIndividuals' | 'paymentEnabledCompanies' | 'paymentEnabledWineOrders',
+    value: boolean
+  ) {
+    const next = {
+      paymentEnabledIndividuals: field === 'paymentEnabledIndividuals' ? value : paymentEnabledIndividuals,
+      paymentEnabledCompanies: field === 'paymentEnabledCompanies' ? value : paymentEnabledCompanies,
+      paymentEnabledWineOrders: field === 'paymentEnabledWineOrders' ? value : paymentEnabledWineOrders,
+    }
+    setPaymentEnabledIndividuals(next.paymentEnabledIndividuals)
+    setPaymentEnabledCompanies(next.paymentEnabledCompanies)
+    setPaymentEnabledWineOrders(next.paymentEnabledWineOrders)
+    startTransition(async () => {
+      await updatePaymentSectionToggles(next)
+      setSavedKey(field)
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -735,6 +768,56 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   </button>
                 )
               )}
+            </div>
+
+            <div className="h-px" style={{ backgroundColor: C.border }} />
+
+            {/* Section toggles (#148) — independent per-section on/off for taking
+                online payment. Deliberately unrelated to show_company_price_after_booking:
+                that setting only controls whether a company sees its price, never
+                whether payment is taken (Feature 148 §5). */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.muted }}>{at('settings.onlinePayment.sections.title')}</p>
+              <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sections.hint')}</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.onlinePayment.sections.individuals')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sections.individualsHint')}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {savedKey === 'paymentEnabledIndividuals' && !isPending && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+                )}
+                <Toggle enabled={paymentEnabledIndividuals} onChange={v => handlePaymentSectionToggle('paymentEnabledIndividuals', v)} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.onlinePayment.sections.companies')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sections.companiesHint')}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {savedKey === 'paymentEnabledCompanies' && !isPending && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+                )}
+                <Toggle enabled={paymentEnabledCompanies} onChange={v => handlePaymentSectionToggle('paymentEnabledCompanies', v)} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.onlinePayment.sections.wineOrders')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sections.wineOrdersHint')}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {savedKey === 'paymentEnabledWineOrders' && !isPending && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+                )}
+                <Toggle enabled={paymentEnabledWineOrders} onChange={v => handlePaymentSectionToggle('paymentEnabledWineOrders', v)} />
+              </div>
             </div>
 
           </div>

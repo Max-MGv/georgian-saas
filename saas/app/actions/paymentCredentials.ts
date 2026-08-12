@@ -23,6 +23,11 @@ export type PaymentCredentialsView = {
   /** True when a secret is stored. The secret itself never crosses to the client. */
   secretKeySet: boolean
   moduleEnabled: boolean
+  // Granular payment controls (#148) — independent per-section on/off, read
+  // alongside the credentials since they render in the same Settings card.
+  paymentEnabledIndividuals: boolean
+  paymentEnabledCompanies: boolean
+  paymentEnabledWineOrders: boolean
 }
 
 export async function getPaymentCredentials(): Promise<PaymentCredentialsView> {
@@ -30,13 +35,52 @@ export async function getPaymentCredentials(): Promise<PaymentCredentialsView> {
   const tenantId = await getTenantId()
   const t = await db.tenant.findUnique({
     where: { id: tenantId },
-    select: { flittMerchantId: true, flittSecretKey: true, modulesOnlinePayment: true },
+    select: {
+      flittMerchantId: true,
+      flittSecretKey: true,
+      modulesOnlinePayment: true,
+      paymentEnabledIndividuals: true,
+      paymentEnabledCompanies: true,
+      paymentEnabledWineOrders: true,
+    },
   })
   return {
     merchantId: t?.flittMerchantId ?? '',
     secretKeySet: Boolean(t?.flittSecretKey),
     moduleEnabled: t?.modulesOnlinePayment ?? false,
+    paymentEnabledIndividuals: t?.paymentEnabledIndividuals ?? true,
+    paymentEnabledCompanies: t?.paymentEnabledCompanies ?? true,
+    paymentEnabledWineOrders: t?.paymentEnabledWineOrders ?? true,
   }
+}
+
+/**
+ * Persists the three per-section payment toggles (#148). Deliberately
+ * separate from updatePaymentCredentials — these are operational on/off
+ * switches, not secrets, but live in the same file since they're read and
+ * rendered together in the Settings "Card Payments" card. Same requireAdmin()
+ * guard as every other write action in this file.
+ */
+export async function updatePaymentSectionToggles(input: {
+  paymentEnabledIndividuals: boolean
+  paymentEnabledCompanies: boolean
+  paymentEnabledWineOrders: boolean
+}): Promise<{ success: boolean }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  await db.tenant.update({
+    where: { id: tenantId },
+    data: {
+      paymentEnabledIndividuals: input.paymentEnabledIndividuals,
+      paymentEnabledCompanies: input.paymentEnabledCompanies,
+      paymentEnabledWineOrders: input.paymentEnabledWineOrders,
+    },
+  })
+
+  revalidatePath('/admin/settings')
+  revalidatePath('/')
+  return { success: true }
 }
 
 export async function updatePaymentCredentials(input: {

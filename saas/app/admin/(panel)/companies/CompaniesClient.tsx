@@ -27,6 +27,9 @@ type Company = {
   isBookingCompany: boolean
   isWineOrderCompany: boolean
   wineDiscountPercent: number | null
+  // Per-company payment override (#148). null = follow the tenant's Companies
+  // section toggle; true = always skip (trusted); false = always require.
+  skipPayment: boolean | null
   identificationCode: string | null
   contactName: string | null
   contactPhone: string | null
@@ -111,11 +114,12 @@ function PriceForm({
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
   locale: string
+  paymentModuleOn: boolean
 }) {
   const at = (key: string) => adminT(locale, key)
   const [name, setName] = useState(company.name)
@@ -128,6 +132,11 @@ function EditPanel({ company, onClose, onSaved, locale }: {
   const [isBooking, setIsBooking] = useState(company.isBookingCompany)
   const [isWineOrder, setIsWineOrder] = useState(company.isWineOrderCompany)
   const [wineDiscount, setWineDiscount] = useState(company.wineDiscountPercent != null ? String(company.wineDiscountPercent) : '')
+  // #148 — three-way override, stored as null/true/false; the UI works with a
+  // string so "no override" is a distinct selectable state, not just "unchecked".
+  const [skipPayment, setSkipPayment] = useState<'default' | 'skip' | 'require'>(
+    company.skipPayment === true ? 'skip' : company.skipPayment === false ? 'require' : 'default'
+  )
   const [showCode, setShowCode] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -140,12 +149,18 @@ function EditPanel({ company, onClose, onSaved, locale }: {
     }
     setLoading(true); setError('')
     const parsedDiscount = wineDiscount.trim() !== '' ? parseFloat(wineDiscount) : null
+    // Only sent when the control is actually rendered (paymentModuleOn) — when
+    // it isn't, `undefined` tells updateCompany to leave skipPayment untouched.
+    const parsedSkipPayment = paymentModuleOn
+      ? (skipPayment === 'skip' ? true : skipPayment === 'require' ? false : null)
+      : undefined
     const result = await updateCompany(company.id, {
       name, identificationCode: idCode,
       contactName, contactPhone, contactEmail, address,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
+      skipPayment: parsedSkipPayment,
     })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     onSaved({
@@ -158,6 +173,7 @@ function EditPanel({ company, onClose, onSaved, locale }: {
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
+      ...(parsedSkipPayment !== undefined ? { skipPayment: parsedSkipPayment } : {}),
     })
     onClose()
     setLoading(false)
@@ -259,6 +275,34 @@ function EditPanel({ company, onClose, onSaved, locale }: {
                     style={{ ...inputStyle, width: 80, padding: '9px 12px', fontSize: '0.875rem', textAlign: 'right' }}
                   />
                   <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
+                </div>
+              </div>
+              <div className="h-px" style={{ backgroundColor: C.border }} />
+            </>
+          )}
+
+          {/* Payment override (#148) — one field covers both bookings and wine
+              orders for this company. Hidden entirely when the tenant's online-
+              payment module is off, same as the Settings card. */}
+          {paymentModuleOn && (
+            <>
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.payment')}</p>
+                <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.paymentHint')}</p>
+                <div className="flex gap-2">
+                  {(['default', 'skip', 'require'] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setSkipPayment(option)}
+                      className="text-xs px-3 py-2 rounded-lg font-medium flex-1"
+                      style={skipPayment === option
+                        ? { backgroundColor: C.wine, color: '#fff', border: `1px solid ${C.wine}` }
+                        : { backgroundColor: '#fffdf9', color: C.muted, border: `1px solid ${C.border}` }}
+                    >
+                      {at(`companies.editPanel.payment${option === 'default' ? 'Default' : option === 'skip' ? 'Skip' : 'Require'}`)}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="h-px" style={{ backgroundColor: C.border }} />
@@ -499,7 +543,7 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false, locale = 'en' }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean; locale?: string }) {
+export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en' }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
@@ -602,6 +646,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           onClose={() => setEditingCompany(null)}
           onSaved={updated => setCompanies(prev => prev.map(c => c.id === editingCompany.id ? { ...c, ...updated } : c))}
           locale={locale}
+          paymentModuleOn={paymentModuleOn}
         />
       )}
 

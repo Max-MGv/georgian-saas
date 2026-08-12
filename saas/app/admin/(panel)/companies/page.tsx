@@ -11,6 +11,9 @@ export default async function CompaniesPage() {
   const locale = adminLanguage || 'en'
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
+  // Gates the per-company payment override (#148) — same source PaymentSetupBanner
+  // and shouldTakePayment() use. A tenant without the module never sees the control.
+  const paymentModuleOn = h.get('x-tenant-modules-online-payment') === 'true'
   await ensureIndividualsCompany(tenantId)
 
   const companies = await withTenantDb(tenantId, tx =>
@@ -39,6 +42,7 @@ export default async function CompaniesPage() {
       <CompaniesClient
         bookingOn={bookingOn}
         wineOrdersOn={wineOrdersOn}
+        paymentModuleOn={paymentModuleOn}
         locale={locale}
         companies={companies.map(c => ({
           id: c.id,
@@ -47,6 +51,7 @@ export default async function CompaniesPage() {
           isBookingCompany: c.isBookingCompany ?? true,
           isWineOrderCompany: c.isWineOrderCompany ?? false,
           wineDiscountPercent: c.wineDiscountPercent,
+          skipPayment: c.skipPayment,
           identificationCode: c.identificationCode,
           contactName: c.contactName,
           contactPhone: c.contactPhone,

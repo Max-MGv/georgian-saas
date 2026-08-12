@@ -54,7 +54,11 @@ Catch any hardcoded URLs in emails, redirects, or config before cutover.
 ## Key things to be wary of
 
 ### In-memory cache
-`saas/proxy.ts` caches `domain → tenantId` in a module-level `Map` for the lifetime of the server process. After updating the DB, the **old domain keeps resolving until the server restarts**. On a production deploy this is a non-issue (deploy triggers restart). Mid-session it causes a brief window of confusion during testing.
+`saas/proxy.ts` caches the **entire resolved tenant record** (`TenantInfo` — not just `domain → tenantId`, but also `theme`/`presetId`, module flags, logo/favicon URLs, `displayName`) in a module-level `Map`, keyed by domain (`'__localhost__'` for local dev). Unlike the note below implies, this isn't restart-only staleness — it has a **5-minute TTL** (`CACHE_TTL_MS`), so it self-heals, but not instantly.
+
+**Consequence found 2026-08-10, building the Playwright theme-color regression test:** switching a tenant's theme preset via `/super-admin/tenants/<id>` and saving does **not** invalidate this cache. The super-admin edit page itself reads fresh (direct Prisma query, unaffected), so the "Theme Preview" panel there updates correctly and immediately — but the **public site** (which reads theme via the `x-tenant-theme` header this cache populates) keeps serving the *old* theme for up to 5 minutes after a save. Confirmed live: an automated test doing rapid preset-switch-and-check cycles within that window reliably read the stale cached value every time, while a single manual check separated by enough wall-clock time read correctly. Same root cause, wider blast radius than the domain-resolution note below — a real theme change made for a client would not visibly apply for up to 5 minutes, which could read as "the change didn't save" if someone checks immediately.
+
+The old domain (or old theme, or old module flags) keeps resolving until either the 5-minute TTL elapses or the server restarts. On a production deploy this is a non-issue (deploy triggers restart, and 5 minutes of stale theme post-save is a minor, self-correcting cosmetic gap rather than a functional one). Mid-session it causes a brief window of confusion during testing — worth remembering specifically for theme/module-flag changes, not just domain migrations.
 
 ### Old domain goes dead immediately
 Once the DB row is updated, any user still on the old URL gets an unknown-tenant response. Communicate the cutover window to the client in advance.

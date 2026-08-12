@@ -56,7 +56,13 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
 
   // Wine orders always show the customer their total, so unlike company
   // bookings there's no hidden-price case to exclude here (§7.4).
-  const gate = await shouldTakePayment({ tenantId, totalPrice: totalAmount, priceShown: true })
+  const gate = await shouldTakePayment({
+    tenantId,
+    totalPrice: totalAmount,
+    priceShown: true,
+    section: 'WINE_ORDER',
+    companyId: companyId || null,
+  })
 
   // A B2B buyer who pays online needs something in writing for their books, and
   // WineOrder has no other address to send it to. Required only on the paying

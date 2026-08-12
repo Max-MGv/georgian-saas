@@ -260,6 +260,23 @@ Full plan + decisions: `vault/Plan-OnboardingFlow.md` · Feature record: [[Featu
 
 ---
 
+## v1.10 — Playwright Regression Suite (Active Plan)
+
+Full tracking: `playwright/Progress.md` (chronological build log, phase-by-phase) · `playwright/ARCHITECTURE.md` (shared helpers/conventions) · `playwright/KNOWN-ISSUES.md` (standing app bugs + environmental gotchas this suite surfaced, indexed by symptom).
+
+**#147 — Automated regression suite (4 tiers, 22 tests)**
+- [x] Phase 0 — Setup: `playwright/` scaffolded, `saas/tests/` wired into `playwright.config.ts`, seed test passing
+- [x] Phase 1 — Tier 1, recurring bug shapes (mobile/Georgian overflow, popover clipping, theme-aware status colors) — 8/8 passing
+- [x] Phase 2 — Tier 2, core customer flows (booking simple/enhanced, wine catalogue → order) — 3/3 built, full suite reconfirmed 14/14 clean
+- [x] Phase 3 — Tier 3, admin panel smoke (login, orders filters, companies CRUD, onboarding wizard) — 4/4 built, full suite reconfirmed 17/17 clean
+- [x] Phase 4 — Tier 4, locale integrity (EN↔KA raw-key-leak + console-error check, parametrized across 5 pages) — 5/5 passing standalone, reconfirmed as a 3/3 admin-only subset
+- [ ] A clean full run of all 22 tests together — blocked this session by severe dev-DB (`georgian-saas-dev`) connection-pool exhaustion under heavy shared load (confirmed as external/environmental, not a code regression); re-run once the shared dev DB isn't under contention
+- [ ] Not committed to git yet
+
+**Real app bugs found while building the suite** — tracked as their own entries: [[KnownBugs]] #15 (nested `<button>` hydration mismatch on `/admin/companies`) and #16 (`/wines` Grid/List toggle hardcoded English, no i18n). Also found and fixed along the way (infra/test-side, not app bugs): a stale `DEFAULT_TENANT_ID`, an admin-language-toggle race condition, and `proxy.ts`'s tenant cache being wider and staler than previously documented (now corrected in [[MigrationNotes]]).
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.
@@ -276,6 +293,7 @@ These are rough ideas, not committed features. Scope and approach TBD.
 - [ ] **Move NM's logo into Supabase Storage** — `Tenant.logoUrl` for Nikalas Marani still points at the shared `/icons/logo-dark.svg` repo file; upload it to the `logos` bucket like every other tenant logo so no tenant identity lives in shared public assets. *(Deferred from #125)*
 - [ ] **Georgian translations for neutral fallback strings** — the neutral fallbacks introduced in #125 are English-only; a tenant with no ka content rows shows English fallbacks on the KA site. *(Deferred from #125 — low priority until a client actually launches Georgian-first with no content entered)*
 - [x] **Wine catalogue filters (color, type/style)** — Type (Red/White/Amber/Rosé) + Style (Dry/Semi-dry/Semi-sweet/Sweet/Sparkling) pill rows on the public `/wines` page; AND-combined, client-side. Built with #116 Wine hierarchy (2026-07-17).
+- [x] **Granular payment controls (#148, built 2026-08-11)** — on top of #145's tenant-wide payment toggle: per-section (Individuals / Companies / Wine Orders) on/off toggles on Settings, plus a per-company 3-way "Default / Always skip / Always require" override on Companies. Migrated + backfilled on the **dev** database only, Claude-tested, not yet pushed to production or reviewed by Max. See [[Feature 148 - Granular Payment Controls]].
 
 ---
 

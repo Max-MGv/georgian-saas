@@ -16,7 +16,14 @@ type Price = {
   id: string; minGuests: number; maxGuests: number
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
 }
-type Company = { id: string; name: string; prices: Price[]; accessCode: string | null; contactName: string | null; contactPhone: string | null; contactEmail: string | null }
+type Company = {
+  id: string; name: string; prices: Price[]; accessCode: string | null
+  contactName: string | null; contactPhone: string | null; contactEmail: string | null
+  // Per-company payment override (#148). null = follow the Companies section
+  // default; true = always skip; false = always require. Label-only here —
+  // the real gate is shouldTakePayment(), server-side, in createBooking.ts.
+  skipPayment?: boolean | null
+}
 type MenuItem = { id: string; name: string; type: string }
 type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
 
@@ -58,15 +65,23 @@ type Props = {
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
   /**
-   * Tenant takes online payment (module on + credentials set). Changes the
-   * submit label to the pay variant and redirects to checkout when the server
-   * returns a checkoutUrl. The server decides authoritatively — this prop only
-   * keeps the button honest.
+   * Drives the submit button's "…& Pay" label and whether it redirects to
+   * checkout when the server returns a checkoutUrl. The server decides
+   * authoritatively (shouldTakePayment(), in createBooking.ts) — these props
+   * only keep the button honest, computed per Feature 148's precedence:
+   *  - `configured`: module on + credentials set — the hard-block half.
+   *    Nothing, not even a company's `skipPayment: false` override, can make
+   *    the label say "pay" when this is false.
+   *  - `individual`/`company`: the Individuals/Companies section defaults
+   *    (`configured && paymentEnabledIndividuals/Companies`), used when the
+   *    selected company (if any) has no override (`skipPayment === null`).
    */
-  onlinePaymentEnabled?: boolean
+  onlinePaymentEnabled?: { configured: boolean; individual: boolean; company: boolean }
 }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, onlinePaymentEnabled = false }: Props) {
+const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
+
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, onlinePaymentEnabled = DEFAULT_PAYMENT_READY }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -135,6 +150,21 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
+  // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
+  // (configured) first — nothing beats it — then, for COMPANY bookings, the
+  // selected company's override, then the section default. INDIVIDUAL bookings
+  // never carry a company, so no override ever applies there (Feature 148 §
+  // "edge cases"). Never used for the actual charge decision, which stays
+  // server-side in createBooking.ts.
+  const paymentLabelActive = !onlinePaymentEnabled.configured
+    ? false
+    : bookingType === 'INDIVIDUAL'
+      ? onlinePaymentEnabled.individual
+      : selectedCompany?.skipPayment === true
+        ? false
+        : selectedCompany?.skipPayment === false
+          ? true
+          : onlinePaymentEnabled.company
 
   // Show access code popup when a company with a code is selected; auto-fill directly if no code
   useEffect(() => {
@@ -842,7 +872,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? 'color-mix(in srgb, var(--color-brand) 60%, var(--site-muted))' : C.wine }}>
           {status === 'loading'
             ? t(locale, 'form.submitting')
-            : onlinePaymentEnabled
+            : paymentLabelActive
               ? fc('form_submit_pay', 'form.submit_pay')
               : fc('form_submit', 'form.submit')}
         </button>

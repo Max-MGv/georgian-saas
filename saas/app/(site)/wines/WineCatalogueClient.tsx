@@ -56,6 +56,14 @@ type Company = {
   address: string | null
   accessCode: string | null
   wineDiscountPercent: number | null
+  // Per-company payment override (#148). null/undefined = follow the WINE_ORDER
+  // section default; true = always skip; false = always require. Optional
+  // because `findCompanyByCode()`'s result (direct-code entry path) doesn't
+  // select it — harmless, since the payment label always re-resolves the
+  // selected company from the full `companies` prop (which does have it), not
+  // from this synthetic object. Label-only either way — the real gate is
+  // shouldTakePayment(), server-side, in submitWineOrder.ts.
+  skipPayment?: boolean | null
 }
 
 const C = {
@@ -94,6 +102,7 @@ export default function WineCatalogueClient({
   tenantName = '',
   hideCompanyDropdown = false,
   locale = 'en',
+  paymentConfigured = false,
   onlinePaymentEnabled = false,
 }: {
   wines: DbWine[]
@@ -104,11 +113,18 @@ export default function WineCatalogueClient({
   hideCompanyDropdown?: boolean
   locale?: string
   /**
-   * Tenant has the payment module on AND credentials stored. Drives the button
-   * label and whether the email field is required. The server decides
-   * authoritatively — this prop only keeps the UI honest, so a tenant with the
-   * module on but no credentials shows the plain reservation button rather than
-   * promising a payment step the server would then skip.
+   * Module on AND credentials stored — the hard-block half of the gate,
+   * independent of the WINE_ORDER section toggle (#148). Nothing, not even a
+   * company's `skipPayment: false` ("always require") override, can make the
+   * label say "pay" when this is false — mirrors shouldTakePayment()'s own
+   * precedence, where module/credentials are checked before any override.
+   */
+  paymentConfigured?: boolean
+  /**
+   * WINE_ORDER section default — `paymentConfigured && paymentEnabledWineOrders`
+   * (#148). Drives the button label and whether the email field is required
+   * when no company override applies. The server decides authoritatively via
+   * shouldTakePayment(); this and `paymentConfigured` only keep the UI honest.
    */
   onlinePaymentEnabled?: boolean
 }) {
@@ -331,6 +347,17 @@ export default function WineCatalogueClient({
   }
 
   const selectedCompany = companies.find(c => c.id === companyId)
+  // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
+  // (paymentConfigured) first — nothing beats it — then the selected company's
+  // override, then the WINE_ORDER section default. Never used for the actual
+  // charge decision, which stays server-side in submitWineOrder.ts.
+  const paymentLabelActive = !paymentConfigured
+    ? false
+    : selectedCompany?.skipPayment === true
+      ? false
+      : selectedCompany?.skipPayment === false
+        ? true
+        : onlinePaymentEnabled
   const selectedWines = WINES.filter(w => (quantities[w.vintageId] ?? 0) > 0)
 
   // ── Company selector JSX (shared between drawer and popups) ────────────────
@@ -541,7 +568,7 @@ export default function WineCatalogueClient({
               onClick={() => setShowDrawer(true)}
               className="btn-wine font-semibold px-5 py-2.5 rounded-lg text-sm flex-shrink-0"
             >
-              {onlinePaymentEnabled ? 'Checkout →' : 'Place Reservation →'}
+              {paymentLabelActive ? 'Checkout →' : 'Place Reservation →'}
             </button>
           </div>
         </div>
@@ -576,7 +603,7 @@ export default function WineCatalogueClient({
                 {/* Drawer header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
                   <h2 className="text-lg font-bold" style={{ color: C.text }}>
-                    {onlinePaymentEnabled ? 'Your Order' : 'Place a Reservation'}
+                    {paymentLabelActive ? 'Your Order' : 'Place a Reservation'}
                   </h2>
                   <button
                     type="button"
@@ -659,8 +686,8 @@ export default function WineCatalogueClient({
                         where we owe the buyer a receipt and have nowhere else
                         to send it. Optional otherwise, so tenants on the plain
                         reservation flow keep the form they have today. */}
-                    <input name="contactEmail" type="email" required={onlinePaymentEnabled}
-                      placeholder={onlinePaymentEnabled ? 'Email address (for your receipt)' : 'Email address (optional)'}
+                    <input name="contactEmail" type="email" required={paymentLabelActive}
+                      placeholder={paymentLabelActive ? 'Email address (for your receipt)' : 'Email address (optional)'}
                       value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
 
@@ -669,8 +696,8 @@ export default function WineCatalogueClient({
                     <button type="submit" disabled={isPending}
                       className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">
                       {isPending
-                        ? (onlinePaymentEnabled ? 'Redirecting...' : 'Sending...')
-                        : (onlinePaymentEnabled ? 'Order & Pay' : 'Place Reservation')}
+                        ? (paymentLabelActive ? 'Redirecting...' : 'Sending...')
+                        : (paymentLabelActive ? 'Order & Pay' : 'Place Reservation')}
                     </button>
                   </form>
                 </div>

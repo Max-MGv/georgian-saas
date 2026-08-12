@@ -16,3 +16,15 @@ credentials.txt
 
 # Obsidian local UI state (open tabs, pane sizes) — not meaningful to track
 vault/.obsidian/workspace.json
+
+# Playwright generated output — everything under playwright/ (README, ARCHITECTURE,
+# KNOWN-ISSUES, Progress, notes/) is tracked docs; only run artifacts are ignored here.
+# Actual test code lives in saas/tests/, not here — see playwright/README.md.
+playwright/test-results/
+playwright/playwright-report/
+playwright/.cache/
+playwright/.auth/
+saas/.env.test
+# playwright-cli session artifacts (snapshots, console/network logs) — ephemeral,
+# can appear here if playwright-cli was ever run with the repo root as cwd
+.playwright-cli/

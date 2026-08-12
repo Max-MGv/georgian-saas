@@ -29,7 +29,7 @@ export default async function WinesPage() {
   const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
-  const [wineProducts, companies, hideCompanyDropdownStr, onlinePaymentEnabled, tenant] = await Promise.all([
+  const [wineProducts, companies, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
@@ -38,10 +38,21 @@ export default async function WinesPage() {
     withTenantDb(tenantId, tx => tx.company.findMany({
       where: { tenantId, isIndividual: false, isWineOrderCompany: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true },
+      // skipPayment (#148) — not used server-side here (that's shouldTakePayment()'s
+      // job), but threaded through to the client so the checkout button label can
+      // reflect a company's own override once selected, not just the section default.
+      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
     })),
     getSetting('hide_company_dropdown'),
+    // Two calls (#148), not one, so the client can tell "module/credentials
+    // missing" (a hard block nothing can override) apart from "WINE_ORDER
+    // section is merely off by default" (a company's skipPayment CAN override
+    // that one). Collapsing both into a single scoped boolean would let a
+    // company with skipPayment:false ("always require") flip the label to
+    // "pay" even when the module is actually off — see Feature 148's
+    // build-time notes for why this distinction matters.
     isPaymentConfigured(tenantId),
+    isPaymentConfigured(tenantId, { section: 'WINE_ORDER' }),
     db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
   ])
   const wineDetailLevel: WineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
@@ -71,7 +82,8 @@ export default async function WinesPage() {
       tenantName={tenantName}
       hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
       locale={locale}
-      onlinePaymentEnabled={onlinePaymentEnabled}
+      paymentConfigured={paymentConfigured}
+      onlinePaymentEnabled={wineOrderPaymentReady}
     />
   )
 }

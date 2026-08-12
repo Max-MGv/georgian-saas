@@ -35,6 +35,12 @@ export default async function PaymentSetupBanner({
   const [credentialsOk, individuals, adminLanguage] = await Promise.all([
     // Reuses the same check the booking path uses, so the banner can never
     // disagree with what actually happens at checkout time.
+    // Deliberately unscoped (no `section`) — this banner answers "is Flitt
+    // technically configured at all," a tenant-wide setup-completeness
+    // question, not "is payment on for section X." There is no single section
+    // that applies to a whole-tenant banner, so this is intentionally left as
+    // the plain module+credentials check (#148 scope decision, not an
+    // oversight — see Feature 148's build-time notes).
     isPaymentConfigured(tenantId),
     // "No usable pricing" = the lookup createBooking does would yield nothing,
     // i.e. the condition that makes totalPrice 0 (see lib/pricingUtils findTier).

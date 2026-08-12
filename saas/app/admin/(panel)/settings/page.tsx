@@ -92,7 +92,13 @@ export default async function SettingsPage() {
           payment_bank_code: bankCode,
           payment_iban: iban,
         }}
-        onlinePayment={credentials ? { merchantId: credentials.merchantId, secretKeySet: credentials.secretKeySet } : null}
+        onlinePayment={credentials ? {
+          merchantId: credentials.merchantId,
+          secretKeySet: credentials.secretKeySet,
+          paymentEnabledIndividuals: credentials.paymentEnabledIndividuals,
+          paymentEnabledCompanies: credentials.paymentEnabledCompanies,
+          paymentEnabledWineOrders: credentials.paymentEnabledWineOrders,
+        } : null}
         invoiceEmailMessage={invoiceEmailMessage}
         minGuestsTasting={minGuestsTasting}
         minGuestsTastingLunch={minGuestsTastingLunch}
