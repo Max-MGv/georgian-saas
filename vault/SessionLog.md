@@ -8,6 +8,20 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-08-12 (latest, part 5) — Georgian nav wrap fix (Bug #18)
+
+Max sent a screenshot of the staging Georgian homepage showing the two-word nav labels ("ჩვენ შესახებ"/About, "ღვინის შეკვეთა"/Order Wine) wrapped onto 2 lines, uneven against the single-word labels. Asked to explore a solution coherent with the rest of the site before touching anything.
+
+**Diagnosis, done live against the dev server (Staging Winery) before any source edit:** same shape as bugs #8/#9 (Georgian text longer than English hitting a width constraint), manifesting as wrap instead of overflow. `SiteNav.tsx`'s header container (`max-w-4xl`, 896px) doesn't have quite enough room for the full row in Georgian once logo + links + book button + divider + language switcher + divider + social icons are all accounted for — the browser's default flex-shrink lets any label with a space wrap to save width, and single-word labels have nowhere to wrap so they don't. Confirmed via `javascript_tool` DOM measurements (not guesswork): at 1280px the row used exactly its available space with zero slack; widening the container to `max-w-5xl` (1024px) plus `whitespace-nowrap` on the links fixed it with no overflow at 768px/900px/1280px, in both locales — tested live by temporarily overriding styles via JS before writing the real fix, then re-verified after the actual source change.
+
+**Fix:** `app/(site)/SiteNav.tsx` — `max-w-4xl` → `max-w-5xl` on the header's inner container; `whitespace-nowrap` added to the nav links and Book button (so a future longer translation can't silently wrap again). Confirmed safe to widen: the homepage's own content sections use `max-w-xl`/`max-w-2xl` (576–672px) — narrower than the nav already, so the nav bar is already the widest element on the page independent of body content, and nothing else in the codebase shares this specific class on this component.
+
+**Verification:** `tsc --noEmit` clean. Live DOM checks confirmed no wrap and no horizontal overflow in either locale across the full desktop nav range (768–1280px). No Playwright run (small, well-isolated CSS-only change; `tier1-regression/mobile-georgian-overflow.spec.ts` covers the closest existing case but wasn't re-run this session).
+
+**Status:** `staging`, single commit, ready for Max to look at on the preview. `vault/KnownBugs.md` Bug #18 added and marked resolved.
+
+---
+
 ## 2026-08-12 (latest, part 4) — Four independent low-risk fixes from [[Plan-I18nIntegrity]] / [[ArchitectureReview-2026-08-12]]
 
 Four independent, low-risk tasks, verified with `npx tsc --noEmit` clean after each before moving to the next.

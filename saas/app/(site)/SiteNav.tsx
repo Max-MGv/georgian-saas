@@ -57,7 +57,7 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
 
   return (
     <header className="sticky top-0 z-50 border-b" style={{ backgroundColor: 'var(--site-header)', borderColor: 'var(--site-border)' }}>
-      <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
 
         {/* Logo — falls back to the tenant's name as styled text, never another brand's mark */}
         <Link href="/" onClick={() => setOpen(false)}>
@@ -73,11 +73,11 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
         {/* Desktop nav */}
         <nav className={`hidden md:flex items-center ${locale === 'ka' ? 'gap-4' : 'gap-6'}`}>
           {navLinks.map(l => (
-            <Link key={l.href} href={l.href} className="text-sm font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--site-muted)' }}>
+            <Link key={l.href} href={l.href} className="text-sm font-medium whitespace-nowrap hover:opacity-70 transition-opacity" style={{ color: 'var(--site-muted)' }}>
               {l.label}
             </Link>
           ))}
-          <Link href="/#book" className="btn-wine text-sm font-semibold px-5 py-2 rounded-lg">
+          <Link href="/#book" className="btn-wine text-sm font-semibold whitespace-nowrap px-5 py-2 rounded-lg">
             {bookLabel}
           </Link>
           <span className="w-px h-5" style={{ backgroundColor: 'var(--site-border)' }} />

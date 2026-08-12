@@ -23,6 +23,19 @@ tags: [bugs]
 | 15 | `CompaniesClient.tsx` nests a `<button>` (`HelpHint`'s "?" trigger) inside another `<button>` (the row summary) — invalid HTML, hydration mismatch on every `/admin/companies` load | Admin / Companies | 🔴 Open |
 | 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🟢 Resolved |
 | 17 | `app/actions/prices.ts` — `createPrice`/`updatePrice`/`deletePrice` bypassed tenant isolation entirely (raw `db` instead of `withTenantDb`), letting a tenant-A admin write/delete another tenant's pricing data by passing a cross-tenant `companyId`/`priceId` | Security / DB | 🟢 Resolved |
+| 18 | Public site nav bar (`SiteNav.tsx`) — Georgian's two-word labels ("ჩვენ შესახებ"/About, "ღვინის შეკვეთა"/Order Wine) wrapped onto 2 lines at desktop widths, uneven with the single-word labels that couldn't wrap | Public / Nav | 🟢 Resolved |
+
+---
+
+## Bug #18 — Georgian nav labels wrapping onto 2 lines
+
+> 🟢 **RESOLVED same day found, 2026-08-12.** Max flagged it from a screenshot of the staging Georgian homepage; diagnosed live via the dev server before touching source.
+
+**Root cause:** same shape as bugs #8/#9 (Georgian text runs longer than English, hitting a width constraint) but manifesting as wrapping instead of overflow this time. `SiteNav.tsx`'s header content sat in a `max-w-4xl` (896px) container — enough room for English's nav labels, not quite enough for Georgian's once the full row (logo + links + book button + divider + language switcher + divider + social icons) is accounted for. When the row doesn't fit, the browser's default flex-shrink lets any label containing a space wrap onto 2 lines to save width; single-word labels (Home, Contact) have no space to wrap at, so they stayed put — producing the lopsided look in the screenshot.
+
+**Fix:** widened the header's container `max-w-4xl` → `max-w-5xl` (896px → 1024px) and added `whitespace-nowrap` to the nav links and Book button, so a future translation running long can't silently wrap again — it would need the container to genuinely run out of room, which the width bump prevents down to the `md:` breakpoint (768px) where the layout falls back to the mobile hamburger menu anyway. Confirmed safe to widen: the homepage's own content sections use `max-w-xl`/`max-w-2xl` (576–672px), narrower than the nav already — the nav bar is already the widest element on the page independent of body content width, so this doesn't introduce any new inconsistency.
+
+**Verified live** (dev server, DOM measurements before writing to source): no wrapping and no horizontal overflow in either locale at 768px, 900px, or 1280px viewport width — the full range the desktop nav is shown at. `tsc --noEmit` clean.
 
 ---
 
