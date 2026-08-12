@@ -10,7 +10,7 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ## 🚧 In Progress — Next to build
 
-### #148 — Granular Payment Controls (built + Claude-tested on dev, needs Max to review — not yet committed, production untouched)
+### #148 — Granular Payment Controls (built + Claude-tested on dev, pushed to `staging` 2026-08-12 (`3bf742d`) — needs Max to review on the staging preview, production untouched)
 
 Full reference: `Features/Feature 148 - Granular Payment Controls.md` and `SessionLog.md` 2026-08-11 (build) + 2026-08-11 follow-up (button-label fixes on `/` and `/wines`). Migrated to the **dev** database only — Nikalas Marani (prod) is completely unaffected until this is deliberately migrated there. Needs `modulesOnlinePayment` + Flitt credentials on for the test tenant to see any of this — with the module off, every toggle below is correctly a no-op, same as today.
 

@@ -8,6 +8,34 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-08-12 (latest, part 4) — Four independent low-risk fixes from [[Plan-I18nIntegrity]] / [[ArchitectureReview-2026-08-12]]
+
+Four independent, low-risk tasks, verified with `npx tsc --noEmit` clean after each before moving to the next.
+
+**1. `KnownBugs.md` Bug #16 fixed** — `/wines` Grid/List toggle was hardcoded English (`title="Grid view"`/`title="List view"`, no `t()` call at all). Added `wines.view.grid`/`wines.view.list` keys to `lib/t.ts` (en: "Grid view"/"List view", ka: "ბადის ხედი"/"სიის ხედი"), swapped the two literals for `t(locale, ...)` calls in `WineCatalogueClient.tsx`. Verified the keys actually resolve in both locales via a standalone script import (browser preview navigation wasn't available in this session, so used a direct code check instead).
+
+**2. Cache-staleness note added to super-admin Edit Tenant UI** — `proxy.ts`'s 5-minute tenant cache means a saved Modules or Theme change can take up to 5 minutes to show on the live site, with nothing telling a super-admin that. Added "Changes may take up to 5 minutes to appear on the live site." near both the Modules checkboxes and the Theme preset picker in `app/super-admin/tenants/TenantFormClient.tsx`. Confirmed `app/super-admin/` uses no i18n system at all (no `t`/`adminT` imports anywhere under it — plain hardcoded English, unlike the tenant-facing `/admin`), so matched that convention rather than introducing translation keys for a Max-only interface.
+
+**3. Built `scripts/check-i18n-parity.ts`** (Plan-I18nIntegrity part B1) — parses `lib/t.ts` and `lib/adminT.ts` as text (brace-depth + quote/comment-aware, since the `en`/`ka` consts aren't exported) and diffs the key sets. **Ran it: both dictionaries are in full parity** — `t.ts` 119/119, `adminT.ts` 890/890 (matches the one-off manual count mentioned in the plan doc from #148's build) — zero mismatches found, nothing needed fixing. Kept as a permanent, rerunnable script (`npx tsx scripts/check-i18n-parity.ts`).
+
+**4. Extended the two-tenant RLS test pattern to the 3 remaining JOIN-only tables** — `scripts/test-orderextra-rls.ts`, `scripts/test-ordermasterclass-rls.ts`, `scripts/test-wineorderitem-rls.ts`, each modeled on today's `scripts/test-price-rls.ts` (itself modeled on `scripts/test-payment-rls.ts`): two throwaway tenants, a parent record under each (`Order`/`Order`/`WineOrder` respectively — `OrderMasterclass` also needed a per-tenant `MasterclassItem`), a child row under each, then asserting the JOIN-based RLS policy blocks cross-tenant read/update/delete/insert in both directions, with full cleanup. **All three pass: 8/8 checks each, 24/24 total.** Kept as permanent scripts, same status as `test-price-rls.ts`.
+
+**Not touched this pass (explicitly out of scope):** Plan-I18nIntegrity's part B2 (`SiteContent` seed-parity script), B3 (raw-literal lint check), and part A item 2 (transactional email locale-awareness, which needs an `Order.locale` schema decision first) — still 📋 Planned. FeatureLog rows #150/#152/#153/#154 also untouched.
+
+**Verification:** `npx tsc --noEmit` clean after all four tasks. All new/changed scripts run successfully against the dev database.
+
+**Status:** committed to `staging` only, per Rule 0 — not merged to `master`. Ready for Max's review on the staging preview.
+
+---
+
+## 2026-08-12 (latest, part 3) — Committed + pushed #148 and the Playwright suite to `staging`
+
+Both had been sitting uncommitted across recent sessions (#148 Granular Payment Controls, built 2026-08-11; the Playwright regression suite, #147, built across several prior sessions). Max asked directly to commit and push everything. Reviewed the full diff first — `.gitignore` changes only *added* ignore rules (notably `saas/.env.test`, tightening rather than loosening secret protection), `next.config.ts`'s `allowedDevOrigins` addition is a documented dev-only test-tenant accommodation, and `saas/tests/helpers/credentials.ts` (checked closely purely because of its filename) reads `credentials.txt` at runtime rather than embedding any secret. One commit (`3bf742d`, 60 files), pushed to `staging` only — confirmed current branch first, `master` untouched. Production unaffected either way (#148's migration only ever ran against dev; the Playwright suite runs against dev/staging only by design).
+
+**Status:** on `staging`, ready for Max to review on the staging preview. `vault/MyToDo.md`'s #148 entry updated to reflect the commit.
+
+---
+
 ## 2026-08-12 (latest, part 2) — Fixed `prices.ts` tenant-isolation bug found in the architecture review
 
 Follow-on to the same-day architecture review below, with Max's explicit go-ahead to implement the one real security finding it surfaced (task chip `task_262c73ba`).

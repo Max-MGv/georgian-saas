@@ -21,7 +21,7 @@ tags: [bugs]
 | 13 | Real Companies list page (`/admin/companies`) had zero visual indicator for missing identificationCode/contact/pricing — same underlying data as the nudge banner, just never surfaced per-row | Admin / Companies | 🟢 Resolved |
 | 14 | Enhanced-booking and wine-catalogue "code confirmed"/"no rate for guest count"/discount badges hardcode light green/red colors that don't respect the tenant's theme (`BookingForm.tsx`, `WineCatalogueClient.tsx`) — would clash on dark presets | Public / Booking, Wine Catalogue | 🟢 Resolved |
 | 15 | `CompaniesClient.tsx` nests a `<button>` (`HelpHint`'s "?" trigger) inside another `<button>` (the row summary) — invalid HTML, hydration mismatch on every `/admin/companies` load | Admin / Companies | 🔴 Open |
-| 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🔴 Open |
+| 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🟢 Resolved |
 | 17 | `app/actions/prices.ts` — `createPrice`/`updatePrice`/`deletePrice` bypassed tenant isolation entirely (raw `db` instead of `withTenantDb`), letting a tenant-A admin write/delete another tenant's pricing data by passing a cross-tenant `companyId`/`priceId` | Security / DB | 🟢 Resolved |
 
 ---
@@ -259,14 +259,16 @@ Expect `fra1::fra1::…`. A second segment of `iad1` means the region pin was lo
 
 ## Bug #16 — `/wines` Grid/List view toggle buttons are hardcoded English, no i18n
 
+> 🟢 **RESOLVED 2026-08-12.** Fixed as part of [[Plan-I18nIntegrity]] part A, item 1 (the plan's first, well-scoped fix).
+
 **Severity:** Low — cosmetic, Georgian-only gap; no functional impact
-**Found:** 2026-08-11, while building the Playwright suite's locale-integrity test (#147 Phase 4) · **Status:** 🔴 Open
+**Found:** 2026-08-11, while building the Playwright suite's locale-integrity test (#147 Phase 4) · **Status:** 🟢 Resolved
 
 **Root cause:** `app/(site)/wines/WineCatalogueClient.tsx`'s view-toggle buttons (~line 726-742) set `title="Grid view"` and `title="List view"` as plain string literals — neither calls `t()` against `lib/t.ts`, so there is no Georgian (or any other locale) translation to fall back to or leak from. This is a different failure shape than the #131-class bug the new locale-integrity test guards against (a dictionary key existing but missing a `ka` row, which falls back to raw-key text or English) — here there is no key at all, so the test's raw-key-leak and console-error assertions never trip on it.
 
 **Impact:** these two labels stay in English even when a visitor has switched the whole `/wines` page to Georgian — everything else on the page translates correctly.
 
-**Fix:** not made here. Add `wines.view.grid`/`wines.view.list` (or similar) keys to `lib/t.ts` in both `en` and `ka`, and swap the two literal `title` strings for `t()` calls. Flagged as task chip `task_c0ea7d95`, found and documented in `playwright/notes/11-locale-integrity.md` and `playwright/KNOWN-ISSUES.md`.
+**Fix:** added `wines.view.grid`/`wines.view.list` keys to `lib/t.ts` in both `en` ("Grid view"/"List view") and `ka` ("ბადის ხედი"/"სიის ხედი"), and swapped the two literal `title` strings for `t(locale, 'wines.view.grid')`/`t(locale, 'wines.view.list')` calls — `locale` was already in scope in the component. Verified directly: a standalone script importing `lib/t.ts` confirmed both keys resolve correctly for `en` and `ka`. `npx tsc --noEmit` clean. New `scripts/check-i18n-parity.ts` (built same session, part B1 of the same plan) confirms `t.ts` is at full 119/119 key parity, including these two. Originally flagged as task chip `task_c0ea7d95`, found and documented in `playwright/notes/11-locale-integrity.md` and `playwright/KNOWN-ISSUES.md`.
 
 ---
 

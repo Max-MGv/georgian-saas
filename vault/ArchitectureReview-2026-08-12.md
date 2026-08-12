@@ -99,6 +99,8 @@ Systems 1 and 2 are connected by a real fallback chain, e.g. `BookingForm.tsx:85
 
 Similarly, `EditableText.tsx` and `EditableLongText.tsx` (`MaintenanceNotes.md` §7) are two independent implementations of the same save/cancel/reset behavior — a deliberate call at the time (different DOM needs), but it means any future change to that UX pattern (e.g. the #148 payment work's toggle interactions, if it ever needs long-text fields) has to remember to touch both.
 
+**New, found while verifying this section (not in the original pass):** `lib/emails/bookingConfirmation.ts` and `lib/emails/wineOrderReceipt.ts` — the actual transactional emails sent to customers — use none of the three text systems above. They hardcode English strings directly, with no locale parameter at all. A customer who booked in Georgian still gets an English confirmation/receipt email. This is a fourth, even more disconnected case: not an adoption gap in an existing pattern, but a surface the pattern never reached at all.
+
 ---
 
 ## 8. Tests can pass green while proving nothing — `test-rls.ts` on a 1-tenant DB
