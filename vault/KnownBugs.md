@@ -20,6 +20,9 @@ tags: [bugs]
 | 12 | `getFinishDetailsStatus()`'s "needs pricing" check applied to ALL companies, including wine-order-only ones that never use price tiers — false-positive nudge | Admin / Onboarding | 🟢 Resolved |
 | 13 | Real Companies list page (`/admin/companies`) had zero visual indicator for missing identificationCode/contact/pricing — same underlying data as the nudge banner, just never surfaced per-row | Admin / Companies | 🟢 Resolved |
 | 14 | Enhanced-booking and wine-catalogue "code confirmed"/"no rate for guest count"/discount badges hardcode light green/red colors that don't respect the tenant's theme (`BookingForm.tsx`, `WineCatalogueClient.tsx`) — would clash on dark presets | Public / Booking, Wine Catalogue | 🟢 Resolved |
+| 15 | `CompaniesClient.tsx` nests a `<button>` (`HelpHint`'s "?" trigger) inside another `<button>` (the row summary) — invalid HTML, hydration mismatch on every `/admin/companies` load | Admin / Companies | 🔴 Open |
+| 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🔴 Open |
+| 17 | `app/actions/prices.ts` — `createPrice`/`updatePrice`/`deletePrice` bypassed tenant isolation entirely (raw `db` instead of `withTenantDb`), letting a tenant-A admin write/delete another tenant's pricing data by passing a cross-tenant `companyId`/`priceId` | Security / DB | 🟢 Resolved |
 
 ---
 
@@ -238,5 +241,51 @@ Expect `fra1::fra1::…`. A second segment of `iad1` means the region pin was lo
 **Fix:** rather than hand-authoring success/error color pairs for all 16 presets (11 light, 5 dark), each file now defines a small `STATUS` object that blends the semantic hue into the theme's own surface/border/text via CSS `color-mix()` — e.g. `color-mix(in srgb, #16a34a 12%, var(--site-surface))` for the success background. This keeps every status color recognizably green/red while automatically adapting to whatever tone the active preset actually has, light or dark, with no per-preset authoring needed and no new theme architecture. Verified the mechanism resolves correctly against real computed CSS on both the light default ("Cream & wine") and a dark preset ("Midnight cellar," switched on the actual test tenant via super-admin, then reverted) — on dark, the mix correctly produced a dark-green-tinted background with a bright, readable green text/border instead of the old fixed light-mint box. `tsc --noEmit` clean.
 
 **Not fixed, deliberately out of scope:** the admin panel's own separate (and much larger, pre-existing) pattern of only theming the `--color-brand` accent and hardcoding everything else — confirmed this is consistent across every admin page, not specific to this bug, and a different-sized problem. A `hover:bg-gray-50` Tailwind literal on both files' "Enter Manually" button was also left as-is (low severity, a brief hover flash; fixing it would need JS-driven state since inline `style` can't express `:hover`).
+
+---
+
+## Bug #15 — Nested `<button>` on `/admin/companies` causes a hydration mismatch
+
+**Severity:** Medium — no data loss by itself, but cost multiple clicks their effect unpredictably (row expand, tab toggle, "+ Add Booking Company") and once contributed to a stale-element-reference incident that briefly overwrote real Cookie Company data during manual testing (caught and reverted)
+**Found:** 2026-08-10, while building the Playwright suite's companies-CRUD test (#147 Phase 3) · **Status:** 🔴 Open
+
+**Root cause:** `CompaniesClient.tsx`'s per-company row summary is a `<button onClick={() => setExpandedId(...)}>` (`app/admin/(panel)/companies/CompaniesClient.tsx` ~line 733) wrapping the row's whole content, including a conditionally-rendered `<HelpHint text={...} />` (~line 757) whenever the row has a "needs details" warning. `HelpHint.tsx` itself renders its "?" trigger as its own `<button type="button">` (~line 69) — so a `<button>` ends up nested inside another `<button>`, which is invalid HTML. Browsers correct this at parse time, so React's server-rendered markup and the DOM the browser actually builds disagree, producing a hydration mismatch on every page load, in any locale. (The similarly-structured Individuals row, ~line 664-685, is safe — its `HelpHint` sits as a sibling *after* the closing `</button>`, not inside it.)
+
+**Observed impact:** React periodically discards/rebuilds the affected DOM subtrees client-side to reconcile the mismatch, which cost clicks their effect unpredictably across the page — not one flaky element, a property of the whole page. Worked around in the Playwright test with a click-and-verify retry helper (`clickUntil()`); not fixed at the source. While diagnosing this live via `playwright-cli`, a stale cached element reference (pointing at a row that had just been rebuilt) briefly caused a real accidental edit to Cookie Company's live data — caught via the actual POST body and reverted via direct SQL, confirmed restored.
+
+**Recommended fix:** move any row's `HelpHint` outside the row-summary `<button>` (same pattern already used correctly for the Individuals row), or make the row-summary clickable via a non-`<button>` element (e.g. a `<div role="button" tabIndex={0}>`) if `HelpHint` needs to stay visually inside it. Not fixed here — flagged this session as task chip `task_b2b8da79`, tracked separately from the Playwright suite that found it (`playwright/KNOWN-ISSUES.md` #2).
+
+---
+
+## Bug #16 — `/wines` Grid/List view toggle buttons are hardcoded English, no i18n
+
+**Severity:** Low — cosmetic, Georgian-only gap; no functional impact
+**Found:** 2026-08-11, while building the Playwright suite's locale-integrity test (#147 Phase 4) · **Status:** 🔴 Open
+
+**Root cause:** `app/(site)/wines/WineCatalogueClient.tsx`'s view-toggle buttons (~line 726-742) set `title="Grid view"` and `title="List view"` as plain string literals — neither calls `t()` against `lib/t.ts`, so there is no Georgian (or any other locale) translation to fall back to or leak from. This is a different failure shape than the #131-class bug the new locale-integrity test guards against (a dictionary key existing but missing a `ka` row, which falls back to raw-key text or English) — here there is no key at all, so the test's raw-key-leak and console-error assertions never trip on it.
+
+**Impact:** these two labels stay in English even when a visitor has switched the whole `/wines` page to Georgian — everything else on the page translates correctly.
+
+**Fix:** not made here. Add `wines.view.grid`/`wines.view.list` (or similar) keys to `lib/t.ts` in both `en` and `ka`, and swap the two literal `title` strings for `t()` calls. Flagged as task chip `task_c0ea7d95`, found and documented in `playwright/notes/11-locale-integrity.md` and `playwright/KNOWN-ISSUES.md`.
+
+---
+
+## Bug #17 — `prices.ts` bypassed tenant isolation (raw `db` instead of `withTenantDb`)
+
+> 🟢 **RESOLVED same day found, 2026-08-12.** Found during the full architecture/flow review earlier this session ([[ArchitectureReview-2026-08-12]] section 1), flagged as task chip `task_262c73ba`, then fixed with Max's explicit go-ahead.
+
+**Severity:** High — a real cross-tenant write path, not a hypothetical. Would have let any tenant-A admin write or delete another tenant's pricing data today, with 2 real tenants on the platform.
+
+**Root cause:** `app/actions/prices.ts` — `createPrice`, `updatePrice`, `deletePrice` — called the raw Prisma client (`db.price.*`) directly instead of going through `withTenantDb` (`lib/db.ts`), the tenant-isolation wrapper every other tenant-scoped action uses (see [[RLS-Architecture]]). They were guarded only by `requireAdmin()` (`lib/requireAdmin.ts`), which takes no arguments and only checks that the *calling admin's own* tenant matches the current request's domain — it never validated that the `companyId`/`priceId` *argument* passed into these functions belonged to that tenant. `Price` has no `tenantId` column of its own; its RLS policy is JOIN-based against `Company.tenantId`. Because these three functions never called `withTenantDb` (which does `SET LOCAL ROLE app_user` before querying), they ran as the raw `postgres`-role connection, which bypasses RLS by design (superuser). Only `setDisplayPrice` in the same file already did this correctly (`price.company.tenantId !== tenantId` check) — that was the reference pattern for the fix. `onboarding.ts`'s `createOnboardingCompany()`/`addIndividualsPriceTier()` both call into `createPrice`, so they inherited the gap without knowing it (harmless in practice there, since both always pass a same-tenant `companyId` — the risk was a direct/crafted call, e.g. via devtools network tab).
+
+**Adversarial verification (same review session, before the fix):** a second agent was sent specifically to try to disprove the finding and could not — confirmed these are real Next.js Server Actions, directly invocable by an authenticated tenant-A admin with an arbitrary tenant-B ID, bypassing the UI entirely. That pass also surfaced that `scripts/setup-rls.ts` only ever runs `ENABLE ROW LEVEL SECURITY`, never `FORCE ROW LEVEL SECURITY` — investigated as part of this fix, see below.
+
+**Fix:** `createPrice`, `updatePrice`, `deletePrice` now all run inside `withTenantDb(tenantId, ...)` using the admin's own resolved `tenantId` (from `getTenantId()`). Since `Price`'s RLS policy requires `EXISTS (Company WHERE company.id = price.companyId AND company.tenantId = current_setting('app.tenant_id'))`, a cross-tenant `companyId`/`priceId` argument now fails RLS automatically. On top of that, each function does an explicit ownership check before touching anything (mirrors `setDisplayPrice`'s pattern) so a cross-tenant attempt returns a friendly `{ error: 'Not found.' }` instead of a thrown Postgres RLS exception. `validateTier()` (the overlap-check helper) was also changed to take the transaction client instead of the raw `db`, so its read is tenant-scoped too.
+
+**`FORCE ROW LEVEL SECURITY` investigation:** the review session's adversarial pass had flagged this as a second, independent reason unwrapped queries bypass RLS (Postgres `ENABLE` without `FORCE` exempts a table's *owner* role, and the app's Prisma connection owns every table). Queried `pg_roles` against the **dev** database directly: `postgres` has `rolbypassrls = true`. A Postgres role with `rolbypassrls = true` ignores RLS regardless of `FORCE` — `FORCE` only removes the owner-exemption, it does not touch genuine `BYPASSRLS`/superuser status. So adding `FORCE ROW LEVEL SECURITY` to `setup-rls.ts` would change **nothing** for this connection today — it was **not** added. This corrects the review doc's speculation, which had correctly identified the mechanism but hadn't yet confirmed which case actually applies here. If `DATABASE_URL` is ever pointed at a role without `BYPASSRLS` (a real superuser-status change, not something planned), this should be revisited.
+
+**Verification:** `npx tsc --noEmit` clean. `npx tsx scripts/check-rls.ts` confirms all 14 tenanted tables still have RLS on with policies intact (unchanged by this fix). New `scripts/test-price-rls.ts` (two-tenant pattern, modeled on `scripts/test-payment-rls.ts` per `MaintenanceNotes.md` §10 — the general `test-rls.ts` suite doesn't reliably catch a JOIN-policy miss like this one) — 10/10 checks pass, covering both the raw RLS policy directly and the fixed action functions' explicit ownership checks. Kept as a permanent addition.
+
+**Status:** fixed and pushed to `staging` (dev database, `georgian-saas-git-staging-...vercel.app`). **Not yet merged to `master`/production** — awaiting Max's review on staging per the standing git workflow (Rule 0).
 
 ---

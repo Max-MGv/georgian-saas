@@ -1,11 +1,12 @@
 'use server'
 
-import { db } from '@/lib/db'
+import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 
 async function validateTier(
+  tx: TxClient,
   companyId: string,
   minGuests: number,
   maxGuests: number,
@@ -14,7 +15,7 @@ async function validateTier(
   if (minGuests > maxGuests) return 'Min guests cannot exceed max guests.'
   if (minGuests < 1) return 'Min guests must be at least 1.'
   if (maxGuests < 1) return 'Max guests must be at least 1.'
-  const overlap = await db.price.findFirst({
+  const overlap = await tx.price.findFirst({
     where: {
       companyId,
       minGuests: { lte: maxGuests },
@@ -35,11 +36,22 @@ export async function createPrice(data: {
   registrationPrice: number
 }) {
   await requireAdmin()
-  const err = await validateTier(data.companyId, data.minGuests, data.maxGuests)
-  if (err) return { error: err }
-  await db.price.create({ data })
-  revalidatePath('/admin/companies')
-  return { success: true }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async (tx) => {
+    // Defense-in-depth, mirrors setDisplayPrice's pattern: the companyId argument
+    // is caller-supplied, so confirm it actually belongs to this admin's tenant
+    // before touching anything. RLS (Price's policy JOINs to Company) would also
+    // reject a cross-tenant write here, but a raw RLS failure is a thrown
+    // Postgres error, not this file's `{ error }` convention — so check first.
+    const company = await tx.company.findFirst({ where: { id: data.companyId, tenantId } })
+    if (!company) return { error: 'Not found.' }
+    const err = await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
+    if (err) return { error: err }
+    await tx.price.create({ data })
+    return { success: true as const }
+  })
+  if (!('error' in result)) revalidatePath('/admin/companies')
+  return result
 }
 
 export async function updatePrice(id: string, data: {
@@ -50,18 +62,36 @@ export async function updatePrice(id: string, data: {
   registrationPrice: number
 }, companyId: string) {
   await requireAdmin()
-  const err = await validateTier(companyId, data.minGuests, data.maxGuests, id)
-  if (err) return { error: err }
-  await db.price.update({ where: { id }, data })
-  revalidatePath('/admin/companies')
-  return { success: true }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async (tx) => {
+    const price = await tx.price.findFirst({
+      where: { id, companyId },
+      select: { id: true, company: { select: { tenantId: true } } },
+    })
+    if (!price || price.company.tenantId !== tenantId) return { error: 'Not found.' }
+    const err = await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
+    if (err) return { error: err }
+    await tx.price.update({ where: { id }, data })
+    return { success: true as const }
+  })
+  if (!('error' in result)) revalidatePath('/admin/companies')
+  return result
 }
 
 export async function deletePrice(id: string) {
   await requireAdmin()
-  await db.price.delete({ where: { id } })
-  revalidatePath('/admin/companies')
-  return { success: true }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async (tx) => {
+    const price = await tx.price.findFirst({
+      where: { id },
+      select: { id: true, company: { select: { tenantId: true } } },
+    })
+    if (!price || price.company.tenantId !== tenantId) return { error: 'Not found.' }
+    await tx.price.delete({ where: { id } })
+    return { success: true as const }
+  })
+  if (!('error' in result)) revalidatePath('/admin/companies')
+  return result
 }
 
 export async function setDisplayPrice(priceId: string) {
