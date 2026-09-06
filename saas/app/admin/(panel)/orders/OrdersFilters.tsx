@@ -10,13 +10,13 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
 const C = {
-  border: '#e0d4c0',
-  muted: '#6b5a47',
-  inputBg: '#fffdf9',
-  text: '#1c1008',
+  border: 'var(--site-border)',
+  muted: 'var(--site-muted)',
+  inputBg: 'var(--site-surface)',
+  text: 'var(--site-text)',
   wine: 'var(--color-brand)',
-  faint: '#a89070',
-  bg: '#fff9f3',
+  faint: 'var(--site-secondary)',
+  bg: 'var(--site-surface)',
 }
 
 const STATUSES = [
@@ -408,7 +408,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     </div>
 
     {/* Progress bar */}
-    <div style={{ height: 2, backgroundColor: '#e0d4c0', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+    <div style={{ height: 2, backgroundColor: 'var(--site-border)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
       {isNavigating && (
         <div style={{
           height: '100%',

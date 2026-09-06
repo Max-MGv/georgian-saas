@@ -4,8 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', wine: 'var(--color-brand)',
 }
 
 export type SelectOption = { value: string; label: string }
@@ -63,7 +63,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
       <div
         style={{
           display: 'flex', alignItems: 'center', gap: 4,
-          backgroundColor: '#fffdf9',
+          backgroundColor: 'var(--site-surface)',
           border: `1px solid ${open ? C.muted : C.border}`,
           borderRadius: 8, padding: '8px 12px', cursor: 'text',
           transition: 'border-color 0.15s',
@@ -94,7 +94,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-          backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
+          backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`,
           borderRadius: 8, boxShadow: '0 4px 20px rgba(28,16,8,0.10)',
           zIndex: 200, maxHeight: 220, overflowY: 'auto',
         }}>

@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { adminT } from '@/lib/adminT'
 
-const C = { border: '#e0d4c0', muted: '#6b5a47', wine: 'var(--color-brand)', inputBg: '#fffdf9' }
+const C = { border: 'var(--site-border)', muted: 'var(--site-muted)', wine: 'var(--color-brand)', inputBg: 'var(--site-surface)' }
 
 type Props = {
   view: 'table' | 'calendar'

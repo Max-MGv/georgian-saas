@@ -104,10 +104,10 @@ function FlittSection({ at, initial }: { at: At; initial: { merchantId: string; 
   }
 
   return (
-    <div className="mt-6 rounded-xl border p-4" style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}>
+    <div className="mt-6 rounded-xl border p-4" style={{ borderColor: C.border, backgroundColor: 'var(--site-surface)' }}>
       <div className="flex items-center gap-2 mb-1">
         <p className="font-medium text-sm" style={{ color: C.text }}>{at('onboarding.payment.flittTitle')}</p>
-        <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#f5efe6', color: C.faint }}>
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>
           {at('onboarding.payment.flittOptional')}
         </span>
       </div>
@@ -134,7 +134,7 @@ function FlittSection({ at, initial }: { at: At; initial: { merchantId: string; 
             <label className="text-xs" style={{ color: C.muted }}>{at('settings.onlinePayment.secretKey')}</label>
             <span
               className="text-xs px-2 py-0.5 rounded-full"
-              style={secretKeySet ? { backgroundColor: '#dcfce7', color: '#166534' } : { backgroundColor: '#f5efe6', color: C.faint }}
+              style={secretKeySet ? { backgroundColor: '#dcfce7', color: '#166534' } : { backgroundColor: 'var(--site-bg)', color: C.faint }}
             >
               {at(secretKeySet ? 'settings.onlinePayment.statusSet' : 'settings.onlinePayment.statusNotSet')}
             </span>

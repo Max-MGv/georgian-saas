@@ -8,8 +8,8 @@ import HelpHint from '@/components/HelpHint'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const STATUS_COLOR: Record<string, { border: string; pill: string; pillText: string; labelKey: string }> = {
@@ -106,7 +106,7 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
         className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150"
         style={{
           borderColor: isDone ? C.wine : panelHovered && isClickable ? '#8a4a30' : C.border,
-          backgroundColor: isDone ? C.wine : hovered && isClickable ? '#fdf0e8' : '#fff9f3',
+          backgroundColor: isDone ? C.wine : hovered && isClickable ? '#fdf0e8' : 'var(--site-surface)',
           transform: hovered && isClickable ? 'scale(1.45)' : 'scale(1)',
           boxShadow: isActive
             ? `0 0 0 4px ${C.wine}22, 0 0 0 7px ${C.wine}12`
@@ -213,7 +213,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
               <div key={stage} className="flex flex-col items-start">
                 <div className="flex items-center gap-2.5">
                   <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                    style={{ borderColor: '#d1b9a0', backgroundColor: '#f5efe6' }}>
+                    style={{ borderColor: '#d1b9a0', backgroundColor: 'var(--site-bg)' }}>
                     <span className="text-xs" style={{ color: '#d1b9a0' }}>{i + 1}</span>
                   </div>
                   <span className="text-xs" style={{ color: '#d1b9a0' }}>{at(STAGE_LABEL_KEYS[stage])}</span>
@@ -255,7 +255,7 @@ function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, on
                 {i < STAGES.length - 1 && (
                   <div
                     className="w-0.5 h-4 ml-3 my-0.5 transition-colors duration-150"
-                    style={{ backgroundColor: currentIdx > i ? C.wine : '#e0d4c0' }}
+                    style={{ backgroundColor: currentIdx > i ? C.wine : 'var(--site-border)' }}
                   />
                 )}
               </div>
@@ -432,7 +432,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                   <div className="flex flex-wrap gap-1 mt-1">
                     {order.wineItems.map(item => (
                       <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
-                        style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
+                        style={{ borderColor: C.border, color: C.muted, backgroundColor: 'var(--site-bg)' }}>
                         {itemLabel(item)}
                       </span>
                     ))}
@@ -577,7 +577,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                   <div className="flex flex-wrap gap-1 mt-1">
                     {order.wineItems.map(item => (
                       <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
-                        style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
+                        style={{ borderColor: C.border, color: C.muted, backgroundColor: 'var(--site-bg)' }}>
                         {itemLabel(item)}
                       </span>
                     ))}
@@ -698,7 +698,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
   }
 
   if (orders.length === 0) {
-    return <div className="text-center py-20 text-sm" style={{ color: '#a89070' }}>{at('wineOrders.noOrdersYet')}</div>
+    return <div className="text-center py-20 text-sm" style={{ color: 'var(--site-secondary)' }}>{at('wineOrders.noOrdersYet')}</div>
   }
 
   const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : at('wineOrders.mode.pack')
@@ -781,7 +781,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
                     <div className="flex flex-wrap gap-2">
                       {order.wineItems.map(item => (
                         <span key={item.id} className="text-xs px-2 py-1 rounded border"
-                          style={{ borderColor: C.border, color: C.muted, backgroundColor: '#f5efe6' }}>
+                          style={{ borderColor: C.border, color: C.muted, backgroundColor: 'var(--site-bg)' }}>
                           {itemLabel(item)}
                         </span>
                       ))}

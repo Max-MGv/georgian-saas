@@ -11,6 +11,9 @@ export type WineSelection = {
   name: string
   year: number
   quantity: number
+  // Client-supplied — display-only. Never trusted for pricing; the server
+  // re-fetches the real WineVintage.price for every line before computing
+  // any total. See KnownBugs.md #22.
   price: number
 }
 
@@ -34,8 +37,6 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
   const winesJson = formData.get('wines') as string
   const companyId = (formData.get('companyId') as string | null)?.trim() || null
-  const discountPercentRaw = formData.get('discountPercent') as string | null
-  const discountPercent = discountPercentRaw ? parseFloat(discountPercentRaw) : null
 
   if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
@@ -48,11 +49,32 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     return { error: 'Please select at least one wine.' }
   }
 
-  const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * w.price, 0)
-  const totalAmount = discountPercent && discountPercent > 0
+  const tenantId = await getTenantId()
+
+  // Re-fetch real prices and the company's real discount from the DB —
+  // never trust the client's `price`/`discountPercent` for the amount
+  // actually charged/recorded. See KnownBugs.md #22.
+  const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
+  const [realVintages, realCompany] = await withTenantDb(tenantId, tx => Promise.all([
+    tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
+    companyId
+      ? tx.company.findFirst({ where: { id: companyId, tenantId }, select: { wineDiscountPercent: true } })
+      : Promise.resolve(null),
+  ]))
+  const priceMap = Object.fromEntries(realVintages.map(v => [v.id, v.price]))
+
+  if (selectedWines.some(w => !(w.vintageId in priceMap))) {
+    return { error: 'One or more selected wines are no longer available. Please refresh and try again.' }
+  }
+
+  const discountPercent = realCompany?.wineDiscountPercent && realCompany.wineDiscountPercent > 0
+    ? Math.min(realCompany.wineDiscountPercent, 100)
+    : null
+
+  const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * priceMap[w.vintageId], 0)
+  const totalAmount = discountPercent
     ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
     : subtotal
-  const tenantId = await getTenantId()
 
   // Wine orders always show the customer their total, so unlike company
   // bookings there's no hidden-price case to exclude here (§7.4).
@@ -96,7 +118,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           wineVintageId: w.vintageId,
           wineNameSnapshot: w.name,
           vintageYearSnapshot: w.year,
-          priceSnapshot: w.price,
+          priceSnapshot: priceMap[w.vintageId],
           quantity: w.quantity,
         })),
       })

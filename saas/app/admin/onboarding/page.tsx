@@ -8,7 +8,7 @@ import { ensureIndividualsCompany } from '@/app/actions/companies'
 import { adminT } from '@/lib/adminT'
 import OnboardingWizard, { type OnboardingData } from './OnboardingWizard'
 
-const C = { faint: '#a89070', border: '#e0d4c0', bg: '#fff9f3', text: '#1c1008' }
+const C = { faint: 'var(--site-secondary)', border: 'var(--site-border)', bg: 'var(--site-surface)', text: 'var(--site-text)' }
 
 export default async function OnboardingPage() {
   const [tenantId, h, adminLanguage] = await Promise.all([
@@ -145,7 +145,7 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f0ebe3' }}>
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--site-bg)' }}>
       <header className="border-b" style={{ backgroundColor: C.bg, borderColor: C.border }}>
         <div className="px-4 py-3 flex items-center justify-between gap-4 max-w-3xl mx-auto">
           <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export default async function OnboardingPage() {
 
       <main className="px-6 py-10 max-w-3xl mx-auto">
         <h1 className="text-2xl font-bold mb-2" style={{ color: C.text }}>{at('onboarding.header.title')}</h1>
-        <p className="text-sm mb-8" style={{ color: '#6b5a47' }}>{at('onboarding.header.subtitle')}</p>
+        <p className="text-sm mb-8" style={{ color: 'var(--site-muted)' }}>{at('onboarding.header.subtitle')}</p>
 
         <OnboardingWizard data={data} />
       </main>

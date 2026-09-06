@@ -20,11 +20,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const at = (key: string) => adminT(adminLanguage, key)
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#f0ebe3' }}>
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--site-bg)' }}>
       {/* Top nav */}
       <nav
         className="border-b"
-        style={{ backgroundColor: '#fff9f3', borderColor: '#e0d4c0' }}
+        style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}
       >
         {/* Top row: brand + logout */}
         <div className="px-4 py-3 flex items-center justify-between gap-4">
@@ -36,10 +36,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 {tenantName}
               </span>
             )}
-            <span className="text-xs font-medium" style={{ color: '#a89070' }}>{at('nav.adminTag')}</span>
+            <span className="text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{at('nav.adminTag')}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-xs" style={{ color: '#a89070' }}>{user?.email}</span>
+            <span className="hidden sm:block text-xs" style={{ color: 'var(--site-secondary)' }}>{user?.email}</span>
             {user?.app_metadata?.role === 'super_admin' && (
               <a
                 href="/super-admin"
@@ -69,7 +69,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               key={link.href}
               href={link.href}
               className="text-sm whitespace-nowrap px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
-              style={{ color: '#6b5a47' }}
+              style={{ color: 'var(--site-muted)' }}
             >
               {link.label}
             </a>

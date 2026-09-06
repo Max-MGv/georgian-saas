@@ -9,14 +9,14 @@ import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
 const inputStyle: React.CSSProperties = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '7px 10px',
@@ -48,8 +48,8 @@ type ExtraItem = { tempId: number; label: string; amount: number }
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border mb-4" style={{ borderColor: C.border }}>
-      <div className="px-5 py-3 border-b" style={{ borderColor: C.border, backgroundColor: '#f5efe6' }}>
-        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>
+      <div className="px-5 py-3 border-b" style={{ borderColor: C.border, backgroundColor: 'var(--site-bg)' }}>
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>
           {title}
         </h3>
       </div>
@@ -417,9 +417,9 @@ export default function NewOrderForm({
           <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ backgroundColor: '#f5efe6', borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
                   {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ''].map(h => (
-                    <th key={h} className="text-left px-3 py-2 text-xs font-medium" style={{ color: '#8b4513' }}>{h}</th>
+                    <th key={h} className="text-left px-3 py-2 text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -578,7 +578,7 @@ export default function NewOrderForm({
       <Card title={at('orderDetail.total.title')}>
         {/* Tier banner */}
         {tier && (
-          <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}>
+          <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
             {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>

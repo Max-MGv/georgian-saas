@@ -11,9 +11,9 @@ import { LEGAL_CONTENT_EN, LEGAL_LABELS } from '@/lib/legalContent'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', pageBg: '#f5efe6',
-  wine: 'var(--color-brand)', rust: '#8b4513', inputBg: '#fffdf9',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', pageBg: 'var(--site-bg)',
+  wine: 'var(--color-brand)', rust: 'var(--site-secondary)', inputBg: 'var(--site-surface)',
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
             <button key={m.id} type="button" onClick={() => setMode(m.id)}
               className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
               style={{
-                backgroundColor: mode === m.id ? '#fff9f3' : 'transparent',
+                backgroundColor: mode === m.id ? 'var(--site-surface)' : 'transparent',
                 color: mode === m.id ? C.wine : C.muted,
                 boxShadow: mode === m.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               }}>
@@ -272,7 +272,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
               <button key={l} type="button" onClick={() => setLocale(l)}
                 className="px-5 py-1.5 rounded-md text-sm font-semibold uppercase transition-all"
                 style={{
-                  backgroundColor: locale === l ? '#fff9f3' : 'transparent',
+                  backgroundColor: locale === l ? 'var(--site-surface)' : 'transparent',
                   color: locale === l ? C.wine : C.muted,
                   boxShadow: locale === l ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                 }}>
@@ -289,7 +289,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
                 style={{
                   color: section === tab.id ? C.wine : C.muted,
                   borderBottom: section === tab.id ? `2px solid ${C.wine}` : '2px solid transparent',
-                  backgroundColor: section === tab.id ? '#fff9f3' : 'transparent',
+                  backgroundColor: section === tab.id ? 'var(--site-surface)' : 'transparent',
                 }}>
                 {tab.label}
               </button>
@@ -319,7 +319,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
                       <button key={v} type="button" onClick={() => setFormVariant(v)}
                         className="px-4 py-1.5 rounded-md text-sm font-semibold transition-all"
                         style={{
-                          backgroundColor: formVariant === v ? '#fff9f3' : 'transparent',
+                          backgroundColor: formVariant === v ? 'var(--site-surface)' : 'transparent',
                           color: formVariant === v ? C.wine : C.muted,
                           boxShadow: formVariant === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                         }}>
@@ -329,7 +329,7 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
                   </div>
                 </div>
                 <div className="rounded-xl border overflow-hidden"
-                  style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', backgroundColor: '#f5efe6' }}>
+                  style={{ borderColor: C.border, boxShadow: '0 2px 12px rgba(0,0,0,0.07)', backgroundColor: 'var(--site-bg)' }}>
                   <div className="p-8">
                     <BookingFormVisualPanel c={c} locale={locale} adminLocale={adminLocale} variant={formVariant} />
                   </div>

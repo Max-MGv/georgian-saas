@@ -1,4 +1,4 @@
-export const C = { border: '#e0d4c0', bg: '#fff9f3', text: '#1c1008', muted: '#6b5a47', faint: '#a89070', wine: 'var(--color-brand)' }
+export const C = { border: 'var(--site-border)', bg: 'var(--site-surface)', text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)', wine: 'var(--color-brand)' }
 
 export type StepKey = 'companies' | 'wines' | 'bookingDetails' | 'payment' | 'contact' | 'photos' | 'review'
 

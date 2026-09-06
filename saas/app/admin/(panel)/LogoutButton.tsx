@@ -17,7 +17,7 @@ export default function LogoutButton({ label = 'Sign out' }: { label?: string })
     <button
       onClick={handleLogout}
       className="text-xs px-3 py-1.5 rounded border transition-colors"
-      style={{ color: '#6b5a47', borderColor: '#e0d4c0' }}
+      style={{ color: 'var(--site-muted)', borderColor: 'var(--site-border)' }}
     >
       {label}
     </button>

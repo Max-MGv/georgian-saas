@@ -69,7 +69,7 @@ export default function EditableLongText({
             onChange={e => setDraft(e.target.value)}
             rows={16}
             className="w-full text-sm leading-relaxed rounded-lg border px-3 py-2.5"
-            style={{ borderColor: 'var(--color-brand)', backgroundColor: '#fffdf9', color: '#1c1008', resize: 'vertical' }}
+            style={{ borderColor: 'var(--color-brand)', backgroundColor: 'var(--site-surface)', color: 'var(--site-text)', resize: 'vertical' }}
             autoFocus
           />
           <div className="flex items-center gap-1.5 mt-1.5">
@@ -86,7 +86,7 @@ export default function EditableLongText({
               type="button"
               onClick={handleCancel}
               className="text-xs px-2 py-1 rounded font-medium"
-              style={{ color: '#6b5a47', border: '1px solid #e0d4c0', backgroundColor: '#fff9f3' }}
+              style={{ color: 'var(--site-muted)', border: '1px solid var(--site-border)', backgroundColor: 'var(--site-surface)' }}
             >
               {at('editable.cancel')}
             </button>
@@ -96,7 +96,7 @@ export default function EditableLongText({
                 onClick={handleReset}
                 disabled={isPending}
                 className="text-xs px-2 py-1 rounded font-medium ml-auto"
-                style={{ color: '#a89070' }}
+                style={{ color: 'var(--site-secondary)' }}
               >
                 {at('editable.resetToDefault')}
               </button>
@@ -107,7 +107,7 @@ export default function EditableLongText({
         <div
           onClick={handleEdit}
           className="cursor-pointer rounded-lg border px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-          style={{ borderColor: '#e0d4c0', backgroundColor: '#fff9f3', color: '#1c1008', maxHeight: 220, overflowY: 'auto' }}
+          style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-surface)', color: 'var(--site-text)', maxHeight: 220, overflowY: 'auto' }}
           title={at('editable.editTitle', { label })}
         >
           {current}
@@ -118,7 +118,7 @@ export default function EditableLongText({
         <span className="text-xs mt-0.5 block" style={{ color: '#16a34a' }}>{at('editable.saved')}</span>
       )}
       {resetDone && !editing && (
-        <span className="text-xs mt-0.5 block" style={{ color: '#a89070' }}>{at('editable.resetToDefault')}</span>
+        <span className="text-xs mt-0.5 block" style={{ color: 'var(--site-secondary)' }}>{at('editable.resetToDefault')}</span>
       )}
     </div>
   )

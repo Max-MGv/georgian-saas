@@ -8,17 +8,17 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const inputStyle = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '6px 10px',
   fontSize: '0.875rem',
-  color: '#1c1008',
+  color: 'var(--site-text)',
   outline: 'none',
 }
 
@@ -108,7 +108,7 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
 
       {/* Unit type legend */}
       <div className="rounded-xl border p-4 mb-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8b4513' }}>{at('masterclass.unitTypes')}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--site-secondary)' }}>{at('masterclass.unitTypes')}</p>
         <div className="space-y-1">
           {MASTERCLASS_UNITS.map(u => (
             <div key={u} className="flex items-baseline gap-2">
@@ -122,7 +122,7 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
         {/* Column headers */}
         <div className="grid px-5 py-2 border-b text-xs font-semibold uppercase tracking-wider"
-          style={{ backgroundColor: '#f5efe6', borderColor: C.border, color: '#8b4513', gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
+          style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border, color: 'var(--site-secondary)', gridTemplateColumns: '1fr 120px 80px 80px 130px' }}>
           <span>{at('masterclass.col.name')}</span>
           <span>{at('masterclass.col.unitType')}</span>
           <span>{at('masterclass.col.price')}</span>

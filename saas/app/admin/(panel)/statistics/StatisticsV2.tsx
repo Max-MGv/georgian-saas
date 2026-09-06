@@ -10,14 +10,14 @@ import { useContainerWidth } from './useContainerWidth'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
+  contentStyle: { backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
   labelStyle: { color: C.muted, fontWeight: 600 },
   itemStyle: { color: C.text },
 }
@@ -38,7 +38,7 @@ function Card({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '8px 12px',

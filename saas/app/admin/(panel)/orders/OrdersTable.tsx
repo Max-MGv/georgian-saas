@@ -9,8 +9,8 @@ import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
@@ -48,7 +48,7 @@ const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00
 const ACTIONS_COL_WIDTH = 190
 
 const inputStyle = {
-  backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
+  backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`,
   borderRadius: '8px', padding: '8px 12px', fontSize: '0.875rem',
   color: C.text, outline: 'none', width: '100%',
 }
@@ -370,7 +370,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     {statusMenuId === order.id && (
                       <div
                         className="absolute right-0 z-30 rounded-xl shadow-lg border py-1 mt-1"
-                        style={{ minWidth: 160, backgroundColor: '#fff9f3', borderColor: C.border }}
+                        style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                         onClick={e => e.stopPropagation()}
                       >
                         {ALL_STATUSES.map(s => (
@@ -680,7 +680,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         return createPortal(
           <div
             className="rounded-lg shadow-lg border py-1"
-            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: '#fff9f3', borderColor: C.border }}
+            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
             {ALL_STATUSES.map(s => (
@@ -710,7 +710,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       {/* Booking sheet preview modal — shows what will print before committing to it */}
       {showBookingSheet && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(28,16,8,0.45)' }}>
-          <div className="w-full max-w-4xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: C.border, maxHeight: '90vh' }}>
+          <div className="w-full max-w-4xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border, maxHeight: '90vh' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
               <h2 className="font-semibold text-base" style={{ color: C.text }}>{at('orders.sheet.previewTitle')}</h2>
               <button onClick={() => setShowBookingSheet(false)} style={{ color: C.faint, fontSize: '1.25rem', lineHeight: 1 }}>×</button>
@@ -751,7 +751,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       {/* Send invoice email modal */}
       {emailOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(28,16,8,0.45)' }}>
-          <div className="w-full max-w-xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: '#fff9f3', borderColor: C.border, maxHeight: '90vh' }}>
+          <div className="w-full max-w-xl rounded-xl border shadow-lg flex flex-col" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border, maxHeight: '90vh' }}>
 
             {/* Fixed header */}
             <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
@@ -854,7 +854,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       <div
         className="fixed top-0 right-0 h-full z-50 overflow-y-auto w-full sm:w-[400px]"
         style={{
-          backgroundColor: '#fff9f3',
+          backgroundColor: 'var(--site-surface)',
           borderLeft: `1px solid ${C.border}`,
           transform: editingOrder ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.2s ease',
@@ -957,7 +957,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <div
             style={{
               position: 'fixed', left, top, width: cardW, zIndex: 9999,
-              backgroundColor: '#fff9f3', border: `1px solid ${C.border}`,
+              backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`,
               borderRadius: 12, boxShadow: '0 8px 32px rgba(28,16,8,0.18)',
               fontFamily: 'Georgia, serif', fontSize: 13, color: C.text,
               pointerEvents: 'none', overflow: 'hidden',
@@ -1054,8 +1054,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 function PRow({ label, value, bold, wine }: { label: string; value: string; bold?: boolean; wine?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '1px 0' }}>
-      <span style={{ color: '#6b5a47' }}>{label}</span>
-      <span style={{ fontWeight: bold ? 700 : 400, color: wine ? 'var(--color-brand)' : '#1c1008' }}>{value}</span>
+      <span style={{ color: 'var(--site-muted)' }}>{label}</span>
+      <span style={{ fontWeight: bold ? 700 : 400, color: wine ? 'var(--color-brand)' : 'var(--site-text)' }}>{value}</span>
     </div>
   )
 }

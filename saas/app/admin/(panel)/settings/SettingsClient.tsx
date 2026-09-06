@@ -9,8 +9,8 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 type Props = {
@@ -69,7 +69,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
 }
 
 const inputStyle = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '8px 12px',
@@ -439,9 +439,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Admin Panel Language */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
           <div className="flex items-center gap-1.5">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.adminLanguage.sectionTitle')}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.adminLanguage.sectionTitle')}</p>
             <HelpHint text={at('help.settings.languageDistinction')} />
           </div>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.adminLanguage.sectionHint')}</p>
@@ -477,8 +477,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Default Language */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.language.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.language.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.language.sectionHint')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
@@ -512,8 +512,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Guide hints */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.guideHints.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.guideHints.sectionTitle')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4" style={{ backgroundColor: C.bg }}>
           <div>
@@ -531,8 +531,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Booking toggles */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.booking.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.booking.sectionTitle')}</p>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
           style={{ backgroundColor: C.bg, borderColor: C.border }}>
@@ -598,8 +598,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Payment details */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.payment.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.payment.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.payment.sectionHint')}</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
@@ -657,8 +657,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           module never sees a payment gateway section at all. */}
       {onlinePayment && (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-          <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.onlinePayment.sectionTitle')}</p>
+          <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.onlinePayment.sectionTitle')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.onlinePayment.sectionHint')}</p>
           </div>
           <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
@@ -706,7 +706,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   className="text-xs px-2 py-0.5 rounded-full"
                   style={flittSecretKeySet
                     ? { backgroundColor: '#dcfce7', color: '#166534' }
-                    : { backgroundColor: '#f5efe6', color: C.faint }}
+                    : { backgroundColor: 'var(--site-bg)', color: C.faint }}
                 >
                   {at(flittSecretKeySet ? 'settings.onlinePayment.statusSet' : 'settings.onlinePayment.statusNotSet')}
                 </span>
@@ -752,7 +752,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       type="button"
                       onClick={() => setFlittClearConfirm(false)}
                       className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                      style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: '#fffdf9' }}
+                      style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: 'var(--site-surface)' }}
                     >
                       {at('settings.common.cancel')}
                     </button>
@@ -762,7 +762,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     type="button"
                     onClick={() => setFlittClearConfirm(true)}
                     className="text-xs mt-2 px-3 py-1.5 rounded-lg font-medium"
-                    style={{ border: `1px solid ${C.border}`, color: '#b91c1c', backgroundColor: '#fffdf9' }}
+                    style={{ border: `1px solid ${C.border}`, color: '#b91c1c', backgroundColor: 'var(--site-surface)' }}
                   >
                     {at('settings.onlinePayment.clear')}
                   </button>
@@ -826,8 +826,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Emails */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.emails.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.emails.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
             {at('settings.emails.sectionHint')}
           </p>
@@ -852,8 +852,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Booking Rules */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.bookingRules.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.bookingRules.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.bookingRules.sectionHint')}</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
@@ -909,8 +909,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Contact Page */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.contactPage.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.contactPage.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
             {at('settings.contactPage.sectionHint')}
           </p>
@@ -927,7 +927,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   type="button"
                   onClick={() => { setMapsDraft(mapsEmbedUrl); setMapsEditMode(true) }}
                   className="text-xs px-3 py-1 rounded-lg font-medium"
-                  style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted }}
+                  style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted }}
                 >
                   {at('settings.common.edit')}
                 </button>
@@ -966,7 +966,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   type="button"
                   onClick={handleMapsCancel}
                   className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                  style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: '#fffdf9' }}
+                  style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: 'var(--site-surface)' }}
                 >
                   {at('settings.common.cancel')}
                 </button>
@@ -975,7 +975,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           ) : (
             <div
               className="rounded-lg px-3 py-2.5 text-xs break-all"
-              style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`,
+              style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`,
                 fontFamily: 'monospace', color: C.faint, lineHeight: 1.6 }}
             >
               {mapsEmbedUrl || <span style={{ fontStyle: 'italic' }}>{at('settings.contactPage.noUrlSet')}</span>}
@@ -986,8 +986,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Branding */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.branding.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.branding.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
             {at('settings.branding.sectionHint')}
           </p>
@@ -1005,7 +1005,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             <p className="text-xs mb-3" style={{ color: C.faint }}>{at('settings.branding.logoHint')}</p>
             <div className="flex items-center gap-3 flex-wrap">
               {logoUrl && (
-                <div className="rounded-lg px-3 py-2 border" style={{ backgroundColor: '#fffdf9', borderColor: C.border }}>
+                <div className="rounded-lg px-3 py-2 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
                   <img src={logoUrl} alt={logoAlt || 'Logo'} style={{ height: 40, width: 'auto', display: 'block' }} />
                 </div>
               )}
@@ -1016,7 +1016,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 disabled={logoUploading}
                 onClick={() => logoInputRef.current?.click()}
                 className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: logoUploading ? 0.6 : 1 }}
+                style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted, opacity: logoUploading ? 0.6 : 1 }}
               >
                 {logoUploading ? at('settings.branding.uploading') : logoUrl ? at('settings.branding.replaceLogo') : at('settings.branding.uploadLogo')}
               </button>
@@ -1084,7 +1084,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 disabled={faviconUploading}
                 onClick={() => faviconInputRef.current?.click()}
                 className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                style={{ backgroundColor: '#f5efe6', border: `1px solid ${C.border}`, color: C.muted, opacity: faviconUploading ? 0.6 : 1 }}
+                style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted, opacity: faviconUploading ? 0.6 : 1 }}
               >
                 {faviconUploading ? at('settings.branding.uploading') : faviconUrl ? at('settings.branding.replaceFavicon') : at('settings.branding.uploadFavicon')}
               </button>
@@ -1102,10 +1102,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           type="button"
           onClick={() => setContactOpen(o => !o)}
           className="w-full px-5 py-3 border-b flex items-center justify-between"
-          style={{ backgroundColor: '#f5efe6', borderColor: C.border }}
+          style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}
         >
           <div className="text-left">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.contactInfo.sectionTitle')}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.contactInfo.sectionTitle')}</p>
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.contactInfo.sectionHint')}</p>
           </div>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, transform: contactOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: C.faint }}>
@@ -1187,8 +1187,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
 
       {/* Closed Days */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>{at('settings.closedDays.sectionTitle')}</p>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.closedDays.sectionTitle')}</p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.closedDays.sectionHint')}</p>
         </div>
         <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
@@ -1223,7 +1223,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           ) : (
             <div className="rounded-lg border divide-y overflow-hidden" style={{ borderColor: C.border }}>
               {blockedDates.map(d => (
-                <div key={d.id} className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: '#fffdf9' }}>
+                <div key={d.id} className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: 'var(--site-surface)' }}>
                   <div>
                     <span className="text-sm font-medium" style={{ color: C.text }}>
                       {new Date(d.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}

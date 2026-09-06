@@ -12,12 +12,12 @@ import { adminT } from '@/lib/adminT'
 import InvoicePrint from '../InvoicePrint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const inputStyle: React.CSSProperties = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '7px 10px',
@@ -113,11 +113,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     <div className="rounded-xl border mb-4" style={{ borderColor: C.border }}>
       <div
         className="px-5 py-3 border-b"
-        style={{ borderColor: C.border, backgroundColor: '#f5efe6' }}
+        style={{ borderColor: C.border, backgroundColor: 'var(--site-bg)' }}
       >
         <h3
           className="text-xs font-semibold uppercase tracking-wider"
-          style={{ color: '#8b4513' }}
+          style={{ color: 'var(--site-secondary)' }}
         >
           {title}
         </h3>
@@ -421,7 +421,7 @@ export default function OrderDetail({
             {statusMenuOpen && (
               <div
                 className="absolute left-0 z-30 rounded-lg shadow-lg border py-1 mt-1"
-                style={{ minWidth: 150, backgroundColor: '#fff9f3', borderColor: C.border }}
+                style={{ minWidth: 150, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                 onClick={e => e.stopPropagation()}
               >
                 {ALL_STATUSES.map(s => (
@@ -607,7 +607,7 @@ export default function OrderDetail({
                 <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.rate')}</span>
                 <span
                   className="text-xs px-2.5 py-1 rounded-full font-medium"
-                  style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
+                  style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
                 >
                   {at('orderDetail.guestBreakdown.rateBadge', { t: manualTastingRate, l: manualLunchRate })}
                 </span>
@@ -622,7 +622,7 @@ export default function OrderDetail({
             ) : (
               <div
                 className="rounded-lg border p-3"
-                style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}
+                style={{ borderColor: C.border, backgroundColor: 'var(--site-surface)' }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium" style={{ color: C.muted }}>{at('orderDetail.guestBreakdown.customRates')}</span>
@@ -756,7 +756,7 @@ export default function OrderDetail({
               <thead>
                 <tr
                   style={{
-                    backgroundColor: '#f5efe6',
+                    backgroundColor: 'var(--site-bg)',
                     borderBottom: `1px solid ${C.border}`,
                   }}
                 >
@@ -764,7 +764,7 @@ export default function OrderDetail({
                     <th
                       key={h}
                       className="text-left px-3 py-2 text-xs font-medium"
-                      style={{ color: '#8b4513' }}
+                      style={{ color: 'var(--site-secondary)' }}
                     >
                       {h}
                     </th>
@@ -1002,7 +1002,7 @@ export default function OrderDetail({
         {tier && payingGuests > 0 && (
           <div
             className="text-xs rounded-lg px-3 py-2 mb-3"
-            style={{ backgroundColor: '#f5efe6', color: '#8b4513' }}
+            style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
           >
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}

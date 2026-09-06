@@ -36,7 +36,7 @@ function UploadCard({ label, previewUrl, fallback, aspect, uploading, onFile }: 
         style={{
           aspectRatio: aspect,
           borderColor: dragging ? C.wine : C.border,
-          backgroundColor: previewUrl ? 'transparent' : '#fffdf9',
+          backgroundColor: previewUrl ? 'transparent' : 'var(--site-surface)',
         }}
       >
         {previewUrl ? (

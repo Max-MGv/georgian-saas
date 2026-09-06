@@ -1,7 +1,7 @@
 export default function OrdersLoading() {
-  const border = '#e0d4c0'
-  const bg = '#fff9f3'
-  const headerBg = '#f5efe6'
+  const border = 'var(--site-border)'
+  const bg = 'var(--site-surface)'
+  const headerBg = 'var(--site-bg)'
 
   return (
     <div>
@@ -38,7 +38,7 @@ export default function OrdersLoading() {
           <div
             key={i}
             className="flex gap-6 px-4 py-3.5 border-b"
-            style={{ borderColor: border, backgroundColor: i % 2 === 0 ? bg : '#fffdf9' }}
+            style={{ borderColor: border, backgroundColor: i % 2 === 0 ? bg : 'var(--site-surface)' }}
           >
             {[56, 72, 140, 90, 60, 68, 48].map((w, j) => (
               <div key={j} className="shimmer h-3 rounded" style={{ width: w }} />

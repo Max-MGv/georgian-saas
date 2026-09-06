@@ -12,7 +12,7 @@ import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
 import ViewToggle from './ViewToggle'
 
-const C = { faint: '#a89070', muted: '#6b5a47', border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)', text: '#1c1008' }
+const C = { faint: 'var(--site-secondary)', muted: 'var(--site-muted)', border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)', text: 'var(--site-text)' }
 
 type SearchParams = {
   dateFrom?: string

@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 export type WineOrderItem = {
@@ -214,7 +214,7 @@ function BoxModePicker({ mode, onChange, locale }: { mode: BoxMode; onChange: (m
               key={m}
               onClick={() => { onChange(m); setOpen(false) }}
               className="w-full text-left px-4 py-2.5 flex flex-col transition-colors"
-              style={{ backgroundColor: mode === m ? '#f5efe6' : 'transparent' }}
+              style={{ backgroundColor: mode === m ? 'var(--site-bg)' : 'transparent' }}
             >
               <span className="text-sm font-medium" style={{ color: mode === m ? C.wine : C.text }}>
                 {at(BOX_MODE_KEYS[m].labelKey)}
@@ -265,7 +265,7 @@ function SummaryContent({ orders, boxMode, onBoxModeChange, onPrint, locale }: {
       </div>
 
       {/* Total wines */}
-      <div className="rounded-lg border p-3" style={{ borderColor: C.border, backgroundColor: '#f5efe6' }}>
+      <div className="rounded-lg border p-3" style={{ borderColor: C.border, backgroundColor: 'var(--site-bg)' }}>
         <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: C.faint }}>{at('packing.totalWines')}</p>
         {Object.entries(wineMap).map(([name, qty]) => (
           <div key={name} className="flex justify-between text-sm py-0.5" style={{ color: C.text }}>

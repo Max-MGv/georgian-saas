@@ -34,8 +34,8 @@ export default async function CompaniesPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(locale, 'nav.companies')}</h1>
-        <span className="text-sm" style={{ color: '#a89070' }}>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(locale, 'nav.companies')}</h1>
+        <span className="text-sm" style={{ color: 'var(--site-secondary)' }}>
           {bookingCount} {adminT(locale, 'companies.summary.booking')} · {wineCount} {adminT(locale, 'companies.summary.wineOrders')}
         </span>
       </div>

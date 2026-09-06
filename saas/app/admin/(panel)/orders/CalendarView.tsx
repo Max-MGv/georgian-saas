@@ -5,8 +5,8 @@ import { useRouter, usePathname } from 'next/navigation'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  border: '#e0d4c0', muted: '#6b5a47', faint: '#a89070',
-  wine: 'var(--color-brand)', text: '#1c1008', bg: '#fff9f3', inputBg: '#fffdf9',
+  border: 'var(--site-border)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  wine: 'var(--color-brand)', text: 'var(--site-text)', bg: 'var(--site-surface)', inputBg: 'var(--site-surface)',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -181,7 +181,7 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                 ? { right: 0 }
                 : { left: popoverPos.left }),
               width: 260,
-              backgroundColor: '#fffdf9',
+              backgroundColor: 'var(--site-surface)',
               borderColor: C.border,
               boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
             }}

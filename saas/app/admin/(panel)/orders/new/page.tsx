@@ -5,7 +5,7 @@ import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import NewOrderForm from './NewOrderForm'
 
-const C = { wine: 'var(--color-brand)', faint: '#a89070' }
+const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
 
 export default async function NewOrderPage() {
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
@@ -30,7 +30,7 @@ export default async function NewOrderPage() {
         {adminT(locale, 'orderDetail.backToOrders')}
       </Link>
 
-      <h1 className="text-lg font-bold mb-5" style={{ color: '#1c1008' }}>
+      <h1 className="text-lg font-bold mb-5" style={{ color: 'var(--site-text)' }}>
         {adminT(locale, 'newOrder.pageTitle')}
       </h1>
 

@@ -19,8 +19,8 @@ export default async function MenuItemsPage() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(locale, 'nav.menuItems')}</h1>
-        <span className="text-sm" style={{ color: '#a89070' }}>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(locale, 'nav.menuItems')}</h1>
+        <span className="text-sm" style={{ color: 'var(--site-secondary)' }}>
           {items.length} {items.length !== 1 ? adminT(locale, 'menuItems.item.plural') : adminT(locale, 'menuItems.item.singular')}
         </span>
       </div>

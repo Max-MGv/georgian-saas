@@ -35,7 +35,7 @@ export default function ReviewStep({ locale, items, onJump, initialLaunchedAt, r
         key={item.key}
         onClick={() => onJump(item.key)}
         className="w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left"
-        style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}
+        style={{ borderColor: C.border, backgroundColor: 'var(--site-surface)' }}
       >
         {item.done ? (
           <StatusIcon symbol="✓" title={at('onboarding.review.done')} bg="#f0fdf4" color="#15803d" border="#bbf7d0" />
@@ -61,7 +61,7 @@ export default function ReviewStep({ locale, items, onJump, initialLaunchedAt, r
         {items.filter(i => optionalKeys.includes(i.key)).map(i => row(i, true))}
       </div>
 
-      <div className="rounded-xl border p-5 text-center" style={{ borderColor: C.border, backgroundColor: '#fffdf9' }}>
+      <div className="rounded-xl border p-5 text-center" style={{ borderColor: C.border, backgroundColor: 'var(--site-surface)' }}>
         {launchedAt ? (
           <>
             <PartyPopper size={24} className="mx-auto mb-2" style={{ color: C.wine }} />

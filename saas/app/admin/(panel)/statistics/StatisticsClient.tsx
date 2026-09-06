@@ -11,8 +11,8 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)', wineLight: '#f3e8e9',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)', wineLight: '#f3e8e9',
 }
 
 type MonthData = { month: string; orders: number; revenue: number }
@@ -71,7 +71,7 @@ function SplitRow({ label, a, b, aLabel, bLabel }: {
 }
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
+  contentStyle: { backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
   labelStyle: { color: C.muted, fontWeight: 600 },
   itemStyle: { color: C.text },
 }

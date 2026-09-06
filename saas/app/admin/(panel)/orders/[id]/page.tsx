@@ -7,7 +7,7 @@ import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 
-const C = { wine: 'var(--color-brand)', faint: '#a89070' }
+const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
 
 export default async function OrderDetailPage({
   params,

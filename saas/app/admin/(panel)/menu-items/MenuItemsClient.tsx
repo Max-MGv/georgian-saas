@@ -5,12 +5,12 @@ import { createMenuItem, updateMenuItem, deleteMenuItem } from '@/app/actions/me
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const inputStyle = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '6px 10px',
@@ -86,8 +86,8 @@ function Section({
   return (
     <div className="rounded-xl border overflow-hidden mb-6" style={{ borderColor: C.border }}>
       {/* Section header */}
-      <div className="px-5 py-3 border-b flex items-center justify-between" style={{ backgroundColor: '#f5efe6', borderColor: C.border }}>
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b4513' }}>
+      <div className="px-5 py-3 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>
           {emoji} {label}
         </p>
         <span className="text-xs" style={{ color: C.faint }}>{items.length} {items.length !== 1 ? at('menuItems.item.plural') : at('menuItems.item.singular')}</span>

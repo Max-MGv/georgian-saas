@@ -7,8 +7,8 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 type Price = {
@@ -57,7 +57,7 @@ function missingDetails(at: (key: string) => string, company: Company): string[]
 }
 
 const inputStyle = {
-  backgroundColor: '#fffdf9', border: `1px solid ${C.border}`,
+  backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`,
   borderRadius: '8px', padding: '7px 10px', fontSize: '0.8125rem', color: C.text, outline: 'none',
 }
 
@@ -218,7 +218,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
       <div className="fixed inset-0 z-40" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }} onClick={onClose} />
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col shadow-2xl overflow-y-auto"
-        style={{ width: '420px', maxWidth: '100vw', backgroundColor: '#fffdf9', borderLeft: `1px solid ${C.border}` }}
+        style={{ width: '420px', maxWidth: '100vw', backgroundColor: 'var(--site-surface)', borderLeft: `1px solid ${C.border}` }}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.border }}>
           <h2 className="font-semibold text-base" style={{ color: C.text }}>{at('companies.editPanel.title')}</h2>
@@ -298,7 +298,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
                       className="text-xs px-3 py-2 rounded-lg font-medium flex-1"
                       style={skipPayment === option
                         ? { backgroundColor: C.wine, color: '#fff', border: `1px solid ${C.wine}` }
-                        : { backgroundColor: '#fffdf9', color: C.muted, border: `1px solid ${C.border}` }}
+                        : { backgroundColor: 'var(--site-surface)', color: C.muted, border: `1px solid ${C.border}` }}
                     >
                       {at(`companies.editPanel.payment${option === 'default' ? 'Default' : option === 'skip' ? 'Skip' : 'Require'}`)}
                     </button>

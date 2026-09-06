@@ -74,9 +74,9 @@ export default function HelpHint({ text }: { text: string }) {
         onClick={toggle}
         className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0 transition-colors"
         style={{
-          backgroundColor: open ? 'var(--color-brand)' : '#f0e6d8',
-          color: open ? '#fff' : '#8b7355',
-          border: '1px solid #d9c7a8',
+          backgroundColor: open ? 'var(--color-brand)' : 'var(--site-surface)',
+          color: open ? '#fff' : 'var(--site-muted)',
+          border: '1px solid var(--site-border)',
           lineHeight: 1,
         }}
       >
@@ -88,7 +88,7 @@ export default function HelpHint({ text }: { text: string }) {
           id={popoverId}
           role="tooltip"
           className="rounded-lg border p-3 text-xs leading-relaxed shadow-lg"
-          style={{ position: 'fixed', top, left, width: POPOVER_WIDTH, zIndex: 100, backgroundColor: '#fffdf9', borderColor: '#e0d4c0', color: '#6b5a47' }}
+          style={{ position: 'fixed', top, left, width: POPOVER_WIDTH, zIndex: 100, backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', color: 'var(--site-muted)' }}
         >
           {text}
         </div>,

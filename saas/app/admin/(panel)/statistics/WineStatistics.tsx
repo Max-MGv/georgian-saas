@@ -11,8 +11,8 @@ import { useContainerWidth } from './useContainerWidth'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -23,13 +23,13 @@ const WINE_LINE_COLORS = [
 ]
 
 const tooltipStyle = {
-  contentStyle: { backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
+  contentStyle: { backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
   labelStyle: { color: C.muted, fontWeight: 600 },
   itemStyle: { color: C.text },
 }
 
 const selectStyle: React.CSSProperties = {
-  backgroundColor: '#fffdf9',
+  backgroundColor: 'var(--site-surface)',
   border: `1px solid ${C.border}`,
   borderRadius: 8,
   padding: '8px 12px',
@@ -325,7 +325,7 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
                       if (!active || !payload?.length) return null
                       const d = payload[0].payload
                       return (
-                        <div style={{ backgroundColor: '#fff9f3', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
+                        <div style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
                           <p style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>{d.name}</p>
                           <p style={{ color: C.wine }}>{(d.revenue ?? 0).toLocaleString()}₾</p>
                           <p style={{ color: C.muted }}>{d.bottles} {d.bottles !== 1 ? at('statistics.bottle.plural') : at('statistics.bottle.singular')}</p>

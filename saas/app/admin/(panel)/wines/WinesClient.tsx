@@ -9,8 +9,8 @@ import { uploadWineImage, deleteWineImage } from '@/app/actions/uploadImage'
 import { adminT } from '@/lib/adminT'
 
 const C = {
-  text: '#1c1008', muted: '#6b5a47', faint: '#a89070',
-  border: '#e0d4c0', bg: '#fff9f3', wine: 'var(--color-brand)',
+  text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
+  border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
 const PRODUCT_IMAGES = [
@@ -67,7 +67,7 @@ const BLANK_VINTAGE: VintageDraft = {
 }
 
 const inputCls = 'w-full rounded-lg border px-3 py-2 text-sm outline-none'
-const inputStyle = { backgroundColor: '#fffdf9', borderColor: C.border, color: C.text }
+const inputStyle = { backgroundColor: 'var(--site-surface)', borderColor: C.border, color: C.text }
 
 function ColorSwatch({ color }: { color: string }) {
   return <span className="inline-block w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
@@ -75,7 +75,7 @@ function ColorSwatch({ color }: { color: string }) {
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: '#f5efe6', color: C.muted }}>
+    <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: 'var(--site-bg)', color: C.muted }}>
       {children}
     </span>
   )
@@ -548,7 +548,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                   <button key={l} type="button" onClick={() => setNameLocale(l)}
                     className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase transition-all"
                     style={{
-                      backgroundColor: nameLocale === l ? '#fff9f3' : 'transparent',
+                      backgroundColor: nameLocale === l ? 'var(--site-surface)' : 'transparent',
                       color: nameLocale === l ? C.wine : C.muted,
                     }}>
                     {l === 'en' ? at('content.localeToggle.english') : at('content.localeToggle.georgian')}
@@ -717,7 +717,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold truncate" style={{ color: C.text }}>{wine.name}</p>
-                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>{at('wines.hidden')}</span>}
+                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>}
                 </div>
                 {!isVintageMode && (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -788,7 +788,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                     onClick={() => selectTab(wine, 'details')}
                     className="px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer"
                     style={{
-                      backgroundColor: activeTab === 'details' ? '#fffdf9' : 'transparent',
+                      backgroundColor: activeTab === 'details' ? 'var(--site-surface)' : 'transparent',
                       color: activeTab === 'details' ? C.wine : C.muted,
                       boxShadow: activeTab === 'details' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
                     }}>
@@ -798,7 +798,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                     onClick={() => selectTab(wine, 'vintages')}
                     className="px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer"
                     style={{
-                      backgroundColor: activeTab === 'vintages' ? '#fffdf9' : 'transparent',
+                      backgroundColor: activeTab === 'vintages' ? 'var(--site-surface)' : 'transparent',
                       color: activeTab === 'vintages' ? C.wine : C.muted,
                       boxShadow: activeTab === 'vintages' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
                     }}>
@@ -917,7 +917,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.overrideImageBadge')}</span>
                               )}
                               {!v.active && (
-                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5efe6', color: C.faint }}>{at('wines.hidden')}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>
                               )}
                               <div className="flex items-center gap-2 ml-auto flex-shrink-0">
                                 <button onClick={() => handleToggleVintageActive(wine.id, v)} disabled={isVSaving}

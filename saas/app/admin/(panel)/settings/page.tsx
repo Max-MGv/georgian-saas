@@ -70,7 +70,7 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: '#1c1008' }}>{adminT(adminLanguage || 'en', 'nav.settings')}</h1>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(adminLanguage || 'en', 'nav.settings')}</h1>
       </div>
 
       {/* Credentials half is explained in the section below, so this instance only
