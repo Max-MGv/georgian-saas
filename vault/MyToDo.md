@@ -8,6 +8,18 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ Committed to staging 2026-09-06, needs your review
+
+### Admin theming fix (Bugs #20, #21) + wine-order pricing security fix (Bug #22)
+
+Full detail: `KnownBugs.md` #20-22, `SessionLog.md` 2026-09-06, `penetration test/` folder. Committed in `3777b04`.
+
+1. **Theming:** in super-admin, switch any test tenant to a dark preset (e.g. "Midnight cellar") and click through its `/admin` panel — nav, Orders, Companies, Wines, Wine Orders, Menu Items, Masterclass, Settings, Content, Statistics, and the onboarding wizard should all now render dark instead of staying stuck in light cream. Switch back to "Cream & wine" afterward and confirm it looks exactly as it did before (this was checked programmatically already, but worth your own eyes on it once).
+2. **Wine-order pricing:** nothing to manually test here — this was a security fix (a tampered request could previously fabricate any price/discount on a wine order) verified end-to-end by directly inspecting the database after a deliberately tampered submission. No user-facing behavior changed for honest customers.
+3. **A dedicated penetration test also ran this session** — found the pricing bug above (now fixed) plus a handful of Low/Informational items not yet addressed: no security headers configured, an outdated Next.js dependency chain with 13 high-severity `npm audit` advisories, unescaped input in one transactional email template, a low-risk SVG-upload gap, and an RLS-configuration drift on two non-data tables. None urgent — see `penetration test/findings.md` for the full list if you want to prioritize any of them.
+
+---
+
 ## 🚧 In Progress — Next to build
 
 ### #148 — Granular Payment Controls (built + Claude-tested on dev, pushed to `staging` 2026-08-12 (`3bf742d`) — needs Max to review on the staging preview, production untouched)
@@ -22,13 +34,9 @@ Full reference: `Features/Feature 148 - Granular Payment Controls.md` and `Sessi
 6. **Wine orders:** go to `/wines`, select a company with a payment override set → confirm the checkout button label reflects the same override, independent of the Individuals/Wine Orders section toggles.
 7. **Individuals:** on the home page, book as an individual (no company selected) → confirm only the **Individuals** section toggle affects the button label — the Companies toggle and any company's override should have zero effect on an individual booking.
 8. **Regression check:** turn `modulesOnlinePayment` off entirely (super-admin, Edit Tenant) → confirm every booking/wine-order button reverts to plain reservation language regardless of any toggle/override above — the new controls must never override the module being off.
-9. When happy: tell Claude to commit (still uncommitted on `staging`), and separately decide when you want the same schema migration + backfill run against production.
+9. **Update 2026-09-06:** this was committed to `staging` in `3bf742d` ("Add #148 Granular Payment Controls and Playwright regression suite") in a session since this checklist was last touched — the "tell Claude to commit" step below is done. Still just needs your review on the staging preview; separately decide when you want the same schema migration + backfill run against production.
 
-### ⚠️ Your localhost is currently pointed at a TEST tenant, not Staging Winery
-
-`saas/.env`'s `DEFAULT_TENANT_ID` was temporarily switched to a blank "Test Onboarding Wizard" tenant so you could inspect the wizard from zero. It's still switched — `localhost:3000` won't show Staging Winery's real data until this is reverted. Tell Claude when you're done and it'll flip `DEFAULT_TENANT_ID` back to `cmrxb85wo0000vlc0d964nzf8` (Staging Winery) and restart the dev server — one line, already noted in the `.env` file's comment.
-
-### #127 — Onboarding wizard, now 7 steps + admin-wide nudge banner (built + Claude-tested on localhost, needs Max to review — not yet pushed to staging, nothing committed)
+### #127 — Onboarding wizard, now 7 steps + admin-wide nudge banner (committed to `staging` in `9e4804f` — needs Max to review)
 
 Big change since the last checklist (2026-08-07): the wizard's own philosophy flipped from "bare minimum, defer the rest" to "ask for everything a section needs, upfront, per your instruction." Two new steps (Booking Details, Payment Info), a real bug fix (Contact info was silently saving to the wrong place — see below), and the nudge banner now shows on every admin page, not just Orders. **Then you tested it yourself on a fresh tenant and found two more real bugs, both now fixed** (see items 2 and 10 below). Full reference: `Plan-OnboardingFlow.md` and `SessionLog.md` 2026-08-04 parts 5–9 + 2026-08-07 parts 10–12.
 

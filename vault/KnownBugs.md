@@ -375,7 +375,7 @@ One agent made a good independent catch: `wine-orders/PackingView.tsx`'s printed
 - `BookingForm.tsx`/`WineCatalogueClient.tsx`'s untethered `hover:bg-gray-50` on the "Enter Manually" button (noted in #21's original write-up) — still not fixed; inline `style` can't express `:hover`, would need JS-driven state, judged not worth the added complexity for a hover-only cosmetic flash.
 - Plain white (`#ffffff`) stat-card backgrounds in the Statistics pages, and `ContentClient.tsx`'s tab-strip track background (`#ede5d8`) — both flagged by review as plausibly the same bug class but lower-confidence/lower-impact judgment calls, left untouched rather than guessed at.
 
-**Not yet committed** — sitting on the `staging` working tree (dev database) per the standing git workflow (Rule 0), pending Max's review before commit/push.
+**Committed** 2026-09-06 in `3777b04` on `staging` (dev database), alongside the Bug #22 fix below. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
 
 ---
 
@@ -395,5 +395,7 @@ One agent made a good independent catch: `wine-orders/PackingView.tsx`'s printed
 **Verified:** `npx tsc --noEmit` clean. Live-tested end-to-end on the dev server: installed a `window.fetch` hook (same technique the pentest used) that rewrote the outgoing request's `price` to `0.01` and `discountPercent` to `99` on a real 5-bottle order of a 15₾ wine, submitted it through the real UI, and confirmed directly in the database that the resulting order stored `totalAmount: 75` (5 × the real 15₾ price) and `discountPercent: null` — the tampered values were completely ignored, exactly as intended. Test order tagged `PENTEST-VerifyFix`, deleted afterward, confirmed removed by follow-up query.
 
 Full write-up with all findings (including 5 lower-severity/infrastructure items and a "tested and not vulnerable" section covering cross-tenant IDOR, auth/access control, SQL injection, and XSS): [[findings]].
+
+**Committed** 2026-09-06 in `3777b04` on `staging` (dev database), alongside the Bug #20/#21 fix. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
 
 ---

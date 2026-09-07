@@ -19,6 +19,6 @@ Everything else tested came back solid or low-severity: cross-tenant data isolat
 
 The delegated agent completed a thorough, ~24-minute, 175-tool-call test pass but was blocked by a tool-level guardrail from writing `findings.md` itself (subagents are restricted from writing report files directly — a sensible safety rail, but it meant the agent's full evidence trail didn't survive past its own summary). [[findings]] was reconstructed from that summary, with the Critical finding and several of the Low/Informational ones independently re-verified against the live code and dev database afterward (each finding in that document is marked with its verification status). Nothing in [[findings]] is presented as fact without either direct re-verification or an explicit "tester-reported, not re-verified" label.
 
-## Not committed
+## Committed
 
-This test touched no application code — it's documentation only. No git action needed beyond having these three files sitting in the vault.
+The Bug #22 fix (`submitWineOrder.ts`) and these three vault docs were committed together 2026-09-06 in `3777b04`, on `staging` only (dev database) — not yet merged to `master`/production. See [[KnownBugs]] Bug #22 for the fix details and live re-verification.
