@@ -87,7 +87,7 @@ const en: Translations = {
   'form.last_name': 'Last Name',
   'form.phone': 'Phone',
   'form.email': 'Email',
-  'form.est_total': 'Estimated Total',
+  'form.est_total': 'Total',
   'form.per_pp': '/ person',
   'form.registration': 'Registration',
   'form.price_after_submit': 'Price will be confirmed after submission.',
@@ -108,7 +108,7 @@ const en: Translations = {
   'form.submit_pay': 'Book & Pay',
   'form.success_heading': 'Booking received!',
   'form.success_body': 'Thank you. We will contact you shortly to confirm your visit.',
-  'form.est_total_label': 'Estimated total',
+  'form.est_total_label': 'Total',
 
   // Online payment result page
   'payment.success_heading': 'Payment received',
@@ -230,7 +230,7 @@ const ka: Translations = {
   'form.last_name': 'გვარი',
   'form.phone': 'ტელეფონი',
   'form.email': 'ელ-ფოსტა',
-  'form.est_total': 'სავარაუდო ჯამი',
+  'form.est_total': 'ჯამი',
   'form.per_pp': '/ პერსონა',
   'form.registration': 'რეგისტრაცია',
   'form.price_after_submit': 'ფასი დადასტურდება განაცხადის შემდეგ.',
@@ -251,7 +251,7 @@ const ka: Translations = {
   'form.submit_pay': 'დაჯავშნა და გადახდა',
   'form.success_heading': 'ჯავშანი მიღებულია!',
   'form.success_body': 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.',
-  'form.est_total_label': 'სავარაუდო ჯამი',
+  'form.est_total_label': 'ჯამი',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',
