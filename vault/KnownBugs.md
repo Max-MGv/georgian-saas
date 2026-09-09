@@ -28,6 +28,7 @@ tags: [bugs]
 | 20 | Admin panel (`/admin`) doesn't respect tenant theme presets — the nav shell, page background, banners and most UI are hardcoded to the "Cream & wine" preset's exact hex values instead of the `--site-*` CSS vars; only isolated spots (e.g. `var(--color-brand)`) pick up the tenant's actual theme | Admin (all pages) | 🟢 Resolved |
 | 21 | Same bug as #20, one level down: nearly every individual admin page body (`CompaniesClient.tsx`, `ContentClient.tsx`, `WinesClient.tsx`, `SettingsClient.tsx`, `OrdersTable.tsx` and ~15 other admin files) independently defines its own hardcoded cream-preset color constant for cards/tables/borders; two shared components used during admin editing (`HelpHint.tsx`, `EditableLongText.tsx`) carry the same bug onto tenant-facing pages too | Admin (nearly all pages) / Shared components | 🟢 Resolved |
 | 22 | `app/actions/submitWineOrder.ts` computes the wine-order total entirely from client-supplied `price`/`discountPercent` values (parsed straight out of submitted form JSON) with zero server-side lookup against real `WineVintage.price`/`Company.wineDiscountPercent` — a tampered request can fabricate any total, which also becomes the literal amount charged via Flitt once a tenant has online payment enabled. Same bug class as the already-fixed masterclass-pricing issue (`Plan-SecurityAndBugFixes.md` #3) and #17, never applied here. Found via a dedicated penetration test, confirmed by direct code read. | Security / Wine Orders | 🟢 Resolved |
+| 23 | `/admin` main content container hardcoded `max-w-6xl` (1152px) regardless of viewport — on wide monitors every admin page (Orders table especially) rendered narrower than the screen with wasted margin on both sides, while the table still needed its own internal horizontal scroll for its wider content | Admin (all pages) | 🟢 Resolved |
 
 ---
 
@@ -397,5 +398,56 @@ One agent made a good independent catch: `wine-orders/PackingView.tsx`'s printed
 Full write-up with all findings (including 5 lower-severity/infrastructure items and a "tested and not vulnerable" section covering cross-tenant IDOR, auth/access control, SQL injection, and XSS): [[findings]].
 
 **Committed** 2026-09-06 in `3777b04` on `staging` (dev database), alongside the Bug #20/#21 fix. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
+
+---
+
+## Bug #23 — Admin panel content container didn't stretch to full screen width
+
+> 🟢 **RESOLVED same day found, 2026-09-09.** Max flagged it via a screenshot of `/admin/orders` on a wide monitor.
+
+**Severity:** Low — cosmetic, no data impact, but affects every admin page.
+**Found:** 2026-09-09, Max's bug list this session · **Status:** 🟢 Resolved
+
+**Root cause:** `app/admin/(panel)/layout.tsx`'s `<main>` wrapper hardcoded `max-w-6xl` (1152px) regardless of viewport width. On a wide monitor this centered every admin page's content in a ~1152px column with large wasted margins on both sides. Separately, the Orders table's own row content (whitespace-nowrap across ~10 default columns) needs ~1411px — wider than even the 1152px cap — so the table's own `overflow-auto` wrapper also kicked in its own horizontal scrollbar. That's the "narrower AND still scrolls" symptom in Max's screenshot: two independent width constraints stacking. `OrdersTable.tsx` itself was already correct (`w-full` table inside `overflow-auto`, with the existing mobile-card fallback from Bug #9) — no changes needed there.
+
+**Fix:** widened the container: `max-w-6xl` → `max-w-screen-2xl` (1152px → 1536px), a standard Tailwind step. Other admin pages that scope their own content narrower (e.g. Settings' inner `max-w-2xl`) are unaffected since they nest their own width inside this shared outer container.
+
+**Verified:** measured via `getBoundingClientRect()` in the browser at 1920px (main: 1152px→1536px, table now fills width with no internal scroll for the default column set), 1280px (table fills width, internal scroll appears only where content genuinely doesn't fit — expected), 768px and 375px (no page-level horizontal overflow, mobile card view unaffected, Georgian nav labels still fine). Columns dropdown (show/hide columns) still functions correctly at the new width. `npx tsc --noEmit` clean.
+
+**Committed** 2026-09-09 in `fee8362` on `staging`. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
+
+---
+
+## Bug #24 — Bug-report button overlapped the wine cart's sticky bottom bar
+
+> 🟢 **RESOLVED same day found, 2026-09-09.** Max flagged this happening during a wine-buying flow.
+
+**Severity:** Low — cosmetic, no data impact.
+**Found:** 2026-09-09, Max's bug list this session · **Status:** 🟢 Resolved
+
+**Root cause:** `components/BugReportWidget.tsx`'s floating trigger button (`fixed bottom:20px, right:20px`, z-index 8900) sits at the same bottom-right corner as `app/(site)/wines/WineCatalogueClient.tsx`'s sticky "add to cart" bar (`fixed bottom-0 left-0 right-0 z-40`, ~65px tall), which only appears once the cart has items. Because the widget's z-index is far higher, once the cart bar appeared the bug-report button rendered directly on top of the bar's checkout button/price text instead of clearing it.
+
+**Fix:** the cart bar now publishes its own live height (via `ResizeObserver`, not a hardcoded number, since the bottle-list text can wrap) to a `--cart-bar-offset` CSS var on `document.documentElement`, reset to `0px` whenever the cart is empty or the component unmounts. `BugReportWidget.tsx`'s button offset changed from `bottom: 20` to `bottom: calc(20px + var(--cart-bar-offset, 0px))` — defaults to unchanged everywhere else, only lifts on the wines page when the bar is actually showing. Chosen over a global fixed offset (would waste space on every other page for a collision that only exists in one place) and over prop/context plumbing (the widget is a shared, page-unaware component mounted once per surface — a CSS var bridge is the lighter-weight fix).
+
+**Verified:** confirmed the exact overlap first (button 652–700px vs bar 655–720px, same vertical span) at desktop and 375px mobile widths, then after the fix measured a clean ~32px gap at both. Confirmed no change with an empty cart, and confirmed the bug-report panel itself still opens/closes correctly with the cart bar showing. Grepped the app for other full-width `fixed bottom-0` bars — this cart bar is the only one; admin slide-overs and the wine drawer are all side/full-screen overlays, unaffected. `npx tsc --noEmit` clean.
+
+**Committed** 2026-09-09 in `3c38a2d` on `staging`. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
+
+---
+
+## Bug #25 — Wine catalogue Type/Style/Year filters didn't respect each other
+
+> 🟢 **RESOLVED same day found, 2026-09-09.**
+
+**Severity:** Low-Medium — no data impact, but a confusing dead click for real customers on `/wines`.
+**Found:** 2026-09-09, Max's bug list this session · **Status:** 🟢 Resolved
+
+**Root cause:** `app/(site)/wines/WineCatalogueClient.tsx`'s 3 filter pill groups (Type, Style, Year) each computed their available options from the FULL wine list independently of the other two active filters. Example: a winery with Red-2023 but no Red-2022 — selecting Type=Red still showed "2022" as a normal clickable Year pill (some wine somewhere is 2022), and clicking it silently produced zero results.
+
+**Fix:** added 3 cross-filter matcher helpers, each checking only the OTHER two dimensions (never its own), and a `disabled` flag per pill option computed against them. Disabled options stay visible with their label (not hidden) but render grayed (`opacity: 0.4`, `cursor: not-allowed`, themed via the same `C.border`/`C.muted` tokens already used for inactive pills) and their click is a no-op. The active pill and "All" are hardcoded never-disabled.
+
+**Verified:** live on the dev server with a real cross-filter gap (one Red/2026/Dry/Sparkling wine, separate White/Amber wines in other years) — selecting Type=Red grayed out every Year except 2026 and grayed "Semi-dry" style; clicking a grayed Year pill did nothing; selecting a valid Year then correctly grayed out other Types with no wine in that year, confirming reciprocal cross-respect. `npx tsc --noEmit` clean.
+
+**Committed** 2026-09-09 in `7aba432` on `staging`. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
 
 ---
