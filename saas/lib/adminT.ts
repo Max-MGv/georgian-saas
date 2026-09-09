@@ -14,6 +14,20 @@ const en: Translations = {
   'nav.adminTag': 'Admin',
   'nav.platform': 'Platform',
   'nav.signOut': 'Sign out',
+  'nav.myReports': 'My Reports',
+
+  // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
+  // view of the reports this logged-in admin personally submitted.
+  'myReports.pageTitle': 'My Reports',
+  'myReports.pageHint': 'Bug and feature reports you have submitted, and their current status.',
+  'myReports.empty': "You haven't submitted any reports yet. Use the report icon in the corner of any page to send one.",
+  'myReports.type.bug': 'Bug',
+  'myReports.type.feature': 'Feature request',
+  'myReports.status.new': 'New',
+  'myReports.status.inProgress': 'In Progress',
+  'myReports.status.resolved': 'Resolved',
+  'myReports.status.wontFix': "Won't Fix",
+  'myReports.submitted': 'Submitted',
 
   // Settings — Admin Panel Language section
   'settings.adminLanguage.sectionTitle': 'Admin Panel Language',
@@ -1020,6 +1034,19 @@ const ka: Translations = {
   'nav.adminTag': 'ადმინი',
   'nav.platform': 'პლატფორმა',
   'nav.signOut': 'გასვლა',
+  'nav.myReports': 'ჩემი შეტყობინებები',
+
+  // My Reports page
+  'myReports.pageTitle': 'ჩემი შეტყობინებები',
+  'myReports.pageHint': 'თქვენ მიერ გაგზავნილი ხარვეზების და ფუნქციების მოთხოვნები და მათი მიმდინარე სტატუსი.',
+  'myReports.empty': 'თქვენ ჯერ არაფერი გაგზავნიათ. გამოიყენეთ შეტყობინების ხატულა ნებისმიერი გვერდის კუთხეში.',
+  'myReports.type.bug': 'ხარვეზი',
+  'myReports.type.feature': 'ფუნქციის მოთხოვნა',
+  'myReports.status.new': 'ახალი',
+  'myReports.status.inProgress': 'მუშავდება',
+  'myReports.status.resolved': 'გადაწყვეტილია',
+  'myReports.status.wontFix': 'არ გამოსწორდება',
+  'myReports.submitted': 'გაგზავნილია',
 
   // Settings — Admin Panel Language section
   'settings.adminLanguage.sectionTitle': 'ადმინ პანელის ენა',

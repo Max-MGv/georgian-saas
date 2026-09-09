@@ -1,15 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
+import { getTenantId } from '@/lib/tenant'
 import { adminT } from '@/lib/adminT'
 import { AdminHintsProvider } from '@/components/AdminHintsContext'
+import BreadcrumbTracker from '@/components/BreadcrumbTracker'
+import BugReportWidget from '@/components/BugReportWidget'
 import LogoutButton from './LogoutButton'
 import OnboardingBanner from './OnboardingBanner'
 import FinishDetailsBanner from './FinishDetailsBanner'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [supabase, h, adminLanguage, showAdminHints] = await Promise.all([
-    createClient(), headers(), getSetting('admin_language'), getSetting('show_admin_hints'),
+  const [supabase, h, adminLanguage, showAdminHints, tenantId] = await Promise.all([
+    createClient(), headers(), getSetting('admin_language'), getSetting('show_admin_hints'), getTenantId(),
   ])
   const { data: { user } } = await supabase.auth.getUser()
   const logoUrl = h.get('x-tenant-logo') ?? null
@@ -21,6 +24,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--site-bg)' }}>
+      <BreadcrumbTracker />
+      {/* Submitter identity comes straight from the auth session already
+          resolved above (server-side) — no extra round trip, no re-implementing
+          auth client-side. */}
+      <BugReportWidget surface="ADMIN" tenantId={tenantId} submitterEmail={user?.email ?? null} submitterUserId={user?.id ?? null} />
       {/* Top nav */}
       <nav
         className="border-b"
@@ -64,6 +72,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: '/admin/masterclass', label: at('nav.masterclass'), show: bookingOn },
             { href: '/admin/content', label: at('nav.content'), show: true },
             { href: '/admin/settings', label: at('nav.settings'), show: true },
+            { href: '/admin/my-reports', label: at('nav.myReports'), show: true },
           ].filter(link => link.show).map(link => (
             <a
               key={link.href}

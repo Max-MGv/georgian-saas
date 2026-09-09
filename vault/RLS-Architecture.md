@@ -124,6 +124,7 @@ withTenantDb(tenantId, tx => ...)
 | OrderExtra | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | WineOrderItem | ❌ via WineOrder | JOIN | EXISTS (WineOrder where tenantId = ...) |
 | Tenant | N/A | no RLS | Read by proxy.ts as superuser before tenant context exists |
+| BugReport | ✅ direct, nullable | **no RLS, deliberate** | Same treatment as `Tenant`, not an oversight — the super-admin bug-report inbox must read every tenant's reports (plus anonymous public-site submissions with `tenantId = null`) in one query, which a `tenant_isolation` policy would block. Access control is enforced entirely in server actions instead: `requireSuperAdmin()` gates the inbox (read/write all), a narrower "must be this admin's own report" filter (`submitterUserId = current user`) gates the tenant-admin status view. Not in `setup-rls.ts`'s `writableTables`. See `Plan-BugReportWidget.md` Phase 1. |
 
 ---
 

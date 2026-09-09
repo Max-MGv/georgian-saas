@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import BreadcrumbTracker from '@/components/BreadcrumbTracker'
+import BugReportWidget from '@/components/BugReportWidget'
 
 export default async function SuperAdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -12,6 +14,9 @@ export default async function SuperAdminLayout({ children }: { children: React.R
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#0b1120' }}>
+      <BreadcrumbTracker />
+      {/* Super-admin is cross-tenant by design — no single tenantId applies here. */}
+      <BugReportWidget surface="SUPER_ADMIN" submitterEmail={user.email ?? null} submitterUserId={user.id ?? null} />
       <nav style={{ backgroundColor: '#111827', borderBottom: '1px solid #1e293b' }}>
         <div className="px-6 py-0 flex items-center justify-between" style={{ height: 56 }}>
           {/* Left: brand + nav */}
@@ -37,6 +42,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
                 { href: '/super-admin/tenants', label: 'Tenants' },
                 { href: '/super-admin/orders', label: 'Orders' },
                 { href: '/super-admin/users', label: 'Users' },
+                { href: '/super-admin/bug-reports', label: 'Bug Reports' },
                 { href: '/super-admin/settings', label: 'Settings' },
               ].map(l => (
                 <Link

@@ -313,6 +313,40 @@ model WineOrderItem {
   wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
 }
 
+/// A bug report or feature request submitted via the floating report widget on
+/// any surface (public site, tenant admin, super-admin). Deliberately modeled
+/// on Tenant, not on the tenanted tables above: no `tenant` relation field and
+/// no tenant_isolation RLS policy, since the super-admin inbox must read across
+/// every tenant at once. `tenantId` is a plain nullable column filtered at the
+/// application layer only — see RLS-Architecture.md's table list and
+/// vault/Plan-BugReportWidget.md Phase 1.
+model BugReport {
+  id              String            @id @default(cuid())
+  type            BugReportType
+  status          BugReportStatus   @default(NEW)
+  surface         BugReportSurface
+  comment         String
+  screenshotUrl   String?
+  /// Capped ring buffer of the last ~25 clicks/navigations, e.g.
+  /// [{type, target, path, timestamp}, ...]. See Plan-BugReportWidget.md Phase 2.
+  breadcrumbs     Json?
+  pageUrl         String
+  userAgent       String?
+  // Null for surfaces with no tenant context (public site pre-tenant-resolution
+  // edge cases). No Prisma relation to Tenant, matching Payment/Order/etc. —
+  // tenantId here is filtered in application code, not via RLS.
+  tenantId        String?
+  // Admin's email/Supabase auth user id if logged in; both null for anonymous
+  // public-site submissions.
+  submitterEmail  String?
+  submitterUserId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+}
+
 enum OrderStatus {
   NEW
   // Customer was sent to the payment gateway and hasn't settled yet. Distinct
@@ -360,4 +394,22 @@ enum MasterclassUnit {
   PER_PERSON // multiplied by paying guest count automatically
   PER_PIECE // admin enters quantity manually
   FLAT // fixed price, no quantity
+}
+
+enum BugReportType {
+  BUG
+  FEATURE
+}
+
+enum BugReportStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  WONT_FIX
+}
+
+enum BugReportSurface {
+  PUBLIC_SITE
+  ADMIN
+  SUPER_ADMIN
 }
