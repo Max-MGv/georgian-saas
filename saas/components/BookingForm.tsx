@@ -94,6 +94,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [errorMsg, setErrorMsg] = useState('')
   const [confirmedPrice, setConfirmedPrice] = useState<number | null>(null)
   const [confirmedType, setConfirmedType] = useState<'INDIVIDUAL' | 'COMPANY' | null>(null)
+  // Per-tenant optional "max guests" cap (server-enforced, never shown pre-submit —
+  // see vault/MaintenanceNotes.md context for why this has no visible UI otherwise).
+  // Individual bookings over the cap get silently clamped; this is the note telling
+  // the customer what happened. Company bookings are never altered — just flagged.
+  const [confirmedGuestAdjustedTo, setConfirmedGuestAdjustedTo] = useState<number | null>(null)
+  const [confirmedOverMaxNotice, setConfirmedOverMaxNotice] = useState<number | null>(null)
 
   // Auto-fill fields (controlled so we can populate them from company profile)
   const [firstName, setFirstName] = useState('')
@@ -351,6 +357,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       }
       setConfirmedPrice(result.totalPrice)
       setConfirmedType(result.bookingType)
+      setConfirmedGuestAdjustedTo(result.guestCountAdjustedTo ?? null)
+      setConfirmedOverMaxNotice(result.guestCountOverMax ? (result.guestCountMax ?? null) : null)
       setStatus('success')
     } else {
       setStatus('error')
@@ -367,6 +375,16 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <div className="text-4xl mb-4">🍷</div>
         <h3 className="text-xl font-bold mb-2" style={{ color: C.text }}>{fc('form_success_heading', 'form.success_heading')}</h3>
         <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
+        {confirmedGuestAdjustedTo != null && (
+          <p className="text-sm mt-3" style={{ color: C.muted }}>
+            {t(locale, 'form.guest_count_adjusted', { max: confirmedGuestAdjustedTo })}
+          </p>
+        )}
+        {confirmedOverMaxNotice != null && (
+          <p className="text-sm mt-3" style={{ color: C.muted }}>
+            {t(locale, 'form.guest_count_over_max_notice', { max: confirmedOverMaxNotice })}
+          </p>
+        )}
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>

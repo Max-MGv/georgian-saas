@@ -109,6 +109,8 @@ const en: Translations = {
   'form.success_heading': 'Booking received!',
   'form.success_body': 'Thank you. We will contact you shortly to confirm your visit.',
   'form.est_total_label': 'Total',
+  'form.guest_count_adjusted': 'We can accommodate up to {max} guests for this visit — your booking has been adjusted to {max} guests.',
+  'form.guest_count_over_max_notice': 'Groups over {max} guests will be confirmed with you directly.',
 
   // Online payment result page
   'payment.success_heading': 'Payment received',
@@ -252,6 +254,8 @@ const ka: Translations = {
   'form.success_heading': 'ჯავშანი მიღებულია!',
   'form.success_body': 'გმადლობთ. ჩვენ მალე დაგიკავშირდებით ვიზიტის დასადასტურებლად.',
   'form.est_total_label': 'ჯამი',
+  'form.guest_count_adjusted': 'ჩვენ შეგვიძლია მივიღოთ მაქსიმუმ {max} სტუმარი ამ ვიზიტისთვის — თქვენი ჯავშანი შესწორდა {max} სტუმარზე.',
+  'form.guest_count_over_max_notice': '{max}-ზე მეტი სტუმრის ჯგუფები დადასტურდება პირდაპირ თქვენთან.',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',

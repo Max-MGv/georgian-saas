@@ -130,9 +130,12 @@ const en: Translations = {
 
   // Settings — Booking Rules
   'settings.bookingRules.sectionTitle': 'Booking Rules',
-  'settings.bookingRules.sectionHint': 'Minimum guest counts enforced on the public booking form.',
+  'settings.bookingRules.sectionHint': 'Minimum and maximum guest counts enforced on the public booking form.',
   'settings.bookingRules.tastingMin': 'Wine Tasting minimum',
   'settings.bookingRules.tastingLunchMin': 'Tasting + Lunch minimum',
+  'settings.bookingRules.tastingMax': 'Wine Tasting maximum',
+  'settings.bookingRules.tastingLunchMax': 'Tasting + Lunch maximum',
+  'settings.bookingRules.maxHint': 'Leave blank for no limit.',
   'settings.bookingRules.guests': 'guests',
 
   // Settings — Contact Page (map)
@@ -1146,9 +1149,12 @@ const ka: Translations = {
 
   // Settings — Booking Rules
   'settings.bookingRules.sectionTitle': 'ჯავშნის წესები',
-  'settings.bookingRules.sectionHint': 'მინიმალური სტუმრების რაოდენობა, რომელიც მოქმედებს საჯარო ჯავშნის ფორმაზე.',
+  'settings.bookingRules.sectionHint': 'მინიმალური და მაქსიმალური სტუმრების რაოდენობა, რომელიც მოქმედებს საჯარო ჯავშნის ფორმაზე.',
   'settings.bookingRules.tastingMin': 'ღვინის დეგუსტაციის მინიმუმი',
   'settings.bookingRules.tastingLunchMin': 'დეგუსტაცია + სადილის მინიმუმი',
+  'settings.bookingRules.tastingMax': 'ღვინის დეგუსტაციის მაქსიმუმი',
+  'settings.bookingRules.tastingLunchMax': 'დეგუსტაცია + სადილის მაქსიმუმი',
+  'settings.bookingRules.maxHint': 'დატოვეთ ცარიელი, თუ შეზღუდვა არ გსურთ.',
   'settings.bookingRules.guests': 'სტუმარი',
 
   // Settings — Contact Page (map)

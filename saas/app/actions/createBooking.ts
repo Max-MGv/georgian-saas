@@ -37,8 +37,26 @@ export type BookingResult =
    * must redirect there — the booking is saved either way, so a customer who
    * never completes checkout still exists as PENDING_PAYMENT for the winery to
    * chase. Absent = today's reservation-only flow, unchanged.
+   *
+   * `guestCountAdjustedTo` / `guestCountOverMax` are the two halves of the
+   * per-tenant "max guests" cap (`max_guests_tasting`/`max_guests_tasting_lunch`
+   * settings, optional — blank means no cap):
+   *  - INDIVIDUAL bookings over the cap are silently clamped down before
+   *    saving; `guestCountAdjustedTo` carries the number it was clamped to so
+   *    the client can tell the customer. `null` when no clamp happened.
+   *  - COMPANY bookings are never altered; `guestCountOverMax` is just a flag
+   *    so the client can show an informational heads-up. `guestCountMax`
+   *    carries the cap that was exceeded, for that message's copy.
    */
-  | { success: true; totalPrice: number; bookingType: 'INDIVIDUAL' | 'COMPANY'; checkoutUrl?: string }
+  | {
+      success: true
+      totalPrice: number
+      bookingType: 'INDIVIDUAL' | 'COMPANY'
+      checkoutUrl?: string
+      guestCountAdjustedTo?: number | null
+      guestCountOverMax?: boolean
+      guestCountMax?: number | null
+    }
   | { success: false; error: string }
 
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
@@ -69,15 +87,40 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       ? (parseInt(minTastingStr) || 4)
       : (parseInt(minLunchStr) || 4)
 
-    const guestCount = Number(data.guestCount)
+    let guestCount = Number(data.guestCount)
     const isEnhanced = data.bookingType === 'COMPANY' &&
       (data.tastingGuestCount != null || data.lunchGuestCount != null)
 
-    const effectiveGuestCount = isEnhanced
+    let effectiveGuestCount = isEnhanced
       ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
       : guestCount
     if (effectiveGuestCount < minGuests) {
       return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
+    }
+
+    // Guard: max guests from settings (optional — blank/unset means no cap).
+    // INDIVIDUAL bookings over the cap are clamped down, never rejected.
+    // COMPANY bookings are never altered — only flagged for a heads-up.
+    const [maxTastingStr, maxLunchStr] = await Promise.all([
+      getSetting('max_guests_tasting'),
+      getSetting('max_guests_tasting_lunch'),
+    ])
+    const maxGuestsStr = data.visitType === 'TASTING' ? maxTastingStr : maxLunchStr
+    const maxGuests = maxGuestsStr.trim() !== '' && !Number.isNaN(parseInt(maxGuestsStr))
+      ? parseInt(maxGuestsStr)
+      : null
+
+    let guestCountAdjustedTo: number | null = null
+    let guestCountOverMax = false
+
+    if (maxGuests != null && effectiveGuestCount > maxGuests) {
+      if (data.bookingType === 'INDIVIDUAL') {
+        guestCount = maxGuests
+        effectiveGuestCount = maxGuests
+        guestCountAdjustedTo = maxGuests
+      } else {
+        guestCountOverMax = true
+      }
     }
 
     // Fetch real masterclass prices from DB (scoped to this tenant)
@@ -217,7 +260,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         // No confirmation email here: "your booking is confirmed" must not
         // reach someone who hasn't paid and may abandon checkout. It is sent
         // by the settlement path once Flitt confirms (phase 7).
-        return { success: true, totalPrice, bookingType: data.bookingType, checkoutUrl }
+        return {
+          success: true, totalPrice, bookingType: data.bookingType, checkoutUrl,
+          guestCountAdjustedTo, guestCountOverMax, guestCountMax: maxGuests,
+        }
       }
       // fall through: checkout unavailable → reservation-only, email as today
     }
@@ -249,7 +295,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }).catch(err => console.error('Email send failed:', err))
     }
 
-    return { success: true, totalPrice, bookingType: data.bookingType }
+    return {
+      success: true, totalPrice, bookingType: data.bookingType,
+      guestCountAdjustedTo, guestCountOverMax, guestCountMax: maxGuests,
+    }
   } catch {
     return { success: false, error: 'Something went wrong. Please try again.' }
   }

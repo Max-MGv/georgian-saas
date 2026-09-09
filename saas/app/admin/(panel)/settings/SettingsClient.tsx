@@ -39,6 +39,14 @@ type Props = {
   invoiceEmailMessage: string
   minGuestsTasting: string
   minGuestsTastingLunch: string
+  /**
+   * Optional caps (Setting keys `max_guests_tasting`/`max_guests_tasting_lunch`).
+   * Empty string = no limit — unlike the min-guest settings, these have no
+   * hardcoded default, so a blank value here is a real, intentional state, not
+   * "not loaded yet".
+   */
+  maxGuestsTasting: string
+  maxGuestsTastingLunch: string
   blockedDates?: { id: string; date: string; reason: string | null }[]
   mapsEmbedUrl: string
   logoUrl?: string | null
@@ -79,7 +87,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -104,6 +112,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [emailMessage, setEmailMessage] = useState(invoiceEmailMessage)
   const [minTasting, setMinTasting] = useState(minGuestsTasting)
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
+  const [maxTasting, setMaxTasting] = useState(maxGuestsTasting)
+  const [maxTastingLunch, setMaxTastingLunch] = useState(maxGuestsTastingLunch)
   const [blockedDates, setBlockedDates] = useState(initialBlockedDates)
   const [mapsEmbedUrl, setMapsEmbedUrl] = useState(initialMapsEmbedUrl)
   const [mapsEditMode, setMapsEditMode] = useState(false)
@@ -324,25 +334,29 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     })
   }
 
-  function handleBookingRuleSave(key: 'min_guests_tasting' | 'min_guests_tasting_lunch') {
+  type BookingRuleKey = 'min_guests_tasting' | 'min_guests_tasting_lunch' | 'max_guests_tasting' | 'max_guests_tasting_lunch'
+
+  function handleBookingRuleSave(key: BookingRuleKey) {
     setBookingRulesEditing(null)
-    if (key === 'min_guests_tasting') {
-      const val = String(Math.max(parseInt(minTasting) || 1, 1))
-      setMinTasting(val)
-      startTransition(async () => {
-        await updateSetting('min_guests_tasting', val)
-        setSavedKey('min_guests_tasting')
-        setTimeout(() => setSavedKey(null), 2000)
-      })
-    } else {
-      const val = String(Math.max(parseInt(minTastingLunch) || 1, 1))
-      setMinTastingLunch(val)
-      startTransition(async () => {
-        await updateSetting('min_guests_tasting_lunch', val)
-        setSavedKey('min_guests_tasting_lunch')
-        setTimeout(() => setSavedKey(null), 2000)
-      })
-    }
+    // Min-guest keys always clamp to >= 1 (they have a hardcoded default of 4
+    // and can never be "off"). Max-guest keys are optional — a blank value is
+    // a real, intentional "no limit" state, not something to coerce to 1.
+    const isMax = key === 'max_guests_tasting' || key === 'max_guests_tasting_lunch'
+    const raw = key === 'min_guests_tasting' ? minTasting
+      : key === 'min_guests_tasting_lunch' ? minTastingLunch
+      : key === 'max_guests_tasting' ? maxTasting
+      : maxTastingLunch
+    const val = isMax && raw.trim() === '' ? '' : String(Math.max(parseInt(raw) || 1, 1))
+    const setter = key === 'min_guests_tasting' ? setMinTasting
+      : key === 'min_guests_tasting_lunch' ? setMinTastingLunch
+      : key === 'max_guests_tasting' ? setMaxTasting
+      : setMaxTastingLunch
+    setter(val)
+    startTransition(async () => {
+      await updateSetting(key, val)
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
   }
 
   function handleAddBlockedDate() {
@@ -858,8 +872,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
           {([
-            { key: 'min_guests_tasting' as const,       label: at('settings.bookingRules.tastingMin'),     value: minTasting,     set: setMinTasting },
-            { key: 'min_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMin'), value: minTastingLunch, set: setMinTastingLunch },
+            { key: 'min_guests_tasting' as const,       label: at('settings.bookingRules.tastingMin'),      value: minTasting,      set: setMinTasting,      isMax: false },
+            { key: 'min_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMin'), value: minTastingLunch, set: setMinTastingLunch, isMax: false },
+            { key: 'max_guests_tasting' as const,       label: at('settings.bookingRules.tastingMax'),      value: maxTasting,      set: setMaxTasting,      isMax: true },
+            { key: 'max_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMax'), value: maxTastingLunch, set: setMaxTastingLunch, isMax: true },
           ]).map(row => {
             const isEditing = bookingRulesEditing === row.key
             return (
@@ -869,6 +885,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   {isEditing ? (
                     <input
                       type="number" min={1} max={200}
+                      placeholder={row.isMax ? '∞' : undefined}
                       style={{ ...inputStyle, width: 80 }}
                       value={row.value}
                       autoFocus
@@ -877,7 +894,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     />
                   ) : (
                     <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
-                      <span style={{ color: C.text }}>{row.value}</span>
+                      <span style={{ color: row.value ? C.text : C.faint }}>{row.value || '∞'}</span>
                     </div>
                   )}
                   <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
@@ -896,6 +913,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
                     </button>
+                  )}
+                  {row.isMax && isEditing && (
+                    <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.maxHint')}</span>
                   )}
                   {savedKey === row.key && !isPending && (
                     <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>

@@ -21,6 +21,8 @@ export default async function SettingsPage() {
     invoiceEmailMessage,
     minGuestsTasting,
     minGuestsTastingLunch,
+    maxGuestsTasting,
+    maxGuestsTastingLunch,
     blockedDates,
     defaultLocale,
     mapsEmbedUrl,
@@ -45,6 +47,8 @@ export default async function SettingsPage() {
     getSetting('invoice_email_message'),
     getSetting('min_guests_tasting'),
     getSetting('min_guests_tasting_lunch'),
+    getSetting('max_guests_tasting'),
+    getSetting('max_guests_tasting_lunch'),
     getBlockedDates(),
     getSetting('default_locale'),
     getSetting('maps_embed_url'),
@@ -102,6 +106,8 @@ export default async function SettingsPage() {
         invoiceEmailMessage={invoiceEmailMessage}
         minGuestsTasting={minGuestsTasting}
         minGuestsTastingLunch={minGuestsTastingLunch}
+        maxGuestsTasting={maxGuestsTasting}
+        maxGuestsTastingLunch={maxGuestsTastingLunch}
         blockedDates={blockedDates}
         defaultLocale={defaultLocale ?? 'en'}
         mapsEmbedUrl={mapsEmbedUrl}
