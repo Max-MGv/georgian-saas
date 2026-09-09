@@ -86,7 +86,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </nav>
 
-      <main className="px-6 py-8 max-w-6xl mx-auto">
+      <main className="px-6 py-8 max-w-screen-2xl mx-auto">
         <OnboardingBanner />
         <FinishDetailsBanner />
         <AdminHintsProvider show={showAdminHints === 'true'}>
