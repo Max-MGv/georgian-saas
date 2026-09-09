@@ -28,8 +28,8 @@ Reports always go to **Max only**, via a new `/super-admin/bug-reports` inbox, r
 - [x] Phase 4 — Submission server action + email notification
 - [x] Phase 5 — Super-admin inbox (`/super-admin/bug-reports`)
 - [x] Phase 6 — Tenant admin "my reports" status view
-- [ ] Phase 7 — QA / stress test pass (cross-tenant isolation, mobile, large screenshots, anonymous public submission, spam/abuse check)
-- [ ] Phase 8 — Vault updates (FeatureLog, Roadmap, feature note)
+- [x] Phase 7 — Superseded by live staging review (see Result below — automated pass didn't complete)
+- [x] Phase 8 — Vault updates (FeatureLog, Roadmap, feature note)
 
 Each phase below is built by a sub-agent, reviewed by Max's Claude session (this one) before merging into the next phase, and gets a quick stress-test pass before moving on. Update the checkbox above and the "Result" line under each phase as it completes.
 
@@ -235,7 +235,17 @@ Beyond the per-phase checks above, before calling this done:
 - Confirm mobile responsiveness of the widget panel itself.
 - Cross-tenant isolation re-check specifically for this feature (per `[[MaintenanceNotes]]` #10 — don't trust a green check alone, write an explicit two-tenant test if a DB-level check is added).
 
-**Result:** _(fill in when done)_
+**Result:** Superseded, 2026-09-09. The scripted automated QA agent for this phase was launched but hit an unrelated session/auth error partway through (`401 OAuth access token has expired`) — not a finding about the feature itself, just an environment failure. Rather than relaunch it, Max asked to push straight to `staging` and test live on the real preview deploy instead ("isn't that what staging is for?") — which is exactly right per this project's normal workflow (`[[ClaudeInstructions]]` rule 0). Committed only this feature's files (left pre-existing unrelated uncommitted work — playwright/FeatureLog/SessionLog edits from other sessions — untouched), pushed to `staging`, confirmed the Vercel deployment reached `READY` via the Vercel MCP tools before handing the URL to Max.
+
+Max then submitted 2 real test reports from the live staging site and asked for a review of each:
+- **Report 1** (`cmtttb6hg...`, "the total is wrong" after adding wine to cart): breadcrumb trail (16 entries) was genuinely useful — a full click-by-click repro path (Order Wine → /wines → set a wine's quantity to 4 via the `+` button → Checkout → opened widget → submitted). **Real gap found:** the screenshot only showed the top of the `/wines` catalogue page, not the cart/checkout total the report was actually about — the core claim couldn't be visually confirmed. Logged as a known limitation in `[[Feature 155 - Bug Report Widget]]`, not fixed yet (candidate fix: a hint nudging the reporter to screenshot the actual broken state).
+- **Report 2** (`cmtttexw...`, "bug found test"): a smoke test of the widget itself (3 breadcrumbs, no real interaction before submit, no screenshot) — correctly not actionable, but confirmed the whole pipeline (submit → DB row → email → inbox listing) fires correctly end to end.
+
+Also confirmed during this review (not in the original Phase 7 checklist, but worth recording): `/admin/my-reports` correctly showed *empty* for both test reports, since both were submitted from the public site while not logged into `/admin` — initially looked like a bug to Max, confirmed via direct DB inspection (`submitterUserId: null` on both rows) that this is the widget working exactly as designed (Phase 6's per-user scoping), not a defect.
+
+**Not covered by this live review** (the automated pass would have): exact comment-length boundary (2000/2001 chars), a repeat of the oversized-image rejection check specifically on the deployed environment, a full mobile sweep on staging itself (only done earlier on localhost in Phase 3). Flagged in `[[Feature 155 - Bug Report Widget]]` as not formally completed — worth a follow-up pass if this feature sees heavier use.
+
+**Cleanup note:** a throwaway second tenant-admin test account created during Phase 6 (`bugreport-test-b@nikalasmarani.test`) was removed via the Supabase Admin API after review, since it was only test scaffolding.
 
 ---
 
@@ -247,4 +257,4 @@ Per `[[ClaudeInstructions]]` rules 1, 4, 9:
 - New feature note: `vault/features/Feature NNN - Bug Report Widget.md` (this touches well over 3 files and has non-trivial state — breadcrumb capture, cross-surface mounting, storage, email). Link it from `FeatureLog.md`.
 - Update `RLS-Architecture.md`'s table list to include `BugReport` in the "no RLS, app-layer only" category alongside `Tenant`, so it reads as a deliberate decision, not a gap.
 
-**Result:** _(fill in when done)_
+**Result:** Done, 2026-09-09. `RLS-Architecture.md` was already updated in Phase 1. Added: `FeatureLog.md` row #155 (full build + live-test summary, User tested marked 🚧 Partial pending the follow-up checks noted in Phase 7's result); `Roadmap.md` — ticked off under Draft Ideas/Backlog, linking both this plan and the new feature note; `[[Feature 155 - Bug Report Widget]]` — the dedicated feature note (touches well over 3 files, has non-trivial state across breadcrumb capture / cross-surface mounting / storage / email, per rule 9), covering what it does, key design decisions, files touched, edge cases handled, the known screenshot-timing limitation, and what's not yet formally tested.

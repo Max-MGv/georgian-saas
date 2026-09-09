@@ -8,7 +8,29 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-06 (latest, part 3) — Dedicated penetration test, found a real Critical pricing bug (Bug #22)
+## 2026-09-09 (latest) — Built the bug/feature report widget (#155), end to end, live-tested on staging
+
+Max asked for a bug/feedback reporting system: a floating icon that opens a panel to file a bug/feature with a comment + screenshot, plus the user's recent click flow attached automatically. Researched real products first (Sentry User Feedback, Marker.io/Usersnap/Userback, BugPin) and proposed a self-built version modeled on Sentry's breadcrumb approach rather than a paid third-party tool, since the stack already had everything needed (Supabase Storage, Prisma, Resend). Max clarified scope before building: **super-admin only for triage** ("the actual work here is for superadmin (me), not the business using my service"), admins get read-only status visibility; icon shows everywhere (public site + admin + super-admin); email notification on submit; one form with a Bug/Feature toggle, not two flows.
+
+Wrote a full phased plan (`[[Plan-BugReportWidget]]`) and built it in 6 phases, each via a delegated subagent, each independently reviewed against the actual diff/live DB state before proceeding (not just the agent's own summary) — established discipline from recent sessions, held here too:
+1. **Data layer** — `BugReport` Prisma model + 3 enums, migrated to dev DB; private Supabase Storage bucket `bug-report-screenshots`; deliberately kept outside tenant RLS (same treatment as `Tenant` itself, documented in `[[RLS-Architecture]]`) since the inbox needs one real cross-tenant query.
+2. **Breadcrumb capture** — `lib/breadcrumbs.ts`, a 25-entry ring buffer of clicks/navigations mirrored to `sessionStorage`, mounted on all 3 root layouts; verified password fields are never captured beyond a generic `"[password field]"` marker.
+3. **Widget UI** — floating icon + slide-over panel matching the existing `OrdersTable.tsx` edit-panel pattern; paste-from-clipboard + file-upload screenshot support.
+4. **Submission action + email** — unauthenticated `submitBugReport()` (public visitors report with no login), server-side validation, Storage upload, Resend notification that never blocks the save if it fails.
+5. **Super-admin inbox** (`/super-admin/bug-reports`) — list + detail with signed-URL screenshots, breadcrumb timeline, status dropdown.
+6. **Admin status view** (`/admin/my-reports`) — read-only, scoped to the specific logged-in admin's own submissions only (not the whole tenant) — an open question in the plan, resolved as the safer default and confirmed correct during live testing.
+
+Phase 7 (a scripted automated QA pass) hit an unrelated session/auth error mid-run; rather than relaunch it, Max asked to push to `staging` and test live instead — committed only this feature's files (left pre-existing unrelated uncommitted work from other sessions untouched), pushed, confirmed the Vercel deployment reached `READY` via the Vercel MCP tools. Max then submitted 2 real reports from the live staging site. Review found the breadcrumb trail genuinely useful (a full click-by-click repro path on a real "cart total is wrong" report) but surfaced a real gap: **the screenshot captures whatever's on screen at paste/upload time, not necessarily the state showing the problem** — logged as a known limitation in `[[Feature 155 - Bug Report Widget]]`, not fixed yet. Also confirmed (initially looked like a bug to Max, wasn't): `/admin/my-reports` correctly showed empty for both test reports since both were submitted from the public site, not while logged into `/admin` — exactly Phase 6's per-user scoping working as designed.
+
+Cleaned up a throwaway test admin account created during Phase 6 review. Vault fully updated: `FeatureLog.md` #155, `Roadmap.md`, new `[[Feature 155 - Bug Report Widget]]` note, `RLS-Architecture.md`'s table list. **Not yet done:** the formal Phase 7 sweep (comment-length boundary, oversized-image re-check, full mobile pass on staging itself) and the screenshot-timing UX fix — both flagged as follow-ups, not blockers.
+
+---
+
+## 2026-09-07 — Explained the Playwright suite to Max, enabled failure video, wrote a non-technical "how to check a test" guide. Set `video: 'retain-on-failure'`; wrote `playwright/HOW-TO-CHECK-A-TEST.md`. Not yet confirmed a `.webm` actually gets produced on a real failure.
+
+---
+
+## 2026-09-06 (part 3) — Dedicated penetration test, found a real Critical pricing bug (Bug #22)
 
 Direct continuation of part 2 (the admin theming fix). Max asked for a subagent to run a penetration test against the dev app and document design + findings in a new `vault/penetration test/` folder.
 
