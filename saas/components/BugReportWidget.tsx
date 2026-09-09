@@ -220,7 +220,15 @@ export default function BugReportWidget({
       {/* Floating trigger button — bottom-right, fixed. Kept clear of the
           public-site mobile hamburger (top header, not fixed-bottom) and the
           admin panel's top nav / OrdersTable slide-over (which itself lives
-          at z-40/z-50) by sitting at a higher z-index. */}
+          at z-40/z-50) by sitting at a higher z-index.
+
+          `--cart-bar-offset` is a CSS var published by pages that show their
+          own fixed-bottom bar (currently just the wine catalogue's sticky
+          cart bar — see WineCatalogueClient.tsx) so this shared,
+          state-unaware component can lift itself clear without needing a
+          prop/context wired down from every page. It defaults to 0px and is
+          reset by the page itself when its bar isn't showing, so this has no
+          effect anywhere else. */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
@@ -228,7 +236,7 @@ export default function BugReportWidget({
           title="Report a bug or feature request"
           className="fixed flex items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105"
           style={{
-            bottom: 20,
+            bottom: 'calc(20px + var(--cart-bar-offset, 0px))',
             right: 20,
             width: 48,
             height: 48,

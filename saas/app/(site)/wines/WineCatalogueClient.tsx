@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
@@ -193,6 +193,7 @@ export default function WineCatalogueClient({
     setQuantities(prev => ({ ...prev, [id]: Math.max(0, value) }))
   }
 
+  const cartBarRef = useRef<HTMLDivElement>(null)
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
   const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * w.price, 0)
 
@@ -219,6 +220,31 @@ export default function WineCatalogueClient({
       setShowDrawer(false)
     }
   }, [totalBottles, showDrawer, submitted])
+
+  // Publish the sticky bottom bar's real height as a CSS var so other
+  // fixed-bottom UI (BugReportWidget's trigger button) can clear it instead
+  // of visually colliding. ResizeObserver rather than a hardcoded height
+  // because the bar's content (bottle list) can wrap to more lines on
+  // narrow viewports or with several wines selected. Reset to 0 whenever
+  // the bar isn't showing or on unmount, so this page never leaves a stale
+  // offset behind for other pages.
+  useEffect(() => {
+    if (totalBottles === 0 || !cartBarRef.current) {
+      document.documentElement.style.setProperty('--cart-bar-offset', '0px')
+      return
+    }
+    const el = cartBarRef.current
+    const updateOffset = () => {
+      document.documentElement.style.setProperty('--cart-bar-offset', `${el.getBoundingClientRect().height + 12}px`)
+    }
+    updateOffset()
+    const observer = new ResizeObserver(updateOffset)
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      document.documentElement.style.setProperty('--cart-bar-offset', '0px')
+    }
+  }, [totalBottles])
 
   useEffect(() => {
     if (!companyId || hideCompanyDropdown) {
@@ -550,6 +576,7 @@ export default function WineCatalogueClient({
       {/* ── Sticky bottom bar ─────────────────────────────────────────────── */}
       {totalBottles > 0 && (
         <div
+          ref={cartBarRef}
           className="fixed bottom-0 left-0 right-0 z-40 border-t"
           style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', boxShadow: '0 -4px 20px rgba(0,0,0,0.08)' }}
         >
