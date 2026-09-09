@@ -206,6 +206,22 @@ export default function WineCatalogueClient({
   // so every wine always offers one — most recent first.
   const availableYears = Array.from(new Set(WINES.map(w => w.year))).sort((a, b) => b - a)
 
+  // Cross-filter matchers, one per dimension, each checking only the OTHER
+  // two active filters (never its own dimension) — used below to gray out
+  // pill options that would produce zero results given the currently active
+  // filters, without hiding them or letting a dimension disable itself.
+  const matchesStyleFilter = (w: DbWine) => {
+    if (styleFilter === 'SPARKLING') return w.sparkling === true
+    if (styleFilter) return w.sweetness === styleFilter
+    return true
+  }
+  const matchesTypeFilter = (w: DbWine) => !typeFilter || w.wineType === typeFilter
+  const matchesYearFilter = (w: DbWine) => !yearFilter || w.year === yearFilter
+
+  const winesForType = WINES.filter(w => matchesStyleFilter(w) && matchesYearFilter(w))
+  const winesForStyle = WINES.filter(w => matchesTypeFilter(w) && matchesYearFilter(w))
+  const winesForYear = WINES.filter(w => matchesTypeFilter(w) && matchesStyleFilter(w))
+
   const visibleWines = WINES.filter(w => {
     if (typeFilter && w.wineType !== typeFilter) return false
     if (yearFilter && w.year !== yearFilter) return false
@@ -783,8 +799,8 @@ export default function WineCatalogueClient({
             {
               label: t(locale, 'wine.filter.type'),
               options: [
-                { value: null, label: t(locale, 'wine.filter.all') },
-                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(tp => availableTypes.has(tp)).map(tp => ({ value: tp as FilterValue, label: TYPE_LABEL[tp] })),
+                { value: null, label: t(locale, 'wine.filter.all'), disabled: false },
+                ...(['RED', 'WHITE', 'AMBER', 'ROSE'] as const).filter(tp => availableTypes.has(tp)).map(tp => ({ value: tp as FilterValue, label: TYPE_LABEL[tp], disabled: !winesForType.some(w => w.wineType === tp) })),
               ],
               active: typeFilter as FilterValue,
               set: (v: FilterValue) => setTypeFilter(v as TypeFilter),
@@ -792,9 +808,9 @@ export default function WineCatalogueClient({
             {
               label: t(locale, 'wine.filter.style'),
               options: [
-                { value: null, label: t(locale, 'wine.filter.all') },
-                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as FilterValue, label: SWEETNESS_LABEL[s] })),
-                ...(hasSparkling ? [{ value: 'SPARKLING' as FilterValue, label: SPARKLING_LABEL }] : []),
+                { value: null, label: t(locale, 'wine.filter.all'), disabled: false },
+                ...(['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SWEET'] as const).filter(s => availableSweetness.has(s)).map(s => ({ value: s as FilterValue, label: SWEETNESS_LABEL[s], disabled: !winesForStyle.some(w => w.sweetness === s) })),
+                ...(hasSparkling ? [{ value: 'SPARKLING' as FilterValue, label: SPARKLING_LABEL, disabled: !winesForStyle.some(w => w.sparkling) }] : []),
               ],
               active: styleFilter as FilterValue,
               set: (v: FilterValue) => setStyleFilter(v as StyleFilter),
@@ -802,8 +818,8 @@ export default function WineCatalogueClient({
             {
               label: t(locale, 'wine.filter.year'),
               options: [
-                { value: null, label: t(locale, 'wine.filter.all') },
-                ...availableYears.map(y => ({ value: y as FilterValue, label: String(y) })),
+                { value: null, label: t(locale, 'wine.filter.all'), disabled: false },
+                ...availableYears.map(y => ({ value: y as FilterValue, label: String(y), disabled: !winesForYear.some(w => w.year === y) })),
               ],
               active: yearFilter as FilterValue,
               set: (v: FilterValue) => setYearFilter(v as YearFilter),
@@ -813,15 +829,23 @@ export default function WineCatalogueClient({
               <span className="text-xs font-medium uppercase tracking-wider w-10 flex-shrink-0" style={{ color: C.faint }}>{row.label}</span>
               {row.options.map(opt => {
                 const isActive = row.active === opt.value
+                // Never disable the currently active pill, even if it would
+                // (edge case) no longer match — only unselected zero-result
+                // options are grayed out and made inert.
+                const isDisabled = opt.disabled && !isActive
                 return (
                   <button
                     key={opt.label}
                     type="button"
-                    onClick={() => row.set(opt.value)}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
+                    onClick={() => { if (!isDisabled) row.set(opt.value) }}
                     className="text-xs px-3 py-1.5 rounded-full font-medium border transition-colors"
                     style={isActive
                       ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#ffffff' }
-                      : { borderColor: C.border, color: C.muted, backgroundColor: 'transparent' }}
+                      : isDisabled
+                        ? { borderColor: C.border, color: C.muted, backgroundColor: 'transparent', opacity: 0.4, cursor: 'not-allowed' }
+                        : { borderColor: C.border, color: C.muted, backgroundColor: 'transparent' }}
                   >
                     {opt.label}
                   </button>
