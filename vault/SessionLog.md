@@ -8,6 +8,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-10 (session 3) — Built and shipped the demo's guided checklist overlay (#159)
+
+Continuing the `demo.vineworks.ge` backlog from `[[Plan-DemoSite]]`'s "Still not started" list — Max picked item 1, the guided checklist, as the next piece. Built `components/DemoChecklist.tsx`: a pinned bottom-left widget, gated on `DEMO_TENANT_ID` exactly like `DemoModeBanner`, listing the 4-step loop (browse wines → book → switch to admin → see it land) with steps auto-checking via route changes plus a small `CustomEvent` dispatched from the booking form's and wine-order form's success paths (a one-line, no-op-elsewhere addition to `BookingForm.tsx`/`WineCatalogueClient.tsx`). Positioned bottom-left specifically to avoid the existing bug-report widget's bottom-right corner, and reuses its `--cart-bar-offset` CSS var so it lifts above the sticky `/wines` cart bar too.
+
+Verified end-to-end locally against the dev DB before touching anything shared — temporarily pointed `DEFAULT_TENANT_ID` at the demo tenant (same trick used to build #158 originally), walked the full loop including a real wine-order submission to confirm the `booked` step fires, then reverted `.env` and reconfirmed zero trace of the checklist on the real Staging Winery tenant (console clean, `tsc` clean). Noted honestly to Max that this feature can't be checked on the shared staging preview URL the normal way, since the demo tenant's domain isn't wired to resolve there — only local (dev DB) and the real `demo.vineworks.ge` (prod DB) are reachable. Pushed to `staging` (`0e50213`), Max opted to verify directly on production rather than wait for an alternate staging path. Merged `staging` → `master`, confirmed the Vercel production deployment reached `READY` via the Vercel MCP tools, and verified live on `demo.vineworks.ge` directly (screenshot confirmed, clean layout, no overlap with the bug-report button). Switched back to `staging` afterward per the standing workflow.
+
+---
+
 ## 2026-09-10 (session 2) — Built demo.vineworks.ge, a public self-serve sales demo
 
 Max's idea: now that `vineworks.ge` exists as the platform's own domain (not a client tenant), turn it into a presentation/demo site showcasing the product — wine e-commerce, booking, the admin CRM, theming, easy content editing, the onboarding wizard. Researched how B2B SaaS companies actually do this first (chat only, no code): found two real patterns — a fully self-serve live sandbox (Shopify's B2B demo store, Bookeo's customer/admin toggle, BookingPress) vs. a gated "book a call" demo (FareHarbor, Toast, Checkfront). Recommended the self-serve pattern since Vineworks doesn't have the brand trust yet to make someone wait for a sales call before seeing the product. Full sourced comparison and the resulting plan: `[[Plan-DemoSite]]`.

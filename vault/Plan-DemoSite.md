@@ -53,8 +53,9 @@ Neither bug blocks the demo (both are edge-case/cosmetic), so proceeding to the 
 
 **2026-09-10 (cont'd) — merged and live.** Max confirmed; merged `staging` → `master` (fast-forward, commit `23c036e`) and pushed. Switched back to `staging` per the standing workflow guardrail. Verified directly on `https://demo.vineworks.ge` in production: correct branding, banner shows, "Winery Admin View →" signs in and lands on `/admin/orders` with 0 bookings (clean slate) and the "← Customer View" flip — the same checks already passed in dev/staging, now confirmed on the real domain.
 
+**2026-09-10 (session 3) — Guided checklist overlay, done ([[FeatureLog]] #159).** Built `components/DemoChecklist.tsx` — pinned bottom-left widget, same `DEMO_TENANT_ID` gate as `DemoModeBanner`, the exact 4-step loop this section originally called for. Steps auto-check via route changes and a `CustomEvent` dispatched from the booking/wine-order success paths, no manual step-marking needed. Verified locally against the dev DB (temporarily pointing `DEFAULT_TENANT_ID` at the demo tenant, same trick as the original build), including a real wine-order submission to confirm the `booked` step fires; reconfirmed zero trace on Staging Winery afterward. Couldn't be checked on the shared staging preview URL (the demo tenant's domain doesn't resolve there) — Max opted to verify directly on production instead. Merged to `master`, confirmed live on `demo.vineworks.ge`. Full session notes: `SessionLog.md` 2026-09-10 (session 3).
+
 ### Still not started
-- Guided checklist overlay ("1. Browse wines → 2. Book → 3. Switch to admin → ...")
 - Nightly reset + abuse guardrails (rate limiting on public-write actions, suppressed emails) — required before wide/public sharing, not before an internal soft preview
 - Onboarding-wizard-as-demo (the distinctive idea flagged in the original plan) — still not started, needs the disposable-tenant-per-visitor question resolved first
 - The two bugs found during QA (wine-order address field, Rkatsiteli mislabeling)

@@ -8,6 +8,19 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ 2026-09-10 (session 3) — Demo guided checklist, live on `demo.vineworks.ge` — needs your check
+
+Full detail: `FeatureLog.md` #159, `SessionLog.md` 2026-09-10 (session 3), `Plan-DemoSite.md`.
+
+1. Open `demo.vineworks.ge` — a small dark "🍷 Try the demo" box should be pinned bottom-left, listing 4 steps (Browse wine list → Book a tasting or order wine → Switch to Winery Admin View → See it land in Orders).
+2. Click "Browse the wine list" (or just visit `/wines`) → step 1 should get a checkmark + strikethrough.
+3. Place a real test wine order (or a booking on the home page) → step 2 should check off automatically the moment it succeeds — no need to click anything on the checklist itself.
+4. Click "Winery Admin View →" in the top banner → steps 3 and 4 should both check off once you land on `/admin/orders`.
+5. Click the ✕ to collapse it → should shrink to a small "🍷 Tour 4/4" pill in the same corner; click that to reopen.
+6. Regression check: open the real site (`nikalasmarani.vineworks.ge` or Staging Winery) → confirm there's no trace of this box there — it's demo-only.
+
+---
+
 ## ✅ 2026-09-10 — pushed to production (`master`), domain migrated — needs your review
 
 **Everything below is already live**, not just staging. Full detail: `SessionLog.md` 2026-09-10, `Plan-EmailInfrastructure.md`, `Vineworks-Hosting/Domain-and-Email-Setup.md`.
