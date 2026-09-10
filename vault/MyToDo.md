@@ -8,6 +8,18 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ 2026-09-10 — pushed to production (`master`), domain migrated — needs your review
+
+**Everything below is already live**, not just staging. Full detail: `SessionLog.md` 2026-09-10, `Plan-EmailInfrastructure.md`, `Vineworks-Hosting/Domain-and-Email-Setup.md`.
+
+1. **Real site address changed.** Nikalas Marani's site is now `nikalasmarani.vineworks.ge`, not `nikalasmarani.vercel.app`. The old address still works (redirects automatically), but update anything you personally have bookmarked or shared with the family.
+2. **Customer emails now actually deliver.** Booking confirmations, wine receipts, and invoices used to silently land in your own inbox instead of the customer's (a leftover Resend sandbox limitation) — fixed. Worth sending yourself one real test booking/invoice on the live site to see it arrive properly.
+3. **Also shipped in the same push** (accumulated on `staging` over recent sessions, all bundled into this one merge): the onboarding wizard, granular per-section payment controls (#148), the bug/feature report widget (#155), the optional max-guests cap (#156), and various i18n/theming fixes. If anything on the live site looks different than you remember, it's probably one of these — check `FeatureLog.md` for the full list.
+4. **Found, not fixed — worth a look when you have a minute:** `nikalasmarani.ge` (your actual `.ge` domain) does not point at this app at all. It's currently serving something else — looks like maybe an old site. If you want it pointed here too, let me know and I'll sort out the DNS.
+5. **Ran the full Playwright suite as a post-merge sanity check** — no real regressions found, nothing needs your attention there.
+
+---
+
 ## ✅ Committed to staging 2026-09-06, needs your review
 
 ### Admin theming fix (Bugs #20, #21) + wine-order pricing security fix (Bug #22)
@@ -399,10 +411,10 @@ Staging: `georgian-saas-git-staging-mg-productions-projects.vercel.app` (Staging
 
 ---
 
-- [ ] **Nikalas Marani payment system (Flitt) — SHIPPED to production 2026-07-29 (`master` @ `429a16e`), module still OFF for every tenant.** Full detail and the resume point: [[Plan-OnlinePayment.md]] §9a — that section is the current source of truth, not this line. Migration + RLS applied to prod, staging→master merged, staging manually walked through both checkout flows (confirmed the secret is never shown once saved, confirmed "Awaiting Payment" + "Mark as paid" recovery works). **3 things left, in this order:**
-  1. **Verify Resend domain, then flip `isDomainVerified`** in `bookingConfirmation.ts` and `wineOrderReceipt.ts` — hard blocker, a paying customer currently gets no receipt (their email goes to you instead). Plan §8a.
+- [ ] **Nikalas Marani payment system (Flitt) — SHIPPED to production 2026-07-29 (`master` @ `429a16e`), module still OFF for every tenant.** Full detail and the resume point: [[Plan-OnlinePayment.md]] §9a — that section is the current source of truth, not this line. Migration + RLS applied to prod, staging→master merged, staging manually walked through both checkout flows (confirmed the secret is never shown once saved, confirmed "Awaiting Payment" + "Mark as paid" recovery works). **2 things left, in this order:**
+  1. ~~Verify Resend domain, then flip `isDomainVerified`~~ ✅ **DONE 2026-09-10** — real domain (`notify.vineworks.ge`) verified, sandbox hack removed entirely (see #157). Paying customers now get real receipts.
   2. **One real payment completed on staging, then refunded via the Flitt portal** — no genuine inbound Flitt callback has ever round-tripped; every test so far used a forged/self-generated one. Needs Flitt portal access (also needed to rotate the merchant password, still outstanding from before — one ask covers both).
-  3. **Only once 1 and 2 are clear: switch the module on for Nikalas Marani for real.**
+  3. **Only once 2 is clear: switch the module on for Nikalas Marani for real.**
 
 - [ ] **NM historical order data (52 real bookings, 2022-2026) — researched, parked 2026-07-28** — real customer data found in the old site's live DB (`nalige_db`), confirmed worth migrating and confirmed the admin UI already tolerates legacy-shaped rows. Still needs from Max: a policy for mapping old `pay_status`/`status` onto the new `OrderStatus` enum (no clean automatic mapping exists), and a decision on whether to also preserve the 231 raw Flitt/TBC payment-transaction records (no table for those exists yet — would piggyback on whatever the Flitt integration above ends up building). Full detail: [[MigrationNotes.md]] → "real production data found via phpMyAdmin" section. Don't re-derive the `nalige_booking` DB (4 test rows, not real data) as a data source — already ruled out.
 
@@ -411,8 +423,8 @@ Staging: `georgian-saas-git-staging-mg-productions-projects.vercel.app` (Staging
 ## 🔧 Planned — Pre-onboarding cleanup (before adding new tenants)
 
 - [x] **Neutral fallback defaults** ✅ — rendering components already clean. Admin login page now uses platform logo (`x-platform-logo`) with no NM fallback. `PlatformConfig` DB table added; super-admin Settings page lets you upload the login page logo. New tenants with no logo set see neutral "Admin Panel" text only.
-- [ ] **Multi-tenant auto emailing** — decided 2026-07-17: shared platform sending domain (default) + per-tenant custom domain later as opt-in; tenant-supplied SMTP/API credentials explicitly rejected. **Blocked: Max doesn't own a domain yet for the shared platform sender.** Full analysis + rough build steps in [[Plan-MultiTenantEmail]].
-- [ ] **NM domain migration** — Nikalas Marani will eventually move to its own standalone deployment; the current multi-tenant SaaS becomes the platform for all other clients. Plan the migration before onboarding a second tenant.
+- [x] **Multi-tenant auto emailing** ✅ **DONE 2026-09-10** — shared platform sending domain (`notify.vineworks.ge`) built exactly as decided 2026-07-17, once Max owned `vineworks.ge`. See [[Plan-EmailInfrastructure]] (supersedes the old [[Plan-MultiTenantEmail]] brainstorm). Per-tenant custom domain as opt-in is still a future option, not built.
+- [ ] **NM domain migration** — Nikalas Marani's *public URL* moved to `nikalasmarani.vineworks.ge` 2026-09-10 (see above), but this item originally meant something bigger: NM eventually getting its own **standalone deployment** separate from the shared multi-tenant codebase, once a second real tenant needs onboarding. That larger decision is still open — today's change was just the domain, not the architecture.
 
 ---
 
@@ -422,7 +434,7 @@ Staging: `georgian-saas-git-staging-mg-productions-projects.vercel.app` (Staging
 
 - [x] Run `setup-rls.ts` against Supabase — confirmed deployed, all 12 tables have tenant_isolation policies ✅
 - [x] **Update Vercel `DATABASE_URL`** to port 6543 + `?pgbouncer=true` — ✅ confirmed updated 7 hours ago in Vercel dashboard
-- [ ] Verify **nikalasmarani.ge** in Resend — unlocks email delivery to any customer (currently only delivers to max.mghvdliashvili@gmail.com)
+- [x] ~~Verify nikalasmarani.ge in Resend~~ ✅ **DONE differently, 2026-09-10** — used a shared domain (`notify.vineworks.ge`) instead of a per-tenant one (Resend's free tier only allows 1 verified domain total). See #157.
 - [ ] **Gallery page** — images already in `saas/public/images/slider/` and `gallery/` — just needs wiring into the public site
 - [ ] **Order detail tap target audit** (v1.4 Mobile Admin last item) — verify all buttons ≥ 44px, no horizontal overflow on phone
 - [ ] **PDF invoice email attachment** — send PDF alongside HTML invoice email (follow-up to the HTML-only email feature)
