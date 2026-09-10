@@ -1,0 +1,1020 @@
+<title>Vineworks Demo Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..800,0..100,0..1&family=Public+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============================================================
+   Committed single-theme design: a dark studio review wall.
+   The product specimens are warm cream — they only read as
+   specimens against an ink ground, so the page does not invert.
+   Every color is painted explicitly.
+   ============================================================ */
+:root{
+  --ground:#131019;
+  --ground-2:#0D0B12;
+  --surface:#1C1826;
+  --surface-2:#241F31;
+  --line:#2E2839;
+  --line-bright:#413951;
+  --text:#EFEBF2;
+  --muted:#9C94AB;
+  --faint:#6B6379;
+  --verdigris:#35A38F;
+  --verdigris-dim:#1F5F55;
+  --signal:#D4694B;
+  --signal-dim:#5C2E20;
+  --gold:#C0A059;
+
+  /* Product palette — accurate to the live Vineworks app */
+  --vw-bg:#F5EFE6;
+  --vw-surface:#FFF9F3;
+  --vw-text:#1C1008;
+  --vw-muted:#6B5A47;
+  --vw-faint:#A89070;
+  --vw-border:#E0D4C0;
+  --vw-wine:#7C1D23;
+  --vw-indigo:#1E1B4B;
+  --vw-indigo-2:#3730A3;
+
+  --sans:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --display:"Fraunces",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --prod:Georgia,"Times New Roman",serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px;margin:0 auto;padding:0 28px}
+
+/* ---------- shared type ---------- */
+.eyebrow{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--verdigris);
+  margin:0;
+}
+h1{
+  font-family:var(--display);
+  font-variation-settings:"SOFT" 20,"WONK" 1,"opsz" 100;
+  font-weight:600;
+  font-size:clamp(2.4rem,5.2vw,3.9rem);
+  line-height:1.02;
+  letter-spacing:-.02em;
+  text-wrap:balance;
+  margin:.28em 0 0;
+}
+h2{
+  font-family:var(--display);
+  font-variation-settings:"SOFT" 20,"WONK" 1,"opsz" 60;
+  font-weight:600;
+  font-size:clamp(1.6rem,3vw,2.2rem);
+  line-height:1.1;
+  letter-spacing:-.015em;
+  text-wrap:balance;
+  margin:0;
+}
+h3{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:1.02rem;
+  letter-spacing:-.005em;
+  margin:0;
+}
+p{margin:0}
+a{color:var(--verdigris)}
+
+/* ---------- header ---------- */
+header.top{
+  border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(120% 140% at 82% -10%, rgba(53,163,143,.13), transparent 58%),
+    var(--ground-2);
+  padding:64px 0 46px;
+}
+.dek{
+  max-width:62ch;
+  color:var(--muted);
+  font-size:1.08rem;
+  margin-top:20px;
+}
+.dek strong{color:var(--text);font-weight:600}
+.meta{
+  display:flex;flex-wrap:wrap;gap:0 30px;
+  margin-top:34px;padding-top:20px;
+  border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11.5px;
+  color:var(--faint);
+}
+.meta b{color:var(--muted);font-weight:500}
+
+/* ---------- section scaffolding ---------- */
+section{padding:70px 0;border-bottom:1px solid var(--line)}
+.sec-head{max-width:64ch;margin-bottom:38px}
+.sec-head p{color:var(--muted);margin-top:14px}
+
+/* ---------- device frame ---------- */
+.screen{
+  border:1px solid var(--line-bright);
+  border-radius:9px;
+  overflow:hidden;
+  background:var(--vw-bg);
+  box-shadow:0 22px 48px -20px rgba(0,0,0,.75);
+}
+.chrome{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 11px;
+  background:#191521;
+  border-bottom:1px solid var(--line);
+}
+.dot{width:8px;height:8px;border-radius:50%;background:#3A3348;flex:none}
+.url{
+  font-family:var(--mono);font-size:10px;color:var(--faint);
+  background:#0F0D14;border:1px solid var(--line);
+  padding:2.5px 9px;border-radius:4px;margin-left:5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.stage{position:relative;font-family:var(--prod);color:var(--vw-text)}
+
+/* ---------- product UI recreation ---------- */
+.vw-demobar{
+  background:var(--vw-indigo);color:#E0E7FF;
+  font-size:9.5px;padding:7px 10px;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  flex-wrap:wrap;text-align:center;
+}
+.vw-pill{
+  background:var(--vw-indigo-2);color:#fff;
+  padding:3px 10px;border-radius:999px;font-weight:700;font-size:9px;
+  white-space:nowrap;
+}
+.vw-nav{
+  background:var(--vw-surface);border-bottom:1px solid var(--vw-border);
+  padding:8px 12px;display:flex;align-items:center;gap:14px;
+}
+.vw-logo{font-size:12.5px;font-weight:700;color:var(--vw-wine);letter-spacing:.01em;line-height:1}
+.vw-logo small{display:block;font-size:5.5px;letter-spacing:.22em;color:var(--vw-faint);font-weight:400;margin-top:2px}
+.vw-navlinks{display:flex;gap:11px;font-size:9px;color:var(--vw-muted);flex-wrap:wrap}
+.vw-tag{font-size:8px;color:var(--vw-faint);margin-left:auto;font-family:var(--sans)}
+.vw-body{padding:14px}
+.vw-h{font-size:15px;font-weight:700;margin:0 0 3px}
+.vw-sub{font-size:9px;color:var(--vw-muted)}
+.vw-card{
+  background:var(--vw-surface);border:1px solid var(--vw-border);
+  border-radius:7px;padding:11px;
+}
+.vw-banner{
+  background:#FDF6E7;border:1px solid #E8D9A8;border-left:3px solid var(--gold);
+  border-radius:6px;padding:8px 11px;font-size:9px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.vw-banner b{display:block;color:var(--vw-wine);font-size:10px}
+.vw-btn{
+  background:var(--vw-wine);color:#fff;border-radius:5px;
+  padding:5px 11px;font-size:9px;font-weight:700;display:inline-block;
+  white-space:nowrap;
+}
+.vw-btn.ghost{background:transparent;color:var(--vw-muted);border:1px solid var(--vw-border)}
+.vw-row{display:flex;gap:9px}
+.vw-empty{
+  border:1px solid var(--vw-border);background:var(--vw-surface);
+  border-radius:7px;padding:26px;text-align:center;
+  font-size:10px;color:var(--vw-faint);
+}
+.vw-table{width:100%;border-collapse:collapse;font-size:8.5px;font-family:var(--sans)}
+.vw-table th{
+  text-align:left;color:var(--vw-faint);font-weight:600;
+  padding:6px 7px;border-bottom:1px solid var(--vw-border);
+  font-size:7.5px;letter-spacing:.05em;text-transform:uppercase;
+}
+.vw-table td{padding:6px 7px;border-bottom:1px solid #EFE7DA;color:var(--vw-text)}
+.vw-stat{
+  background:var(--vw-surface);border:1px solid var(--vw-border);
+  border-radius:7px;padding:10px;text-align:center;
+}
+.vw-stat .k{font-size:7px;color:var(--vw-faint);text-transform:uppercase;letter-spacing:.08em}
+.vw-stat .v{font-size:17px;font-weight:700;margin-top:3px;line-height:1}
+.vw-stat .n{font-size:7px;color:var(--vw-faint);margin-top:2px}
+.status{
+  font-family:var(--sans);font-size:7px;font-weight:700;
+  padding:2px 6px;border-radius:999px;display:inline-block;white-space:nowrap;
+}
+.st-new{background:#FEF3C7;color:#92400E}
+.st-paid{background:#D1FAE5;color:#065F46}
+.st-conf{background:#DBEAFE;color:#1E40AF}
+
+/* ---------- annotation markers ---------- */
+.mark{
+  position:absolute;z-index:6;
+  width:19px;height:19px;border-radius:50%;
+  background:var(--signal);color:#fff;
+  font-family:var(--mono);font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 3px rgba(212,105,75,.24);
+}
+.findings{
+  display:grid;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:8px;overflow:hidden;
+}
+.finding{
+  background:var(--surface);padding:15px 17px;
+  display:grid;grid-template-columns:22px 1fr;gap:13px;align-items:start;
+}
+.finding .n{
+  width:19px;height:19px;border-radius:50%;
+  background:var(--signal-dim);color:var(--signal);
+  font-family:var(--mono);font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;margin-top:2px;
+}
+.finding h3{margin-bottom:4px}
+.finding p{font-size:13.5px;color:var(--muted);line-height:1.55}
+.finding code{
+  font-family:var(--mono);font-size:11.5px;
+  background:var(--ground-2);border:1px solid var(--line);
+  padding:1px 5px;border-radius:3px;color:var(--text);
+}
+
+/* ---------- diagnosis layout ---------- */
+.diag{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;align-items:start}
+@media(max-width:900px){.diag{grid-template-columns:1fr}}
+
+/* ---------- option panels ---------- */
+.opt{
+  border:1px solid var(--line);border-radius:11px;
+  background:var(--surface);overflow:hidden;
+  margin-bottom:30px;
+}
+.opt-head{
+  display:flex;align-items:flex-start;gap:16px;
+  padding:20px 24px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);
+}
+.opt-num{
+  font-family:var(--display);
+  font-variation-settings:"WONK" 1,"opsz" 40;
+  font-size:1.6rem;font-weight:600;line-height:1;
+  color:var(--verdigris);flex:none;padding-top:2px;
+  font-variant-numeric:tabular-nums;
+}
+.opt-head h2{font-size:1.42rem}
+.opt-head .tl{color:var(--muted);font-size:13.5px;margin-top:5px;max-width:60ch}
+.badge{
+  font-family:var(--mono);font-size:9.5px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 9px;border-radius:4px;white-space:nowrap;
+  border:1px solid var(--verdigris-dim);color:var(--verdigris);
+  background:rgba(53,163,143,.09);
+  margin-left:auto;flex:none;
+}
+.badge.flag{border-color:#6E5A26;color:var(--gold);background:rgba(192,160,89,.1)}
+.opt-body{display:grid;grid-template-columns:1.35fr 1fr;gap:0}
+@media(max-width:960px){.opt-body{grid-template-columns:1fr}}
+.opt-vis{padding:24px;border-right:1px solid var(--line);background:var(--ground-2)}
+@media(max-width:960px){.opt-vis{border-right:none;border-bottom:1px solid var(--line)}}
+.opt-notes{padding:24px}
+.opt-notes h3{
+  font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint);font-weight:500;
+  margin-bottom:9px;
+}
+.opt-notes h3:not(:first-child){margin-top:22px}
+.opt-notes p{font-size:13.5px;color:var(--muted);line-height:1.6}
+.opt-notes ul{margin:0;padding-left:17px;font-size:13.5px;color:var(--muted);line-height:1.6}
+.opt-notes li{margin-bottom:5px}
+.opt-notes strong{color:var(--text);font-weight:600}
+.cost{
+  display:flex;align-items:baseline;gap:9px;
+  margin-top:20px;padding-top:15px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--faint);
+}
+.cost b{color:var(--text);font-weight:700;font-size:12px}
+.cap{
+  font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  margin-top:11px;line-height:1.5;
+}
+
+/* ---------- mockup: demo hub ---------- */
+.hub{
+  background:
+    radial-gradient(130% 100% at 50% -20%, #2C2769, transparent 62%),
+    var(--vw-indigo);
+  padding:26px 20px;text-align:center;color:#E0E7FF;font-family:var(--prod);
+}
+.hub .kicker{font-family:var(--sans);font-size:7px;letter-spacing:.24em;text-transform:uppercase;color:#9E97D8}
+.hub h4{font-size:16px;margin:8px 0 5px;font-weight:700;letter-spacing:-.01em;line-height:1.15}
+.hub .sub{font-family:var(--sans);font-size:8.5px;color:#B7B0E4;max-width:34ch;margin:0 auto}
+.paths{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;text-align:left}
+.path{
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.15);
+  border-radius:7px;padding:10px 9px;
+}
+.path.hot{border-color:#8B84E8;background:rgba(139,132,232,.16)}
+.path .ic{font-size:13px;line-height:1}
+.path .t{font-family:var(--sans);font-size:8.5px;font-weight:700;color:#fff;margin-top:6px;line-height:1.3}
+.path .d{font-family:var(--sans);font-size:7px;color:#ABA4DC;margin-top:3px;line-height:1.4}
+.path .go{font-family:var(--sans);font-size:7px;color:#C6C0FF;margin-top:7px;font-weight:700}
+.hub .skip{font-family:var(--sans);font-size:7.5px;color:#8B84B8;margin-top:13px;text-decoration:underline}
+
+/* ---------- mockup: split screen ---------- */
+.split{display:grid;grid-template-columns:1fr 1fr;position:relative;background:var(--vw-bg)}
+.split-pane{padding:11px;min-width:0}
+.split-pane+.split-pane{border-left:1px dashed var(--vw-faint)}
+.pane-tag{
+  font-family:var(--sans);font-size:6.5px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--vw-faint);margin-bottom:7px;
+  display:flex;align-items:center;gap:5px;
+}
+.pane-tag i{width:5px;height:5px;border-radius:50%;background:var(--vw-wine);font-style:normal;flex:none}
+.pane-tag.admin i{background:var(--vw-indigo-2)}
+.field{
+  background:var(--vw-surface);border:1px solid var(--vw-border);
+  border-radius:4px;padding:4px 6px;font-size:7.5px;color:var(--vw-text);
+  font-family:var(--sans);margin-bottom:4px;
+}
+.field span{color:var(--vw-faint);display:block;font-size:6px;text-transform:uppercase;letter-spacing:.07em}
+.newrow{
+  background:#E9F9F0!important;
+  box-shadow:inset 3px 0 0 #16A34A;
+  animation:landed 2.6s ease-in-out infinite;
+}
+@keyframes landed{0%,100%{background:#E9F9F0}50%{background:#D6F5E4}}
+@media(prefers-reduced-motion:reduce){.newrow{animation:none}}
+.justnow{
+  font-family:var(--sans);font-size:6.5px;font-weight:700;color:#0E7A4B;
+  background:#D1FAE5;padding:1.5px 5px;border-radius:999px;white-space:nowrap;
+}
+.flight{
+  position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);
+  z-index:5;pointer-events:none;
+}
+.flight-chip{
+  background:var(--vw-indigo);color:#fff;font-family:var(--sans);
+  font-size:7px;font-weight:700;padding:4px 9px;border-radius:999px;
+  box-shadow:0 5px 16px rgba(30,27,75,.5);white-space:nowrap;
+}
+
+/* ---------- mockup: spotlight ---------- */
+.spot-wrap{position:relative}
+.scrim{
+  position:absolute;inset:0;background:rgba(19,16,25,.72);z-index:4;
+}
+.cutout{
+  position:absolute;z-index:5;border-radius:6px;
+  box-shadow:0 0 0 2px var(--verdigris),0 0 0 9999px rgba(19,16,25,.72);
+}
+.tip{
+  position:absolute;z-index:6;
+  background:var(--surface);border:1px solid var(--line-bright);
+  border-radius:8px;padding:12px 13px;width:238px;
+  box-shadow:0 16px 34px -10px rgba(0,0,0,.7);
+  font-family:var(--sans);
+}
+.tip .step{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;
+  color:var(--verdigris);text-transform:uppercase;
+}
+.tip h5{font-size:11.5px;margin:5px 0 5px;color:var(--text);font-weight:600;line-height:1.3}
+.tip p{font-size:9.5px;color:var(--muted);line-height:1.5}
+.tip .acts{display:flex;align-items:center;gap:7px;margin-top:10px}
+.tip .prog{
+  flex:1;height:2.5px;background:var(--line);border-radius:2px;overflow:hidden;
+}
+.tip .prog i{display:block;height:100%;width:43%;background:var(--verdigris);font-style:normal}
+.tip .nxt{
+  background:var(--verdigris);color:#0B1512;font-size:8.5px;font-weight:700;
+  padding:4px 10px;border-radius:4px;white-space:nowrap;
+}
+.tip .skip{font-size:8px;color:var(--faint)}
+
+/* ---------- mockup: feature rail ---------- */
+.rail-wrap{display:grid;grid-template-columns:104px 1fr;background:var(--vw-bg)}
+.rail{background:var(--vw-indigo);padding:10px 9px;color:#CFC9F5}
+.rail .rt{font-family:var(--sans);font-size:6.5px;letter-spacing:.14em;text-transform:uppercase;color:#8B84B8;margin-bottom:7px}
+.rail .grp{font-family:var(--sans);font-size:6px;letter-spacing:.1em;text-transform:uppercase;color:#6F68A0;margin:9px 0 4px}
+.rail .it{
+  font-family:var(--sans);font-size:7.5px;padding:3.5px 6px;border-radius:4px;
+  color:#CFC9F5;display:flex;align-items:center;gap:5px;line-height:1.25;
+}
+.rail .it.on{background:rgba(255,255,255,.13);color:#fff;font-weight:700}
+.rail .it b{color:#7D76B4;font-weight:400;font-size:7px}
+.callout{
+  position:absolute;z-index:6;
+  background:var(--vw-indigo);color:#E5E1FA;
+  border-radius:7px;padding:9px 11px;width:190px;
+  font-family:var(--sans);
+  box-shadow:0 12px 26px -8px rgba(0,0,0,.6);
+}
+.callout b{display:block;font-size:9.5px;color:#fff;margin-bottom:3px}
+.callout p{font-size:8.5px;line-height:1.5;color:#B9B2E4}
+.callout:after{
+  content:"";position:absolute;left:-6px;top:16px;
+  border:6px solid transparent;border-right-color:var(--vw-indigo);border-left:0;
+}
+
+/* ---------- prerequisite callout ---------- */
+.prereq{
+  border:1px solid var(--verdigris-dim);
+  background:linear-gradient(180deg,rgba(53,163,143,.09),rgba(53,163,143,.03));
+  border-radius:11px;padding:26px 28px;
+  display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:center;
+}
+@media(max-width:860px){.prereq{grid-template-columns:1fr}}
+.prereq h2{font-size:1.5rem}
+.prereq p{color:var(--muted);font-size:14px;margin-top:12px}
+.prereq strong{color:var(--text)}
+.beforeafter{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ba-lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  margin-bottom:7px;
+}
+.ba-lbl.b{color:var(--signal)}
+.ba-lbl.a{color:var(--verdigris)}
+
+/* ---------- sequencing ---------- */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+@media(max-width:820px){.steps{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.steps{grid-template-columns:1fr}}
+.step{background:var(--surface);padding:19px 18px}
+.step .w{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--verdigris)}
+.step h3{margin:8px 0 6px;font-size:.98rem}
+.step p{font-size:12.5px;color:var(--muted);line-height:1.55}
+.step .eff{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:10px}
+
+footer{padding:46px 0 70px;color:var(--faint);font-size:12.5px}
+footer a{color:var(--verdigris)}
+.srcs{margin-top:12px;font-family:var(--mono);font-size:11px;line-height:2}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Design review · demo.vineworks.ge</p>
+    <h1>Four ways to make the demo sell</h1>
+    <p class="dek">
+      The demo is live and technically works — a real tenant, real booking engine, real
+      back office. But a cold visitor lands on what looks like <strong>a small winery's
+      website in Kakheti</strong>, with no signal that it's a product, and the back office
+      they're meant to be impressed by is <strong>completely empty</strong>. Below: what's
+      actually on screen today, then four directions, drawn on top of the real UI.
+    </p>
+    <div class="meta">
+      <span><b>Reviewed</b> 10 Sep 2026</span>
+      <span><b>Screens captured</b> Home · Order Wine · Orders · Statistics</span>
+      <span><b>Signed in as</b> demo-admin@vineworks.ge</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ DIAGNOSIS ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">What a visitor sees today</p>
+      <h2 style="margin-top:10px">The back office is the pitch, and it's blank</h2>
+      <p>
+        This is the actual Orders screen behind “Winery Admin View”, captured from
+        production. Everything the platform is for — bookings arriving, revenue building,
+        wine orders moving through packing — resolves to a single line of grey text.
+      </p>
+    </div>
+
+    <div class="diag">
+      <div>
+        <div class="screen">
+          <div class="chrome">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="url">demo.vineworks.ge/admin/orders</span>
+          </div>
+          <div class="stage">
+            <div class="mark" style="top:99px;left:-9px">1</div>
+            <div class="mark" style="top:184px;left:47%">2</div>
+
+            <div class="vw-demobar">
+              <span>🍷 You're exploring a live <b>Vineworks</b> demo — click around freely.</span>
+              <span class="vw-pill">← Customer View</span>
+            </div>
+            <div class="vw-nav">
+              <div class="vw-logo">VineWorks<small>ESTATE &amp; VINEYARD</small></div>
+              <span class="vw-tag">Admin</span>
+              <span class="vw-tag" style="margin-left:0">demo-admin@vineworks.ge</span>
+            </div>
+            <div class="vw-nav" style="padding:6px 12px;border-top:0">
+              <div class="vw-navlinks">
+                <span style="color:var(--vw-wine);font-weight:700">Orders</span>
+                <span>Companies</span><span>Statistics</span><span>Wines</span>
+                <span>Wine Orders</span><span>Menu Items</span><span>Settings</span>
+              </div>
+            </div>
+            <div class="vw-body">
+              <div class="vw-banner">
+                <div><b>Finish setting up your account</b>A couple of quick steps left before your site is ready for guests.</div>
+                <span class="vw-btn ghost">Continue setup →</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin:13px 0 9px">
+                <div class="vw-h">Orders</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span class="vw-sub">0 bookings</span>
+                  <span class="vw-btn">+ New Order</span>
+                </div>
+              </div>
+              <div class="vw-empty">No orders found.</div>
+            </div>
+          </div>
+        </div>
+        <p class="cap">
+          Captured live, 10 Sep 2026. Statistics is the same story: <b>0</b> upcoming
+          orders, <b>0₾</b> future revenue, “No data for this period” on both charts.
+        </p>
+      </div>
+
+      <div class="findings">
+        <div class="finding">
+          <div class="n" style="background:var(--signal);color:#fff">1</div>
+          <div>
+            <h3>The nag banner says “unfinished”</h3>
+            <p>“Finish setting up your account” sits on top of every admin page. To a
+            prospect evaluating whether this product is real, it reads as a half-built
+            tool — the opposite of the intended message.</p>
+          </div>
+        </div>
+        <div class="finding">
+          <div class="n" style="background:var(--signal);color:#fff">2</div>
+          <div>
+            <h3>Empty state where the value lives</h3>
+            <p><code>No orders found</code> is the punchline of the whole demo journey.
+            Industry data is unambiguous here: generic or hollow demos convert around
+            <b>18%</b>, while demos with believable, situation-specific data run
+            <b>25%+</b>, and interactive ones the prospect drives reach <b>~38%</b>.</p>
+          </div>
+        </div>
+        <div class="finding">
+          <div class="n">3</div>
+          <div>
+            <h3>No frame, no product story</h3>
+            <p>Nothing on the page explains what Vineworks <em>is</em>, who it's for, or
+            what it costs. The depth you've actually built — masterclasses, per-company
+            pricing, packing sheets, Georgian/English, card payments — is invisible unless
+            you already know to look for it.</p>
+          </div>
+        </div>
+        <div class="finding">
+          <div class="n">4</div>
+          <div>
+            <h3>A dead end behind the admin link</h3>
+            <p>Opening <code>/admin</code> directly (a shared link, a reload, an expired
+            session) lands on a bare email + password form with no credentials and no way
+            back to the demo. That visitor is simply gone.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OPTIONS ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Directions</p>
+      <h2 style="margin-top:10px">Four ways to structure it</h2>
+      <p>
+        These aren't visual variants of the same idea — they're four different answers to
+        “how does a stranger understand this in ninety seconds?”. They combine well;
+        the sequencing at the end says which to build first.
+      </p>
+    </div>
+
+    <!-- OPTION 1 -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-num">01</div>
+        <div>
+          <h2>The front door</h2>
+          <p class="tl">An interstitial that frames the product and lets the visitor pick what they came to see, before dropping them into the live site.</p>
+        </div>
+        <span class="badge">Cheapest fix</span>
+      </div>
+      <div class="opt-body">
+        <div class="opt-vis">
+          <div class="screen">
+            <div class="chrome">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="url">demo.vineworks.ge</span>
+            </div>
+            <div class="stage">
+              <div class="hub">
+                <p class="kicker">Live product demo</p>
+                <h4>Booking, wine sales and a back office<br>built for Georgian wineries</h4>
+                <p class="sub">This is the real software running a real winery's site. Nothing is a screenshot. Pick where to start.</p>
+                <div class="paths">
+                  <div class="path hot">
+                    <div class="ic">📋</div>
+                    <div class="t">I run a winery</div>
+                    <div class="d">See the back office: bookings, revenue, packing lists</div>
+                    <div class="go">Open the admin →</div>
+                  </div>
+                  <div class="path">
+                    <div class="ic">🍷</div>
+                    <div class="t">Show me the guest view</div>
+                    <div class="d">Book a tasting or order wine as a customer would</div>
+                    <div class="go">Open the site →</div>
+                  </div>
+                  <div class="path">
+                    <div class="ic">⚡</div>
+                    <div class="t">How fast is setup?</div>
+                    <div class="d">Run the onboarding wizard on a live tenant</div>
+                    <div class="go">Start setup →</div>
+                  </div>
+                </div>
+                <div class="skip">Skip — just let me explore on my own</div>
+              </div>
+            </div>
+          </div>
+          <p class="cap">Sits at the root. Each card deep-links into the real product with the relevant tour armed.</p>
+        </div>
+        <div class="opt-notes">
+          <h3>Why it works</h3>
+          <p>It answers the three questions a stranger has — what is this, is it real, and
+          what's in it for me — in one screen, then gets out of the way. This is the
+          standard “demo hub” shape used by Navattic and Storylane customers, and the
+          reason it exists is that self-directed demos get engagement from roughly a
+          quarter of visitors versus 2–5% who will book a sales call.</p>
+
+          <h3>What it fixes</h3>
+          <ul>
+            <li><strong>Framing</strong> — no more “why am I on a winery's website?”</li>
+            <li><strong>Segmentation</strong> — a winery owner and a curious browser get different first screens</li>
+            <li><strong>The dead end</strong> — the admin path can carry its own sign-in, so <code>/admin</code> never strands anyone</li>
+          </ul>
+
+          <h3>Watch out for</h3>
+          <p>An interstitial is a door in front of the thing. Keep it to one screen, make
+          “skip” genuinely prominent, and never show it twice to the same browser.</p>
+
+          <div class="cost"><span>Effort</span><b>Low</b><span>· one new page, no changes to the product itself</span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- OPTION 2 -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-num">02</div>
+        <div>
+          <h2>The live mirror</h2>
+          <p class="tl">Guest site and back office side by side in one view. Book on the left, watch it land on the right — no switching, no remembering.</p>
+        </div>
+        <span class="badge flag">Most distinctive</span>
+      </div>
+      <div class="opt-body">
+        <div class="opt-vis">
+          <div class="screen">
+            <div class="chrome">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="url">demo.vineworks.ge/live</span>
+            </div>
+            <div class="stage">
+              <div class="split">
+                <div class="flight"><span class="flight-chip">Nino B. · 6 guests · 300₾ →</span></div>
+
+                <div class="split-pane">
+                  <div class="pane-tag"><i></i>What your guest sees</div>
+                  <div class="field"><span>Name</span>Nino Beridze</div>
+                  <div class="field"><span>Date · Guests</span>18 Sep 2026 · 6</div>
+                  <div class="field"><span>Visit</span>Tasting + Lunch · 100₾ / person</div>
+                  <div style="text-align:right;margin-top:7px">
+                    <span class="vw-btn">Request Booking</span>
+                  </div>
+                </div>
+
+                <div class="split-pane">
+                  <div class="pane-tag admin"><i></i>What the winery sees</div>
+                  <table class="vw-table">
+                    <tr><th>Guest</th><th>Visit</th><th>Total</th><th></th></tr>
+                    <tr class="newrow">
+                      <td><b>Nino Beridze</b></td><td>Tasting + Lunch</td>
+                      <td><b>300₾</b></td><td><span class="justnow">just now</span></td>
+                    </tr>
+                    <tr><td>Levan K.</td><td>Wine Tasting</td><td>200₾</td><td><span class="status st-paid">Paid</span></td></tr>
+                    <tr><td>Marta S.</td><td>Tasting + Lunch</td><td>400₾</td><td><span class="status st-conf">Confirmed</span></td></tr>
+                    <tr><td>Giorgi T.</td><td>Wine Tasting</td><td>150₾</td><td><span class="status st-new">New</span></td></tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="cap">The booking crosses the divide and lands highlighted, timestamped “just now”. This is also your hero GIF for vineworks.ge.</p>
+        </div>
+        <div class="opt-notes">
+          <h3>Why it works</h3>
+          <p>Your actual differentiator is that the guest-facing site and the back office
+          are <strong>one system</strong>. Right now a visitor has to book, then remember
+          to switch, then trust that what they're seeing is connected. Showing both panes
+          at once removes the memory and the trust gap — the causal link is just visible.</p>
+          <p>None of the booking platforms researched — Bookeo, BookingPress, Cloudbeds,
+          Toast — put both sides on screen simultaneously. It's the one thing here that
+          nobody else is doing.</p>
+
+          <h3>What it fixes</h3>
+          <ul>
+            <li><strong>The core story</strong>, told in one screen instead of four steps</li>
+            <li><strong>Shareability</strong> — this is the screenshot that goes on the landing page, in a pitch deck, in a WhatsApp message to a winery owner</li>
+          </ul>
+
+          <h3>Watch out for</h3>
+          <p>Narrow screens can't hold two panes — on mobile it becomes a stacked
+          "book, then watch it appear" with an auto-scroll. And the right pane needs to
+          actually refresh when the left submits.</p>
+
+          <div class="cost"><span>Effort</span><b>High</b><span>· a new two-pane route plus a refresh signal between them</span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- OPTION 3 -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-num">03</div>
+        <div>
+          <h2>The spotlight tour</h2>
+          <p class="tl">Replace the small corner checklist with a real guided walkthrough that dims the page, points at the actual thing, and says why it matters in money.</p>
+        </div>
+        <span class="badge">Builds on what exists</span>
+      </div>
+      <div class="opt-body">
+        <div class="opt-vis">
+          <div class="screen">
+            <div class="chrome">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="url">demo.vineworks.ge/admin/orders</span>
+            </div>
+            <div class="stage spot-wrap">
+              <div class="vw-demobar">
+                <span>🍷 You're exploring a live <b>Vineworks</b> demo</span>
+                <span class="vw-pill">← Customer View</span>
+              </div>
+              <div class="vw-nav">
+                <div class="vw-logo">VineWorks<small>ESTATE &amp; VINEYARD</small></div>
+                <span class="vw-tag">Admin</span>
+              </div>
+              <div class="vw-body" style="padding-bottom:34px">
+                <div class="vw-h" style="font-size:12px">Orders</div>
+                <div class="vw-card" style="padding:0;margin-top:9px;overflow:hidden">
+                  <table class="vw-table">
+                    <tr><th>Guest</th><th>Visit</th><th>Guests</th><th>Total</th><th>Status</th></tr>
+                    <tr><td>Nino Beridze</td><td>Tasting + Lunch</td><td>6</td><td>600₾</td><td><span class="status st-new">New</span></td></tr>
+                    <tr><td>Levan Kapanadze</td><td>Wine Tasting</td><td>4</td><td>200₾</td><td><span class="status st-paid">Paid</span></td></tr>
+                    <tr><td>Marta Sikharulidze</td><td>Tasting + Lunch</td><td>8</td><td>800₾</td><td><span class="status st-conf">Confirmed</span></td></tr>
+                  </table>
+                </div>
+              </div>
+
+              <div class="scrim"></div>
+              <div class="cutout" style="top:74px;left:14px;right:14px;height:19px"></div>
+              <div class="tip" style="top:104px;left:16px">
+                <div class="step">Step 3 of 7</div>
+                <h5>A ₾600 booking that cost you nothing</h5>
+                <p>Nino booked at 23:40 on a Saturday. No phone call, no back-and-forth on
+                Facebook, no one writing it in a notebook. It's already priced, counted and
+                in the calendar.</p>
+                <div class="acts">
+                  <span class="skip">Skip tour</span>
+                  <span class="prog"><i></i></span>
+                  <span class="nxt">Next →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="cap">Dimmed backdrop, ring on the real row, tooltip framed commercially rather than descriptively.</p>
+        </div>
+        <div class="opt-notes">
+          <h3>Why it works</h3>
+          <p>The checklist that shipped today tells someone <em>what to click</em>. It
+          never tells them <em>why they should care</em>. The spotlight pattern — dim,
+          highlight, explain — is the standard walkthrough shape precisely because it
+          controls attention: the visitor can't be looking at the wrong thing while you
+          make the point.</p>
+          <p>The real upgrade here is the copy. “See it land in Orders” is a UI
+          instruction. “A ₾600 booking that arrived at 23:40 while you slept” is a sales
+          argument.</p>
+
+          <h3>What it fixes</h3>
+          <ul>
+            <li><strong>Nobody reads the corner box</strong> — a dimmed screen is unmissable</li>
+            <li><strong>Feature → benefit</strong>, on every step</li>
+            <li>Gives you a place to <strong>name the money</strong>, which nothing on the demo currently does</li>
+          </ul>
+
+          <h3>Watch out for</h3>
+          <p>Seven steps is the ceiling. Always-visible skip. And it must never dim a
+          screen the visitor navigated to themselves — a tour that fights you is worse
+          than no tour.</p>
+
+          <div class="cost"><span>Effort</span><b>Medium</b><span>· mostly one component, replacing the checklist you already have</span></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- OPTION 4 -->
+    <article class="opt">
+      <div class="opt-head">
+        <div class="opt-num">04</div>
+        <div>
+          <h2>The feature rail</h2>
+          <p class="tl">A persistent menu of everything the platform does. Click any capability, land on the exact screen that proves it, with a note attached.</p>
+        </div>
+        <span class="badge">Surfaces hidden depth</span>
+      </div>
+      <div class="opt-body">
+        <div class="opt-vis">
+          <div class="screen">
+            <div class="chrome">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="url">demo.vineworks.ge/admin/wine-orders</span>
+            </div>
+            <div class="stage">
+              <div class="rail-wrap">
+                <div class="rail">
+                  <div class="rt">Explore</div>
+                  <div class="grp">Guest-facing</div>
+                  <div class="it">Booking form</div>
+                  <div class="it">Wine catalogue</div>
+                  <div class="it">Card payment <b>·</b></div>
+                  <div class="grp">Back office</div>
+                  <div class="it">Bookings CRM</div>
+                  <div class="it on">Packing sheets</div>
+                  <div class="it">Revenue stats</div>
+                  <div class="it">Company pricing</div>
+                  <div class="grp">Platform</div>
+                  <div class="it">Theming</div>
+                  <div class="it">ქართული / EN</div>
+                  <div class="it">Setup wizard</div>
+                </div>
+                <div style="position:relative;padding:11px">
+                  <div class="vw-h" style="font-size:11px">Wine Orders · Packing</div>
+                  <div class="vw-sub" style="margin-bottom:8px">3 orders selected · box size 6</div>
+                  <div class="vw-card" style="padding:0;overflow:hidden">
+                    <table class="vw-table">
+                      <tr><th>Wine</th><th>Bottles</th><th>Boxes</th></tr>
+                      <tr><td>Rkatsiteli 2026</td><td>18</td><td>3 full</td></tr>
+                      <tr><td>Rkatsiteli Amber 2026</td><td>10</td><td>1 full + 4</td></tr>
+                      <tr><td>Saperavi 2023</td><td>24</td><td>4 full</td></tr>
+                    </table>
+                  </div>
+                  <div class="callout" style="top:40px;right:8px">
+                    <b>Packing sheets</b>
+                    <p>Groups every open order into boxes and prints a sheet for the cellar. Most booking tools stop at the invoice.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="cap">The rail is the product's feature list, made clickable. Each item is a proof, not a claim.</p>
+        </div>
+        <div class="opt-notes">
+          <h3>Why it works</h3>
+          <p>You've built a genuinely deep product and almost none of it is discoverable.
+          A visitor would have to guess that packing sheets, per-company price tiers,
+          masterclass add-ons, theme presets and a Georgian translation layer exist. The
+          rail turns that invisible surface area into a menu — the “choose your own
+          journey” pattern, which lets a prospect self-qualify on the feature they
+          personally care about instead of sitting through your ordering.</p>
+
+          <h3>What it fixes</h3>
+          <ul>
+            <li><strong>Invisible depth</strong> — the strongest argument you have is currently unfindable</li>
+            <li><strong>No forced sequence</strong> — a winery owner who only cares about wine logistics goes straight there</li>
+            <li>Doubles as the <strong>feature list for the marketing site</strong>, with each row deep-linking into live proof</li>
+          </ul>
+
+          <h3>Watch out for</h3>
+          <p>A rail competes with the product's own navigation, and the admin already has
+          a full nav row. It probably wants to be collapsible, or to live only on the
+          public side.</p>
+
+          <div class="cost"><span>Effort</span><b>Medium</b><span>· a rail component plus one annotation per destination screen</span></div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============ PREREQUISITE ============ -->
+<section>
+  <div class="wrap">
+    <div class="prereq">
+      <div>
+        <p class="eyebrow">Before any of the four</p>
+        <h2 style="margin-top:10px">Fill the demo with a winery that's actually trading</h2>
+        <p>
+          Every direction above still ends on <code style="font-family:var(--mono);font-size:12px">No orders found</code>
+          unless the tenant has data. This is the highest-value work on the page and the
+          least glamorous: roughly <strong>18 months of plausible history</strong> —
+          bookings behind and ahead, a revenue curve with a real summer peak, wine orders
+          spread across pending, paid and delivered, a handful of tour companies on
+          different price tiers.
+        </p>
+        <p>
+          It should regenerate on a schedule so it never drifts, and the <strong>“Finish
+          setting up your account” banner must be suppressed</strong> for this tenant —
+          a demo winery is not a winery mid-setup.
+        </p>
+      </div>
+      <div class="beforeafter">
+        <div>
+          <div class="ba-lbl b">Today</div>
+          <div class="screen">
+            <div class="stage" style="padding:11px">
+              <div class="vw-stat"><div class="k">Future revenue</div><div class="v">0₾</div><div class="n">in 2026</div></div>
+              <div class="vw-empty" style="margin-top:8px;padding:16px;font-size:9px">No data for this period</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="ba-lbl a">Seeded</div>
+          <div class="screen">
+            <div class="stage" style="padding:11px">
+              <div class="vw-stat"><div class="k">Future revenue</div><div class="v" style="color:var(--vw-wine)">14 850₾</div><div class="n">42 bookings ahead</div></div>
+              <div class="vw-card" style="margin-top:8px;padding:9px">
+                <svg viewBox="0 0 200 54" width="100%" height="46" role="img" aria-label="Monthly revenue rising into a summer peak">
+                  <line x1="0" y1="53" x2="200" y2="53" stroke="#E0D4C0" stroke-width="1"/>
+                  <polyline points="6,44 30,40 54,33 78,22 102,10 126,14 150,25 174,31 194,38"
+                    fill="none" stroke="#7C1D23" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                  <circle cx="102" cy="10" r="3" fill="#7C1D23"/>
+                  <text x="102" y="7" font-family="Georgia, serif" font-size="7" fill="#6B5A47" text-anchor="middle">Aug</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SEQUENCING ============ -->
+<section style="border-bottom:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">If it were my call</p>
+      <h2 style="margin-top:10px">Build it in this order</h2>
+      <p>
+        Seed data first because everything else depends on it, then the two cheap wins
+        that make the demo legible, then the flagship once the traffic justifies it.
+      </p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="w">First</div>
+        <h3>Seed the winery</h3>
+        <p>18 months of bookings, wine orders and revenue. Kill the setup banner for this tenant. Nothing else pays off without it.</p>
+        <div class="eff">— highest value / lowest risk</div>
+      </div>
+      <div class="step">
+        <div class="w">Then</div>
+        <h3>01 · Front door</h3>
+        <p>One page. Frames the product, splits the audience, and closes the <code>/admin</code> dead end.</p>
+        <div class="eff">— a day's work, big legibility gain</div>
+      </div>
+      <div class="step">
+        <div class="w">Then</div>
+        <h3>03 · Spotlight tour</h3>
+        <p>Rewrite today's checklist as a real walkthrough with commercial copy. Reuses what already shipped.</p>
+        <div class="eff">— replaces, not adds</div>
+      </div>
+      <div class="step">
+        <div class="w">Flagship</div>
+        <h3>02 · Live mirror</h3>
+        <p>The thing nobody else has, and the asset the marketing site is built around. Worth doing properly, not early.</p>
+        <div class="eff">— after the basics land</div>
+      </div>
+    </div>
+    <p class="cap" style="margin-top:18px">
+      Direction 04 (feature rail) folds naturally into vineworks.ge itself when that gets
+      built — same list, each row deep-linking into the live demo.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Mockups drawn on top of the real production UI at demo.vineworks.ge, captured 10 September 2026.
+    Conversion figures are industry benchmarks, not measurements of this site.
+    <div class="srcs">
+      <a href="https://www.navattic.com/blog/interactive-demos">navattic.com — interactive demo platforms &amp; best practices</a><br>
+      <a href="https://www.storylane.io/blog/awesome-interactive-demo-examples">storylane.io — interactive demo examples</a><br>
+      <a href="https://userpilot.com/blog/interactive-product-demo/">userpilot.com — what actually converts in 2026</a><br>
+      <a href="https://fungies.io/saas-demo-best-practices-2026/">fungies.io — SaaS demo best practices 2026</a><br>
+      <a href="https://www.reprise.com/resources/blog/demo-environments-guide">reprise.com — building scalable demo environments</a>
+    </div>
+  </div>
+</footer>

@@ -4,6 +4,16 @@ tags: [plan, marketing, demo, vineworks]
 
 # Plan — vineworks.ge Marketing Site + demo.vineworks.ge Live Sandbox
 
+> ⚠️ **This is the original build log — history, not current work.** It records how the
+> demo tenant, rebranding, role-switcher and production cutover were built on 2026-09-10.
+>
+> **Current work lives in [[Plan-DemoRedesign]]**, driven by the design review in
+> [[DemoDirections]]. Start at [[DemoSite-README]] if you're new to this.
+>
+> The "Still not started" list near the bottom has been superseded — its items were
+> folded into [[Plan-DemoRedesign]] (the guided checklist shipped as [[FeatureLog]] #159;
+> nightly reset merged into that plan's Phase 0, since it's the same machinery as seeding).
+
 Status: ✅ Live — `demo.vineworks.ge` shipped to production 2026-09-10.
 
 ## Progress

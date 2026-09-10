@@ -8,6 +8,20 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-10 (session 4) — Design review of the demo site; planned the redesign
+
+Max's verdict on the demo, unprompted: *"stale, out of date and not guided, not very attention grabbing. no display of features or anything."* Switched to a design footing rather than a build one — captured the live production screens, researched how best-in-class SaaS companies run live demos, and produced a design proposal with four directions drawn on top of the real UI.
+
+**The finding that reframed everything:** the demo's admin panel — the thing the entire demo journey builds toward — is **empty**. `/admin/orders` shows "No orders found"; `/admin/statistics` shows `0` upcoming orders, `0₾` future revenue and "No data for this period" on both charts. On top of that, a "Finish setting up your account" banner sits on every admin page (telling prospects the product is half-built), and opening `/admin` directly dead-ends on a bare login form with no credentials and no way back. So the guided checklist shipped in session 3 was solving the wrong layer: it successfully walks a visitor to a blank table.
+
+Industry research backing the response (full sources in `[[Research-DemoPatterns]]`): interactive demos get ~25% visitor engagement vs 2–5% for "book a call"; hollow/generic demos convert ~18% while situation-specific ones run 25%+ and prospect-driven interactive ones ~38%. Also confirmed the competitive gap that justifies the flagship idea — none of Bookeo, BookingPress, Cloudbeds or Toast shows the customer-facing site and the back office *simultaneously*.
+
+Four directions proposed, **Max approved all four**: (01) a framing front-door interstitial with three self-select paths, (02) a two-pane "live mirror" showing a booking crossing from guest site to back office in one screen — the distinctive one nobody else does, (03) a spotlight guided tour replacing session 3's corner checklist, with copy framed commercially rather than as UI instructions, (04) a feature rail surfacing the product depth that's currently undiscoverable. Plus the non-optional prerequisite: seed the tenant with ~18 months of realistic trading data, since every direction otherwise still ends on "No orders found."
+
+**Set up `vault/DemoSite/` as the home for all of this** — `[[DemoSite-README]]` (index), `[[Plan-DemoRedesign]]` (the live phased task tracker with resume points, built for handoff between sessions), `[[DemoDirections]]` (the design review), `[[Research-DemoPatterns]]` (research + sources + a caveat that the figures are vendor benchmarks, not measurements of our site), `[[HANDOFF]]` (a ready-to-paste prompt for the next session), and `demo-directions.html` (the published artifact's source, kept so it can be re-published rather than rebuilt). Moved the original `Plan-DemoSite.md` in there too and marked it as history. **No code was written this session** — deliberately, since the plan needed to exist before implementation started.
+
+---
+
 ## 2026-09-10 (session 3) — Built and shipped the demo's guided checklist overlay (#159)
 
 Continuing the `demo.vineworks.ge` backlog from `[[Plan-DemoSite]]`'s "Still not started" list — Max picked item 1, the guided checklist, as the next piece. Built `components/DemoChecklist.tsx`: a pinned bottom-left widget, gated on `DEMO_TENANT_ID` exactly like `DemoModeBanner`, listing the 4-step loop (browse wines → book → switch to admin → see it land) with steps auto-checking via route changes plus a small `CustomEvent` dispatched from the booking form's and wine-order form's success paths (a one-line, no-op-elsewhere addition to `BookingForm.tsx`/`WineCatalogueClient.tsx`). Positioned bottom-left specifically to avoid the existing bug-report widget's bottom-right corner, and reuses its `--cart-bar-offset` CSS var so it lifts above the sticky `/wines` cart bar too.

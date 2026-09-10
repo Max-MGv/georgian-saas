@@ -8,6 +8,20 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 📐 2026-09-10 (session 4) — Demo redesign planned, nothing built yet — your call on what's next
+
+Everything about the demo site now lives in one folder: **`vault/DemoSite/`**. Start at `DemoSite-README.md`.
+
+**The design review** (with mockups drawn on your real screens): https://claude.ai/code/artifact/8775d152-5e9a-44d4-9380-e334b305cc7f
+
+1. **Nothing has been built yet** — this session was research, design and planning only. No code changed, nothing shipped.
+2. **The main finding:** the demo's admin panel is empty. Orders says "No orders found", Statistics says `0₾`. That's the screen the whole demo builds toward, so it's the first thing being fixed (`Plan-DemoRedesign.md` Phase 0).
+3. **Two smaller things found at the same time**, both in that plan: the "Finish setting up your account" banner makes the product look half-built to a prospect, and opening `/admin` directly dead-ends on a login form with no credentials and no way back.
+4. **Nothing needs testing from you right now.** When you want to continue, the ready-made prompt is in `vault/DemoSite/HANDOFF.md` — paste it into a fresh session.
+5. **One open question worth deciding at some point:** the demo has no analytics at all. The conversion figures in the design review are industry benchmarks, not measurements of your site. If you want those numbers to actually guide decisions, instrumenting the demo is its own small task.
+
+---
+
 ## ✅ 2026-09-10 (session 3) — Demo guided checklist, live on `demo.vineworks.ge` — needs your check
 
 Full detail: `FeatureLog.md` #159, `SessionLog.md` 2026-09-10 (session 3), `Plan-DemoSite.md`.
