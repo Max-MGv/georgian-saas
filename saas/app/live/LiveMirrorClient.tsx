@@ -97,12 +97,9 @@ export default function LiveMirrorClient() {
     // booking cannot appear in the pre-reload document.
     // (Same mistake, same fix, as the feature rail's callout anchor.)
     let attempts = 0
-    let applied = false
-    /** Keep re-applying for ~5s after the first hit, to outlive hydration. */
-    let settleTicks = Number.POSITIVE_INFINITY
     const timer = window.setInterval(() => {
-      if (applied && settleTicks === Number.POSITIVE_INFINITY) settleTicks = attempts + 25
       attempts++
+      if (attempts > 100) { window.clearInterval(timer); return }
       const doc = adminRef.current?.contentDocument
       const row = doc
         ? ([...doc.querySelectorAll('tbody tr')].find(tr =>
@@ -111,7 +108,6 @@ export default function LiveMirrorClient() {
         : undefined
 
       if (row) {
-        applied = true
         row.style.outline = `2px solid ${C.ok}`
         row.style.outlineOffset = '-2px'
         row.style.backgroundColor = 'rgba(34,197,94,0.12)'
@@ -131,18 +127,21 @@ export default function LiveMirrorClient() {
           ].join(';')
           firstCell.appendChild(pill)
         }
-        // Deliberately NOT stopping on first success. The pane is its own
-        // React root: the poll usually finds the row in server-rendered HTML
-        // *before* that root hydrates, and hydration then reconciles the table
-        // and throws away the inline styles and the pill. Re-applying for a
-        // few seconds outlives that. Every step is idempotent — the pill is
-        // only appended when the cell does not already have one, and a
-        // hydration-replaced cell correctly does not.
-        if (attempts > settleTicks) window.clearInterval(timer)
+        // Deliberately does NOT stop on first success, and does not try to
+        // guess when it is safe to stop. The pane is its own React root: the
+        // poll typically finds the row in server-rendered HTML *before* that
+        // root hydrates, and hydration then reconciles the table and discards
+        // the inline styles and the pill. A fixed "settle" window was tried and
+        // was simply a slower guess — it held on dev and lost on production,
+        // where hydrating ~400 rows takes longer than the window did.
+        //
+        // So: re-assert the marks on every tick for the whole window. Each step
+        // is idempotent (the pill is only appended to a cell that lacks one, and
+        // a hydration-replaced cell correctly lacks it), and 100 cheap DOM
+        // queries over 20s costs nothing on a page showing two iframes.
         return
       }
-      // ~20s ceiling, generous because a cold pane on a slow connection can
-      // take a while. Giving up quietly is right: the booking is in the table
+      // ~20s window. Giving up quietly is right: the booking is in the table
       // either way, it just isn't ringed.
       if (attempts > 100) window.clearInterval(timer)
     }, 200)
