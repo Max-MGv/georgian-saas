@@ -4,7 +4,7 @@ tags: [plan, marketing, demo, vineworks]
 
 # Plan — vineworks.ge Marketing Site + demo.vineworks.ge Live Sandbox
 
-Status: 🚧 In progress — phase 1 (demo tenant) started 2026-09-10.
+Status: ✅ Live — `demo.vineworks.ge` shipped to production 2026-09-10.
 
 ## Progress
 
@@ -51,10 +51,9 @@ Neither bug blocks the demo (both are edge-case/cosmetic), so proceeding to the 
 - Vercel (via browser automation, MG_Productions account already logged in): added `demo.vineworks.ge` as a Production domain on the `georgian-saas` project — DNS auto-configured with zero manual records (same as the `nikalasmarani.vineworks.ge` precedent, since Vercel already owns `vineworks.ge`'s zone). Added `NEXT_PUBLIC_DEMO_TENANT_ID=cmtvi582n0000vl7kjq44ir5p` as a Production-scope env var, then redeployed production so it takes effect (redeployed the *existing* `master` HEAD — no new code shipped by that redeploy, since the role-switcher code hadn't been merged yet at that point).
 - Code committed to `staging` (commit `6f3a550`) and pushed — deliberately only the demo-site-specific files, leaving other unrelated pending changes on the branch untouched. Verified on the staging preview URL: builds clean, Staging Winery tenant renders exactly as before with no demo banner shown (correct — regression check, since the demo tenant itself was already verified locally + via independent QA subagent).
 
-**Not yet done: merging `staging` → `master`.** Per the standing git workflow (Rule 0), this is the one step that requires Max's explicit confirmation before it ships — everything above is either local/dev-safe or already-verified prod infrastructure (tenant data, domain, env var), but the actual `DemoModeBanner` code is not live on production yet. `demo.vineworks.ge` currently resolves to the correct tenant/branding/data, just without the role-switcher banner, until that merge happens.
+**2026-09-10 (cont'd) — merged and live.** Max confirmed; merged `staging` → `master` (fast-forward, commit `23c036e`) and pushed. Switched back to `staging` per the standing workflow guardrail. Verified directly on `https://demo.vineworks.ge` in production: correct branding, banner shows, "Winery Admin View →" signs in and lands on `/admin/orders` with 0 bookings (clean slate) and the "← Customer View" flip — the same checks already passed in dev/staging, now confirmed on the real domain.
 
 ### Still not started
-- **Merge `staging` → `master`** (needs Max's go-ahead) — this is what actually puts the role-switcher live on `demo.vineworks.ge`
 - Guided checklist overlay ("1. Browse wines → 2. Book → 3. Switch to admin → ...")
 - Nightly reset + abuse guardrails (rate limiting on public-write actions, suppressed emails) — required before wide/public sharing, not before an internal soft preview
 - Onboarding-wizard-as-demo (the distinctive idea flagged in the original plan) — still not started, needs the disposable-tenant-per-visitor question resolved first
