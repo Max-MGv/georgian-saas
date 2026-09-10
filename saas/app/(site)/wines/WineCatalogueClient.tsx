@@ -5,7 +5,7 @@ import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
-import { dispatchDemoBooked } from '@/components/DemoChecklist'
+import { dispatchDemoBooked } from '@/lib/demoEvents'
 
 type WineTypeValue = 'RED' | 'WHITE' | 'AMBER' | 'ROSE'
 type SweetnessValue = 'DRY' | 'SEMI_DRY' | 'SEMI_SWEET' | 'SWEET'
@@ -375,7 +375,7 @@ export default function WineCatalogueClient({
         return
       }
       setSubmitted(true)
-      dispatchDemoBooked() // no-op outside the demo tenant — see components/DemoChecklist.tsx
+      dispatchDemoBooked() // no-op outside the demo tenant — see lib/demoEvents.ts
       form.reset()
       setQuantities({})
       setCompanyId('')

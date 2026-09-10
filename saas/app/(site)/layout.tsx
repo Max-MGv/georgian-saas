@@ -8,7 +8,8 @@ import { t } from '@/lib/t'
 import BreadcrumbTracker from '@/components/BreadcrumbTracker'
 import BugReportWidget from '@/components/BugReportWidget'
 import DemoModeBanner from '@/components/DemoModeBanner'
-import DemoChecklist from '@/components/DemoChecklist'
+import DemoFrontDoor from '@/components/DemoFrontDoor'
+import DemoTour from '@/components/DemoTour'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // Was 6 separate getSetting() calls + a getContentMap(), each opening its own
@@ -44,8 +45,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-text)' }}>
+      <DemoFrontDoor tenantId={tenantId} />
       <DemoModeBanner tenantId={tenantId} />
-      <DemoChecklist tenantId={tenantId} />
+      <DemoTour tenantId={tenantId} />
       <BreadcrumbTracker />
       {/* Public site: no logged-in submitter — anonymous reports (Phase 4 stores
           submitterEmail/submitterUserId as null here, per the plan). */}

@@ -41,5 +41,9 @@ export default async function ContentPage() {
   const bgSettings = Object.fromEntries(bgRows.map(r => [r.key, r.value]))
   const adminLocale = adminLanguage || 'en'
 
-  return <ContentClient rows={{ en, ka }} bgSettings={bgSettings} uploadedImages={uploadedImages} adminLocale={adminLocale} />
+  return (
+    <div data-tour="content-editor">
+      <ContentClient rows={{ en, ka }} bgSettings={bgSettings} uploadedImages={uploadedImages} adminLocale={adminLocale} />
+    </div>
+  )
 }

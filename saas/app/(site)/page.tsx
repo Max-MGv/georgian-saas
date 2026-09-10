@@ -358,7 +358,7 @@ export default async function Home({ searchParams }: PageProps) {
       <div className="max-w-2xl mx-auto px-6"><div className="h-px" style={{ backgroundColor: 'var(--site-border)' }} /></div>
 
       {/* Booking form */}
-      <section id="book" className="px-6 py-16 max-w-2xl mx-auto">
+      <section id="book" data-tour="booking-form" className="px-6 py-16 max-w-2xl mx-auto">
         <ET k="home_book_heading" s="home" lbl="Booking section heading"
           fb={t(locale, 'home.book_heading')} as="h2"
           className="text-2xl font-bold mb-2" style={{ color: 'var(--site-text)' }} />

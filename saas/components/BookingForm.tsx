@@ -11,7 +11,7 @@ import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
-import { dispatchDemoBooked } from '@/components/DemoChecklist'
+import { dispatchDemoBooked } from '@/lib/demoEvents'
 
 type Price = {
   id: string; minGuests: number; maxGuests: number
@@ -361,7 +361,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setConfirmedGuestAdjustedTo(result.guestCountAdjustedTo ?? null)
       setConfirmedOverMaxNotice(result.guestCountOverMax ? (result.guestCountMax ?? null) : null)
       setStatus('success')
-      dispatchDemoBooked() // no-op outside the demo tenant — see components/DemoChecklist.tsx
+      dispatchDemoBooked() // no-op outside the demo tenant — see lib/demoEvents.ts
     } else {
       setStatus('error')
       setErrorMsg(result.error)

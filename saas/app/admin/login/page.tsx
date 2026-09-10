@@ -1,8 +1,10 @@
 import { headers } from 'next/headers'
+import { getTenantId } from '@/lib/tenant'
+import DemoLoginShortcut from '@/components/DemoLoginShortcut'
 import LoginForm from './LoginForm'
 
 export default async function LoginPage() {
-  const h = await headers()
+  const [h, tenantId] = await Promise.all([headers(), getTenantId()])
   const logoUrl = h.get('x-platform-logo')
   const logoAlt = h.get('x-platform-logo-alt') ?? ''
 
@@ -15,6 +17,9 @@ export default async function LoginPage() {
           )}
           <p className="text-sm font-medium" style={{ color: '#6b5a47' }}>Admin Panel</p>
         </div>
+        {/* Demo tenant only — a no-op everywhere else. Closes the dead end a
+            shared /admin link used to lead to. Plan-DemoRedesign task 1.4. */}
+        <DemoLoginShortcut tenantId={tenantId} />
         <LoginForm />
       </div>
     </div>

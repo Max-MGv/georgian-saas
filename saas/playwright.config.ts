@@ -36,6 +36,12 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+
+    /* Record a video of every test, kept only for failures so passing runs
+       don't pile up disk usage. Videos land in playwright/test-results/ next
+       to the failed test's other artifacts — see
+       playwright/HOW-TO-CHECK-A-TEST.md for how to find and watch one. */
+    video: 'retain-on-failure',
   },
 
   /* Configure projects for major browsers */

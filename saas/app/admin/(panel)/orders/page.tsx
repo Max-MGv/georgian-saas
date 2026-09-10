@@ -151,14 +151,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         />
       ) : (
         <>
-      <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} />
+      <div data-tour="orders-filters">
+        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} />
+      </div>
 
       {orders.length === 0 ? (
         <div className="rounded-xl border p-12 text-center mt-4" style={{ borderColor: C.border, backgroundColor: C.bg }}>
           <p style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         </div>
       ) : (
-        <>
+        <div data-tour="orders-table">
           <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
@@ -196,7 +198,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <span className="font-bold text-lg" style={{ color: C.wine }}>{totalRevenue}₾</span>
             </div>
           </div>
-        </>
+        </div>
       )}
         </>
       )}

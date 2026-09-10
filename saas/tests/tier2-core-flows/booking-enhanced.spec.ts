@@ -230,8 +230,12 @@ test.describe('Booking form — enhanced/company variant', () => {
     // (both simple and enhanced) never redirect to the Flitt payment
     // gateway — only individual bookings do (companies are invoiced later,
     // not charged online). Submitting shows the inline "Booking received!"
-    // confirmation instead.
-    await page.getByRole('button', { name: 'Book & Pay' }).click();
+    // confirmation instead. Button label is "Request Booking" (form.submit),
+    // not "Book & Pay" (form.submit_pay) — paymentLabelActive in
+    // BookingForm.tsx is false here because Staging Winery's
+    // paymentEnabledCompanies is false (backfilled false by #148, after this
+    // test was originally written expecting the payment-active label).
+    await page.getByRole('button', { name: 'Request Booking' }).click();
     await expect(page.getByRole('heading', { name: 'Booking received!' })).toBeVisible({ timeout: 15_000 });
 
     // 8. Verify via the admin order row (not just the confirmation toast)

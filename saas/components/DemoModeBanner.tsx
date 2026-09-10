@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { DEMO_TENANT_ID, DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD } from '@/lib/demoTenant'
+import { DEMO_TENANT_ID } from '@/lib/demoTenant'
+import { signInAsDemoAdmin } from '@/lib/demoAuth'
 
 /**
  * Role-switcher + "you're in a demo" banner for the Vineworks Demo tenant.
@@ -29,12 +29,8 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
   async function handleAdminView() {
     setLoading(true)
     setError(false)
-    const supabase = createClient()
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: DEMO_ADMIN_EMAIL,
-      password: DEMO_ADMIN_PASSWORD,
-    })
-    if (signInError) {
+    const { ok } = await signInAsDemoAdmin()
+    if (!ok) {
       setError(true)
       setLoading(false)
       return

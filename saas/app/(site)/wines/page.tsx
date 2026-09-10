@@ -74,6 +74,7 @@ export default async function WinesPage() {
     imagePath: v.imagePath ?? wine.imagePath,
   })))
   return (
+    <div data-tour="wine-catalogue">
     <WineCatalogueClient
       wines={wines}
       companies={companies}
@@ -85,5 +86,6 @@ export default async function WinesPage() {
       paymentConfigured={paymentConfigured}
       onlinePaymentEnabled={wineOrderPaymentReady}
     />
+    </div>
   )
 }

@@ -141,7 +141,7 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
     <div className="space-y-6">
 
       {/* Top cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div data-tour="stats-cards" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card
           label={at('statistics.card.upcomingOrders')}
           value={String(upcomingCount)}
