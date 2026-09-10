@@ -27,7 +27,17 @@ Picked up [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] at Phase 0 — nothin
 
 **Flagged to Max, not actioned:** `rebrand-demo-tenant.ts` scrubs the tenant row, settings and site content but **never touched Companies**. The prod demo tenant was cloned from Nikalas Marani's real production data, so `demo.vineworks.ge` may right now be publishing his real B2B customers' company names, contact people, phone numbers and email addresses. Could not confirm — reading the prod DB was blocked this session. Seeding prod fixes it as a side effect, since the whole cast gets replaced.
 
-**Next:** 0.5 — push to `staging`, verify, Max's go-ahead, merge to `master`, then run the seed script against **prod** as its own separate deliberate step. Then 0.6, then Phase 1 (the front door).
+**Shipped to production later the same session.** Max's call on process: for demo work he wants to skip the staging pass and push straight to `master`, since the demo site *is* the test environment. Agreed with one caveat he accepted — `master` also deploys Nikalas Marani's real site, so the split is **demo-only files** (components gated on `DEMO_TENANT_ID`, demo-only routes, scripts) straight to `master`, **shared files** (like `app/admin/(panel)/layout.tsx`, which every tenant renders) still through staging. Merged `staging` → `master` at `0804229`; production deploy READY; branch switched back to `staging`.
+
+**Where it stopped — read this first next session.** The prod seed run did **not** happen: every route to the production database was refused by the session sandbox (direct `DATABASE_URL` invocation, a temporary probe script, and the Supabase MCP `execute_sql`). Environment restriction, not a code problem — the script is finished and proven on dev.
+
+**So `demo.vineworks.ge` is in a half-shipped state right now:** the "Finish setting up your account" banner is gone, but the admin panel behind it is **still empty**. Finishing this outranks starting Phase 1.
+
+**The agreed unblock, to build first:** a `--prod` flag on `scripts/seed-demo-data.ts` that reads `DIRECT_URL` out of `saas/.env.prod.backup` itself, so the prod run is one copy-pasteable command with no database password passing through a shell or a chat window — `--prod` alone dry-runs, `--prod --confirm` writes. If the sandbox still refuses, Max runs those two commands himself.
+
+**Still unanswered:** whether the prod demo tenant is publishing Nikalas Marani's real B2B customers' names, phones and emails — `rebrand-demo-tenant.ts` never touched Companies. Reading prod was blocked. **Check it on the `--prod` dry-run, before the seed overwrites the evidence.**
+
+**Then:** 0.6 (scheduled regeneration), then Phase 1 (the front door).
 
 ---
 

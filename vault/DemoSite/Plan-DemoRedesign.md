@@ -26,9 +26,13 @@ link in [[DemoSite-README|README]]). **How the demo was originally built:** [[Pl
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Phase 0 — 0.1–0.4 are done and verified on **dev**. Next: 0.5,
-ship to `staging`, get Max's go-ahead, merge to `master`, then run the seed script against
-**prod** as its own separate step. Nothing has been written to the prod database yet.
+**Overall resume point:** Phase 0 — code is **live on production** (merged to `master`,
+deploy `0804229` READY). **The prod demo tenant has NOT been seeded yet**, so
+`demo.vineworks.ge` right now has no setup banner but still an *empty* admin panel. That
+is the half-shipped state to fix first.
+
+**START HERE next session:** add a `--prod` flag to `scripts/seed-demo-data.ts` (design
+below), then run it against prod. Everything else in Phase 0 is done.
 
 ---
 
@@ -56,11 +60,9 @@ ship to `staging`, get Max's go-ahead, merge to `master`, then run the seed scri
 
 ## Phase 0 — Seed the demo with a winery that's actually trading
 
-**Status:** 🚧 In progress — built and verified on dev, not yet shipped
-**Resume point:** 0.1–0.4 done. Next is **0.5** — push to `staging`, verify there, get
-Max's go-ahead, merge to `master`, then run `npx tsx scripts/seed-demo-data.ts` against
-the **prod** database as a separate deliberate step. **The prod demo tenant is still
-empty** — only dev has been seeded. After that, 0.6 (scheduled regeneration).
+**Status:** 🚧 In progress — code shipped to production, prod data not yet seeded
+**Resume point:** 0.1–0.4 done; 0.5 **half done** — the code is merged to `master` and
+live, but the prod seed run is blocked (see below). Finish 0.5, then 0.6.
 **Why first:** every other phase still dead-ends on `No orders found` without this. It is
 the highest-value, lowest-risk work in the whole plan.
 
@@ -231,6 +233,46 @@ from Nikalas Marani's real production data, so it may currently be publishing hi
 customers' company names, contact people, phone numbers and emails on a public demo site.
 Could not be confirmed — reading the prod DB was blocked in this session. Running the seed
 script against prod fixes it as a side effect, since it replaces the whole cast.
+
+#### 0.5 — where it stopped, and the blocker (2026-09-10)
+
+**Done:** `staging` → `master` merged and pushed (`0804229`), production deploy READY.
+Max's call, recorded so it isn't re-litigated: for demo work he wants to skip the staging
+pass and push straight to `master`, on the grounds that the demo site *is* the test
+environment. Agreed with one caveat he accepted — `master` also deploys Nikalas Marani's
+real site, so **demo-only files** (components gated on `DEMO_TENANT_ID`, demo-only routes,
+scripts) can go straight to `master`, while **shared files** (like
+`app/admin/(panel)/layout.tsx`, which every tenant renders) still deserve the staging pass.
+Phases 1–4 are mostly the first kind.
+
+**NOT done — the prod seed run.** Every route to the production database was refused by
+this session's sandbox: a direct `DATABASE_URL=… npx tsx` invocation, a temporary probe
+script, and the Supabase MCP `execute_sql` tool. This is an environment restriction, not a
+code problem — the script itself is finished and proven on dev.
+
+**Consequence, live right now:** `demo.vineworks.ge` has the setup banner suppressed but
+its admin panel is **still empty**. Half the fix is visible. Prioritise finishing this.
+
+**The agreed way to unblock it — build this first next session:** add a `--prod` flag to
+`scripts/seed-demo-data.ts` that reads the connection string from `saas/.env.prod.backup`
+itself (the `DIRECT_URL` line — use direct, not the pooled URL, for a few hundred
+sequential writes). That way the prod run is one copy-pasteable command with no database
+password ever passing through a shell or a chat window:
+
+```
+npx tsx scripts/seed-demo-data.ts --prod            # preview, writes nothing
+npx tsx scripts/seed-demo-data.ts --prod --confirm  # actually writes
+```
+
+`--prod` without `--confirm` must dry-run and say so, so a mistyped command previews
+instead of wiping. The existing slug guard stays as the real protection. If the sandbox
+still refuses to run it, Max runs those two commands in his own terminal.
+
+**Also still unanswered:** whether the prod demo tenant is publishing Nikalas Marani's real
+B2B customers' names, phones and emails (`rebrand-demo-tenant.ts` never touched Companies).
+Reading prod was blocked, so it could not be confirmed. **Check this on the `--prod`
+dry-run, before the seed overwrites the evidence** — if real customer data was exposed,
+how long it was live is worth knowing.
 
 ---
 

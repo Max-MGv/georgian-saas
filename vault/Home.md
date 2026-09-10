@@ -23,6 +23,7 @@ A white-label booking & revenue CRM for small Georgian businesses — wineries, 
 - [[Business Model]] — pricing thoughts
 - [[Decisions]] — key tradeoff decisions and reasoning
 - [[Dashboard]] — how to run the local visual project dashboard
+- [[Domain-and-Email-Setup|Vineworks Hosting]] — the platform's own domain (`vineworks.ge`) + email setup, in `Vineworks-Hosting/`
 
 ## Archive
 
