@@ -10,7 +10,6 @@
  * a wide-open write endpoint, so don't trust anything from the client.
  */
 
-import { Resend } from 'resend'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
@@ -18,6 +17,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
 import { requireSuperAdmin } from '@/lib/requireSuperAdmin'
 import { requireAdmin } from '@/lib/requireAdmin'
+import { sendTenantEmail } from '@/lib/emails/sendEmail'
 import type { BugReportStatus } from '@prisma/client'
 
 const BUCKET = 'bug-report-screenshots' // private bucket, created in Phase 1
@@ -159,8 +159,6 @@ async function sendBugReportNotification(args: {
   tenantId: string | null
   hasScreenshot: boolean
 }) {
-  const resend = new Resend(process.env.RESEND_API_KEY)
-
   const tenant = args.tenantId
     ? await db.tenant.findUnique({ where: { id: args.tenantId }, select: { displayName: true, name: true } })
     : null
@@ -179,12 +177,6 @@ async function sendBugReportNotification(args: {
 
   const typeLabel = args.type === 'BUG' ? 'Bug' : 'Feature request'
 
-  // Sandbox mode: onboarding@resend.dev can only deliver to the verified
-  // owner email — same convention as lib/emails/invoiceEmail.ts and
-  // app/actions/notifyNewCompany.ts.
-  const isDomainVerified = false
-  const to = isDomainVerified ? 'max.mghvdliashvili@gmail.com' : 'max.mghvdliashvili@gmail.com'
-
   const html = `
     <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; color: #1c1008; padding: 32px;">
       <h2 style="margin: 0 0 4px; font-size: 18px;">New ${typeLabel.toLowerCase()} report</h2>
@@ -199,14 +191,12 @@ async function sendBugReportNotification(args: {
     </div>
   `
 
-  const { error } = await resend.emails.send({
-    from: 'onboarding@resend.dev',
-    to,
+  await sendTenantEmail({
+    fromLocalPart: 'alerts',
+    to: 'max@vineworks.ge',
     subject: `[${typeLabel}] ${args.surface} — ${tenantLabel}`,
     html,
   })
-
-  if (error) throw new Error(error.message)
 }
 
 // ── Phase 5 — Super-admin inbox ─────────────────────────────────────────

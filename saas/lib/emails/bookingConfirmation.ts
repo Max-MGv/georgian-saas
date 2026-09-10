@@ -1,5 +1,5 @@
-import { Resend } from 'resend'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { sendTenantEmail } from '@/lib/emails/sendEmail'
 
 type BookingEmailData = {
   name: string
@@ -104,23 +104,14 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
     </div>
   `
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-
-  // Sandbox mode: onboarding@resend.dev can only deliver to the verified owner email.
-  // Once nikalasmarani.ge is verified in Resend, change `to` back to data.email
-  // and update `from` to something like bookings@nikalasmarani.ge.
-  const isDomainVerified = false // flip to true after verifying nikalasmarani.ge in Resend
-  const toAddress = isDomainVerified ? data.email : 'max.mghvdliashvili@gmail.com'
-
-  const { error } = await resend.emails.send({
-    from: 'onboarding@resend.dev',
-    to: toAddress,
-    replyTo: 'max.mghvdliashvili@gmail.com',
+  await sendTenantEmail({
+    tenantName: data.wineryName,
+    fromLocalPart: 'bookings',
+    to: data.email,
+    replyTo: data.wineryEmail,
     subject: data.paid
       ? `Payment received — your booking on ${data.date} at ${data.timeSlot} is confirmed`
       : `Booking request received — ${data.date} at ${data.timeSlot}`,
     html,
   })
-
-  if (error) throw new Error(error.message)
 }

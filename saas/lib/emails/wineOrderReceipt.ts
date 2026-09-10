@@ -1,5 +1,5 @@
-import { Resend } from 'resend'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { sendTenantEmail } from '@/lib/emails/sendEmail'
 
 /**
  * Receipt for a wine order paid by card.
@@ -97,24 +97,12 @@ export async function sendWineOrderReceipt(data: WineOrderReceiptData) {
     </div>
   `
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-
-  // Sandbox mode, mirroring bookingConfirmation.ts: onboarding@resend.dev can
-  // only deliver to the verified owner address, so every customer receipt
-  // currently lands with Max instead of the buyer. Flip alongside the same
-  // constant in bookingConfirmation.ts once the sending domain is verified —
-  // until then, online payment must not be switched on for a real tenant, or
-  // paying customers get no receipt.
-  const isDomainVerified = false
-  const toAddress = isDomainVerified ? data.email : 'max.mghvdliashvili@gmail.com'
-
-  const { error } = await resend.emails.send({
-    from: 'onboarding@resend.dev',
-    to: toAddress,
-    replyTo: 'max.mghvdliashvili@gmail.com',
+  await sendTenantEmail({
+    tenantName: data.wineryName,
+    fromLocalPart: 'receipts',
+    to: data.email,
+    replyTo: data.wineryEmail,
     subject: `Payment received — your wine order is confirmed`,
     html,
   })
-
-  if (error) throw new Error(error.message)
 }
