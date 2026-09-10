@@ -32,6 +32,24 @@ tags: [bugs]
 
 ---
 
+## Hydration mismatch on public site pages (observed 2026-09-11, not yet diagnosed)
+
+**Symptom:** `Hydration failed because the server rendered text ...` in the browser console
+on public-site routes (`/`, `/wines`) in local dev.
+
+**Not caused by the demo work**, though that is how it was noticed. Confirmed by loading
+`/wines` on **Staging Winery**, where no demo component renders at all — the error still
+appears. So it predates the demo redesign and affects real tenants too.
+
+**Why it matters beyond a console warning:** React discards the server HTML and re-renders
+on the client when this happens. It cost real debugging time on the live mirror, where
+highlighting a row in the server-rendered table was silently undone the moment the pane
+hydrated. Anything that manipulates or measures server-rendered DOM is exposed to it.
+
+**Not investigated:** the specific mismatching text was not identified — likely a
+date/locale or price format rendered differently on server and client. Worth a dedicated
+look; start by expanding the full error in the browser console on `/wines`.
+
 ## Bug #19 — No protection against concurrent-traffic bursts; production hits a hard DB connection ceiling around 100–150 simultaneous visitors, causing a whole-site outage that outlasts the burst
 
 > **Partially addressed 2026-09-10 (demo only).** `lib/demoRateLimit.ts` caps public writes

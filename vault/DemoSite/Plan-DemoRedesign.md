@@ -514,10 +514,30 @@ tour pill and feature rail. Deliberately a frame check rather than a query param
 parameter would have to be threaded through every internal link inside both panes and
 would be lost the first time a visitor clicked one.
 
-**4.3 landing moment:** a green "Just landed" pill over the admin pane, animated in, with
-the animation dropped under `prefers-reduced-motion`. Per-row highlighting *inside* the
-iframe was **not** done — it would mean threading a highlight parameter through the orders
-page for the demo's benefit alone. A deliberate omission, not an oversight.
+**4.3 landing moment — completed 2026-09-11.** Direction 02 asks for the booking to land
+"highlighted, timestamped *just now*". The first pass only had the green "Just landed" pill
+over the pane, and per-row highlighting was written off as needing a query parameter
+threaded through the orders page for the demo's benefit alone. That was the wrong call, and
+it was caught by re-reading DemoDirections rather than my own summary of it.
+
+It is now done without touching the orders page at all: the panes are same-origin, so the
+mirror reaches into the admin frame, finds the row by the guest's name (carried on the
+`vineworks-demo:booked` event) and applies the outline, tint and a "just now" pill.
+Matching on name means it degrades to "no highlight" rather than misfiring if the table
+markup changes. `prefers-reduced-motion` respected throughout.
+
+**Three ordering bugs had to be fixed to make it actually work**, all invisible to a
+casual test:
+1. The highlight ran *before* `reload()`, so it marked the outgoing document and the reload
+   threw the mark away. Invisible on a first booking (the row cannot be there yet); it only
+   showed up on a repeat.
+2. The poll window was anchored to the iframe's `load` event, which fires long before a
+   Next.js pane has hydrated and painted ~400 rows — so it often expired before the row
+   existed. Now polled from announcement, straight through the reload.
+3. **The real one:** the poll would find the row in the pane's server-rendered HTML, style
+   it, and stop — then that pane's own React hydrated, reconciled the table, and discarded
+   the inline styles and the pill. The highlight now re-applies for ~5s after first hit to
+   outlive hydration. Every step is idempotent.
 
 **4.4 mobile:** panes stack below 900px and the view auto-scrolls to the admin pane when a
 booking lands. Verified at 375px — stacked, no horizontal overflow.

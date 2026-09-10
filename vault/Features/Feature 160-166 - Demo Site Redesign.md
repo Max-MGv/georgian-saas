@@ -50,6 +50,13 @@ genuinely clickable, so the visitor can use the thing being pointed at without d
 full nav row; a second permanent rail would compete for the same glance and push the
 bookings table — the thing that actually sells — sideways.
 
+**The landing moment reaches into the frame rather than adding a query parameter.** The
+orders page is real product surface shared with every winery; it should not grow a
+`?highlight=` parameter that exists only for the demo. The panes are same-origin, so the
+mirror finds the row by the guest's name (carried on the booked event) and styles it
+directly. Trade-off accepted: matching on name degrades to "no highlight" if the table
+markup changes, rather than misfiring.
+
 **The live mirror syncs by postMessage + iframe reload.** Polling would burn queries
 against a demo nobody is watching most of the time; SSE would need an endpoint, a
 connection per viewer and a reconnect story, all to deliver one bit the page already knows
@@ -115,7 +122,15 @@ Recorded because every one would have shipped silently and looked fine in a scre
 6. **Sequential writes.** ~450 awaited creates: fine from a CLI, a timeout risk inside a
    function, and a reseed that dies halfway leaves the demo with its cast deleted and *no*
    bookings. Now batched 10 at a time, under the pooled `connection_limit=20`.
-7. **Revenue curve shape.** A flat 30% company/individual mix produced a curve where
+7. **Landing moment applied before the reload.** The live mirror highlighted the new row
+   and *then* reloaded the pane, so the reload discarded the mark. Invisible on a first
+   booking — the row cannot be there yet — so it only surfaced on a repeat.
+8. **Landing moment applied before hydration.** The poll found the row in the pane's
+   server-rendered HTML, styled it and stopped; the pane's own React then hydrated,
+   reconciled the table and threw the styles away. Now re-applied for ~5s to outlive
+   hydration. This is the third instance in this feature of *"measured once, raced the
+   render, gave up"* — see also bugs 4 and the tour's ring.
+9. **Revenue curve shape.** A flat 30% company/individual mix produced a curve where
    August — the busiest month by bookings — showed *less* revenue than July. Realistic
    counts do not automatically give a realistic revenue *shape*; the two are modelled
    separately (40% company Jun–Sep vs 22% otherwise).

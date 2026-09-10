@@ -361,7 +361,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setConfirmedGuestAdjustedTo(result.guestCountAdjustedTo ?? null)
       setConfirmedOverMaxNotice(result.guestCountOverMax ? (result.guestCountMax ?? null) : null)
       setStatus('success')
-      dispatchDemoBooked() // no-op outside the demo tenant — see lib/demoEvents.ts
+      // Name is carried so the live mirror can highlight this exact row.
+      dispatchDemoBooked({ name: firstName, surname: lastName }) // no-op outside the demo tenant — see lib/demoEvents.ts
     } else {
       setStatus('error')
       setErrorMsg(result.error)

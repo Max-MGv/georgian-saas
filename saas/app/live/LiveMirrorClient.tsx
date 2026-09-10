@@ -72,7 +72,83 @@ export default function LiveMirrorClient() {
     return () => { cancelled = true }
   }, [])
 
-  const refreshAdmin = useCallback(() => {
+  /**
+   * Finds the row the visitor just created and marks it — DemoDirections
+   * Direction 02 asks for the booking to land "highlighted, timestamped
+   * 'just now'", and the pane is an iframe of the real orders table.
+   *
+   * Done by reaching into the same-origin frame rather than by threading a
+   * highlight parameter through the orders page: that page is real product
+   * surface shared with every winery, and it should not grow a query parameter
+   * that exists solely for the demo. The cost is that this is matched on the
+   * guest's name, so it degrades to "no highlight" rather than misfiring if the
+   * table markup changes.
+   */
+  const highlightNewRow = useCallback((who: { name?: string; surname?: string }) => {
+    if (!who.name) return
+    const needle = `${who.name} ${who.surname ?? ''}`.trim().toLowerCase()
+
+    // Polled from the moment the booking is announced, straight through the
+    // reload, rather than started on the iframe's `load` event. The pane is a
+    // full Next.js app: `load` fires long before it has hydrated and painted
+    // ~400 rows, so anchoring the window to it meant the poll could expire
+    // before the row ever existed. Re-reading contentDocument each tick means
+    // the reload is simply absorbed. There is no risk of matching early — the
+    // booking cannot appear in the pre-reload document.
+    // (Same mistake, same fix, as the feature rail's callout anchor.)
+    let attempts = 0
+    let applied = false
+    /** Keep re-applying for ~5s after the first hit, to outlive hydration. */
+    let settleTicks = Number.POSITIVE_INFINITY
+    const timer = window.setInterval(() => {
+      if (applied && settleTicks === Number.POSITIVE_INFINITY) settleTicks = attempts + 25
+      attempts++
+      const doc = adminRef.current?.contentDocument
+      const row = doc
+        ? ([...doc.querySelectorAll('tbody tr')].find(tr =>
+            (tr.textContent ?? '').toLowerCase().includes(needle),
+          ) as HTMLElement | undefined)
+        : undefined
+
+      if (row) {
+        applied = true
+        row.style.outline = `2px solid ${C.ok}`
+        row.style.outlineOffset = '-2px'
+        row.style.backgroundColor = 'rgba(34,197,94,0.12)'
+        if (!reducedMotion) row.style.transition = 'background-color 600ms ease-out'
+        row.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
+
+        // "just now", pinned to the row itself rather than to the pane.
+        const firstCell = row.querySelector('td')
+        if (doc && firstCell && !firstCell.querySelector('[data-just-now]')) {
+          const pill = doc.createElement('span')
+          pill.setAttribute('data-just-now', '')
+          pill.textContent = 'just now'
+          pill.style.cssText = [
+            'display:inline-block', 'margin-left:8px', 'padding:2px 8px',
+            'border-radius:999px', `background:${C.ok}`, 'color:#052e16',
+            'font-size:0.68rem', 'font-weight:700', 'vertical-align:middle',
+          ].join(';')
+          firstCell.appendChild(pill)
+        }
+        // Deliberately NOT stopping on first success. The pane is its own
+        // React root: the poll usually finds the row in server-rendered HTML
+        // *before* that root hydrates, and hydration then reconciles the table
+        // and throws away the inline styles and the pill. Re-applying for a
+        // few seconds outlives that. Every step is idempotent — the pill is
+        // only appended when the cell does not already have one, and a
+        // hydration-replaced cell correctly does not.
+        if (attempts > settleTicks) window.clearInterval(timer)
+        return
+      }
+      // ~20s ceiling, generous because a cold pane on a slow connection can
+      // take a while. Giving up quietly is right: the booking is in the table
+      // either way, it just isn't ringed.
+      if (attempts > 100) window.clearInterval(timer)
+    }, 200)
+  }, [reducedMotion])
+
+  const refreshAdmin = useCallback((who: { name?: string; surname?: string }) => {
     const frame = adminRef.current
     if (!frame) return
     try {
@@ -82,7 +158,14 @@ export default function LiveMirrorClient() {
     } catch {
       frame.src = `${ADMIN_SRC}?t=${Date.now()}`
     }
-  }, [])
+    // Then look for the row — reload first, highlight second. Highlighting
+    // before the reload marks the outgoing document, and the reload throws the
+    // mark away; that is invisible on a first booking (the row cannot be there
+    // yet) and only shows up on a repeat, which is exactly how it slipped
+    // through once. The short delay lets the navigation begin so the poll does
+    // not match the row it is about to destroy.
+    window.setTimeout(() => highlightNewRow(who), 500)
+  }, [highlightNewRow])
 
   useEffect(() => {
     function onMessage(e: MessageEvent) {
@@ -90,7 +173,7 @@ export default function LiveMirrorClient() {
       // page embeds frames.
       if (e.origin !== window.location.origin) return
       if (!e.data || e.data.type !== DEMO_BOOKED_EVENT) return
-      refreshAdmin()
+      refreshAdmin(e.data.detail ?? {})
       setLanded(true)
       // On a stacked layout the admin pane is below the fold, so the landing
       // moment would happen off-screen. Bring it into view.
