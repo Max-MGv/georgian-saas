@@ -451,3 +451,25 @@ Full write-up with all findings (including 5 lower-severity/infrastructure items
 **Committed** 2026-09-09 in `7aba432` on `staging`. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
 
 ---
+
+### Wine order form: "Actual address of bar / restaurant" silently required, submit button gives no feedback
+
+**Severity:** Moderate — affects the real product, not just the demo tenant. A real individual customer filling out the wine order form on `/wines` who leaves the address field blank clicks "Place Reservation" and **nothing happens** — no loading state, no error message, no network request. Looks like a dead/broken button.
+
+**Found:** 2026-09-10, by an independent QA subagent testing the Vineworks Demo tenant's wine-order flow (see [[Plan-DemoSite]]). Confirmed via JS inspection: the field has `required` set with no visual indicator (no asterisk, no red border, no HTML5 validation tooltip surfaced) — the field is labeled for bars/restaurants specifically, so it reads as optional to an individual customer, but blocks submission silently.
+
+**Status:** 🔴 Not fixed — found during unrelated demo-site testing, not yet triaged or scheduled.
+
+**Suggested fix (not yet implemented):** either make the address field genuinely optional for individual (non-company) wine orders, or make the required-field validation visible (asterisk + inline error on failed submit) so the button doesn't look inert.
+
+---
+
+### Wine catalogue: Rkatsiteli tagged "RED DRY" in demo/NM data
+
+**Severity:** Low — cosmetic data-entry issue, not a code bug. Rkatsiteli is a white grape variety; both catalogue entries ("Rkatsiteli 2026" and "Rkatsiteli 2023" per the QA pass) are tagged Red/Dry.
+
+**Found:** 2026-09-10, same QA pass as above. Since the demo tenant's wine data was cloned from Nikalas Marani's real catalogue, this may be a real data entry mistake on NM's actual live site too — worth Max checking directly rather than assuming it's demo-only.
+
+**Status:** 🔴 Not fixed — not yet checked against the real NM site.
+
+---

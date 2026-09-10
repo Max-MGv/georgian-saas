@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 140">
+  <text x="210" y="70" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="46" font-weight="600" letter-spacing="1" fill="#9B090C">VineWorks</text>
+  <text x="210" y="98" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="15" letter-spacing="4" fill="#5a5248">ESTATE &amp; VINEYARD</text>
+  <line x1="130" y1="112" x2="290" y2="112" stroke="#9B090C" stroke-width="1"/>
+</svg>

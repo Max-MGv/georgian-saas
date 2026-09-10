@@ -7,6 +7,7 @@ import SiteNav from './SiteNav'
 import { t } from '@/lib/t'
 import BreadcrumbTracker from '@/components/BreadcrumbTracker'
 import BugReportWidget from '@/components/BugReportWidget'
+import DemoModeBanner from '@/components/DemoModeBanner'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // Was 6 separate getSetting() calls + a getContentMap(), each opening its own
@@ -42,6 +43,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-text)' }}>
+      <DemoModeBanner tenantId={tenantId} />
       <BreadcrumbTracker />
       {/* Public site: no logged-in submitter — anonymous reports (Phase 4 stores
           submitterEmail/submitterUserId as null here, per the plan). */}
