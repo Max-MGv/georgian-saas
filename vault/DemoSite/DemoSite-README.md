@@ -52,10 +52,9 @@ directly; [[DemoDirections]] is the response.
 **⚠️ One action for Max:** add `CRON_SECRET` to the Vercel production environment, or the
 nightly regeneration returns 503 and the demo never resets.
 
-**Before sharing the link widely:** the abuse guardrails at the bottom of
-[[Plan-DemoRedesign]] — rate-limiting public writes and suppressing outbound email from the
-demo tenant — are still open. Without them, demo traffic hits the Resend quota and mails
-strangers.
+**Safe to share.** The abuse guardrails are done ([[FeatureLog]] #166): the demo tenant
+sends **no** outbound email at all, and public writes are capped at 5 per IP per 10
+minutes. Both are demo-only and leave real wineries untouched.
 
 ---
 

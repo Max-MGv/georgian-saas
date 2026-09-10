@@ -18,6 +18,8 @@ export type WineOrderLine = {
 }
 
 type WineOrderReceiptData = {
+  /** Sending tenant — lets sendTenantEmail suppress mail from the demo. */
+  tenantId?: string | null
   email: string
   contactName: string
   businessName: string
@@ -98,6 +100,7 @@ export async function sendWineOrderReceipt(data: WineOrderReceiptData) {
   `
 
   await sendTenantEmail({
+    tenantId: data.tenantId,
     tenantName: data.wineryName,
     fromLocalPart: 'receipts',
     to: data.email,

@@ -508,10 +508,44 @@ asset rather than code, and it wants Max's eye on the framing.
 
 ## Carried over from [[Plan-DemoSite]] — still open, not yet scheduled
 
-- [ ] **Abuse guardrails** — rate-limit public-write actions (bookings, wine orders) on the
-      demo tenant, and suppress real outbound emails from it so demo traffic doesn't hit
-      the Resend quota or mail strangers. **Required before sharing the link widely.**
-      Related: [[KnownBugs]] #19 (no rate limiting anywhere in the app).
+- [x] **Abuse guardrails** ✅ 2026-09-10 — both halves shipped and live.
+
+      **Outbound email is suppressed for the demo tenant outright**
+      (`lib/emails/sendEmail.ts`). Every message the app sends already went through
+      `sendTenantEmail`, so the guard sits at that one chokepoint rather than at the five
+      call sites — a future template cannot forget to opt in. `tenantId` is now threaded
+      through all five senders to make it work. **Bug reports deliberately still send**:
+      they go to the super-admin inbox rather than to or from any winery, and Max wants to
+      hear it if the demo breaks. Omitting `tenantId` is the signal that a message is
+      platform mail, not tenant mail.
+
+      This was the half that actually mattered: without it every booking a stranger made
+      on the demo sent a real email — to whatever address they typed, which may well
+      belong to someone who never asked for it — and burned the shared Resend quota that
+      real wineries depend on.
+
+      **Rate limiting** (`lib/demoRateLimit.ts`): 5 bookings and 5 wine orders per IP per
+      10 minutes, **on the demo tenant only**. Deliberately not applied to real tenants —
+      a winery's booking form is their livelihood, and throttling a shared office IP or a
+      coach party booking together would cost them money. That decision needs its own
+      thought rather than being smuggled in with a demo fix, so **[[KnownBugs]] #19 stays
+      open** for the app at large.
+
+      **Stated limitation:** the limiter is per-instance and in-memory, so an attacker
+      spreading requests across Vercel lambda instances gets a higher effective limit. It
+      is a speed bump, not a wall. That is proportionate, because the two things worth
+      protecting are handled outright rather than by throttling — email is suppressed
+      entirely, and junk rows are wiped by the nightly regeneration. A durable limiter
+      needs its own table and migration; that belongs with #19.
+
+      **Verified on the demo tenant:** bookings 1–5 succeeded, the 6th was refused with a
+      plain-language message, and the server log confirmed
+      `[demo] suppressed outbound email` instead of a send. **Not verified by submitting
+      on a real tenant:** Staging Winery has online payment enabled, so its submit button
+      starts a real checkout, which is not something to trigger for a test. The guard is
+      the same `tenantId !== DEMO_TENANT_ID` early return used by every other demo gate,
+      and that comparison was confirmed to evaluate false on Staging Winery (no demo
+      chrome renders there).
 - [ ] **Onboarding-wizard-as-demo** — letting a visitor genuinely run `/admin/onboarding`.
       Partially addressed by Phase 1's third path card. The bigger open question —
       disposable tenant per visitor vs. one shared sandbox — is still unresolved;

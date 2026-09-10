@@ -34,6 +34,14 @@ tags: [bugs]
 
 ## Bug #19 — No protection against concurrent-traffic bursts; production hits a hard DB connection ceiling around 100–150 simultaneous visitors, causing a whole-site outage that outlasts the burst
 
+> **Partially addressed 2026-09-10 (demo only).** `lib/demoRateLimit.ts` caps public writes
+> (bookings, wine orders) at 5 per IP per 10 minutes **on the demo tenant only**, so
+> `demo.vineworks.ge` can be shared publicly. Real tenants are deliberately untouched: a
+> winery's booking form is their livelihood, and throttling a shared office IP or a coach
+> party booking together would cost them money. The demo limiter is also per-instance and
+> in-memory, which is fine for a sandbox but not for a real tenant. **This bug stays open**
+> for the app at large — a proper fix needs a durable, cross-instance store.
+
 **Severity:** Medium-High — not an active incident with ~1 real tenant today, but a real, unguarded ceiling with no warning system between "fine" and "site down for everyone." Confirmed directly against **live production**, not just estimated from localhost.
 **Found:** 2026-08-12, dedicated stress test (Max's request, `FeatureLog.md` #129), first pass on localhost then repeated directly against `nikalasmarani.vercel.app` with Max's explicit go-ahead (confirmed all 61 existing production orders are fake/seed data, and production's payment module has no Flitt credentials configured) · **Status:** 🔴 Open (measured and documented, not fixed)
 

@@ -5,6 +5,7 @@ import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
+import { checkDemoRateLimit, DEMO_WINE_ORDER_LIMIT } from '@/lib/demoRateLimit'
 
 export type WineSelection = {
   vintageId: string
@@ -50,6 +51,15 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   }
 
   const tenantId = await getTenantId()
+
+  // Guard: abuse on the public demo sandbox. A no-op for real tenants —
+  // see lib/demoRateLimit.ts for why this is deliberately demo-only.
+  const rate = await checkDemoRateLimit(tenantId, 'wine-order', DEMO_WINE_ORDER_LIMIT)
+  if (rate.limited) {
+    return {
+      error: `That's a lot of orders in a short time. This is a shared demo, so it caps how fast orders can be placed — try again in about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s).`,
+    }
+  }
 
   // Re-fetch real prices and the company's real discount from the DB —
   // never trust the client's `price`/`discountPercent` for the amount

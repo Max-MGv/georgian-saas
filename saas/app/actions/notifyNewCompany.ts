@@ -2,6 +2,7 @@
 
 import { getSetting } from './settings'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
+import { getTenantId } from '@/lib/tenant'
 
 export async function notifyNewCompany(data: {
   companyName: string
@@ -14,9 +15,11 @@ export async function notifyNewCompany(data: {
   // the company in their admin panel, not us. Falls back to us only if a
   // tenant hasn't set a contact email.
   const to = (await getSetting('contact_email')) || 'max@vineworks.ge'
+  const tenantId = await getTenantId()
 
   try {
     await sendTenantEmail({
+      tenantId,
       fromLocalPart: 'alerts',
       to,
       subject: `New ${data.module === 'WINE_ORDER' ? 'wine order' : 'booking'} company request — ${data.companyName}`,

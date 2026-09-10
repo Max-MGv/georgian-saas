@@ -170,6 +170,8 @@ async function sendSettlementEmail(
     getAllSettings(tenantId),
   ])
   const common = {
+    // Carried so sendTenantEmail can suppress mail from the demo tenant.
+    tenantId,
     wineryName: tenant?.displayName ?? tenant?.name ?? '',
     wineryAddress: settingValue(settings, 'contact_address'),
     wineryPhone: settingValue(settings, 'contact_phone'),

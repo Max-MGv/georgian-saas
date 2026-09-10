@@ -10,6 +10,7 @@ import { getSetting } from '@/app/actions/settings'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
+import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -62,6 +63,16 @@ export type BookingResult =
 export async function createBooking(data: BookingFormData): Promise<BookingResult> {
   try {
     const tenantId = await getTenantId()
+
+    // Guard: abuse on the public demo sandbox. A no-op for real tenants —
+    // see lib/demoRateLimit.ts for why this is deliberately demo-only.
+    const rate = await checkDemoRateLimit(tenantId, 'booking', DEMO_BOOKING_LIMIT)
+    if (rate.limited) {
+      return {
+        success: false,
+        error: `That's a lot of bookings in a short time. This is a shared demo, so it caps how fast bookings can be made — try again in about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s).`,
+      }
+    }
 
     // Guard: past dates
     const dateStr = new Date(data.date).toISOString().split('T')[0]
@@ -279,6 +290,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
       ])
       sendBookingConfirmation({
+        tenantId,
         name: data.name,
         surname: data.surname,
         email: data.email,

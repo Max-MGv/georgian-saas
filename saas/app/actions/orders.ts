@@ -265,6 +265,7 @@ export async function sendOrderInvoice(
     ])
 
     await sendInvoiceEmail({
+      tenantId,
       name: order.name,
       surname: order.surname,
       email: order.email,

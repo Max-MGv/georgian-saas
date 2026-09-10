@@ -2,6 +2,8 @@ import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
 
 type BookingEmailData = {
+  /** Sending tenant — lets sendTenantEmail suppress mail from the demo. */
+  tenantId?: string | null
   name: string
   surname: string
   email: string
@@ -105,6 +107,7 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
   `
 
   await sendTenantEmail({
+    tenantId: data.tenantId,
     tenantName: data.wineryName,
     fromLocalPart: 'bookings',
     to: data.email,
