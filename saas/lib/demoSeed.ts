@@ -198,6 +198,24 @@ function computeTotal(opts: {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Runs `tasks` with bounded concurrency.
+ *
+ * The seed used to await ~450 creates one at a time. Locally that is merely
+ * slow; on a Vercel function it is a timeout risk, and a reseed that dies
+ * halfway leaves the demo with its cast deleted and no bookings — worse than
+ * the stale data it was replacing. Chunking turns it into ~45 waves.
+ *
+ * The limit stays under the pooled connection ceiling (DATABASE_URL carries
+ * connection_limit=20), so this cannot starve the pool the rest of the request
+ * is using.
+ */
+async function inBatches<T>(tasks: (() => Promise<T>)[], size = 10): Promise<void> {
+  for (let i = 0; i < tasks.length; i += size) {
+    await Promise.all(tasks.slice(i, i + size).map(fn => fn()))
+  }
+}
+
 export type ExistingCompany = { name: string; contactName: string | null; contactPhone: string | null; contactEmail: string | null }
 
 export type SeedReport = {
@@ -341,7 +359,9 @@ export async function seedDemoTenant(
 
   // --- Bookings ---
   const companyWeights = bookingCompanies.map(c => [c, c.share] as const)
-  let created = 0
+  // Payloads are built sequentially so the deterministic PRNG is consumed in a
+  // fixed order; only the writes are parallelised. Same data, fewer round trips.
+  const orderWrites: (() => Promise<unknown>)[] = []
 
   for (const { year: y, month: m, count } of plan) {
     const daysInMonth = new Date(y, m + 1, 0).getDate()
@@ -404,8 +424,7 @@ export async function seedDemoTenant(
       // "arrived at 23:40 on a Saturday" style copy true, not decorative.
       const createdAt = new Date(date.getTime() - rand(3, 42) * 86400000 - rand(0, 23) * 3600000)
 
-      await db.order.create({
-        data: {
+      const orderData = {
           tenantId: tid, status, bookingType, visitType, date,
           timeSlot: pick(TIME_SLOTS), guestCount,
           tastingGuestCount: tastingGuests, lunchGuestCount: lunchGuests, freeGuestCount: freeGuests,
@@ -418,11 +437,13 @@ export async function seedDemoTenant(
           companyId: company ? company.id : individuals.id,
           totalPrice, createdAt,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
-        },
-      })
-      created++
+      }
+      orderWrites.push(() => db.order.create({ data: orderData }))
     }
   }
+
+  await inBatches(orderWrites)
+  const created = orderWrites.length
 
   // --- Wine orders ---
   const vintages = await db.wineVintage.findMany({
@@ -431,6 +452,7 @@ export async function seedDemoTenant(
   let wineCreated = 0
   if (vintages.length > 0) {
     const wineWeights = wineCompanies.map(c => [c, c.share] as const)
+    const wineWrites: (() => Promise<unknown>)[] = []
     for (let i = 0; i < WINE_ORDER_COUNT; i++) {
       const buyer = weighted(wineWeights)
       // Spread over the last 12 months, denser recently.
@@ -455,18 +477,18 @@ export async function seedDemoTenant(
         ? weighted([['delivered', 80], ['cancelled', 10], ['paid', 10]] as const)
         : weighted([['delivered', 20], ['paid', 30], ['confirmed', 25], ['pending', 25]] as const)
 
-      await db.wineOrder.create({
-        data: {
+      const wineData = {
           tenantId: tid, companyId: buyer.id, businessName: buyer.name,
           llcName: buyer.name, llcId: buyer.identificationCode, address: buyer.address,
           workingHours: pick(['10:00–20:00', '11:00–23:00', '09:00–18:00', 'Mon–Sat 10:00–19:00']),
           contactName: buyer.contactName, contactPhone: buyer.contactPhone, contactEmail: buyer.contactEmail,
           discountPercent: buyer.discount, totalAmount, status, createdAt,
           wineItems: { create: items },
-        },
-      })
-      wineCreated++
+      }
+      wineWrites.push(() => db.wineOrder.create({ data: wineData }))
     }
+    await inBatches(wineWrites)
+    wineCreated = wineWrites.length
   }
 
   // --- Report ---
