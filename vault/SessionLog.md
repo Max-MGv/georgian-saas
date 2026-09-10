@@ -33,7 +33,17 @@ Max: *"dont stop until you finish all stages you suggested, all phases of the pl
 
 **⚠️ One action outstanding for Max, and it is not code:** add **`CRON_SECRET`** to the Vercel production environment. Until then the nightly regeneration returns 503 and the demo never resets — everything else works, it just drifts as visitors tinker.
 
-**Next, in priority order:** the **abuse guardrails** carried over in [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] — rate-limiting public writes and suppressing outbound email from the demo tenant — are **required before sharing the demo link widely**, or demo traffic hits the Resend quota and mails strangers. Then the hero screenshot for `vineworks.ge` (task 4.5), which wants Max's eye on the framing.
+**Then, same session, both remaining items were closed too.**
+
+**Abuse guardrails ([[FeatureLog]] #166) — the demo is now safe to share.** Outbound email is suppressed for the demo tenant outright, at the `sendTenantEmail` chokepoint rather than at the five call sites so a future template cannot forget to opt in; `tenantId` is threaded through all five senders to make it work. Bug reports deliberately still send — they go to the super-admin inbox, not to or from a winery. This was the half that mattered: before it, every booking a stranger made emailed whatever address they typed and burned the shared Resend quota real wineries depend on. Rate limiting caps public writes at 5 per IP per 10 minutes, **demo tenant only** — throttling a real winery's booking form (shared office IP, coach party booking together) would cost them money, so [[KnownBugs]] #19 stays open app-wide. Verified: bookings 1–5 succeeded, the 6th refused, log confirmed suppression instead of a send.
+
+**`CRON_SECRET` set up in Vercel with Max.** Saving it was not enough — **Vercel only injects environment variables into new deployments**, so the running build kept returning 503 until an empty commit rebuilt production. The proof it is now loaded: an unauthenticated call went 503 → 401. Recorded as [[MaintenanceNotes]] §14 because it cost a debugging cycle.
+
+**A timeout risk found and removed before it could bite.** The seed awaited ~450 creates one at a time. Fine from a CLI; inside a function it risks a timeout, and **a reseed that dies halfway leaves the demo with its cast deleted and no bookings — worse than the stale data it was replacing.** Writes now run in batches of 10, under the pooled `connection_limit=20`, with payloads still built sequentially so the deterministic PRNG is consumed in a fixed order. Verified identical output before and after (393 bookings, 238,258₾). Production was then re-seeded onto the new relative-month plan (403 → 393).
+
+**What could not be verified, stated plainly:** Vercel actually *invoking* the cron on schedule. The dashboard's "Run" button produced no request at all — checked the runtime logs twice, nothing but our own curl probes — so it appears to be a no-op on the Hobby plan. Everything either side of that link is proven (secret loaded, auth correct, cron registered and enabled, seed runs against prod). First real evidence is the 03:00 UTC run, and **Hobby crons fire within a ±1-hour window**. If the demo looks stale tomorrow, check the runtime logs for `/api/cron/reseed-demo`.
+
+**Deliberately not done:** the hero screenshot/GIF of the live mirror for `vineworks.ge` (task 4.5) — a marketing asset that wants Max's eye on the framing — and analytics on the demo, without which the conversion figures in the design review stay industry benchmarks rather than measurements of this site.
 
 ---
 

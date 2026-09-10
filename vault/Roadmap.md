@@ -277,6 +277,39 @@ Full tracking: `playwright/Progress.md` (chronological build log, phase-by-phase
 
 ---
 
+## v1.11 — Sales Demo Site (`demo.vineworks.ge`) ✅ COMPLETE (2026-09-10)
+
+The self-serve demo that a prospective winery can be pointed at. Full plan and
+per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rationale:
+[[DemoSite/DemoDirections|DemoDirections]]. Features #158–#166.
+
+- [x] Demo tenant cloned from Nikalas Marani, rebranded "VineWorks Estate" (#158)
+- [x] Role-switcher banner — Customer View ↔ Winery Admin View (#158)
+- [x] **Phase 0** — seeded with a winery that actually trades: ~18 months of history plus
+      3 months ahead, 393 bookings, 45 trade wine orders, six tour operators each on their
+      own price ladder, four B2B buyers on their own discounts (#160)
+- [x] **Phase 0** — "Finish setting up your account" banner suppressed for the demo (#160)
+- [x] **Phase 0** — nightly regeneration so visitor tinkering can't degrade it (#161)
+- [x] **Phase 1** — front door interstitial framing what Vineworks is (#162)
+- [x] **Phase 1** — `/admin` dead end closed with one-click entry (#162)
+- [x] **Phase 2** — spotlight tour, seven steps that name money not buttons (#163)
+- [x] **Phase 3** — feature rail surfacing 16 otherwise-invisible capabilities (#164)
+- [x] **Phase 4** — live mirror at `/live`: guest site and back office side by side (#165)
+- [x] Abuse guardrails — outbound email suppressed, public writes rate-limited (#166)
+
+**Still open (deliberately):**
+- [ ] Hero screenshot / GIF of the live mirror for the `vineworks.ge` marketing site
+- [ ] Analytics — the demo is not instrumented, so the conversion figures quoted in the
+      design review remain industry benchmarks rather than measurements of this site
+- [ ] Disposable tenant per visitor vs. one shared sandbox — still unresolved; the shared
+      sandbox is what shipped
+
+**Reusable elsewhere:** `CAPABILITY_GROUPS` in `saas/components/DemoFeatureRail.tsx` is the
+feature list for the `vineworks.ge` marketing site when that gets built, each row already
+deep-linking into live proof.
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

@@ -204,10 +204,54 @@ The dev database normally holds exactly one tenant (Staging Winery). So the ever
 **What the dependency is:**
 `saas/lib/emails/sendEmail.ts` (`sendTenantEmail()`) is the single place that builds the From header (tenant name + the shared `notify.vineworks.ge` sending domain — see [[Plan-EmailInfrastructure]] for why a shared domain, not a per-tenant one) and Reply-To (the tenant's own `contact_email` setting). Every existing email — `bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts`, `notifyNewCompany.ts`, `bugReports.ts` — was migrated onto it 2026-09-10, replacing 5 separate hand-rolled `new Resend(...).emails.send(...)` calls that had drifted (one still had the old sandbox `onboarding@resend.dev` hack live in production).
 
-**What this means in practice:** a new email template should call `sendTenantEmail({ tenantName, fromLocalPart, to, replyTo, subject, html })`, not instantiate its own `Resend` client. If the sending domain (`notify.vineworks.ge`) is ever swapped for a different one, that's a one-line change inside `sendEmail.ts` — it only stays a one-line change as long as nothing else calls Resend directly.
+**What this means in practice:** a new email template should call `sendTenantEmail({ tenantId, tenantName, fromLocalPart, to, replyTo, subject, html })`, not instantiate its own `Resend` client.
+
+**⚠️ Pass `tenantId` (added 2026-09-10).** `sendTenantEmail` suppresses all outbound mail for the demo tenant — `demo.vineworks.ge` is a public sandbox, and without this every booking a stranger makes emails whatever address they typed and burns the shared Resend quota. The suppression keys on `tenantId`, so **an email that omits it will send for real from the demo**. It is optional in the type only because platform mail deliberately omits it: `bugReports.ts` goes to the super-admin inbox rather than to or from any winery, and those should still arrive from the demo. Omitting `tenantId` is the signal that a message is platform mail, not tenant mail — if you are writing tenant mail, pass it. If the sending domain (`notify.vineworks.ge`) is ever swapped for a different one, that's a one-line change inside `sendEmail.ts` — it only stays a one-line change as long as nothing else calls Resend directly.
 
 **Files involved:**
 - `saas/lib/emails/sendEmail.ts` — the shared helper
 - `saas/lib/emails/bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts` — customer-facing, all take `wineryEmail` (the tenant's `contact_email`) as Reply-To
 - `saas/app/actions/notifyNewCompany.ts`, `bugReports.ts` — internal notifications
 - Full build/verification log: [[Plan-EmailInfrastructure]]
+
+---
+
+## 12. Demo tour / feature rail rings are anchored to `data-tour` attributes scattered across six screens
+
+**What the dependency is:**
+`saas/components/DemoTour.tsx` (each step's `target`) and `saas/components/DemoFeatureRail.tsx` (each capability's `target`) locate what to highlight with `document.querySelector('[data-tour="…"]')`. Those attributes live on unrelated pages:
+
+| `data-tour` value | Where it lives |
+|---|---|
+| `booking-form` | `saas/app/(site)/page.tsx` — the `#book` section |
+| `wine-catalogue` | `saas/app/(site)/wines/page.tsx` — wrapper around `WineCatalogueClient` |
+| `orders-table`, `orders-filters` | `saas/app/admin/(panel)/orders/page.tsx` |
+| `stats-cards` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` |
+| `wine-orders-list` | `saas/app/admin/(panel)/wine-orders/page.tsx` |
+| `content-editor` | `saas/app/admin/(panel)/content/page.tsx` |
+
+**Why it bites:** nothing in the type system connects the two ends. Rename or drop an attribute while refactoring one of those pages and the tour step still runs — it just silently loses its ring and dims the whole screen instead. Deliberately a soft failure (a tour that vanishes because a selector drifted would be worse), which is exactly why it can go unnoticed.
+
+**If you touch one of those pages:** grep `data-tour` before and after, and walk the tour on the demo tenant.
+
+---
+
+## 13. Every demo-only component must hide itself inside a `/live` pane
+
+**What the dependency is:**
+`saas/app/live/` (the live mirror) embeds the real guest site and the real admin panel as same-origin iframes. Each demo component — `DemoModeBanner`, `DemoFrontDoor`, `DemoTour`, `DemoFeatureRail` — checks `isEmbeddedPane()` (`saas/lib/demoEmbed.ts`) and renders nothing when framed.
+
+**Why it bites:** a new demo component that forgets the check will draw itself *inside both panes* of the mirror, which is the one screen where that chrome is most obviously wrong — a banner within a banner, two tour pills, the rail over itself.
+
+**Also note:** `isEmbeddedPane()` must be resolved in an effect after mount, never during render. `window` does not exist on the server, and branching on it during the first client render is a hydration mismatch. All four existing components follow that shape — copy it.
+
+---
+
+## 14. `saas/vercel.json` `crons[].path` must match a real route, and the route needs `CRON_SECRET`
+
+**What the dependency is:**
+`saas/vercel.json` schedules `/api/cron/reseed-demo`; the handler is `saas/app/api/cron/reseed-demo/route.ts`. The path is a plain string with nothing validating it against the filesystem — a moved or renamed route leaves the cron firing into a 404 every night, silently.
+
+**The secret:** the route refuses to run (503) when `CRON_SECRET` is unset rather than failing open, because its whole job is deleting rows. **Vercel only injects environment variables into *new* deployments**, so adding or rotating `CRON_SECRET` requires a redeploy before it takes effect — an existing build keeps returning 503 until then. That surprise cost a debugging cycle on 2026-09-10.
+
+**Also:** cron jobs on the Hobby plan fire within a ±1-hour window, not at the exact minute, and the dashboard's "Run" button appears to be a no-op there — it produced no request at all when tested. Verify from the runtime logs, not from the button.

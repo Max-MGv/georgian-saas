@@ -8,6 +8,49 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ 2026-09-10 (sessions 5–6) — Demo redesign **built and live** — please click through it
+
+All five phases of `vault/DemoSite/Plan-DemoRedesign.md` are shipped to
+**https://demo.vineworks.ge**. Nothing here is blocking; this is a "walk through it and
+tell me what feels wrong" list.
+
+**Worth seeing first — the live mirror:** https://demo.vineworks.ge/live
+Guest site and back office side by side. Make a booking on the left, watch it appear on the
+right. This is the screenshot to put on `vineworks.ge` when you build it.
+
+**What to click through:**
+1. **Open https://demo.vineworks.ge in a private window** (the front door only shows once
+   per browser, so a normal window may skip it). You should get a screen explaining what
+   Vineworks is, with four ways in and a "skip" link.
+2. **Take the tour** — the "🍷 Show me what this does" pill, bottom left. Seven steps.
+   **Read the wording** and tell me if any of it oversells or sounds wrong for a Georgian
+   winery owner. That copy is a sales argument, and it's the thing I'd most like your eye on.
+3. **The feature rail** — the "✦ What can it do?" tab on the right edge. 16 capabilities.
+   **Is anything missing, or described in a way you wouldn't say out loud to a customer?**
+4. **The admin panel** — 393 bookings, ~31,000₾ of future revenue, both charts drawing.
+   Check the numbers look plausible for a real Kakheti winery, not obviously invented.
+5. **Open https://demo.vineworks.ge/admin directly** — you should get a one-click "Enter the
+   demo" card instead of the old dead-end login form.
+
+**Things I could NOT verify, that only you can:**
+- **The nightly reset.** It is scheduled for 03:00 UTC (Hobby plan fires within ±1 hour).
+  Vercel's own "Run" button did nothing when I tried it, so the first proof is tonight's run.
+  **If the demo looks unchanged/stale tomorrow**, check the Vercel runtime logs for
+  `/api/cron/reseed-demo` and tell me what it says.
+- **Whether the demo actually persuades anyone.** There's no analytics on it, so nothing
+  measures whether any of this works. Worth deciding if you want that.
+
+**Two things deliberately left undone:**
+- The hero screenshot/GIF of the live mirror for `vineworks.ge` — wants your eye on framing.
+- Wine bottle photos are still Nikalas Marani's real product shots. You can swap them
+  yourself in the Wines admin image picker, no code needed.
+
+**Safe to share the link now.** The demo sends **no** outbound email at all (so demo traffic
+can't mail strangers or burn your Resend quota), and public writes are capped at 5 per
+10 minutes per visitor. Both are demo-only — your real wineries are untouched.
+
+---
+
 ## 📐 2026-09-10 (session 4) — Demo redesign planned, nothing built yet — your call on what's next
 
 Everything about the demo site now lives in one folder: **`vault/DemoSite/`**. Start at `DemoSite-README.md`.
