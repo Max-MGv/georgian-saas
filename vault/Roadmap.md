@@ -87,7 +87,7 @@ Complete this before writing a single line of product code.
 
 ## v1.1 — Quality of Life
 
-- [x] Email confirmation to customer on booking (Resend) — sandbox mode only; upgrade by verifying nikalasmarani.ge in Resend
+- [x] Email confirmation to customer on booking (Resend) — real delivery since 2026-09-10, see #157 below
 - [x] Time slot picker blocks past hours on today's date
 - [x] Guest count input bug fixed — backspace/typing works correctly, clamps to min 4
 - [x] Admin settings panel (`/admin/settings`) — extensible key-value settings store
@@ -109,7 +109,7 @@ Complete this before writing a single line of product code.
 - [x] **Configurable columns** — show/hide any column in orders table; dropdown stays open; sticky actions column; icon buttons
 - [x] **Rate UI improvements** — rate inputs in Guest Breakdown; both rates always visible; collapse after save
 - [x] **Fix date filters on admin orders** (KnownBugs #1) — filter by date range on orders page doesn't work
-- [ ] Verify nikalasmarani.ge in Resend — unlock email delivery to any customer
+- [x] **Multi-tenant email infrastructure (#157, built 2026-09-10)** — verified sending domain in Resend (`notify.vineworks.ge`, a shared subdomain rather than per-tenant `nikalasmarani.ge` — Resend's free tier only allows 1 verified domain, a per-tenant one would need a paid plan past the first client), shared `sendTenantEmail()` helper, all customer + internal emails now deliver for real. See [[Plan-EmailInfrastructure]].
 - [ ] Gallery page — wire up slider photos and gallery photos on public site (images already in `public/images/`)
 - [ ] Georgian / English language toggle
 - [x] Calendar view for bookings — month grid, booking count badges, day hover preview, click-to-filter

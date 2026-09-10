@@ -8,7 +8,35 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-09 (latest) — Built the bug/feature report widget (#155), end to end, live-tested on staging
+## 2026-09-10 — Built multi-tenant email infrastructure (#157), verified end-to-end on staging
+
+Max wanted to revisit email sending options (had been on Resend, unrevisited since) — brainstormed the real options: platform-branded sending vs. "on behalf of" tenants, and within that, a real per-winery domain (needs the winery's own DNS cooperation, high support risk) vs. a branded shared subdomain (zero cooperation needed, small cosmetic "via" cost). Landed on the shared-subdomain approach, `notify.vineworks.ge`, kept as a subdomain rather than the `vineworks.ge` apex specifically so it gets independent SPF/DKIM and never touches the existing Zoho SPF record on the apex. Confirmed Resend's actual pricing/domain limits with Max before committing (free tier = 1 verified domain; a literal per-tenant subdomain would need Resend Pro, $20/mo, past the first tenant) — this is what settled the shared-domain design, not just cosmetics.
+
+**Real bug found while investigating, not previously known:** all 3 customer-facing email templates were still hardcoded to Resend's sandbox (`onboarding@resend.dev`), which can only deliver to the account owner — meaning every booking confirmation, wine order receipt, and invoice was landing in Max's own inbox instead of the actual customer's, on the live Nikalas Marani tenant. This had already been flagged as a blocker in an earlier session (feature #153, #145) but not yet fixed.
+
+Built and shipped in one session, tracked chunk-by-chunk in `[[Plan-EmailInfrastructure]]` for resumability:
+1. Verified `notify.vineworks.ge` in Resend (region: Ireland/eu-west-1, matching the Supabase/Vercel `fra1` pin) — added DKIM/MX/SPF records to Vercel's DNS panel by hand (skipped Resend's "Auto configure" since it would have granted Resend OAuth access to the Vercel account without asking first). Verified in under 2 minutes.
+2. New `saas/lib/emails/sendEmail.ts` (`sendTenantEmail()`) — one shared helper building the per-tenant From header and Reply-To, replacing duplicated raw Resend calls across 5 files.
+3. Wired all 3 customer templates (`bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts`) and both internal notification emails (`notifyNewCompany.ts`, `bugReports.ts`) to it. Decided with Max: `bugReports.ts` moves off Max's personal Gmail to `max@vineworks.ge`; `notifyNewCompany.ts` now emails each tenant's own `contact_email` instead of always Max, matching the code's original (previously dead) intent.
+4. Pushed to `staging`, waited for the Vercel deploy (polled via a `Monitor` background task rather than blocking), then tested live: submitting a real booking hit a real Flitt payment redirect (Staging Winery has online payment on) — backed out immediately without entering card details, never complete a real charge for a test. Used the resulting order to send a real invoice via the admin panel's "Send Invoice by Email" instead (a safe, non-payment action) — confirmed **Delivered** in Resend's dashboard with the correct per-tenant From name and Reply-To.
+
+Not yet done: merge `staging` → `master` (Max hasn't confirmed the staging check yet), and the optional DMARC record for `notify.vineworks.ge` (skipped — Resend's shown record name was ambiguous between the subdomain and the `vineworks.ge` apex, didn't want to guess on a record that could affect the existing Zoho mail).
+
+---
+
+## 2026-09-09 (part 2) — Set up vineworks.ge domain, hosting, and email end-to-end
+
+Max registered `vineworks.ge` (primary) and `wineworks.ge` (typo-protection redirect) on Namespace.ge, 50 GEL/year each — checked afterward whether Namespace's price was competitive (it's at the `.ge` registry's own wholesale floor; FindDomain.ge had a cheaper 40 GEL/year promo, noted for next time, not acted on since already bought).
+
+Walked Max — new to domains/DNS — through the full setup conversationally, then finished it directly by connecting Claude in Chrome and driving Namespace, Vercel, and Zoho's dashboards myself once Max asked to hand it off: added both domains to the `georgian-saas` Vercel project (`www.vineworks.ge` as Production, `vineworks.ge`/`wineworks.ge`/`www.wineworks.ge` all 308-redirecting there), switched both domains' nameservers from Namespace's own to Vercel's (`ns1/ns2.vercel-dns.com`) so one dashboard manages all DNS, verified the nameserver change directly against the `.ge` registry (`ns1.nic.ge`) rather than trusting a cached resolver — took about 6 minutes to actually land despite Namespace's UI saying "success" immediately. Ran the propagation check as a background poll (`Bash run_in_background`, checked every 3 min) instead of blocking the conversation.
+
+Set up Zoho Mail for `max@vineworks.ge` — ended up on the free plan (the paid-only screen mid-signup was a display quirk, no payment made), added the domain-verification TXT record plus MX/SPF/DKIM records in Vercel's DNS panel, and got Zoho's "all records verified successfully" confirmation. Flagged two things for Max, not fixed this session: the Vercel team is still on the Hobby plan (should upgrade to Pro before real paying customers), and Zoho's free plan has no IMAP/POP — mail can only be checked via Zoho's own webmail, not Gmail, until/unless upgraded to Mail Lite ($1.25/mo).
+
+Documented the whole setup in a new `vault/Vineworks-Hosting/Domain-and-Email-Setup.md`, added account pointers (no passwords) to `credentials.txt`, linked from `Home.md`.
+
+---
+
+## 2026-09-09 (part 1) — Built the bug/feature report widget (#155), end to end, live-tested on staging
 
 Max asked for a bug/feedback reporting system: a floating icon that opens a panel to file a bug/feature with a comment + screenshot, plus the user's recent click flow attached automatically. Researched real products first (Sentry User Feedback, Marker.io/Usersnap/Userback, BugPin) and proposed a self-built version modeled on Sentry's breadcrumb approach rather than a paid third-party tool, since the stack already had everything needed (Supabase Storage, Prisma, Resend). Max clarified scope before building: **super-admin only for triage** ("the actual work here is for superadmin (me), not the business using my service"), admins get read-only status visibility; icon shows everywhere (public site + admin + super-admin); email notification on submit; one form with a Bug/Feature toggle, not two flows.
 

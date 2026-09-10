@@ -42,8 +42,13 @@ Started 2026-09-10. Tracks progress chunk by chunk so work can resume across ses
   - `notifyNewCompany.ts` (new company registration request) — now goes to **each tenant's own `contact_email` setting**, falling back to `max@vineworks.ge` only if a tenant has none set. This matches the code's original (previously dead) intent — the winery creates the company in their own admin panel, so they should be the one notified, not Max, for every tenant.
   Both return their original `{error}`/`{success}` shape via try/catch around `sendTenantEmail()` (it throws), since existing callers (`BookingForm.tsx`, `WineCatalogueClient.tsx`) check that return value. Type-check clean.
 
-- [ ] **Chunk 4 — Test on staging**
-  Real test bookings against Staging Winery tenant (dev DB). Confirm delivery lands in inbox (not spam), Reply-To routes to the tenant's contact address, From display name renders correctly per tenant.
+- [x] **Chunk 4 — Test on staging (done 2026-09-10, verified end-to-end)**
+  Pushed the commit to `staging`, confirmed the Vercel deployment went READY (`georgian-saas-b6qizvjq3-...vercel.app`), then tested two ways:
+  - Submitted a real booking on the live staging site with a min-4-guest Wine Tasting for 20 Sept 2026. **Caught mid-test:** Staging Winery has online payment enabled, so "Book & Pay" redirected to a real Flitt payment page — backed out immediately without entering any card details (never complete a real charge for a test). The booking itself was already saved server-side as `Awaiting Payment` before the redirect, which was enough to use for the next step.
+  - Used that order to send a real invoice via the admin panel (`Send Invoice by Email` — a safe, non-payment action). Resend confirmed **Delivered**. Opened the email in Resend's dashboard and confirmed:
+    - **From:** `"Nikalas Marani (Staging)" <invoices@notify.vineworks.ge>` — tenant name in the display, correct local-part
+    - **Reply-To:** `nikalasmarani@gmail.com` — Staging Winery's own `contact_email` setting, not Max's personal address
+  This proves the shared helper, the verified domain, and the per-tenant Reply-To all work correctly in a real deploy, not just locally.
 
 - [ ] **Chunk 5 — Vault updates**
   `FeatureLog.md`, `SessionLog.md`, and a new `MaintenanceNotes.md` entry: "new customer-facing email → use the shared sender helper, don't call Resend directly."
