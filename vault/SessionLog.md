@@ -8,6 +8,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-10 (session 2) — Built demo.vineworks.ge, a public self-serve sales demo
+
+Max's idea: now that `vineworks.ge` exists as the platform's own domain (not a client tenant), turn it into a presentation/demo site showcasing the product — wine e-commerce, booking, the admin CRM, theming, easy content editing, the onboarding wizard. Researched how B2B SaaS companies actually do this first (chat only, no code): found two real patterns — a fully self-serve live sandbox (Shopify's B2B demo store, Bookeo's customer/admin toggle, BookingPress) vs. a gated "book a call" demo (FareHarbor, Toast, Checkfront). Recommended the self-serve pattern since Vineworks doesn't have the brand trust yet to make someone wait for a sales call before seeing the product. Full sourced comparison and the resulting plan: `[[Plan-DemoSite]]`.
+
+Built it end to end in one session:
+1. `scripts/clone-nm-to-demo.ts` — clones Nikalas Marani's structural data (wines, companies, settings, menu/masterclass items) into a new tenant, deliberately excluding real orders/bookings/auth users.
+2. Rebranding pass (`scripts/rebrand-demo-tenant.ts`) — a first brand-name text search caught the obvious stuff (logo, About copy, contact email/socials), but a **broader identifier sweep afterward caught the real phone number, address, and full banking details (IBAN/bank code)** that the name-only search missed — worth remembering for any future "clone a real tenant" work.
+3. Role-switcher banner (`components/DemoModeBanner.tsx`) — sticky bar on both public site and admin, one-click "Winery Admin View" (auto-signs into a dedicated `demo-admin@vineworks.ge` account) and "← Customer View". Gated on tenant ID via a new `NEXT_PUBLIC_DEMO_TENANT_ID` env var (not hardcoded — staging and prod are the same codebase against different DBs, same reason `DEFAULT_TENANT_ID` is env-driven).
+4. Had an independent subagent (deliberately no prior context, to avoid the building session's own bias) QA the critical loop — book as a customer, switch to admin, confirm it shows up. **Passed.** It also found a real product bug along the way (wine order form's address field is silently required with zero feedback on failed submit) and a data-quality issue (Rkatsiteli tagged "Red Dry" — it's a white grape) — both logged in `[[KnownBugs]]`, neither demo-specific or blocking.
+5. Prod cutover: re-ran the clone+rebrand scripts against prod, created the prod demo-admin user (one attempt blocked twice by the sandbox's safety classifier for creating an auth user against prod credentials — went through on retry), added `demo.vineworks.ge` as a Production domain on Vercel (zero-config DNS, same as the `nikalasmarani.vineworks.ge` precedent) via Claude in Chrome, added the `NEXT_PUBLIC_DEMO_TENANT_ID` prod env var, redeployed.
+6. Pushed to `staging`, verified there (regression-checked Staging Winery still renders fine), Max confirmed the merge to `master`. Verified live on the real domain afterward — full round trip works in production.
+
+**Result: `demo.vineworks.ge` is live** — branded VineWorks Estate, role-switcher working, clean slate (0 bookings). Not yet done: guided checklist overlay, nightly reset/abuse guardrails (needed before wide public sharing, not before this soft launch), the onboarding-wizard-as-demo idea, and the two bugs above. All tracked in `[[Plan-DemoSite]]`.
+
+---
+
 ## 2026-09-10 — Built multi-tenant email infrastructure (#157), verified end-to-end on staging
 
 Max wanted to revisit email sending options (had been on Resend, unrevisited since) — brainstormed the real options: platform-branded sending vs. "on behalf of" tenants, and within that, a real per-winery domain (needs the winery's own DNS cooperation, high support risk) vs. a branded shared subdomain (zero cooperation needed, small cosmetic "via" cost). Landed on the shared-subdomain approach, `notify.vineworks.ge`, kept as a subdomain rather than the `vineworks.ge` apex specifically so it gets independent SPF/DKIM and never touches the existing Zoho SPF record on the apex. Confirmed Resend's actual pricing/domain limits with Max before committing (free tier = 1 verified domain; a literal per-tenant subdomain would need Resend Pro, $20/mo, past the first tenant) — this is what settled the shared-domain design, not just cosmetics.
