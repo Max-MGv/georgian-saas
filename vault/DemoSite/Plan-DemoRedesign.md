@@ -63,9 +63,34 @@ important one, and are **required before sharing the demo link widely**.
 ## Phase 0 — Seed the demo with a winery that's actually trading
 
 **Status:** ✅ Done and live
-**Resume point:** Complete. 0.1–0.6 all shipped and verified on production. The one thing
-outstanding is not code: **`CRON_SECRET` must be added to the Vercel production
-environment** or the nightly regeneration returns 503 and never resets the demo.
+**Resume point:** Complete. `CRON_SECRET` was added by Max on 2026-09-10 and production
+redeployed to pick it up (Vercel only injects env vars into *new* deployments — the running
+build had to be rebuilt, which is what commit `4cfda21` is for).
+
+**Verification state of the nightly job, stated precisely:**
+- ✅ `CRON_SECRET` set, Secret type, Production scope.
+- ✅ The route's auth works — an unauthenticated call went from `503` (secret missing) to
+  `401` (secret present, token wrong) after the redeploy. That transition is the proof the
+  variable is actually loaded.
+- ✅ The cron is registered and Enabled in Vercel: `/api/cron/reseed-demo`, `0 3 * * *`.
+- ✅ The seed logic itself runs against prod — verified by running the identical
+  `seedDemoTenant` through the CLI.
+- ❓ **Not verified: Vercel actually invoking it on schedule.** The dashboard's "Run"
+  button produced no request at all (checked the runtime logs twice — nothing but our own
+  curls), so it appears to be a no-op on the Hobby plan. The first real evidence will be
+  the 03:00 UTC run. **Note Hobby crons have a ±1-hour window**, so it fires *some time*
+  around 03:00, not on the dot. If it has not run by ~05:00 UTC, check the runtime logs
+  for `/api/cron/reseed-demo`.
+
+**Timeout risk removed before it could bite.** The seed awaited ~450 creates one at a
+time — fine from a CLI, a timeout risk inside a function, and a reseed that dies halfway
+leaves the demo with its cast deleted and *no* bookings, which is worse than the stale data
+it was replacing. Writes now run in batches of 10 (under the pooled `connection_limit=20`),
+with payloads still built sequentially so the deterministic PRNG is consumed in a fixed
+order. Verified byte-identical output before and after: 393 bookings, 238,258 GEL.
+
+Production was re-seeded on the new relative-month plan (403 → 393 bookings; the old figure
+came from the hardcoded absolute-month table).
 **Why first:** every other phase still dead-ends on `No orders found` without this. It is
 the highest-value, lowest-risk work in the whole plan.
 
