@@ -96,7 +96,16 @@ Captured live on 2026-09-10 from production:
       on `tenantId !== DEMO_TENANT_ID`. (Alternative: actually complete the onboarding
       steps for the demo tenant so the banner retires naturally — decide which, note the
       choice here.)
-- [ ] **0.5 — Ship.** `staging` → verify → Max's go-ahead → `master`. Then run the seed
+- [ ] **0.5 — Ship.** 🚧 Pushed to `staging` 2026-09-10 as commit `95ffe91`; awaiting
+      Max's go-ahead to merge to `master`, then the prod seed run.
+      **Know what staging can and cannot prove here:** the staging preview URL resolves
+      tenants through its own `DEFAULT_TENANT_ID`, which is Staging Winery — so the
+      preview **cannot display the demo tenant at all**. What staging verifies is that
+      the build compiles and that a real tenant is unaffected (its banner still shows).
+      The demo side was verified locally against the dev DB, which is the same database
+      the staging preview reads. `demo.vineworks.ge` only changes after the `master`
+      merge **and** the separate prod seed run.
+      Original task text: `staging` → verify → Max's go-ahead → `master`. Then run the seed
       script against **prod** as its own deliberate, separate step.
 - [ ] **0.6 — Schedule regeneration.** Wire the same script to run on a schedule so
       visitor tinkering doesn't degrade it. **This is the same machinery as the "nightly
