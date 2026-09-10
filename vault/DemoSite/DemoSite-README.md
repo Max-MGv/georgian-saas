@@ -38,12 +38,12 @@ directly; [[DemoDirections]] is the response.
 
 **Agreed plan:** all four directions approved, seeding first.
 
-**Progress, 2026-09-10 (session 5):** Phase 0 tasks **0.1–0.4 are done and verified on
-dev** — `scripts/seed-demo-data.ts` fills the demo tenant with 403 bookings, 45 wine
-orders and a named cast of tour operators and B2B buyers, and both setup banners are
-suppressed for the demo tenant ([[FeatureLog]] #160). **The prod demo tenant is still
-empty and still shows the banner** — `demo.vineworks.ge` is unchanged until task 0.5
-ships. **Resume at Phase 0, task 0.5.**
+**Progress, 2026-09-10 (session 5):** **Phase 0 is done and live.** `demo.vineworks.ge`
+now shows a winery that actually trades — 403 bookings, 30,998₾ of future revenue, both
+statistics charts drawing a real seasonal curve, a named cast of six tour operators and
+four B2B wine buyers, and no "Finish setting up your account" banner ([[FeatureLog]] #160).
+Only task **0.6 (scheduled regeneration)** is outstanding, and it blocks nothing.
+**Resume at Phase 0 task 0.6, or start Phase 1 — the front door.**
 
 ---
 

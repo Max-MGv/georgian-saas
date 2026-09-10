@@ -9,11 +9,19 @@
  * /admin/statistics said 0 GEL — the exact screens a prospect is sent to in
  * order to be impressed.
  *
- * Run:  npx tsx scripts/seed-demo-data.ts
- *       npx tsx scripts/seed-demo-data.ts --dry-run    (report, write nothing)
- * Env:  DATABASE_URL — whichever database the demo tenant lives in. Defaults
- *       to saas/.env, i.e. dev. Point it at prod deliberately, never by
- *       accident; the script prints the host it connected to before writing.
+ * Run (dev — the default, reads DATABASE_URL from saas/.env):
+ *       npx tsx scripts/seed-demo-data.ts
+ *       npx tsx scripts/seed-demo-data.ts --dry-run     report, write nothing
+ *
+ * Run (production):
+ *       npx tsx scripts/seed-demo-data.ts --prod              previews only
+ *       npx tsx scripts/seed-demo-data.ts --prod --confirm    actually writes
+ *
+ *       --prod reads DIRECT_URL out of saas/.env.prod.backup itself, so no
+ *       database password has to be pasted into a shell or a chat window.
+ *       DIRECT_URL rather than the pooled URL because this makes several
+ *       hundred sequential writes. --prod WITHOUT --confirm always dry-runs:
+ *       a mistyped production command previews instead of wiping.
  *
  * SAFETY: looks the tenant up by slug ('vineworks-demo') and refuses to run
  * against anything else, so it cannot be aimed at a real winery. Within that
@@ -25,12 +33,42 @@
  * Deterministic: a fixed-seed PRNG, so two runs produce identical data.
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { PrismaClient, OrderStatus, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
 
 const DEMO_SLUG = 'vineworks-demo'
-const DRY_RUN = process.argv.includes('--dry-run')
+const PROD = process.argv.includes('--prod')
+const CONFIRMED = process.argv.includes('--confirm')
+// --prod without --confirm is always a preview. Getting a production wipe
+// should take a deliberate second flag, not a correctly-typed first one.
+const DRY_RUN = process.argv.includes('--dry-run') || (PROD && !CONFIRMED)
 
-const db = new PrismaClient()
+/**
+ * Production connection string, read from saas/.env.prod.backup rather than
+ * taken as an argument — a password passed on a command line ends up in shell
+ * history, and one pasted into a chat window ends up somewhere worse.
+ * DIRECT_URL, not DATABASE_URL: the pooled/pgbouncer endpoint is the wrong
+ * shape for the few hundred sequential writes this does.
+ */
+function prodUrl(): string {
+  const path = join(__dirname, '..', '.env.prod.backup')
+  let raw: string
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch {
+    throw new Error(`--prod needs ${path}, which is not there. It is gitignored, so a fresh clone will not have it.`)
+  }
+  const line = raw.split(/\r?\n/).find(l => l.trim().startsWith('DIRECT_URL='))
+  if (!line) throw new Error(`No DIRECT_URL line in ${path}`)
+  const url = line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '')
+  if (!url.startsWith('postgres')) throw new Error('DIRECT_URL in .env.prod.backup does not look like a Postgres URL')
+  return url
+}
+
+const db = PROD
+  ? new PrismaClient({ datasources: { db: { url: prodUrl() } } })
+  : new PrismaClient()
 
 // ---------------------------------------------------------------------------
 // Deterministic PRNG (mulberry32). Math.random would make every run produce a
@@ -202,9 +240,17 @@ function computeTotal(opts: {
 
 // ---------------------------------------------------------------------------
 async function main() {
-  const host = (process.env.DATABASE_URL ?? '').replace(/:\/\/[^@]*@/, '://***@')
+  const rawUrl = PROD ? prodUrl() : (process.env.DATABASE_URL ?? '')
+  const host = rawUrl.replace(/:\/\/[^@]*@/, '://***@')
+  console.log(PROD ? '*** TARGET: PRODUCTION ***' : 'TARGET: dev (DATABASE_URL from .env)')
   console.log(`DB: ${host || '(from .env)'}`)
-  console.log(DRY_RUN ? 'MODE: dry run — nothing will be written\n' : 'MODE: writing\n')
+  if (DRY_RUN) {
+    console.log(PROD
+      ? 'MODE: preview — nothing will be written. Re-run with --confirm to write.\n'
+      : 'MODE: dry run — nothing will be written\n')
+  } else {
+    console.log('MODE: WRITING\n')
+  }
 
   const tenant = await db.tenant.findFirst({ where: { slug: DEMO_SLUG } })
   if (!tenant) throw new Error(`No tenant with slug '${DEMO_SLUG}' in this database — wrong DATABASE_URL?`)
@@ -220,10 +266,31 @@ async function main() {
   console.log(`Existing: ${before.orders} orders, ${before.wineOrders} wine orders, ${before.companies} companies`)
 
   if (DRY_RUN) {
+    // Print the cast that is about to be destroyed. rebrand-demo-tenant.ts
+    // scrubbed the tenant row, settings and site content when the demo was
+    // built, but never touched Companies — so a demo tenant cloned from a real
+    // winery can still be publishing that winery's B2B customers' names,
+    // contact people, phone numbers and emails. Seeding overwrites the
+    // evidence, so it gets shown here first, while it can still be checked.
+    const cast = await db.company.findMany({
+      where: { tenantId: tid },
+      select: { name: true, contactName: true, contactPhone: true, contactEmail: true },
+      orderBy: { name: 'asc' },
+    })
+    if (cast.length) {
+      console.log('\nCompanies currently on this tenant (all of these will be deleted):')
+      for (const c of cast) {
+        const contact = [c.contactName, c.contactPhone, c.contactEmail].filter(Boolean).join(' · ')
+        console.log(`  - ${c.name}${contact ? `  [${contact}]` : ''}`)
+      }
+      console.log('  ^ check these for real customer contact details before continuing.')
+    }
+
     const planned = Object.values(MONTHLY_BOOKINGS).reduce((a, b) => a + b, 0)
     console.log(`\nWould delete all of the above and create ~${planned} bookings, 45 wine orders,`)
     console.log(`${BOOKING_COMPANIES.length + 1} booking companies, ${WINE_COMPANIES.length} wine buyers,`)
     console.log(`${MENU_ITEMS.length} menu items, ${MASTERCLASS_ITEMS.length} masterclass items.`)
+    if (PROD) console.log('\nNothing was written. Re-run with --prod --confirm to apply.')
     return
   }
 
