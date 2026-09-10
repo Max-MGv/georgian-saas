@@ -8,6 +8,29 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-10 (session 5) — Phase 0 of the demo redesign: seeded a winery that actually trades
+
+Picked up [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] at Phase 0 — nothing in it had been started. Tasks **0.1–0.4 are done and verified on dev**; 0.5 (ship) and 0.6 (scheduled regeneration) are still open, and **the prod demo tenant has not been touched**.
+
+**Three things found by reading the code rather than assuming, which changed the design:**
+1. The Statistics bar chart only reads the **last 6 months** of `Order.date`, and its top cards (upcoming, future revenue, next order) read **only future-dated** orders. History alone would never have cleared the `0₾` — the seed needed bookings ahead of today, and the August peak had to land inside Apr–Sep to be visible at all.
+2. `orders/page.tsx` loads **every** order with no pagination, which is why the range is capped at ~400 rows rather than left open-ended.
+3. The demo tenant's supporting cast was leftover test junk — `Test Company # 1`, `Test Company # 2`, `Cookie Company`, `x`, `Wine Test Company`, and menu items like `hifel iwagi fegiufe`. Eighteen months of trading history attributed to "Cookie Company" is still not a demo that sells. Max approved widening the script to replace the whole cast.
+
+**Built:** `saas/scripts/seed-demo-data.ts` — deterministic (fixed-seed PRNG, so re-runs are identical and screenshots stay valid), slug-guarded, `--dry-run` flag, prints the masked DB host before writing. Destructive by design inside the demo tenant: it wipes and rebuilds, which is what makes it idempotent and is exactly what task 0.6's scheduled regeneration needs — one behaviour, not two. Pricing math deliberately mirrors `lib/pricing.ts` `recalcOrderTotal` so seeded totals reconcile against each company's tier ladder.
+
+**Result on dev:** 403 bookings (was 0) · 57 upcoming · **30,998₾ future revenue** (was 0₾) · both charts drawing · ~243,800₾ lifetime over 21 months · status spread Completed 283 / Cancelled 41 / Paid 33 / Confirmed 26 / New 13 / Invoice Sent 7. Monthly revenue Apr 7,363 → **Aug 27,545** → Sep 18,521, a clean seasonal curve.
+
+**A correction made mid-build worth remembering:** the first run gave a *noisy* revenue curve in which August — the busiest month by booking count — showed **less** money than July, because the company/individual mix was a flat 30% year-round and a month could fill with small individual bookings. Group business in Kakheti concentrates in season, so the mix is now weighted 40% company Jun–Sep vs 22% otherwise (still ~30% overall). Realistic *counts* do not automatically give a realistic *revenue shape* — the two have to be modelled separately.
+
+**Setup banner (0.4):** both `OnboardingBanner` and `FinishDetailsBanner` gated on `tenantId !== DEMO_TENANT_ID` in `app/admin/(panel)/layout.tsx`. Gated rather than "complete the onboarding for the demo tenant" — both banners recompute live on every page load, so a visitor toggling any setting in a sandbox strangers can edit could bring them straight back. `PaymentSetupBanner` needed no change: it self-suppresses when the online-payment module is off, which it is on the demo tenant. Regression-checked by signing into Staging Winery on localhost — its banner still renders ("5 companies still need full details"), so the gate is a real no-op for everyone else.
+
+**Flagged to Max, not actioned:** `rebrand-demo-tenant.ts` scrubs the tenant row, settings and site content but **never touched Companies**. The prod demo tenant was cloned from Nikalas Marani's real production data, so `demo.vineworks.ge` may right now be publishing his real B2B customers' company names, contact people, phone numbers and email addresses. Could not confirm — reading the prod DB was blocked this session. Seeding prod fixes it as a side effect, since the whole cast gets replaced.
+
+**Next:** 0.5 — push to `staging`, verify, Max's go-ahead, merge to `master`, then run the seed script against **prod** as its own separate deliberate step. Then 0.6, then Phase 1 (the front door).
+
+---
+
 ## 2026-09-10 (session 4) — Design review of the demo site; planned the redesign
 
 Max's verdict on the demo, unprompted: *"stale, out of date and not guided, not very attention grabbing. no display of features or anything."* Switched to a design footing rather than a build one — captured the live production screens, researched how best-in-class SaaS companies run live demos, and produced a design proposal with four directions drawn on top of the real UI.

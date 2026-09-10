@@ -18,7 +18,7 @@ link in [[DemoSite-README|README]]). **How the demo was originally built:** [[Pl
 
 | Phase | What | Status |
 |---|---|---|
-| **0** | Seed the demo with a trading winery + kill the setup banner | ⬜ Not started |
+| **0** | Seed the demo with a trading winery + kill the setup banner | 🚧 In progress |
 | **1** | Front door (framing interstitial + fix `/admin` dead end) | ⬜ Not started |
 | **2** | Spotlight tour (replaces today's corner checklist) | ⬜ Not started |
 | **3** | Feature rail (surface the invisible depth) | ⬜ Not started |
@@ -26,7 +26,9 @@ link in [[DemoSite-README|README]]). **How the demo was originally built:** [[Pl
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Phase 0 has not been started. Begin at task 0.1.
+**Overall resume point:** Phase 0 — 0.1–0.4 are done and verified on **dev**. Next: 0.5,
+ship to `staging`, get Max's go-ahead, merge to `master`, then run the seed script against
+**prod** as its own separate step. Nothing has been written to the prod database yet.
 
 ---
 
@@ -54,8 +56,11 @@ Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
 ## Phase 0 — Seed the demo with a winery that's actually trading
 
-**Status:** ⬜ Not started
-**Resume point:** Not started — begin at 0.1.
+**Status:** 🚧 In progress — built and verified on dev, not yet shipped
+**Resume point:** 0.1–0.4 done. Next is **0.5** — push to `staging`, verify there, get
+Max's go-ahead, merge to `master`, then run `npx tsx scripts/seed-demo-data.ts` against
+the **prod** database as a separate deliberate step. **The prod demo tenant is still
+empty** — only dev has been seeded. After that, 0.6 (scheduled regeneration).
 **Why first:** every other phase still dead-ends on `No orders found` without this. It is
 the highest-value, lowest-risk work in the whole plan.
 
@@ -68,23 +73,25 @@ Captured live on 2026-09-10 from production:
   prospects the product is half-built
 
 ### Tasks
-- [ ] **0.1 — Design the seed shape.** Decide and write down (here) the target numbers
+- [x] **0.1 — Design the seed shape.** ✅ 2026-09-10 — numbers recorded below. Decide and write down (here) the target numbers
       before writing code: how many past vs. future bookings, over what date range, what
       the revenue curve looks like (a real summer peak — August is Kakheti's harvest
       season), how many tour companies on which price tiers, how many wine orders in each
       status (pending / confirmed / paid / delivered). Aim for roughly **18 months of
       history**. Use plausible Georgian names and real wines already in the catalogue
       (Rkatsiteli, Rkatsiteli Amber, Saperavi).
-- [ ] **0.2 — Write `saas/scripts/seed-demo-data.ts`.** Must be **idempotent** (safe to
+- [x] **0.2 — Write `saas/scripts/seed-demo-data.ts`.** ✅ 2026-09-10 Must be **idempotent** (safe to
       re-run — clears its own previously-seeded rows first, never touches other tenants),
       look the tenant up **by slug** (`vineworks-demo`) not by hardcoded ID, and refuse to
       run against a non-demo tenant. Model it on the existing
       `scripts/clone-nm-to-demo.ts` and `scripts/rebrand-demo-tenant.ts`, which already
       follow this shape. Also see `vault/Seeding/` for prior seeding conventions.
-- [ ] **0.3 — Run against dev + verify.** Orders list populated, Statistics charts drawing
+- [x] **0.3 — Run against dev + verify.** ✅ 2026-09-10 — results below. Orders list populated, Statistics charts drawing
       a real curve, wine orders spread across statuses, packing view showing real box
       counts. Screenshot for Max.
-- [ ] **0.4 — Suppress the setup banner for the demo tenant.** `OnboardingBanner` and
+- [x] **0.4 — Suppress the setup banner for the demo tenant.** ✅ 2026-09-10 — gated in
+      `saas/app/admin/(panel)/layout.tsx`; regression-checked against Staging Winery,
+      which still shows its banner. `OnboardingBanner` and
       `FinishDetailsBanner` are rendered in `saas/app/admin/(panel)/layout.tsx`. Gate both
       on `tenantId !== DEMO_TENANT_ID`. (Alternative: actually complete the onboarding
       steps for the demo tenant so the banner retires naturally — decide which, note the
@@ -96,7 +103,125 @@ Captured live on 2026-09-10 from production:
       reset" item** carried over from [[Plan-DemoSite]] — they are one job, not two.
 
 ### Notes / decisions
-_(record the seed shape numbers and the 0.4 decision here once made)_
+
+#### 0.1 — Seed shape (decided 2026-09-10)
+
+**Reference date for everything below: 2026-09-10.** The script computes all dates
+relative to "today" at run time, so it stays correct when re-run months later.
+
+**What the surfaces actually read** (checked in code, not assumed):
+- `statistics/page.tsx` builds its bar chart from **the last 6 months of `Order.date`**
+  only — so the summer peak has to land inside Apr–Sep to be visible today.
+- `StatisticsV2.tsx` top cards are **upcoming only** (`date >= today`): upcoming count,
+  future revenue, next order. Without future-dated bookings these stay `0` even with
+  years of history behind them.
+- Top-companies panel shows the **top 5 by revenue** — so we need at least 5 booking
+  companies with real volume.
+- `orders/page.tsx` loads **every** order for the tenant (no pagination). ~400 rows is
+  comfortable; this is why the range below is capped rather than open-ended.
+
+**Bookings — 18 months back + 3.5 months forward (Mar 2025 → Dec 2026), ~400 orders.**
+Monthly counts, shaped as a real Kakheti winery trades — August peak (harvest), January
+trough:
+
+| 2025 | Mar 8 · Apr 12 · May 18 · Jun 24 · Jul 30 · Aug 34 · Sep 28 · Oct 16 · Nov 8 · Dec 6 |
+|---|---|
+| **2026** | Jan 5 · Feb 6 · Mar 10 · Apr 15 · May 21 · Jun 27 · Jul 33 · **Aug 38** · Sep 30 |
+| **ahead** | Oct 18 · Nov 9 · Dec 7 |
+
+Year-on-year 2026 runs ~12% above 2025 — the chart should read as a business growing,
+not a flat line. Annual revenue lands around **₾80–90k**, right for a boutique winery.
+
+**Mix:** 70% `INDIVIDUAL` / 30% `COMPANY` · 55% `TASTING` / 45% `TASTING_LUNCH` ·
+individuals 2–6 guests, companies 8–25. Prices come from the company's own `Price` tier
+rows, never invented — so the numbers reconcile if anyone checks them against Companies.
+
+**Booking statuses** (a real book looks different behind and ahead):
+- **Past dates:** `COMPLETED` 85% · `PAID` 7% · `CANCELLED` 8%
+- **Future dates:** `CONFIRMED` 40% · `NEW` 25% · `PAID` 20% · `INVOICE_SENT` 15%
+
+Roughly a fifth of bookings carry masterclass lines and a hot-dish selection, so the
+order-detail expansion isn't empty either.
+
+**Companies — the junk has to go.** The demo tenant today carries `Test Company # 1`,
+`Test Company # 2`, `Cookie Company`, `x` and `Wine Test Company`, plus gibberish menu
+items. Seeding 18 months of trading against "Cookie Company" is still not a sellable
+demo. The script replaces the booking/wine cast with named fictional operators:
+
+- **Booking:** `Individuals` (kept — walk-ins) · Kakheti Wine Routes · Tbilisi Tour
+  Collective · Caucasus Vine Travel · Alazani Valley Tours · Silk Road Journeys —
+  each on a **different price tier ladder**, which is what makes the per-company pricing
+  feature visible at all.
+- **Wine (B2B):** Sighnaghi Wine Bar (10% off) · Restaurant Kakhuri (15%) ·
+  Vinoteka Batumi (5%) · Marani Import, Berlin (20%).
+
+**Wine orders — 45 over 12 months**, using wines already in the catalogue (Saperavi,
+Rkatsiteli, Rkatsiteli Amber, Mtsvane, Kisi, Rosé) at their real vintage prices, 12–120
+bottles per line. Statuses: `delivered` 45% · `paid` 20% · `confirmed` 15% ·
+`pending` 15% · `cancelled` 5% — enough live rows for the packing view to show real box
+counts.
+
+**Idempotency:** the script **deletes every Order and WineOrder on the demo tenant and
+rebuilds them**, rather than tracking which rows it made. There is no real customer data
+on this tenant by definition, and wiping visitor tinkering is exactly what task 0.6
+wants from the scheduled regeneration — one behaviour, not two. Guarded by a hard refusal
+unless `tenant.slug === 'vineworks-demo'`.
+
+#### 0.4 — Banner suppression: gate, don't complete
+
+Decision: **gate both banners on `tenantId !== DEMO_TENANT_ID`** rather than completing
+the onboarding steps for the demo tenant. `getFinishDetailsStatus` recomputes live on
+every page load, so a visitor toggling any setting could bring the banner back — a
+"completed" tenant is not a stable state on a sandbox strangers can edit. Two one-line
+guards can't regress.
+
+#### 0.2–0.4 — what was actually built (2026-09-10)
+
+**`saas/scripts/seed-demo-data.ts`** — deterministic (fixed-seed PRNG, so two runs produce
+identical data and screenshots stay valid), looks the tenant up by slug and refuses
+anything else, `--dry-run` flag reports without writing, prints the masked DB host before
+it touches anything. Its pricing math is a deliberate mirror of `lib/pricing.ts`
+`recalcOrderTotal`, so every seeded total reconciles against that company's tier ladder.
+
+**Verified on dev, 2026-09-10** (localhost temporarily pointed at the dev demo tenant,
+`.env` reverted straight after):
+
+| Surface | Before | After |
+|---|---|---|
+| `/admin/orders` | "No orders found", 0 bookings | **403 bookings** |
+| Statistics — upcoming | `0` | **57 bookings ahead** |
+| Statistics — future revenue | `0₾` | **30,998₾** |
+| Statistics — next order | — | Fri, 11 Sep 2026 |
+| Both charts | "No data for this period" | drawing; company chart ranks all 6 operators |
+| Setup banner | "Finish setting up your account" | gone |
+| Companies list | Test Company # 1, Cookie Company, x | 6 named operators + 4 B2B wine buyers |
+
+Status spread came out: Completed 283 · Cancelled 41 · Paid 33 · Confirmed 26 · New 13 ·
+Invoice Sent 7. Lifetime revenue ~243,800₾ over 21 months.
+
+Revenue by month, last 6: Apr 7,363 · May 13,280 · Jun 16,623 · Jul 26,848 ·
+**Aug 27,545** · Sep 18,521 — a clean rising curve peaking in August.
+
+**One correction made during the build:** the first run produced a *noisy* revenue curve
+in which August, the busiest month by booking count, showed **less** money than July —
+because the company/individual mix was a flat 30% all year, so a month could fill up with
+small individual bookings. Group business in Kakheti concentrates in season, so the mix is
+now weighted (40% company Jun–Sep, 22% otherwise, still ~30% overall). That is what
+produces the curve above.
+
+**Regression check:** signed into Staging Winery (a real, non-demo tenant) on localhost —
+`FinishDetailsBanner` still renders there ("5 companies still need full details"), so the
+gate is genuinely a no-op for everyone but the demo.
+
+**Still open in this phase:** the **prod** demo tenant has not been touched. 0.5 ships the
+code and then runs the script against prod as its own separate step.
+
+**Flagged for Max, not yet actioned:** `rebrand-demo-tenant.ts` scrubs the tenant row,
+settings and site content but **never touched Companies**. The prod demo tenant was cloned
+from Nikalas Marani's real production data, so it may currently be publishing his real B2B
+customers' company names, contact people, phone numbers and emails on a public demo site.
+Could not be confirmed — reading the prod DB was blocked in this session. Running the seed
+script against prod fixes it as a side effect, since it replaces the whole cast.
 
 ---
 

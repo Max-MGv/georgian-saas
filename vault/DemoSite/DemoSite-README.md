@@ -36,8 +36,14 @@ admin panel they're meant to be impressed by is **completely empty** (`No orders
 `0₾` revenue) with a "Finish setting up your account" banner on top. Max flagged this
 directly; [[DemoDirections]] is the response.
 
-**Agreed plan:** all four directions approved, seeding first. Nothing from
-[[Plan-DemoRedesign]] has been started yet — **begin at Phase 0, task 0.1.**
+**Agreed plan:** all four directions approved, seeding first.
+
+**Progress, 2026-09-10 (session 5):** Phase 0 tasks **0.1–0.4 are done and verified on
+dev** — `scripts/seed-demo-data.ts` fills the demo tenant with 403 bookings, 45 wine
+orders and a named cast of tour operators and B2B buyers, and both setup banners are
+suppressed for the demo tenant ([[FeatureLog]] #160). **The prod demo tenant is still
+empty and still shows the banner** — `demo.vineworks.ge` is unchanged until task 0.5
+ships. **Resume at Phase 0, task 0.5.**
 
 ---
 

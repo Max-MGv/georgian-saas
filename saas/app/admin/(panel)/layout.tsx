@@ -8,6 +8,7 @@ import BreadcrumbTracker from '@/components/BreadcrumbTracker'
 import BugReportWidget from '@/components/BugReportWidget'
 import DemoModeBanner from '@/components/DemoModeBanner'
 import DemoChecklist from '@/components/DemoChecklist'
+import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import LogoutButton from './LogoutButton'
 import OnboardingBanner from './OnboardingBanner'
 import FinishDetailsBanner from './FinishDetailsBanner'
@@ -91,8 +92,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </nav>
 
       <main className="px-6 py-8 max-w-screen-2xl mx-auto">
-        <OnboardingBanner />
-        <FinishDetailsBanner />
+        {/* Both setup nudges are suppressed on the sales demo tenant. A
+            prospect sent to /admin to be shown a working back office was
+            landing on "Finish setting up your account" instead — the product
+            reading as half-built at exactly the moment it should look real.
+            Gated rather than "completed" for the demo tenant: both banners
+            recompute live on every page load, so a visitor toggling any
+            setting in the sandbox could bring them straight back.
+            No-op for every other tenant. Plan-DemoRedesign.md task 0.4. */}
+        {tenantId !== DEMO_TENANT_ID && (
+          <>
+            <OnboardingBanner />
+            <FinishDetailsBanner />
+          </>
+        )}
         <AdminHintsProvider show={showAdminHints === 'true'}>
           {children}
         </AdminHintsProvider>
