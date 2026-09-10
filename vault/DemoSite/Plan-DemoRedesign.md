@@ -536,8 +536,16 @@ casual test:
    existed. Now polled from announcement, straight through the reload.
 3. **The real one:** the poll would find the row in the pane's server-rendered HTML, style
    it, and stop — then that pane's own React hydrated, reconciled the table, and discarded
-   the inline styles and the pill. The highlight now re-applies for ~5s after first hit to
-   outlive hydration. Every step is idempotent.
+   the inline styles and the pill.
+4. **And the fix for (3) was itself a guess.** Re-applying "for ~5s after first hit" held on
+   dev and *lost on production*, where hydrating ~400 rows takes longer than that window.
+   It looked verified because dev passed. The marks are now re-asserted on **every tick for
+   the full 20s**, which needs no estimate of when hydration finishes; each step is
+   idempotent, and 100 cheap DOM queries cost nothing. **Verified on production**, including
+   that the highlight survives past the window closing.
+
+**Worth remembering:** four of these were the same mistake wearing different clothes —
+assuming a render had finished. Verify against production timings, not dev ones.
 
 **4.4 mobile:** panes stack below 900px and the view auto-scrolls to the admin pane when a
 booking lands. Verified at 375px — stacked, no horizontal overflow.
