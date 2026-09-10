@@ -196,3 +196,18 @@ The dev database normally holds exactly one tenant (Staging Winery). So the ever
 - `saas/scripts/test-rls.ts` — the suite with the conditional skip
 - `saas/scripts/check-rls.ts` — existence/enabled check only, not a behavioural test
 - `saas/scripts/test-payment-rls.ts` — the two-tenant pattern worth copying
+
+---
+
+## 11. Any new customer-facing (or internal-notification) email must go through `sendTenantEmail()` — never call Resend directly
+
+**What the dependency is:**
+`saas/lib/emails/sendEmail.ts` (`sendTenantEmail()`) is the single place that builds the From header (tenant name + the shared `notify.vineworks.ge` sending domain — see [[Plan-EmailInfrastructure]] for why a shared domain, not a per-tenant one) and Reply-To (the tenant's own `contact_email` setting). Every existing email — `bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts`, `notifyNewCompany.ts`, `bugReports.ts` — was migrated onto it 2026-09-10, replacing 5 separate hand-rolled `new Resend(...).emails.send(...)` calls that had drifted (one still had the old sandbox `onboarding@resend.dev` hack live in production).
+
+**What this means in practice:** a new email template should call `sendTenantEmail({ tenantName, fromLocalPart, to, replyTo, subject, html })`, not instantiate its own `Resend` client. If the sending domain (`notify.vineworks.ge`) is ever swapped for a different one, that's a one-line change inside `sendEmail.ts` — it only stays a one-line change as long as nothing else calls Resend directly.
+
+**Files involved:**
+- `saas/lib/emails/sendEmail.ts` — the shared helper
+- `saas/lib/emails/bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts` — customer-facing, all take `wineryEmail` (the tenant's `contact_email`) as Reply-To
+- `saas/app/actions/notifyNewCompany.ts`, `bugReports.ts` — internal notifications
+- Full build/verification log: [[Plan-EmailInfrastructure]]

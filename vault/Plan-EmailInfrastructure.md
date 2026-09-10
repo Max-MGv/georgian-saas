@@ -50,8 +50,10 @@ Started 2026-09-10. Tracks progress chunk by chunk so work can resume across ses
     - **Reply-To:** `nikalasmarani@gmail.com` — Staging Winery's own `contact_email` setting, not Max's personal address
   This proves the shared helper, the verified domain, and the per-tenant Reply-To all work correctly in a real deploy, not just locally.
 
-- [ ] **Chunk 5 — Vault updates**
-  `FeatureLog.md`, `SessionLog.md`, and a new `MaintenanceNotes.md` entry: "new customer-facing email → use the shared sender helper, don't call Resend directly."
+- [x] **Chunk 5 — Vault updates (done 2026-09-10)**
+  `FeatureLog.md` (#157), `Roadmap.md` (checked off the old "verify nikalasmarani.ge in Resend" item + the sandbox-mode note), `SessionLog.md` (full session entry), `MaintenanceNotes.md` §11 (new emails must use `sendTenantEmail()`, don't call Resend directly).
+
+**All chunks complete.** This plan is done — the remaining commit (vault + MaintenanceNotes) still needs pushing to staging.
 
 ## Open questions
 
