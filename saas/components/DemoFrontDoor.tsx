@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
+import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
 
 /**
@@ -71,6 +72,13 @@ const PATHS: Path[] = [
     cta: 'Show me the back office',
   },
   {
+    key: 'mirror',
+    icon: '⧉',
+    title: 'Show me both at once',
+    body: 'The guest site and the back office side by side. Make a booking on the left and watch it appear on the right, in the same second.',
+    cta: 'Open the live mirror',
+  },
+  {
     key: 'guest',
     icon: '🍷',
     title: 'Show me the guest view',
@@ -91,6 +99,11 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  // Resolved after mount, never during render: window does not exist on the
+  // server, and branching on it during the first client render would produce a
+  // hydration mismatch.
+  const [embedded, setEmbedded] = useState(false)
+  useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [error, setError] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -127,12 +140,18 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
     }
   }, [open, dismiss])
 
-  if (!isDemo || !open) return null
+  if (!isDemo || !open || embedded) return null
 
   async function choose(key: string) {
     setError(false)
     if (key === 'guest') {
       dismiss()
+      return
+    }
+    if (key === 'mirror') {
+      markSeen()
+      setOpen(false)
+      router.push('/live')
       return
     }
     setBusy(key)

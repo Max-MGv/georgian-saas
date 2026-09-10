@@ -14,4 +14,14 @@ export const DEMO_BOOKED_EVENT = 'vineworks-demo:booked'
 export function dispatchDemoBooked() {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(DEMO_BOOKED_EVENT))
+  // The live mirror (/live) runs the guest site in an iframe, so the event has
+  // to cross the frame boundary for the admin pane beside it to know a booking
+  // landed. Same-origin, and the listener checks the origin before acting.
+  if (window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: DEMO_BOOKED_EVENT }, window.location.origin)
+    } catch {
+      // Cross-origin embed — the in-page listener still fires.
+    }
+  }
 }

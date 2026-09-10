@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
+import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
 
 /**
@@ -20,9 +21,16 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  // Resolved after mount, never during render: window does not exist on the
+  // server, and branching on it during the first client render would produce a
+  // hydration mismatch.
+  const [embedded, setEmbedded] = useState(false)
+  useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [error, setError] = useState(false)
 
   if (tenantId !== DEMO_TENANT_ID) return null
+  // Inside a /live pane the mirror provides its own framing — see lib/demoEmbed.
+  if (embedded) return null
 
   const isAdminSide = pathname?.startsWith('/admin')
 
@@ -93,6 +101,18 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
           {loading ? 'Loading…' : 'Winery Admin View →'}
         </button>
       )}
+
+      <a
+        href="/live"
+        style={{
+          color: '#c7d2fe',
+          textDecoration: 'underline',
+          whiteSpace: 'nowrap',
+          fontSize: '0.78rem',
+        }}
+      >
+        ⧉ See both sides at once
+      </a>
 
       {error && <span style={{ color: '#fca5a5' }}>Couldn&apos;t open the admin view — try again.</span>}
     </div>

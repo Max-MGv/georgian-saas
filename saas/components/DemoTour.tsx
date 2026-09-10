@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
+import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 
 /**
@@ -132,6 +133,11 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   const [state, setState] = useState<TourState | null>(null)
   const [rect, setRect] = useState<Rect | null>(null)
   const [mounted, setMounted] = useState(false)
+  // Resolved after mount, never during render: window does not exist on the
+  // server, and branching on it during the first client render would produce a
+  // hydration mismatch.
+  const [embedded, setEmbedded] = useState(false)
+  useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [isNarrow, setIsNarrow] = useState(false)
 
   const isDemo = tenantId === DEMO_TENANT_ID
@@ -241,7 +247,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     return () => window.removeEventListener(DEMO_BOOKED_EVENT, onBooked)
   }, [isDemo])
 
-  if (!isDemo || !mounted || !state) return null
+  if (!isDemo || !mounted || !state || embedded) return null
 
   const start = () => update({ started: true, index: 0, finished: false })
   const skip = () => update({ ...state, started: false, finished: true })

@@ -8,6 +8,7 @@ import BreadcrumbTracker from '@/components/BreadcrumbTracker'
 import BugReportWidget from '@/components/BugReportWidget'
 import DemoModeBanner from '@/components/DemoModeBanner'
 import DemoTour from '@/components/DemoTour'
+import DemoFeatureRail from '@/components/DemoFeatureRail'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import LogoutButton from './LogoutButton'
 import OnboardingBanner from './OnboardingBanner'
@@ -29,6 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen" style={{ backgroundColor: 'var(--site-bg)' }}>
       <DemoModeBanner tenantId={tenantId} />
       <DemoTour tenantId={tenantId} />
+      <DemoFeatureRail tenantId={tenantId} />
       <BreadcrumbTracker />
       {/* Submitter identity comes straight from the auth session already
           resolved above (server-side) — no extra round trip, no re-implementing

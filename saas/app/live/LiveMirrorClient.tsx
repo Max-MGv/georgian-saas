@@ -1,0 +1,241 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
+import { signInAsDemoAdmin } from '@/lib/demoAuth'
+
+/**
+ * The live mirror — Plan-DemoRedesign Phase 4, DemoDirections Direction 02.
+ * The guest site and the back office side by side, in one view: book on the
+ * left, watch it land on the right.
+ *
+ * Why this is the flagship: the actual differentiator is that the guest-facing
+ * site and the back office are *one system*. Everywhere else in the demo, a
+ * visitor has to book, then remember to switch, then trust that what they are
+ * seeing is connected. Both panes on screen at once removes the memory step and
+ * the trust gap — the causal link is simply visible. None of the researched
+ * competitors (Bookeo, BookingPress, Cloudbeds, Toast) does this.
+ *
+ * **Sync mechanism (task 4.1): same-origin iframes + the existing booked event,
+ * posted up to this parent, which reloads the admin pane.** Cheapest thing that
+ * works, per the plan. Polling would burn queries against a demo nobody is
+ * watching most of the time, and server-sent events would need an endpoint,
+ * a connection per viewer and a reconnect story — all to deliver one bit that
+ * the page already knows locally the instant it happens.
+ *
+ * Both panes are the real pages, not mockups: an iframe of the actual guest site
+ * and the actual admin panel. They render without their own demo chrome because
+ * every demo component checks lib/demoEmbed.
+ */
+
+const C = {
+  ink: '#1e1b4b',
+  inkSoft: '#312e81',
+  border: '#3730a3',
+  text: '#e0e7ff',
+  muted: '#a5b4fc',
+  accent: '#4f46e5',
+  ok: '#22c55e',
+}
+
+const GUEST_SRC = '/'
+const ADMIN_SRC = '/admin/orders'
+
+export default function LiveMirrorClient() {
+  const adminRef = useRef<HTMLIFrameElement>(null)
+  const adminWrapRef = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [landed, setLanded] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(false)
+
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const narrow = window.matchMedia('(max-width: 900px)')
+    const sync = () => { setReducedMotion(motion.matches); setIsNarrow(narrow.matches) }
+    sync()
+    motion.addEventListener('change', sync)
+    narrow.addEventListener('change', sync)
+    return () => { motion.removeEventListener('change', sync); narrow.removeEventListener('change', sync) }
+  }, [])
+
+  // The admin pane needs a session before it will render anything but a login
+  // form. Sign in first, then mount the frames.
+  useEffect(() => {
+    let cancelled = false
+    signInAsDemoAdmin().then(({ ok }) => {
+      if (cancelled) return
+      if (ok) setReady(true)
+      else setFailed(true)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const refreshAdmin = useCallback(() => {
+    const frame = adminRef.current
+    if (!frame) return
+    try {
+      // Same-origin, so a direct reload works and preserves the pane's own URL
+      // if the visitor has navigated inside it.
+      frame.contentWindow?.location.reload()
+    } catch {
+      frame.src = `${ADMIN_SRC}?t=${Date.now()}`
+    }
+  }, [])
+
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      // Only trust our own origin — this listener triggers a reload, and the
+      // page embeds frames.
+      if (e.origin !== window.location.origin) return
+      if (!e.data || e.data.type !== DEMO_BOOKED_EVENT) return
+      refreshAdmin()
+      setLanded(true)
+      // On a stacked layout the admin pane is below the fold, so the landing
+      // moment would happen off-screen. Bring it into view.
+      if (isNarrow) {
+        adminWrapRef.current?.scrollIntoView({
+          behavior: reducedMotion ? 'auto' : 'smooth',
+          block: 'start',
+        })
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [refreshAdmin, isNarrow, reducedMotion])
+
+  useEffect(() => {
+    if (!landed) return
+    const t = window.setTimeout(() => setLanded(false), 9000)
+    return () => window.clearTimeout(t)
+  }, [landed])
+
+  const paneStyle: React.CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    minHeight: isNarrow ? '78vh' : 0,
+    display: 'flex',
+    flexDirection: 'column',
+    border: `1px solid ${C.border}`,
+    borderRadius: '14px',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    position: 'relative',
+  }
+
+  const paneHeader = (title: string, sub: string, accent?: boolean): React.ReactNode => (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '8px',
+      padding: '9px 14px',
+      backgroundColor: accent ? C.accent : C.inkSoft,
+      color: '#fff',
+      fontSize: '0.78rem',
+      flexShrink: 0,
+    }}>
+      <strong>{title}</strong>
+      <span style={{ opacity: 0.75 }}>{sub}</span>
+    </div>
+  )
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#0f0d28',
+      color: C.text,
+      display: 'flex',
+      flexDirection: 'column',
+      padding: 'clamp(12px, 2vw, 20px)',
+      gap: '14px',
+    }}>
+      <header style={{ flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+          <p style={{ margin: 0, color: C.muted, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            Vineworks — live mirror
+          </p>
+          <a href="/" style={{ color: C.muted, fontSize: '0.78rem' }}>← back to the demo</a>
+        </div>
+        <h1 style={{ margin: '6px 0 0', fontSize: 'clamp(1.1rem, 2.6vw, 1.5rem)', fontWeight: 700 }}>
+          Book on the left. Watch it arrive on the right.
+        </h1>
+        <p style={{ margin: '6px 0 0', color: C.muted, fontSize: '0.85rem', maxWidth: '70ch', lineHeight: 1.5 }}>
+          Both sides are the real thing — the guest&apos;s booking form, and the winery&apos;s
+          own back office. Same system, same second. Fill in the form on the left and the
+          bookings table will refresh on its own.
+        </p>
+      </header>
+
+      {failed && (
+        <p style={{ color: '#fca5a5', fontSize: '0.85rem' }}>
+          Couldn&apos;t open the winery account, so the right-hand pane can&apos;t load.
+          Try reloading the page.
+        </p>
+      )}
+
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: isNarrow ? 'column' : 'row',
+        gap: '14px',
+        minHeight: 0,
+      }}>
+        <div style={paneStyle}>
+          {paneHeader('Guest view', 'what your customer sees')}
+          {ready
+            ? <iframe src={GUEST_SRC} title="Guest view" style={{ flex: 1, width: '100%', border: 'none' }} />
+            : <PaneLoading />}
+        </div>
+
+        <div ref={adminWrapRef} style={paneStyle}>
+          {paneHeader('Winery admin', 'what you see', true)}
+          {ready
+            ? <iframe ref={adminRef} src={ADMIN_SRC} title="Winery admin" style={{ flex: 1, width: '100%', border: 'none' }} />
+            : <PaneLoading />}
+
+          {landed && (
+            <div
+              role="status"
+              style={{
+                position: 'absolute',
+                top: '46px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 5,
+                backgroundColor: C.ok,
+                color: '#052e16',
+                borderRadius: '999px',
+                padding: '7px 16px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+                // Respect prefers-reduced-motion: the pill still appears, it
+                // just doesn't move.
+                animation: reducedMotion ? undefined : 'vw-land 480ms ease-out',
+              }}
+            >
+              ● Just landed — new booking, just now
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes vw-land {
+          from { opacity: 0; transform: translate(-50%, -10px); }
+          to   { opacity: 1; transform: translate(-50%, 0); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function PaneLoading() {
+  return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: '#f5efe6', color: '#6b5a47', fontSize: '0.85rem',
+    }}>
+      Opening the winery…
+    </div>
+  )
+}
