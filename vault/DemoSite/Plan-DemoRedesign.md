@@ -109,7 +109,21 @@ Captured live on 2026-09-10 from production:
       merge **and** the separate prod seed run.
       Original task text: `staging` → verify → Max's go-ahead → `master`. Then run the seed
       script against **prod** as its own deliberate, separate step.
-- [ ] **0.6 — Schedule regeneration.** Wire the same script to run on a schedule so
+- [x] **0.6 — Schedule regeneration.** ✅ 2026-09-10. Vercel Cron (`saas/vercel.json`)
+      hits `/api/cron/reseed-demo` nightly at 03:00 UTC, authenticated with `CRON_SECRET`
+      as a bearer token — the route **refuses to run if `CRON_SECRET` is unset** rather
+      than failing open, since its whole job is deleting rows.
+      **⚠️ ACTION FOR MAX: add `CRON_SECRET` to the Vercel production environment.**
+      Until then the cron fires and gets a 503; nothing breaks, it just doesn't reset.
+      **The generation logic moved to `saas/lib/demoSeed.ts`** so the CLI and the cron
+      route share one implementation. While doing that, found and fixed a flaw that would
+      have made the schedule actively harmful: the month plan was a hardcoded table of
+      absolute months (`2025-2` … `2026-11`), which would have drifted out of the
+      Statistics chart's rolling six-month window within months — a nightly job faithfully
+      restoring an increasingly empty chart. It is now a **seasonal profile by calendar
+      month** (Aug peak, Jan trough) projected relative to today, with ~12% year-on-year
+      growth applied backwards, so it stays correct indefinitely.
+      Original task text: Wire the same script to run on a schedule so
       visitor tinkering doesn't degrade it. **This is the same machinery as the "nightly
       reset" item** carried over from [[Plan-DemoSite]] — they are one job, not two.
 
