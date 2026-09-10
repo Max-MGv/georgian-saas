@@ -38,12 +38,24 @@ directly; [[DemoDirections]] is the response.
 
 **Agreed plan:** all four directions approved, seeding first.
 
-**Progress, 2026-09-10 (session 5):** **Phase 0 is done and live.** `demo.vineworks.ge`
-now shows a winery that actually trades — 403 bookings, 30,998₾ of future revenue, both
-statistics charts drawing a real seasonal curve, a named cast of six tour operators and
-four B2B wine buyers, and no "Finish setting up your account" banner ([[FeatureLog]] #160).
-Only task **0.6 (scheduled regeneration)** is outstanding, and it blocks nothing.
-**Resume at Phase 0 task 0.6, or start Phase 1 — the front door.**
+**Status, 2026-09-10 — the redesign is finished.** All five phases of
+[[Plan-DemoRedesign]] are built, verified and live:
+
+- **Phase 0** — the winery trades: 403 bookings, 30,998₾ of future revenue, both charts
+  drawing a seasonal curve, a named cast of tour operators and B2B buyers, no setup
+  banner. Regenerates nightly. ([[FeatureLog]] #160, #161)
+- **Phase 1** — a front door that says what Vineworks is, and no more `/admin` dead end. (#162)
+- **Phase 2** — a spotlight tour whose seven steps name money, not buttons. (#163)
+- **Phase 3** — a feature rail surfacing sixteen capabilities that were invisible. (#164)
+- **Phase 4** — `demo.vineworks.ge/live`: the guest site and the back office side by side. (#165)
+
+**⚠️ One action for Max:** add `CRON_SECRET` to the Vercel production environment, or the
+nightly regeneration returns 503 and the demo never resets.
+
+**Before sharing the link widely:** the abuse guardrails at the bottom of
+[[Plan-DemoRedesign]] — rate-limiting public writes and suppressing outbound email from the
+demo tenant — are still open. Without them, demo traffic hits the Resend quota and mails
+strangers.
 
 ---
 

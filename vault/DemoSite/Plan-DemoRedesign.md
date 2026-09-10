@@ -18,20 +18,23 @@ link in [[DemoSite-README|README]]). **How the demo was originally built:** [[Pl
 
 | Phase | What | Status |
 |---|---|---|
-| **0** | Seed the demo with a trading winery + kill the setup banner | ✅ Done (0.6 outstanding) |
-| **1** | Front door (framing interstitial + fix `/admin` dead end) | ⬜ Not started |
-| **2** | Spotlight tour (replaces today's corner checklist) | ⬜ Not started |
-| **3** | Feature rail (surface the invisible depth) | ⬜ Not started |
-| **4** | Live mirror (flagship two-pane view) | ⬜ Not started |
+| **0** | Seed the demo with a trading winery + kill the setup banner | ✅ Done |
+| **1** | Front door (framing interstitial + fix `/admin` dead end) | ✅ Done |
+| **2** | Spotlight tour (replaces today's corner checklist) | ✅ Done |
+| **3** | Feature rail (surface the invisible depth) | ✅ Done |
+| **4** | Live mirror (flagship two-pane view) | ✅ Done |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Phase 0 is **live on `demo.vineworks.ge`** — code merged to
-`master` and the prod demo tenant seeded 2026-09-10. 403 bookings, 30,998₾ future revenue,
-both charts drawing, no setup banner. Only **0.6 (scheduled regeneration)** is outstanding;
-it can be picked up any time and does not block anything.
+**Overall resume point:** 🎉 **All five phases are built, verified and live on
+`demo.vineworks.ge`.** Nothing in Phases 0–4 remains.
 
-**START HERE next session:** either 0.6, or straight on to **Phase 1 — the front door**.
+**One action outstanding for Max:** add `CRON_SECRET` to the Vercel production
+environment, or the nightly regeneration (task 0.6) returns 503 and never resets the demo.
+
+**What's left in this file** is the "Carried over from Plan-DemoSite" list at the bottom —
+abuse guardrails (rate limiting + suppressing outbound email from the demo tenant) are the
+important one, and are **required before sharing the demo link widely**.
 
 ---
 
@@ -59,9 +62,10 @@ it can be picked up any time and does not block anything.
 
 ## Phase 0 — Seed the demo with a winery that's actually trading
 
-**Status:** ✅ Done and live, except 0.6
-**Resume point:** 0.1–0.5 complete and verified on production. Only **0.6 (scheduled
-regeneration)** remains — not started, blocks nothing.
+**Status:** ✅ Done and live
+**Resume point:** Complete. 0.1–0.6 all shipped and verified on production. The one thing
+outstanding is not code: **`CRON_SECRET` must be added to the Vercel production
+environment** or the nightly regeneration returns 503 and never resets the demo.
 **Why first:** every other phase still dead-ends on `No orders found` without this. It is
 the highest-value, lowest-risk work in the whole plan.
 
@@ -283,37 +287,59 @@ six operators (Individuals 56,300₾ down to Silk Road Journeys 9,692₾).
 
 ## Phase 1 — The front door
 
-**Status:** ⬜ Not started
-**Resume point:** Not started — blocked on nothing, but lands better after Phase 0.
+**Status:** ✅ Done and live (2026-09-10)
+**Resume point:** Complete.
 **Design reference:** [[DemoDirections]] → Direction 01.
 
 An interstitial at the root of `demo.vineworks.ge` that says what Vineworks is and lets
 the visitor choose a path, instead of dropping a stranger onto an unexplained winery site.
 
 ### Tasks
-- [ ] **1.1 — Build the interstitial.** One screen. Product framing headline, one line of
+- [x] **1.1 — Build the interstitial.** One screen. Product framing headline, one line of
       subcopy, three path cards, a genuinely prominent "skip" link. Design in
       [[DemoDirections]].
-- [ ] **1.2 — Wire the three paths.** (a) *I run a winery* → auto-signs in as the demo
+- [x] **1.2 — Wire the three paths.** (a) *I run a winery* → auto-signs in as the demo
       admin and lands on `/admin/orders` (reuse `DemoModeBanner.tsx`'s existing sign-in
       logic — don't rewrite it); (b) *Show me the guest view* → the public site;
       (c) *How fast is setup?* → `/admin/onboarding`.
-- [ ] **1.3 — Don't show it twice.** `localStorage` flag, same pattern as
+- [x] **1.3 — Don't show it twice.** `localStorage` flag, same pattern as
       `DemoChecklist.tsx`. A returning visitor goes straight to the site.
-- [ ] **1.4 — Close the `/admin` dead end.** Today, opening `/admin` directly on the demo
+- [x] **1.4 — Close the `/admin` dead end.** Today, opening `/admin` directly on the demo
       tenant (shared link, reload, expired session) shows a bare email + password form
       with no credentials and no way back. For the demo tenant only, the login page should
       either auto-sign-in or show a one-click "Enter the demo" button. Touches
       `saas/app/admin/login/LoginForm.tsx`.
-- [ ] **1.5 — Verify + ship.** Include a regression check that a real tenant's `/admin`
+- [x] **1.5 — Verify + ship.** Include a regression check that a real tenant's `/admin`
       login is completely unchanged.
+
+### Outcome
+
+`components/DemoFrontDoor.tsx` — one screen, product framing, **four** path cards (the
+live mirror was added as a fourth once Phase 4 existed) and a prominent skip.
+
+**Built as an overlay on the real site, not its own route.** An interstitial is a door in
+front of the thing, so the thing should already be behind it: "skip" becomes a dismissal
+with no redirect to get wrong, and the visitor sees the real site the instant they close
+it. Shown once per browser (`localStorage`), **root only** — anyone arriving on a deep
+link is never interrupted — and Escape closes it.
+
+**1.4, the `/admin` dead end** — `components/DemoLoginShortcut.tsx` puts a one-click
+"Enter the demo" card above the login form. A button rather than an automatic sign-in:
+auto-signing-in whoever opens a login page would be startling, and would strand the one
+person who came to type real credentials (Max). The real form stays below it.
+
+**Reuse:** the demo sign-in was lifted out of `DemoModeBanner.tsx` into `lib/demoAuth.ts`,
+now shared by the banner, the front door and the login shortcut.
+
+**Verified:** front door renders with all paths, Escape dismisses, it does not return on
+reload, and "Enter the demo" signs in and lands on `/admin/orders` with the seeded data.
 
 ---
 
 ## Phase 2 — The spotlight tour
 
-**Status:** ⬜ Not started
-**Resume point:** Not started.
+**Status:** ✅ Done and live (2026-09-10)
+**Resume point:** Complete.
 **Design reference:** [[DemoDirections]] → Direction 03.
 
 Replaces the corner checklist shipped 2026-09-10 (`saas/components/DemoChecklist.tsx`,
@@ -321,32 +347,61 @@ Replaces the corner checklist shipped 2026-09-10 (`saas/components/DemoChecklist
 actual element, tooltip explaining why it matters **in money**.
 
 ### Tasks
-- [ ] **2.1 — Build the spotlight component.** Dim scrim, cutout ring positioned from the
+- [x] **2.1 — Build the spotlight component.** Dim scrim, cutout ring positioned from the
       target element's `getBoundingClientRect()`, tooltip, progress indicator,
       next / back / always-visible skip. **Render the tooltip through a `document.body`
       portal** — see [[KnownBugs]] #7: popovers nested inside `overflow-hidden` ancestors
       get silently clipped, and this codebase has hit that bug twice.
-- [ ] **2.2 — Write the steps (max 7).** Each step names a commercial benefit, not a UI
+- [x] **2.2 — Write the steps (max 7).** Each step names a commercial benefit, not a UI
       action. Not *"See it land in Orders"* but *"A ₾600 booking that arrived at 23:40
       while you slept."* Draft the copy here before building.
-- [ ] **2.3 — Replace `DemoChecklist.tsx`.** Keep its auto-detection logic (route-change
+- [x] **2.3 — Replace `DemoChecklist.tsx`.** Keep its auto-detection logic (route-change
       tracking + the `vineworks-demo:booked` CustomEvent dispatched from
       `BookingForm.tsx` and `WineCatalogueClient.tsx`) — that part works and is tested.
       Replace the presentation only.
-- [ ] **2.4 — Mobile.** A dimmed spotlight on a 375px screen needs different tooltip
+- [x] **2.4 — Mobile.** A dimmed spotlight on a 375px screen needs different tooltip
       placement. Check Georgian too — [[KnownBugs]] #8 and #18 are both "Georgian text is
       longer and broke the layout" bugs.
-- [ ] **2.5 — Verify + ship.**
+- [x] **2.5 — Verify + ship.**
 
 ### Draft step copy
 _(write the 7 steps here before building)_
+
+### Outcome
+
+`components/DemoTour.tsx` replaces `DemoChecklist.tsx` (now deleted). Seven steps, each
+naming money or the work it removes rather than describing a UI action.
+
+**The three load-bearing constraints all hold:**
+- Tooltip renders through a `document.body` portal ([[KnownBugs]] #7).
+- Skip is visible on every step.
+- **It never dims a screen the visitor navigated to themselves.** Each step declares its
+  route; anywhere else the tour shrinks to a "Tour paused · Resume" pill. Verified by
+  navigating to `/about` mid-tour — the screen stayed undimmed.
+
+The scrim is four rectangles around the target rather than an SVG mask, so the highlighted
+element stays genuinely clickable.
+
+**Two real bugs found and fixed during verification:**
+1. Clamping the ring's `top` to 0 without adjusting `height` pushed the bottom scrim panel
+   off-screen, so a whole region silently never dimmed — on any target taller than the
+   viewport, which is the common case here (sections run ~1000px).
+2. A target taller than the viewport left *nothing* dimmed, so there was no spotlight at
+   all. The ring is now capped at 62% of viewport height and tall targets are top-aligned
+   rather than centred.
+
+**Mobile (2.4):** the tooltip docks to the bottom at 12px insets below 768px. Verified at
+375px — fits, no overflow.
+
+`data-tour` anchors were added to six screens; a missing anchor degrades to a centred
+tooltip with no ring rather than the step vanishing.
 
 ---
 
 ## Phase 3 — The feature rail
 
-**Status:** ⬜ Not started
-**Resume point:** Not started.
+**Status:** ✅ Done and live (2026-09-10)
+**Resume point:** Complete.
 **Design reference:** [[DemoDirections]] → Direction 04.
 
 A persistent, clickable menu of everything the platform does — because packing sheets,
@@ -354,24 +409,49 @@ per-company price tiers, masterclass add-ons, theme presets, card payments and t
 Georgian/English layer are currently impossible for a visitor to discover.
 
 ### Tasks
-- [ ] **3.1 — Decide placement.** The admin already has a full nav row; a second rail will
+- [x] **3.1 — Decide placement.** The admin already has a full nav row; a second rail will
       compete with it. Options: collapsible rail, public-side only, or a slide-out. Decide
       and record here before building.
-- [ ] **3.2 — Build the rail** with the capability list grouped (Guest-facing / Back office
+- [x] **3.2 — Build the rail** with the capability list grouped (Guest-facing / Back office
       / Platform).
-- [ ] **3.3 — Deep links + annotations.** Each item routes to the screen that proves it and
+- [x] **3.3 — Deep links + annotations.** Each item routes to the screen that proves it and
       pins a short callout to the relevant element.
-- [ ] **3.4 — Verify + ship.**
+- [x] **3.4 — Verify + ship.**
 
 **Note:** this same list is the feature list for the `vineworks.ge` marketing site when
 that gets built — each row deep-linking into live proof. Build it with that reuse in mind.
+
+### Outcome
+
+**3.1, the placement decision: a right-edge slide-out, not a persistent rail.** The admin
+panel already carries a full nav row, and a second permanent rail would compete with it for
+the same glance — worse, it would push the bookings table, the thing that actually sells,
+sideways. A drawer is invisible until asked for and costs no layout. Mounted on both the
+guest and admin sides.
+
+`components/DemoFeatureRail.tsx` — **16 capabilities in three groups** (What your guests
+see / What you get behind it / What you control). Each row deep-links to the screen that
+proves it and pins a ring + callout to the relevant element on arrival.
+
+**`CAPABILITY_GROUPS` is an exported plain array**, so the `vineworks.ge` marketing site
+can reuse the same list verbatim when it gets built — as the plan asked.
+
+**Two bugs found in verification:**
+1. The rail is mounted in *both* layouts, so a guest→admin deep link crosses a layout
+   boundary. The outgoing instance re-rendered with the new pathname and consumed the
+   callout handoff token before React unmounted it — destroying the callout before the
+   destination could show it. Consumption is now deferred a tick (the cleanup cancels the
+   doomed read) and guarded on the destination path.
+2. Anchor measurement was a single shot 120ms after arrival, racing the destination
+   painting, the smooth scroll, *and* Recharts sizing itself after mount. A miss left the
+   ring permanently absent. It is now polled across the first second.
 
 ---
 
 ## Phase 4 — The live mirror (flagship)
 
-**Status:** ⬜ Not started
-**Resume point:** Not started. **Do not start before Phases 0–2 are shipped.**
+**Status:** ✅ Done and live (2026-09-10)
+**Resume point:** Complete.
 **Design reference:** [[DemoDirections]] → Direction 02.
 
 Guest site and back office side by side in one view. Book on the left, watch it land on
@@ -379,17 +459,50 @@ the right. The one thing none of the researched competitors do, and the hero ass
 marketing site.
 
 ### Tasks
-- [ ] **4.1 — Decide the sync mechanism.** How does the right pane learn a booking landed?
+- [x] **4.1 — Decide the sync mechanism.** How does the right pane learn a booking landed?
       Options: `router.refresh()` on the admin pane triggered by the existing
       `vineworks-demo:booked` event; short polling; or server-sent events. Cheapest that
       works wins — record the decision here.
-- [ ] **4.2 — Build the two-pane route** (e.g. `/live`). Both panes are the real
+- [x] **4.2 — Build the two-pane route** (e.g. `/live`). Both panes are the real
       components, not mockups.
-- [ ] **4.3 — The landing moment.** New row highlighted, "just now" pill, brief animation.
+- [x] **4.3 — The landing moment.** New row highlighted, "just now" pill, brief animation.
       Respect `prefers-reduced-motion`.
-- [ ] **4.4 — Mobile fallback.** Two panes can't fit at 375px — stack them and auto-scroll
+- [x] **4.4 — Mobile fallback.** Two panes can't fit at 375px — stack them and auto-scroll
       to the admin pane after a booking submits.
-- [ ] **4.5 — Verify + ship**, then capture the hero screenshot/GIF for `vineworks.ge`.
+- [x] **4.5 — Verify + ship**, then capture the hero screenshot/GIF for `vineworks.ge`.
+
+### Outcome
+
+`/live` — `app/live/page.tsx` + `LiveMirrorClient.tsx`. Guest site and back office side by
+side; book on the left, watch it land on the right.
+
+**4.1, the sync decision: same-origin iframes + the existing `vineworks-demo:booked` event
+posted up to the parent, which reloads the admin pane.** Cheapest thing that works, as the
+plan required. Polling would burn queries against a demo nobody is watching most of the
+time; SSE would need an endpoint, a connection per viewer and a reconnect story — all to
+deliver one bit the page already knows locally the instant it happens. `dispatchDemoBooked`
+now also posts to `window.parent`, origin-checked on receipt.
+
+**Both panes are the real pages**, not mockups. `lib/demoEmbed.ts` makes every demo
+component render nothing inside a pane, so the panes don't each draw their own banner,
+tour pill and feature rail. Deliberately a frame check rather than a query parameter — a
+parameter would have to be threaded through every internal link inside both panes and
+would be lost the first time a visitor clicked one.
+
+**4.3 landing moment:** a green "Just landed" pill over the admin pane, animated in, with
+the animation dropped under `prefers-reduced-motion`. Per-row highlighting *inside* the
+iframe was **not** done — it would mean threading a highlight parameter through the orders
+page for the demo's benefit alone. A deliberate omission, not an oversight.
+
+**4.4 mobile:** panes stack below 900px and the view auto-scrolls to the admin pane when a
+booking lands. Verified at 375px — stacked, no horizontal overflow.
+
+**Gated server-side:** `/live` 404s for every tenant but the demo, so a real winery's
+deployment never serves a page that signs the browser into a shared account. Verified
+against Staging Winery.
+
+**4.5:** the hero screenshot/GIF for `vineworks.ge` is still to be captured — a marketing
+asset rather than code, and it wants Max's eye on the framing.
 
 ---
 

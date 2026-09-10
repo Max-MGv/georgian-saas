@@ -8,6 +8,35 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-10 (session 6) — Finished the whole demo redesign: all five phases live
+
+Max: *"dont stop until you finish all stages you suggested, all phases of the plan."* Done — **Phases 0 through 4 of [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] are built, verified and live on `demo.vineworks.ge`.** Per-phase detail lives in that file; this is the session-level record.
+
+**0.6 — nightly regeneration.** Vercel Cron → `/api/cron/reseed-demo` at 03:00 UTC, bearer-authenticated with `CRON_SECRET`; the route refuses to run when that is unset rather than failing open, since its whole job is deleting rows. Generation moved to `lib/demoSeed.ts` so the CLI and the cron share one implementation. **Building this surfaced a flaw that would have made the schedule actively harmful:** the month plan was a hardcoded table of absolute months (`2025-2` … `2026-11`), which would have drifted out of the Statistics chart's rolling six-month window within months — a nightly job faithfully restoring an increasingly empty chart. It is now a seasonal profile by calendar month, projected relative to today, with year-on-year growth applied backwards.
+
+**Phase 1 — the front door.** A framing interstitial with four paths and a prominent skip, built as an overlay rather than its own route (an interstitial is a door in front of the thing, so the thing should already be behind it). Plus `DemoLoginShortcut`, closing the `/admin` dead end that a shared link or expired session used to produce.
+
+**Phase 2 — the spotlight tour**, replacing the corner checklist (#159). Seven steps, each naming money rather than a UI action. The constraint that mattered most — *never dim a screen the visitor navigated to themselves* — holds: each step declares its route and the tour shrinks to a "paused · resume" pill anywhere else.
+
+**Phase 3 — the feature rail.** Sixteen capabilities in three groups, as a right-edge slide-out rather than a persistent rail (the admin already has a full nav row; a second one would compete for the same glance and push the bookings table sideways). `CAPABILITY_GROUPS` is an exported array so `vineworks.ge` can reuse the list verbatim.
+
+**Phase 4 — the live mirror at `/live`.** Guest site and back office side by side, both the real pages in same-origin iframes; the existing booked event is posted up to the parent, which reloads the admin pane. Chosen over polling and SSE as the cheapest thing that works. Server-gated so it 404s for every tenant but the demo.
+
+**Five real bugs were found by verifying rather than assuming** — worth recording, because every one of them would have shipped silently:
+1. **Scrim clamping.** Clamping the spotlight ring's `top` to 0 without adjusting `height` pushed the bottom scrim panel off-screen, so a whole region never dimmed — on any target taller than the viewport, which is the common case here (sections run ~1000px).
+2. **No spotlight at all.** A target taller than the viewport left nothing dimmed. The ring is now capped at 62% of viewport height with tall targets top-aligned.
+3. **Callout handoff race.** The feature rail is mounted in *both* layouts, so a guest→admin deep link crosses a layout boundary. The outgoing instance re-rendered with the new pathname, consumed the callout token, and then unmounted with it — destroying the callout before the destination could show it.
+4. **Single-shot measurement.** The callout's anchor was measured once, 120ms after arrival, racing the destination painting, the smooth scroll *and* Recharts sizing itself after mount. A miss left the ring permanently absent. Now polled across the first second.
+5. **The absolute-month seed plan** above, which only mattered once a schedule existed.
+
+**Process:** Max ruled that demo work goes straight to `master`, since the demo site *is* the test environment. Agreed with one caveat he accepted — `master` also deploys Nikalas Marani's real site, so demo-only files (components gated on `DEMO_TENANT_ID`, demo-only routes, scripts) go straight to `master` while shared files still take the staging pass. **Regression-checked throughout:** on Staging Winery no demo component renders at all and `/live` 404s.
+
+**⚠️ One action outstanding for Max, and it is not code:** add **`CRON_SECRET`** to the Vercel production environment. Until then the nightly regeneration returns 503 and the demo never resets — everything else works, it just drifts as visitors tinker.
+
+**Next, in priority order:** the **abuse guardrails** carried over in [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] — rate-limiting public writes and suppressing outbound email from the demo tenant — are **required before sharing the demo link widely**, or demo traffic hits the Resend quota and mails strangers. Then the hero screenshot for `vineworks.ge` (task 4.5), which wants Max's eye on the framing.
+
+---
+
 ## 2026-09-10 (session 5) — Phase 0 of the demo redesign: seeded a winery that actually trades
 
 Picked up [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] at Phase 0 — nothing in it had been started. Tasks **0.1–0.4 are done and verified on dev**; 0.5 (ship) and 0.6 (scheduled regeneration) are still open, and **the prod demo tenant has not been touched**.
