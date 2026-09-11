@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ClipboardList, Columns2, Wine, Rocket, type LucideIcon } from 'lucide-react'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
+import { useIsNarrow } from '@/lib/useIsNarrow'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
 import { TOUR_AUTOSTART_KEY } from '@/components/DemoTour'
@@ -110,6 +111,11 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
   useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [error, setError] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
+  // On a phone this dialog ran to roughly two and a half screens, so "Skip" and
+  // three of the four paths were below the fold — a visitor could not see what
+  // they were choosing between, which is the one job the front door has.
+  // Measured in the 2026-09-12 mobile audit.
+  const isNarrow = useIsNarrow()
 
   const isDemo = tenantId === DEMO_TENANT_ID
   // Root only. A visitor who followed a link to /wines came for the wines.
@@ -191,7 +197,7 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
+        padding: isNarrow ? '12px' : '20px',
         overflowY: 'auto',
       }}
     >
@@ -205,7 +211,7 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
           color: DEMO.text,
           border: `1px solid ${DEMO.border}`,
           borderRadius: '18px',
-          padding: 'clamp(24px, 5vw, 40px)',
+          padding: isNarrow ? '18px' : 'clamp(24px, 5vw, 40px)',
           boxShadow: DEMO_FX.shadowLg,
           outline: 'none',
           margin: 'auto',
@@ -217,15 +223,18 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
 
         <h1
           id="demo-frontdoor-title"
-          style={{ margin: '10px 0 0', fontSize: 'clamp(1.4rem, 3.6vw, 2rem)', lineHeight: 1.2, fontWeight: 700 }}
+          style={{ margin: '8px 0 0', fontSize: isNarrow ? '1.28rem' : 'clamp(1.4rem, 3.6vw, 2rem)', lineHeight: 1.2, fontWeight: 700 }}
         >
           Everything a winery needs to take bookings and sell wine.
         </h1>
 
-        <p style={{ margin: '12px 0 0', color: DEMO.muted, fontSize: '0.95rem', lineHeight: 1.55, maxWidth: '60ch' }}>
-          What you&apos;re looking at is a real, working winery — its public site and the
-          back office behind it, running on live data. Nothing here is a mockup, and you
-          can change anything. Where would you like to start?
+        <p style={{ margin: '10px 0 0', color: DEMO.muted, fontSize: isNarrow ? '0.86rem' : '0.95rem', lineHeight: 1.5, maxWidth: '60ch' }}>
+          {isNarrow
+            /* Same promise, a third of the height. The long version earns its
+               space on a desktop screen and costs a phone visitor the choice
+               they came for. */
+            ? 'A real, working winery — its public site and the back office behind it, on live data. Change anything you like.'
+            : 'What you’re looking at is a real, working winery — its public site and the back office behind it, running on live data. Nothing here is a mockup, and you can change anything. Where would you like to start?'}
         </p>
 
         {/* ── The promoted path ──────────────────────────────────────────────
@@ -244,8 +253,8 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
             color: DEMO.text,
             border: `1px solid ${DEMO.accent}`,
             borderRadius: '16px',
-            padding: 'clamp(18px, 3vw, 24px)',
-            margin: '26px 0 0',
+            padding: isNarrow ? '14px' : 'clamp(18px, 3vw, 24px)',
+            margin: isNarrow ? '16px 0 0' : '26px 0 0',
             cursor: busy ? 'default' : 'pointer',
             opacity: busy && busy !== HERO.key ? 0.5 : 1,
             display: 'flex',
@@ -255,25 +264,27 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
             font: 'inherit',
           }}
         >
-          <HERO.Icon aria-hidden="true" size={26} strokeWidth={1.6} style={{ color: DEMO.accent, flexShrink: 0, marginTop: '2px' }} />
+          <HERO.Icon aria-hidden="true" size={isNarrow ? 20 : 26} strokeWidth={1.6} style={{ color: DEMO.accent, flexShrink: 0, marginTop: '2px' }} />
           <span style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '210px' }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-              <strong style={{ fontSize: '1.12rem' }}>{HERO.title}</strong>
-              <span style={{
-                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-                color: DEMO.accent, border: `1px solid ${DEMO.border}`, borderRadius: '999px', padding: '3px 8px',
-              }}>
-                Start here
-              </span>
+              <strong style={{ fontSize: isNarrow ? '0.98rem' : '1.12rem' }}>{HERO.title}</strong>
+              {!isNarrow && (
+                <span style={{
+                  fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+                  color: DEMO.accent, border: `1px solid ${DEMO.border}`, borderRadius: '999px', padding: '3px 8px',
+                }}>
+                  Start here
+                </span>
+              )}
             </span>
-            <span style={{ color: DEMO.muted, fontSize: '0.88rem', lineHeight: 1.55, maxWidth: '60ch' }}>{HERO.body}</span>
+            {!isNarrow && <span style={{ color: DEMO.muted, fontSize: '0.88rem', lineHeight: 1.55, maxWidth: '60ch' }}>{HERO.body}</span>}
           </span>
           <span
             style={{
               backgroundColor: DEMO.accentSolid,
               color: DEMO_FX.onAccent,
               borderRadius: '999px',
-              padding: '10px 18px',
+              padding: isNarrow ? '11px 16px' : '10px 18px',
               fontSize: '0.85rem',
               fontWeight: 700,
               whiteSpace: 'nowrap',
@@ -306,18 +317,30 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
                 color: DEMO.text,
                 border: `1px solid ${DEMO.border}`,
                 borderRadius: '14px',
-                padding: '18px',
+                padding: isNarrow ? '13px' : '18px',
                 cursor: busy ? 'default' : 'pointer',
                 opacity: busy && busy !== p.key ? 0.5 : 1,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px',
+                gap: isNarrow ? '5px' : '8px',
                 font: 'inherit',
               }}
             >
-              <p.Icon aria-hidden="true" size={22} strokeWidth={1.6} style={{ color: DEMO.accent }} />
-              <strong style={{ fontSize: '0.98rem' }}>{p.title}</strong>
-              <span style={{ color: DEMO.muted, fontSize: '0.82rem', lineHeight: 1.5, flex: 1 }}>{p.body}</span>
+              {/* On a phone the icon shares the title's line: stacked, each
+                  card ran to ~200px and the fourth path plus Skip fell off the
+                  screen. Same elements, half the height. */}
+              {isNarrow ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <p.Icon aria-hidden="true" size={19} strokeWidth={1.6} style={{ color: DEMO.accent, flexShrink: 0 }} />
+                  <strong style={{ fontSize: '0.95rem' }}>{p.title}</strong>
+                </span>
+              ) : (
+                <>
+                  <p.Icon aria-hidden="true" size={22} strokeWidth={1.6} style={{ color: DEMO.accent }} />
+                  <strong style={{ fontSize: '0.98rem' }}>{p.title}</strong>
+                </>
+              )}
+              {!isNarrow && <span style={{ color: DEMO.muted, fontSize: '0.82rem', lineHeight: 1.5, flex: 1 }}>{p.body}</span>}
               <span style={{ color: DEMO.accent, fontSize: '0.82rem', fontWeight: 600, marginTop: '4px' }}>
                 {busy === p.key ? 'Opening…' : `${p.cta} →`}
               </span>
@@ -334,7 +357,7 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
 
         {/* Genuinely prominent, per DemoDirections: an interstitial that traps
             people is worse than no interstitial at all. */}
-        <div style={{ marginTop: '22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ marginTop: isNarrow ? '16px' : '22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <button
             onClick={dismiss}
             style={{
@@ -342,7 +365,7 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
               color: DEMO.text,
               border: `1px solid ${DEMO.border}`,
               borderRadius: '999px',
-              padding: '10px 20px',
+              padding: isNarrow ? '13px 22px' : '10px 20px',
               fontSize: '0.88rem',
               fontWeight: 600,
               cursor: 'pointer',
@@ -350,10 +373,12 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
           >
             Skip — let me just explore
           </button>
-          <span style={{ color: DEMO.muted, fontSize: '0.75rem' }}>
-            You can switch between the guest site and the winery&apos;s back office at any
-            time, from the bar at the top.
-          </span>
+          {!isNarrow && (
+            <span style={{ color: DEMO.muted, fontSize: '0.75rem' }}>
+              You can switch between the guest site and the winery&apos;s back office at any
+              time, from the bar at the top.
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
 import { Wine, Columns2 } from 'lucide-react'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
+import { useIsNarrow } from '@/lib/useIsNarrow'
 
 /**
  * Role-switcher + "you're in a demo" banner for the Vineworks Demo tenant.
@@ -20,6 +21,7 @@ import { DEMO, DEMO_FX } from '@/lib/demoTheme'
  * in the CRM as the admin.
  */
 export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
+  const isNarrow = useIsNarrow()
   const pathname = usePathname()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -79,7 +81,7 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
           style={{
             backgroundColor: DEMO.accentSolid,
             color: DEMO_FX.onAccent,
-            padding: '5px 14px',
+            padding: isNarrow ? '10px 16px' : '5px 14px',
             borderRadius: '999px',
             fontWeight: 600,
             whiteSpace: 'nowrap',
@@ -94,7 +96,7 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
           style={{
             backgroundColor: DEMO.accentSolid,
             color: DEMO_FX.onAccent,
-            padding: '5px 14px',
+            padding: isNarrow ? '10px 16px' : '5px 14px',
             borderRadius: '999px',
             fontWeight: 600,
             whiteSpace: 'nowrap',
@@ -113,6 +115,8 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
           textDecoration: 'underline',
           whiteSpace: 'nowrap',
           fontSize: '0.78rem',
+          // 130×19 on a phone before this — under any reasonable tap target.
+          padding: isNarrow ? '9px 4px' : '0',
           display: 'inline-flex',
           alignItems: 'center',
           gap: '6px',

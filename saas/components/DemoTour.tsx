@@ -9,6 +9,7 @@ import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { Wine } from 'lucide-react'
+import { useIsNarrow } from '@/lib/useIsNarrow'
 
 /**
  * Guided spotlight tour for demo.vineworks.ge — Plan-DemoRedesign Phase 2,
@@ -197,7 +198,9 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   // hydration mismatch.
   const [embedded, setEmbedded] = useState(false)
   useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
-  const [isNarrow, setIsNarrow] = useState(false)
+  // Was three lines of matchMedia here; the front door, the banner and the live
+  // mirror all needed the same answer, so it moved to a shared hook.
+  const isNarrow = useIsNarrow()
 
   const isDemo = tenantId === DEMO_TENANT_ID
 
@@ -205,14 +208,6 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     setMounted(true)
     if (isDemo) setState(load())
   }, [isDemo])
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const update = () => setIsNarrow(mq.matches)
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
 
   const step = state && state.started && !state.finished ? STEPS[state.index] : null
   const onStepRoute = step ? pathname === step.route : false

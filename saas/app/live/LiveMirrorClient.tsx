@@ -1,5 +1,6 @@
 'use client'
 
+import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
@@ -28,13 +29,23 @@ import { signInAsDemoAdmin } from '@/lib/demoAuth'
  * every demo component checks lib/demoEmbed.
  */
 
+// Palette: lib/demoTheme ("cellar dark"). This route was missed by
+// Plan-DemoFlowFixes Chunk 5 — task 5.1 named the four demo *components*, and
+// /live is a route, not one of them. It kept the old indigo while everything
+// around it changed, which on the demo's flagship screen read as two different
+// products. Found by the mobile audit, 2026-09-12.
+//
+// `ok` stays green and is deliberately NOT a demo token: it marks the booking
+// that just landed, and "this is the new row" has to be legible as *success*
+// rather than as more chrome. It is the one colour here doing a job the
+// platform palette cannot do.
 const C = {
-  ink: '#1e1b4b',
-  inkSoft: '#312e81',
-  border: '#3730a3',
-  text: '#e0e7ff',
-  muted: '#a5b4fc',
-  accent: '#4f46e5',
+  ink: DEMO.surface,
+  inkSoft: DEMO.raised,
+  border: DEMO.border,
+  text: DEMO.text,
+  muted: DEMO.muted,
+  accent: DEMO.accentSolid,
   ok: '#22c55e',
 }
 
@@ -294,6 +305,9 @@ export default function LiveMirrorClient() {
     border: `1px solid ${C.border}`,
     borderRadius: '14px',
     overflow: 'hidden',
+    // Not a demo token, on purpose: this sits *behind* an iframe of the
+    // tenant's own site, so it belongs to the winery's world, not the
+    // platform's. Painting it cellar-dark would flash dark behind a cream page.
     backgroundColor: '#fff',
     position: 'relative',
   }
@@ -303,7 +317,7 @@ export default function LiveMirrorClient() {
       display: 'flex', alignItems: 'center', gap: '8px',
       padding: '9px 14px',
       backgroundColor: accent ? C.accent : C.inkSoft,
-      color: '#fff',
+      color: DEMO_FX.onAccent,
       fontSize: '0.78rem',
       flexShrink: 0,
     }}>
@@ -315,7 +329,7 @@ export default function LiveMirrorClient() {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#0f0d28',
+      backgroundColor: DEMO.ground,
       color: C.text,
       display: 'flex',
       flexDirection: 'column',
@@ -327,7 +341,18 @@ export default function LiveMirrorClient() {
           <p style={{ margin: 0, color: C.muted, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
             Vineworks — live mirror
           </p>
-          <a href="/" style={{ color: C.muted, fontSize: '0.78rem' }}>← back to the demo</a>
+          {/* 101×19 before this — the only way out of the mirror, and on a
+              phone it was barely tappable. Chunk 5's palette work and the
+              2026-09-12 mobile audit. */}
+          <a
+            href="/"
+            style={{
+              color: C.muted, fontSize: '0.78rem',
+              display: 'inline-block', padding: '9px 6px', marginLeft: '-6px',
+            }}
+          >
+            ← back to the demo
+          </a>
         </div>
         {/* Copy has to follow the layout: the panes sit side by side on a wide
             screen and stack below 900px, so "left"/"right" is simply wrong on a
@@ -351,7 +376,7 @@ export default function LiveMirrorClient() {
       </header>
 
       {failed && (
-        <p style={{ color: '#fca5a5', fontSize: '0.85rem' }}>
+        <p style={{ color: DEMO_FX.danger, fontSize: '0.85rem' }}>
           Couldn&apos;t open the winery account, so the right-hand pane can&apos;t load.
           Try reloading the page.
         </p>
@@ -392,7 +417,7 @@ export default function LiveMirrorClient() {
                 padding: '7px 16px',
                 fontSize: '0.8rem',
                 fontWeight: 700,
-                boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+                boxShadow: DEMO_FX.shadowMd,
                 // Respect prefers-reduced-motion: the pill still appears, it
                 // just doesn't move.
                 animation: reducedMotion ? undefined : 'vw-land 480ms ease-out',
@@ -418,6 +443,9 @@ function PaneLoading() {
   return (
     <div style={{
       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      // Deliberately the tenant's cream rather than a demo token: this is the
+      // placeholder for the winery's page, so it should look like the thing
+      // that is about to appear, not like the frame around it.
       backgroundColor: '#f5efe6', color: '#6b5a47', fontSize: '0.85rem',
     }}>
       Opening the winery…
