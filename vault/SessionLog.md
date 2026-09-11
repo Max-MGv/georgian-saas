@@ -8,11 +8,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-11 (session 9) — Chunk 2: #418 diagnosed. It doesn't fire from Georgia, and that's the whole story
+## 2026-09-11 (session 9) — Chunk 2 done. #418 named and fixed; it was invisible from Georgia
 
-**Shipped to `staging` as `30bbcc7`, verified on Staging Winery. Not merged to `master` — that
-is Max's call.** Chunk 2 tasks 2.1, 2.2, 2.3 and 2.5 are ✅; 2.4 is done on staging and pending on
-production. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 2 notes.
+**Chunk 2 ✅ complete — shipped to `master` as `e64ccbb`, live and verified on production.**
+All five tasks done. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 2 notes.
 
 **The headline: React #418 does not currently fire anywhere.** Checked local dev (`/`, `/wines`,
 `/admin/orders`, `/admin/statistics` on Staging Winery — dev mode is where React prints the exact
@@ -72,6 +71,26 @@ call. Task 2.4's production half and the [[KnownBugs]] entry's final close both 
 **Deliberately not swept up:** the same unpinned `toLocale*` pattern exists in ~10 other admin and
 super-admin files. None are on the five routes this bug was reported against, so they were left
 alone rather than widening a change that needed a focused staging check. Sensible follow-up.
+
+**Then Max asked for it on demo.vineworks.ge.** Flagged first that demo and
+`nikalasmarani.vercel.app` are the same deployment on `master` against the same production
+database, so "push to demo" ships to Nikalas's live site in the same instant; Max confirmed.
+Merged `staging` → `master` (fast-forward, `e64ccbb`), pushed, and switched back to `staging`.
+
+**Verified on production** — a much stronger sample than staging, since the demo tenant has 395
+orders to Staging Winery's 17: `/admin/orders` compared server HTML against the hydrated DOM and
+found **260 distinct dates, none one-sided**, server UTC vs browser Asia/Tbilisi. Consoles clean
+on all five routes. `nikalasmarani.vercel.app` regression-checked — clean, renders correctly, no
+demo chrome. `/live` still assembles both panes with the right desktop headline.
+
+**Gap worth naming:** 2.4's "re-check Chunk 1's outline" was done structurally, not by submitting
+another booking — that is a production write and there is already one un-cleared test row. The
+change does not touch `LiveMirrorClient.tsx`.
+
+**Still outstanding for Max:** the Chunk 1 test booking (Luka Testashvili, 4 guests, 20 Oct 2026)
+is **still in the live demo data** — confirmed, 395 rows where the seed baseline is 394. The
+03:00 UTC nightly reseed did not clear it. Left in place deliberately; deleting it is a
+production write and Max's call.
 
 **Housekeeping:** the Chunk 1 test booking (Luka Testashvili) was not checked this session —
 still worth confirming the nightly reseed cleared it.

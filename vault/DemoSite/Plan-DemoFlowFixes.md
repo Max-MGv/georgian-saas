@@ -29,7 +29,7 @@ the live mirror's landing moment — all find their target and then never show i
 | Chunk | What | Ship route | Status |
 |---|---|---|---|
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
-| **2** | The hydration mismatch (React #418) | shared → `staging` | 🚧 Fixed + verified on `staging` — awaiting Max's merge to `master` |
+| **2** | The hydration mismatch (React #418) | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, verified on production) |
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ⬜ Not started |
 | **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ⬜ Not started |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
@@ -39,12 +39,12 @@ the live mirror's landing moment — all find their target and then never show i
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 **Chunk 2 is fixed and verified on `staging`; the merge to
-`master` is Max's to make.** Both `toLocale*` call sites are pinned (`Asia/Tbilisi` for dates,
-`en-US` for numbers) and checked on Staging Winery across the UTC-server / Tbilisi-browser
-boundary the bug lives on. Once Max merges, re-check the five routes on production and tick 2.4.
-**Then Chunk 3** — but Rule 8 applies per chunk, and Max has approved Chunks 1 and 2 only, so
-ask before starting it.
+**Overall resume point:** 🔜 **Chunks 1 and 2 are ✅ and both shipped to production. Begin at
+Chunk 3.** Chunk 2's notes are worth skimming first for one transferable lesson: the bug was
+invisible from Georgia because the server is UTC/en-US and every browser to hand is
+en-US/Asia/Tbilisi — when something "can't be reproduced", check whether the *environment* is
+what hides it. [[ClaudeInstructions]] Rule 8 applies per chunk and **Max has approved Chunks 1
+and 2 only**, so ask before starting Chunk 3.
 
 ---
 
@@ -295,12 +295,10 @@ Console after the booking: only the pre-existing React #418, no new errors from 
 
 ## Chunk 2 — The hydration mismatch (React #418)
 
-**Status:** 🚧 Fixed and verified on `staging` — one step left, and it is Max's to take.
-**Resume point:** 2.1, 2.2, 2.3 and 2.5 are ✅; 2.4 is done on `staging` and pending on
-production. **The only outstanding action is merging `staging` → `master`, which is Max's call
-per [[ClaudeInstructions]] Rule 0** — it ships to Nikalas Marani's live site. After that merge,
-re-check the console on the five routes on production and tick 2.4. Do not re-investigate the
-diagnosis; it is written up in full below.
+**Status:** ✅ Done — 2026-09-11, shipped to `master` as `e64ccbb`, verified on production.
+**Resume point:** Nothing outstanding. Chunk 2 is closed. The one loose thread, deliberately not
+pulled: the same unpinned `toLocale*` pattern exists in ~10 other admin and super-admin files
+that were out of scope here — a sensible follow-up chunk, not a regression.
 **Ship route:** shared file (wherever the culprit lives) → `staging` pass required.
 **Fixes:** report finding C1. Already logged in [[KnownBugs]] as an open, undiagnosed note.
 
@@ -339,9 +337,10 @@ page before React settles gets wiped**.
       See the notes below.
 - [x] **2.3 — Fix it** by pinning the timezone/locale (or moving the formatting to a point
       where server and client agree).
-- [~] **2.4 — Verify the console is clean** on all five routes above, on **production** after
-      deploy, and re-check that Chunk 1's outline now survives. **Staging half done** (see notes);
-      the production half waits on Max merging `staging` → `master`.
+- [x] **2.4 — Verify the console is clean** on all five routes above, on **production** after
+      deploy, and re-check that Chunk 1's outline now survives. Done on staging *and* production
+      (260 dates, 0 one-sided, on 395 live orders). Chunk 1's outline re-checked structurally
+      only — no second test booking was made; see the note in the production section.
 - [x] **2.5 — Close the [[KnownBugs]] entry** properly, including the "Hydration mismatch on
       public site pages" section, not just a status flip.
 
@@ -469,9 +468,33 @@ server now agree, which is precisely the dependence the pin removes.
 | Demo chrome on Staging Winery | absent, as required |
 | `tsc --noEmit` | clean |
 
-**Not yet on production.** [[ClaudeInstructions]] Rule 0 — the `staging` → `master` merge is
+**Shipped to production 2026-09-11 — see below.** Originally held here because [[ClaudeInstructions]] Rule 0 — the `staging` → `master` merge is
 Max's call, and it ships to Nikalas Marani's live site. Task 2.4's production half is done once
 that merge happens.
+
+##### Production verification (2026-09-11, after Max approved the merge)
+
+Merged `staging` → `master` (fast-forward, `e64ccbb`) on Max's explicit go-ahead and pushed.
+Vercel production build `dpl_6t6Uuja4AMaykhnmKHy4WFrN4p9i`, region `fra1`, aliased to
+`demo.vineworks.ge`, `nikalasmarani.vercel.app`, `vineworks.ge` and the rest. Switched back to
+`staging` afterwards per Rule 0's guardrail.
+
+The production check is a much stronger sample than staging's, because the demo tenant carries
+395 orders against Staging Winery's 17:
+
+| Check, on production | Result |
+|---|---|
+| `demo.vineworks.ge/admin/orders` — SSR vs hydrated DOM | **260 distinct dates, 0 one-sided**, 395 rows, UTC server vs Asia/Tbilisi browser |
+| `demo.vineworks.ge` — `/`, `/wines`, `/admin/orders`, `/admin/statistics`, `/live` | consoles clean across the whole sequence (the buffer accumulates, so a single #418 anywhere would have surfaced) |
+| `nikalasmarani.vercel.app` — `/`, `/wines` | clean, renders correctly, **no demo chrome** — the real-tenant regression check |
+| `/live` | both panes mount (`/` and `/admin/orders`), desktop headline correct, console clean |
+
+**One honest gap:** 2.4's "re-check that Chunk 1's outline survives" was verified structurally
+(the mirror assembles and both panes load) but **not** by submitting another booking. That is a
+production write, and there is already one un-cleared test row in the demo data. The change does
+not touch `LiveMirrorClient.tsx`, and Chunk 1's own verification established the outline holds
+while #418 was still firing — so the risk is low, but it is not the same as having watched it
+again. Worth one real booking next time someone is in there anyway.
 
 ---
 

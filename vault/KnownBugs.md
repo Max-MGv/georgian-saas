@@ -88,7 +88,7 @@ fix plan rather than last — it may be on the critical path for the flagship.
 
 ---
 
-## ✅ Hydration mismatch on public site pages (observed 2026-09-11, diagnosed + fixed 2026-09-11)
+## ✅ RESOLVED — Hydration mismatch on public site pages (observed 2026-09-11, fixed and shipped 2026-09-11)
 
 > **Update, 2026-09-11 (teardown session):** confirmed live on **production**, on **every** route
 > checked — `/`, `/wines`, `/admin/orders`, `/admin/statistics`, `/live` — not just local dev and
@@ -156,7 +156,7 @@ exposed to it.
 > and needs one product decision from Max — which timezone is authoritative for a booking date.
 > Tracked as Chunk 2 tasks 2.3–2.5 of [[DemoSite/Plan-DemoFlowFixes]].
 
-### ✅ Resolved on `staging` 2026-09-11 — awaiting the `master` merge
+### ✅ Resolved and live on production, 2026-09-11
 
 **Root cause:** two `toLocale*` calls in `'use client'` components that did not pin the setting
 they depend on, so the server render and the hydration render used different ones.
@@ -178,9 +178,17 @@ and byte-identical to what a Tbilisi-based dev server produced from the same dat
 `/admin/statistics`, `/` and `/wines` consoles clean; no demo chrome on Staging Winery;
 `tsc --noEmit` clean.
 
-**Still open until:** Max merges `staging` → `master` ([[ClaudeInstructions]] Rule 0 — that merge
-ships to Nikalas Marani's live site), then the console is re-checked on the five production
-routes. Tracked as task 2.4 of [[DemoSite/Plan-DemoFlowFixes]].
+**Shipped to production** on Max's explicit go-ahead, merged `staging` → `master` as `e64ccbb`,
+Vercel production build in `fra1`. **Verified on production**, a far stronger sample than staging
+because the demo tenant carries 395 orders to Staging Winery's 17: `/admin/orders` compared
+server HTML against the hydrated DOM and found **260 distinct dates, none appearing on only one
+side**, with the server in UTC and the browser in Asia/Tbilisi. Consoles clean across `/`,
+`/wines`, `/admin/orders`, `/admin/statistics` and `/live`. **Regression-checked on
+`nikalasmarani.vercel.app`** — the real tenant's live site — clean and free of demo chrome.
+
+**One gap, stated plainly:** Chunk 1's row outline was re-checked structurally (the mirror
+assembles, both panes load) but not by submitting another booking, which would be a production
+write. The change does not touch `LiveMirrorClient.tsx`.
 
 **Worth keeping in mind:** the same unpinned pattern exists in other admin and super-admin files
 (`CalendarView`, `OrderDetail`, `WineOrdersClient`, `StatisticsClient`, `WineStatistics`,
