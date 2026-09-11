@@ -37,7 +37,7 @@ type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
 
 const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
 
-import { COLUMN_DEFS, DEFAULT_VISIBLE, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
+import { COLUMN_DEFS, defaultVisibleFor, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
@@ -86,6 +86,27 @@ type Payment = {
   iban: string
 }
 
+/**
+ * One line, ellipsised, with the full value on hover.
+ *
+ * Plan-DemoFlowFixes Chunk 7 task 7.2: Masterclass, Food and Additional each
+ * stacked their parts in a `flex-col`, so a booking with a vegetable dish, a
+ * meat dish and a note pushed its row to ~150px and only about five bookings
+ * fitted a 900px screen. Nothing is lost — the title attribute carries the
+ * whole value and clicking the row still opens the detail view that always
+ * held it.
+ */
+function OneLine({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div
+      title={title}
+      style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+    >
+      {children}
+    </div>
+  )
+}
+
 function visitLabel(locale: string, v: string) {
   return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : adminT(locale, 'orders.visit.tastingLunch')
 }
@@ -115,7 +136,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Your Winery', locale = 'en' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string; locale?: string }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Your Winery', locale = 'en', tenantId = null }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -135,7 +156,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   // Column visibility — state lives in OrdersFilters (same row as filter bar)
   // Table listens for changes via a custom event + re-reads localStorage
-  const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
+  const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(() => defaultVisibleFor(tenantId))
 
   useEffect(() => {
     function readCols() {
@@ -536,11 +557,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('masterclass') && (
                   <td className="px-4 py-3" style={{ color: C.muted, fontSize: 12 }}>
                     {order.masterclassLines.length > 0
-                      ? <div className="flex flex-col gap-0.5">
+                      ? <OneLine title={order.masterclassLines.map(l => `${l.name} ×${l.quantity}`).join(', ')}>
                           {order.masterclassLines.map((l, idx) => (
-                            <span key={idx}>{l.name} <span style={{ color: C.faint }}>×{l.quantity}</span></span>
+                            <span key={idx}>
+                              {idx > 0 && <span style={{ color: C.faint }}> · </span>}
+                              {l.name} <span style={{ color: C.faint }}>×{l.quantity}</span>
+                            </span>
                           ))}
-                        </div>
+                        </OneLine>
                       : <span style={{ color: C.faint }}>—</span>
                     }
                   </td>
@@ -550,11 +574,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('food') && (
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>
                     {order.hotDishVegetable || order.hotDishMeat || order.foodNotes
-                      ? <div className="flex flex-col gap-0.5">
+                      ? <OneLine title={[
+                          order.hotDishVegetable && `${at('orders.food.veg')} ${order.hotDishVegetable}`,
+                          order.hotDishMeat && `${at('orders.food.meat')} ${order.hotDishMeat}`,
+                          order.foodNotes,
+                        ].filter(Boolean).join(' · ')}>
                           {order.hotDishVegetable && <span style={{ color: C.muted }}><span style={{ color: C.faint }}>{at('orders.food.veg')}</span> {order.hotDishVegetable}</span>}
-                          {order.hotDishMeat && <span style={{ color: C.muted }}><span style={{ color: C.faint }}>{at('orders.food.meat')}</span> {order.hotDishMeat}</span>}
-                          {order.foodNotes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.foodNotes}</span>}
-                        </div>
+                          {order.hotDishMeat && <span style={{ color: C.muted }}>{order.hotDishVegetable && <span style={{ color: C.faint }}> · </span>}<span style={{ color: C.faint }}>{at('orders.food.meat')}</span> {order.hotDishMeat}</span>}
+                          {order.foodNotes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{(order.hotDishVegetable || order.hotDishMeat) && ' · '}{order.foodNotes}</span>}
+                        </OneLine>
                       : <span style={{ color: C.faint }}>—</span>
                     }
                   </td>
@@ -571,12 +599,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('additional') && (
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>
                     {(order.extras.length > 0 || order.notes)
-                      ? <div className="flex flex-col gap-0.5">
+                      ? <OneLine title={[
+                          ...order.extras.map(e => `${e.label}: ${e.amount}₾`),
+                          order.notes,
+                        ].filter(Boolean).join(' · ')}>
                           {order.extras.map((e, idx) => (
-                            <span key={idx} style={{ color: C.muted }}>{e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span></span>
+                            <span key={idx} style={{ color: C.muted }}>
+                              {idx > 0 && <span style={{ color: C.faint }}> · </span>}
+                              {e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span>
+                            </span>
                           ))}
-                          {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.notes}</span>}
-                        </div>
+                          {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.extras.length > 0 && ' · '}{order.notes}</span>}
+                        </OneLine>
                       : <span style={{ color: C.faint }}>—</span>
                     }
                   </td>

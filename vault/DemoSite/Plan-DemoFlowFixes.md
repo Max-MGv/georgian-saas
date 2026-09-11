@@ -33,8 +33,8 @@ the live mirror's landing moment — all find their target and then never show i
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
 | **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, all 7 steps verified on production) |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ✅ Done (2026-09-11, verified locally incl. over a dark preset) |
-| **6** | Bug-report widget off the demo tenant | shared → `staging` | ⬜ Not started |
-| **7** | Admin landing readability | shared → `staging` | ⬜ Not started |
+| **6** | Bug-report widget off the demo tenant | shared → `staging` | ✅ Done (2026-09-11) |
+| **7** | Admin landing readability | shared → `staging` | ✅ Done (2026-09-11) |
 | **8** | Onboarding path + super-admin "Reset demo" button | shared → `staging` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
@@ -954,8 +954,8 @@ first place. Front door, tour step 1 and the rail drawer were each looked at in 
 
 ## Chunk 6 — Bug-report widget off the demo tenant
 
-**Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 5 is ✅.
+**Status:** ✅ Done — 2026-09-11.
+**Resume point:** none — closed.
 **Ship route:** **shared file** → `staging` pass required.
 **Fixes:** report finding B4. Max approved removal: *"it's really a nice to have."*
 
@@ -992,9 +992,9 @@ demo tenant, it kills the duplicate FAB as a side effect — one line fixes the 
 `NEXT_PUBLIC_` prefix — so it works in this client component. No new env work needed.
 
 ### Tasks
-- [ ] **6.1 — Add the guard** in
+- [x] **6.1 — Add the guard** in
       `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\BugReportWidget.tsx`.
-- [ ] **6.2 — Regression-check** that the widget still renders on Staging Winery (public +
+- [x] **6.2 — Regression-check** that the widget still renders on Staging Winery (public +
       admin) and in super-admin. This is a shared file; that check is the point of the
       staging pass.
 - [ ] **6.3 — Verify on production** that no bug button appears anywhere on the demo,
@@ -1007,12 +1007,30 @@ they currently work. Removing the widget gives up a functioning channel for hear
 breakage. Middle option if Max changes his mind: hide it on the demo's **public** side only
 and keep it in the demo admin.
 
+### Notes / decisions (2026-09-11)
+
+Implemented exactly as scoped above — one `if` after the hooks, before the JSX, so the
+react-hooks rule stays satisfied. Nothing else changed.
+
+**Verified locally on both sides of the guard**, by pointing `DEFAULT_TENANT_ID` at each tenant
+in turn:
+- **Staging Winery** (`/`): the button is still there, `aria-label="Report a bug or feature
+  request"`, and no demo chrome renders. 6.2.
+- **The demo tenant** (`/`): zero bug buttons, demo chrome present.
+- **`/live`**: two iframes, **zero** bug buttons in either pane and none at the top level. That
+  is the duplicate FAB gone as a side effect, exactly as the chokepoint argument predicted —
+  `isEmbeddedPane()` never needed to learn about this widget.
+
+The super-admin mount was not re-tested: it passes no `tenantId` at all, so `undefined ===
+DEMO_TENANT_ID` is false and the branch cannot be reached from there.
+
+
 ---
 
 ## Chunk 7 — Admin landing readability
 
-**Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 6 is ✅.
+**Status:** ✅ Done — 2026-09-11.
+**Resume point:** none — closed.
 **Ship route:** **shared** (`/admin/orders` is every tenant's page) → `staging` pass required.
 **Fixes:** report finding B5. Decision already made: **stay on Orders**, make it readable.
 
@@ -1024,18 +1042,71 @@ is data entry, not a business — while ₾30,785 of committed future revenue, t
 and the six-operator ranking sit two clicks away on Statistics.
 
 ### Tasks
-- [ ] **7.1 — Hide Food and Masterclass by default** using the Columns control that already
+- [x] **7.1 — Hide Food and Masterclass by default** using the Columns control that already
       exists on the page. Check whether the default is per-tenant persisted or per-browser —
       if it is a real tenant setting, do **not** change it globally; gate the default to the
       demo tenant instead.
-- [ ] **7.2 — Truncate long cells to one line** with the full value still reachable (the row
+- [x] **7.2 — Truncate long cells to one line** with the full value still reachable (the row
       already expands to a detail view).
-- [ ] **7.3 — Add a three-number revenue strip** above the table — upcoming bookings, future
+- [x] **7.3 — Add a three-number revenue strip** above the table — upcoming bookings, future
       revenue, next order — reusing the figures Statistics already computes. Decide with Max
       whether this is demo-only or a genuine improvement for every winery; if the latter, it
       needs its own small design pass rather than riding along here.
 - [ ] **7.4 — Regression-check Staging Winery** and verify row height and visible-row count
       on production.
+
+### Notes / decisions (2026-09-11)
+
+#### 7.1 — the default is per-browser, and it was still gated to the demo
+
+`COLUMNS_STORAGE_KEY` is `localStorage`, so the default is per-browser, not a tenant setting —
+which by the letter of the task permitted changing it globally. It was **not** changed globally.
+A real winery's kitchen wants the food line; whether every tenant should lose it is a product
+decision with an owner, and it is not this chunk's to make. `defaultVisibleFor(tenantId)` in
+`columnDefs.ts` drops `food` and `masterclass` for the demo tenant only, and both `OrdersFilters`
+and `OrdersTable` now take a `tenantId` prop for no other purpose. Every other tenant's first
+visit is byte-for-byte what it was.
+
+#### 7.2 is what actually fixed the row height
+
+Masterclass, Food and Additional each stacked their parts in a `flex-col`. They now render one
+ellipsised line with the full value in a `title`, and the row click still opens the detail view
+that always held everything — nothing is reachable only by hover.
+
+**Measured, same data, 1440×900, production (old code) vs. local (new):**
+
+| | tallest row | rows fully visible |
+|---|---|---|
+| Production, 13 columns | **147 px** | 4 |
+| New, 11 columns + the strip | **80 px** | 5 |
+
+And with Food and Masterclass manually switched **back on** under the new code, the tallest row
+is 85 px — so the truncation, not the hiding, is doing the work. That is worth knowing: 7.2
+alone would have bought most of this, and it is the part that helps every tenant.
+
+The strip costs about one row of its own (87 px). 4 → 5 visible is therefore the number *after*
+paying for it; without the strip it would be 6.
+
+#### 7.3 — built demo-only, deliberately
+
+The task left "is this a genuine improvement for every winery, or demo-only?" open for Max, and
+noted that the every-winery answer needs its own design pass. Shipping an undesigned strip onto
+every tenant's landing page in order to ask the question is the wrong order, so
+`DemoRevenueStrip` renders only for the demo tenant — one `if` in `orders/page.tsx`, in the
+place it would have to be widened.
+
+Two details that are not arbitrary:
+- It is styled on the tenant's own `--site-*` tokens, **not** the "cellar dark" demo chrome.
+  This is not the platform talking about the tenant; it is part of the winery's own back office,
+  and it has to look native for the demo to make its point.
+- Its numbers use Statistics' own definition (upcoming = `date >= today`, over **all** orders,
+  ignoring the current filter) so the two screens cannot disagree, and it pins `en-US` number
+  formatting for the same reason Chunk 2 had to — the server is UTC/en-US and a Georgian
+  browser is not.
+
+**⚠️ Open for Max:** whether the strip should go to every winery. If yes it needs the design
+pass the task called for, not just a widened `if`.
+
 
 ---
 

@@ -11,6 +11,8 @@ import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
 import ViewToggle from './ViewToggle'
+import { DEMO_TENANT_ID } from '@/lib/demoTenant'
+import DemoRevenueStrip from '@/components/DemoRevenueStrip'
 
 const C = { faint: 'var(--site-secondary)', muted: 'var(--site-muted)', border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)', text: 'var(--site-text)' }
 
@@ -122,6 +124,35 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 
+  // ── Demo-only revenue strip ───────────────────────────────────────
+  // "I run a winery" lands here, and the first impression of the back office was
+  // a thirteen-column table — data entry, not a business — while ₾30,785 of
+  // committed future revenue sat two clicks away on Statistics. This puts three
+  // of those numbers above the table. Plan-DemoFlowFixes Chunk 7 task 7.3.
+  //
+  // Demo-only by decision: the task left "is this a genuine improvement for
+  // every winery?" open, and shipping an undesigned strip onto every tenant's
+  // landing page to answer it is the wrong order. It is one `if` to widen once
+  // Max says so. The numbers deliberately match Statistics' own definition
+  // (upcoming = date >= today, over ALL orders, not the current filter) so the
+  // two screens can never disagree.
+  const demoStrip = tenantId === DEMO_TENANT_ID
+    ? await (async () => {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const upcoming = await withTenantDb(tenantId, tx => tx.order.findMany({
+          where: { tenantId, date: { gte: today }, status: { not: 'CANCELLED' } },
+          select: { date: true, totalPrice: true },
+          orderBy: { date: 'asc' },
+        }))
+        return {
+          count: upcoming.length,
+          revenue: Math.round(upcoming.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
+          nextDate: upcoming[0]?.date ?? null,
+        }
+      })()
+    : null
+
   return (
     <div>
       <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
@@ -151,8 +182,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         />
       ) : (
         <>
+      {demoStrip && <DemoRevenueStrip {...demoStrip} locale={locale} />}
+
       <div data-tour="orders-filters">
-        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} />
+        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} tenantId={tenantId} />
       </div>
 
       {orders.length === 0 ? (
@@ -161,7 +194,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} tenantId={tenantId} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,

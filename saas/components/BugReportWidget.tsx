@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { getBreadcrumbs, clearBreadcrumbs, type Breadcrumb } from '@/lib/breadcrumbs'
 import { submitBugReport } from '@/app/actions/bugReports'
+import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 
 export type BugReportSurface = 'PUBLIC_SITE' | 'ADMIN' | 'SUPER_ADMIN'
 
@@ -205,6 +206,29 @@ export default function BugReportWidget({
       setSubmitError('Something went wrong. Please try again.')
     }
   }
+
+  // ── Never on the demo tenant ──────────────────────────────────────────────
+  // Three floating overlays competed on demo.vineworks.ge: the tour pill
+  // bottom-left, the feature rail's tab on the right edge, and this red button
+  // bottom-right — which sat *on top of* the tour's "Next" button on every step
+  // and over the rail's list. On /live there were two of them, one per pane,
+  // because isEmbeddedPane() suppression covers the demo components but never
+  // reached this widget.
+  //
+  // Guarded here rather than at the three mount sites, for the same chokepoint
+  // reasoning the demo's outbound-email suppression already uses: a future
+  // mount cannot forget to opt out. The super-admin mount passes no tenantId,
+  // so Max's own reporting is untouched. And because both /live panes are the
+  // demo tenant, one line kills the duplicate FAB as well as the collisions.
+  //
+  // After the hooks and before the JSX, the same position DemoModeBanner uses,
+  // so the react-hooks rule stays satisfied. Plan-DemoFlowFixes Chunk 6.
+  //
+  // The trade-off Max accepted: bug reports from the demo were deliberately
+  // exempted from the demo's email suppression and did reach the super-admin
+  // inbox, so this gives up a working channel for hearing about demo breakage.
+  // *"It's really a nice to have."*
+  if (tenantId === DEMO_TENANT_ID) return null
 
   const commentCount = comment.length
   const C = {

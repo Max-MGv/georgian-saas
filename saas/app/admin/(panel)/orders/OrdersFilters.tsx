@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { Company } from '@prisma/client'
-import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, DEFAULT_VISIBLE, type ColumnId } from './columnDefs'
+import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, defaultVisibleFor, type ColumnId } from './columnDefs'
 import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
@@ -34,9 +34,11 @@ type Props = {
   params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
   statusCounts: Record<string, number>
   locale?: string
+  /** Only to pick the first-visit column defaults — see defaultVisibleFor. */
+  tenantId?: string | null
 }
 
-export default function OrdersFilters({ companies, params, statusCounts, locale = 'en' }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, locale = 'en', tenantId = null }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const at = (key: string) => adminT(locale, key)
@@ -60,7 +62,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   }, [navKey, params.dateFrom, params.dateTo])
 
   // ── Column visibility (lives here so Columns button is in the filter bar) ──
-  const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(DEFAULT_VISIBLE)
+  const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(() => defaultVisibleFor(tenantId))
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const columnsPickerRef = useRef<HTMLDivElement>(null)
