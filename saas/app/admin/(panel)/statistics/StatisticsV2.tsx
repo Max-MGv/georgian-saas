@@ -147,9 +147,16 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
           value={String(upcomingCount)}
           sub={upcomingCount === 1 ? at('statistics.bookingAhead.singular') : at('statistics.bookingAhead.plural', { n: upcomingCount })}
         />
+        {/* Every toLocaleString in this file pins 'en-US' on purpose. Left bare it
+            uses the *runtime's* default locale, which differs between the two
+            renders of a client component — en-US on the server, the viewer's in
+            the browser — so a German or Russian visitor got 1.234.567 against the
+            server's 1,234,567 and React reported a hydration text mismatch (#418).
+            'en-US' is what this already rendered for everyone here, so nothing
+            changes visually. See Chunk 2 of Plan-DemoFlowFixes. */}
         <Card
           label={at('statistics.card.futureRevenue')}
-          value={`${futureRevenue.toLocaleString()}₾`}
+          value={`${futureRevenue.toLocaleString('en-US')}₾`}
           sub={at('statistics.inPeriod', { period: periodLabel })}
         />
         <Card
@@ -213,12 +220,12 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
                   <CartesianGrid horizontal={false} stroke={C.border} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
                   <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={36} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString('en-US')}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props
                       if (!value || value === 0) return <g />
-                      return <text x={revenueChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString()}₾`}</text>
+                      return <text x={revenueChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString('en-US')}₾`}</text>
                     }} />
                   </Bar>
                 </BarChart>
@@ -239,12 +246,12 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
                   <CartesianGrid horizontal={false} stroke={C.border} />
                   <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={90} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString('en-US')}₾`, at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props
                       if (!value || value === 0) return <g />
-                      return <text x={companyChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString()}₾`}</text>
+                      return <text x={companyChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString('en-US')}₾`}</text>
                     }} />
                   </Bar>
                 </BarChart>

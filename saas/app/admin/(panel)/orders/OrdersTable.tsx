@@ -90,8 +90,16 @@ function visitLabel(locale: string, v: string) {
   return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : adminT(locale, 'orders.visit.tastingLunch')
 }
 
+// `timeZone` is pinned deliberately. This is a client component, so it renders
+// once on the server and again at hydration — and without a fixed zone those two
+// runs use *different* ones (UTC on Vercel, the viewer's in the browser). A date
+// stored at midnight UTC then reads a day earlier for anyone at a negative offset,
+// and any value carrying a 20:00–24:00 UTC time reads a day later from Georgia,
+// which React reports as a hydration text mismatch (#418). Asia/Tbilisi is the
+// winery's own zone, so a booking for 20 Oct says 20 Oct to everyone — including
+// an owner checking bookings from abroad. See Chunk 2 of Plan-DemoFlowFixes.
 function formatDate(d: Date) {
-  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Tbilisi' })
 }
 
 function toInputDate(d: Date) {
