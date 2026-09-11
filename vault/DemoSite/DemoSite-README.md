@@ -14,6 +14,7 @@ platform. **If you are a new session picking this work up, read in this order.**
 | # | File | What it's for |
 |---|---|---|
 | 0 | **[[Plan-DemoFlowFixes]]** | 🔴 **The live task tracker (current work).** Chunks 1–8, strictly sequential, checkboxes, per-chunk resume points. Fixes what the redesign build got wrong. **Start here.** |
+| 0.5 | **[[HANDOFF]]** | 🟢 **Ready-to-paste prompt for the next session.** Kept current — it carries where the work actually stands, which as of 2026-09-11 is "Chunk 4 is built and sitting on `staging`, unmerged". Paste it into a fresh session rather than writing a prompt from scratch. |
 | 1 | [[Plan-DemoRedesign]] | The previous tracker — Phases 0–4, all ✅ complete. History now, but read it for why each piece exists and for the load-bearing constraints. |
 | 2 | [[DemoDirections]] | The design review that produced the plan. Why each direction exists, what it fixes, what to watch out for. |
 | 3 | [[Research-DemoPatterns]] | Industry research behind the decisions, with sources and a caveat about the numbers. |
@@ -82,7 +83,31 @@ The three that matter most:
 main source of the "out of date" feeling.
 
 **All of it is chunked and prioritised in [[Plan-DemoFlowFixes]].** Max approved the plan and
-the order on 2026-09-11; **no code has been written yet.**
+the order on 2026-09-11.
+
+> ### ⚠️ Progress since the above was written — updated 2026-09-11 (session 11)
+>
+> The section above describes the state at the **start** of the fix work. Four chunks in, most
+> of it is no longer true. Current state:
+>
+> | Chunk | Status |
+> |---|---|
+> | **1** — the flagship lands (mirror scrolls to the new booking) | ✅ on `master`, verified on production |
+> | **2** — hydration mismatch (React #418) | ✅ on `master`, verified on production |
+> | **3** — tour entry: no more "Tour paused", auto-start, real ending | ✅ on `master`, verified on production |
+> | **4** — tour + rail anchoring | 🚧 **built and on `staging` (`9d3a2b2`), NOT merged to `master`** |
+> | **5–8** | ⬜ not started |
+>
+> **The trap for a new session:** Chunk 4's fix is real and complete, but it is on `staging`
+> only — so `demo.vineworks.ge` still shows the broken behaviour. Do not re-debug it. Run
+> `git diff master..staging` first. See [[HANDOFF]].
+>
+> **What Chunk 4 found, because it overturns the framing above:** the tour's missing rings were
+> never about missing `data-tour` anchors. All seven existed. The tour measured where to draw
+> the ring **once, 60 ms after a route change**, and lost that race on every step that involved
+> navigating — which is why step 4, the only step that does not navigate, was the only one that
+> worked, and why it passed locally and failed on production. Full record in
+> [[Plan-DemoFlowFixes]] Chunk 4.
 
 ---
 

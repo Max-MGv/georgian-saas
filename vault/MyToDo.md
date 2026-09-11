@@ -8,6 +8,51 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ⏸ 2026-09-11 (session 11) — Chunk 4 is built but **parked on `staging`**, waiting on you
+
+The spotlight tour now actually spotlights — all seven steps draw a real ring. It is **not on
+the live demo yet**, because this chunk touched shared admin pages and those render for Nikalas
+Marani's real staff too. Two things need you before it ships.
+
+### 1. Two screens I could not check myself (2 minutes)
+
+Open the staging preview and log in as admin:
+`georgian-saas-git-staging-mg-productions-projects.vercel.app`
+
+- **`/admin/statistics`** — do the three cards at the top (Upcoming orders / Future revenue /
+  Next order) still look **identical in size and alignment**? I wrapped the middle one in a
+  `div` so the tour can ring that card specifically, and added `h-full` so it still fills its
+  cell. I measured it as pixel-identical on the demo tenant (all three 114 px tall, same top),
+  but I could not check it on Staging Winery.
+- **`/admin/companies`** — does the list still look and behave normally? Rows expand and
+  collapse as before?
+
+**Why I couldn't:** both sit behind the admin login, and I'm not allowed to type a password
+into a login form. That's a standing safety rule, not a one-off.
+
+### 2. Then say the word and I'll merge
+
+`staging` → `master`. **That merge is the one action that ships to Nikalas Marani's real site**,
+so I won't run it without you saying so. Once it's live I'll walk all seven tour steps plus the
+feature rail on `demo.vineworks.ge` and confirm.
+
+### One question still open from last session
+
+Chunk 1's testing left a fake booking in the **live** demo data — **"Luka Testashvili", 4 guests,
+20 Oct 2026**. It's still there, and the 03:00 UTC nightly reseed did **not** clear it, which is
+itself a bit odd and may be worth a look. **Do you want it deleted?** It's a write to the real
+production database, so I'd rather you said yes first.
+
+### What changed, in one line
+
+The plan assumed the tour was missing its `data-tour` anchors. It wasn't — all seven existed
+the whole time. The tour measured where to draw the ring **once, 60 ms after changing page**,
+which was a race it lost on every step that involved navigating. Step 4 worked only because it's
+the one step that doesn't navigate. Same reason it looked fine on my machine and broke on the
+real site: 60 ms is plenty locally and not enough over the internet.
+
+---
+
 ## ✅ 2026-09-10 (sessions 5–6) — Demo redesign **built and live** — please click through it
 
 All five phases of `vault/DemoSite/Plan-DemoRedesign.md` are shipped to
