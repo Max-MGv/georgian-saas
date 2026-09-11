@@ -8,6 +8,24 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🆕 2026-09-12 — the revenue strip is on every winery now
+
+Done and live. On any winery's **Orders** page there is now a centred three-number strip above
+the table: upcoming bookings, future revenue, next order.
+
+**One thing to look at when you next open Nikalas Marani's admin:** it shows 8 upcoming bookings
+and 1,800₾ for the staging winery, so it will show real numbers for Nikalas too. Tell me if the
+wording or the three choices of number are wrong for a real winery — easy to change.
+
+**A rule I made that you should know about, because you may disagree:** a winery with **zero
+bookings ever** does not see the strip at all. A brand-new client opening their back office for
+the first time would otherwise be met by "0 bookings, 0₾", which felt discouraging and says
+nothing. It appears the moment they take their first booking. A winery that *has* traded but has
+nothing upcoming still sees it, showing 0 and "No upcoming orders". Say the word if you would
+rather it always showed.
+
+---
+
 ## ✅ 2026-09-11 (session 12) — the demo plan is **finished and live**. Two small things for you
 
 All eight chunks are shipped to `master` and verified on `demo.vineworks.ge`. The tour rings, the

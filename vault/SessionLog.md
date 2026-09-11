@@ -8,6 +8,47 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 (session 12, continued) — the revenue strip goes platform-wide
+
+Max saw the strip on the demo and asked for it on the normal site too, centred
+(*"i really like this addition to orders so yeah let's add it to the normal website too, but
+center the numbers, they are aligned left"*). That answers the one open question Chunk 7 task 7.3
+had deliberately left for him.
+
+Done as the small design pass the task called for rather than a widened `if`:
+
+- Moved `components/DemoRevenueStrip.tsx` → `app/admin/(panel)/orders/RevenueStrip.tsx`,
+  colocated with the only page that renders it and no longer carrying "Demo" in a name that is
+  no longer true.
+- **Centred**, measured rather than eyeballed: `text-align: center` on all three cells, each
+  value's box 20 px from its cell's left edge and 20–21 px from the right, on localhost and again
+  on production.
+- **It hides itself for a winery with no bookings at all.** This is the decision the rollout
+  actually turned on. A brand-new tenant opening the back office on day one should not be met by
+  a row of zeros — that is discouraging and says nothing. It appears with their first booking. A
+  winery that *has* traded but has nothing upcoming still gets it, showing 0 and "No upcoming
+  orders", because there the zero is real information rather than an empty state. Costs one
+  `count` query, table view only.
+- The numbers still ignore the page's filters, and still use Statistics' own definition
+  (`date >= today`, cancelled excluded), so the two screens cannot disagree.
+
+**Verified against every tenant in the dev database** by running the component's exact two
+queries for each — `staging-winery` 17 orders → renders (8 upcoming, 1,800₾),
+`test-onboarding-wizard` 0 orders → **hidden**, `vineworks-demo` 393 → renders. That middle row is
+the one worth having: the zero-booking case is what a new client sees first and the only one
+nobody would have thought to open.
+
+Shared file, so it took the `staging` pass (`b9162b1`) with a Staging Winery public regression
+check before the `master` fast-forward. Live and re-measured on production.
+
+**Method note:** both the Browser pane (collapsed to a 45 px sliver) and Max's Chrome window
+(reporting zero width all session) refused to screenshot. Driving Playwright directly from
+`saas/` worked and controls its own viewport — use that for screenshots on this machine rather
+than fighting the panes. It also signs into the demo through the demo's own one-click button, so
+no password is ever typed.
+
+---
+
 ## 2026-09-11 (session 12) — Chunks 4–8 all shipped. The demo plan is finished
 
 **Every chunk of [[DemoSite/Plan-DemoFlowFixes]] is now ✅ and live on `demo.vineworks.ge`.**
