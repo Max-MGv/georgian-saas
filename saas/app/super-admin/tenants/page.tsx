@@ -1,9 +1,11 @@
 import { getTenants } from '@/app/actions/superAdmin'
 import Link from 'next/link'
 import TenantsClient from './TenantsClient'
+import ResetDemoCard from './ResetDemoCard'
+import { demoTenantExists } from '@/app/actions/demoReset'
 
 export default async function TenantsPage() {
-  const tenants = await getTenants()
+  const [tenants, demo] = await Promise.all([getTenants(), demoTenantExists()])
 
   return (
     <div>
@@ -24,6 +26,10 @@ export default async function TenantsPage() {
       </div>
 
       <TenantsClient tenants={tenants} />
+
+      {/* Only on the database that actually hosts the demo — Plan-DemoFlowFixes
+          Chunk 8 task 8.2. */}
+      {demo && <ResetDemoCard tenantName={demo.name} />}
     </div>
   )
 }

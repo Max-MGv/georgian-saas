@@ -491,6 +491,38 @@ export async function seedDemoTenant(
     wineCreated = wineWrites.length
   }
 
+  // --- Onboarding: put the setup wizard back to a fresh account ---------------
+  //
+  // The front door's fourth card promises "see what standing up your own winery
+  // site actually takes", and a visitor arrived at a wizard someone else had
+  // already filled in. These four Setting rows are the answers the wizard
+  // stores; clearing them returns the qualifying questions to unanswered, so
+  // the wizard opens on step 1 again. Plan-DemoFlowFixes Chunk 8, task 8.1 —
+  // in the existing reseed rather than a second job, as the task asked.
+  //
+  // **What this can and cannot reset, measured rather than assumed.** Wizard
+  // completeness is computed live from real data (getOnboardingStatus), never
+  // from a stored "done" flag — that is by design, so toggling a setting later
+  // cannot leave a stale tick. So Wines, Payment info, Contact and Photos stay
+  // ticked *because the demo genuinely has wines, an IBAN, contact details and
+  // a hero photo*, and the only way to untick them is to delete the content the
+  // rest of the demo exists to show. Companies, Booking details and Review do
+  // reset, and the wizard lands on Companies — a visitor is asked the first
+  // question again instead of being dropped on a review screen.
+  //
+  // Checked, per the task's own warning: this does NOT bring the setup banners
+  // back on the demo. Both are gated off for the demo tenant in
+  // app/admin/(panel)/layout.tsx (Plan-DemoRedesign task 0.4), and
+  // getFinishDetailsStatus reports nothing outstanding while readyToLaunch is
+  // false, which is exactly what clearing these produces.
+  const ONBOARDING_KEYS = [
+    'onboarding_works_with_companies',
+    'onboarding_offers_food_addons',
+    'onboarding_offers_masterclasses',
+    'onboarding_launched_at',
+  ]
+  await db.setting.deleteMany({ where: { tenantId: tid, key: { in: ONBOARDING_KEYS } } })
+
   // --- Report ---
   const all = await db.order.findMany({ where: { tenantId: tid }, select: { date: true, totalPrice: true } })
   const upcoming = all.filter(o => o.date >= today)

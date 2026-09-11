@@ -35,7 +35,7 @@ the live mirror's landing moment — all find their target and then never show i
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ✅ Done (2026-09-11, verified locally incl. over a dark preset) |
 | **6** | Bug-report widget off the demo tenant | shared → `staging` | ✅ Done (2026-09-11) |
 | **7** | Admin landing readability | shared → `staging` | ✅ Done (2026-09-11) |
-| **8** | Onboarding path + super-admin "Reset demo" button | shared → `staging` | ⬜ Not started |
+| **8** | Onboarding path + super-admin "Reset demo" button | shared → `staging` | ✅ Done (2026-09-11) |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
@@ -1112,8 +1112,8 @@ pass the task called for, not just a widened `if`.
 
 ## Chunk 8 — Onboarding path + super-admin "Reset demo" button
 
-**Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 7 is ✅.
+**Status:** ✅ Done — 2026-09-11.
+**Resume point:** none — closed.
 **Ship route:** **shared** → `staging` pass required.
 **Fixes:** report finding A5, via Max's reset-button idea.
 
@@ -1130,21 +1130,100 @@ account and see what standing up your own winery site actually takes."* Two thin
    out of the guided demo entirely.**
 
 ### Tasks
-- [ ] **8.1 — Reset the onboarding flags in the nightly reseed** so the wizard presents fresh
+- [x] **8.1 — Reset the onboarding flags in the nightly reseed** so the wizard presents fresh
       each morning. The reseed already exists (`saas\lib\demoSeed.ts`, driven by
       `/api/cron/reseed-demo`) — extend it rather than adding a second job. Note that
       `getFinishDetailsStatus` recomputes live, which is why [[Plan-DemoRedesign]] task 0.4
       gated the banners rather than completing the steps; check that resetting flags does not
       bring the "Finish setting up your account" banner back on the demo.
-- [ ] **8.2 — Build the super-admin "Reset demo now" button** (Max's request). Calls the same
+- [x] **8.2 — Build the super-admin "Reset demo now" button** (Max's request). Calls the same
       `demoSeed` logic the cron does, so there is one implementation, not two. Needs a
       confirm step — it deletes and rebuilds rows — and should report what it did.
-- [ ] **8.3 — Mount the demo chrome on `/admin/onboarding`** so path 4 no longer exits the
+- [x] **8.3 — Mount the demo chrome on `/admin/onboarding`** so path 4 no longer exits the
       demo, or give that route its own "← back to the demo" affordance that returns to the
       guided flow rather than to a bare admin page.
-- [ ] **8.4 — Verify** path 4 end to end: front door → "How fast is setup?" → a fresh wizard
+- [x] **8.4 — Verify** path 4 end to end: front door → "How fast is setup?" → a fresh wizard
       → a way back into the demo. Then press the reset button and confirm the demo returns to
       its seeded state.
+
+
+### Notes / decisions (2026-09-11)
+
+#### 8.1 — what a reset can and cannot reach, measured
+
+Wizard completeness is **computed live** from real data (`getOnboardingStatus`), never stored as
+a "done" flag — by design, so toggling a setting later cannot leave a stale tick. That puts a
+hard ceiling on this task, and it is worth stating plainly rather than discovering again:
+
+| Step | Resettable? | Why |
+|---|---|---|
+| Companies | ✅ | gated on the `onboarding_works_with_companies` answer |
+| Booking details | ✅ | gated on the food / masterclass answers |
+| Review | ✅ | gated on `onboarding_launched_at` |
+| Wines, Payment info, Contact, Photos | ❌ | gated on the demo genuinely *having* wines, an IBAN, contact details and a hero photo |
+
+The four that stay ticked can only be untold by deleting the content the rest of the demo exists
+to show. So the reseed clears the four Setting rows that *are* answers, and the wizard opens on
+**Companies** — the visitor is asked the first question again instead of being dropped on a
+review screen someone else completed. That is the honest ceiling, not the full "fresh account"
+the card's copy implies. **Worth Max's judgement**: if the fourth card must be literally true,
+the answer is a disposable tenant per visitor, which is the open question Chunk 8 explicitly does
+not settle.
+
+**The task's own warning, checked rather than assumed:** clearing these does **not** bring the
+setup banners back on the demo. Both are gated off for the demo tenant in
+`app/admin/(panel)/layout.tsx` (Plan-DemoRedesign task 0.4), and independently
+`getFinishDetailsStatus` reports nothing outstanding while `readyToLaunch` is false — which is
+exactly what clearing these produces.
+
+**Verified by simulation, not by inspection:** the four settings were written to the dev demo
+tenant as a visitor running the wizard would leave them, the real reseed was run, and they were
+counted again. 4 → 0, alongside a normal rebuild of 393 bookings and 45 wine orders.
+
+#### 8.2 — one implementation, two triggers
+
+`resetDemoNow()` calls the **same** `seedDemoTenant` the cron route calls, so the button and the
+03:00 job can never drift, and 8.1's onboarding reset came along for free. Three layers of
+safety: `requireSuperAdmin()` before anything is read or written; `seedDemoTenant`'s own
+slug lookup, which refuses outright on any database without the demo; and a two-step confirm in
+the UI, because the first click should not be able to delete rows.
+
+It reports what it did — tenant, rows rebuilt, totals, elapsed — rather than flashing a tick,
+since "did that actually work?" is the only question anyone has after pressing it. The card
+renders only on a database that actually hosts the demo.
+
+**⚠️ Not verified by Claude:** the card sits behind the super-admin login, which Claude may not
+pass. It typechecks, its action is a thin wrapper over a function verified above, and the page
+it mounts on renders it only when `demoTenantExists()` returns a row — but nobody has looked at
+it. **Max should press it once.**
+
+#### 8.3 — its own route layout, not `app/admin/layout.tsx`
+
+`app/admin/layout.tsx` wraps `(panel)` as well, so mounting the demo chrome there would render
+every demo component **twice** on every other admin page. `app/admin/onboarding/layout.tsx`
+scopes it to the one route that was missing it. `DemoTour` is included deliberately even though
+no tour *step* lives on this route: off-step it shrinks to the corner pill, which is exactly the
+way back into the guided flow this page lacked.
+
+Verified on localhost against the dev demo tenant: `/admin/onboarding` now carries the demo
+banner, the tour pill and the feature rail, shows the Companies question as its current step, and
+has no bug button (Chunk 6 holds here too).
+
+#### Rode along: the tour pill's emoji
+
+`DemoTour`'s pill still read "🍷 Show me what this does" — the same flat-OS-emoji problem
+Chunk 5 task 5.2 removed everywhere else, missed because 5.2 named the *card* icons. It is now
+the same lucide `Wine` glyph as the banner. Demo-only file, one line, and leaving it would have
+made the palette work look half-done on the single most-seen control in the demo.
+
+### Files expected
+- `saas\lib\demoSeed.ts` *(8.1 — the onboarding reset)*
+- `saas\app\actions\demoReset.ts` *(new — 8.2)*
+- `saas\app\super-admin\tenants\ResetDemoCard.tsx` *(new — 8.2)*
+- `saas\app\super-admin\tenants\page.tsx` *(8.2 — mounts the card)*
+- `saas\app\admin\onboarding\layout.tsx` *(new — 8.3)*
+- `saas\components\DemoTour.tsx` *(the pill's icon)*
+
 
 ### Still unresolved behind this
 [[Plan-DemoRedesign]] carries an open item — **disposable tenant per visitor vs. one shared

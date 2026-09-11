@@ -8,6 +8,7 @@ import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
+import { Wine } from 'lucide-react'
 
 /**
  * Guided spotlight tour for demo.vineworks.ge — Plan-DemoRedesign Phase 2,
@@ -331,9 +332,13 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           fontWeight: 600,
           cursor: 'pointer',
           boxShadow: DEMO_FX.shadowSm,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '7px',
         }}
       >
-        {state.finished ? '🍷 Replay the tour' : '🍷 Show me what this does'}
+        <Wine aria-hidden="true" size={14} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+        {state.finished ? 'Replay the tour' : 'Show me what this does'}
       </button>,
       document.body,
     )
