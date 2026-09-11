@@ -8,6 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-11 (session 9) — Chunk 2: #418 diagnosed. It doesn't fire from Georgia, and that's the whole story
+
+**Nothing shipped. No code was touched.** Chunk 2 tasks 2.1 and 2.2 are done; 2.3–2.5 are blocked
+on one decision from Max. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 2 notes.
+
+**The headline: React #418 does not currently fire anywhere.** Checked local dev (`/`, `/wines`,
+`/admin/orders`, `/admin/statistics` on Staging Winery — dev mode is where React prints the exact
+mismatching text) and production (all five routes, both the in-app browser and Max's real
+Chrome). Console capture was proved working first with an injected `console.error`, so "clean"
+means clean. Then, independently of the console, a **SSR-vs-DOM text diff** — fetch the server
+HTML, parse it, walk both trees, compare every text node, since React repairs a mismatch by
+keeping the client value: **0 differences across 12,582 text nodes** on production
+`/admin/orders`, 0 across 85 on `/wines`.
+
+**Why three sessions failed to find it — this is the useful part.** The server renders in **UTC**
+with a Node default locale of **en-US**. Every browser available here is **en-US /
+Asia/Tbilisi**. That pairing hides both possible mechanisms: `ka-GE` and `en-GB` group digits
+*identically* to `en-US` (`1,234,567.5` — only `de-DE`/`ru-RU` diverge), and Tbilisi's **+4** is
+a *positive* offset, so a midnight-UTC date never crosses back over midnight. The bug was being
+hunted from the one timezone and locale that cannot see it.
+
+**The two call sites, named.** Not one node — two, both `toLocale*` called at render time in a
+client component without pinning:
+- `saas/app/admin/(panel)/orders/OrdersTable.tsx:94` — `toLocaleDateString('en-GB', …)` with no
+  `timeZone`. Demonstrated: `2026-10-20T00:00:00Z` → "20 Oct 2026" (UTC) vs "19 Oct 2026" (New
+  York); `2026-09-10T21:30:00Z` → "10 Sept 2026" (UTC) vs "11 Sept 2026" (Tbilisi). So it breaks
+  for any viewer in the Americas, and **from Georgia** for any timestamp in the 20:00–24:00 UTC
+  window. `Order.date` is a bare `DateTime` (`schema.prisma:91`), so it can land in that window.
+- `saas/app/admin/(panel)/statistics/StatisticsV2.tsx:152, 216, 221, 242, 247` —
+  `Number(v).toLocaleString()` with **no locale argument at all**.
+
+**"Fires on every route" is probably an artifact, and the plan/KnownBugs now say so.** Console
+buffers persist across same-origin navigations — demonstrated, an injected error survived three
+full navigations — so one occurrence reads as five routes. And `/`, `/wines` and `/live` contain
+no date or locale formatting at all, so the stated mechanism cannot apply on three of the five.
+The bug is intermittent and data-dependent (the nightly 03:00 UTC reseed changes which rows land
+in the bad window), which also explains why the teardown saw it this morning and this session
+did not.
+
+**Blocked on Max:** which timezone is authoritative for a booking date? Recommendation is the
+winery's own zone (`Asia/Tbilisi`), so "20 Oct" reads as 20 Oct to everyone including an owner
+abroad. Then 2.3 is two one-line pins → **shared files, so `staging` pass + Staging Winery
+regression check** before `master`.
+
+**Housekeeping:** the Chunk 1 test booking (Luka Testashvili) was not checked this session —
+still worth confirming the nightly reseed cleared it.
+
+---
+
 ## 2026-09-11 (session 8) — Chunk 1: the flagship lands. Cause was not what anyone thought
 
 **Shipped to `master` as `9959711`, verified on production.** Max approved Chunk 1 of

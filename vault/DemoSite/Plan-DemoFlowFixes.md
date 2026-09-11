@@ -29,7 +29,7 @@ the live mirror's landing moment — all find their target and then never show i
 | Chunk | What | Ship route | Status |
 |---|---|---|---|
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
-| **2** | The hydration mismatch (React #418) | shared → `staging` | ⬜ Not started |
+| **2** | The hydration mismatch (React #418) | shared → `staging` | 🚧 In progress — diagnosed 2026-09-11, fix awaiting Max |
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ⬜ Not started |
 | **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ⬜ Not started |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
@@ -39,11 +39,13 @@ the live mirror's landing moment — all find their target and then never show i
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 **Chunk 1 is ✅ and shipped to production. Begin at Chunk 2,
-task 2.1 — but read Chunk 1's "Notes / decisions" first: task 1.3 falsified the premise
-Chunk 2 was sequenced on.** Chunk 2 is still worth doing; it is simply no longer on the
-flagship's critical path, so re-confirm with Max that it keeps its slot at #2 before starting.
-[[ClaudeInstructions]] Rule 8 still applies per chunk — Max has approved Chunk 1 only.
+**Overall resume point:** 🔜 **Chunk 2 is diagnosed but not fixed — waiting on Max.** Read
+Chunk 2's "Notes / decisions" in full before touching it; 2.1 and 2.2 are done and the answer is
+written up there, so there is nothing left to investigate. #418 does not currently reproduce on
+any route in any environment, and the two `toLocale*` call sites that can produce it are named
+with the mechanism demonstrated. **Blocked on one product decision** (which timezone is
+authoritative for a booking date) before 2.3 can be applied. Do not start Chunk 3.
+[[ClaudeInstructions]] Rule 8 still applies per chunk — Max has approved Chunks 1 and 2 only.
 
 ---
 
@@ -294,10 +296,14 @@ Console after the booking: only the pre-existing React #418, no new errors from 
 
 ## Chunk 2 — The hydration mismatch (React #418)
 
-**Status:** ⬜ Not started
-**Resume point:** Chunk 1 is ✅ and 1.3 has reported: **the hydration bug was not the cause of
-the flagship failure.** Start at 2.1 — but this chunk is now ordinary cleanup rather than
-critical path, so confirm with Max that it keeps slot #2 before spending a session on it.
+**Status:** 🚧 In progress — 2.1 and 2.2 done (diagnosed); 2.3–2.5 blocked on Max.
+**Resume point:** **Diagnosis is complete and written up below — do not re-investigate.** #418
+does not currently fire on any route in any environment; the two `toLocale*` call sites that can
+cause it are named, with the mechanism demonstrated. What is left is 2.3 (apply the two one-line
+pins), 2.4 (verify on staging + production) and 2.5 (close the [[KnownBugs]] entry). 2.3 needs
+**Max's answer on which timezone is authoritative** — see "Recommended fix" at the end of the
+notes — and it touches shared files, so it takes the `staging` pass with a Staging Winery
+regression check.
 **Ship route:** shared file (wherever the culprit lives) → `staging` pass required.
 **Fixes:** report finding C1. Already logged in [[KnownBugs]] as an open, undiagnosed note.
 
@@ -328,10 +334,12 @@ page before React settles gets wiped**.
   candidates — dates, times and ₾ amounts on every screen.
 
 ### Tasks
-- [ ] **2.1 — Reproduce locally in dev mode**, where React prints the exact mismatching text
+- [x] **2.1 — Reproduce locally in dev mode**, where React prints the exact mismatching text
       side by side. **Do not keep chasing this in production** — that is what made it cost
       three sessions' worth of debugging so far, including real time lost on the live mirror.
-- [ ] **2.2 — Identify the offending text node** and record it here.
+- [x] **2.2 — Identify the offending text node** and record it here. **Done — but the honest
+      answer is "there are two call sites, not one node, and neither fires from Georgia."**
+      See the notes below.
 - [ ] **2.3 — Fix it** by pinning the timezone/locale (or moving the formatting to a point
       where server and client agree).
 - [ ] **2.4 — Verify the console is clean** on all five routes above, on **production** after
@@ -340,7 +348,100 @@ page before React settles gets wiped**.
       public site pages" section, not just a status flip.
 
 ### Notes / decisions
-_(record the offending node here — this is the thing three sessions have failed to name)_
+#### 2.1/2.2's finding — measured 2026-09-11, second session on this chunk
+
+**#418 does not currently fire anywhere, and the two mechanisms that can cause it are both
+invisible from Georgia on an en-US browser — which is Max's setup and Claude's.**
+
+##### What was checked, and came back clean
+
+| Environment | Routes | Result |
+|---|---|---|
+| Local dev (`next dev`, Staging Winery via `DEFAULT_TENANT_ID`) | `/`, `/wines`, `/admin/orders`, `/admin/statistics` | no hydration error — and dev mode is where React prints the full side-by-side diff |
+| Production, in-app browser | `/`, `/wines`, `/live`, `/admin/orders`, `/admin/statistics` | console clean |
+| Production, Max's real Chrome (Grammarly installed) | `/wines` | console clean |
+
+Console capture was **proved working** first (an injected `console.error` was captured), so
+"clean" means clean, not unmonitored.
+
+Beyond the console, a **direct SSR-vs-DOM text diff** was run: fetch the page's server HTML,
+parse it, walk both trees' text nodes and compare. React repairs a text mismatch by keeping the
+*client* value, so any mismatch shows up as an SSR-only/DOM-only pair. Results:
+
+- `/admin/orders` on production — **12,582 text nodes, zero differences**
+- `/wines` on production — 85 nodes, zero differences (in both browsers)
+
+The only DOM-only strings anywhere were `🍷 Show me what this does` and `✦ What can it do?` —
+the demo tour/rail pills, which mount in `useEffect` after hydration. Expected, not a mismatch.
+
+##### Why it didn't reproduce — the environment actually matters
+
+The server renders in **UTC** with a Node default locale of **en-US** (`fra1`). Both browsers
+available here resolve to **en-US / Asia/Tbilisi**. That combination hides both mechanisms:
+
+- **Numbers:** `ka-GE` and `en-GB` group digits *identically* to `en-US` (`1,234,567.5`).
+  Only `de-DE` (`1.234.567,5`) or `ru-RU` (`1 234 567,5`) diverge.
+- **Dates:** Tbilisi is **UTC+4**, a *positive* offset, so a midnight-UTC date value never
+  crosses back over midnight. `20 Oct 2026` in UTC is still `20 Oct 2026` in Tbilisi.
+
+This is very likely why three sessions failed: the bug was being hunted from the one timezone
+and locale that cannot see it.
+
+##### The two offending call sites — named, with the mechanism demonstrated
+
+Neither is "the" single node, because there isn't one. Both are real, both are latent, and both
+are **`toLocale*` called at render time in a client component without pinning**:
+
+1. `saas/app/admin/(panel)/orders/OrdersTable.tsx:94`
+   `new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })`
+   — locale is pinned, **`timeZone` is not**, so it uses the runtime's zone: UTC on the server,
+   the viewer's in the browser.
+2. `saas/app/admin/(panel)/statistics/StatisticsV2.tsx:152, 216, 221, 242, 247`
+   `Number(v).toLocaleString()` — **no locale argument at all**, so it uses the runtime's
+   default locale: en-US on the server, the viewer's in the browser.
+
+Demonstrated deterministically (same formatter, forced timezones):
+
+| Value | Server (UTC) | Tbilisi (+4) | New York (−4) |
+|---|---|---|---|
+| `2026-10-20T00:00:00Z` (a visit date) | 20 Oct 2026 | 20 Oct 2026 | **19 Oct 2026** |
+| `2026-09-10T21:30:00Z` (a `createdAt`) | 10 Sept 2026 | **11 Sept 2026** | 10 Sept 2026 |
+
+So it breaks for **any viewer in the Americas** on ordinary visit dates, and it breaks **from
+Georgia** for any displayed timestamp falling in the **20:00–24:00 UTC** window. `Order.date` is
+a bare `DateTime` in the schema (`prisma/schema.prisma:91`), not `@db.Date`, so it can carry a
+time component and land in that window.
+
+That last row is the likely explanation for the teardown seeing #418 on `/admin/orders` and this
+session not: **which rows fall in the 20:00–24:00 UTC window changes with the data**, and the
+demo tenant is reseeded nightly at 03:00 UTC.
+
+##### The "fires on every route" claim is probably an artifact — treat it as unproven
+
+Two independent reasons to doubt it:
+
+1. **Console buffers persist across same-origin navigations.** Observed directly this session: an
+   injected `console.error` was still in the buffer after three full navigations within
+   `demo.vineworks.ge`. A single #418 from the first page read as five routes' worth.
+2. **`/`, `/wines` and `/live` contain no date or locale formatting at all** — verified by grep.
+   The mechanism in the bug's own description cannot apply on three of the five routes.
+
+This does not mean nothing was seen; it means "every route" should not be carried forward as
+established fact. The bug is real but **intermittent and data-dependent**, not universal.
+
+##### Recommended fix (NOT yet applied — needs Max's decision, and it is a shared file)
+
+Pin both. The product question Max needs to answer is *which* timezone is authoritative: the
+right answer is almost certainly **the winery's own zone (`Asia/Tbilisi`)**, so a booking for
+20 Oct reads "20 Oct" to everyone — including the owner checking bookings from abroad, and any
+future non-Georgian tenant's staff. That makes the fix:
+
+- `OrdersTable.tsx:94` — add `timeZone: 'Asia/Tbilisi'` (or a per-tenant setting) to the options.
+- `StatisticsV2.tsx` — give every `toLocaleString()` an explicit locale (`'en-US'`, matching what
+  it renders today, so no visible change for anyone).
+
+Both are one-line changes, both are **shared files** → `staging` pass + Staging Winery
+regression check before `master`, per ground rule 2.
 
 ---
 

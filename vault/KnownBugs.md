@@ -120,6 +120,42 @@ exposed to it.
 > genuine in principle; it just has no confirmed victim yet, and this bug's priority should be
 > judged on its own merits rather than on the live mirror.
 
+> **Update, 2026-09-11 (Chunk 2, diagnosis session) — the bug is real but NOT universal, and it
+> does not currently fire.** Measured across local dev (`/`, `/wines`, `/admin/orders`,
+> `/admin/statistics`, Staging Winery) and production (all five routes, two browsers): **no
+> hydration error anywhere**, console capture verified working first. A direct SSR-vs-DOM text
+> diff — fetch the server HTML, walk both trees, compare every text node — found **0 differences
+> across 12,582 text nodes** on production `/admin/orders` and 0 across 85 on `/wines`.
+>
+> **Why three sessions missed it:** the server renders in **UTC / en-US**; every browser
+> available here is **en-US / Asia/Tbilisi**. That pairing hides both mechanisms — `ka-GE` and
+> `en-GB` group digits identically to `en-US`, and Tbilisi's **+4** offset never carries a
+> midnight-UTC date back over midnight. The bug was being hunted from the one timezone and
+> locale that cannot see it.
+>
+> **The two call sites, named at last** (both `toLocale*` at render time in a client component,
+> neither pinned):
+> - `saas/app/admin/(panel)/orders/OrdersTable.tsx:94` — `toLocaleDateString('en-GB', …)` with
+>   **no `timeZone`**. Breaks for any viewer at a negative UTC offset (the Americas), and breaks
+>   **from Georgia** for any timestamp in the **20:00–24:00 UTC** window. Demonstrated:
+>   `2026-10-20T00:00:00Z` → "20 Oct 2026" (UTC) vs "19 Oct 2026" (New York);
+>   `2026-09-10T21:30:00Z` → "10 Sept 2026" (UTC) vs "11 Sept 2026" (Tbilisi).
+> - `saas/app/admin/(panel)/statistics/StatisticsV2.tsx:152, 216, 221, 242, 247` —
+>   `Number(v).toLocaleString()` with **no locale argument at all**. Breaks for any viewer whose
+>   browser groups digits differently (`de-DE`, `ru-RU`, …).
+>
+> **"Fires on every route" should be treated as unproven.** Console buffers persist across
+> same-origin navigations — demonstrated this session, an injected `console.error` survived three
+> full navigations — so one occurrence reads as five routes. Independently, `/`, `/wines` and
+> `/live` contain **no** date or locale formatting at all (verified by grep), so the stated
+> mechanism cannot apply on three of the five. The bug is **intermittent and data-dependent**
+> (which rows land in the 20:00–24:00 UTC window changes with the nightly 03:00 UTC reseed), not
+> universal.
+>
+> **Status: diagnosed, not yet fixed.** The fix is two one-line pins, but it touches shared files
+> and needs one product decision from Max — which timezone is authoritative for a booking date.
+> Tracked as Chunk 2 tasks 2.3–2.5 of [[DemoSite/Plan-DemoFlowFixes]].
+
 **Not investigated:** the specific mismatching text was not identified — likely a
 date/locale or price format rendered differently on server and client. Worth a dedicated
 look; start by expanding the full error in the browser console on `/wines`.
