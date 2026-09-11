@@ -8,6 +8,139 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-11 (session 8) — Chunk 1: the flagship lands. Cause was not what anyone thought
+
+**Shipped to `master` as `9959711`, verified on production.** Max approved Chunk 1 of
+[[DemoSite/Plan-DemoFlowFixes]] only; Chunk 2 is not started and is waiting on him.
+
+**What was wrong, and it was not the plan's hypothesis.** The plan assumed two causes — the
+orders table sorts by visit date so the new row renders six screens down, and hydration eats the
+outline. The first is true but incidental; the second is false. Measured in the live production
+frame before changing anything:
+
+`/admin/orders` renders its orders **twice** — a table inside `hidden md:block` and a card list
+inside `md:hidden` — and Tailwind picks between them on the **pane's** width, not the viewer's.
+The mirror's admin pane is a **691px** iframe on a 1440×900 desktop, below the 768px `md`
+breakpoint. So the table is `display:none` and the cards are the real list. All **394 `tbody tr`
+rows measured 0×0**. The Phase 4.3 code found its row, outlined it and called `scrollIntoView`
+on it exactly as written — on an element in a hidden subtree, where an outline cannot be seen
+and `scrollIntoView` is a no-op. Nothing was ever eaten; nothing was ever shown.
+
+**This is the input Chunk 2 was sequenced on, and it is a negative result.** Chunk 2 was promoted
+to slot #2 because hydration "may be on the critical path for the flagship." It is not: the fixed
+highlight holds for its full 20s window on production *while React #418 is still firing on that
+same page*. Chunk 2 is still a real bug affecting real tenants, but its ordering is now Max's call.
+
+**What changed** (`saas/app/live/LiveMirrorClient.tsx`, demo-only, so straight to `master` per
+Max's 2026-09-10 split):
+- The mark resolves whichever list is **rendered** rather than assuming the table.
+- The matched card is moved to the head of its own container — a reorder within one parent, the
+  form React tolerates — so it lands at index 0 instead of 4,769px down a 74,000px list. This is
+  task 1.2's second mechanism; the other two options both required leaving demo-only files.
+- The new order is identified from a snapshot of the pane taken **before** the reload, so it no
+  longer depends on the name match. That also closes a latent bug: the demo seed data reuses
+  guest names ("Nino Beridze" appears more than once), so the old `.find()` returned the first
+  booking under that name rather than the new one.
+- Scroll fires **once**, not on all 100 re-assert ticks — which would have yanked the pane back
+  every 200ms for 20s as soon as the scroll started working.
+- `/live`'s headline follows the layout instead of saying "left"/"right" to a phone (task 1.4,
+  the one agreed mobile exception — copy only, no layout work).
+
+**Verified on production**, real booking at 1440×900, Luka Testashvili / 4 guests / 20 Oct 2026
+— deliberately the same shape as the teardown's, a visit far from a list that opens on 31 Dec:
+new card at **index 0**, top **251px** inside a 679px pane, `2px solid rgb(34,197,94)` holding
+for the full window, "just now" pill present, count 394 → 395, **visible with no scrolling**.
+Console clean apart from the pre-existing #418. Screenshot sent to Max.
+
+**Still open, and not a regression from this work:** the flagship screen still shows **two**
+floating red bug buttons — `isEmbeddedPane()` does not suppress `BugReportWidget`. That is
+[[KnownBugs]] #29 and Chunk 6; it needs the `staging` pass because the widget is shared.
+
+**Next:** Max's approval before Chunk 2 — and worth asking whether Chunk 2 keeps slot #2 now that
+the reason it held that slot is disproved.
+
+---
+
+## 2026-09-11 (session 7) — Tore down the demo flow; found 5 flow-breaking bugs; chunked the fixes
+
+**No code was written this session, deliberately.** Max asked for a review of how well the
+redesign is actually implemented, then for a hands-on inspection with screenshots and a set of
+proposed fixes. Output is two published reports and a new chunked tracker,
+[[DemoSite/Plan-DemoFlowFixes]]. Max approved the plan and the priority order; implementation is
+not yet authorised ([[ClaudeInstructions]] Rule 8).
+
+**First pass was crippled by tooling and it matters that the record says so.** The Browser pane
+rendered every screenshot at a fraction of the requested viewport (legible only at the 375px
+mobile preset) and its click actions timed out. That produced an audit
+(https://claude.ai/code/artifact/179194f5-9907-4346-abe6-8008c9db4adb) which honestly flagged the
+spotlight tour and feature rail as "could not confirm" rather than claiming they worked — and
+**both turned out to be fine.** The lesson is the one already written into
+[[Perf-Baseline-2026-07-29]] in a different form: when the instrument is unreliable, say so and
+change instrument, don't convert a tooling failure into a finding.
+
+**Second pass used `playwright-cli` against real Chrome and everything opened up.** Full desktop
+screenshots, real clicks, frame-level access into the live mirror's iframes, and computed-style
+measurement. Report with embedded screenshots:
+https://claude.ai/code/artifact/72a9a58c-7a3b-4ce6-8ad3-4abc08c32026
+
+**The finding that organises everything else:** every phase of the redesign was genuinely built,
+and **three separate components locate their target and then never show it to the viewer** —
+silently, so all three shipped and survive a casual look.
+
+1. **The live mirror's landing moment never lands** ([[KnownBugs]] #24). A real booking was
+   submitted and traced: the guest saw "Booking received! 280₾", the admin pane reloaded, the
+   counter went 393 → 394, the green "Just landed" pill fired — and the new row sat at
+   **y = 4,769px** inside the pane (the table sorts by visit date, and the booking was for
+   October while the list opens on 31 December), with **no outline applied** on the row or any of
+   six ancestors. The flagship feature's whole sentence resolves to a counter incrementing by one.
+2. **Six of seven tour steps draw no ring at all** (#25). Step 4 works perfectly, which is what
+   proves the machinery is fine and the `data-tour` anchors are the defect. Phase 2 recorded that
+   a missing anchor "degrades to a centred tooltip with no ring" — that degradation is firing six
+   times out of seven, and the desktop tooltip also falls back to the mobile full-width bottom
+   dock at 1440px, which is a big part of why it reads as dated.
+3. **Starting the tour from the admin panel says "Tour paused · step 1 of 7"** (#26) — the first
+   front-door card's most likely path walking into a dead end. A good rule (never dim a screen the
+   visitor chose) misfiring on an explicit press of the start button.
+4. **The feature rail's callouts pin to nothing and land on collapsed data** (#27) — same anchor
+   bug, different component.
+5. **Front-door path 4 of 4 exits the demo** (#28): `/admin/onboarding` renders outside the admin
+   panel layout so no demo chrome mounts, and the wizard shows 4/7 steps already complete —
+   disproving its own "how fast is setup?" promise.
+
+**Plus the answer to Max's actual question, "why does it feel out of date":** it's the palette.
+The front door, tour tooltip, feature rail and top banner are all built in a saturated
+indigo-violet (`#4A3FD1`) that appears **nowhere else** in VineWorks — the product underneath is
+cream, ivory and wine red. Four surfaces borrowed from another product is what reads as template
+bolted on. Also two floating bug-report buttons on the flagship screen (#29), emoji card icons,
+and four cards in a three-up grid leaving one orphaned.
+
+**The hydration bug got genuinely narrowed** after costing time in three sessions: it fires on
+every route on production (not just public pages, not just dev), and the error carries
+`args[]=text` — so it is a **text node** mismatch, pointing at render-time date/number formatting
+where the server (UTC, `fra1`) and browser disagree. Recorded on the [[KnownBugs]] entry with the
+instruction to stop chasing it in production and reproduce in dev mode, where React names the
+node. It is sequenced **second** in the fix plan, not last, because it is the known mechanism for
+DOM writes being discarded — i.e. probably why #24's outline is missing.
+
+**Decisions Max made this session**, all recorded in the plan so they aren't reopened: desktop-first
+(mobile layout deferred, but the wrong "left/right" copy on stacked mobile rides along as a
+minutes-long exception); the tour auto-starts on the winery path; the admin landing stays on Orders
+but gets compacted plus a revenue strip; the bug-report widget comes off the demo; Claude chooses
+the chrome palette. Max's own improvement on the plan: rather than only resetting the onboarding
+state nightly, **give him a "Reset demo" button in super-admin** so he can reset before a sales
+call — scoped as both.
+
+**New request parked for later:** a **theme-preset catalogue** inside the demo, so visitors can see
+how colours can be changed. Deferred with reasoning — it needs a decision about whether a visitor
+can apply a preset to a shared sandbox, which is the same collision problem as the unresolved
+disposable-tenant-per-visitor question.
+
+**Next:** Chunk 1 of [[DemoSite/Plan-DemoFlowFixes]] — scroll the mirror to the landed booking.
+Chunks are strictly sequential and each carries its own resume point, so a session that runs out
+of context can be picked up exactly where it stopped.
+
+---
+
 ## 2026-09-10 (session 6) — Finished the whole demo redesign: all five phases live
 
 Max: *"dont stop until you finish all stages you suggested, all phases of the plan."* Done — **Phases 0 through 4 of [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]] are built, verified and live on `demo.vineworks.ge`.** Per-phase detail lives in that file; this is the session-level record.

@@ -277,11 +277,18 @@ Full tracking: `playwright/Progress.md` (chronological build log, phase-by-phase
 
 ---
 
-## v1.11 — Sales Demo Site (`demo.vineworks.ge`) ✅ COMPLETE (2026-09-10)
+## v1.11 — Sales Demo Site (`demo.vineworks.ge`) 🚧 BUILT, NOT WORKING (built 2026-09-10, torn down 2026-09-11)
 
 The self-serve demo that a prospective winery can be pointed at. Full plan and
 per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rationale:
 [[DemoSite/DemoDirections|DemoDirections]]. Features #158–#166.
+
+> **Was marked ✅ COMPLETE on 2026-09-10. Reopened 2026-09-11** after a hands-on teardown of
+> the live flow found that three of the phases below ship a feature that locates its target
+> and then never shows it to the viewer — silently, which is why they all passed review. The
+> boxes stay ticked because the code was genuinely written and shipped; the phases are flagged
+> inline. **Current work is [[DemoSite/Plan-DemoFlowFixes]]** (8 sequential chunks).
+> Report with screenshots: https://claude.ai/code/artifact/72a9a58c-7a3b-4ce6-8ad3-4abc08c32026
 
 - [x] Demo tenant cloned from Nikalas Marani, rebranded "VineWorks Estate" (#158)
 - [x] Role-switcher banner — Customer View ↔ Winery Admin View (#158)
@@ -292,12 +299,24 @@ per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rat
 - [x] **Phase 0** — nightly regeneration so visitor tinkering can't degrade it (#161)
 - [x] **Phase 1** — front door interstitial framing what Vineworks is (#162)
 - [x] **Phase 1** — `/admin` dead end closed with one-click entry (#162)
-- [x] **Phase 2** — spotlight tour, seven steps that name money not buttons (#163)
-- [x] **Phase 3** — feature rail surfacing 16 otherwise-invisible capabilities (#164)
-- [x] **Phase 4** — live mirror at `/live`: guest site and back office side by side (#165)
+- [x] **Phase 2** — spotlight tour, seven steps that name money not buttons (#163) — ❌ **no ring on 6 of 7 steps; says "Tour paused" when started from admin** ([[KnownBugs]] #25, #26)
+- [x] **Phase 3** — feature rail surfacing 16 otherwise-invisible capabilities (#164) — 🚧 **rail opens; its callouts pin to nothing and land on collapsed data** ([[KnownBugs]] #27)
+- [x] **Phase 4** — live mirror at `/live`: guest site and back office side by side (#165) — ❌ **the landing moment doesn't land: new row renders 4,769px below the fold, no outline applied** ([[KnownBugs]] #24)
 - [x] Abuse guardrails — outbound email suppressed, public writes rate-limited (#166)
 
+**Reopened by the 2026-09-11 teardown — tracked in [[DemoSite/Plan-DemoFlowFixes]]:**
+- [ ] **Chunk 1** — mirror scrolls to the landed booking (+ wrong "left/right" copy on mobile)
+- [ ] **Chunk 2** — the hydration text mismatch (React #418), fires on every route on production
+- [ ] **Chunk 3** — tour entry: no "Tour paused" dead end, auto-start on the winery path, a real ending
+- [ ] **Chunk 4** — tour + rail anchoring, and make anchor failure loud in dev so this can't ship again
+- [ ] **Chunk 5** — demo chrome off the off-brand indigo onto a "cellar dark" brand palette
+- [ ] **Chunk 6** — bug-report widget off the demo tenant (kills the duplicate on `/live` too)
+- [ ] **Chunk 7** — admin landing readability: compact rows, revenue strip
+- [ ] **Chunk 8** — onboarding path back inside the demo + a super-admin "Reset demo" button
+
 **Still open (deliberately):**
+- [ ] Theme-preset catalogue inside the demo, so visitors see how colours can be changed
+      (Max's request 2026-09-11; needs the shared-sandbox collision question answered first)
 - [ ] Hero screenshot / GIF of the live mirror for the `vineworks.ge` marketing site
 - [ ] Analytics — the demo is not instrumented, so the conversion figures quoted in the
       design review remain industry benchmarks rather than measurements of this site

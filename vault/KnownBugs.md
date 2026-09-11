@@ -29,10 +29,77 @@ tags: [bugs]
 | 21 | Same bug as #20, one level down: nearly every individual admin page body (`CompaniesClient.tsx`, `ContentClient.tsx`, `WinesClient.tsx`, `SettingsClient.tsx`, `OrdersTable.tsx` and ~15 other admin files) independently defines its own hardcoded cream-preset color constant for cards/tables/borders; two shared components used during admin editing (`HelpHint.tsx`, `EditableLongText.tsx`) carry the same bug onto tenant-facing pages too | Admin (nearly all pages) / Shared components | 🟢 Resolved |
 | 22 | `app/actions/submitWineOrder.ts` computes the wine-order total entirely from client-supplied `price`/`discountPercent` values (parsed straight out of submitted form JSON) with zero server-side lookup against real `WineVintage.price`/`Company.wineDiscountPercent` — a tampered request can fabricate any total, which also becomes the literal amount charged via Flitt once a tenant has online payment enabled. Same bug class as the already-fixed masterclass-pricing issue (`Plan-SecurityAndBugFixes.md` #3) and #17, never applied here. Found via a dedicated penetration test, confirmed by direct code read. | Security / Wine Orders | 🟢 Resolved |
 | 23 | `/admin` main content container hardcoded `max-w-6xl` (1152px) regardless of viewport — on wide monitors every admin page (Orders table especially) rendered narrower than the screen with wasted margin on both sides, while the table still needed its own internal horizontal scroll for its wider content | Admin (all pages) | 🟢 Resolved |
+| 24 | Live mirror's "landing moment" never lands — new booking row renders **4,769px below the fold** inside the admin pane (table sorts by visit date, not creation) and the Phase 4.3 row outline is **not applied at all**. The flagship feature's payoff resolves to a counter incrementing by one | Demo / Live mirror | 🔴 Open |
+| 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine | Demo / Tour | 🔴 Open |
+| 26 | Starting the spotlight tour from any admin page immediately shows "Tour paused · step 1 of 7" — step 1 declares the guest-site route and the never-dim-a-screen-they-chose rule fires on an explicit press of the start button | Demo / Tour | 🔴 Open |
+| 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing | Demo / Feature rail | 🔴 Open |
+| 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🔴 Open |
+| 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🔴 Open |
 
 ---
 
-## Hydration mismatch on public site pages (observed 2026-09-11, not yet diagnosed)
+## Bugs #24–#29 — demo flow failures found by teardown, 2026-09-11
+
+All six were found by driving the live demo end to end in a real browser (Playwright, production
+site, desktop 1440×900 and mobile 360×732, one real booking submitted and traced to its row).
+
+**Full detail, measurements, and the fix plan live in [[DemoSite/Plan-DemoFlowFixes]]** — not
+duplicated here, so there is one source of truth. Report with screenshots:
+https://claude.ai/code/artifact/72a9a58c-7a3b-4ce6-8ad3-4abc08c32026
+
+**The shared root cause behind #24, #25 and #27** is worth stating on its own, because it is one
+bug wearing three coats: **three separate components locate their target element and then fail to
+show it to the viewer**, and in every case the failure mode is silent. The tour degrades to "no
+ring" when an anchor misses; the rail's callout floats unpinned; the mirror styles a row 4,769px
+off-screen without scrolling to it. Nothing logs, nothing throws, so all three shipped and passed
+a casual look. **The first fix in that plan is to make anchor failure loud in dev** — otherwise
+the next one ships the same way.
+
+**Relationship to the hydration bug below:** #24's missing outline is the same shape as a problem
+[[Plan-DemoRedesign]] Phase 4.3 already fought once and "fixed" by re-asserting marks every tick
+for 20 seconds. If React is discarding server HTML and re-rendering, anything written to the DOM
+before hydration settles is thrown away. That is why the hydration bug is sequenced second in the
+fix plan rather than last — it may be on the critical path for the flagship.
+
+> 🟢 **#24 RESOLVED 2026-09-11** (Chunk 1 of [[DemoSite/Plan-DemoFlowFixes]], shipped to `master`
+> as `9959711`, verified on production with a real booking at 1440×900). **And the hypothesis in
+> the paragraph directly above was wrong** — it was not hydration.
+>
+> `/admin/orders` renders its orders twice, a table (`hidden md:block`) and a card list
+> (`md:hidden`), and Tailwind picks between them on the **pane's** width. The mirror's admin pane
+> is a **691px** iframe on a 1440×900 desktop — below the 768px `md` breakpoint — so the table is
+> `display:none` and the cards are what the visitor sees. All 394 `tbody tr` rows measured 0×0.
+> The Phase 4.3 code found its row, outlined it and scrolled to it exactly as written, on an
+> element in a hidden subtree, where an outline is unobservable and `scrollIntoView` is a no-op.
+> There was never anything for hydration to discard. Confirmed twice over: the fixed highlight now
+> holds for its full 20s window on production **while React #418 is still firing on that page**.
+>
+> Fixed by resolving whichever list is actually rendered, pinning the matched card to the head of
+> its container (it now lands at index 0 instead of 4,769px down a 74,000px list), and identifying
+> the new order from a snapshot of the pane taken before the reload rather than from the guest's
+> name — which also closes a latent bug, since the demo seed data reuses guest names and the old
+> `.find()` returned the first booking under that name.
+>
+> **#29 is NOT fixed and was not touched** — the flagship screen still shows two floating red bug
+> buttons. It is Chunk 6, and it needs the `staging` pass because `BugReportWidget` is shared.
+> **The shared root cause above still stands for #25 and #27**, and gains a fourth failure mode
+> worth adding to the list: *found the target, showed it, but showed the copy nobody is looking
+> at.* Any code reaching into the admin pane must resolve which representation is **rendered**.
+
+---
+
+## Hydration mismatch on public site pages (observed 2026-09-11, narrowed 2026-09-11)
+
+> **Update, 2026-09-11 (teardown session):** confirmed live on **production**, on **every** route
+> checked — `/`, `/wines`, `/admin/orders`, `/admin/statistics`, `/live` — not just local dev and
+> not just public pages. **New and useful:** the minified error carries `args[]=text`, which
+> narrows it from "some hydration mismatch" to **a text node** whose server-rendered content
+> differs from the client's — not an attribute or structural mismatch. Prime suspects are
+> therefore values formatted at render time from `new Date()` or a locale-dependent formatter,
+> where the server (UTC, `fra1`) and the browser disagree; this app renders dates, times and ₾
+> amounts on every screen. **Do not keep chasing this in production** — it has now cost time in
+> three separate sessions. Reproduce locally in **dev mode**, where React prints the exact
+> mismatching text side by side. Tracked as Chunk 2 of [[DemoSite/Plan-DemoFlowFixes]].
 
 **Symptom:** `Hydration failed because the server rendered text ...` in the browser console
 on public-site routes (`/`, `/wines`) in local dev.
@@ -42,9 +109,16 @@ on public-site routes (`/`, `/wines`) in local dev.
 appears. So it predates the demo redesign and affects real tenants too.
 
 **Why it matters beyond a console warning:** React discards the server HTML and re-renders
-on the client when this happens. It cost real debugging time on the live mirror, where
-highlighting a row in the server-rendered table was silently undone the moment the pane
-hydrated. Anything that manipulates or measures server-rendered DOM is exposed to it.
+on the client when this happens. Anything that manipulates or measures server-rendered DOM is
+exposed to it.
+
+> **Correction, 2026-09-11:** this section previously claimed the bug "cost real debugging time
+> on the live mirror, where highlighting a row in the server-rendered table was silently undone
+> the moment the pane hydrated." **That was never true.** Chunk 1 measured it: the mirror was
+> marking a `display:none` copy of the orders list, so nothing was ever undone. The fixed
+> highlight holds on production while this error is still firing. The hazard described above is
+> genuine in principle; it just has no confirmed victim yet, and this bug's priority should be
+> judged on its own merits rather than on the live mirror.
 
 **Not investigated:** the specific mismatching text was not identified — likely a
 date/locale or price format rendered differently on server and client. Worth a dedicated

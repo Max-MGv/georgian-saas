@@ -13,7 +13,8 @@ platform. **If you are a new session picking this work up, read in this order.**
 
 | # | File | What it's for |
 |---|---|---|
-| 1 | **[[Plan-DemoRedesign]]** | 🔴 **The live task tracker.** Phases 0–4, checkboxes, resume points. This is the working document — keep it current. |
+| 0 | **[[Plan-DemoFlowFixes]]** | 🔴 **The live task tracker (current work).** Chunks 1–8, strictly sequential, checkboxes, per-chunk resume points. Fixes what the redesign build got wrong. **Start here.** |
+| 1 | [[Plan-DemoRedesign]] | The previous tracker — Phases 0–4, all ✅ complete. History now, but read it for why each piece exists and for the load-bearing constraints. |
 | 2 | [[DemoDirections]] | The design review that produced the plan. Why each direction exists, what it fixes, what to watch out for. |
 | 3 | [[Research-DemoPatterns]] | Industry research behind the decisions, with sources and a caveat about the numbers. |
 | 4 | [[Plan-DemoSite]] | The original build log — how the demo tenant, rebranding, role-switcher and prod cutover were done (2026-09-10). History, not current work. |
@@ -55,6 +56,33 @@ nightly regeneration returns 503 and the demo never resets.
 **Safe to share.** The abuse guardrails are done ([[FeatureLog]] #166): the demo tenant
 sends **no** outbound email at all, and public writes are capped at 5 per IP per 10
 minutes. Both are demo-only and leave real wineries untouched.
+
+---
+
+## State of play, 2026-09-11 — the flow was torn down and it doesn't hold up
+
+Max: *"there are some bugs and quirks and some features that look just a bit out of date in
+use even though the idea behind it is strong."* Correct again. A hands-on teardown (Playwright,
+real Chrome, production, one real booking traced) found **5 flow-breaking issues and 8 polish
+issues**. Report: https://claude.ai/code/artifact/72a9a58c-7a3b-4ce6-8ad3-4abc08c32026
+
+**The finding in one sentence:** everything was built; the layer that points at it fails
+silently. Three components — the tour, the rail's callouts, the mirror's landing moment — all
+find their target and then never show it to you.
+
+The three that matter most:
+- **The live mirror's payoff is 4,769px below the fold.** A real booking saves, the counter
+  ticks, the "Just landed" pill fires — and the row is six screens down with no outline applied.
+- **Six of seven tour steps draw no spotlight at all.** Step 4 works, which proves the
+  machinery is fine — the anchors aren't resolving, and failure is silent, which is why it shipped.
+- **Starting the tour from the admin panel says "Tour paused."** The first front-door card's
+  most likely path hits a dead end.
+
+**Plus:** the demo chrome is in an indigo-violet that appears nowhere else in VineWorks — the
+main source of the "out of date" feeling.
+
+**All of it is chunked and prioritised in [[Plan-DemoFlowFixes]].** Max approved the plan and
+the order on 2026-09-11; **no code has been written yet.**
 
 ---
 
