@@ -20,7 +20,7 @@ tags: [bugs]
 | 12 | `getFinishDetailsStatus()`'s "needs pricing" check applied to ALL companies, including wine-order-only ones that never use price tiers — false-positive nudge | Admin / Onboarding | 🟢 Resolved |
 | 13 | Real Companies list page (`/admin/companies`) had zero visual indicator for missing identificationCode/contact/pricing — same underlying data as the nudge banner, just never surfaced per-row | Admin / Companies | 🟢 Resolved |
 | 14 | Enhanced-booking and wine-catalogue "code confirmed"/"no rate for guest count"/discount badges hardcode light green/red colors that don't respect the tenant's theme (`BookingForm.tsx`, `WineCatalogueClient.tsx`) — would clash on dark presets | Public / Booking, Wine Catalogue | 🟢 Resolved |
-| 15 | `CompaniesClient.tsx` nests a `<button>` (`HelpHint`'s "?" trigger) inside another `<button>` (the row summary) — invalid HTML, hydration mismatch on every `/admin/companies` load | Admin / Companies | 🔴 Open |
+| 15 | `CompaniesClient.tsx` nests a `<button>` (`HelpHint`'s "?" trigger) inside another `<button>` (the row summary) — invalid HTML, hydration mismatch on every `/admin/companies` load | Admin / Companies | 🟢 Resolved |
 | 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🟢 Resolved |
 | 17 | `app/actions/prices.ts` — `createPrice`/`updatePrice`/`deletePrice` bypassed tenant isolation entirely (raw `db` instead of `withTenantDb`), letting a tenant-A admin write/delete another tenant's pricing data by passing a cross-tenant `companyId`/`priceId` | Security / DB | 🟢 Resolved |
 | 18 | Public site nav bar (`SiteNav.tsx`) — Georgian's two-word labels ("ჩვენ შესახებ"/About, "ღვინის შეკვეთა"/Order Wine) wrapped onto 2 lines at desktop widths, uneven with the single-word labels that couldn't wrap | Public / Nav | 🟢 Resolved |
@@ -29,14 +29,44 @@ tags: [bugs]
 | 21 | Same bug as #20, one level down: nearly every individual admin page body (`CompaniesClient.tsx`, `ContentClient.tsx`, `WinesClient.tsx`, `SettingsClient.tsx`, `OrdersTable.tsx` and ~15 other admin files) independently defines its own hardcoded cream-preset color constant for cards/tables/borders; two shared components used during admin editing (`HelpHint.tsx`, `EditableLongText.tsx`) carry the same bug onto tenant-facing pages too | Admin (nearly all pages) / Shared components | 🟢 Resolved |
 | 22 | `app/actions/submitWineOrder.ts` computes the wine-order total entirely from client-supplied `price`/`discountPercent` values (parsed straight out of submitted form JSON) with zero server-side lookup against real `WineVintage.price`/`Company.wineDiscountPercent` — a tampered request can fabricate any total, which also becomes the literal amount charged via Flitt once a tenant has online payment enabled. Same bug class as the already-fixed masterclass-pricing issue (`Plan-SecurityAndBugFixes.md` #3) and #17, never applied here. Found via a dedicated penetration test, confirmed by direct code read. | Security / Wine Orders | 🟢 Resolved |
 | 23 | `/admin` main content container hardcoded `max-w-6xl` (1152px) regardless of viewport — on wide monitors every admin page (Orders table especially) rendered narrower than the screen with wasted margin on both sides, while the table still needed its own internal horizontal scroll for its wider content | Admin (all pages) | 🟢 Resolved |
-| 24 | Live mirror's "landing moment" never lands — new booking row renders **4,769px below the fold** inside the admin pane (table sorts by visit date, not creation) and the Phase 4.3 row outline is **not applied at all**. The flagship feature's payoff resolves to a counter incrementing by one | Demo / Live mirror | 🔴 Open |
-| 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Root cause was not missing anchors (all seven existed) but a single 60 ms measurement racing the route paint; see the 2026-09-11 update below | Demo / Tour | 🔴 Open |
-| 26 | Starting the spotlight tour from any admin page immediately shows "Tour paused · step 1 of 7" — step 1 declares the guest-site route and the never-dim-a-screen-they-chose rule fires on an explicit press of the start button | Demo / Tour | 🔴 Open |
-| 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Same root cause as #25; the collapsed-data half fixed via `?expand=first`; see the 2026-09-11 update below | Demo / Feature rail | 🔴 Open |
+| 24 | Live mirror's "landing moment" never lands — new booking row renders **4,769px below the fold** inside the admin pane (table sorts by visit date, not creation) and the Phase 4.3 row outline is **not applied at all**. The flagship feature's payoff resolves to a counter incrementing by one | Demo / Live mirror | 🟢 Resolved |
+| 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Root cause was not missing anchors (all seven existed) but a single 60 ms measurement racing the route paint; see the 2026-09-11 update below | Demo / Tour | 🟢 Resolved |
+| 26 | Starting the spotlight tour from any admin page immediately shows "Tour paused · step 1 of 7" — step 1 declares the guest-site route and the never-dim-a-screen-they-chose rule fires on an explicit press of the start button | Demo / Tour | 🟢 Resolved |
+| 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Same root cause as #25; the collapsed-data half fixed via `?expand=first`; see the 2026-09-11 update below | Demo / Feature rail | 🟢 Resolved |
 | 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🟢 Resolved |
 | 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🟢 Resolved |
 
 ---
+
+
+> 🟢 **#15 RESOLVED 2026-09-12.**
+>
+> `HelpHint` renders a `<button>`, and `CompaniesClient`'s row summary wrapped it in another
+> one. A button inside a button is invalid HTML: the parser relocates the inner one, so the
+> server's tree and the client's disagree.
+>
+> **Why it went unnoticed for so long:** the nested hint only renders when a company is
+> *missing details*. On a healthy tenant — the demo included — there is nothing to flag, no
+> hint, and no error. It fires precisely for the tenants whose data is incomplete, which is to
+> say for new clients during onboarding.
+>
+> The fix closes the summary `<button>` before the hint and lets the badge, the hint and the
+> tiers/orders count sit beside it inside a `flex-1` wrapper. **Visual order is unchanged**; the
+> only behaviour lost is that the "3 tiers · 14 orders" text no longer expands the row when
+> clicked. The Individuals row directly above already used exactly this shape — the fix makes
+> the two consistent rather than inventing anything.
+>
+> **Measured before and after**, on `/admin/companies` with a company deliberately left without
+> an identification code so the hint rendered:
+>
+> | | `button button` in the DOM | console |
+> |---|---|---|
+> | before | **1** | `<button> cannot contain a nested <button>` — and `Hydration failed… this tree will be regenerated on the client` |
+> | after | **0** | clean |
+>
+> The before-state was taken by stashing the fix and re-running the same check, not by reasoning
+> about the diff.
+
 
 ## Bugs #24–#29 — demo flow failures found by teardown, 2026-09-11
 

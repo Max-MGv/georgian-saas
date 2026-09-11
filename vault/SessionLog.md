@@ -8,6 +8,60 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 — the "reseed bug" isn't one, and a three-year-old hydration error is fixed
+
+### The reseed is not broken — the observation was taken in the wrong window
+
+[[MyToDo]] and three session entries carried "the 03:00 UTC nightly reseed did NOT clear the test
+booking", treated as a possible reseed bug. **It does not hold up.**
+
+- The cron route answers **401**, not 503, to an unauthenticated request — so `CRON_SECRET` *is*
+  configured on production ([[MaintenanceNotes]] §14's trap is not what is happening).
+- `seedDemoTenant` does `db.order.deleteMany({ where: { tenantId } })`. There is no filter that
+  could spare one row.
+- The arithmetic: today's deterministic seed produces **393** bookings. Production shows **395**.
+  That is 393 seeded plus 2 later writes — the signature of a reseed that ran and was *then*
+  written to, not one that skipped rows.
+- **The timing settles it.** "Luka Testashvili" was created during session work on 2026-09-11,
+  Tbilisi daytime, i.e. after 03:00 UTC that day. At the moment the claim was written it was
+  still 2026-09-11 in UTC. **No reseed had had the chance to run since the booking existed.**
+
+So the honest status is *unverified*, not *broken*. The next run is 03:00 UTC and should clear
+both extra rows. Worth one check afterwards — if they survive **that**, it is a real bug and the
+arithmetic above is the way back into it.
+
+A second, unglamorous lesson: "X did not happen" needs the window in which X could have happened.
+Three sessions repeated the claim without checking the clock.
+
+### [[KnownBugs]] #15 — nested `<button>`, fixed
+
+`HelpHint` renders a `<button>`; `CompaniesClient`'s row summary wrapped it in another one.
+Invalid HTML, so the parser relocates the inner button and hydration fails.
+
+**Why it survived this long:** the nested hint only renders when a company is *missing details*.
+On a healthy tenant there is nothing to flag, no hint, no error — so it fires precisely for
+tenants whose data is incomplete, which is to say for **new clients during onboarding**, the
+worst possible audience for a hydration failure.
+
+Fixed by closing the summary button before the hint, with the badge, hint and tiers/orders count
+beside it in a `flex-1` wrapper. Visual order unchanged; the Individuals row above already used
+this exact shape. Measured before and after with a company deliberately left without an
+identification code — before: 1 `button button` in the DOM plus `Hydration failed…`; after: 0 and
+a clean console. The before-state came from stashing the fix and re-running, not from reading the
+diff.
+
+### Bookkeeping: four bug rows whose status column never caught up
+
+#24, #25, #26 and #27 all carried prose saying **RESOLVED** while their row in the table still
+said 🔴 Open — the prose was updated at the time, the column was not. Corrected. Worth
+noticing as a pattern: the table is what anyone skims, so a resolution that only lands in prose
+reads as an open bug forever.
+
+**[[KnownBugs]] is now down to one open item: #19**, the 200-connection database ceiling at
+roughly 100–150 simultaneous visitors. That one is infrastructure, not a patch.
+
+---
+
 ## 2026-09-12 (session 12, continued) — the revenue strip goes platform-wide
 
 Max saw the strip on the demo and asked for it on the normal site too, centred

@@ -8,6 +8,33 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🔧 2026-09-12 — corrections, and one thing to check tomorrow
+
+### The demo test booking: I was wrong to call it a reseed bug
+
+Earlier notes (mine) said the nightly reseed "did NOT clear" the **Luka Testashvili** test
+booking. That conclusion was drawn in a window where **no reseed could have run yet** — the
+booking was made on 11 Sep during the day, and the job runs at 03:00 UTC. The reseed deletes
+*every* order for the demo tenant, the cron secret is correctly configured, and the row count
+(395 = 393 seeded + 2 later writes) is exactly what a working reseed plus two visitor bookings
+looks like.
+
+**Nothing for you to do.** After tonight's run the demo should be back to its seeded 393. If you
+ever see it sitting above that with names you recognise as tests, tell me — *then* it is a bug.
+
+### Also fixed: a hydration error your new clients would have hit
+
+`/admin/companies` was logging a hydration failure — but only for tenants with a company that is
+**missing details**, which means new clients during onboarding and not the tidy demo. Fixed and
+measured. Nothing for you to do; it is invisible when working.
+
+### Still yours, unchanged
+
+1. **Press "Reset demo now"** once (super-admin → Tenants).
+2. **Glance at Staging Winery's admin** — `/admin/orders`, `/admin/statistics`, `/admin/companies`.
+
+---
+
 ## 🆕 2026-09-12 — the revenue strip is on every winery now
 
 Done and live. On any winery's **Orders** page there is now a centred three-number strip above

@@ -749,9 +749,18 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
             return (
               <div key={company.id} style={{ borderBottom: i < visibleCompanies.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
                 <div className="flex items-center px-5 py-4 gap-4">
+                  {/* The summary button stops before the "needs details" hint.
+                      HelpHint renders a <button>, and a button inside a button
+                      is invalid HTML: the parser relocates the inner one, so
+                      the server's tree and the client's disagree and every
+                      /admin/companies load logged a hydration mismatch
+                      (KnownBugs #15). Same shape the Individuals row above
+                      already uses. Visual order is unchanged — the pieces below
+                      simply sit beside the button rather than inside it. */}
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                   <button
                     onClick={() => setExpandedId(expanded ? null : company.id)}
-                    className="flex items-center gap-2 flex-1 text-left"
+                    className="flex items-center gap-2 text-left min-w-0"
                   >
                     <svg className="w-4 h-4 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
                       <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -768,6 +777,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                         {at('companies.bothModules')}
                       </span>
                     )}
+                  </button>
                     {missing.length > 0 && (
                       <span className="flex items-center gap-1">
                         <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: '#fff7ed', color: '#b45309', border: '1px solid #fdba74' }}>
@@ -781,7 +791,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                         ? `${company.prices.length} ${company.prices.length !== 1 ? at('companies.individuals.tier.plural') : at('companies.individuals.tier.singular')} · `
                         : ''}{company.orderCount} {company.orderCount !== 1 ? at('packing.order.plural') : at('packing.order.singular')}
                     </span>
-                  </button>
+                  </div>
 
                   {deletingId === company.id ? (
                     <div className="flex items-center gap-2">
