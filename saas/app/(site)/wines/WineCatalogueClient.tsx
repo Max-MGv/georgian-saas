@@ -862,8 +862,14 @@ export default function WineCatalogueClient({
         )}
 
         {/* ── GRID VIEW ── */}
+        {/* `data-tour="wine-catalogue"` sits on the list itself, not on the page
+            wrapper. Measured on production 2026-09-11 the page wrapper was
+            1425×1365 — the full viewport width — so the tour's "ring" had no
+            left or right edge on screen and read as no ring at all.
+            Plan-DemoFlowFixes Chunk 4 task 4.3, MaintenanceNotes §12.
+            Both view branches carry it; only one is mounted at a time. */}
         {view === 'grid' && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div data-tour="wine-catalogue" className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleWines.map(wine => {
               const qty = quantities[wine.vintageId] ?? 0
               return (
@@ -926,7 +932,7 @@ export default function WineCatalogueClient({
 
         {/* ── LIST VIEW ── */}
         {view === 'list' && (
-          <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--site-border)' }}>
+          <div data-tour="wine-catalogue" className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--site-border)' }}>
             <div className="grid items-center text-xs font-medium uppercase tracking-wider px-4 py-3 border-b"
               style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', backgroundColor: 'var(--site-bg)', borderColor: 'var(--site-border)', color: 'var(--site-secondary)' }}>
               <span>Wine</span>

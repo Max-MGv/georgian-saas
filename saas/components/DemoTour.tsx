@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
+import { useAnchorRect } from '@/lib/demoAnchor'
 
 /**
  * Guided spotlight tour for demo.vineworks.ge — Plan-DemoRedesign Phase 2,
@@ -126,12 +127,12 @@ const STEPS: Step[] = [
   {
     route: '/admin/orders',
     target: 'orders-filters',
-    title: 'Six tour operators, six different prices',
-    body: 'Each operator has its own rate ladder — per head, and different again for a group of 25 than for a group of 8. The system picks the right one. You stop quoting the wrong price.',
+    title: 'Pull up one operator in a second',
+    body: 'Six tour operators are in that company filter, each on its own rate ladder — per head, and different again for a group of 25 than for a group of 8. Every booking here was priced on the right one automatically. Filter to one operator and the whole season with them is in front of you.',
   },
   {
     route: '/admin/statistics',
-    target: 'stats-cards',
+    target: 'stats-future-revenue',
     title: 'You know your season before it happens',
     body: 'Around ₾31,000 is already committed for the months ahead, from bookings that are on the books today. That is the number that tells you whether to hire for the summer.',
   },
@@ -176,13 +177,10 @@ function save(s: TourState) {
   }
 }
 
-type Rect = { top: number; left: number; width: number; height: number }
-
 export default function DemoTour({ tenantId }: { tenantId: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const [state, setState] = useState<TourState | null>(null)
-  const [rect, setRect] = useState<Rect | null>(null)
   const [mounted, setMounted] = useState(false)
   // Resolved after mount, never during render: window does not exist on the
   // server, and branching on it during the first client render would produce a
@@ -209,72 +207,16 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   const step = state && state.started && !state.finished ? STEPS[state.index] : null
   const onStepRoute = step ? pathname === step.route : false
 
-  // Track the target's position. Recomputed on scroll and resize because the
-  // ring is drawn in viewport coordinates — a spotlight that stays behind when
-  // the page scrolls points at nothing.
-  useEffect(() => {
-    if (!step || !onStepRoute) { setRect(null); return }
-    if (!step.target) { setRect(null); return }
-
-    let frame = 0
-    function measure() {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${step!.target}"]`)
-      if (!el) { setRect(null); return }
-      const r = el.getBoundingClientRect()
-      if (r.width === 0 && r.height === 0) { setRect(null); return }
-      const pad = 8
-      // Clamp to the viewport as edges, not as an origin. Clamping `top` to 0
-      // while leaving `height` alone pushes the bottom scrim panel off-screen
-      // on any target taller than the viewport — a whole region that silently
-      // never dims. Sections here run ~1000px, so that is the common case.
-      const top = Math.max(0, r.top - pad)
-      const left = Math.max(0, r.left - pad)
-      const bottom = Math.min(window.innerHeight, r.bottom + pad)
-      const right = Math.min(window.innerWidth, r.right + pad)
-      // A target taller than the viewport leaves nothing to dim — the "spotlight"
-      // becomes the whole screen and the effect is lost. Sections on these pages
-      // run ~1000px, so cap the ring to the top portion of a tall target: it
-      // still frames the right thing, and the dim stays visible.
-      const maxHeight = window.innerHeight * MAX_RING_VIEWPORT_FRACTION
-      setRect({
-        top,
-        left,
-        width: Math.max(0, right - left),
-        height: Math.min(maxHeight, Math.max(0, bottom - top)),
-      })
-    }
-
-    // The target may not be painted on the first tick after a route change.
-    const t = window.setTimeout(measure, 60)
-    function onMove() {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(measure)
-    }
-    window.addEventListener('scroll', onMove, true)
-    window.addEventListener('resize', onMove)
-    return () => {
-      window.clearTimeout(t)
-      cancelAnimationFrame(frame)
-      window.clearTimeout(t)
-      window.removeEventListener('scroll', onMove, true)
-      window.removeEventListener('resize', onMove)
-    }
-  }, [step, onStepRoute, pathname])
-
-  // Scroll the target into view when a step opens, so the ring is never drawn
-  // around something off-screen.
-  useEffect(() => {
-    if (!step || !onStepRoute || !step.target) return
-    const t = window.setTimeout(() => {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
-      if (!el) return
-      // Centring a target taller than the viewport puts its top off-screen,
-      // which is where the ring is drawn. Align tall ones to the top instead.
-      const tall = el.getBoundingClientRect().height > window.innerHeight * MAX_RING_VIEWPORT_FRACTION
-      el.scrollIntoView({ block: tall ? 'start' : 'center', behavior: 'smooth' })
-    }, 120)
-    return () => window.clearTimeout(t)
-  }, [step, onStepRoute])
+  // Resolve and track the target. Polled, not measured once — see
+  // lib/demoAnchor.ts for the measurement that proved a single 60ms shot loses
+  // the race against the destination route painting on every step reached by a
+  // navigation. That was six of the seven steps.
+  const rect = useAnchorRect(step?.target, !!step && onStepRoute, {
+    maxHeightFraction: MAX_RING_VIEWPORT_FRACTION,
+    pad: 8,
+    source: 'DemoTour',
+    scrollIntoView: true,
+  })
 
   const update = useCallback((next: TourState) => {
     save(next)
@@ -440,18 +382,53 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
       ]
     : [{ inset: 0 }]
 
-  // Tooltip: under the ring when there's room, above it otherwise. On a narrow
-  // screen it docks to the bottom instead — a floating card beside a spotlight
-  // does not fit at 375px.
+  // ---- Tooltip placement (task 4.4) ----
+  //
+  // The full-bleed bar docked across the bottom is the *mobile* treatment. It
+  // was showing up at 1440px because it doubled as the `!rect` fallback, and
+  // `rect` was null on six steps out of seven. With the anchor race fixed that
+  // branch is rare — but "rare" is not "never" (an anchor really can go missing
+  // after a refactor), so the desktop fallback is now a compact centred card
+  // rather than the dock. The dock is reached only on a genuinely narrow screen.
   const TOOLTIP_W = 340
   // The last step carries the hand-off — two stacked CTAs instead of one button
   // row — so it needs more clearance than the others or it runs off the bottom.
   const TOOLTIP_H = isLast ? 300 : 190
-  const tooltipStyle: React.CSSProperties = isNarrow || !rect
-    ? { left: 12, right: 12, bottom: 12 }
-    : (rect.top + rect.height + TOOLTIP_H < window.innerHeight
-        ? { top: rect.top + rect.height + 12, left: Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - TOOLTIP_W - 12)), width: TOOLTIP_W }
-        : { top: Math.max(12, rect.top - TOOLTIP_H), left: Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - TOOLTIP_W - 12)), width: TOOLTIP_W })
+  const clampLeft = (x: number) =>
+    Math.min(Math.max(12, x), Math.max(12, window.innerWidth - TOOLTIP_W - 12))
+
+  let tooltipStyle: React.CSSProperties
+  if (isNarrow) {
+    tooltipStyle = { left: 12, right: 12, bottom: 12 }
+  } else if (!rect) {
+    // Desktop, no anchor: centre it. Never the full-width dock.
+    tooltipStyle = {
+      top: Math.max(12, (window.innerHeight - TOOLTIP_H) / 2),
+      left: clampLeft((window.innerWidth - TOOLTIP_W) / 2),
+      width: TOOLTIP_W,
+    }
+  } else if (rect.top + rect.height + TOOLTIP_H + 12 < window.innerHeight) {
+    // Below the ring.
+    tooltipStyle = { top: rect.top + rect.height + 12, left: clampLeft(rect.left), width: TOOLTIP_W }
+  } else if (rect.top - TOOLTIP_H - 12 > 0) {
+    // Above it.
+    tooltipStyle = { top: rect.top - TOOLTIP_H - 12, left: clampLeft(rect.left), width: TOOLTIP_W }
+  } else if (window.innerWidth - rect.left - rect.width > TOOLTIP_W + 24) {
+    // Beside it, to the right — a tall ring that fills the vertical space still
+    // gets a compact card instead of falling back to the dock.
+    tooltipStyle = { top: Math.max(12, rect.top), left: rect.left + rect.width + 12, width: TOOLTIP_W }
+  } else if (rect.left > TOOLTIP_W + 24) {
+    // Beside it, to the left.
+    tooltipStyle = { top: Math.max(12, rect.top), left: rect.left - TOOLTIP_W - 12, width: TOOLTIP_W }
+  } else {
+    // The ring fills the screen in both axes. Overlay it, bottom-right, still
+    // at a fixed width — the visitor can see what is ringed around the card.
+    tooltipStyle = {
+      top: Math.max(12, window.innerHeight - TOOLTIP_H - 16),
+      left: clampLeft(window.innerWidth - TOOLTIP_W - 16),
+      width: TOOLTIP_W,
+    }
+  }
 
   return createPortal(
     <div aria-live="polite">

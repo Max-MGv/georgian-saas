@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
+import { useAnchorRect } from '@/lib/demoAnchor'
 
 /**
  * The feature rail for demo.vineworks.ge — Plan-DemoRedesign Phase 3,
@@ -68,7 +69,10 @@ export const CAPABILITY_GROUPS: { group: string; items: Capability[] }[] = [
     group: 'What you get behind it',
     items: [
       { label: 'Every booking in one table', href: '/admin/orders', target: 'orders-table', note: 'Filter by date, company or status. Expand any row for guest counts, food choices and add-ons.' },
-      { label: 'Per-company price ladders', href: '/admin/companies', note: 'Six tour operators here, each on its own rates — and different again by group size. You stop quoting the wrong price.' },
+      // `?expand=first` opens the top company's ladder on arrival (task 4.6) —
+      // without it this landed on six collapsed rows and the proof the label
+      // promises was one click away and invisible.
+      { label: 'Per-company price ladders', href: '/admin/companies?expand=first', target: 'company-rates', note: 'Six tour operators here, each on its own rates — and different again by group size. The top one is open so you can see a ladder. You stop quoting the wrong price.' },
       { label: 'Revenue and season forecasting', href: '/admin/statistics', target: 'stats-cards', note: 'What is already committed for the months ahead — the number that tells you whether to hire for summer.' },
       { label: 'Trade orders and packing sheets', href: '/admin/wine-orders', target: 'wine-orders-list', note: 'Open trade orders become a physical picking list: which wine, which vintage, how many bottles, for whom.' },
       { label: 'Invoices sent from the booking', href: '/admin/orders', target: 'orders-table', note: 'Generate and email an invoice without leaving the row, from your own address.' },
@@ -87,6 +91,44 @@ export const CAPABILITY_GROUPS: { group: string; items: Capability[] }[] = [
   },
 ]
 
+/**
+ * Where to put the callout card (task 4.5).
+ *
+ * It used to be hard-pinned to the bottom centre of the viewport regardless of
+ * what it was annotating — which is the "callout floating in dead space, pinned
+ * to nothing" in the 2026-09-11 teardown. The ring was over here and the
+ * sentence explaining it was down there, and on a destination that scrolled,
+ * the two were not even on screen together.
+ *
+ * Now it tucks under its ring when there is room, sits above it otherwise, and
+ * only falls back to the bottom dock when there is no anchor at all.
+ */
+const CALLOUT_W = 460
+const CALLOUT_H = 130
+
+function calloutPosition(rect: { top: number; left: number; width: number; height: number } | null): React.CSSProperties {
+  const dock: React.CSSProperties = {
+    left: '50%',
+    transform: 'translateX(-50%)',
+    bottom: '20px',
+    width: `min(${CALLOUT_W}px, calc(100vw - 24px))`,
+  }
+  if (!rect || typeof window === 'undefined') return dock
+  // Narrow screens keep the dock: a floating card beside a ring does not fit.
+  if (window.innerWidth < 768) return dock
+
+  const width = Math.min(CALLOUT_W, window.innerWidth - 24)
+  const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
+
+  if (rect.top + rect.height + CALLOUT_H + 12 < window.innerHeight) {
+    return { top: rect.top + rect.height + 12, left, width }
+  }
+  if (rect.top - CALLOUT_H - 12 > 0) {
+    return { top: rect.top - CALLOUT_H - 12, left, width }
+  }
+  return dock
+}
+
 type PendingCallout = { note: string; target?: string; label: string }
 
 export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
@@ -100,7 +142,6 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
   const [embedded, setEmbedded] = useState(false)
   useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [callout, setCallout] = useState<PendingCallout | null>(null)
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
 
   const isDemo = tenantId === DEMO_TENANT_ID
 
@@ -136,55 +177,18 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
 
   // Position the callout against its anchor, if it has one.
   //
-  // Polled over the first second rather than measured once. A single shot races
-  // three things at a deep link: the destination route still painting, the
-  // smooth scroll still moving, and charts that size themselves after mount. A
-  // miss used to leave the ring permanently absent. A transient miss now just
-  // retries, and only a sustained one clears the ring.
-  useEffect(() => {
-    if (!callout?.target) { setRect(null); return }
-    const target = callout.target
-    let frame = 0
-    let attempts = 0
-    let poll = 0
-
-    function measure(): boolean {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${target}"]`)
-      if (!el) return false
-      const r = el.getBoundingClientRect()
-      if (r.width === 0 && r.height === 0) return false
-      setRect({
-        top: r.top,
-        left: r.left,
-        width: r.width,
-        height: Math.min(r.height, window.innerHeight * 0.6),
-      })
-      return true
-    }
-
-    poll = window.setInterval(() => {
-      attempts++
-      const found = measure()
-      if (found && attempts > 6) window.clearInterval(poll)
-      if (attempts > 20) { window.clearInterval(poll); if (!found) setRect(null) }
-    }, 80)
-
-    const scroll = window.setTimeout(() => {
-      document.querySelector<HTMLElement>(`[data-tour="${target}"]`)
-        ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    }, 100)
-
-    function onMove() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { measure() }) }
-    window.addEventListener('scroll', onMove, true)
-    window.addEventListener('resize', onMove)
-    return () => {
-      window.clearInterval(poll)
-      window.clearTimeout(scroll)
-      cancelAnimationFrame(frame)
-      window.removeEventListener('scroll', onMove, true)
-      window.removeEventListener('resize', onMove)
-    }
-  }, [callout])
+  // The polling this used to do inline now lives in lib/demoAnchor.ts, shared
+  // with DemoTour — the tour had the single-shot version of the same
+  // measurement and it was the reason six of its seven steps drew no ring
+  // (Plan-DemoFlowFixes Chunk 4). One implementation so they cannot drift
+  // apart a third time; it also brings the dev warning when an anchor is
+  // missing entirely.
+  const rect = useAnchorRect(callout?.target, !!callout, {
+    maxHeightFraction: 0.6,
+    pad: 6,
+    source: 'DemoFeatureRail',
+    scrollIntoView: true,
+  })
 
   // Auto-retire the callout so it never becomes furniture.
   useEffect(() => {
@@ -334,12 +338,14 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
       {/* The pinned callout on the destination screen. */}
       {callout && (
         <>
+          {/* The padding is applied by useAnchorRect (`pad: 6`), so the rect is
+              already the outset box — do not add it again here. */}
           {rect && (
             <div
               style={{
                 position: 'fixed',
-                top: rect.top - 6, left: rect.left - 6,
-                width: rect.width + 12, height: rect.height + 12,
+                top: rect.top, left: rect.left,
+                width: rect.width, height: rect.height,
                 border: `2px solid ${C.accent}`,
                 borderRadius: '12px',
                 zIndex: 138,
@@ -352,10 +358,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
             style={{
               position: 'fixed',
               zIndex: 142,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              bottom: '20px',
-              width: 'min(460px, calc(100vw - 24px))',
+              ...calloutPosition(rect),
               backgroundColor: C.ink,
               color: C.text,
               border: `1px solid ${C.border}`,

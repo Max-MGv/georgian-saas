@@ -29,7 +29,11 @@ type Props = { orders: Order[]; companies: Company[]; locale?: string }
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border p-5 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+    /* `h-full` so a Card fills its grid cell whether it *is* the grid item or
+       sits inside a wrapper (the Future Revenue card carries a `data-tour`
+       anchor). Grid items stretch by default, so all three stay the same
+       height exactly as before. */
+    <div className="rounded-xl border p-5 text-center h-full" style={{ borderColor: C.border, backgroundColor: C.bg }}>
       <p className="text-xs font-medium mb-1" style={{ color: C.muted }}>{label}</p>
       <p className="text-2xl font-bold" style={{ color: C.text }}>{value}</p>
       {sub && <p className="text-xs mt-1" style={{ color: C.faint }}>{sub}</p>}
@@ -154,11 +158,18 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
             server's 1,234,567 and React reported a hydration text mismatch (#418).
             'en-US' is what this already rendered for everyone here, so nothing
             changes visually. See Chunk 2 of Plan-DemoFlowFixes. */}
-        <Card
-          label={at('statistics.card.futureRevenue')}
-          value={`${futureRevenue.toLocaleString('en-US')}₾`}
-          sub={at('statistics.inPeriod', { period: periodLabel })}
-        />
+        {/* Wrapped for its own `data-tour` anchor: the demo tour's step 5 copy
+            names *this* number ("around ₾31,000 is already committed"), so the
+            ring has to be on this card rather than the whole three-card grid.
+            Plan-DemoFlowFixes Chunk 4, task 4.3. A plain wrapper div — the grid
+            treats it as one cell exactly as it treated the Card. */}
+        <div data-tour="stats-future-revenue">
+          <Card
+            label={at('statistics.card.futureRevenue')}
+            value={`${futureRevenue.toLocaleString('en-US')}₾`}
+            sub={at('statistics.inPeriod', { period: periodLabel })}
+          />
+        </div>
         <Card
           label={at('statistics.card.nextOrder')}
           value={nextOrderDate}

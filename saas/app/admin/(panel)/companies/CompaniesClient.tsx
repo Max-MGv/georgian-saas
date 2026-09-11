@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
 import { adminT } from '@/lib/adminT'
@@ -551,6 +551,14 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
   ]
   const [companies, setCompanies] = useState(initial)
   const [activeModule, setActiveModule] = useState<Module>(availableModules[0] ?? 'BOOKING')
+  // `?expand=first` opens the first company in the list on arrival.
+  //
+  // The rate ladders are the proof this screen exists to show, and every row
+  // arrives collapsed — so a deep link into it landed on six instances of
+  // "2 tiers" in grey microtext and nothing else (Plan-DemoFlowFixes Chunk 4,
+  // task 4.6). Resolved lazily in the initialiser so it costs nothing on a
+  // normal visit, and it is a plain deep-link parameter rather than demo
+  // chrome: any link into this page can use it.
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
   const [adding, setAdding] = useState(false)
@@ -569,6 +577,17 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
   const visibleCompanies = allTourOperators.filter(c =>
     activeModule === 'BOOKING' ? c.isBookingCompany : c.isWineOrderCompany
   )
+
+  // Applied in an effect, not during render: `visibleCompanies` depends on the
+  // active module tab, which is not known until after mount.
+  const appliedExpandParam = useRef(false)
+  useEffect(() => {
+    if (appliedExpandParam.current) return
+    if (visibleCompanies.length === 0) return
+    if (new URLSearchParams(window.location.search).get('expand') !== 'first') return
+    appliedExpandParam.current = true
+    setExpandedId(visibleCompanies[0].id)
+  }, [visibleCompanies])
 
   function updateCompanyPrices(companyId: string, prices: Price[]) {
     setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, prices } : c))
@@ -722,7 +741,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div data-tour="company-rates" className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
           {visibleCompanies.map((company, i) => {
             const expanded = expandedId === company.id
             const isInBoth = company.isBookingCompany && company.isWineOrderCompany
