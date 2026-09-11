@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
+import { Wine, Columns2 } from 'lucide-react'
+import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 
 /**
  * Role-switcher + "you're in a demo" banner for the Vineworks Demo tenant.
@@ -50,9 +52,10 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
   return (
     <div
       style={{
-        backgroundColor: '#1e1b4b',
-        color: '#e0e7ff',
-        borderBottom: '1px solid #3730a3',
+        // Palette: lib/demoTheme ("cellar dark"), Chunk 5 task 5.1.
+        backgroundColor: DEMO.ground,
+        color: DEMO.text,
+        borderBottom: `1px solid ${DEMO.border}`,
         padding: '10px 16px',
         display: 'flex',
         flexWrap: 'wrap',
@@ -65,16 +68,17 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
         zIndex: 100,
       }}
     >
-      <span>
-        🍷 You&apos;re exploring a live <strong>Vineworks</strong> demo — click around freely.
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+        <Wine aria-hidden="true" size={15} strokeWidth={1.7} style={{ color: DEMO.accent, flexShrink: 0 }} />
+        You&apos;re exploring a live <strong>Vineworks</strong> demo — click around freely.
       </span>
 
       {isAdminSide ? (
         <a
           href="/"
           style={{
-            backgroundColor: '#3730a3',
-            color: '#fff',
+            backgroundColor: DEMO.accentSolid,
+            color: DEMO_FX.onAccent,
             padding: '5px 14px',
             borderRadius: '999px',
             fontWeight: 600,
@@ -88,8 +92,8 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
           onClick={handleAdminView}
           disabled={loading}
           style={{
-            backgroundColor: '#3730a3',
-            color: '#fff',
+            backgroundColor: DEMO.accentSolid,
+            color: DEMO_FX.onAccent,
             padding: '5px 14px',
             borderRadius: '999px',
             fontWeight: 600,
@@ -105,16 +109,20 @@ export default function DemoModeBanner({ tenantId }: { tenantId: string }) {
       <a
         href="/live"
         style={{
-          color: '#c7d2fe',
+          color: DEMO.accent,
           textDecoration: 'underline',
           whiteSpace: 'nowrap',
           fontSize: '0.78rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
         }}
       >
-        ⧉ See both sides at once
+        <Columns2 aria-hidden="true" size={14} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+        See both sides at once
       </a>
 
-      {error && <span style={{ color: '#fca5a5' }}>Couldn&apos;t open the admin view — try again.</span>}
+      {error && <span style={{ color: DEMO_FX.danger }}>Couldn&apos;t open the admin view — try again.</span>}
     </div>
   )
 }

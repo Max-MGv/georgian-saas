@@ -31,8 +31,8 @@ the live mirror's landing moment — all find their target and then never show i
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
 | **2** | The hydration mismatch (React #418) | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, verified on production) |
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
-| **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | 🚧 4.1–4.6 on `staging` (`9d3a2b2`); 4.7 + `master` merge pending Max |
-| **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
+| **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, all 7 steps verified on production) |
+| **5** | Demo chrome palette + front door layout | demo-only → `master` | ✅ Done (2026-09-11, verified locally incl. over a dark preset) |
 | **6** | Bug-report widget off the demo tenant | shared → `staging` | ⬜ Not started |
 | **7** | Admin landing readability | shared → `staging` | ⬜ Not started |
 | **8** | Onboarding path + super-admin "Reset demo" button | shared → `staging` | ⬜ Not started |
@@ -651,15 +651,9 @@ here it is with a dev/prod delta to bisect against.
 
 ## Chunk 4 — Tour + rail anchoring: make the spotlight actually spotlight
 
-**Status:** 🚧 In progress — 4.1–4.6 done, committed to `staging` (`9d3a2b2`) and verified
-locally on the dev demo tenant. **4.7 (staging + production verification) is what remains**, and
-the `staging` → `master` merge needs Max.
-**Resume point:** 🔜 The staging deploy of `9d3a2b2` is live and its public surfaces are
-checked. What is left: Max's eyes on `/admin/statistics` and `/admin/companies` on Staging
-Winery (both behind a login Claude cannot pass), then his approval of the `staging` → `master`
-merge. **Do not merge without him** — that merge ships to Nikalas Marani's real site. Once it
-lands, walk all seven steps plus the "Per-company price ladders" rail link on
-`demo.vineworks.ge` from a cleared `localStorage` (`vineworks-demo-tour`), and tick 4.7.
+**Status:** ✅ Done — 2026-09-11. Merged to `master` on Max's explicit approval
+(*"push to master its fine"*) as a fast-forward of `staging`, then verified on production.
+**Resume point:** none — closed. The numbers are under "4.7 as measured on production" below.
 **Ship route:** **shared** — adding `data-tour` anchors touches admin pages every tenant
 renders → `staging` pass required, with a Staging Winery regression check.
 **Fixes:** report findings A1 (no spotlight) + B7 (rail callout pinned to nothing).
@@ -705,7 +699,7 @@ because every company row is **collapsed**.
       arrive with a company row already expanded so the ladder is on screen without a click.
       Check the other 15 destinations for the same "lands on a list, not on proof" problem
       and record which ones need it.
-- [ ] **4.7 — Regression-check Staging Winery** (shared files) and verify all 7 steps + a
+- [x] **4.7 — Regression-check Staging Winery** (shared files) and verify all 7 steps + a
       sample of rail links on **production**.
 
 ### Per-step anchor audit
@@ -830,6 +824,38 @@ component takes no tenant-dependent input that could alter that. But it is an ar
 observation on Staging Winery itself. **Worth 30 seconds of Max's eyes on `/admin/statistics`
 and `/admin/companies` before the merge to `master`.**
 
+#### 4.7 as measured on production (2026-09-11, after the merge)
+
+`master` was fast-forwarded to `staging` (`caaed5a..2773966`) on Max's explicit approval. Walked
+all seven steps on `demo.vineworks.ge` at 1568×911 from a **cleared** `localStorage`, entering
+through the front door's "I run a winery" path so the auto-start armed exactly as a visitor's
+would. At each step the live DOM was asked for the ring's rect and the tooltip's width:
+
+| Step | Route | Ring (w×h) | Tooltip | Verdict |
+|---|---|---|---|---|
+| 1 | `/` | 688×565 | 340 px | ✅ booking form, scrolled into view |
+| 2 | `/wines` | 864×565 | 340 px | ✅ the wine list, not the 1425 px wrapper |
+| 3 | `/admin/orders` | 1504×565 | 340 px | ✅ the step that used to prove the bug |
+| 4 | `/admin/orders` | 1504×89 | 340 px | ✅ filters row, unchanged |
+| 5 | `/admin/statistics` | 501×130 | 340 px | ✅ **the Future Revenue card alone**, not the grid |
+| 6 | `/admin/wine-orders` | 1040×565 | 340 px | ✅ capped by the 62 % viewport rule as designed |
+| 7 | `/admin/content` | 1504×565 | 340 px | ✅ hand-off bottom at 887 px of 911 — above the fold |
+
+**Seven of seven, where it used to be one of seven.** Not one tooltip fell back to the
+full-bleed bottom dock — 1401 px was that failure's signature, and every step measured 340 px.
+
+The rail's **"Per-company price ladders"** link was walked in the same session: it lands on
+`/admin/companies?expand=first` with Alazani Valley Tours already expanded, both price tiers
+(1–12 and 13–100 guests, tasting and lunch) on screen without a click, and its callout pinned
+beside the ring rather than floating at the bottom of the page.
+
+**The one residual, recorded honestly:** Staging Winery's `/admin/statistics` and
+`/admin/companies` still have not been seen by a human, because they sit behind a login Claude
+may not pass. Both changes are inert by construction — a wrapper `div`, `h-full` on a grid item
+that already stretched, and a URL parameter that does nothing when absent — and both components
+were exercised on the demo tenant above. But that is an argument plus a check on a *different*
+tenant, not an observation on Staging Winery itself. **Still worth 30 seconds of Max's eyes.**
+
 ### Files expected
 - `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\lib\demoAnchor.ts` *(new — the shared hook)*
 - `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoTour.tsx`
@@ -840,27 +866,89 @@ and `/admin/companies` before the merge to `master`.**
 
 ## Chunk 5 — Demo chrome palette + front door layout
 
-**Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 4 is ✅.
+**Status:** ✅ Done — 2026-09-11.
+**Resume point:** none — closed.
 **Ship route:** demo-only → straight to `master`.
 **Fixes:** report findings B1 (off-brand palette), B2 (emoji icons), B3 (lopsided grid).
 **Palette is already decided** — see "cellar dark" in Decisions above. Do not redesign it.
 
 ### Tasks
-- [ ] **5.1 — Define the eight `--demo-*` tokens once**, in one place, and restyle
+- [x] **5.1 — Define the eight `--demo-*` tokens once**, in one place, and restyle
       `DemoFrontDoor`, `DemoTour`, `DemoFeatureRail` and `DemoModeBanner` onto them. No
       component should carry its own literal hex — that is the mistake [[KnownBugs]] #20/#21
       already had to be cleaned up once.
-- [ ] **5.2 — Replace the emoji card icons** (📋 ⧉ 🍷 ⚡) with one consistent line-icon set,
+- [x] **5.2 — Replace the emoji card icons** (📋 ⧉ 🍷 ⚡) with one consistent line-icon set,
       or drop icons entirely and let the labels carry it. They currently render as flat OS
       emoji next to serif display type and mix metaphors.
-- [ ] **5.3 — Fix the front-door grid.** Four cards in a three-up grid leaves the fourth
+- [x] **5.3 — Fix the front-door grid.** Four cards in a three-up grid leaves the fourth
       orphaned beside two empty slots — an accident of the live mirror being added as a
       fourth card after the layout was built for three. Go 2×2, and **give the live mirror
       the primary position** (larger cell, or promoted above the grid). It is the one thing
       no competitor has and it currently looks identical to the other three.
-- [ ] **5.4 — Verify over a dark tenant preset**, to confirm the fixed platform palette is
+- [x] **5.4 — Verify over a dark tenant preset**, to confirm the fixed platform palette is
       legible over any of the 16 themes (the reason it is fixed rather than inherited).
+
+
+### Notes / decisions (2026-09-11)
+
+#### Where the tokens live — a TS module, not `globals.css`
+
+`saas/lib/demoTheme.ts` exports the eight as a `DEMO` object, plus a small `DEMO_FX` group of
+values *derived* from them (scrims, shadows, the ring glow, the `onAccent` text colour) so
+"one place" holds for those too, plus a `demoCssVars` map for anywhere a stylesheet needs the
+real `--demo-*` custom properties.
+
+They are deliberately **not** written to `:root` in `globals.css`: that file is loaded by every
+tenant, and this chunk's whole ship route depends on touching demo-only files. A shared-file
+edit for eight inert custom properties would have forced a `staging` pass for a cosmetic change.
+
+Each component keeps its existing local `C` key names, re-pointed at the tokens. That kept the
+diff to one object per file instead of sixty call sites, and it is why the swap is reviewable.
+
+**The one colour left as a literal**, with a comment saying so: the "or sign in with your own
+account" line in `DemoLoginShortcut`, which sits *outside* the demo card on the login page's own
+cream background and belongs to that page, not to the demo chrome.
+
+#### `accent` and `accentSolid` are two tokens because they do two jobs
+
+The old palette used one indigo for both the filled CTA and the spotlight ring, which is part of
+why neither read well. Filled buttons take `accentSolid` (#8F2229, dark enough for ivory text);
+the ring, links and arrows take `accent` (#C9565C, the brightest thing on a dimmed screen). In
+`DemoTour` these are `C.accent` and `C.ring` respectively.
+
+#### 5.2 — lucide, not a new icon set
+
+`lucide-react` is already a dependency and already the admin panel's icon set (the onboarding
+wizard uses it). Adding a second icon family to get four glyphs would have been the same mistake
+one layer down. 📋 ⧉ 🍷 ⚡ became `ClipboardList`, `Columns2`, `Wine` and `Rocket` at
+`strokeWidth={1.6}`. The two emoji in `DemoModeBanner` (🍷 and ⧉) went the same way, for
+the same reason — they are the most-seen chrome on the whole demo.
+
+#### 5.3 — promoted above the grid rather than made a bigger cell
+
+The task allowed either. Four cards cannot make a 2×2 grid *with* one of them larger without
+leaving a hole somewhere — that is the same geometry that produced the orphan in the first
+place. So the live mirror moved **out** of the grid entirely: full width, accent border, a
+"START HERE" pill and the only filled CTA on the screen. The remaining three then fill a
+three-up row exactly, which is the layout that row was built for.
+
+#### 5.4 — checked against the worst case, not a friendly one
+
+Verified at 1440×900 on the dev demo tenant, then re-checked with the tenant's `--site-*`
+tokens overridden to **Deep harbor** (`#131A22`) — the darkest and the *coolest* of the five
+dark presets, so the warm chrome has nowhere to hide. The ring, the tooltip, the banner and the
+rail tab all stay clearly separate from the tenant's navy; warm-over-cool reads as a distinct
+layer rather than competing with it, which is the argument for a fixed platform palette in the
+first place. Front door, tour step 1 and the rail drawer were each looked at in both.
+
+### Files expected
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\lib\demoTheme.ts` *(new — the palette)*
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoFrontDoor.tsx`
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoTour.tsx`
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoFeatureRail.tsx`
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoModeBanner.tsx`
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoLoginShortcut.tsx` *(not in the original scope — it carried the same indigo)*
+
 
 ---
 

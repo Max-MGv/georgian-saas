@@ -7,6 +7,7 @@ import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { useAnchorRect } from '@/lib/demoAnchor'
+import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 
 /**
  * Guided spotlight tour for demo.vineworks.ge — Plan-DemoRedesign Phase 2,
@@ -81,12 +82,20 @@ const HANDOFF_MAILTO =
   '?subject=' + encodeURIComponent('Vineworks — I saw the demo') +
   '&body=' + encodeURIComponent('Hi Max,\n\nI just went through the Vineworks demo. My winery is:\n\n')
 
+// Palette: lib/demoTheme ("cellar dark"), Plan-DemoFlowFixes Chunk 5 task 5.1.
+// The local key names this file already used are kept, so the swap happens in
+// one place rather than at sixty call sites. No literal hex below this line.
+//
+// `accent` and `ring` are deliberately different tokens: the filled CTA needs a
+// background dark enough for ivory text to sit on, the spotlight ring needs to
+// be the brightest thing on a dimmed screen. One token could not be both.
 const C = {
-  ink: '#1e1b4b',
-  border: '#3730a3',
-  text: '#e0e7ff',
-  muted: '#a5b4fc',
-  accent: '#4f46e5',
+  ink: DEMO.surface,
+  border: DEMO.border,
+  text: DEMO.text,
+  muted: DEMO.muted,
+  accent: DEMO.accentSolid,
+  ring: DEMO.accent,
 }
 
 type Step = {
@@ -321,7 +330,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           fontSize: '0.82rem',
           fontWeight: 600,
           cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.28)',
+          boxShadow: DEMO_FX.shadowSm,
         }}
       >
         {state.finished ? '🍷 Replay the tour' : '🍷 Show me what this does'}
@@ -349,13 +358,13 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           borderRadius: '999px',
           padding: '8px 10px 8px 16px',
           fontSize: '0.8rem',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.28)',
+          boxShadow: DEMO_FX.shadowSm,
         }}
       >
         <span>Tour paused · step {state.index + 1} of {STEPS.length}</span>
         <button
           onClick={() => router.push(step.route)}
-          style={{ backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+          style={{ backgroundColor: C.accent, color: DEMO_FX.onAccent, border: 'none', borderRadius: '999px', padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
         >
           Resume →
         </button>
@@ -372,7 +381,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   }
 
   // ---- Touring, on the right screen: dim, ring, explain. ----
-  const scrim = 'rgba(15, 13, 40, 0.72)'
+  const scrim = DEMO_FX.scrimTour
   const panels: React.CSSProperties[] = rect
     ? [
         { top: 0, left: 0, right: 0, height: rect.top },
@@ -441,9 +450,9 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           style={{
             position: 'fixed',
             top: rect.top, left: rect.left, width: rect.width, height: rect.height,
-            border: `2px solid ${C.accent}`,
+            border: `2px solid ${C.ring}`,
             borderRadius: '12px',
-            boxShadow: '0 0 0 3px rgba(79,70,229,0.35)',
+            boxShadow: DEMO_FX.ring,
             zIndex: 151,
             // The hole stays usable: the visitor can click the thing being
             // pointed at without dropping out of the tour.
@@ -463,7 +472,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           border: `1px solid ${C.border}`,
           borderRadius: '14px',
           padding: '16px 18px',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+          boxShadow: DEMO_FX.shadowMd,
           ...tooltipStyle,
         }}
       >
@@ -491,7 +500,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
             <button
               onClick={handOffToMirror}
-              style={{ backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}
+              style={{ backgroundColor: C.accent, color: DEMO_FX.onAccent, border: 'none', borderRadius: '999px', padding: '10px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}
             >
               Now try it yourself → make a booking and watch it arrive
             </button>
@@ -525,7 +534,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
             )}
             <button
               onClick={next}
-              style={{ flex: 1, backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+              style={{ flex: 1, backgroundColor: C.accent, color: DEMO_FX.onAccent, border: 'none', borderRadius: '999px', padding: '9px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
             >
               Next →
             </button>

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
+import { Wine } from 'lucide-react'
+import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 
 /**
  * Closes the /admin dead end on demo.vineworks.ge — Plan-DemoRedesign task 1.4.
@@ -43,17 +45,19 @@ export default function DemoLoginShortcut({ tenantId }: { tenantId: string }) {
     <div style={{ marginBottom: '22px' }}>
       <div
         style={{
-          backgroundColor: '#1e1b4b',
-          color: '#e0e7ff',
-          border: '1px solid #3730a3',
+          // Palette: lib/demoTheme ("cellar dark"), Chunk 5 task 5.1.
+          backgroundColor: DEMO.surface,
+          color: DEMO.text,
+          border: `1px solid ${DEMO.border}`,
           borderRadius: '14px',
           padding: '18px',
         }}
       >
-        <strong style={{ display: 'block', fontSize: '0.92rem' }}>
-          🍷 This is a live Vineworks demo
+        <strong style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem' }}>
+          <Wine aria-hidden="true" size={16} strokeWidth={1.7} style={{ color: DEMO.accent, flexShrink: 0 }} />
+          This is a live Vineworks demo
         </strong>
-        <p style={{ margin: '6px 0 14px', fontSize: '0.82rem', lineHeight: 1.5, color: '#a5b4fc' }}>
+        <p style={{ margin: '6px 0 14px', fontSize: '0.82rem', lineHeight: 1.5, color: DEMO.muted }}>
           No account needed — go straight into the winery&apos;s back office and look
           around.
         </p>
@@ -62,8 +66,8 @@ export default function DemoLoginShortcut({ tenantId }: { tenantId: string }) {
           disabled={loading}
           style={{
             width: '100%',
-            backgroundColor: '#4f46e5',
-            color: '#fff',
+            backgroundColor: DEMO.accentSolid,
+            color: DEMO_FX.onAccent,
             border: 'none',
             borderRadius: '9px',
             padding: '11px',
@@ -75,18 +79,22 @@ export default function DemoLoginShortcut({ tenantId }: { tenantId: string }) {
           {loading ? 'Opening…' : 'Enter the demo →'}
         </button>
         {error && (
-          <p style={{ margin: '10px 0 0', fontSize: '0.8rem', color: '#fca5a5' }}>
+          <p style={{ margin: '10px 0 0', fontSize: '0.8rem', color: DEMO_FX.danger }}>
             Couldn&apos;t open the demo just now — please try again.
           </p>
         )}
         <a
           href="/"
-          style={{ display: 'inline-block', marginTop: '12px', fontSize: '0.78rem', color: '#a5b4fc' }}
+          style={{ display: 'inline-block', marginTop: '12px', fontSize: '0.78rem', color: DEMO.accent }}
         >
           ← Back to the winery&apos;s site
         </a>
       </div>
 
+      {/* The one colour here that is deliberately NOT a --demo-* token: this
+          line sits outside the demo card, on the login page's own cream
+          background, and belongs to that page rather than to the demo chrome.
+          Chunk 5 task 5.1. */}
       <p style={{ margin: '18px 0 0', fontSize: '0.75rem', color: '#6b5a47', textAlign: 'center' }}>
         or sign in with your own account
       </p>

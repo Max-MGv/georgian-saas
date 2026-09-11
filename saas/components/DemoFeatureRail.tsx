@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { useAnchorRect } from '@/lib/demoAnchor'
+import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 
 /**
  * The feature rail for demo.vineworks.ge — Plan-DemoRedesign Phase 3,
@@ -35,13 +36,16 @@ import { useAnchorRect } from '@/lib/demoAnchor'
 
 const CALLOUT_KEY = 'vineworks-demo-rail-callout'
 
+// Palette: lib/demoTheme ("cellar dark"), Plan-DemoFlowFixes Chunk 5 task 5.1.
+// Local key names kept so the swap is one place, not thirty call sites.
+// `accent` is the ring colour here — the rail has no filled CTA.
 const C = {
-  ink: '#1e1b4b',
-  inkSoft: '#312e81',
-  border: '#3730a3',
-  text: '#e0e7ff',
-  muted: '#a5b4fc',
-  accent: '#4f46e5',
+  ink: DEMO.surface,
+  inkSoft: DEMO.raised,
+  border: DEMO.border,
+  text: DEMO.text,
+  muted: DEMO.muted,
+  accent: DEMO.accent,
 }
 
 export type Capability = {
@@ -247,7 +251,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
             letterSpacing: '0.06em',
             cursor: 'pointer',
             writingMode: 'vertical-rl',
-            boxShadow: '-4px 0 18px rgba(0,0,0,0.25)',
+            boxShadow: DEMO_FX.shadowSm,
           }}
         >
           ✦ What can it do?
@@ -258,7 +262,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
         <>
           <div
             onClick={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 140, backgroundColor: 'rgba(15,13,40,0.55)' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 140, backgroundColor: DEMO_FX.scrimSoft }}
           />
           <aside
             role="dialog"
@@ -273,7 +277,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
               borderLeft: `1px solid ${C.border}`,
               padding: '20px',
               overflowY: 'auto',
-              boxShadow: '-10px 0 40px rgba(0,0,0,0.45)',
+              boxShadow: DEMO_FX.shadowMd,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
@@ -364,7 +368,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
               border: `1px solid ${C.border}`,
               borderRadius: '14px',
               padding: '14px 16px',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.45)',
+              boxShadow: DEMO_FX.shadowMd,
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
