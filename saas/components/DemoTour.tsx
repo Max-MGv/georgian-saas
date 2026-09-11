@@ -524,14 +524,16 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
             >
               Talk to us about your winery
             </a>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+            {/* Both left-aligned on purpose: on the full-width dock this row's
+                right-hand end sits underneath the floating bug-report button. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
               <button
                 onClick={back}
                 style={{ background: 'none', border: 'none', color: C.muted, fontSize: '0.75rem', cursor: 'pointer', padding: '2px 4px', textDecoration: 'underline' }}
               >
                 Back
               </button>
-              <span style={{ color: C.muted, fontSize: '0.72rem' }}>{HANDOFF_EMAIL}</span>
+              <span style={{ color: C.muted, fontSize: '0.72rem' }}>· {HANDOFF_EMAIL}</span>
             </div>
           </div>
         ) : (
