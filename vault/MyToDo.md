@@ -8,6 +8,27 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🎨 2026-09-12 — two new things on the demo
+
+**A theme catalogue.** Open the rail on `demo.vineworks.ge` (the tab on the right edge) →
+**"Branding and theme presets"**. Sixteen looks; click any one and the winery's real site
+repaints behind the panel. It is a private preview — it changes nothing for anyone else and
+saves nothing, which is what makes it safe on a shared demo. Worth trying on a sales call.
+
+**The demo works on a phone now.** The front door fits one screen instead of two and a half, and
+the small buttons in the demo bar are actually tappable. Worth opening
+`demo.vineworks.ge` on your phone once.
+
+**One thing I found while doing it:** `/live` — the side-by-side mirror, your best screen — was
+still in the old purple while everything else had moved to the wine palette. Fixed.
+
+**One decision for you.** The parts of the demo that are still fiddly on a phone are all *shared*
+product screens, not demo chrome: the "?" help buttons, the nav menu button, the date picker,
+the admin status dropdowns. Making those bigger changes the app for **every** winery, so I have
+not touched them. Want a proper mobile pass on the product itself? That is its own piece of work.
+
+---
+
 ## 🔧 2026-09-12 — corrections, and one thing to check tomorrow
 
 ### The demo test booking: I was wrong to call it a reseed bug

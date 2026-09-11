@@ -1299,14 +1299,24 @@ pass. Both are Max's, and neither is a coding task:**
 
 ## Deferred — agreed as out of scope for this plan
 
-- **Theme-preset catalogue in the demo** (Max's request, 2026-09-11): *"later I want to have
-  part of the demo — that they see the catalogue of how colours CAN be changed."* A browsable
-  gallery of the 16 theme presets, ideally previewing live on the demo tenant. The feature
-  rail already has a "Branding and theme presets" row that deep-links to a screen; this would
-  replace that with a real catalogue. **Worth its own plan** — it needs a decision about
-  whether a visitor can actually apply a preset to the shared sandbox, which is the same
-  collision problem as Chunk 8's open item.
-- **Mobile layout** — desktop-first, per Max. Only the wrong-copy fix rides along in Chunk 1.
+- ~~**Theme-preset catalogue in the demo**~~ — ✅ **built 2026-09-12** (`0276ecf`). The open
+  question was whether a visitor can apply a preset to the shared sandbox. **They cannot, and
+  they do not need to:** the preview is purely client-side. `app/layout.tsx` writes the
+  tenant's theme into a `:root` rule, and the same custom properties set as *inline* styles on
+  `document.documentElement` outrank it — so the real pages repaint instantly, every visitor
+  gets their own preview, and the demo tenant is never written to. Chunk 8's collision problem
+  simply does not arise. Reached from the rail's existing "Branding and theme presets" row,
+  which used to deep-link to `/admin/settings`; a form explaining that colours are configurable
+  is a worse answer than the site itself changing colour. `lib/demoThemePreview.ts`,
+  `components/DemoThemeCatalogue.tsx`.
+- ~~**Mobile layout**~~ — ✅ **the demo-only half done 2026-09-12** (`bc3a7bd`). Audited at
+  iPhone size first: **nothing scrolls sideways anywhere**, so the layout was never broken. Two
+  real problems, both fixed — the front door ran to ~2.5 screens (now 631 px against a 664 px
+  viewport, all four paths and Skip visible without scrolling), and three demo-chrome tap
+  targets were 155×29, 130×19 and 101×19 (all now clear 40 px). **What is deliberately left:**
+  the remaining small tap targets are all *shared* site and admin components — the HelpHint
+  "?" at 17×17, the nav Menu at 30×30, the date picker at 15×15, footer links, admin status
+  dropdowns. Those are the real product on mobile, a far wider blast radius, and Max's call.
 - **Merging the tour pill and rail tab into one "Explore" control** — recommended in the
   teardown (two entry points to two guided experiences is one too many) but it is a design
   change rather than a fix, and Chunk 5 may make it unnecessary.

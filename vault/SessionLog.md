@@ -8,6 +8,56 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 — theme catalogue, and the demo on a phone
+
+Both of the plan's deferred items, on Max's pick.
+
+### The theme catalogue settles its own open question
+
+The feature was deferred because nobody knew whether a visitor could *apply* a preset to the
+shared sandbox. They cannot — two visitors at once would repaint each other's site mid-sentence,
+Chunk 8's collision problem again. **But they do not need to.** `app/layout.tsx` writes the
+tenant's theme into a `:root` rule; the same custom properties set as **inline** styles on
+`document.documentElement` outrank it. So the real pages repaint instantly, the preview is
+private to that browser, the demo tenant is never written to, and the nightly reseed has nothing
+to undo. The panel says so in words too — a visitor who thinks they have just recoloured a
+stranger's live website stops clicking.
+
+It replaces the rail row that deep-linked to `/admin/settings`. A form explaining that colours
+are configurable is a worse answer than the site itself changing colour.
+
+### Mobile: measured first, and the layout was never the problem
+
+Audited the live demo at iPhone size before touching anything. **Nothing scrolls sideways on any
+screen** — the "desktop-only" assumption had quietly become untrue. Two real faults:
+
+1. **The front door ran to ~2.5 screens**, so Skip and three of four paths sat below the fold. A
+   visitor could not see what they were choosing between, which is the front door's only job.
+   Now **631 px against a 664 px viewport** — everything visible, no scrolling. Achieved by
+   dropping per-card body copy, putting each icon on its title's line, shortening the intro and
+   hiding the "START HERE" badge, all narrow-only. Desktop is byte-identical.
+2. **Three demo-chrome tap targets were 155×29, 130×19 and 101×19.** All now clear 40 px.
+
+### The thing the audit caught that nobody was looking for
+
+**`/live` was still in the old indigo.** Chunk 5's task 5.1 named the four demo *components*;
+`/live` is a *route*, so it was never in scope and kept the old palette while everything around
+it changed — on the demo's flagship screen, reading as two different products. Now on the shared
+tokens. Two literals stay and are commented: the pane frame and the pane loading state are
+deliberately the **tenant's** cream, because they sit behind iframes of the winery's own pages
+and should look like what is about to appear.
+
+**Left undone on purpose:** every remaining small tap target is a *shared* site or admin
+component — HelpHint's "?" at 17×17, the nav Menu at 30×30, the date picker at 15×15, footer
+links, admin status dropdowns. That is the real product on mobile, a far wider blast radius, and
+Max's call rather than something to fold into demo work.
+
+Also extracted `lib/useIsNarrow.ts`: `DemoTour` had grown the matchMedia effect and two more
+components needed the same answer. Three hand-written copies of one measurement is precisely how
+Chunk 4's anchoring bug happened.
+
+---
+
 ## 2026-09-12 — the "reseed bug" isn't one, and a three-year-old hydration error is fixed
 
 ### The reseed is not broken — the observation was taken in the wrong window
