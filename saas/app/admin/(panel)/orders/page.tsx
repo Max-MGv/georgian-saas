@@ -11,8 +11,7 @@ import OrdersFilters from './OrdersFilters'
 import OrdersTable from './OrdersTable'
 import CalendarView from './CalendarView'
 import ViewToggle from './ViewToggle'
-import { DEMO_TENANT_ID } from '@/lib/demoTenant'
-import DemoRevenueStrip from '@/components/DemoRevenueStrip'
+import RevenueStrip from './RevenueStrip'
 
 const C = { faint: 'var(--site-secondary)', muted: 'var(--site-muted)', border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)', text: 'var(--site-text)' }
 
@@ -124,33 +123,44 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 
-  // ── Demo-only revenue strip ───────────────────────────────────────
-  // "I run a winery" lands here, and the first impression of the back office was
-  // a thirteen-column table — data entry, not a business — while ₾30,785 of
-  // committed future revenue sat two clicks away on Statistics. This puts three
-  // of those numbers above the table. Plan-DemoFlowFixes Chunk 7 task 7.3.
+  // ── Revenue strip ─────────────────────────────────────────────────
+  // Three numbers above the table: upcoming bookings, the revenue they
+  // represent, and when the next one is. Built demo-only in Plan-DemoFlowFixes
+  // Chunk 7 task 7.3, rolled out to every tenant on Max's call 2026-09-11.
+  // The design decisions behind it are documented in RevenueStrip.tsx.
   //
-  // Demo-only by decision: the task left "is this a genuine improvement for
-  // every winery?" open, and shipping an undesigned strip onto every tenant's
-  // landing page to answer it is the wrong order. It is one `if` to widen once
-  // Max says so. The numbers deliberately match Statistics' own definition
-  // (upcoming = date >= today, over ALL orders, not the current filter) so the
-  // two screens can never disagree.
-  const demoStrip = tenantId === DEMO_TENANT_ID
-    ? await (async () => {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const upcoming = await withTenantDb(tenantId, tx => tx.order.findMany({
-          where: { tenantId, date: { gte: today }, status: { not: 'CANCELLED' } },
-          select: { date: true, totalPrice: true },
-          orderBy: { date: 'asc' },
-        }))
-        return {
-          count: upcoming.length,
-          revenue: Math.round(upcoming.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
-          nextDate: upcoming[0]?.date ?? null,
-        }
-      })()
+  // Two queries, both only on the table view — the calendar view has its own
+  // shape and does not need them:
+  //  - `upcoming` drives the numbers. Deliberately unfiltered: it is the whole
+  //    business, not the current view.
+  //  - `hasAnyOrders` decides whether the strip renders at all. A brand-new
+  //    winery with no bookings should not be met by a row of zeros; a winery
+  //    that has traded but has nothing upcoming still gets it, because there
+  //    the zero is real information.
+  //
+  // Same definition Statistics uses (date >= today, cancelled excluded) so the
+  // two screens cannot disagree.
+  const [upcoming, hasAnyOrders] = view === 'table'
+    ? await Promise.all([
+        (() => {
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          return withTenantDb(tenantId, tx => tx.order.findMany({
+            where: { tenantId, date: { gte: today }, status: { not: 'CANCELLED' } },
+            select: { date: true, totalPrice: true },
+            orderBy: { date: 'asc' },
+          }))
+        })(),
+        withTenantDb(tenantId, tx => tx.order.count({ where: { tenantId } })).then(c => c > 0),
+      ])
+    : [[], false]
+
+  const revenueStrip = hasAnyOrders
+    ? {
+        count: upcoming.length,
+        revenue: Math.round(upcoming.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
+        nextDate: upcoming[0]?.date ?? null,
+      }
     : null
 
   return (
@@ -182,7 +192,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         />
       ) : (
         <>
-      {demoStrip && <DemoRevenueStrip {...demoStrip} locale={locale} />}
+      {revenueStrip && <RevenueStrip {...revenueStrip} locale={locale} />}
 
       <div data-tour="orders-filters">
         <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} tenantId={tenantId} />

@@ -1104,8 +1104,38 @@ Two details that are not arbitrary:
   formatting for the same reason Chunk 2 had to — the server is UTC/en-US and a Georgian
   browser is not.
 
-**⚠️ Open for Max:** whether the strip should go to every winery. If yes it needs the design
-pass the task called for, not just a widened `if`.
+#### 7.3 — **answered 2026-09-11: every winery gets it**
+
+Max saw it on the demo and asked for it platform-wide (*"i really like this addition to orders so
+yeah let's add it to the normal website too, but center the numbers, they are aligned left"*).
+Done as its own small design pass rather than a widened `if`, which is what the task asked for.
+It is now `saas/app/admin/(panel)/orders/RevenueStrip.tsx` — moved out of `components/` and
+colocated with the one page that renders it, and no longer carrying "Demo" in its name.
+
+Three decisions that pass produced:
+
+1. **Centred**, per Max. Measured rather than eyeballed: `text-align: center` on all three cells,
+   and each value's box sits 20 px from its cell's left edge and 20–21 px from the right.
+2. **It hides itself for a winery with no bookings at all.** A brand-new tenant opening the back
+   office on day one should not be met by a row of zeros — that is discouraging and says
+   nothing. The strip appears with their first booking. A winery that *has* traded but has
+   nothing upcoming still gets it, showing 0 and "No upcoming orders", because there the zero is
+   real information rather than an empty state. One extra `count` query, table view only.
+3. **The numbers keep ignoring the page's filters.** They are the whole business, not the current
+   view — a strip that moved whenever someone filtered by company would be a second, quieter set
+   of totals competing with the one the table already prints at its foot.
+
+**Verified against every tenant in the dev database**, by running the component's exact two
+queries for each:
+
+| Tenant | orders | strip renders | upcoming | revenue |
+|---|---|---|---|---|
+| `staging-winery` | 17 | ✅ yes | 8 | 1,800₾ |
+| `test-onboarding-wizard` | 0 | ❌ **hidden**, as designed | 0 | 0₾ |
+| `vineworks-demo` | 393 | ✅ yes | 56 | 30,785₾ |
+
+That middle row is the one worth having: the zero-booking case is the one a new client sees
+first, and it is the only one nobody would have thought to look at.
 
 
 ---
@@ -1250,7 +1280,7 @@ against the deployed site, not inferred from the diff.
 | `/admin/orders` columns | 11 (was 13 — Food and Masterclass hidden) | 7 |
 | `/admin/orders` tallest row | **80 px** (was 147 px) | 7 |
 | `/admin/orders` rows fully visible at 900 px | **5** (was 4), *after* the strip's own 87 px | 7 |
-| Revenue strip | renders above the filters | 7 |
+| Revenue strip | renders above the filters (demo-only at the time; **now on every tenant** — see 7.3) | 7 |
 | `/admin/onboarding` | demo banner ✅, "Customer View" ✅, tour pill ✅, feature rail ✅ | 8 |
 | `/admin/onboarding` first step | the Companies question, unanswered | 8 |
 
