@@ -2,118 +2,113 @@
 tags: [handoff, demo, vineworks]
 ---
 
-# Handoff — starting the demo flow fixes
+# Handoff — Chunk 2 of the demo flow fixes
 
 **How to use this:** copy the block below into a fresh Claude Code session. It is written to
-be self-contained — a session with no memory of the teardown can start work from it.
+be self-contained — a session with no memory of Chunk 1 can start work from it.
 
-**Supersedes** the previous handoff (for [[Plan-DemoRedesign]], now complete). Written
-2026-09-11.
+**Supersedes** the Chunk 1 handoff (Chunk 1 is ✅, shipped `9959711`, verified on production
+2026-09-11). Written 2026-09-11.
 
-**When Chunk 1 is done**, the prompt for Chunk 2 is the same block with two edits: change
-"Chunk 1" to "Chunk 2" in the task line, and drop the "the measurements you don't need to
-re-derive" section (it is Chunk-1 specific). Every chunk in the plan carries its own resume
-point and verification criteria, so the shape of this prompt works for all eight.
+**The shape works for every chunk.** To produce the prompt for Chunk N, swap the task line,
+replace the "what you don't need to re-derive" section with that chunk's recorded findings,
+and re-check the ship route in the plan's status table — it differs per chunk and is not a
+guess.
+
+**⚠️ The one thing that changed between Chunk 1 and Chunk 2:** Chunk 1 was demo-only and went
+straight to `master`. **Chunk 2 is a shared file and needs the `staging` pass.** That is the
+single biggest difference and the prompt below leads with it.
 
 ---
 
 ## The prompt
 
 ```
-This is the Vineworks project (multi-tenant SaaS for Georgian wineries). I want you to start
-implementing fixes to the public sales demo at demo.vineworks.ge.
+This is the Vineworks project (multi-tenant SaaS for Georgian wineries). Continue the public
+sales demo fixes at demo.vineworks.ge. Chunk 1 is done and shipped; you are starting Chunk 2.
 
 READ FIRST, IN THIS ORDER:
 1. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\ClaudeInstructions.md
    — how to behave on this project. Rule 0 (git) and Rule 8 (confirm before editing) both
-   apply to this work.
+   apply. Rule 0 matters much more this time than it did for Chunk 1 — see ship route below.
 2. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\DemoSite\Plan-DemoFlowFixes.md
-   — THE TASK TRACKER. Read the status table, the ground rules, the "Decisions already made"
-   section, and then Chunk 1 in full.
+   — THE TASK TRACKER. Read the status table, the ground rules, "Decisions already made",
+   then Chunk 1's "Notes / decisions" section IN FULL, and then Chunk 2 in full. Chunk 1's
+   notes are not history — they contain the finding that Chunk 2's premise was built on.
 3. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\MaintenanceNotes.md §4
-   — the localhost / DEFAULT_TENANT_ID trap you will hit when previewing the demo locally.
+   — the localhost / DEFAULT_TENANT_ID trap. You WILL hit this, because task 2.1 requires
+   working locally in dev mode.
 
-BACKGROUND, SO YOU DON'T RE-DERIVE IT:
-The demo was fully built across five phases (Plan-DemoRedesign, all complete). A hands-on
-teardown on 2026-09-11 found that three separate components locate their target element and
-then never show it to the viewer — silently, which is why they all passed review. The fixes
-are broken into 8 sequential chunks in Plan-DemoFlowFixes.md. Do not re-run the teardown;
-its findings are already written down with measurements.
+YOUR TASK: Chunk 2 only — "The hydration mismatch (React #418)".
+Max has approved Chunk 2 specifically. Implement it, then STOP and report back. Do not start
+Chunk 3; chunks are strictly sequential by Max's instruction.
 
-YOUR TASK: Chunk 1 only — "The flagship lands".
-Max has approved Chunk 1 specifically. Implement it, then STOP and report back. Do not start
-Chunk 2; chunks are strictly sequential by Max's instruction, and Chunk 2's approach depends
-on what Chunk 1's task 1.3 finds.
+THE SHIP ROUTE IS DIFFERENT THIS TIME — READ THIS TWICE:
+Chunk 1 touched demo-only files, so it went straight to master. CHUNK 2 DOES NOT. The
+offending code is shared — the bug is confirmed on Staging Winery, so it lives in a file every
+tenant renders. That means the full staging pass from ClaudeInstructions Rule 0:
+  push to `staging` → verify on the staging preview URL (reads the DEV database) → only merge
+  staging → master after Max confirms.
+Do not merge to master on your own judgement. There is only ONE deployment: demo.vineworks.ge
+and nikalasmarani.vercel.app are the same code and the same production database, distinguished
+only by which tenant the domain resolves to. Pushing to master ships to Nikalas Marani's real
+site with his real customer bookings at the same instant it ships to the demo.
 
-THE MEASUREMENTS YOU DON'T NEED TO RE-DERIVE (all taken on production, 2026-09-11):
-- A real booking through /live works end to end: guest saw "Booking received! 280₾", the admin
-  pane reloaded, the header count went 393 → 394, and the green "Just landed" pill fired.
-- But the new row rendered at y = 4,769px inside the admin pane — about six screens down —
-  because the orders table sorts by VISIT date, not creation date, and the test booking was
-  for 20 October while the list opens on 31 December.
-- And no outline was applied: checked computed styles on the matched row plus six ancestors,
-  result "no outline found", ~6 seconds after submit (well inside the 20s re-assert window
-  that Plan-DemoRedesign Phase 4.3 describes).
-So the feature's whole promise currently resolves to a counter incrementing by one.
-
-WHAT GOOD LOOKS LIKE WHEN YOU'RE DONE:
-A booking submitted in the guest pane on a 1440x900 desktop is visible in the admin pane
-WITHOUT the viewer scrolling, and is visibly marked as new. Verified on production with a
-real booking, with a screenshot for Max.
+WHAT YOU DON'T NEED TO RE-DERIVE (all already measured and written down):
+- The error is React #418, minified, with arguments `args[]=text`. So it is a TEXT NODE
+  mismatch — not an attribute and not a structural one. That narrowing is already done.
+- It fires on EVERY route checked: /, /wines, /admin/orders, /admin/statistics, /live.
+- It is NOT demo-specific. Confirmed on Staging Winery, where no demo component renders at
+  all. It affects real tenants.
+- Prime suspects: values formatted at render time from `new Date()` or a locale-dependent
+  formatter, where the server (UTC, region fra1) and the browser disagree. This app renders
+  dates, times and ₾ amounts on every screen.
+- **It is NOT the cause of the live mirror's landing-moment bug.** Chunk 1 measured that and
+  disproved it. The mirror was marking a `display:none` copy of the orders list; the admin
+  pane is a 691px iframe, below Tailwind's 768px `md` breakpoint, so /admin/orders was showing
+  its card list while the code marked its hidden table. The fixed highlight now holds for its
+  full 20s window on production WHILE #418 is still firing on that same page. Do not re-open
+  this. It is written up in Chunk 1's "Notes / decisions".
 
 RULES THAT ACTUALLY BITE ON THIS CHUNK:
-- Chunk 1 touches demo-only files (LiveMirrorClient.tsx, app/live/), so per Max's standing
-  decision it goes STRAIGHT TO master rather than through staging. Confirm the file list is
-  genuinely demo-only before you rely on that. Anything shared takes the staging pass.
-- Verify against PRODUCTION timings, not dev. Four separate bugs in the previous plan came
-  from assuming a render had finished; dev passing is not evidence.
-- prefers-reduced-motion must be respected on the scroll (drop to behavior:'auto').
-- Task 1.2 is a real decision, not a formality: the scroll alone depends on the name-match
-  succeeding, so pick a second mechanism (sort newest-created-first in the mirror pane, or a
-  pinned "just added" group, or defaulting the guest form's date to the soonest open date).
-  Record which you chose and why in the plan file.
-- Task 1.4 is the one agreed mobile exception: /live's copy still says "left"/"right" while
-  the panes stack below 900px. Fix the STRING only — no mobile layout work, Max is
-  desktop-first for now.
+- Task 2.1 is not optional and it is not a formality: REPRODUCE LOCALLY IN DEV MODE, where
+  React prints the exact mismatching text side by side. Chasing this in production is what
+  made it cost three sessions already. Production has only the minified error.
+- Task 2.2 is the actual deliverable: NAME the offending text node. Three sessions have failed
+  to name it. A fix without a named node is a guess, and this plan has already been burned once
+  by a plausible guess that measurement falsified.
+- Regression-check Staging Winery (cmrxb85wo0000vlc0d964nzf8) before shipping, per ground rule
+  2 — this is a shared file, so a real tenant is the check.
+- Task 2.4's "re-check that Chunk 1's outline survives" is now a REGRESSION check, not a hope.
+  The outline already works. Confirm your fix didn't break it.
+- Verify against PRODUCTION timings after deploy, not dev. Dev passing is not evidence — four
+  separate bugs in the previous plan came from assuming a render had finished.
+- Stop the dev server before any prisma command (ClaudeInstructions Rule 10). Unlikely to come
+  up here, but it fails silently when it does.
 
 WHEN YOU FINISH:
-1. Tick the boxes in Plan-DemoFlowFixes.md, set Chunk 1's Status to Done, and rewrite both
-   its Resume point and the Overall resume point.
-2. Record task 1.2's decision and task 1.3's finding in that file's "Notes / decisions"
-   section — 1.3's finding is the input to Chunk 2, so it must be written down.
-3. Update SessionLog.md, FeatureLog.md (#165 is currently marked Broken — update it honestly)
-   and KnownBugs.md (#24, and #29 if the duplicate bug button is gone as a side effect), per
-   ClaudeInstructions Rule 1.
-4. Report to Max with a screenshot, then wait for approval before Chunk 2.
+1. Tick the boxes in Plan-DemoFlowFixes.md, set Chunk 2's Status to Done, rewrite its Resume
+   point and the Overall resume point.
+2. Record the offending text node in Chunk 2's "Notes / decisions" — this is the thing three
+   sessions have failed to name, so it must be written down even if the fix is one line.
+3. Update SessionLog.md, FeatureLog.md and KnownBugs.md per ClaudeInstructions Rule 1. For
+   KnownBugs, task 2.5 is explicit: close the "Hydration mismatch on public site pages"
+   section properly, not just a status flip. Note that section already carries a 2026-09-11
+   correction from Chunk 1 — keep it, it records why this bug was mis-prioritised.
+4. Report to Max, then wait for approval before Chunk 3.
 
 DON'T:
-- Don't redesign the demo chrome palette — it's already decided ("cellar dark", in the plan's
-  Decisions section) and it belongs to Chunk 5.
-- Don't fix the tour or the feature rail. Chunks 3 and 4.
-- Don't touch the mobile layout.
-- Don't re-open decisions recorded in the plan's "Decisions already made" section.
+- Don't push to master yourself. Staging first, then Max confirms.
+- Don't redesign the demo chrome palette — decided ("cellar dark"), it belongs to Chunk 5.
+- Don't fix the tour, the feature rail, or the duplicate bug-report button. Chunks 3, 4 and 6.
+- Don't touch the mobile layout. Desktop-first is a recorded decision.
+- Don't re-open decisions in the plan's "Decisions already made" section. The one exception is
+  flagged in that section itself: the note on the hydration bug's PRIORITY was a bet on what
+  Chunk 1 would find, and Chunk 1 found otherwise. Max has since confirmed Chunk 2 keeps its
+  slot, so just do the work.
+
+HOUSEKEEPING, IF STILL PRESENT:
+Chunk 1's verification left a real test booking in the live demo data — "Luka Testashvili",
+4 guests, 20 Oct 2026. The 03:00 UTC nightly reseed should have cleared it. If it is still
+there, ask Max whether to delete it rather than deleting it yourself; it is a production write.
 ```
-
----
-
-## Quick reference for whoever picks this up
-
-| Thing | Value |
-|---|---|
-| Live demo URL | `https://demo.vineworks.ge` |
-| Demo tenant slug | `vineworks-demo` |
-| Demo tenant ID — dev DB | `cmtvgl6e60000vl6w9se65t86` |
-| Demo tenant ID — prod DB | `cmtvi582n0000vl7kjq44ir5p` |
-| Env var driving the gate | `NEXT_PUBLIC_DEMO_TENANT_ID` |
-| Staging Winery (regression check) | `cmrxb85wo0000vlc0d964nzf8` |
-| Demo admin | `demo-admin@vineworks.ge` (password in `credentials.txt`) |
-| Vercel project | `georgian-saas` · team `mg-productions-projects` |
-
-**Tooling note worth knowing:** the Browser pane's screenshots were unusable in the
-2026-09-10 session (rendered at a fraction of the requested viewport, clicks timing out) and
-that caused a real false finding — two features were reported as "could not confirm" when
-they were fine. The 2026-09-11 session used `playwright-cli` against real Chrome instead and
-everything worked, including frame-level access into `/live`'s iframes and computed-style
-measurement. **Use `playwright-cli` for anything visual on this project.** Its skill is
-available in-session; `playwright-cli open`, `resize 1440 900`, `screenshot --filename=x.png`,
-then read the PNG.
