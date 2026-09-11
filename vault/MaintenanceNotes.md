@@ -288,3 +288,52 @@ demo tenant with the console open.
 **The secret:** the route refuses to run (503) when `CRON_SECRET` is unset rather than failing open, because its whole job is deleting rows. **Vercel only injects environment variables into *new* deployments**, so adding or rotating `CRON_SECRET` requires a redeploy before it takes effect — an existing build keeps returning 503 until then. That surprise cost a debugging cycle on 2026-09-10.
 
 **Also:** cron jobs on the Hobby plan fire within a ±1-hour window, not at the exact minute, and the dashboard's "Run" button appears to be a no-op there — it produced no request at all when tested. Verify from the runtime logs, not from the button.
+
+---
+
+## 15. The demo chrome's colours live in one module — no demo component may carry its own hex
+
+**What the dependency is:**
+`saas/lib/demoTheme.ts` exports the eight "cellar dark" tokens (`DEMO`) plus the values derived
+from them (`DEMO_FX` — scrims, shadows, the spotlight ring glow, the text colour for filled
+CTAs). `DemoFrontDoor`, `DemoTour`, `DemoFeatureRail`, `DemoModeBanner` and `DemoLoginShortcut`
+all read from it, each keeping its own local `C` object as a re-pointed alias so call sites did
+not have to change.
+
+**Why it bites:** two hand-written copies of a palette is exactly what [[KnownBugs]] #20/#21 were,
+and they had to be cleaned up once already. A new demo surface with its own literal hex will look
+right on the day and drift the moment anything changes.
+
+**Two tokens, not one, for the accent.** `accentSolid` (`#8F2229`) backs filled buttons, which
+need ivory text to sit on them; `accent` (`#C9565C`) is the spotlight ring, links and arrows,
+which need to be the brightest thing on a dimmed screen. The old palette used one colour for both
+and neither read well. In `DemoTour` these are `C.accent` and `C.ring`.
+
+**Deliberately not `:root` in `globals.css`.** That file loads for every tenant, and the demo
+chrome ships demo-only — putting the tokens there would force a `staging` pass on every cosmetic
+demo change. `demoCssVars` is exported for anywhere a stylesheet genuinely needs the real
+`--demo-*` custom properties.
+
+**The palette is fixed, not inherited.** It must stay legible over all 16 tenant presets,
+including the five dark ones — inheriting `var(--site-*)` would give dark-on-dark. Checked
+against **Deep harbor**, the darkest and coolest, which is the worst case for a warm palette.
+
+---
+
+## 16. `/admin/onboarding` has its own layout, and it is the second place demo chrome mounts
+
+**What the dependency is:**
+The setup wizard renders **outside** `saas/app/admin/(panel)/layout.tsx`, which is where the demo
+chrome normally mounts. `saas/app/admin/onboarding/layout.tsx` exists solely to mount
+`DemoModeBanner`, `DemoTour` and `DemoFeatureRail` on that one route
+([[DemoSite/Plan-DemoFlowFixes]] Chunk 8, [[KnownBugs]] #28).
+
+**Why it bites two ways:**
+- A new demo component added to `(panel)/layout.tsx` and *not* here leaves the onboarding route
+  half-dressed again — which is the bug that was just fixed. **Both files, or neither.**
+- The obvious-looking fix, putting the chrome in `app/admin/layout.tsx`, is wrong: that file
+  wraps `(panel)` as well, so it would render every demo component **twice** on every other
+  admin page.
+
+---
+

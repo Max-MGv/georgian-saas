@@ -997,7 +997,7 @@ demo tenant, it kills the duplicate FAB as a side effect — one line fixes the 
 - [x] **6.2 — Regression-check** that the widget still renders on Staging Winery (public +
       admin) and in super-admin. This is a shared file; that check is the point of the
       staging pass.
-- [ ] **6.3 — Verify on production** that no bug button appears anywhere on the demo,
+- [x] **6.3 — Verify on production** that no bug button appears anywhere on the demo,
       including both `/live` panes.
 
 ### Trade-off Max accepted
@@ -1052,7 +1052,7 @@ and the six-operator ranking sit two clicks away on Statistics.
       revenue, next order — reusing the figures Statistics already computes. Decide with Max
       whether this is demo-only or a genuine improvement for every winery; if the latter, it
       needs its own small design pass rather than riding along here.
-- [ ] **7.4 — Regression-check Staging Winery** and verify row height and visible-row count
+- [x] **7.4 — Regression-check Staging Winery** and verify row height and visible-row count
       on production.
 
 ### Notes / decisions (2026-09-11)
@@ -1230,6 +1230,40 @@ made the palette work look half-done on the single most-seen control in the demo
 sandbox** — and this chunk does not settle it. It makes the shared sandbox honest, which is
 what [[Plan-DemoSite]] recommended starting with. If two visitors ever run the wizard at once
 they will still collide.
+
+---
+
+## Production verification — Chunks 5–8 (2026-09-11)
+
+All four chunks are on `master` and live on `demo.vineworks.ge`. Measured from the browser
+against the deployed site, not inferred from the diff.
+
+| What | Measured on production | Chunk |
+|---|---|---|
+| Front door ground | `rgb(30,14,17)` = `#1E0E11` — cellar dark | 5 |
+| Front door hero border | `rgb(201,86,92)` = `#C9565C` — the accent, on the live mirror only | 5 |
+| Front door icons | 4 inline SVGs, **zero** emoji in the dialog | 5 |
+| "START HERE" badge | present, on the live mirror card | 5 |
+| Bug buttons on `/` | **0** (was 1) | 6 |
+| Bug buttons on `/live` | **0** at top level and **0** in each of the two panes (was 2) | 6 |
+| Bug buttons on `/admin/orders`, `/admin/onboarding` | **0** | 6 |
+| `/admin/orders` columns | 11 (was 13 — Food and Masterclass hidden) | 7 |
+| `/admin/orders` tallest row | **80 px** (was 147 px) | 7 |
+| `/admin/orders` rows fully visible at 900 px | **5** (was 4), *after* the strip's own 87 px | 7 |
+| Revenue strip | renders above the filters | 7 |
+| `/admin/onboarding` | demo banner ✅, "Customer View" ✅, tour pill ✅, feature rail ✅ | 8 |
+| `/admin/onboarding` first step | the Companies question, unanswered | 8 |
+
+**Two things Claude could not check, both behind the super-admin or admin login it may not
+pass. Both are Max's, and neither is a coding task:**
+
+1. **The "Reset demo now" button** (`/super-admin/tenants`). It typechecks and wraps a function
+   that *was* verified end to end against the dev database, but nobody has pressed it. **Press
+   it once.**
+2. **Staging Winery's admin pages** — `/admin/orders` under the new truncation, plus
+   `/admin/statistics` and `/admin/companies` still outstanding from Chunk 4. Staging Winery's
+   *public* pages were checked on the staging preview at every step and are clean.
+
 
 ---
 

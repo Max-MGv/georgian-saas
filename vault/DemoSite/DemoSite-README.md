@@ -13,8 +13,8 @@ platform. **If you are a new session picking this work up, read in this order.**
 
 | # | File | What it's for |
 |---|---|---|
-| 0 | **[[Plan-DemoFlowFixes]]** | 🔴 **The live task tracker (current work).** Chunks 1–8, strictly sequential, checkboxes, per-chunk resume points. Fixes what the redesign build got wrong. **Start here.** |
-| 0.5 | **[[HANDOFF]]** | 🟢 **Ready-to-paste prompt for the next session.** Kept current — it carries where the work actually stands, which as of 2026-09-11 is "Chunk 4 is built and sitting on `staging`, unmerged". Paste it into a fresh session rather than writing a prompt from scratch. |
+| 0 | **[[Plan-DemoFlowFixes]]** | ✅ **The task tracker — all eight chunks complete as of 2026-09-11.** Now the record of what was found and decided rather than a live to-do. Still **start here**: its per-chunk notes carry every measurement and every anti-pattern. |
+| 0.5 | **[[HANDOFF]]** | 🟢 **Ready-to-paste prompt for the next session.** Kept current — as of 2026-09-11 it says the plan is finished, names the two items that are Max's, and lists what a next session would pick up instead. |
 | 1 | [[Plan-DemoRedesign]] | The previous tracker — Phases 0–4, all ✅ complete. History now, but read it for why each piece exists and for the load-bearing constraints. |
 | 2 | [[DemoDirections]] | The design review that produced the plan. Why each direction exists, what it fixes, what to watch out for. |
 | 3 | [[Research-DemoPatterns]] | Industry research behind the decisions, with sources and a caveat about the numbers. |
@@ -85,29 +85,41 @@ main source of the "out of date" feeling.
 **All of it is chunked and prioritised in [[Plan-DemoFlowFixes]].** Max approved the plan and
 the order on 2026-09-11.
 
-> ### ⚠️ Progress since the above was written — updated 2026-09-11 (session 11)
+> ### ✅ The flow-fix plan is **finished** — updated 2026-09-11 (session 12)
 >
-> The section above describes the state at the **start** of the fix work. Four chunks in, most
-> of it is no longer true. Current state:
+> The section above describes the state at the **start** of the fix work. None of it is current.
+> **All eight chunks of [[Plan-DemoFlowFixes]] are shipped to `master` and verified on
+> `demo.vineworks.ge`.**
 >
 > | Chunk | Status |
 > |---|---|
 > | **1** — the flagship lands (mirror scrolls to the new booking) | ✅ on `master`, verified on production |
 > | **2** — hydration mismatch (React #418) | ✅ on `master`, verified on production |
 > | **3** — tour entry: no more "Tour paused", auto-start, real ending | ✅ on `master`, verified on production |
-> | **4** — tour + rail anchoring | 🚧 **built and on `staging` (`9d3a2b2`), NOT merged to `master`** |
-> | **5–8** | ⬜ not started |
+> | **4** — tour + rail anchoring | ✅ on `master` (`2773966`), **7 of 7 steps ring on production** |
+> | **5** — "cellar dark" palette + front door layout | ✅ on `master` (`1773938`) |
+> | **6** — bug widget off the demo | ✅ on `master` (`8e5203c`), 0 bug buttons anywhere on the demo |
+> | **7** — admin landing readability | ✅ on `master` (`8e5203c`), tallest row 147 px → 80 px |
+> | **8** — onboarding path + super-admin reset button | ✅ on `master` (`0919a6a`) |
 >
-> **The trap for a new session:** Chunk 4's fix is real and complete, but it is on `staging`
-> only — so `demo.vineworks.ge` still shows the broken behaviour. Do not re-debug it. Run
-> `git diff master..staging` first. See [[HANDOFF]].
+> **What is genuinely left is Max's, not a session's** — both behind logins Claude may not pass:
+> press the new **"Reset demo now"** button once (`/super-admin/tenants`), and glance at
+> **Staging Winery's** `/admin/orders`, `/admin/statistics` and `/admin/companies`. See
+> [[MyToDo]].
 >
-> **What Chunk 4 found, because it overturns the framing above:** the tour's missing rings were
-> never about missing `data-tour` anchors. All seven existed. The tour measured where to draw
-> the ring **once, 60 ms after a route change**, and lost that race on every step that involved
-> navigating — which is why step 4, the only step that does not navigate, was the only one that
-> worked, and why it passed locally and failed on production. Full record in
-> [[Plan-DemoFlowFixes]] Chunk 4.
+> **Two findings worth carrying into any future demo work:**
+>
+> 1. *(Chunk 4)* The tour's missing rings were never about missing `data-tour` anchors — all
+>    seven existed. The tour measured where to draw the ring **once, 60 ms after a route
+>    change**, and lost that race on every step that navigated. That is why step 4, the only
+>    step that does not navigate, was the only one that worked, and why it passed locally and
+>    failed on production. **A timeout is a guess about someone else's latency.** The fix is a
+>    `MutationObserver` with no deadline; do not replace it with a longer timer.
+> 2. *(Chunk 8)* Onboarding completeness is **computed live from real data**, never stored. So a
+>    reset can clear the wizard's *answers* but cannot untick Wines, Payment, Contact or Photos
+>    without deleting the content the demo exists to show. If the front door's "how fast is
+>    setup?" must be literally true, the answer is a **disposable tenant per visitor** — still
+>    open in [[Plan-DemoRedesign]].
 
 ---
 

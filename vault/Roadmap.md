@@ -299,8 +299,8 @@ per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rat
 - [x] **Phase 0** — nightly regeneration so visitor tinkering can't degrade it (#161)
 - [x] **Phase 1** — front door interstitial framing what Vineworks is (#162)
 - [x] **Phase 1** — `/admin` dead end closed with one-click entry (#162)
-- [x] **Phase 2** — spotlight tour, seven steps that name money not buttons (#163) — 🟡 **both halves now fixed**: the "Tour paused" entry bug shipped to `master` in Chunk 3; the missing rings are fixed in Chunk 4 and sit on `staging` awaiting the merge ([[KnownBugs]] #25, #26)
-- [x] **Phase 3** — feature rail surfacing 16 otherwise-invisible capabilities (#164) — 🟡 **callout anchoring and the collapsed-data deep link both fixed in Chunk 4**, on `staging` awaiting the merge ([[KnownBugs]] #27)
+- [x] **Phase 2** — spotlight tour, seven steps that name money not buttons (#163) — ✅ **both halves fixed and live**: the "Tour paused" entry bug in Chunk 3, the missing rings in Chunk 4. Seven of seven steps draw a real ring on production ([[KnownBugs]] #25, #26)
+- [x] **Phase 3** — feature rail surfacing 16 otherwise-invisible capabilities (#164) — ✅ **callout anchoring and the collapsed-data deep link both fixed in Chunk 4**, shipped and verified on production ([[KnownBugs]] #27)
 - [x] **Phase 4** — live mirror at `/live`: guest site and back office side by side (#165) — ✅ **the landing moment lands**: fixed in Chunk 1, shipped to `master`, verified on production 2026-09-11 ([[KnownBugs]] #24)
 - [x] Abuse guardrails — outbound email suppressed, public writes rate-limited (#166)
 
@@ -308,11 +308,11 @@ per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rat
 - [x] **Chunk 1** — mirror scrolls to the landed booking (+ wrong "left/right" copy on mobile) — ✅ shipped to `master`, verified on production 2026-09-11
 - [x] **Chunk 2** — the hydration text mismatch (React #418), fires on every route on production — ✅ shipped to `master`, verified on production 2026-09-11
 - [x] **Chunk 3** — tour entry: no "Tour paused" dead end, auto-start on the winery path, a real ending — ✅ shipped to `master` (`e44e519`, `cce867c`), verified on production 2026-09-11
-- [ ] **Chunk 4** — tour + rail anchoring, and make anchor failure loud in dev so this can't ship again — 🚧 **built, on `staging` (`9d3a2b2`), awaiting Max's review + the `master` merge.** The premise was wrong: all seven anchors already existed; the cause was a single 60 ms measurement racing the route paint
-- [ ] **Chunk 5** — demo chrome off the off-brand indigo onto a "cellar dark" brand palette
-- [ ] **Chunk 6** — bug-report widget off the demo tenant (kills the duplicate on `/live` too)
-- [ ] **Chunk 7** — admin landing readability: compact rows, revenue strip
-- [ ] **Chunk 8** — onboarding path back inside the demo + a super-admin "Reset demo" button
+- [x] **Chunk 4** — tour + rail anchoring, and make anchor failure loud in dev so this can't ship again — ✅ shipped to `master` (`9d3a2b2`), **all seven steps verified ringing on production** 2026-09-11. The premise was wrong: all seven anchors already existed; the cause was a single 60 ms measurement racing the route paint
+- [x] **Chunk 5** — demo chrome off the off-brand indigo onto a "cellar dark" brand palette — ✅ shipped to `master` (`1773938`), verified on production. One palette module, lucide line icons, and the live mirror promoted out of the lopsided grid
+- [x] **Chunk 6** — bug-report widget off the demo tenant (kills the duplicate on `/live` too) — ✅ shipped to `master` (`8e5203c`), **0 bug buttons on production, including both `/live` panes**
+- [x] **Chunk 7** — admin landing readability: compact rows, revenue strip — ✅ shipped to `master` (`8e5203c`). Tallest row 147 px → 80 px on production; the truncation, not the column hiding, is what did it
+- [x] **Chunk 8** — onboarding path back inside the demo + a super-admin "Reset demo" button — ✅ shipped to `master` (`0919a6a`). Path 4 keeps its demo chrome on production; **the reset button itself is unpressed — it sits behind the super-admin login**
 
 **Still open (deliberately):**
 - [ ] Theme-preset catalogue inside the demo, so visitors see how colours can be changed

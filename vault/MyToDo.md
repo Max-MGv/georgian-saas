@@ -8,6 +8,47 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ 2026-09-11 (session 12) — the demo plan is **finished and live**. Two small things for you
+
+All eight chunks are shipped to `master` and verified on `demo.vineworks.ge`. The tour rings, the
+chrome is on brand, the bug button is gone, the bookings table is readable and the setup path no
+longer throws you out of the demo.
+
+### 1. Press the new "Reset demo now" button once (1 minute)
+
+Go to **super-admin → Tenants**. There is a new card at the bottom: **"Reset the sales demo"**.
+It does the same rebuild the 03:00 UTC job does, on demand — for the minute before a sales call,
+after visitors have clicked the demo around. It asks you to confirm, then tells you what it did.
+
+I could not press it myself (super-admin login). The function underneath it **is** verified — I
+ran the real reseed against the dev database and watched it clear the wizard — but the button
+itself has never been clicked. **If it errors, tell me what it says.**
+
+### 2. Glance at Staging Winery's admin (2 minutes)
+
+On `georgian-saas-git-staging-mg-productions-projects.vercel.app`, logged in as admin:
+
+- **`/admin/orders`** — the Food / Masterclass / Additional columns now show **one line** with the
+  full text on hover (the row still opens the full detail). Does that read right to you for a
+  real winery? This is the one change this batch made to every tenant, not just the demo.
+- **`/admin/statistics`** and **`/admin/companies`** — still outstanding from Chunk 4. Should look
+  completely unchanged. If they do, nothing more is needed.
+
+### 3. One decision, whenever you like
+
+The demo's bookings page now has a **three-number strip** above the table — upcoming bookings,
+future revenue, next order. It is **demo-only** right now. Should every winery get it? If yes it
+needs a proper design pass rather than just switching it on, so say the word and it becomes its
+own small piece of work.
+
+### Still waiting on you from earlier sessions
+
+The test booking **"Luka Testashvili", 4 guests, 20 Oct 2026** is still in the live demo data.
+Delete it or leave it? Worth noting: if it survives tonight's 03:00 reseed, that is a reseed bug
+rather than a stray row, and I should look at it.
+
+---
+
 ## ⏸ 2026-09-11 (session 11) — Chunk 4 is built but **parked on `staging`**, waiting on you
 
 The spotlight tour now actually spotlights — all seven steps draw a real ring. It is **not on

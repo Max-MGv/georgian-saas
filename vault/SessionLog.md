@@ -8,6 +8,79 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-11 (session 12) — Chunks 4–8 all shipped. The demo plan is finished
+
+**Every chunk of [[DemoSite/Plan-DemoFlowFixes]] is now ✅ and live on `demo.vineworks.ge`.**
+Max approved the `master` merge outright (*"push to master its fine — and continue next stages,
+finalize the demo according to the plan"*), which unblocked Chunk 4 and authorised the rest.
+
+**Shipped, in order:**
+
+| Chunk | Commit | What landed |
+|---|---|---|
+| 4 | `2773966` (ff of `staging`) | tour + rail anchoring — the fix already existed, it just was not on `master` |
+| 5 | `1773938` | "cellar dark" palette, lucide icons, front door relaid out |
+| 6 + 7 | `8e5203c` | bug widget off the demo; readable admin landing |
+| 8 | `0919a6a` | onboarding keeps its demo chrome; super-admin reset button |
+
+Chunks 6–8 took the `staging` pass first (shared files), were regression-checked against Staging
+Winery on the preview, and only then fast-forwarded onto `master`.
+
+**Chunk 4, closed properly.** Walked all seven steps on production from a cleared `localStorage`,
+asking the DOM for the ring's rect at each: **7 of 7 draw a real ring**, every tooltip 340 px
+rather than the 1401 px bottom dock that was the failure's signature, step 5 ringing the Future
+Revenue card alone (501×130) rather than the whole grid, and step 7's hand-off landing at 887 px
+of 911. The rail's ladder link arrives at `/admin/companies?expand=first` with a company already
+expanded.
+
+**Chunk 5.** Eight tokens in one module (`saas/lib/demoTheme.ts`) with every demo component
+re-pointed at them — deliberately a TS module rather than `:root` in `globals.css`, because that
+file is shared by every tenant and this chunk had to stay demo-only. `accent` and `accentSolid`
+are two tokens doing two jobs: a filled CTA needs a background ivory text can sit on, a spotlight
+ring needs to be the brightest thing on a dimmed screen. The live mirror was promoted **out** of
+the front door's grid rather than made a bigger cell in it — four cards cannot make a 2×2 with one
+of them larger without leaving a hole, which is the same geometry that orphaned the fourth card
+in the first place. Checked over **Deep harbor**, the darkest and coolest preset, so the warm
+chrome had nowhere to hide.
+
+**Chunk 7 taught something worth keeping: the column hiding was not the fix.** Measured on the
+same data, production vs. the new build at 1440×900 — tallest row **147 px → 80 px**, and 85 px
+even with Food and Masterclass switched back *on*. The one-line truncation is doing the work; the
+hiding is cosmetic on top. That also means 7.2 is the part that helps every winery, and it does.
+Food/Masterclass hiding was gated to the demo tenant only: the default turned out to be
+per-browser rather than a tenant setting, which by the letter of the task permitted a global
+change — but a real winery's kitchen wants the food line, and that is a product decision with an
+owner.
+
+**Chunk 8 hit a ceiling and it is recorded rather than glossed.** Onboarding completeness is
+computed live from real data, never stored, so the reseed can reset the wizard's *answers*
+(Companies, Booking details, Review) but cannot untick Wines, Payment, Contact or Photos without
+deleting the content the demo exists to show. The wizard now opens on the Companies question
+instead of a review screen. If the front door's "how fast is setup?" must be literally true, the
+answer is the disposable-tenant-per-visitor question [[DemoSite/Plan-DemoRedesign]] still carries
+as open.
+
+**Two things left for Max, both behind logins Claude may not pass:**
+1. **Press the new "Reset demo now" button** once (`/super-admin/tenants`). Its underlying
+   function was verified end to end against the dev database — 4 onboarding settings written as a
+   visitor would leave them, real reseed run, 4 → 0 — but nobody has pressed the button.
+2. **Look at Staging Winery's admin pages**: `/admin/orders` under the new truncation, and
+   `/admin/statistics` + `/admin/companies` still outstanding from Chunk 4. Staging Winery's
+   public pages were checked on the preview at every step and are clean.
+
+**Still unanswered, raised at the end of Chunks 3, 4 and now 8:** Chunk 1's verification left a
+real test booking in the live demo — "Luka Testashvili", 4 guests, 20 Oct 2026 — and the nightly
+reseed did not clear it. **Note that Chunk 8's work may have changed this**: the reseed wipes and
+rebuilds trading data, so if that row is still there tomorrow it is a reseed bug worth its own
+look, not just a stray row.
+
+**Method note, earned again.** Every claim above is a measurement taken from the deployed site,
+not a reading of the diff. Ground rule 5 — "dev passing is not evidence" — has now cost this
+project five bugs, and the two chunks that went fastest this session were the two that measured
+the before-state first.
+
+---
+
 ## 2026-09-11 (session 11) — Chunk 4. The anchors were never missing; one 60 ms timeout was
 
 **Chunk 4 built, committed to `staging` as `9d3a2b2`, verified there. NOT on `master` yet — that

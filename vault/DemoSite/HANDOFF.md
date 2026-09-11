@@ -2,133 +2,124 @@
 tags: [handoff, demo, vineworks]
 ---
 
-# Handoff — finishing Chunk 4, then Chunk 5
+# Handoff — the demo flow-fix plan is finished
 
 **How to use this:** copy the block below into a fresh Claude Code session. It is written to be
-self-contained — a session with no memory of Chunks 1–4 can start work from it.
+self-contained.
 
-**Supersedes** the Chunk 4 handoff (Chunk 4 is built; 4.1–4.6 are done and on `staging` as
-`9d3a2b2`, vault as `c7bc1d5`). Written 2026-09-11, session 11.
+**Supersedes** the "finishing Chunk 4" handoff. Written 2026-09-11, session 12.
 
-**The shape works for every chunk.** To produce the prompt for Chunk N, swap the task line,
-replace the "what you don't need to re-derive" section with that chunk's recorded findings, and
-re-check the ship route in the plan's status table — it differs per chunk and is not a guess.
+**The state is simple now, which is a change.** Every previous version of this file had to open
+with a warning about half-shipped work. There is none. All eight chunks of
+`Plan-DemoFlowFixes.md` are on `master` and verified on `demo.vineworks.ge`; `staging` and
+`master` are at the same commit (`0919a6a`).
 
-**⚠️ The state is unusual: a chunk is half-shipped.** Chunk 4's code is written, typechecked,
-verified locally and on the staging preview, and **committed to `staging` but not merged to
-`master`**. So the demo site in production still has the old broken behaviour. Do not re-fix it
-— read the diff first.
-
-**⚠️ Two things block the merge, and both need Max, not Claude.** They are listed in the prompt.
-Neither is a coding task.
+**What is left is Max's, not a session's.** Two items, both behind logins Claude may not pass.
+Neither is a coding task, and a session should not try to work around them.
 
 ---
 
 ## The prompt
 
 ~~~
-This is the Vineworks project (multi-tenant SaaS for Georgian wineries). Continue the public
-sales demo fixes at demo.vineworks.ge.
+This is the Vineworks project (multi-tenant SaaS for Georgian wineries). The public sales demo
+at demo.vineworks.ge has just had a full round of flow fixes finished and shipped.
 
 READ FIRST, IN THIS ORDER:
 1. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\ClaudeInstructions.md
-   — how to behave on this project. Rule 0 (git: staging before master) and Rule 8 (confirm
-   before editing) both apply.
-2. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\DemoSite\Plan-DemoFlowFixes.md
-   — THE TASK TRACKER. Read the status table, the ground rules, "Decisions already made", then
-   Chunk 4 in full. Its per-step audit table and its "Notes / decisions" are the record of what
-   was actually found, and they contradict what the chunk was originally scoped as.
-3. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\MaintenanceNotes.md §12 and §4.
-   §12 is the map of where every data-tour anchor lives and now carries the two traps this
-   dependency has actually fallen into. §4 is the localhost / DEFAULT_TENANT_ID trap.
+   — how to behave on this project. Rule 0 (git: staging before master for SHARED files) and
+   Rule 8 (confirm before editing) both apply.
+2. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\SessionLog.md — the session 12 entry
+   at the top is what just happened.
+3. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\MyToDo.md — the two things waiting
+   on Max. If he has not done them, remind him rather than trying to do them yourself.
+4. C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\MaintenanceNotes.md §12, §13, §15
+   and §16 before touching anything demo-related. §15 is the palette module (no demo component
+   may carry its own hex); §16 is the second place demo chrome mounts, which is easy to miss.
 
-WHERE THINGS STAND — READ THIS BEFORE TOUCHING ANY CODE:
-Chunks 1, 2 and 3 are done and shipped to production. **Chunk 4 is BUILT but only half
-shipped**: tasks 4.1-4.6 are complete, committed to `staging` as 9d3a2b2 (vault updates in
-c7bc1d5), verified locally and on the staging preview. It is NOT on `master`, so
-demo.vineworks.ge still shows the OLD broken behaviour. Do not "fix" the tour again — run
-`git log staging` and `git diff master..staging` first.
+WHERE THINGS STAND:
+All eight chunks of vault/DemoSite/Plan-DemoFlowFixes.md are ✅ Done, shipped to `master`, and
+verified against the deployed site. `staging` and `master` are both at 0919a6a. There is no
+half-shipped work and nothing parked. The plan file is now a record, not a to-do list — but read
+its per-chunk "Notes / decisions", because they carry every measurement and every anti-pattern.
 
-Only task 4.7 remains, and most of it is blocked on Max:
-  (a) Max must eyeball /admin/statistics and /admin/companies on the staging preview
-      (georgian-saas-git-staging-mg-productions-projects.vercel.app). Those are the two shared
-      surfaces Claude could not check, because they sit behind the admin login and Claude may
-      not type a password into a login form. That is a standing safety rule — do not try to
-      work around it, just ask Max.
-  (b) Max must approve the `staging` -> `master` merge. DO NOT RUN IT YOURSELF. That merge is
-      the one action that ships to Nikalas Marani's real staff working real bookings.
-  (c) AFTER the merge lands: walk all seven tour steps and the feature rail's "Per-company
-      price ladders" link on demo.vineworks.ge from a CLEARED localStorage (the tour's state
-      lives under `vineworks-demo-tour`; clear it or you are testing a tour that thinks it has
-      already finished). Then tick 4.7 and set Chunk 4's Status to done.
+STILL OPEN, AND THEY ARE MAX'S:
+  (a) The new "Reset demo now" button in super-admin (/super-admin/tenants) has never been
+      pressed. Its underlying function IS verified — the real reseed was run against the dev
+      database and watched to clear the onboarding wizard, 4 settings → 0 — but the button
+      itself sits behind the super-admin login, which Claude may not pass. Ask Max to press it
+      once. Do not try to log in.
+  (b) Staging Winery's ADMIN pages have still not been looked at by a human: /admin/orders under
+      the new one-line cell truncation (the one change in this batch that affects every tenant,
+      not just the demo), plus /admin/statistics and /admin/companies outstanding since Chunk 4.
+      Its PUBLIC pages were checked on the staging preview at every step and are clean.
+  (c) One decision, not urgent: the demo's bookings page now carries a three-number revenue
+      strip (upcoming / future revenue / next order). It is demo-only on purpose. Max has not
+      said whether every winery should get it. If he says yes, it needs its own small design
+      pass — do not just widen the `if`.
 
-Then STOP and ask before starting Chunk 5 — chunks are strictly sequential by Max's
-instruction, and he has approved Chunks 1-4 only.
+HOUSEKEEPING, IF STILL PRESENT:
+Chunk 1's verification left a real test booking in the live demo — "Luka Testashvili", 4 guests,
+20 Oct 2026. It has survived several nightly reseeds, which is itself suspicious: the 03:00 UTC
+job wipes and rebuilds trading data, so a booking that persists through it is a reseed bug worth
+its own look, not just a stray row. Ask Max before deleting anything — it is a production write.
 
-WHAT CHUNK 4 ACTUALLY FOUND (do not re-derive — it is measured and recorded):
-The plan's status table described Chunk 4 as "adding data-tour anchors to admin pages". That
-was wrong. **All seven anchors already existed and always had.** The real cause was that
-DemoTour measured its target ONCE, on a 60ms setTimeout after the route changed — a race
-against the destination painting. setRect(null) then latched and nothing retried.
-
-That one line explains everything the teardown saw:
-  - Why exactly 6 of 7 steps failed: step 4 is the only step reached WITHOUT a navigation
-    (steps 3 and 4 share /admin/orders). It was the control in the experiment all along.
-  - Why step 7 resolved in local dev and not on production: the RSC fetch returns well under
-    60ms from localhost and does not over the network. Same code, different latency.
-  - Why it shipped: a missing anchor degrades silently by design, and a LATE anchor was
-    indistinguishable from a missing one.
-
-The fix is a shared `useAnchorRect()` hook in saas/lib/demoAnchor.ts, used by BOTH DemoTour and
-DemoFeatureRail. It polls AND runs a MutationObserver with no deadline. **Do not replace that
-observer with a longer timeout** — a timeout is a guess about someone else's latency, and that
-guess is the original bug. It also logs a dev-only console.warn when an anchor genuinely cannot
-be resolved; that warning is the early-warning system for MaintenanceNotes §12, and it caught a
-real problem on its first run.
-
-IF YOU ARE STARTING CHUNK 5 (only after Max approves):
-Chunk 5 is "Demo chrome palette + front door layout" — demo-only files, so it goes STRAIGHT TO
-`master`, no staging pass. Note this INVERTS from Chunk 4. The palette decision is already made
-and is not open for re-litigation: "cellar dark". See the plan's "Decisions already made".
+TWO FINDINGS THAT SHOULD OUTLIVE THIS PLAN:
+1. **A timeout is a guess about someone else's latency.** The tour's missing rings (6 of 7 steps,
+   shipped and invisible for weeks) were one 60ms setTimeout racing the route paint. All seven
+   `data-tour` anchors existed the whole time — the plan's premise that they were missing was
+   simply wrong, and ten minutes of asking the live DOM replaced it. The fix is
+   saas/lib/demoAnchor.ts: a MutationObserver with NO deadline, plus a poll whose budget decides
+   only when to *warn*. **Do not replace that observer with a longer timeout.** That guess is the
+   original bug, and this codebase has now made it twice on the same feature.
+2. **Measure the before-state first.** Chunk 7 was scoped as "hide two columns"; measuring showed
+   the one-line truncation did the work (tallest row 147px → 80px, and 85px even with the columns
+   switched back on) and the hiding was cosmetic on top. Ground rule 5 — "dev passing is not
+   evidence" — has now cost this project five bugs.
 
 RULES THAT ACTUALLY BITE HERE:
-- Verify against PRODUCTION after deploy, not just dev. "Dev passing is not evidence" is ground
-  rule 5 and it has cost this project four separate bugs — one of which was Chunk 4's.
+- Demo-only files (gated on DEMO_TENANT_ID) go straight to `master`. Shared files take the
+  `staging` pass first, with a Staging Winery regression check. The route is decided per change,
+  not per session, and it has inverted between chunks more than once.
 - localhost resolves to DEFAULT_TENANT_ID in saas/.env, currently Staging Winery
   (cmrxb85wo0000vlc0d964nzf8), which renders NO demo components at all. To preview the demo
   locally, temporarily point it at the DEV demo tenant cmtvgl6e60000vl6w9se65t86, and REVERT
   before committing. Back the file up first and diff it against the backup.
-- If every route 404s on a freshly started dev server, it is a stale Turbopack cache — stop the
-  server, remove saas/.next, restart.
-- Console buffers and localStorage both persist across same-origin navigations. Verify
-  per-load, not per-session, and from a cleared store.
+- Console buffers and localStorage both persist across same-origin navigations. Anything
+  once-per-browser must be re-tested from a CLEARED store, not from a reload. The tour's state
+  lives under `vineworks-demo-tour`; the front door's under `vineworks-demo-frontdoor`; the
+  orders table's column prefs under `orders-columns`.
 - Stop the dev server before any prisma command (ClaudeInstructions Rule 10).
-- When editing vault markdown with a script, build the new content and only then replace the
-  original. A Python script that opened Plan-DemoFlowFixes.md for writing and then hit an
-  encoding error truncated it to 0 bytes in session 11. It was recovered from git, but only
-  because it happened to be committed.
+- When editing vault markdown with a script, build the new content in full and only then replace
+  the original. A script that opened Plan-DemoFlowFixes.md for writing and then hit an encoding
+  error truncated it to 0 bytes in session 11. Write the script to a UTF-8 file rather than
+  piping it through a heredoc — the shell mangles em dashes on this machine.
 
-HOUSEKEEPING, IF STILL PRESENT:
-Chunk 1's verification left a real test booking in the live demo data — "Luka Testashvili",
-4 guests, 20 Oct 2026. Confirmed still present 2026-09-11; the 03:00 UTC nightly reseed did NOT
-clear it, which may itself be worth a look. Ask Max whether to delete it rather than deleting it
-yourself; it is a production write. Raised at the end of Chunks 3 and 4, still unanswered.
+WHAT A NEXT SESSION WOULD ACTUALLY PICK UP:
+Nothing in this plan. Candidates, in no particular order:
+- The deferred items at the bottom of Plan-DemoFlowFixes.md, including Max's theme-preset
+  catalogue request.
+- The disposable-tenant-per-visitor question, still open in Plan-DemoRedesign.md. Chunk 8 made
+  the shared sandbox honest but did not settle it; two visitors running the setup wizard at once
+  still collide.
+- Mobile layout for the demo. Explicitly out of scope for the whole flow-fix plan — Max ruled
+  "desktop now, mobile later" — so it is untouched and will look it.
+- Anything in KnownBugs.md that is not demo-related. #22 (wine-order total computed from
+  client-supplied prices) is a real security issue and is still open.
 ~~~
 
 ---
 
 ## Why this handoff is shaped the way it is
 
-**It leads with "the code already exists."** The single most expensive failure mode for the next
-session is re-solving Chunk 4 from the plan's original (wrong) premise — because the production
-site still exhibits the bug, while the fix sits on `staging`. A session that opens
-demo.vineworks.ge, sees no ring, and starts debugging will burn its whole context re-deriving a
-solved problem.
+**It opens by saying there is nothing parked.** Every previous version had to lead with a warning
+about half-shipped work, and a session that expects one will go looking. Saying plainly that
+`staging` and `master` are at the same commit is the fastest way to stop that.
 
-**It names the blocked items as Max's, explicitly.** Task 4.7 reads like a coding task and is
-mostly not one. Two of its three parts need a human: one because of a login Claude may not pass,
-one because it ships to real customers.
+**It separates "left to do" from "left for Max".** All three open items need a human with a
+login or an opinion. A session that treats them as tasks will either try to get past a login it
+must not, or make a product decision that is not its own.
 
-**It carries the anti-pattern, not just the pattern.** "Do not replace the observer with a
-longer timeout" matters more than any description of what the observer does — the timeout is the
-mistake this codebase has now made twice on the same feature.
+**It carries the two anti-patterns, not the two features.** What the tour does is in the code.
+What this project keeps getting wrong — guessing at latency, and building before measuring — is
+not, and it has cost five bugs so far.

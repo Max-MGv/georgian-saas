@@ -33,8 +33,8 @@ tags: [bugs]
 | 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Root cause was not missing anchors (all seven existed) but a single 60 ms measurement racing the route paint; see the 2026-09-11 update below | Demo / Tour | 🔴 Open |
 | 26 | Starting the spotlight tour from any admin page immediately shows "Tour paused · step 1 of 7" — step 1 declares the guest-site route and the never-dim-a-screen-they-chose rule fires on an explicit press of the start button | Demo / Tour | 🔴 Open |
 | 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Same root cause as #25; the collapsed-data half fixed via `?expand=first`; see the 2026-09-11 update below | Demo / Feature rail | 🔴 Open |
-| 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🔴 Open |
-| 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🔴 Open |
+| 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🟢 Resolved |
+| 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🟢 Resolved |
 
 ---
 
@@ -143,6 +143,57 @@ fix plan rather than last — it may be on the critical path for the flagship.
 > **And the class of bug is now visible.** `useAnchorRect` logs a dev-only console warning when
 > an anchor genuinely cannot be resolved — the silent degradation is *why this shipped*, and it
 > caught a real problem on the first local run.
+
+
+
+> 🟢 **#28 RESOLVED 2026-09-11** (Chunk 8 of [[DemoSite/Plan-DemoFlowFixes]], shipped to
+> `master` as `0919a6a`, verified on production).
+>
+> Two separate faults wearing one bug number, and only one of them was fully fixable.
+>
+> **The chrome is back.** `/admin/onboarding` renders outside the `(panel)` layout, which is
+> where every demo component is mounted — so one of the four front-door paths dropped the visitor
+> out of the guided demo with only a small "← Back to admin" link. It now has its own route
+> layout (`saas/app/admin/onboarding/layout.tsx`) mounting the banner, the tour and the rail.
+> **Not** `app/admin/layout.tsx`, which wraps `(panel)` too and would have double-mounted every
+> demo component on every other admin page. Verified on production: demo banner, "Customer View",
+> tour pill and feature rail all present, and no bug button.
+>
+> **The "4/7 already complete" half is only partly fixable, and that is worth knowing.** The
+> nightly reseed now clears the four Setting rows that hold the wizard's *answers*, so the wizard
+> opens on the Companies question again rather than on a review screen someone else filled in.
+> But wizard completeness is **computed live from real data**, never stored as a flag — so Wines,
+> Payment info, Contact and Photos stay ticked because the demo genuinely has wines, an IBAN,
+> contact details and a hero photo. Unticking them means deleting the content the rest of the
+> demo exists to show. **If the fourth card's promise must be literally true, the answer is a
+> disposable tenant per visitor**, which [[DemoSite/Plan-DemoRedesign]] still carries as open.
+>
+> Checked rather than assumed, per the task's own warning: clearing those settings does **not**
+> bring the setup banners back on the demo. They are gated off for the demo tenant in
+> `app/admin/(panel)/layout.tsx`, and independently `getFinishDetailsStatus` reports nothing
+> outstanding while `readyToLaunch` is false.
+
+> 🟢 **#29 RESOLVED 2026-09-11** (Chunk 6 of [[DemoSite/Plan-DemoFlowFixes]], shipped to
+> `master` as `8e5203c`, verified on production).
+>
+> One line, inside `BugReportWidget` itself: `if (tenantId === DEMO_TENANT_ID) return null`.
+>
+> Guarded at the component rather than at its three mount sites, for the same chokepoint reason
+> the demo's outbound-email suppression already uses — a future mount cannot forget to opt out.
+> The super-admin mount passes no `tenantId`, so Max's own reporting is untouched. And because
+> both `/live` panes *are* the demo tenant, the duplicate FAB died as a side effect: no
+> `isEmbeddedPane()` change was needed at all.
+>
+> **Measured on production:** 0 bug buttons on `/`, 0 on `/admin/orders`, 0 on
+> `/admin/onboarding`, and on `/live` 0 at the top level plus 0 in *each* of the two panes —
+> where there used to be two. Staging Winery still shows exactly one, checked on the staging
+> preview before the merge.
+>
+> **The trade-off Max accepted** (*"it's really a nice to have"*): bug reports from the demo were
+> deliberately exempted from the demo's email suppression and did reach the super-admin inbox, so
+> this gives up a working channel for hearing about demo breakage. The middle option, if he
+> changes his mind, is to hide it on the demo's **public** side only and keep it in the demo
+> admin.
 
 
 ## ✅ RESOLVED — Hydration mismatch on public site pages (observed 2026-09-11, fixed and shipped 2026-09-11)
