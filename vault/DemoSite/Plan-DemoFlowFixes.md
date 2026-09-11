@@ -30,7 +30,7 @@ the live mirror's landing moment — all find their target and then never show i
 |---|---|---|---|
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
 | **2** | The hydration mismatch (React #418) | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, verified on production) |
-| **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ⬜ Not started |
+| **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
 | **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ⬜ Not started |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
 | **6** | Bug-report widget off the demo tenant | shared → `staging` | ⬜ Not started |
@@ -39,12 +39,19 @@ the live mirror's landing moment — all find their target and then never show i
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 **Chunks 1 and 2 are ✅ and both shipped to production. Begin at
-Chunk 3.** Chunk 2's notes are worth skimming first for one transferable lesson: the bug was
-invisible from Georgia because the server is UTC/en-US and every browser to hand is
-en-US/Asia/Tbilisi — when something "can't be reproduced", check whether the *environment* is
-what hides it. [[ClaudeInstructions]] Rule 8 applies per chunk and **Max has approved Chunks 1
-and 2 only**, so ask before starting Chunk 3.
+**Overall resume point:** 🔜 **Chunks 1, 2 and 3 are ✅ and all shipped to production. Begin at
+Chunk 4** — the biggest chunk, and the first since Chunk 2 that is **shared**, so it needs the
+`staging` pass and a Staging Winery regression check. [[ClaudeInstructions]] Rule 8 applies per
+chunk and **Max has approved Chunks 1–3 only**, so ask before starting Chunk 4.
+
+Two lessons worth carrying into Chunk 4, both earned:
+- *(Chunk 2)* When something "can't be reproduced", check whether the **environment** is what
+  hides it — the bug was invisible from Georgia because the server is UTC/en-US and every
+  browser to hand is en-US/Asia/Tbilisi.
+- *(Chunk 3)* Console buffers and `localStorage` both persist across same-origin navigations, so
+  a once-per-browser behaviour has to be re-tested from a **cleared** store, not from a reload.
+  Chunk 3's auto-start was verified by clearing `localStorage` and walking the path from the
+  front door each time; anything less would have passed trivially.
 
 ---
 
@@ -500,8 +507,11 @@ again. Worth one real booking next time someone is in there anyway.
 
 ## Chunk 3 — Tour entry: no more "Tour paused"
 
-**Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 2 is ✅.
+**Status:** ✅ Done — 2026-09-11, shipped to `master` as `e44e519` (+ `cce867c`, a footer
+collision fix), verified on production.
+**Resume point:** Nothing outstanding. Chunk 3 is closed; go to Chunk 4 — but read the Notes
+below first, in particular the auto-start's narrative-order tradeoff, which Max confirmed, and
+the two things Chunk 4 will need to re-verify once the anchors resolve.
 **Ship route:** demo-only → straight to `master`.
 **Fixes:** report findings A2 (paused dead end), the approved auto-start, and B8 (dead ending).
 
@@ -522,20 +532,101 @@ given seven reasons to care and nothing is asked of them. The demo has no conver
 at all.
 
 ### Tasks
-- [ ] **3.1 — Explicit start navigates, never pauses.** When the visitor starts the tour,
+- [x] **3.1 — Explicit start navigates, never pauses.** When the visitor starts the tour,
       go to step 1's declared route and begin there. Keep the pause behaviour **only** for a
       tour already in progress whose visitor has wandered off — that constraint stays.
-- [ ] **3.2 — Auto-start on the winery path**, once per browser (`localStorage`, same pattern
+- [x] **3.2 — Auto-start on the winery path**, once per browser (`localStorage`, same pattern
       as the front door), with the skip prominent. Only on the "I run a winery" path — do not
       auto-start on top of someone who chose the guest view or the live mirror.
-- [ ] **3.3 — Give step 7 a hand-off.** Replace the bare "Done" with a real next step —
+- [x] **3.3 — Give step 7 a hand-off.** Replace the bare "Done" with a real next step —
       "Now try it yourself: make a booking and watch it arrive" (into `/live`) plus a way to
       start a conversation with Max. Decide the second CTA with Max before building.
-- [ ] **3.4 — Verify the full path end to end:** front door → "I run a winery" → tour
+- [x] **3.4 — Verify the full path end to end:** front door → "I run a winery" → tour
       auto-starts on the right screen → 7 steps → hand-off lands somewhere useful.
 
 ### Notes / decisions
-_(3.3's second CTA needs Max's input — ask before building)_
+
+#### 3.3's second CTA — **email**, decided by Max 2026-09-11
+
+The step-7 hand-off carries **two** CTAs, and they are deliberately **not** mutually exclusive:
+
+1. **Primary** — "Now try it yourself → make a booking and watch it arrive", which closes the
+   tour and deep-links to `/live`.
+2. **Secondary** — "Talk to us about your winery", a `mailto:max@vineworks.ge` with the subject
+   and a first line pre-filled. **It does not end the tour**, so someone who writes can still
+   take the mirror invitation afterwards.
+
+**`max@vineworks.ge` is the address**, not Max's personal one — it is the platform address bug
+reports already go to (`app/actions/bugReports.ts`). **This is a product decision the marketing
+site and later chunks must match**: if the conversion address ever changes, it changes in both
+places. Max chose email over WhatsApp, a calendar link, and an in-page form.
+
+Also here: **"Skip the tour" reads "Close" on the last step** — there is nothing left to skip,
+but constraint 2 (a dismissal visible on *every* step) still holds.
+
+#### 3.1/3.2 — what changed, and the one rule that did **not**
+
+The load-bearing constraint **stays**: the tour still never dims a screen the visitor navigated
+to themselves. It was simply also applying to an **explicit press of the start button**. Now any
+deliberate tour control — start, replay, back, next — routes to the step's screen through one
+`beginAt(index)` helper; only genuine wander-off pauses.
+
+`back()` had the identical misfire from the other direction and was fixed with it: stepping back
+from `/admin/orders` (step 3) to the `/wines` step left the visitor on the admin page looking at
+the pause pill. Not in the task list — it fell out of reading the code, and leaving it would have
+meant the bug was fixed in one direction only.
+
+**The auto-start's wiring:** `DemoFrontDoor` writes a `localStorage` flag (`TOUR_AUTOSTART_KEY`,
+exported from `DemoTour.tsx`) on the "I run a winery" path **only**; `DemoTour` consumes it once
+on `/admin/orders` after a ~900 ms delay, so the screen the visitor asked for paints first. The
+two components live in different layouts (`(site)` vs `admin/(panel)`) and are never in the same
+React tree — `localStorage` is the only channel between them. "Once per browser" is belt and
+braces: the flag is removed on firing **and** an `autoStarted` flag is persisted in the tour
+state, so a re-set flag cannot replay it.
+
+**The tradeoff Max confirmed, recorded because it looks like a bug if you meet it cold.** The
+auto-start opens at **step 1**, which lives on the guest site — so a visitor who clicked "Show me
+the back office" lands on `/admin/orders`, sees it for ~0.9 s, and is then taken to `/` for steps
+1–2 before returning to the back office at step 3. Max was offered the alternative (start at step
+3, no navigation, 5 steps instead of 7) and **chose the full seven-step narrative**: bookings
+arrive → here is where they land. If this is ever revisited it is a one-line change —
+`AUTO_START_INDEX` in `DemoTour.tsx`, whose comment documents both settings.
+
+#### What 3.4 verified, on production
+
+Walked from a cleared `localStorage` on `demo.vineworks.ge` at 1440×900, twice — once by hand in
+the in-app browser, once scripted through Playwright against real Chrome:
+
+| Check | Before | After |
+|---|---|---|
+| Front door → "I run a winery" → press the start pill | "Tour paused · step 1 of 7 · Resume" | opens **step 1 of 7** on `/`, no pause |
+| Same path, no press at all | nothing happened | **auto-starts** ~0.9 s after `/admin/orders` paints |
+| Auto-start firing a second time | — | it doesn't — flag consumed, `autoStarted:true` persisted |
+| Guest view / live mirror / setup wizard arming it | — | they don't — verified the setup path leaves no flag |
+| Genuine wander-off still pauses | — | **yes** — `/wines` mid-step-1 still gives "Tour paused · step 1 of 7" |
+| Back across a route boundary (step 3 → 2) | left you on `/admin/orders`, paused | navigates to `/wines`, **step 2 of 7** |
+| Steps 1→7 by "Next" | — | all seven reached, correct route each time, never paused |
+| Step 7's ending | bare "Done" | two CTAs + "Close"; `mailto` href correct |
+| Step 7's primary CTA | — | lands on `/live`, both panes mount (`/` and `/admin/orders`), tour persists finished |
+| Staging Winery (real tenant) regression | — | **no demo chrome at all** — no front door, no tour pill, no rail |
+
+`tsc --noEmit` clean. Screenshots of the front door, the auto-start and the step-7 hand-off were
+captured from production and sent to Max.
+
+**One cosmetic bug this chunk introduced and then fixed** (`cce867c`): the hand-off's footer row
+was `space-between`, so on the full-width bottom dock the email address landed underneath the
+floating bug-report button. Both items are left-aligned now. Worth noting because it is the
+**second** time a demo surface has collided with that widget — [[KnownBugs]] #24 was the first.
+**Chunk 6 takes the widget off the demo tenant entirely**, which retires the whole class.
+
+#### A measurement Chunk 4 should not have to re-take
+
+Step 7's `content-editor` anchor **resolves in local dev and does not resolve on production.**
+Same step, same viewport, minutes apart: locally the tooltip positioned itself beside the target
+(340 px wide, `top: 570`); on production it fell back to the full-width bottom dock (1401 px
+wide), which is the `!rect` branch. That is Chunk 4's bug caught in the act, and it is a
+**reproducible** instance of it — most of Chunk 4's difficulty is that the failure is silent, and
+here it is with a dev/prod delta to bisect against.
 
 ### Files expected
 - `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoTour.tsx`
@@ -546,7 +637,13 @@ _(3.3's second CTA needs Max's input — ask before building)_
 ## Chunk 4 — Tour + rail anchoring: make the spotlight actually spotlight
 
 **Status:** ⬜ Not started
-**Resume point:** Do not start until Chunk 3 is ✅.
+**Resume point:** Chunk 3 is ✅, so this is next — but it needs Max's approval first
+([[ClaudeInstructions]] Rule 8). Two things Chunk 3 leaves on the doorstep: step 7's
+`content-editor` anchor **does** resolve in local dev and **does not** on production (measured
+2026-09-11 — see Chunk 3's notes), which is a concrete, reproducible instance of this chunk's bug
+and a good first thread to pull; and the last step's tooltip is taller than the others
+(`TOOLTIP_H` in `DemoTour.tsx`), so once the anchors resolve, re-check that step 7's hand-off
+still fits above the fold at 1440×900.
 **Ship route:** **shared** — adding `data-tour` anchors touches admin pages every tenant
 renders → `staging` pass required, with a Staging Winery regression check.
 **Fixes:** report findings A1 (no spotlight) + B7 (rail callout pinned to nothing).

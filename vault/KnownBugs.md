@@ -86,6 +86,26 @@ fix plan rather than last — it may be on the critical path for the flagship.
 > worth adding to the list: *found the target, showed it, but showed the copy nobody is looking
 > at.* Any code reaching into the admin pane must resolve which representation is **rendered**.
 
+> 🟢 **#26 RESOLVED 2026-09-11** (Chunk 3 of [[DemoSite/Plan-DemoFlowFixes]], shipped to `master`
+> as `e44e519`, verified on production). This is the "Tour paused · step 1 of 7" dead end: press
+> the start pill on `/admin/orders` and the tour answers that it is paused.
+>
+> **It was a good rule misfiring, not a broken tour.** Step 1 declares the guest-site route, and
+> the tour deliberately refuses to dim a screen the visitor navigated to themselves — a constraint
+> from [[Plan-DemoRedesign]] Phase 2 that is right and **stays**. It was simply also applying to an
+> explicit press of the start button. Now any deliberate tour control (start, replay, back, next)
+> goes to the step's screen; only wandering off mid-tour pauses. `back()` had the same misfire from
+> the other direction — stepping back from `/admin/orders` to the `/wines` step left the visitor on
+> the admin page staring at the pause pill — and was fixed with it.
+>
+> Shipped alongside it: the tour auto-starts once per browser on the "I run a winery" path only,
+> and step 7 now hands off (live mirror + a mailto) instead of ending on a bare "Done".
+>
+> **#25 is NOT fixed and was deliberately not touched** — 6 of the 7 steps still draw no spotlight
+> ring, because the `data-tour` anchors fail to resolve. That is Chunk 4, it is **shared** (it means
+> adding anchors to admin pages every tenant renders), and it needs the `staging` pass. The shared
+> root cause above therefore still stands for **#25 and #27**.
+
 ---
 
 ## ✅ RESOLVED — Hydration mismatch on public site pages (observed 2026-09-11, fixed and shipped 2026-09-11)

@@ -8,6 +8,77 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-11 (session 10) — Chunk 3 done. The tour no longer tells you it's paused when you ask for it
+
+**Chunk 3 ✅ complete — shipped to `master` as `e44e519` (+ `cce867c`), live and verified on
+production.** All four tasks done. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 3 notes.
+Both files are demo-only (gated on `DEMO_TENANT_ID`), so this took the straight-to-`master` route
+per the plan's ground rule 1 — no staging pass. Regression-checked anyway: Staging Winery renders
+no demo chrome at all.
+
+**The headline: it was a good rule misfiring, not a broken tour.** Take the likeliest path a
+winery owner takes — front door → "I run a winery" → `/admin/orders` → press "Show me what this
+does" — and the answer was **"Tour paused · step 1 of 7 · Resume"**. The visitor asked for the
+tour and was told the tour is paused. The cause: step 1 declares the guest-site route, and the
+tour deliberately refuses to dim a screen the visitor navigated to themselves. **That constraint
+is load-bearing and it stays** — it just should never have applied to an explicit press of the
+start button. Any deliberate control (start, replay, back, next) now goes to the step's screen;
+only genuine wander-off pauses. Verified both directions: `/wines` mid-step-1 still pauses.
+
+**A second instance of the same bug, not in the task list.** `back()` never navigated either, so
+stepping back from `/admin/orders` (step 3) to the `/wines` step left you on the admin page
+staring at the pause pill. Fixed with it — otherwise the bug would have been fixed in one
+direction only.
+
+**The tour now auto-starts**, once per browser, on the "I run a winery" path *only*. The front
+door writes a `localStorage` flag; the tour consumes it once on `/admin/orders`, after ~0.9 s so
+the screen the visitor asked for paints first. The two components sit in different layouts and
+are never in the same React tree, so `localStorage` is the only channel between them. Belt and
+braces on "once": the flag is deleted on firing **and** an `autoStarted` flag is persisted in the
+tour state. The guest view, the live mirror and the setup wizard do not arm it — each of those
+visitors asked for something specific.
+
+**Step 7 asks for something instead of ending on "Done".** Two CTAs, deliberately not mutually
+exclusive: the live mirror ("make a booking and watch it arrive"), and `mailto:max@vineworks.ge`,
+which does **not** end the tour. **Max's decision, 2026-09-11** — email over WhatsApp, a calendar
+link, or an in-page form. This is the demo's only conversion surface, so the address is a product
+decision the marketing site has to match; `max@vineworks.ge` is the platform address bug reports
+already use, not Max's personal one.
+
+**A tradeoff Max confirmed rather than a thing to re-discover.** The auto-start opens at step 1,
+which is on the guest site — so someone who clicked "Show me the back office" gets ~0.9 s of it
+and is then taken to `/` for steps 1–2, returning to the back office at step 3. Offered the
+alternative (start at step 3, no navigation, five steps), Max chose the full seven-step
+narrative. One-line change if ever revisited: `AUTO_START_INDEX` in `DemoTour.tsx`.
+
+**Deliberately NOT fixed, and this was the main scope risk:** the tour draws no spotlight ring on
+**6 of its 7 steps**, because the `data-tour` anchors fail to resolve and it degrades silently to
+a centred tooltip. Much more visible than the bug that was fixed, and much more tempting. It is
+**Chunk 4**, it is **shared** (it means adding anchors to admin pages every tenant renders), and
+it needs the `staging` pass. [[FeatureLog]] row 163 stays ❌ Broken for exactly that reason —
+the entry half is resolved in the row, the anchoring half is still flagged.
+
+**One free measurement for Chunk 4.** Step 7's `content-editor` anchor **resolves in local dev
+and does not resolve on production** — same step, same viewport, minutes apart: 340 px tooltip
+beside the target locally, 1401 px full-width bottom dock on production. Chunk 4's bug caught in
+the act, with a dev/prod delta to bisect against. Most of that chunk's difficulty is that the
+failure is silent; this instance isn't.
+
+**A methodology note worth keeping.** A once-per-browser behaviour passes trivially if you test
+it by reloading — `localStorage` survives same-origin navigation, the same way console buffers do
+(Chunk 2's lesson). Every auto-start check here started from a cleared store and walked the path
+from the front door.
+
+**Housekeeping, still open for Max:** Chunk 1's verification left a real test booking in the live
+demo data — **"Luka Testashvili", 4 guests, 20 Oct 2026**. Still present; the 03:00 UTC nightly
+reseed did not clear it, which may itself be worth a look. Not deleted — it is a production
+write, so it is Max's call.
+
+**Next:** Chunk 4 — the biggest one, shared, `staging` pass required. Needs Max's approval first
+([[ClaudeInstructions]] Rule 8); he has approved Chunks 1–3 only.
+
+---
+
 ## 2026-09-11 (session 9) — Chunk 2 done. #418 named and fixed; it was invisible from Georgia
 
 **Chunk 2 ✅ complete — shipped to `master` as `e64ccbb`, live and verified on production.**
