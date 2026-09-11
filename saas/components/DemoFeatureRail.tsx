@@ -7,6 +7,7 @@ import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
+import DemoThemeCatalogue, { THEME_CATALOGUE_EVENT } from '@/components/DemoThemeCatalogue'
 
 /**
  * The feature rail for demo.vineworks.ge — Plan-DemoRedesign Phase 3,
@@ -52,6 +53,14 @@ export type Capability = {
   label: string
   /** Where the proof lives. */
   href: string
+  /**
+   * A row whose proof is a demo panel rather than a screen. Only the theme
+   * catalogue uses this: "how can it look?" cannot be answered by navigating
+   * somewhere, because the answer is *this* site repainted. `href` is still
+   * required and is still where the row would have gone — it is the fallback
+   * if the panel ever cannot open.
+   */
+  opens?: 'theme-catalogue'
   /** `data-tour` anchor on the destination to pin the callout to, if any. */
   target?: string
   /** The callout: what to look at, and why it matters commercially. */
@@ -87,7 +96,7 @@ export const CAPABILITY_GROUPS: { group: string; items: Capability[] }[] = [
     group: 'What you control',
     items: [
       { label: 'Edit your own site content', href: '/admin/content', target: 'content-editor', note: 'Text, photos, opening hours — in both languages. No developer, no ticket, no waiting a week for a paragraph.' },
-      { label: 'Branding and theme presets', href: '/admin/settings', note: 'Your logo, your colours. Presets to start from, and everything overridable.' },
+      { label: 'Branding and theme presets', href: '/admin/settings', opens: 'theme-catalogue', note: 'Sixteen presets, and this site repaints as you click them. Your logo and your exact colours on top.' },
       { label: 'Card payments', href: '/admin/settings', note: 'Take card payment at booking time, or keep it reservation-only — per section, and per company.' },
       { label: 'Set the whole thing up yourself', href: '/admin/onboarding', note: 'The guided wizard that takes a winery from nothing to a live site. Run it here on live data.' },
       { label: 'See both sides at once', href: '/live', note: 'The guest site and the back office side by side. Book on the left, watch it land on the right.' },
@@ -209,6 +218,14 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
   }, [open])
 
   const go = useCallback((c: Capability) => {
+    // A panel row answers in place. Navigating to /admin/settings to explain
+    // "your colours are configurable" shows a form; repainting the site the
+    // visitor is standing on shows the thing itself.
+    if (c.opens === 'theme-catalogue') {
+      setOpen(false)
+      window.dispatchEvent(new CustomEvent(THEME_CATALOGUE_EVENT))
+      return
+    }
     try {
       const [dest] = c.href.split('?')
       sessionStorage.setItem(CALLOUT_KEY, JSON.stringify({ note: c.note, target: c.target, label: c.label, dest }))
@@ -385,6 +402,14 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
           </div>
         </>
       )}
+
+      {/* Mounted here rather than in the three layouts: it is this rail's
+          "Branding and theme presets" row opening in place, not an independent
+          surface, and one fewer mount point is one fewer thing for
+          MaintenanceNotes §16 to fall out of step on. It renders whether or not
+          the drawer is open, because it also re-applies a preview the visitor
+          chose before a reload. */}
+      <DemoThemeCatalogue />
     </>,
     document.body,
   )
