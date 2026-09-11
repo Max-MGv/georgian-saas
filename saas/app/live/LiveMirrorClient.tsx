@@ -41,9 +41,55 @@ const C = {
 const GUEST_SRC = '/'
 const ADMIN_SRC = '/admin/orders'
 
+/**
+ * Which of the admin pane's two order lists the visitor can actually see.
+ *
+ * `/admin/orders` renders the list twice — a table (`hidden md:block`) and a
+ * card list (`md:hidden`) — and Tailwind picks between them on the **pane's**
+ * width, not the viewer's. In the mirror the pane is an iframe about 691px
+ * wide on a 1440×900 desktop, i.e. below the 768px `md` breakpoint, so the
+ * table is `display:none` and the cards are the real, visible list.
+ *
+ * This is the whole of Chunk 1's task 1.3, measured on production 2026-09-11:
+ * all 394 `tbody tr` rows were 0×0 inside a `display:none` ancestor. The
+ * previous fix did find its row, outline it and call `scrollIntoView` on it —
+ * but on an invisible element, where the outline is unobservable and
+ * `scrollIntoView` is a no-op. It was never the hydration bug.
+ *
+ * Resolved per-tick rather than once, so a pane that crosses the breakpoint
+ * (or an orders page that changes its markup) degrades to "no highlight"
+ * instead of marking something nobody is looking at.
+ */
+type OrderList = { kind: 'cards' | 'rows'; container: HTMLElement; items: HTMLElement[] }
+
+function visibleOrderList(doc: Document): OrderList | null {
+  const shown = (el: Element | null | undefined) => !!el && el.getClientRects().length > 0
+
+  const cardWrap = [...doc.querySelectorAll('div')].find(d => {
+    const c = (d.className || '').toString()
+    return c.includes('md:hidden') && c.includes('flex-col') && d.children.length > 0
+  }) as HTMLElement | undefined
+  if (shown(cardWrap)) {
+    return { kind: 'cards', container: cardWrap!, items: [...cardWrap!.children] as HTMLElement[] }
+  }
+
+  const tbody = doc.querySelector('tbody')
+  if (shown(tbody?.closest('table'))) {
+    return { kind: 'rows', container: tbody!, items: [...tbody!.children] as HTMLElement[] }
+  }
+  return null
+}
+
+/** Stable-enough identity for one order in either representation. */
+const signature = (el: Element) => (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+
 export default function LiveMirrorClient() {
   const adminRef = useRef<HTMLIFrameElement>(null)
   const adminWrapRef = useRef<HTMLDivElement>(null)
+  // Signatures of the orders on screen immediately before the pane reloads, so
+  // the one that appears afterwards can be identified without relying on the
+  // guest's name (task 1.2).
+  const seenRef = useRef<Set<string> | null>(null)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
   const [landed, setLanded] = useState(false)
@@ -85,8 +131,13 @@ export default function LiveMirrorClient() {
    * table markup changes.
    */
   const highlightNewRow = useCallback((who: { name?: string; surname?: string }) => {
-    if (!who.name) return
-    const needle = `${who.name} ${who.surname ?? ''}`.trim().toLowerCase()
+    const needle = who.name ? `${who.name} ${who.surname ?? ''}`.trim().toLowerCase() : ''
+    const seen = seenRef.current
+    // Nothing to match on at all — a wine order carries no name and has no row
+    // in this table. (task 1.2: the pre-reload snapshot is the fallback, so a
+    // missing name is no longer fatal on its own.)
+    if (!needle && !seen) return
+    let scrolled = false
 
     // Polled from the moment the booking is announced, straight through the
     // reload, rather than started on the iframe's `load` event. The pane is a
@@ -101,22 +152,53 @@ export default function LiveMirrorClient() {
       attempts++
       if (attempts > 100) { window.clearInterval(timer); return }
       const doc = adminRef.current?.contentDocument
-      const row = doc
-        ? ([...doc.querySelectorAll('tbody tr')].find(tr =>
-            (tr.textContent ?? '').toLowerCase().includes(needle),
-          ) as HTMLElement | undefined)
-        : undefined
+      const list = doc ? visibleOrderList(doc) : null
+      if (!list) return
+
+      // Identify the new order. The name match is the primary signal, but the
+      // demo's seed data reuses names (measured: "Nino Beridze" appears more
+      // than once), so among name matches prefer the one that was NOT in the
+      // pane before the reload. If the name match yields nothing at all — no
+      // name carried, or the markup moved — fall back to that pre-reload
+      // snapshot on its own. That fallback is task 1.2's second mechanism and
+      // it does not depend on the name match succeeding.
+      const named = needle
+        ? list.items.filter(el => (el.textContent ?? '').toLowerCase().includes(needle))
+        : []
+      const isNew = (el: HTMLElement) => !!seen && !seen.has(signature(el))
+      const row = named.find(isNew) ?? named[0] ?? (seen ? list.items.find(isNew) : undefined)
 
       if (row) {
+        // Land it where the eye already is. The card list is ~74,000px tall on
+        // the demo tenant's 394 bookings and sorts by *visit* date, so a
+        // booking for next month renders thousands of pixels down. Moving the
+        // matched card to the head of its own container is a reorder within
+        // one parent — the form of DOM meddling React tolerates, since it
+        // never changes which parent owns the node.
+        if (list.kind === 'cards' && list.container.firstElementChild !== row) {
+          list.container.insertBefore(row, list.container.firstElementChild)
+        }
+
         row.style.outline = `2px solid ${C.ok}`
         row.style.outlineOffset = '-2px'
         row.style.backgroundColor = 'rgba(34,197,94,0.12)'
         if (!reducedMotion) row.style.transition = 'background-color 600ms ease-out'
-        row.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
 
-        // "just now", pinned to the row itself rather than to the pane.
-        const firstCell = row.querySelector('td')
-        if (doc && firstCell && !firstCell.querySelector('[data-just-now]')) {
+        // Scroll once, not every tick. Re-asserting the scroll for the whole
+        // 20s window would yank the pane back each time the visitor tried to
+        // look anywhere else.
+        if (!scrolled) {
+          scrolled = true
+          row.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
+        }
+
+        // "just now", pinned to the order itself rather than to the pane —
+        // DemoDirections Direction 02 asks for it to land "timestamped 'just
+        // now'". The name element differs between the two representations.
+        const host = list.kind === 'cards'
+          ? row.querySelector('span.font-semibold')
+          : row.querySelector('td')
+        if (doc && host && !host.querySelector('[data-just-now]')) {
           const pill = doc.createElement('span')
           pill.setAttribute('data-just-now', '')
           pill.textContent = 'just now'
@@ -125,20 +207,21 @@ export default function LiveMirrorClient() {
             'border-radius:999px', `background:${C.ok}`, 'color:#052e16',
             'font-size:0.68rem', 'font-weight:700', 'vertical-align:middle',
           ].join(';')
-          firstCell.appendChild(pill)
+          host.appendChild(pill)
         }
-        // Deliberately does NOT stop on first success, and does not try to
-        // guess when it is safe to stop. The pane is its own React root: the
-        // poll typically finds the row in server-rendered HTML *before* that
-        // root hydrates, and hydration then reconciles the table and discards
-        // the inline styles and the pill. A fixed "settle" window was tried and
-        // was simply a slower guess — it held on dev and lost on production,
-        // where hydrating ~400 rows takes longer than the window did.
+        // Deliberately does NOT stop on first success. The pane is its own
+        // React root: the poll typically finds the order in server-rendered
+        // HTML *before* that root hydrates, and hydration then reconciles the
+        // list and discards the inline styles, the pill and the reorder. A
+        // fixed "settle" window was tried and was simply a slower guess — it
+        // held on dev and lost on production, where hydrating ~400 orders takes
+        // longer than the window did.
         //
-        // So: re-assert the marks on every tick for the whole window. Each step
-        // is idempotent (the pill is only appended to a cell that lacks one, and
-        // a hydration-replaced cell correctly lacks it), and 100 cheap DOM
-        // queries over 20s costs nothing on a page showing two iframes.
+        // So: re-assert on every tick for the whole window. Every step above is
+        // idempotent (the card is only moved when it isn't already first, the
+        // pill only appended where one is absent, and the scroll is fired once
+        // via `scrolled`), and 100 cheap DOM queries over 20s costs nothing on
+        // a page showing two iframes.
         return
       }
       // ~20s window. Giving up quietly is right: the booking is in the table
@@ -150,6 +233,15 @@ export default function LiveMirrorClient() {
   const refreshAdmin = useCallback((who: { name?: string; surname?: string }) => {
     const frame = adminRef.current
     if (!frame) return
+    // Snapshot what is on screen *before* the reload — this is what makes the
+    // new order identifiable afterwards even if the name match misses.
+    try {
+      const doc = frame.contentDocument
+      const list = doc ? visibleOrderList(doc) : null
+      seenRef.current = list ? new Set(list.items.map(signature)) : null
+    } catch {
+      seenRef.current = null
+    }
     try {
       // Same-origin, so a direct reload works and preserves the pane's own URL
       // if the visitor has navigated inside it.
@@ -237,13 +329,24 @@ export default function LiveMirrorClient() {
           </p>
           <a href="/" style={{ color: C.muted, fontSize: '0.78rem' }}>← back to the demo</a>
         </div>
+        {/* Copy has to follow the layout: the panes sit side by side on a wide
+            screen and stack below 900px, so "left"/"right" is simply wrong on a
+            phone — and this is the first sentence anyone reads if the demo link
+            is pasted into WhatsApp. Copy only; the stacked layout itself is out
+            of scope (desktop-first, per the plan's Decisions section).
+            `isNarrow` is false on the server and on the first client render, so
+            this swaps after mount rather than mismatching hydration. */}
         <h1 style={{ margin: '6px 0 0', fontSize: 'clamp(1.1rem, 2.6vw, 1.5rem)', fontWeight: 700 }}>
-          Book on the left. Watch it arrive on the right.
+          {isNarrow
+            ? 'Book here. Watch it arrive below.'
+            : 'Book on the left. Watch it arrive on the right.'}
         </h1>
         <p style={{ margin: '6px 0 0', color: C.muted, fontSize: '0.85rem', maxWidth: '70ch', lineHeight: 1.5 }}>
           Both sides are the real thing — the guest&apos;s booking form, and the winery&apos;s
-          own back office. Same system, same second. Fill in the form on the left and the
-          bookings table will refresh on its own.
+          own back office. Same system, same second.{' '}
+          {isNarrow
+            ? 'Fill in the form above and the bookings below will refresh on their own.'
+            : 'Fill in the form on the left and the bookings table will refresh on its own.'}
         </p>
       </header>
 
