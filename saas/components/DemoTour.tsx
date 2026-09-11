@@ -33,8 +33,52 @@ import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 
 const STORAGE_KEY = 'vineworks-demo-tour'
 
+/**
+ * Set by DemoFrontDoor when the visitor picks "I run a winery", consumed here.
+ * Deliberately a separate key from the tour's own state: the front door and the
+ * tour live in different layouts (`(site)` vs `admin/(panel)`) and never share a
+ * React tree, so localStorage is the only channel between them.
+ *
+ * Only that one path arms it. Someone who chose the guest view or the live
+ * mirror asked for something specific and must not be taken over.
+ */
+export const TOUR_AUTOSTART_KEY = 'vineworks-demo-tour-autostart'
+
+/** Where the "I run a winery" card lands. The auto-start waits for this route. */
+const AUTO_START_ROUTE = '/admin/orders'
+
+/**
+ * Which step the auto-start opens on. 0 = the full seven-step tour, which means
+ * navigating back to the guest site for steps 1–2 before returning to the back
+ * office at step 3 — the narrative order (bookings arrive → here is where they
+ * land). Set to `STEPS.findIndex(s => s.route === AUTO_START_ROUTE)` instead to
+ * start where the visitor already is and skip the guest-site steps.
+ */
+const AUTO_START_INDEX = 0
+
+/**
+ * Let the screen the visitor asked for actually paint before the tour opens over
+ * it. Taking over the instant the route resolves reads as a redirect loop.
+ */
+const AUTO_START_DELAY_MS = 900
+
 /** Ceiling on the spotlight ring's height, as a fraction of the viewport. */
 const MAX_RING_VIEWPORT_FRACTION = 0.62
+
+/**
+ * The demo's only conversion surface (task 3.3). Step 7 used to end on a bare
+ * "Done" — seven reasons to care and then nothing asked of the visitor.
+ *
+ * Two CTAs, deliberately not mutually exclusive: the mail link does not end the
+ * tour, so someone who writes can still take the /live invitation afterwards.
+ * Max chose email over WhatsApp / a calendar link (2026-09-11); `max@vineworks.ge`
+ * is the platform address bug reports already go to.
+ */
+const HANDOFF_EMAIL = 'max@vineworks.ge'
+const HANDOFF_MAILTO =
+  `mailto:${HANDOFF_EMAIL}` +
+  '?subject=' + encodeURIComponent('Vineworks — I saw the demo') +
+  '&body=' + encodeURIComponent('Hi Max,\n\nI just went through the Vineworks demo. My winery is:\n\n')
 
 const C = {
   ink: '#1e1b4b',
@@ -105,8 +149,15 @@ const STEPS: Step[] = [
   },
 ]
 
-type TourState = { started: boolean; index: number; finished: boolean }
-const EMPTY: TourState = { started: false, index: 0, finished: false }
+type TourState = {
+  started: boolean
+  index: number
+  finished: boolean
+  /** Set once the auto-start has fired, so it never fires twice on this browser
+   *  even if the arming flag is somehow re-set. */
+  autoStarted: boolean
+}
+const EMPTY: TourState = { started: false, index: 0, finished: false, autoStarted: false }
 
 function load(): TourState {
   try {
@@ -230,6 +281,49 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     setState(next)
   }, [])
 
+  /**
+   * Open the tour at `index`, going to that step's screen if we aren't on it.
+   *
+   * This is the fix for the "Tour paused · step 1 of 7" dead end. The rule that
+   * the tour must never dim a screen the visitor navigated to themselves is
+   * load-bearing and stays — but it was also firing on an *explicit* press of
+   * the start button, which meant asking for the tour and being told the tour
+   * was paused. A deliberate tour control (start, replay, back, next) now takes
+   * the visitor to the step's screen; only wandering off mid-tour pauses.
+   */
+  const beginAt = useCallback((index: number, auto = false) => {
+    setState(prev => {
+      const next: TourState = {
+        started: true,
+        index,
+        finished: false,
+        autoStarted: auto || (prev?.autoStarted ?? false),
+      }
+      save(next)
+      return next
+    })
+    const dest = STEPS[index].route
+    if (dest !== pathname) router.push(dest)
+  }, [pathname, router])
+
+  // ---- Auto-start on the "I run a winery" path (approved in Plan-DemoFlowFixes'
+  // "Decisions already made"). Armed by DemoFrontDoor, consumed exactly once. ----
+  useEffect(() => {
+    if (!isDemo || embedded || !state) return
+    if (state.started || state.finished || state.autoStarted) return
+    if (pathname !== AUTO_START_ROUTE) return
+
+    let armed = false
+    try { armed = localStorage.getItem(TOUR_AUTOSTART_KEY) === 'armed' } catch { /* private mode */ }
+    if (!armed) return
+
+    const t = window.setTimeout(() => {
+      try { localStorage.removeItem(TOUR_AUTOSTART_KEY) } catch { /* private mode */ }
+      beginAt(AUTO_START_INDEX, true)
+    }, AUTO_START_DELAY_MS)
+    return () => window.clearTimeout(t)
+  }, [isDemo, embedded, state, pathname, beginAt])
+
   // A booking submitted during the tour jumps to the step that shows it landing.
   useEffect(() => {
     if (!isDemo) return
@@ -249,15 +343,22 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
 
   if (!isDemo || !mounted || !state || embedded) return null
 
-  const start = () => update({ started: true, index: 0, finished: false })
+  const start = () => beginAt(0)
   const skip = () => update({ ...state, started: false, finished: true })
-  const back = () => update({ ...state, index: Math.max(0, state.index - 1) })
+  // Back navigates too: stepping back from /admin/orders to the /wines step used
+  // to leave the visitor on the admin page staring at "Tour paused", which is the
+  // same misfire as the start button's, just reached from the other direction.
+  const back = () => beginAt(Math.max(0, state.index - 1))
   const next = () => {
     if (state.index >= STEPS.length - 1) return update({ ...state, started: false, finished: true })
-    const n = { ...state, index: state.index + 1 }
-    update(n)
-    const dest = STEPS[n.index].route
-    if (dest !== pathname) router.push(dest)
+    beginAt(state.index + 1)
+  }
+  const isLast = state.index >= STEPS.length - 1
+  /** Close the tour and hand the visitor to the live mirror, where the thing the
+   *  tour has been describing actually happens in front of them. */
+  const handOffToMirror = () => {
+    update({ ...state, started: false, finished: true })
+    router.push('/live')
   }
 
   // ---- Not touring: a small invitation pill, never a takeover. ----
@@ -343,11 +444,14 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   // screen it docks to the bottom instead — a floating card beside a spotlight
   // does not fit at 375px.
   const TOOLTIP_W = 340
+  // The last step carries the hand-off — two stacked CTAs instead of one button
+  // row — so it needs more clearance than the others or it runs off the bottom.
+  const TOOLTIP_H = isLast ? 300 : 190
   const tooltipStyle: React.CSSProperties = isNarrow || !rect
     ? { left: 12, right: 12, bottom: 12 }
-    : (rect.top + rect.height + 190 < window.innerHeight
+    : (rect.top + rect.height + TOOLTIP_H < window.innerHeight
         ? { top: rect.top + rect.height + 12, left: Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - TOOLTIP_W - 12)), width: TOOLTIP_W }
-        : { top: Math.max(12, rect.top - 190), left: Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - TOOLTIP_W - 12)), width: TOOLTIP_W })
+        : { top: Math.max(12, rect.top - TOOLTIP_H), left: Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - TOOLTIP_W - 12)), width: TOOLTIP_W })
 
   return createPortal(
     <div aria-live="polite">
@@ -394,29 +498,60 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
             onClick={skip}
             style={{ background: 'none', border: 'none', color: C.muted, fontSize: '0.75rem', cursor: 'pointer', padding: '2px 4px', textDecoration: 'underline' }}
           >
-            Skip the tour
+            {/* "Skip the tour" is the wrong word once there is nothing left to
+                skip — but a dismissal must stay visible on every step. */}
+            {isLast ? 'Close' : 'Skip the tour'}
           </button>
         </div>
 
         <strong style={{ display: 'block', margin: '8px 0 0', fontSize: '1rem', lineHeight: 1.3 }}>{step.title}</strong>
         <p style={{ margin: '8px 0 0', fontSize: '0.85rem', lineHeight: 1.55, color: C.muted }}>{step.body}</p>
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          {state.index > 0 && (
+        {/* ---- The hand-off (task 3.3). The last step is the one moment the
+             visitor has been given seven reasons to care, so it asks for
+             something instead of ending on "Done". ---- */}
+        {isLast ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
             <button
-              onClick={back}
-              style={{ backgroundColor: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: '999px', padding: '8px 16px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+              onClick={handOffToMirror}
+              style={{ backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}
             >
-              Back
+              Now try it yourself → make a booking and watch it arrive
             </button>
-          )}
-          <button
-            onClick={next}
-            style={{ flex: 1, backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-          >
-            {state.index >= STEPS.length - 1 ? 'Done' : 'Next →'}
-          </button>
-        </div>
+            <a
+              href={HANDOFF_MAILTO}
+              style={{ display: 'block', backgroundColor: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: '999px', padding: '9px 16px', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}
+            >
+              Talk to us about your winery
+            </a>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+              <button
+                onClick={back}
+                style={{ background: 'none', border: 'none', color: C.muted, fontSize: '0.75rem', cursor: 'pointer', padding: '2px 4px', textDecoration: 'underline' }}
+              >
+                Back
+              </button>
+              <span style={{ color: C.muted, fontSize: '0.72rem' }}>{HANDOFF_EMAIL}</span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+            {state.index > 0 && (
+              <button
+                onClick={back}
+                style={{ backgroundColor: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: '999px', padding: '8px 16px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Back
+              </button>
+            )}
+            <button
+              onClick={next}
+              style={{ flex: 1, backgroundColor: C.accent, color: '#fff', border: 'none', borderRadius: '999px', padding: '9px 16px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body,

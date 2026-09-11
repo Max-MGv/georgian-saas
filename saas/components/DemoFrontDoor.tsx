@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
+import { TOUR_AUTOSTART_KEY } from '@/components/DemoTour'
 
 /**
  * The front door for demo.vineworks.ge — Plan-DemoRedesign Phase 1,
@@ -163,6 +164,13 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
     }
     markSeen()
     setOpen(false)
+    // Arm the tour's auto-start — only on the "I run a winery" path. The visitor
+    // who picked the setup wizard, the guest view or the live mirror asked for a
+    // specific thing and must not have a tour opened on top of it. DemoTour
+    // consumes this flag once, on /admin/orders. See TOUR_AUTOSTART_KEY.
+    if (key === 'winery') {
+      try { localStorage.setItem(TOUR_AUTOSTART_KEY, 'armed') } catch { /* private mode: no auto-start, pill still works */ }
+    }
     router.push(key === 'setup' ? '/admin/onboarding' : '/admin/orders')
     router.refresh()
   }
