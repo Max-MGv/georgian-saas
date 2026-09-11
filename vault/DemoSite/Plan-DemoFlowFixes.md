@@ -31,7 +31,7 @@ the live mirror's landing moment — all find their target and then never show i
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
 | **2** | The hydration mismatch (React #418) | shared → `staging` | ✅ Done (2026-09-11, shipped to `master`, verified on production) |
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
-| **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ⬜ Not started |
+| **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | 🚧 4.1–4.6 on `staging` (`9d3a2b2`); 4.7 + `master` merge pending Max |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
 | **6** | Bug-report widget off the demo tenant | shared → `staging` | ⬜ Not started |
 | **7** | Admin landing readability | shared → `staging` | ⬜ Not started |
@@ -39,19 +39,34 @@ the live mirror's landing moment — all find their target and then never show i
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 **Chunks 1, 2 and 3 are ✅ and all shipped to production. Begin at
-Chunk 4** — the biggest chunk, and the first since Chunk 2 that is **shared**, so it needs the
-`staging` pass and a Staging Winery regression check. [[ClaudeInstructions]] Rule 8 applies per
-chunk and **Max has approved Chunks 1–3 only**, so ask before starting Chunk 4.
+**Overall resume point:** 🔜 **Chunk 4 is built and on `staging` (commit `9d3a2b2`), not yet on
+`master`.** Two things are outstanding, in order:
 
-Two lessons worth carrying into Chunk 4, both earned:
+1. **Max reviews the staging preview** — `/admin/statistics` and `/admin/companies` on Staging
+   Winery, the two shared surfaces that sit behind a login Claude cannot pass. Everything else
+   on staging is checked and clean.
+2. **Max approves the `staging` → `master` merge.** That merge is the one action that ships to
+   Nikalas Marani's real site; do not run it without him. After it lands, walk all seven steps
+   and the rail's "Per-company price ladders" link on `demo.vineworks.ge` from a **cleared**
+   `localStorage`, and tick 4.7.
+
+Then **Chunk 5**, which needs its own approval ([[ClaudeInstructions]] Rule 8 — Max has approved
+Chunks 1–4 only).
+
+Lessons worth carrying forward, all earned:
 - *(Chunk 2)* When something "can't be reproduced", check whether the **environment** is what
   hides it — the bug was invisible from Georgia because the server is UTC/en-US and every
   browser to hand is en-US/Asia/Tbilisi.
 - *(Chunk 3)* Console buffers and `localStorage` both persist across same-origin navigations, so
   a once-per-browser behaviour has to be re-tested from a **cleared** store, not from a reload.
-  Chunk 3's auto-start was verified by clearing `localStorage` and walking the path from the
-  front door each time; anything less would have passed trivially.
+- *(Chunk 4)* **Measure before you theorise, and measure the thing itself.** The plan said this
+  chunk was about missing `data-tour` anchors. All seven existed and always had. Ten minutes of
+  asking the live DOM what it actually contained — before editing anything — replaced the whole
+  premise and found a one-line cause. The same habit retired Chunk 3's unexplained dev/prod
+  delta as a second symptom of it rather than a separate bug.
+- *(Chunk 4)* **A timeout is a guess about someone else's latency.** `60 ms` was correct on
+  localhost and wrong over the network, which is the entire bug. Where something must wait for
+  the DOM, prefer an observer with no deadline and let any timer decide only when to *complain*.
 
 ---
 
@@ -636,14 +651,15 @@ here it is with a dev/prod delta to bisect against.
 
 ## Chunk 4 — Tour + rail anchoring: make the spotlight actually spotlight
 
-**Status:** ⬜ Not started
-**Resume point:** Chunk 3 is ✅, so this is next — but it needs Max's approval first
-([[ClaudeInstructions]] Rule 8). Two things Chunk 3 leaves on the doorstep: step 7's
-`content-editor` anchor **does** resolve in local dev and **does not** on production (measured
-2026-09-11 — see Chunk 3's notes), which is a concrete, reproducible instance of this chunk's bug
-and a good first thread to pull; and the last step's tooltip is taller than the others
-(`TOOLTIP_H` in `DemoTour.tsx`), so once the anchors resolve, re-check that step 7's hand-off
-still fits above the fold at 1440×900.
+**Status:** 🚧 In progress — 4.1–4.6 done, committed to `staging` (`9d3a2b2`) and verified
+locally on the dev demo tenant. **4.7 (staging + production verification) is what remains**, and
+the `staging` → `master` merge needs Max.
+**Resume point:** 🔜 The staging deploy of `9d3a2b2` is live and its public surfaces are
+checked. What is left: Max's eyes on `/admin/statistics` and `/admin/companies` on Staging
+Winery (both behind a login Claude cannot pass), then his approval of the `staging` → `master`
+merge. **Do not merge without him** — that merge ships to Nikalas Marani's real site. Once it
+lands, walk all seven steps plus the "Per-company price ladders" rail link on
+`demo.vineworks.ge` from a cleared `localStorage` (`vineworks-demo-tour`), and tick 4.7.
 **Ship route:** **shared** — adding `data-tour` anchors touches admin pages every tenant
 renders → `staging` pass required, with a Staging Winery regression check.
 **Fixes:** report findings A1 (no spotlight) + B7 (rail callout pinned to nothing).
@@ -671,21 +687,21 @@ nothing — and the ladders it promised are six instances of "2 tiers" in grey m
 because every company row is **collapsed**.
 
 ### Tasks
-- [ ] **4.1 — Make anchor failure loud.** Before fixing anything: `console.warn` in dev when
+- [x] **4.1 — Make anchor failure loud.** Before fixing anything: `console.warn` in dev when
       a step or callout can't resolve its anchor. This is why the bug shipped, and without it
       the next one ships too. Do this first so 4.2's work is verifiable.
-- [ ] **4.2 — Audit all seven tour anchors against the live DOM** on each declared route, and
+- [x] **4.2 — Audit all seven tour anchors against the live DOM** on each declared route, and
       fix them. Record the per-step findings in the table below.
-- [ ] **4.3 — Anchor to small, specific elements**, not whole pages. Step 5 should ring the
+- [x] **4.3 — Anchor to small, specific elements**, not whole pages. Step 5 should ring the
       Future Revenue card, not `/admin/statistics`. Step 1 should ring the booking form —
       and must **scroll it into view**, since the copy says "this form" while the hero is on
       screen.
-- [ ] **4.4 — Stop the desktop tooltip falling back to the mobile bottom dock.** A tall
+- [x] **4.4 — Stop the desktop tooltip falling back to the mobile bottom dock.** A tall
       target should still get a ring (the 62% viewport cap from Phase 2 exists for this) and
       a tooltip placed beside it. The full-width dock at 1440px is a large part of the dated
       feel.
-- [ ] **4.5 — Fix the rail's callout anchoring** — same root cause, same fix.
-- [ ] **4.6 — Auto-expand the proof on rail deep links.** "Per-company price ladders" should
+- [x] **4.5 — Fix the rail's callout anchoring** — same root cause, same fix.
+- [x] **4.6 — Auto-expand the proof on rail deep links.** "Per-company price ladders" should
       arrive with a company row already expanded so the ladder is on screen without a click.
       Check the other 15 destinations for the same "lands on a list, not on proof" problem
       and record which ones need it.
@@ -695,21 +711,127 @@ because every company row is **collapsed**.
 ### Per-step anchor audit
 _(fill in during 4.2 — this table is the deliverable of this chunk)_
 
-| Step | Route | Intended target | Anchor resolves? | Fix |
-|---|---|---|---|---|
-| 1 | `/` | booking form | ❌ no ring | |
-| 2 | `/wines` | wine list | ❌ no ring | |
-| 3 | `/admin/orders` | bookings table | ❌ no ring | |
-| 4 | `/admin/orders` | filters row | ✅ works | — (reference implementation) |
-| 5 | `/admin/statistics` | Future Revenue card | ❌ no ring | |
-| 6 | `/admin/wine-orders` | packing view | ❌ no ring | |
-| 7 | `/admin/content` | inline editor | ❌ no ring | |
+**The headline: every one of the seven anchors was present and measurable the whole time.**
+Not one was missing. Measured on production (`demo.vineworks.ge`, 1440×900, 2026-09-11) by
+walking the tour and, at each step, asking the DOM directly whether the anchor existed and what
+it measured — *before* touching any code.
 
-**Also noted during the teardown:** step 4's copy is about per-company rate ladders while its
-ring is on the *filters* row — copy and highlight disagree even on the one step that works.
-Decide whether to re-anchor it or re-word it.
+"Anchor in DOM" is what `querySelector` returned at the moment the ring was absent; "rect in
+state" is whether the component had it.
+
+| Step | Route | Anchor | In DOM? | Rect in state? | Measured rect | Diagnosis / fix |
+|---|---|---|---|---|---|---|
+| 1 | `/` | `booking-form` | ✅ yes | ❌ null after a nav | 672×983 | Race. Fixed by the polling + observer hook. Anchor kept. |
+| 2 | `/wines` | `wine-catalogue` | ✅ yes | ❌ null after a nav | **1425×1365** | Race **and** a bad target — the anchor was the page wrapper, i.e. the full viewport width, so the "ring" had no left or right edge on screen. **Moved onto the wine list itself** → now 864 px wide with real dim on both sides. |
+| 3 | `/admin/orders` | `orders-table` | ✅ yes | ❌ null | 1377×700 | Pure race — the rect was perfect. **This is the step that proved the diagnosis** (below). Anchor kept. |
+| 4 | `/admin/orders` | `orders-filters` | ✅ yes | ✅ **yes** | 1377×73 | Worked because it is the only step reached **without a navigation** — steps 3 and 4 share a route. The reference implementation, and the control in the experiment. |
+| 5 | `/admin/statistics` | `stats-cards` → **`stats-future-revenue`** | ✅ yes | ❌ null | 1377×114 (whole grid) | Race **and** the copy names one card while the ring covered all three. **Re-anchored to the Future Revenue card** → now 464×130. Task 4.3's headline case. |
+| 6 | `/admin/wine-orders` | `wine-orders-list` | ✅ yes | ❌ null | **1024×10322** | Race. The 10 322 px height is the whole order list; the existing 62 % viewport cap already frames it sensibly once the rect resolves, so the anchor was **kept** rather than moved — one less shared file touched. |
+| 7 | `/admin/content` | `content-editor` | ✅ yes | ❌ null | 1377×1073 | Race. This is the dev/prod delta Chunk 3 handed over, and it is the same bug. Anchor kept. Step 7's taller hand-off tooltip re-checked: bottom lands at 881 px of 900, still above the fold. |
+
+#### The measurement that settled it
+
+On step 3 the anchor was in the DOM with a rect of `{top: 322, left: 24, 1377×700}` while the
+tooltip rendered 1401 px wide — the full-bleed bottom dock, which is the `!rect` branch. So the
+component believed it had no target while the target was sitting right there. Dispatching a
+single synthetic `resize` event re-ran `measure()` and **the ring appeared immediately**, the
+tooltip snapping from 1401 px to 340 px.
+
+Conclusive: nothing was missing, nothing was `display:none`, nothing was 0×0. The measurement
+was simply taken too early and never taken again.
+
+`DemoTour` ran `measure()` once, on a single 60 ms `setTimeout` after the route changed. On any
+step reached by a client-side navigation that fires while the destination is still painting;
+`setRect(null)` latches and nothing retries. The companion scroll effect could not rescue it —
+it looks for the same element 60 ms later, and when it does not find one it returns without
+scrolling, so no scroll event fires and no re-measure happens either.
+
+**Everything the teardown saw follows from that one line:**
+- *Why exactly six of seven failed* — step 4 is the only step reached without a navigation.
+- *Why step 7 resolved in local dev and not on production* (the delta Chunk 3 left on the
+  doorstep): the RSC fetch for the destination route returns in well under 60 ms from localhost
+  and does not over the network. Same code, same viewport, different latency.
+- *Why it shipped* — a missing anchor degrades silently by design, and a **late** anchor was
+  indistinguishable from a missing one.
+
+#### Step 4's copy-vs-ring disagreement — decided: **re-worded**
+
+Its copy sold per-company rate ladders while its ring sat on the filters row. Re-anchoring it to
+`/admin/companies` would have added an eighth navigation to a seven-step tour, and the ladders
+already have their own rail entry. The filters row *does* contain the company filter listing all
+six operators, so the copy now makes the same commercial argument about the thing actually being
+ringed: six operators in that filter, each priced on its own ladder automatically, and one click
+pulls up a whole season with any of them.
+
+### Notes / decisions (2026-09-11)
+
+#### The fix, and why it is not just "poll like the rail does"
+
+The obvious fix was to copy `DemoFeatureRail`'s polling into `DemoTour`. That was done — but
+into **one shared hook**, `saas/lib/demoAnchor.ts`, used by both, because two hand-written
+copies of this measurement are what produced two different bugs in the first place. A third
+divergence is now a merge conflict rather than a silent regression.
+
+The hook does one thing the rail's version did not: **a `MutationObserver` with no deadline**,
+alongside the poll. Polling alone still encodes a guess about how long a route takes to paint,
+and a wrong guess about exactly that is the original bug. The local dev run proved the point
+immediately — a cold Turbopack compile of `/admin/orders` ran past the 1.6 s poll budget and the
+anchor still resolved, because the observer caught it. The budget now decides only when to
+*warn*, never whether to keep looking. A cold serverless start on production would have hit the
+same wall.
+
+#### 4.1 paid for itself inside one test run
+
+The dev warning fired on the very first local walk-through with the exact message it was written
+for — `[demo] DemoTour: no element matching [data-tour="orders-table"] … after 1.6s`. That is
+what turned "the ring is missing again" into "the poll budget is too short", in one step, and it
+is the reason the observer above exists. Task 4.1 being first was right.
+
+#### Step 4's copy vs. ring — **re-worded, not re-anchored**
+
+Recorded in full under the audit table above. Short version: re-anchoring to `/admin/companies`
+would add an eighth navigation to a seven-step tour, the ladders already have their own rail
+entry, and the filters row genuinely contains the six-operator company filter — so the copy now
+argues the same commercial point about the thing actually being ringed.
+
+#### 4.6 — which rail destinations needed the auto-expand
+
+Only **one** of the sixteen: **"Per-company price ladders"** (`/admin/companies`). It was the
+destination the teardown caught, and the worst case — every company row arrives collapsed, so
+the deep link landed on six instances of "2 tiers" in grey microtext with the actual ladders one
+click away and invisible. It now deep-links to `/admin/companies?expand=first` and carries a new
+`company-rates` anchor.
+
+The other fifteen were checked against the same "lands on a list, not on proof" test and **none
+needed it**: eleven already carry a `data-tour` anchor that rings the proof directly, and the
+remaining four (`/admin/settings` ×2, `/admin/onboarding`, `/live`) land on screens that *are*
+the proof — there is no collapsed state hiding anything.
+
+`?expand=first` was deliberately built as a **plain deep-link parameter**, not demo chrome: any
+link into the companies page can use it, it is inert without the param, and it reads
+`window.location.search` in an effect rather than `useSearchParams` — which in this Next version
+would have forced a Suspense boundary onto a shared admin page for a cosmetic feature.
+
+#### What is verified, and the one thing that is not
+
+Verified locally against the dev demo tenant, all at 1440×900: **all seven steps draw a real
+ring**, each tooltip is the compact 340 px card rather than the 1401 px bottom dock, step 7's
+taller hand-off still lands at 881 px of 900, and the rail's ladder link arrives with a company
+expanded and its callout pinned beside the ring instead of docked at the bottom centre.
+Verified on the staging preview: Staging Winery renders **no demo chrome at all** on `/` or
+`/wines`, the wine grid still renders all seven cards through the moved anchor, and the console
+is clean.
+
+**Not verified on a real tenant:** the statistics cards and the companies list sit behind the
+admin login, and Claude cannot type a password into a login form. The statistics change (a
+wrapper `div` plus `h-full` on `Card`) *was* measured on the identical shared component on the
+demo tenant — all three cards 114 px tall with identical tops, i.e. unchanged — and the
+component takes no tenant-dependent input that could alter that. But it is an argument, not an
+observation on Staging Winery itself. **Worth 30 seconds of Max's eyes on `/admin/statistics`
+and `/admin/companies` before the merge to `master`.**
 
 ### Files expected
+- `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\lib\demoAnchor.ts` *(new — the shared hook)*
 - `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoTour.tsx`
 - `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\components\DemoFeatureRail.tsx`
 - `data-tour` attributes across `C:\Users\Max\Desktop\claude-projects\georgian-saas\saas\app\admin\(panel)\**` and `saas\app\(site)\**`

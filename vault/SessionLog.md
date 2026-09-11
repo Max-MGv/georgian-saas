@@ -8,6 +8,98 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-11 (session 11) — Chunk 4. The anchors were never missing; one 60 ms timeout was
+
+**Chunk 4 built, committed to `staging` as `9d3a2b2`, verified there. NOT on `master` yet — that
+merge needs Max and it ships to Nikalas Marani's real site.** Tasks 4.1–4.6 done; 4.7 is the
+production walk-through, which can only happen after the merge. Full write-up in
+[[DemoSite/Plan-DemoFlowFixes]] Chunk 4, including the per-step audit table that was this chunk's
+stated deliverable.
+
+**The headline: the plan's premise was wrong, and measuring first is what caught it.** The status
+table described this chunk as "adding `data-tour` anchors to admin pages." **All seven anchors
+already existed and always had.** Ten minutes of asking the live production DOM what it actually
+contained — before editing anything — replaced the whole premise.
+
+**What the measurement showed.** Walking the tour on `demo.vineworks.ge` at 1440×900, at step 3
+the anchor sat in the DOM with a rect of `{top: 322, left: 24, 1377×700}` — perfectly
+measurable — while the tooltip rendered 1401 px wide, which is the `!rect` full-bleed bottom
+dock. The component believed it had no target while the target was right there. Dispatching **one
+synthetic `resize` event** re-ran the measurement and the ring appeared instantly, the tooltip
+snapping to 340 px. Nothing was missing, nothing was `display:none`, nothing was 0×0.
+
+**The cause was one line.** `DemoTour` measured its target **once**, on a 60 ms `setTimeout` after
+the route changed — a race against the destination painting. `setRect(null)` then latched and
+nothing retried (the companion scroll effect couldn't rescue it: it looks for the same element,
+doesn't find it, returns without scrolling, so no scroll event fires either).
+
+That one fact explains everything the teardown saw:
+- **Why exactly six of seven failed.** Step 4 is the only step reached *without* a navigation —
+  steps 3 and 4 share `/admin/orders`. It was the control in the experiment all along.
+- **Why step 7 resolved in local dev and not on production** — the dev/prod delta Chunk 3 left on
+  the doorstep, and it turned out to be a second symptom of the same bug rather than a separate
+  one. The RSC fetch returns in well under 60 ms from localhost and does not over the network.
+- **Why it shipped.** A missing anchor degrades silently by design; a *late* anchor was
+  indistinguishable from a missing one.
+
+**The fix.** One shared `useAnchorRect()` hook in `saas/lib/demoAnchor.ts`, used by both the tour
+and the rail — two hand-written copies of this measurement are what produced two different bugs,
+so a third divergence is now a merge conflict instead of a silent regression. It polls **and**
+runs a `MutationObserver` with **no deadline**. That part matters: polling alone still encodes a
+guess about how long a route takes to paint, and a wrong guess about exactly that *is* the
+original bug. The budget now decides only when to *warn*.
+
+**Task 4.1 paid for itself inside one test run.** The dev-only console warning fired on the first
+local walk-through with the exact message it was written for — `[demo] DemoTour: no element
+matching [data-tour="orders-table"] … after 1.6s` — when a cold Turbopack compile ran past the
+poll budget. That is what turned "the ring is missing again" into "the budget is too short" in
+one step, and it is why the observer exists. Doing 4.1 first was right.
+
+**Also in this chunk:**
+- **Step 5 re-anchored to the Future Revenue card** (464×130) instead of the whole three-card
+  grid (1377×114) — its copy names that specific number. Task 4.3's headline case.
+- **`wine-catalogue` moved off the page wrapper** onto the wine list. The wrapper measured
+  1425×1365 — the full viewport width — so the "ring" had no visible left or right edge at all.
+  Now 864 px wide with real dim on both sides.
+- **Step 4's copy re-worded, not re-anchored** (the decision this chunk had to make). Its copy
+  sold rate ladders while its ring sat on the filters row. Re-anchoring meant an eighth
+  navigation in a seven-step tour, and the ladders already have their own rail entry — so the
+  copy now argues the same commercial point about the filters row's six-operator company filter.
+- **Desktop tooltip no longer falls back to the mobile bottom dock** (4.4). It doubled as the
+  `!rect` fallback, which fired on six steps; the desktop fallback is now a compact centred card,
+  and the tooltip places itself below / above / beside the ring.
+- **Rail callout now positions against its anchor** (4.5) instead of being hard-pinned to the
+  bottom centre — the "floating in dead space" symptom was literally that.
+- **4.6 needed exactly one destination of sixteen:** "Per-company price ladders" now deep-links
+  to `/admin/companies?expand=first` with a new `company-rates` anchor, arriving on an open rate
+  ladder instead of six collapsed rows. The other fifteen were checked; none needed it.
+
+**Verified.** All seven steps draw a real ring at 1440×900 on the dev demo tenant, each with the
+compact 340 px tooltip; step 7's taller hand-off lands at 881 px of 900, still above the fold.
+On the staging preview, Staging Winery renders **no demo chrome at all**, the wine grid still
+renders all seven cards through the moved anchor, and the console is clean. `tsc --noEmit` clean.
+
+**Two things Max needs to do:**
+1. **Look at `/admin/statistics` and `/admin/companies` on the staging preview.** Those two
+   shared surfaces sit behind the admin login, and Claude cannot type a password into a login
+   form. The statistics change (a wrapper `div` + `h-full` on `Card`) was measured as
+   pixel-identical on the same component on the demo tenant — all three cards 114 px with
+   identical tops — but that is an argument, not an observation on Staging Winery.
+2. **Approve the `staging` → `master` merge.** It ships to real customers.
+
+**Still unanswered from Chunk 3:** the test booking Chunk 1's verification left in the live demo
+data — "Luka Testashvili", 4 guests, 20 Oct 2026 — is still there, and the 03:00 UTC nightly
+reseed did **not** clear it, which may be worth a look in its own right. Delete it? It is a
+production write, so it needs Max's word.
+
+**A process note worth keeping.** This session cost one self-inflicted scare: a Python script
+that opened the plan file for writing and *then* hit a `UnicodeEncodeError` truncated
+`Plan-DemoFlowFixes.md` to 0 bytes. Recovered in full from git (the file was committed at
+Chunk 3) and re-applied. Vault edits now build the new content first and only replace the
+original once it is complete.
+
+---
+
 ## 2026-09-11 (session 10) — Chunk 3 done. The tour no longer tells you it's paused when you ask for it
 
 **Chunk 3 ✅ complete — shipped to `master` as `e44e519` (+ `cce867c`), live and verified on

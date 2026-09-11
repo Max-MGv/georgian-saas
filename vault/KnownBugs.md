@@ -30,9 +30,9 @@ tags: [bugs]
 | 22 | `app/actions/submitWineOrder.ts` computes the wine-order total entirely from client-supplied `price`/`discountPercent` values (parsed straight out of submitted form JSON) with zero server-side lookup against real `WineVintage.price`/`Company.wineDiscountPercent` — a tampered request can fabricate any total, which also becomes the literal amount charged via Flitt once a tenant has online payment enabled. Same bug class as the already-fixed masterclass-pricing issue (`Plan-SecurityAndBugFixes.md` #3) and #17, never applied here. Found via a dedicated penetration test, confirmed by direct code read. | Security / Wine Orders | 🟢 Resolved |
 | 23 | `/admin` main content container hardcoded `max-w-6xl` (1152px) regardless of viewport — on wide monitors every admin page (Orders table especially) rendered narrower than the screen with wasted margin on both sides, while the table still needed its own internal horizontal scroll for its wider content | Admin (all pages) | 🟢 Resolved |
 | 24 | Live mirror's "landing moment" never lands — new booking row renders **4,769px below the fold** inside the admin pane (table sorts by visit date, not creation) and the Phase 4.3 row outline is **not applied at all**. The flagship feature's payoff resolves to a counter incrementing by one | Demo / Live mirror | 🔴 Open |
-| 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine | Demo / Tour | 🔴 Open |
+| 25 | Spotlight tour draws **no ring on 6 of 7 steps** — `data-tour` anchors fail to resolve and degrade silently to a centred tooltip with no ring, plus the desktop tooltip falls back to the mobile full-width bottom dock at 1440px. Step 4 works, proving the machinery is fine  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Root cause was not missing anchors (all seven existed) but a single 60 ms measurement racing the route paint; see the 2026-09-11 update below | Demo / Tour | 🔴 Open |
 | 26 | Starting the spotlight tour from any admin page immediately shows "Tour paused · step 1 of 7" — step 1 declares the guest-site route and the never-dim-a-screen-they-chose rule fires on an explicit press of the start button | Demo / Tour | 🔴 Open |
-| 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing | Demo / Feature rail | 🔴 Open |
+| 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Same root cause as #25; the collapsed-data half fixed via `?expand=first`; see the 2026-09-11 update below | Demo / Feature rail | 🔴 Open |
 | 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🔴 Open |
 | 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🔴 Open |
 
@@ -107,6 +107,43 @@ fix plan rather than last — it may be on the critical path for the flagship.
 > root cause above therefore still stands for **#25 and #27**.
 
 ---
+
+---
+
+> **Update, 2026-09-11 — Chunk 4 fixes #25 and #27, and the "shared root cause" above turns out
+> to have been diagnosed wrongly.** On `staging` as `9d3a2b2`; **not yet on `master`**, so both
+> stay 🔴 Open until that merge lands and production is walked.
+>
+> **The anchors were never missing.** All seven `data-tour` attributes existed and always had —
+> the premise that this was "anchors that fail to resolve" was wrong. Measured on production at
+> 1440×900 before any code changed: on step 3 the anchor sat in the DOM with a rect of
+> `{top: 322, left: 24, 1377×700}` while the tooltip rendered 1401 px wide, which is the `!rect`
+> branch. The component believed it had no target while the target was right there. One
+> synthetic `resize` event re-ran the measurement and **the ring appeared immediately**.
+>
+> **The actual cause is one line.** `DemoTour` measured its target once, on a 60 ms `setTimeout`
+> after the route changed — a race against the destination painting. Every step reached by a
+> navigation lost it; step 4 was the only one that worked because it is the only step that
+> shares a route with its predecessor and therefore involves no navigation at all. That single
+> fact explains the exact 6-of-7 pattern, and it also explains why step 7 resolved in local dev
+> and not on production: the RSC fetch returns in well under 60 ms from localhost and does not
+> over the network. Same code, same viewport, different latency.
+>
+> **The fix** is a shared `useAnchorRect()` hook (`saas/lib/demoAnchor.ts`) used by both the tour
+> and the rail, so the two cannot drift apart again. It polls **and** runs a `MutationObserver`
+> with no deadline, because any fixed budget is a guess about how long a route takes to paint and
+> a wrong guess about exactly that is this bug. A cold Turbopack compile during local testing ran
+> past the poll budget and the anchor still resolved — the observer earned its place the same day.
+>
+> **#27's second half** (deep links landing on collapsed data) is fixed separately: the rail's
+> "Per-company price ladders" entry now deep-links to `/admin/companies?expand=first` with a new
+> `company-rates` anchor, so it arrives on an open rate ladder. The other fifteen destinations
+> were checked and none needed the same treatment.
+>
+> **And the class of bug is now visible.** `useAnchorRect` logs a dev-only console warning when
+> an anchor genuinely cannot be resolved — the silent degradation is *why this shipped*, and it
+> caught a real problem on the first local run.
+
 
 ## ✅ RESOLVED — Hydration mismatch on public site pages (observed 2026-09-11, fixed and shipped 2026-09-11)
 

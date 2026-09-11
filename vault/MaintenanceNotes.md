@@ -216,23 +216,56 @@ The dev database normally holds exactly one tenant (Staging Winery). So the ever
 
 ---
 
-## 12. Demo tour / feature rail rings are anchored to `data-tour` attributes scattered across six screens
+## 12. Demo tour / feature rail rings are anchored to `data-tour` attributes scattered across seven screens
 
 **What the dependency is:**
-`saas/components/DemoTour.tsx` (each step's `target`) and `saas/components/DemoFeatureRail.tsx` (each capability's `target`) locate what to highlight with `document.querySelector('[data-tour="…"]')`. Those attributes live on unrelated pages:
+`saas/components/DemoTour.tsx` (each step's `target`) and `saas/components/DemoFeatureRail.tsx`
+(each capability's `target`) locate what to highlight with
+`document.querySelector('[data-tour="…"]')`. Both resolve it through the shared
+`useAnchorRect()` hook in **`saas/lib/demoAnchor.ts`** — that file is the single implementation
+of the find-and-measure logic, and the place to change it. Those attributes live on unrelated
+pages:
 
 | `data-tour` value | Where it lives |
 |---|---|
 | `booking-form` | `saas/app/(site)/page.tsx` — the `#book` section |
-| `wine-catalogue` | `saas/app/(site)/wines/page.tsx` — wrapper around `WineCatalogueClient` |
+| `wine-catalogue` | `saas/app/(site)/wines/WineCatalogueClient.tsx` — **on the wine list itself**, and it appears **twice**: once in the grid-view branch, once in the list-view branch. Only one is mounted at a time. (Moved off the page wrapper in Chunk 4 — the wrapper was the full viewport width, so the ring had no visible left or right edge.) |
 | `orders-table`, `orders-filters` | `saas/app/admin/(panel)/orders/page.tsx` |
-| `stats-cards` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` |
+| `stats-cards` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — the three-card grid. Used by the **rail** only. |
+| `stats-future-revenue` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — the wrapper around the Future Revenue `Card`. Used by the **tour's step 5**, whose copy names that specific number. |
 | `wine-orders-list` | `saas/app/admin/(panel)/wine-orders/page.tsx` |
 | `content-editor` | `saas/app/admin/(panel)/content/page.tsx` |
+| `company-rates` | `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — the company list. Added in Chunk 4 for the rail's "Per-company price ladders" link. |
 
-**Why it bites:** nothing in the type system connects the two ends. Rename or drop an attribute while refactoring one of those pages and the tour step still runs — it just silently loses its ring and dims the whole screen instead. Deliberately a soft failure (a tour that vanishes because a selector drifted would be worse), which is exactly why it can go unnoticed.
+**Why it bites:** nothing in the type system connects the two ends. Rename or drop an attribute
+while refactoring one of those pages and the tour step still runs — it just silently loses its
+ring and dims the whole screen instead. Deliberately a soft failure (a tour that vanishes
+because a selector drifted would be worse), which is exactly why it can go unnoticed.
 
-**If you touch one of those pages:** grep `data-tour` before and after, and walk the tour on the demo tenant.
+**Since Chunk 4 the failure is no longer silent in development:** `useAnchorRect` logs
+`[demo] DemoTour: no element matching [data-tour="…"] on <route>` to the console when an anchor
+cannot be resolved. It is dev-only and deduped per (target, route). **If you see that warning,
+an anchor has drifted** — do not ignore it, it is the whole early-warning system for this
+dependency.
+
+**Two traps this has actually fallen into, both worth knowing before you touch it:**
+
+1. **Measuring too early.** Until Chunk 4, `DemoTour` measured once, 60 ms after the route
+   changed. That is a race against the destination painting, and it lost it on every step
+   reached by a navigation — six of seven — while working perfectly on the one step that shares
+   a route with its predecessor. It also passed on localhost and failed on production, because
+   the difference is network latency on the RSC fetch. `useAnchorRect` now polls **and** runs a
+   `MutationObserver` with no deadline, so a late anchor still resolves. **Do not replace that
+   observer with a longer timeout** — a timeout is a guess about someone else's latency, and
+   that guess is the original bug.
+2. **Anchoring to something that is not rendered.** An element inside a `display:none` subtree
+   measures 0×0. `/admin/orders` renders its bookings twice (a `hidden md:block` table and a
+   `md:hidden` card list) and Tailwind picks on the **pane's** width, not the viewer's. The hook
+   treats 0×0 as "not ready yet" and keeps looking rather than latching a dead rect, but an
+   anchor placed only on the hidden copy will never resolve.
+
+**If you touch one of those pages:** grep `data-tour` before and after, and walk the tour on the
+demo tenant with the console open.
 
 ---
 
