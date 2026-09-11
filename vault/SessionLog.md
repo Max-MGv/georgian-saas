@@ -10,8 +10,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ## 2026-09-11 (session 9) — Chunk 2: #418 diagnosed. It doesn't fire from Georgia, and that's the whole story
 
-**Nothing shipped. No code was touched.** Chunk 2 tasks 2.1 and 2.2 are done; 2.3–2.5 are blocked
-on one decision from Max. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 2 notes.
+**Shipped to `staging` as `30bbcc7`, verified on Staging Winery. Not merged to `master` — that
+is Max's call.** Chunk 2 tasks 2.1, 2.2, 2.3 and 2.5 are ✅; 2.4 is done on staging and pending on
+production. Full write-up in [[DemoSite/Plan-DemoFlowFixes]] Chunk 2 notes.
 
 **The headline: React #418 does not currently fire anywhere.** Checked local dev (`/`, `/wines`,
 `/admin/orders`, `/admin/statistics` on Staging Winery — dev mode is where React prints the exact
@@ -47,10 +48,30 @@ The bug is intermittent and data-dependent (the nightly 03:00 UTC reseed changes
 in the bad window), which also explains why the teardown saw it this morning and this session
 did not.
 
-**Blocked on Max:** which timezone is authoritative for a booking date? Recommendation is the
-winery's own zone (`Asia/Tbilisi`), so "20 Oct" reads as 20 Oct to everyone including an owner
-abroad. Then 2.3 is two one-line pins → **shared files, so `staging` pass + Staging Winery
-regression check** before `master`.
+**Then Max approved the fix** (pin to `Asia/Tbilisi`, fix both now), so it was built and shipped
+to `staging` as `30bbcc7`:
+
+- `OrdersTable.tsx` — `timeZone: 'Asia/Tbilisi'` added to `formatDate`. The winery's own zone, so
+  a booking for 20 Oct reads "20 Oct" to everyone, including an owner checking from abroad.
+- `StatisticsV2.tsx` — all five `toLocaleString()` calls given an explicit `'en-US'`, which is
+  what they already rendered, so nothing changed visually (`1,800₾` still `1,800₾`).
+
+Both carry a comment explaining the pin so a later tidy-up doesn't remove it.
+
+**Verified on `staging` against Staging Winery** — the check that crosses the boundary the bug
+lives on, since staging's server renders UTC (`fra1`) while the browser ran Asia/Tbilisi.
+`/admin/orders`: all 10 distinct dates present on both the server HTML and the hydrated DOM,
+none one-sided, and identical to what the local Tbilisi-based dev server produced from the same
+database — a UTC server and a Tbilisi server now agree, which is exactly the dependence the pin
+removes. `/admin/statistics`, `/` and `/wines` consoles clean, no demo chrome on Staging Winery,
+`tsc --noEmit` clean.
+
+**Not merged to `master`.** Rule 0 — that merge ships to Nikalas Marani's live site and is Max's
+call. Task 2.4's production half and the [[KnownBugs]] entry's final close both wait on it.
+
+**Deliberately not swept up:** the same unpinned `toLocale*` pattern exists in ~10 other admin and
+super-admin files. None are on the five routes this bug was reported against, so they were left
+alone rather than widening a change that needed a focused staging check. Sensible follow-up.
 
 **Housekeeping:** the Chunk 1 test booking (Luka Testashvili) was not checked this session —
 still worth confirming the nightly reseed cleared it.

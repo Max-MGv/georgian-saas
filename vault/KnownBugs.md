@@ -88,7 +88,7 @@ fix plan rather than last — it may be on the critical path for the flagship.
 
 ---
 
-## Hydration mismatch on public site pages (observed 2026-09-11, narrowed 2026-09-11)
+## ✅ Hydration mismatch on public site pages (observed 2026-09-11, diagnosed + fixed 2026-09-11)
 
 > **Update, 2026-09-11 (teardown session):** confirmed live on **production**, on **every** route
 > checked — `/`, `/wines`, `/admin/orders`, `/admin/statistics`, `/live` — not just local dev and
@@ -155,6 +155,38 @@ exposed to it.
 > **Status: diagnosed, not yet fixed.** The fix is two one-line pins, but it touches shared files
 > and needs one product decision from Max — which timezone is authoritative for a booking date.
 > Tracked as Chunk 2 tasks 2.3–2.5 of [[DemoSite/Plan-DemoFlowFixes]].
+
+### ✅ Resolved on `staging` 2026-09-11 — awaiting the `master` merge
+
+**Root cause:** two `toLocale*` calls in `'use client'` components that did not pin the setting
+they depend on, so the server render and the hydration render used different ones.
+
+- `saas/app/admin/(panel)/orders/OrdersTable.tsx` — `toLocaleDateString('en-GB', …)` had no
+  `timeZone`, so it used UTC on the server and the viewer's zone in the browser.
+- `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — five `toLocaleString()` calls had no
+  locale at all, so en-US on the server and the viewer's in the browser.
+
+**Fix:** `timeZone: 'Asia/Tbilisi'` on the date formatter — the winery's own zone, so a booking
+for 20 Oct reads "20 Oct" to everyone including an owner abroad — and an explicit `'en-US'` on
+all five number formatters, which is what they already rendered, so nothing changed visually.
+Both sites carry a comment explaining the pin so it does not get tidied away. Commit `30bbcc7`.
+
+**Verified on `staging` against Staging Winery**, which is the check that crosses the boundary
+the bug lives on: the server renders UTC (`fra1`), the browser ran Asia/Tbilisi. `/admin/orders`
+— all 10 distinct dates present on both the server HTML and the hydrated DOM, none one-sided,
+and byte-identical to what a Tbilisi-based dev server produced from the same database.
+`/admin/statistics`, `/` and `/wines` consoles clean; no demo chrome on Staging Winery;
+`tsc --noEmit` clean.
+
+**Still open until:** Max merges `staging` → `master` ([[ClaudeInstructions]] Rule 0 — that merge
+ships to Nikalas Marani's live site), then the console is re-checked on the five production
+routes. Tracked as task 2.4 of [[DemoSite/Plan-DemoFlowFixes]].
+
+**Worth keeping in mind:** the same unpinned pattern exists in other admin and super-admin files
+(`CalendarView`, `OrderDetail`, `WineOrdersClient`, `StatisticsClient`, `WineStatistics`,
+`PackingView`, the `super-admin/*` clients). None of them are on the five routes this bug was
+reported against, so they were deliberately left alone rather than swept up in a fix that needed
+a focused staging check — but they carry the same latent risk and are a sensible follow-up.
 
 **Not investigated:** the specific mismatching text was not identified — likely a
 date/locale or price format rendered differently on server and client. Worth a dedicated

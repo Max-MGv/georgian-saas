@@ -29,7 +29,7 @@ the live mirror's landing moment — all find their target and then never show i
 | Chunk | What | Ship route | Status |
 |---|---|---|---|
 | **1** | The flagship lands — mirror scrolls to the new booking (+ mobile copy) | demo-only → `master` | ✅ Done (2026-09-11, verified on production) |
-| **2** | The hydration mismatch (React #418) | shared → `staging` | 🚧 In progress — diagnosed 2026-09-11, fix awaiting Max |
+| **2** | The hydration mismatch (React #418) | shared → `staging` | 🚧 Fixed + verified on `staging` — awaiting Max's merge to `master` |
 | **3** | Tour entry — no more "Tour paused", auto-start, real ending | demo-only → `master` | ⬜ Not started |
 | **4** | Tour + rail anchoring — make the spotlight actually spotlight | shared → `staging` | ⬜ Not started |
 | **5** | Demo chrome palette + front door layout | demo-only → `master` | ⬜ Not started |
@@ -39,13 +39,12 @@ the live mirror's landing moment — all find their target and then never show i
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 **Chunk 2 is diagnosed but not fixed — waiting on Max.** Read
-Chunk 2's "Notes / decisions" in full before touching it; 2.1 and 2.2 are done and the answer is
-written up there, so there is nothing left to investigate. #418 does not currently reproduce on
-any route in any environment, and the two `toLocale*` call sites that can produce it are named
-with the mechanism demonstrated. **Blocked on one product decision** (which timezone is
-authoritative for a booking date) before 2.3 can be applied. Do not start Chunk 3.
-[[ClaudeInstructions]] Rule 8 still applies per chunk — Max has approved Chunks 1 and 2 only.
+**Overall resume point:** 🔜 **Chunk 2 is fixed and verified on `staging`; the merge to
+`master` is Max's to make.** Both `toLocale*` call sites are pinned (`Asia/Tbilisi` for dates,
+`en-US` for numbers) and checked on Staging Winery across the UTC-server / Tbilisi-browser
+boundary the bug lives on. Once Max merges, re-check the five routes on production and tick 2.4.
+**Then Chunk 3** — but Rule 8 applies per chunk, and Max has approved Chunks 1 and 2 only, so
+ask before starting it.
 
 ---
 
@@ -296,14 +295,12 @@ Console after the booking: only the pre-existing React #418, no new errors from 
 
 ## Chunk 2 — The hydration mismatch (React #418)
 
-**Status:** 🚧 In progress — 2.1 and 2.2 done (diagnosed); 2.3–2.5 blocked on Max.
-**Resume point:** **Diagnosis is complete and written up below — do not re-investigate.** #418
-does not currently fire on any route in any environment; the two `toLocale*` call sites that can
-cause it are named, with the mechanism demonstrated. What is left is 2.3 (apply the two one-line
-pins), 2.4 (verify on staging + production) and 2.5 (close the [[KnownBugs]] entry). 2.3 needs
-**Max's answer on which timezone is authoritative** — see "Recommended fix" at the end of the
-notes — and it touches shared files, so it takes the `staging` pass with a Staging Winery
-regression check.
+**Status:** 🚧 Fixed and verified on `staging` — one step left, and it is Max's to take.
+**Resume point:** 2.1, 2.2, 2.3 and 2.5 are ✅; 2.4 is done on `staging` and pending on
+production. **The only outstanding action is merging `staging` → `master`, which is Max's call
+per [[ClaudeInstructions]] Rule 0** — it ships to Nikalas Marani's live site. After that merge,
+re-check the console on the five routes on production and tick 2.4. Do not re-investigate the
+diagnosis; it is written up in full below.
 **Ship route:** shared file (wherever the culprit lives) → `staging` pass required.
 **Fixes:** report finding C1. Already logged in [[KnownBugs]] as an open, undiagnosed note.
 
@@ -340,11 +337,12 @@ page before React settles gets wiped**.
 - [x] **2.2 — Identify the offending text node** and record it here. **Done — but the honest
       answer is "there are two call sites, not one node, and neither fires from Georgia."**
       See the notes below.
-- [ ] **2.3 — Fix it** by pinning the timezone/locale (or moving the formatting to a point
+- [x] **2.3 — Fix it** by pinning the timezone/locale (or moving the formatting to a point
       where server and client agree).
-- [ ] **2.4 — Verify the console is clean** on all five routes above, on **production** after
-      deploy, and re-check that Chunk 1's outline now survives.
-- [ ] **2.5 — Close the [[KnownBugs]] entry** properly, including the "Hydration mismatch on
+- [~] **2.4 — Verify the console is clean** on all five routes above, on **production** after
+      deploy, and re-check that Chunk 1's outline now survives. **Staging half done** (see notes);
+      the production half waits on Max merging `staging` → `master`.
+- [x] **2.5 — Close the [[KnownBugs]] entry** properly, including the "Hydration mismatch on
       public site pages" section, not just a status flip.
 
 ### Notes / decisions
@@ -442,6 +440,38 @@ future non-Georgian tenant's staff. That makes the fix:
 
 Both are one-line changes, both are **shared files** → `staging` pass + Staging Winery
 regression check before `master`, per ground rule 2.
+
+##### The fix, and what staging proved (2026-09-11)
+
+Max chose **pin to `Asia/Tbilisi`** and **fix both now**. Shipped to `staging` as `30bbcc7`
+(code) + `98180c4` (vault), deployed `fra1`, verified on **Staging Winery** — a real tenant,
+per ground rule 2.
+
+- `OrdersTable.tsx` — `timeZone: 'Asia/Tbilisi'` added to `formatDate`'s options.
+- `StatisticsV2.tsx` — all five `toLocaleString()` calls given an explicit `'en-US'`, which is
+  what they already rendered here, so nothing changes visually.
+
+Both carry a comment explaining why the pin is there, so nobody "tidies" it away later.
+
+**The verification that actually matters**, because it crosses the boundary the bug lives on:
+staging's server renders in **UTC** (`fra1`) and the browser ran **Asia/Tbilisi**. Compared the
+server HTML against the hydrated DOM on `/admin/orders` — **all 10 distinct dates present on both
+sides, none appearing on only one side.** And those strings are *identical* to what the local dev
+server produced rendering the same dev database from **Asia/Tbilisi**. A UTC server and a Tbilisi
+server now agree, which is precisely the dependence the pin removes.
+
+| Check, on staging (Staging Winery) | Result |
+|---|---|
+| `/admin/orders` console | clean; 17 rows render |
+| `/admin/orders` SSR-vs-DOM dates | 10/10 match, 0 one-sided |
+| `/admin/statistics` console | clean; server-rendered `1,800₾` matches DOM, grouping preserved |
+| `/` and `/wines` console | clean |
+| Demo chrome on Staging Winery | absent, as required |
+| `tsc --noEmit` | clean |
+
+**Not yet on production.** [[ClaudeInstructions]] Rule 0 — the `staging` → `master` merge is
+Max's call, and it ships to Nikalas Marani's live site. Task 2.4's production half is done once
+that merge happens.
 
 ---
 
