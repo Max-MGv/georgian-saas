@@ -337,3 +337,32 @@ chrome normally mounts. `saas/app/admin/onboarding/layout.tsx` exists solely to 
 
 ---
 
+## 17. Three mobile hit areas are invisible to `getBoundingClientRect` — measure the hit, not the box
+
+**What the dependency is:**
+Three controls were made thumb-sized in the 2026-09-12 product mobile pass **without changing
+their visual size**, because making the visual bigger would have been wrong in each case:
+
+| Control | Visual box | Actual hit area | How it is done |
+|---|---|---|---|
+| `components/HelpHint.tsx` "?" | 16x16 | ~30x39 | absolutely-positioned `<span aria-hidden>` child, `-inset-y-3 -inset-x-2` |
+| `SettingsClient.tsx` `Toggle` | 44x24 | 44x39 | same pattern, `inset-x-0 -inset-y-2` |
+| `OrdersTable.tsx` card-list status pill | 87x26 | 87x41 | `py-2 -my-2` on the wrapper `div`, which already owned the `onClick` |
+
+**Why it bites:** an audit script that reads each element's own rect reports the **old** numbers
+for all three and looks like a regression that was never fixed — or worse, invites someone to
+"fix" it again by enlarging the visual. Verify these with `document.elementFromPoint`, walking
+outward from the control's centre until the hit stops resolving inside it.
+
+**The two asymmetries are deliberate, not sloppy:**
+- HelpHint grows further vertically than horizontally because it sits inline beside a label and,
+  on `/admin/companies`, beside another button ([[KnownBugs]] #15). A symmetric expansion would
+  start stealing that button's taps.
+- The status pill grows vertically only because the whole booking card is a link to the order —
+  widening sideways would turn taps meant for the guest's name into status changes.
+
+**Related: `md:`, never `sm:`.** Every desktop reset in that pass uses `md:` (768px), matching
+`lib/useIsNarrow.ts` and the `md:hidden` / `hidden md:block` split on `/admin/orders`. Tailwind's
+default `sm:` is 640px, which would hand 640–767px tablets the desktop sizes while the admin
+still served them the phone card list. If you add a narrow-only rule here, use `md:`.
+

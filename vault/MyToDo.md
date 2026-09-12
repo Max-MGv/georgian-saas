@@ -8,6 +8,46 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 📱 2026-09-12 — the mobile pass on the product, on staging now
+
+You said go, so this is done and pushed to **`staging`** — not to the real site yet. Check it at
+`georgian-saas-git-staging-mg-productions-projects.vercel.app` **on your actual phone**, then
+tell me whether to merge to `master`.
+
+**What changed:** nothing moved and nothing was redesigned. About 25 buttons got bigger to
+*touch*, mostly without looking any different. The ones you will notice:
+
+- The **phone / email / Facebook / Instagram icons** in the site header. They were 17px — smaller
+  than a fingertip. Tap the phone icon on your phone; it should now just work.
+- The **☰ menu button**, the **calendar icon** in the booking form, and the **Terms / Privacy /
+  Returns** links at the bottom.
+- On **Order Wine**: the filter pills (All / Red / Dry / 2024…), the grid-vs-list switch, and the
+  **+ / −** quantity buttons.
+- In the **admin panel**: the nav links along the top, Sign out, Table/Calendar, + New Order, the
+  **status dropdown on each booking card** (the one you tap to mark something Confirmed), the
+  **"?" help buttons**, and every on/off switch and little pencil icon on Settings.
+
+**On a laptop it should look exactly the same as before.** That is the main thing to sanity-check
+— if anything on desktop looks different, that is a bug and I want to know.
+
+**Three things I deliberately did not push all the way to 40px**, each for a reason I measured:
+the header icons (16px gap between them — any bigger and they start stealing each other's taps),
+the wine filter pills (40px cost two extra rows of wrapping and pushed the wines off screen), and
+the word "Terms" (it is only 35px wide).
+
+**One thing I left alone, because you said so:** the admin nav on a phone — nine links in a
+sideways scroller. It works; turning it into a drawer is a redesign, not a fix.
+
+### Still needs you, and I could not do it
+
+**Press "Reset demo now" in super-admin.** You told me to, but getting into `/super-admin` needs a
+real password login and I do not type passwords. The demo's one-click shortcut signs in as the
+*demo tenant's admin*, not as super-admin — there is no "Platform" link in its nav. So this one is
+still yours. Same for eyeballing **Staging Winery's** `/admin/orders`, `/admin/statistics` and
+`/admin/companies` — that tenant has no one-click login either.
+
+---
+
 ## 🎨 2026-09-12 — two new things on the demo
 
 **A theme catalogue.** Open the rail on `demo.vineworks.ge` (the tab on the right edge) →
@@ -22,10 +62,8 @@ the small buttons in the demo bar are actually tappable. Worth opening
 **One thing I found while doing it:** `/live` — the side-by-side mirror, your best screen — was
 still in the old purple while everything else had moved to the wine palette. Fixed.
 
-**One decision for you.** The parts of the demo that are still fiddly on a phone are all *shared*
-product screens, not demo chrome: the "?" help buttons, the nav menu button, the date picker,
-the admin status dropdowns. Making those bigger changes the app for **every** winery, so I have
-not touched them. Want a proper mobile pass on the product itself? That is its own piece of work.
+**One decision for you.** ~~The parts of the demo that are still fiddly on a phone are all
+*shared* product screens...~~ **Answered 2026-09-12 — you said do it.** Done; see the entry above.
 
 ---
 

@@ -70,6 +70,7 @@ Complete this before writing a single line of product code.
 
 ### Polish before first client
 - [x] Responsive design (mobile-friendly) — public site + admin panel; iOS Safari zoom fixed
+- [x] **Mobile tap targets across the shared product** (2026-09-12, `fe22fb4`) — ~25 controls on the guest site and admin panel raised from 15–36px to 38–45px at iPhone size. No layout changes: the audit found zero horizontal overflow. Desktop byte-identical. Remaining open item is the `/admin/orders` nav scroller, left as is on Max's call.
 - [x] Error states and loading indicators — loading skeleton, Saving…/Deleting… button text, error messages on forms
 - [x] Confirm dialogs before delete (admin) — inline Yes/No in orders, companies, price tiers
 

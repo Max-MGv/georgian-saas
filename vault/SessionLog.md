@@ -8,6 +8,61 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 — the product's mobile pass: hit area, not layout
+
+The handoff ([[HANDOFF-MobileProduct]]) opened by ruling things out, and re-measuring confirmed
+it was right to: **no horizontal overflow on any screen**, on `/`, `/wines`, `/admin/orders`,
+`/admin/companies` or `/admin/settings`. Nothing here rebuilt a layout. Every change buys tap
+area and leaves the pixels alone. Shipped to `staging` as `fe22fb4`.
+
+### What the audit found that the handoff had not
+
+The four 17x17 targets are in the **header**, not the footer — phone, email, Facebook and
+Instagram, in `SiteNav`'s `md:hidden` branch. A `tel:` link at 17x17 is the smallest thing a
+guest is most likely to reach for, and it was mislabelled as a footer problem.
+
+The handoff also over-weighted the date picker. `DateInput`'s text field already calls
+`showPicker()` on focus, so tapping anywhere in the 44px field opens the calendar; the 15x15
+button is a redundant second path, not a dead end. Still widened to 40x45, but it was not
+costing bookings.
+
+### Three numbers that are deliberately short of 40
+
+Worth recording, because each is a real constraint rather than an oversight:
+
+- **Header icons stop at 33 wide.** The row's gap is 16px, so a symmetric expansion past 33
+  makes adjacent icons steal each other's taps. Height is free — they get 41.
+- **Filter chips stop at 38 tall.** 40 was built and measured first: it cost two extra rows of
+  wrapping and pushed the wines below the fold. Reverted on the measurement, not on taste.
+- **"Terms" is 35 wide** because the word is 35px wide. Height fixed at 40.
+
+### The three fixes a bounding box cannot see
+
+`HelpHint`, the settings on/off switches and the orders card-list status pill all keep their
+visual size and gain an **invisible** hit area (an absolutely-positioned child, or padding on a
+wrapper that already owned the click handler). `getBoundingClientRect` still reports 16x16,
+44x24 and 87x26 for them. They were verified instead with `document.elementFromPoint`, walking
+outward from the centre until the hit stops resolving to the control: **~30x39, 44x39 and
+87x41**. Anyone re-running the audit will see the old numbers and should not treat that as a
+regression — measure the hit, not the box.
+
+### The breakpoint that was nearly wrong
+
+The first pass used Tailwind's default `sm:` (640px) for the desktop resets. This project's
+narrow breakpoint is **767px** — `lib/useIsNarrow.ts`, and the `md:hidden` / `hidden md:block`
+split on `/admin/orders`. `sm:` would have handed 640–767px tablets the desktop sizes while the
+admin still showed them the phone card list. All resets moved to `md:`.
+
+**Left open, on Max's answer:** the `/admin/orders` nav scroller — nine links running to x=865
+inside 390px. It works; replacing it with a drawer or overflow menu is a design decision, not a
+tap-target fix. Asked and answered this session: leave it.
+
+**Not done, and it needs Max:** pressing super-admin's "Reset demo now". Reaching `/super-admin`
+needs a real password login, which Claude does not perform — the demo's one-click shortcut signs
+in as the demo tenant's admin, not as `super_admin` (no "Platform" link appears in its nav).
+
+---
+
 ## 2026-09-12 — theme catalogue, and the demo on a phone
 
 Both of the plan's deferred items, on Max's pick.
