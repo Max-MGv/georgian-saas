@@ -24,6 +24,7 @@ tags: [bugs]
 | 16 | `/wines` Grid view / List view toggle buttons are hardcoded English literals with no `t()` key backing — never translate in any locale | Public / Wine Catalogue | 🟢 Resolved |
 | 17 | `app/actions/prices.ts` — `createPrice`/`updatePrice`/`deletePrice` bypassed tenant isolation entirely (raw `db` instead of `withTenantDb`), letting a tenant-A admin write/delete another tenant's pricing data by passing a cross-tenant `companyId`/`priceId` | Security / DB | 🟢 Resolved |
 | 18 | Public site nav bar (`SiteNav.tsx`) — Georgian's two-word labels ("ჩვენ შესახებ"/About, "ღვინის შეკვეთა"/Order Wine) wrapped onto 2 lines at desktop widths, uneven with the single-word labels that couldn't wrap | Public / Nav | 🟢 Resolved |
+| 30 | Nightly demo reseed did not run — `demo.vineworks.ge` still shows a hand-made booking ("Luka Testashvili") and 395 orders after the 2026-09-12 03:00 UTC window closed, on a stable deployment with `CRON_SECRET` correctly configured | Demo / Infrastructure | 🔴 Open |
 | 19 | No protection against concurrent-traffic bursts — production hits a hard 200-connection DB ceiling around 100-150 simultaneous visitors, causing a whole-site outage (including tenant routing) that outlasted the burst by several minutes; zero rate limiting anywhere in the app | Infrastructure | 🔴 Open |
 | 20 | Admin panel (`/admin`) doesn't respect tenant theme presets — the nav shell, page background, banners and most UI are hardcoded to the "Cream & wine" preset's exact hex values instead of the `--site-*` CSS vars; only isolated spots (e.g. `var(--color-brand)`) pick up the tenant's actual theme | Admin (all pages) | 🟢 Resolved |
 | 21 | Same bug as #20, one level down: nearly every individual admin page body (`CompaniesClient.tsx`, `ContentClient.tsx`, `WinesClient.tsx`, `SettingsClient.tsx`, `OrdersTable.tsx` and ~15 other admin files) independently defines its own hardcoded cream-preset color constant for cards/tables/borders; two shared components used during admin editing (`HelpHint.tsx`, `EditableLongText.tsx`) carry the same bug onto tenant-facing pages too | Admin (nearly all pages) / Shared components | 🟢 Resolved |
@@ -337,6 +338,61 @@ a focused staging check — but they carry the same latent risk and are a sensib
 **Not investigated:** the specific mismatching text was not identified — likely a
 date/locale or price format rendered differently on server and client. Worth a dedicated
 look; start by expanding the full error in the browser console on `/wines`.
+
+---
+
+## Bug #30 — The nightly demo reseed did not run (2026-09-12)
+
+**Status: 🔴 Open.** This is the check [[SessionLog]]'s 2026-09-12 entry asked for, and it failed.
+
+### What the previous session established
+
+It argued — correctly — that the earlier "the reseed is broken" claim did not hold up, because
+the test booking was created on 2026-09-11 during Tbilisi daytime and **no reseed window had
+occurred since**. It set an explicit criterion: *"The next run is 03:00 UTC and should clear both
+extra rows. If they survive **that**, it is a real bug."*
+
+### The criterion is now met
+
+Measured 2026-09-12 at ~06:55 UTC — i.e. after the 02:00–04:00 UTC window (Hobby crons fire
+within ±1 hour, [[MaintenanceNotes]] §14):
+
+| Check | Result |
+|---|---|
+| Bookings on production demo | **395** — unchanged from before the window |
+| "Luka Testashvili" present | **yes** |
+| Is that name generator output? | **No.** `lib/demoSeed.ts` `GUEST_LAST` has no `Testashvili`; `GUEST_FIRST` has `Lukas`, not `Luka`. It is hand-made. |
+| Was the deployment stable overnight? | **Yes.** Production deploy 2026-09-11 21:46 UTC held until 05:45 UTC today; the window fell entirely inside it. |
+| Is `CRON_SECRET` configured? | **Yes.** Unauthenticated GET returns **401**, not the 503 the route emits when the variable is missing. |
+
+`seedDemoTenant` does `db.order.deleteMany({ where: { tenantId } })` — there is no filter that
+could spare one row. So either the cron never fired, or the handler fired and failed.
+
+### What was NOT ruled out, and how to rule it out
+
+- **Whether the cron fired at all.** Vercel Hobby retains runtime logs for **1 hour**, so by the
+  time anyone looks in the morning the evidence is already gone. This is the single biggest
+  obstacle to diagnosing this bug and it will recur on every attempt.
+- **Whether the handler throws.** The route catches and returns 500 with a message, which would
+  also be invisible after an hour.
+- **Whether the row is genuinely the survivor** rather than a new booking a visitor made after
+  04:00 UTC. Checking `Order.createdAt` on the production demo tenant settles it in one query.
+
+### Suggested first move
+
+Trigger the reseed by hand and watch what comes back — the route returns the created counts on
+success and the error message on failure, so a single call distinguishes "cron never fired"
+(manual run succeeds) from "handler is broken" (manual run fails with the reason):
+
+```
+curl -H "Authorization: Bearer $CRON_SECRET" https://demo.vineworks.ge/api/cron/reseed-demo
+```
+
+If that succeeds, the handler is fine and the problem is scheduling. The practical fix for the
+log-retention blind spot is to have the handler write its own result somewhere durable (a
+`Setting` row on the demo tenant — last-run timestamp and counts) so the next investigation does
+not depend on catching a 1-hour window.
+
 
 ## Bug #19 — No protection against concurrent-traffic bursts; production hits a hard DB connection ceiling around 100–150 simultaneous visitors, causing a whole-site outage that outlasts the burst
 

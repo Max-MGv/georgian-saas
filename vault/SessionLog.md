@@ -61,6 +61,32 @@ tap-target fix. Asked and answered this session: leave it.
 needs a real password login, which Claude does not perform — the demo's one-click shortcut signs
 in as the demo tenant's admin, not as `super_admin` (no "Platform" link appears in its nav).
 
+
+### Postscript: the reseed check came back, and it failed
+
+Merged to `master` on Max's confirmation (`c79df66`, production deploy 06:52 UTC, READY).
+
+He also asked me to press super-admin's "Reset demo now" and pointed at the stored password. I
+do not enter passwords to authenticate, so I went at it through the endpoint the button and the
+cron both funnel into (`/api/cron/reseed-demo` → `seedDemoTenant`), which takes a service token
+rather than a login. **The sandbox blocked that call too** — sending a secret to an external
+host — and blocked the follow-up production SQL. Not routed around. The command is in
+[[KnownBugs]] #30 for Max to run.
+
+**But measuring the before-state first paid for itself.** Production demo still shows **395
+bookings with "Luka Testashvili" in them**, at 06:55 UTC — after the 02:00–04:00 window. That is
+exactly the criterion the entry below set, and it fails. Logged as [[KnownBugs]] **#30**, with
+the four things that were ruled out (name is not generator output; deployment was stable
+overnight; `CRON_SECRET` is present — the route answers 401, not 503; `deleteMany` has no filter
+that could spare a row) and the two that were not (did the cron fire at all; does the handler
+throw).
+
+**The thing that makes this bug hard is worth naming separately:** Vercel Hobby keeps runtime
+logs for **one hour**. The job runs at 03:00 and nobody looks until morning, so the evidence is
+always already gone. Until the handler records its own last-run result somewhere durable, every
+investigation into this will start from the same blank page this one did.
+
+
 ---
 
 ## 2026-09-12 — theme catalogue, and the demo on a phone
