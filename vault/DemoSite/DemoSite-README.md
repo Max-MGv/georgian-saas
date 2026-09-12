@@ -20,6 +20,7 @@ platform. **If you are a new session picking this work up, read in this order.**
 | 3 | [[Research-DemoPatterns]] | Industry research behind the decisions, with sources and a caveat about the numbers. |
 | 4 | [[Plan-DemoSite]] | The original build log — how the demo tenant, rebranding, role-switcher and prod cutover were done (2026-09-10). History, not current work. |
 | 5 | `demo-directions.html` | Source of the published design-review artifact, with mockups drawn on the real UI. Re-publish or edit this rather than rebuilding it. |
+| 6 | [[Prompt-ExploreControlAndAnalytics]] | Two ready-to-paste prompts for the two items still sitting in Plan-DemoFlowFixes.md's "Deferred" list: merging the tour pill/rail tab into one control, and instrumenting the demo with analytics. |
 
 **Published artifact (the visual version of [[DemoDirections]]):**
 https://claude.ai/code/artifact/8775d152-5e9a-44d4-9380-e334b305cc7f
