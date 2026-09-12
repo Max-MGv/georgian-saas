@@ -9,6 +9,7 @@ Automated regression tests for the Georgian SaaS site, run after changes to veri
 ## Start here
 
 - **New to this suite?** Read this file, then `ARCHITECTURE.md`.
+- **Non-technical, just want to see what a run did (report, video, sanity checks)?** `HOW-TO-CHECK-A-TEST.md`.
 - **Debugging a failing test?** Check `KNOWN-ISSUES.md` first — most failures so far have matched a known, already-diagnosed pattern rather than a new regression.
 - **Adding a test?** `ARCHITECTURE.md`'s "Conventions for adding a new test" section.
 - **Want current status?** `Progress.md`.
