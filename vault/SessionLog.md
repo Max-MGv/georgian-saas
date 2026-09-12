@@ -65,10 +65,28 @@ start (`{auto:false}`), `tour_abandoned {step:2}`, and `booking_placed` from a *
 through the real form**. Negative test: browsing the real tenant wrote **zero** rows, and a direct
 POST from that tenant naming the demo tenant in its body wrote zero rows and returned 204.
 
-**Not yet done, deliberately — needs Max:** the `DemoEvent` migration and `setup-rls.ts` have
-been run against **dev only**. Production needs `prisma migrate deploy` + `setup-rls.ts` as its
-own deliberate step (Rule 0), after the `staging` → `master` merge. Until then the live demo
-records nothing.
+### Shipped to production the same day
+
+Max gave the go-ahead, so both pieces went the whole way: `staging` → `master` (fast-forward to
+`91854d8`), Vercel production READY, then the database as its own deliberate step (Rule 0).
+
+- **`prisma migrate deploy` against prod**, run from `saas/.env.prod.backup`. One pending
+  migration, purely additive (`CREATE TABLE "DemoEvent"` + two indexes) — read before applying.
+- **RLS scoped to the new table only**, not a full `setup-rls.ts` re-run: that script DROPs and
+  re-CREATEs `tenant_isolation` on fourteen live customer tables, which is a far bigger blast
+  radius than one new table needs. The four statements it would have produced for `DemoEvent`
+  were applied by hand and verified — policy present, RLS enabled, `app_user` holds
+  SELECT/INSERT/UPDATE/DELETE. `setup-rls.ts` stays the source of truth and now lists
+  `DemoEvent`, so a future full run matches what is there.
+- **Verified live on demo.vineworks.ge:** one Explore pill, no rail tab, no old tour pill, panel
+  opens with the tour card — and three events landed in the **prod** `DemoEvent` table against
+  the prod demo tenant (`cmtvi582n…`). Those three rows are this verification visit, not a
+  visitor.
+
+**One footgun removed while doing it:** `scripts/demo-funnel.ts` first resolved the demo tenant
+from an env var whose default was the **dev** id, so running it against production would have
+reported "no events" rather than an error. It now resolves by slug (`vineworks-demo`), which is
+the same in both databases, and says so plainly if the slug is missing. Checked against both.
 
 ---
 

@@ -20,8 +20,17 @@ import { PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 
-/** Which tenant's events to read. Matches NEXT_PUBLIC_DEMO_TENANT_ID. */
-const DEMO_TENANT_ID = process.env.NEXT_PUBLIC_DEMO_TENANT_ID ?? 'cmtvgl6e60000vl6w9se65t86'
+/**
+ * Which tenant's events to read — resolved by **slug**, not by id.
+ *
+ * The demo tenant has a different id in each database (`cmtvgl6e6…` in dev,
+ * `cmtvi582n…` in prod), so an id from an env var is a quiet way to run this
+ * against production and be told there is no data. The slug is the same in both.
+ */
+async function demoTenantId(): Promise<string | null> {
+  const tenant = await db.tenant.findUnique({ where: { slug: 'vineworks-demo' }, select: { id: true } })
+  return tenant?.id ?? null
+}
 
 function bar(n: number, of: number, width = 28): string {
   if (of <= 0) return ''
@@ -38,8 +47,14 @@ async function main() {
   const days = Number(process.argv[2] ?? 30)
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 
+  const tenantId = await demoTenantId()
+  if (!tenantId) {
+    console.log('\nNo tenant with slug "vineworks-demo" in this database — wrong DATABASE_URL?\n')
+    return
+  }
+
   const events = await db.demoEvent.findMany({
-    where: { tenantId: DEMO_TENANT_ID, createdAt: { gte: since } },
+    where: { tenantId, createdAt: { gte: since } },
     orderBy: { createdAt: 'asc' },
   })
 

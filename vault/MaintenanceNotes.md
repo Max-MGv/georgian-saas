@@ -461,4 +461,14 @@ so a `booking_placed` event outlives the booking row it describes. That is delib
 is demo furniture, the event is the measurement.
 
 **Reading it:** `npx tsx scripts/demo-funnel.ts [days]` from `saas/`. Counts are by session, not
-by event.
+by event. It resolves the demo tenant **by slug**, because the tenant's id differs per database
+(`cmtvgl6e6…` dev, `cmtvi582n…` prod) and an id from an env var is a quiet way to run it against
+production and be told there is no data.
+
+**Adding this table to a database:** the migration is additive, but the RLS half was applied to
+`DemoEvent` **alone** on production rather than by re-running `setup-rls.ts`. That script DROPs
+and re-CREATEs `tenant_isolation` on fourteen live customer tables; between the DROP and the
+CREATE the table fails closed, so nothing leaks, but a live request can still error for a reason
+unrelated to the change. For one new table, apply the four statements it would produce (GRANT,
+ENABLE ROW LEVEL SECURITY, DROP POLICY IF EXISTS, CREATE POLICY) and verify with `pg_policies`.
+`setup-rls.ts` remains the source of truth and lists `DemoEvent`, so a future full run matches.
