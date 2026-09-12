@@ -9,6 +9,7 @@ import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { useIsNarrow } from '@/lib/useIsNarrow'
+import { trackDemo } from '@/lib/demoAnalytics'
 import {
   TOUR_STATE_EVENT,
   TOUR_STEPS,
@@ -270,6 +271,11 @@ export default function DemoExplore({ tenantId }: { tenantId: string }) {
   }, [open])
 
   const go = useCallback((c: Capability) => {
+    // Which capabilities a prospect picks is the closest thing this demo has to
+    // a stated requirement — the label, not the href, because the label is what
+    // they read before deciding. Fired before the branch so the theme-catalogue
+    // row, which answers in place rather than navigating, still counts.
+    trackDemo('capability_clicked', { label: c.label })
     // A panel row answers in place. Navigating to /admin/settings to explain
     // "your colours are configurable" shows a form; repainting the site the
     // visitor is standing on shows the thing itself.
@@ -314,6 +320,13 @@ export default function DemoExplore({ tenantId }: { tenantId: string }) {
     sendTourCommand({ action: 'begin', index })
   }
 
+  /** The one way the panel opens, so all three openers — the idle pill, the
+   *  paused pill's compass, and anything added later — are counted once each. */
+  const openPanel = () => {
+    trackDemo('explore_opened')
+    setOpen(true)
+  }
+
   const pillBase: React.CSSProperties = {
     position: 'fixed',
     // Lifts over the wine catalogue's sticky cart bar, which publishes this var
@@ -338,7 +351,7 @@ export default function DemoExplore({ tenantId }: { tenantId: string }) {
           should meet one invitation, not two. ---- */}
       {!open && !spotlighting && !paused && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={openPanel}
           aria-haspopup="dialog"
           style={{
             ...pillBase,
@@ -371,7 +384,7 @@ export default function DemoExplore({ tenantId }: { tenantId: string }) {
           }}
         >
           <button
-            onClick={() => setOpen(true)}
+            onClick={openPanel}
             aria-label="Explore this demo"
             aria-haspopup="dialog"
             style={{

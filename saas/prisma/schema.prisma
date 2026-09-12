@@ -385,6 +385,58 @@ enum Sweetness {
   SWEET
 }
 
+/// One thing a visitor did on demo.vineworks.ge.
+///
+/// Added 2026-09-12 (Plan-DemoFlowFixes' second deferred item). Every conversion
+/// figure that shaped the demo's design — the tour's length, the feature list,
+/// the front door's four paths — came from a vendor's blog, not from this site:
+/// see Research-DemoPatterns.md's Caveat. This table is what turns those
+/// benchmarks into measurements.
+///
+/// **Why our own table rather than an analytics product:** the Vercel team is on
+/// Hobby, where Web Analytics has no custom events at all and a one-month
+/// reporting window — page views that evaporate before a quarter is out, which
+/// is the opposite of what a "did the demo convert" question needs. A third
+/// party would have meant an external script, prospect traffic leaving the
+/// building, and a cookie-consent banner on a public EU-facing sales demo. This
+/// costs nothing, keeps everything first-party, uses no cookies, and retains
+/// forever.
+///
+/// **Deliberately holds no personal data.** No IP, no user agent, no name, no
+/// email — `sessionId` is a random per-tab string from sessionStorage that dies
+/// with the tab and identifies nobody. `props` carries only small non-identifying
+/// detail (which front-door path, which tour step, which capability row).
+///
+/// **The nightly reseed does not touch this table** (lib/demoSeed.ts deletes
+/// Payment/Order/WineOrder/Company/MenuItem/MasterclassItem only), so a
+/// "booking placed" event outlives the booking row it describes — which is the
+/// point: the row is demo furniture, the event is the measurement.
+///
+/// RLS follows the standard checklist (RLS-Architecture.md) even though this
+/// tenant is a fixed, known, publicly writable sandbox. The demo's threat model
+/// genuinely is different, but a table that opts out is a table someone has to
+/// remember is special; consistency is cheaper than the exception.
+model DemoEvent {
+  id        String   @id @default(cuid())
+  /// Always the demo tenant — the server action refuses anything else. Present
+  /// for RLS and so the table needs no special case in setup-rls.ts.
+  tenantId  String
+  /// A fixed vocabulary, defined in lib/demoAnalytics.ts. Kept as a String
+  /// rather than an enum so adding one is not a migration.
+  name      String
+  /// Small, non-identifying detail: { path: 'winery' }, { step: 4 }.
+  props     Json?
+  /// Where it fired. Null for events with no single route.
+  route     String?
+  /// Random per-tab id (sessionStorage, not a cookie). Groups one visit's
+  /// events together so a funnel is countable; identifies nobody.
+  sessionId String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, name, createdAt])
+  @@index([tenantId, sessionId])
+}
+
 enum WineDetailLevel {
   PRODUCT
   VINTAGE

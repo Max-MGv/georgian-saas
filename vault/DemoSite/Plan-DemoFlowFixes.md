@@ -1330,9 +1330,17 @@ pass. Both are Max's, and neither is a coding task:**
   off the demo. Verified end to end on the dev demo tenant — all seven steps ring their
   anchor, auto-start survives, the paused pill resumes, and every control clears 40 px on
   an iPhone 13. See [[MaintenanceNotes]] §18.
-- **Analytics on the demo** — still nothing is instrumented, so the conversion figures in
-  [[DemoDirections]] remain industry benchmarks rather than measurements of this site. Carried
-  from [[Plan-DemoRedesign]].
+- ~~**Analytics on the demo**~~ — ✅ **done 2026-09-12.** Scope and tool confirmed with Max
+  first: **named events, not just page views** (a conversion rate needs events; page views
+  cannot tell you who *finished* the tour), stored in **our own `DemoEvent` table** rather than
+  a product. The deciding fact was the plan: the Vercel team is on **Hobby**, where Web
+  Analytics has no custom events at all and a one-month reporting window — page views that
+  evaporate before a quarter is out. Our own table costs nothing, keeps prospect traffic
+  in-house, uses no cookies and therefore needs no consent banner on a public sales demo, and
+  retains forever. Eleven event names, all verified landing end to end; the gate is server-side
+  in the route handler, proven by a forged POST that named the demo tenant in its body and wrote
+  nothing. Read it with `npx tsx scripts/demo-funnel.ts`. See [[MaintenanceNotes]] §19 — in
+  particular why it must never become a server action.
 - **Two bugs from the original plan's carried-over list**, both affecting the real product not
   just the demo: the wine-order address field silently required for individuals, and
   Rkatsiteli mislabelled "RED DRY" (it is a white grape).

@@ -9,6 +9,7 @@ import { useIsNarrow } from '@/lib/useIsNarrow'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
 import { TOUR_AUTOSTART_KEY } from '@/lib/demoTour'
+import { trackDemo } from '@/lib/demoAnalytics'
 
 /**
  * The front door for demo.vineworks.ge — Plan-DemoRedesign Phase 1,
@@ -127,7 +128,15 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
     setOpen(true)
   }, [isDemo, atRoot])
 
+  /** Set by `choose`, so a dismissal that follows a path choice is not also
+   *  counted as a skip — "guest" closes the door by calling `dismiss` itself. */
+  const chose = useRef(false)
+
   const dismiss = useCallback(() => {
+    // Which of the five exits a visitor takes is the first question the demo's
+    // analytics exist to answer (lib/demoAnalytics.ts). Escape counts as a skip:
+    // it is the same decision, taken with the keyboard.
+    if (!chose.current) trackDemo('front_door_path', { path: 'skip' })
     markSeen()
     setOpen(false)
   }, [])
@@ -152,6 +161,8 @@ export default function DemoFrontDoor({ tenantId }: { tenantId: string }) {
 
   const choose = useCallback(async (key: string) => {
     setError(false)
+    chose.current = true
+    trackDemo('front_door_path', { path: key })
     if (key === 'guest') {
       dismiss()
       return

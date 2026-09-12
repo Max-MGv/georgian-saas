@@ -11,6 +11,7 @@ import DemoModeBanner from '@/components/DemoModeBanner'
 import DemoFrontDoor from '@/components/DemoFrontDoor'
 import DemoTour from '@/components/DemoTour'
 import DemoExplore from '@/components/DemoExplore'
+import DemoAnalytics from '@/components/DemoAnalytics'
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   // Was 6 separate getSetting() calls + a getContentMap(), each opening its own
@@ -50,6 +51,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <DemoModeBanner tenantId={tenantId} />
       <DemoTour tenantId={tenantId} />
       <DemoExplore tenantId={tenantId} />
+      <DemoAnalytics tenantId={tenantId} />
       <BreadcrumbTracker />
       {/* Public site: no logged-in submitter — anonymous reports (Phase 4 stores
           submitterEmail/submitterUserId as null here, per the plan). */}

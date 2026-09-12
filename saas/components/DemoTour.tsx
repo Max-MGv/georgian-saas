@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from 'next/navigation'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
@@ -9,6 +9,7 @@ import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { useIsNarrow } from '@/lib/useIsNarrow'
+import { trackDemo } from '@/lib/demoAnalytics'
 import {
   TOUR_AUTOSTART_KEY,
   TOUR_COMMAND_EVENT,
@@ -141,6 +142,18 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     scrollIntoView: true,
   })
 
+  /**
+   * A mirror of `state` for the analytics decisions below.
+   *
+   * They have to happen *outside* the `setState` updaters: an updater must be a
+   * pure function of its previous value, and React deliberately calls it twice
+   * in development StrictMode — an event fired in there would be counted twice
+   * in dev and once in production, which is the worst of both worlds for
+   * something whose entire job is to be a number you can trust.
+   */
+  const stateRef = useRef<TourState | null>(null)
+  useEffect(() => { stateRef.current = state }, [state])
+
   const update = useCallback((next: TourState) => {
     saveTourState(next)
     setState(next)
@@ -157,6 +170,12 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
    * the visitor to the step's screen; only wandering off mid-tour pauses.
    */
   const beginAt = useCallback((index: number, auto = false) => {
+    // Only a genuine start counts, not a step change: resuming or stepping
+    // through an already-running tour is not a second visitor starting one.
+    const before = stateRef.current
+    if (!before?.started || before.finished) {
+      trackDemo('tour_started', { step: index + 1, auto })
+    }
     setState(prev => {
       const next: TourState = {
         started: true,
@@ -174,6 +193,15 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   /** End the tour where the visitor stands. Used by Skip, by the last step's
    *  Close, and by the Explore pill's ✕. */
   const endTour = useCallback(() => {
+    // The step it ended on is the measurement. Ending on the last step is the
+    // visitor reaching the end; ending anywhere else is the tour losing them,
+    // and *which* step lost them is the whole reason the event carries one.
+    const before = stateRef.current
+    if (before?.started && !before.finished) {
+      const atEnd = before.index >= TOUR_STEPS.length - 1
+      if (atEnd) trackDemo('tour_completed')
+      else trackDemo('tour_abandoned', { step: before.index + 1 })
+    }
     setState(prev => {
       const next: TourState = { ...(prev ?? EMPTY_TOUR_STATE), started: false, finished: true }
       saveTourState(next)
@@ -215,6 +243,19 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     return () => window.clearTimeout(t)
   }, [isDemo, embedded, state, pathname, beginAt])
 
+  // Count a step when its spotlight is actually on screen, not when the index
+  // changes: a step the visitor never saw (because they navigated away before it
+  // painted) is not a step they reached. The ref keeps React's re-renders from
+  // counting the same one twice.
+  const countedStep = useRef<number | null>(null)
+  useEffect(() => {
+    if (!isDemo || embedded || !state?.started || state.finished) return
+    if (!onStepRoute) return
+    if (countedStep.current === state.index) return
+    countedStep.current = state.index
+    trackDemo('tour_step', { step: state.index + 1 })
+  }, [isDemo, embedded, state, onStepRoute])
+
   // A booking submitted during the tour jumps to the step that shows it landing.
   useEffect(() => {
     if (!isDemo) return
@@ -247,6 +288,10 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   /** Close the tour and hand the visitor to the live mirror, where the thing the
    *  tour has been describing actually happens in front of them. */
   const handOffToMirror = () => {
+    // Two events, deliberately: the visitor both finished the tour and took its
+    // primary CTA, and the funnel needs to be able to ask those separately.
+    trackDemo('cta_live_mirror')
+    trackDemo('tour_completed')
     update({ ...state, started: false, finished: true })
     router.push('/live')
   }
@@ -383,6 +428,9 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
             </button>
             <a
               href={HANDOFF_MAILTO}
+              // The one event that is unambiguously a lead. It does not end the
+              // tour — see the note on HANDOFF_MAILTO — so no completion here.
+              onClick={() => trackDemo('cta_email')}
               style={{ display: 'block', backgroundColor: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: '999px', padding: '9px 16px', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}
             >
               Talk to us about your winery

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getTenantId } from '@/lib/tenant'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import LiveMirrorClient from './LiveMirrorClient'
+import DemoAnalytics from '@/components/DemoAnalytics'
 
 /**
  * /live — the two-pane demo view (Plan-DemoRedesign Phase 4).
@@ -15,5 +16,13 @@ import LiveMirrorClient from './LiveMirrorClient'
 export default async function LivePage() {
   const tenantId = await getTenantId()
   if (tenantId !== DEMO_TENANT_ID) notFound()
-  return <LiveMirrorClient />
+  return (
+    <>
+      {/* The mirror is its own route group and mounts no other demo chrome, but
+          "does anyone reach /live" is one of the four questions the analytics
+          exist to answer — see components/DemoAnalytics.tsx. */}
+      <DemoAnalytics tenantId={tenantId} />
+      <LiveMirrorClient />
+    </>
+  )
 }

@@ -8,6 +8,70 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 — the demo starts counting, and an analytics write that blocked the demo
+
+The second deferred item from [[DemoSite/Plan-DemoFlowFixes]], and the one that makes
+[[DemoSite/Research-DemoPatterns]]' Caveat obsolete: every conversion figure behind this demo's
+design came from a vendor's blog, because the site measured nothing.
+
+### The decision that the plan settled
+
+Max confirmed **named events, not just page views** — a conversion rate needs events; page views
+cannot tell you who *finished* the tour — stored in **our own table**.
+
+What settled the tool question was a fact worth writing down: the Vercel team is on **Hobby**,
+and Vercel's own pricing table says Hobby gets **no custom events at all** and a **one-month**
+reporting window. The obvious free option would have produced page views that evaporate before a
+quarter is out. A third party (PostHog, Umami) meant an external script, prospect traffic leaving
+the building, and a cookie-consent banner on a public sales demo. Our own `DemoEvent` table costs
+nothing, retains forever, uses no cookies, and needs no banner.
+
+### What was built
+
+Eleven event names (`lib/demoEventNames.ts`), a `trackDemo()` sender, a route handler that writes
+them, and `components/DemoAnalytics.tsx` for the two events no component owns — page views, and
+"a booking actually happened". Plus `scripts/demo-funnel.ts`, which prints the funnel by session:
+path split, tour started/completed/abandoned **and the step it was abandoned on**, who reached
+`/live`, which capabilities got picked, and the two step-7 CTAs.
+
+### The bug worth the whole session
+
+The write started life as a **server action**, and under test the demo's front door stalled: the
+"I run a winery" sign-in would hang, the tour never auto-started, and the page sat there. The
+cause is that **Next runs one client's server actions strictly in sequence** — so an analytics
+write (cold compile, then a transaction to a database in `eu-central-1`) sat in front of the
+visitor's own next action. Analytics delaying the thing they measure is the one failure mode this
+kind of code must not have.
+
+It is now a plain `fetch` to `/api/demo-event` with `keepalive`: unordered, concurrent, and it
+survives the navigation that the event usually describes. The stall vanished and the full journey
+runs clean. [[MaintenanceNotes]] §19 records it as a rule — **never a server action**.
+
+### Two things done structurally rather than carefully
+
+- **`booking_placed` adds no code to `BookingForm.tsx`**, which is every winery's booking form.
+  `DemoAnalytics` listens for the `DEMO_BOOKED_EVENT` the form already broadcasts. The shared
+  path stays byte-identical for a real tenant because nothing was added to it, not because a
+  conditional was added carefully.
+- **The tenant gate is server-side.** The handler reads `x-tenant-id` from `proxy.ts`; the body
+  cannot name a tenant. Verified by forging one.
+
+### Verified (Playwright + SQL, dev demo tenant)
+
+All eleven names recorded at least once with correct props, in order: front door → auto-start
+(`{auto:true}`) → seven `tour_step`s → `cta_email` → `cta_live_mirror` → `tour_completed` →
+`/live` page view → `explore_opened` → `capability_clicked` → and, on a second pass, a deliberate
+start (`{auto:false}`), `tour_abandoned {step:2}`, and `booking_placed` from a **real booking
+through the real form**. Negative test: browsing the real tenant wrote **zero** rows, and a direct
+POST from that tenant naming the demo tenant in its body wrote zero rows and returned 204.
+
+**Not yet done, deliberately — needs Max:** the `DemoEvent` migration and `setup-rls.ts` have
+been run against **dev only**. Production needs `prisma migrate deploy` + `setup-rls.ts` as its
+own deliberate step (Rule 0), after the `staging` → `master` merge. Until then the live demo
+records nothing.
+
+---
+
 ## 2026-09-12 — one door into the demo: the tour pill and the feature rail become "Explore"
 
 The first of the two deferred items from [[DemoSite/Plan-DemoFlowFixes]]' "Deferred" list, and

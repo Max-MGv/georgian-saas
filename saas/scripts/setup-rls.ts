@@ -35,6 +35,11 @@ async function main() {
     'Order', 'Company', 'Price', 'Wine', 'WineVintage', 'WineOrder', 'WineOrderItem',
     'MenuItem', 'MasterclassItem', 'OrderMasterclass', 'OrderExtra',
     'BlockedDate', 'SiteContent', 'Setting', 'Payment',
+    // Demo analytics (2026-09-12). Only ever holds the demo tenant's rows, and
+    // the server action refuses any other tenant — but it carries a tenantId and
+    // goes through the same GRANT + policy as everything else, because a table
+    // that opts out of RLS is a table someone has to remember is special.
+    'DemoEvent',
   ]
   for (const t of writableTables) {
     console.log(`  GRANT SELECT/INSERT/UPDATE/DELETE on "${t}"`)
@@ -57,6 +62,7 @@ async function main() {
   const tenantedTables = [
     'Order', 'Company', 'Wine', 'WineVintage', 'WineOrder',
     'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting', 'Payment',
+    'DemoEvent',
   ]
 
   for (const t of tenantedTables) {

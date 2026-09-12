@@ -94,6 +94,24 @@ measurement of `demo.vineworks.ge`. Vendors selling demo software have an obviou
 in demo-conversion numbers looking good — treat the direction of these figures as reliable
 and the precise values as marketing.
 
-**We currently have no analytics on the demo at all.** If these numbers are going to drive
-real decisions, instrumenting the demo (even just page views + which paths get clicked) is
-worth its own task.
+~~**We currently have no analytics on the demo at all.**~~ **Instrumented 2026-09-12** — the
+demo now records what visitors actually do (`DemoEvent`, see [[MaintenanceNotes]] §19). Read it
+with `npx tsx scripts/demo-funnel.ts` from `saas/`.
+
+### What is now measured, and what is still a benchmark
+
+**Measured, on our own traffic:** which of the front door's five exits a visitor takes; whether
+the tour is started, completed, or abandoned — and on which step; whether the automatic start on
+the "I run a winery" path or a deliberate press; whether anyone reaches `/live`; which
+capability rows get picked; both step-7 CTAs, the email one being the only unambiguous lead; and
+whether a booking actually gets placed.
+
+**Still a benchmark, and must keep being labelled as one:** every percentage above and in
+[[DemoDirections]] — demo-to-close rates, "interactive demos convert N× better", the seven-step
+ceiling. Those came from vendors selling demo software and none of them describes this site.
+
+**The honest caveat, for now:** the table exists but the traffic does not yet. A conversion rate
+over a handful of visits is noise, and the first weeks of data will mostly be Max and Claude
+testing. Treat the numbers as a way to see *shape* — where people stop — long before treating
+any single percentage as real. Nothing in this file should be rewritten from a rate that rests
+on fewer than a few dozen genuine visits.

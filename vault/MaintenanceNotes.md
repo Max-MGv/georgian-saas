@@ -331,6 +331,12 @@ chrome normally mounts. `saas/app/admin/onboarding/layout.tsx` exists solely to 
 **Why it bites two ways:**
 - A new demo component added to `(panel)/layout.tsx` and *not* here leaves the onboarding route
   half-dressed again — which is the bug that was just fixed. **Both files, or neither.**
+- **Since 2026-09-12 it is three files for chrome and four for analytics.**
+  `DemoAnalytics` (§19) also mounts in `app/live/page.tsx`, because `/live` is its own route
+  group with no demo chrome and "does anyone reach the mirror" is one of the four questions the
+  analytics exist to answer. Chrome: `(site)`, `(panel)`, `onboarding`. Analytics: those three
+  **plus** `/live`. Leaving `/live` out loses the single most important page view on the site,
+  silently and with nothing to notice.
 - The obvious-looking fix, putting the chrome in `app/admin/layout.tsx`, is wrong: that file
   wraps `(panel)` as well, so it would render every demo component **twice** on every other
   admin page.
@@ -407,3 +413,52 @@ light ring colour (§15's two-token rule, from the other end).
 **Mobile:** the paused pill's three controls (compass, Resume, ✕) are each a full 40×40 rather
 than a 28 px visual with §17's outset hit area — they sit 6 px apart, so two expanded hit areas
 would both claim the same gap and a tap there could end the tour instead of resuming it.
+
+
+---
+
+## 19. Demo analytics: a route handler, never a server action, and the gate is server-side
+
+**What the dependency is:**
+`demo.vineworks.ge` records what visitors do, into the `DemoEvent` table. Four files:
+
+| File | Job |
+|---|---|
+| `saas/lib/demoEventNames.ts` | the fixed vocabulary, imported by both sides |
+| `saas/lib/demoAnalytics.ts` | `trackDemo()` — the browser half |
+| `saas/app/api/demo-event/route.ts` | the write, and the tenant gate |
+| `saas/components/DemoAnalytics.tsx` | page views + the booking listener |
+
+**Why it bites four ways:**
+
+1. **It must never be a server action.** It was one for an afternoon, and the bug it caused is
+   the reason this note exists: **Next runs a client's server actions strictly in sequence**, so
+   an analytics write — cold module compile, then a transaction to a database in `eu-central-1`
+   — sat in front of the visitor's *own* next action. The front door's "I run a winery" sign-in
+   stalled behind a page-view counter and the demo looked broken. It is now a plain `fetch` to a
+   route handler, sent with `keepalive` so an event fired on a click that navigates still
+   arrives. **If you add an event, call `trackDemo()` — do not reach for an action.**
+2. **The tenant gate is the route handler's, not the call site's.** Every call site today is a
+   demo-only component, but that is a convention, and a convention is not a gate. The handler
+   reads `x-tenant-id` (set by `proxy.ts`, which runs on `/api` too) and drops anything that is
+   not the demo tenant. The request body cannot name a tenant — verified by posting one that
+   tried. **Never add a `tenantId` parameter to that endpoint.**
+3. **Shared components stay clean.** `booking_placed` is not recorded by `BookingForm.tsx` —
+   that file is every winery's booking form. It is recorded by `DemoAnalytics` listening for the
+   `DEMO_BOOKED_EVENT` the form already broadcasts (`lib/demoEvents.ts`). Any future event that
+   originates in shared code should reach the analytics the same way: a signal the shared file
+   already emits, never a demo conditional inside it.
+4. **The vocabulary is closed.** A name not in `DEMO_EVENT_NAMES` is dropped by the handler. Add
+   the name there first, or the event silently never lands.
+
+**The table holds no personal data** — no IP, no user agent, no name, no email. `sessionId` is a
+random per-tab string from `sessionStorage` that dies with the tab. That is what lets the demo
+run without a cookie-consent banner, which on a sales demo would cost more than the analytics
+are worth. **Do not add an identifying column to this table** without reopening that decision.
+
+**The nightly reseed does not touch `DemoEvent`** (`lib/demoSeed.ts` deletes six named tables),
+so a `booking_placed` event outlives the booking row it describes. That is deliberate: the row
+is demo furniture, the event is the measurement.
+
+**Reading it:** `npx tsx scripts/demo-funnel.ts [days]` from `saas/`. Counts are by session, not
+by event.

@@ -2,6 +2,7 @@ import { getTenantId } from '@/lib/tenant'
 import DemoModeBanner from '@/components/DemoModeBanner'
 import DemoTour from '@/components/DemoTour'
 import DemoExplore from '@/components/DemoExplore'
+import DemoAnalytics from '@/components/DemoAnalytics'
 
 /**
  * Mounts the demo chrome on `/admin/onboarding` — Plan-DemoFlowFixes Chunk 8,
@@ -40,6 +41,7 @@ export default async function OnboardingDemoChromeLayout({
       <DemoModeBanner tenantId={tenantId} />
       <DemoTour tenantId={tenantId} />
       <DemoExplore tenantId={tenantId} />
+      <DemoAnalytics tenantId={tenantId} />
       {children}
     </>
   )
