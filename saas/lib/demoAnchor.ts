@@ -28,7 +28,7 @@ import { useEffect, useState } from 'react'
  * ## The fix
  *
  * Poll across the first ~1.6 s instead of taking one shot, and watch the DOM
- * with a MutationObserver that has no deadline at all. `DemoFeatureRail`
+ * with a MutationObserver that has no deadline at all. `DemoExplore`
  * already polled, and that is the reason its ring worked where the tour's did
  * not; the logic lives here now so the two cannot drift apart a third time.
  * A transient miss retries; a late anchor still resolves whenever it arrives.

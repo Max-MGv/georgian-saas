@@ -1317,9 +1317,19 @@ pass. Both are Max's, and neither is a coding task:**
   the remaining small tap targets are all *shared* site and admin components — the HelpHint
   "?" at 17×17, the nav Menu at 30×30, the date picker at 15×15, footer links, admin status
   dropdowns. Those are the real product on mobile, a far wider blast radius, and Max's call.
-- **Merging the tour pill and rail tab into one "Explore" control** — recommended in the
-  teardown (two entry points to two guided experiences is one too many) but it is a design
-  change rather than a fix, and Chunk 5 may make it unnecessary.
+- ~~**Merging the tour pill and rail tab into one "Explore" control**~~ — ✅ **done
+  2026-09-12.** Chunk 5 did *not* make it unnecessary: a visitor still met two floating
+  invitations, bottom-left and right-edge, offering two guided experiences with no stated
+  relationship. Max picked **option B of three** (2026-09-12): one bottom-right pill,
+  "Explore this demo", opening the old rail drawer with the guided tour as its first row —
+  not a chooser in front of both (option A), and not the rail folded into the tour (option
+  C, rejected because someone who wants to check one feature should not have to enter a
+  narrative to reach it). `DemoFeatureRail.tsx` → `DemoExplore.tsx`; the tour's steps and
+  state moved to `lib/demoTour.ts`; `DemoTour` kept the spotlight and remains the only
+  writer of tour state. Bottom-right was free because Chunk 6 took the bug-report widget
+  off the demo. Verified end to end on the dev demo tenant — all seven steps ring their
+  anchor, auto-start survives, the paused pill resumes, and every control clears 40 px on
+  an iPhone 13. See [[MaintenanceNotes]] §18.
 - **Analytics on the demo** — still nothing is instrumented, so the conversion figures in
   [[DemoDirections]] remain industry benchmarks rather than measurements of this site. Carried
   from [[Plan-DemoRedesign]].

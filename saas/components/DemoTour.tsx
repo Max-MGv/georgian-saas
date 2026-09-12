@@ -8,8 +8,17 @@ import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { DEMO_BOOKED_EVENT } from '@/lib/demoEvents'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
-import { Wine } from 'lucide-react'
 import { useIsNarrow } from '@/lib/useIsNarrow'
+import {
+  TOUR_AUTOSTART_KEY,
+  TOUR_COMMAND_EVENT,
+  TOUR_STEPS,
+  type TourCommand,
+  type TourState,
+  EMPTY_TOUR_STATE,
+  loadTourState,
+  saveTourState,
+} from '@/lib/demoTour'
 
 /**
  * Guided spotlight tour for demo.vineworks.ge — Plan-DemoRedesign Phase 2,
@@ -19,12 +28,22 @@ import { useIsNarrow } from '@/lib/useIsNarrow'
  * Dim → highlight → explain, with every step naming a commercial benefit in
  * money rather than describing a UI action. Renders nothing for other tenants.
  *
+ * **This file is the tour's screen, not its front door.** Entry — start,
+ * replay, resume, and the "Tour paused · step N of 7" pill — moved to
+ * `DemoExplore` on 2026-09-12, when the tour's pill and the feature rail's edge
+ * tab were merged into one control. The steps and the state moved with it, into
+ * `lib/demoTour.ts`. What is left here is: decide whether a step is showing,
+ * and if so dim the screen, ring the anchor, and explain it. Everything that
+ * changes the state still happens here — `DemoExplore` asks by dispatching
+ * `TOUR_COMMAND_EVENT` and this decides what that means.
+ *
  * Three constraints from the design review, all load-bearing:
  *
  * 1. **It must never dim a screen the visitor navigated to themselves.** A tour
  *    that fights you is worse than no tour. Each step declares the route it
  *    belongs to; the spotlight only appears when the visitor is actually on that
- *    route. Anywhere else the tour shrinks to a pill that offers to continue.
+ *    route. Anywhere else the tour shrinks to the Explore pill's paused state,
+ *    which offers to continue.
  * 2. **Skip is always visible**, on every step.
  * 3. **The tooltip renders through a document.body portal** — see KnownBugs #7:
  *    popovers nested inside `overflow-hidden` ancestors get silently clipped,
@@ -35,19 +54,6 @@ import { useIsNarrow } from '@/lib/useIsNarrow'
  * thing being pointed at without leaving the tour.
  */
 
-const STORAGE_KEY = 'vineworks-demo-tour'
-
-/**
- * Set by DemoFrontDoor when the visitor picks "I run a winery", consumed here.
- * Deliberately a separate key from the tour's own state: the front door and the
- * tour live in different layouts (`(site)` vs `admin/(panel)`) and never share a
- * React tree, so localStorage is the only channel between them.
- *
- * Only that one path arms it. Someone who chose the guest view or the live
- * mirror asked for something specific and must not be taken over.
- */
-export const TOUR_AUTOSTART_KEY = 'vineworks-demo-tour-autostart'
-
 /** Where the "I run a winery" card lands. The auto-start waits for this route. */
 const AUTO_START_ROUTE = '/admin/orders'
 
@@ -55,8 +61,8 @@ const AUTO_START_ROUTE = '/admin/orders'
  * Which step the auto-start opens on. 0 = the full seven-step tour, which means
  * navigating back to the guest site for steps 1–2 before returning to the back
  * office at step 3 — the narrative order (bookings arrive → here is where they
- * land). Set to `STEPS.findIndex(s => s.route === AUTO_START_ROUTE)` instead to
- * start where the visitor already is and skip the guest-site steps.
+ * land). Set to `TOUR_STEPS.findIndex(s => s.route === AUTO_START_ROUTE)`
+ * instead to start where the visitor already is and skip the guest-site steps.
  */
 const AUTO_START_INDEX = 0
 
@@ -100,94 +106,6 @@ const C = {
   ring: DEMO.accent,
 }
 
-type Step = {
-  /** Route this step lives on. The spotlight only shows here. */
-  route: string
-  /** `data-tour` value of the element to highlight. Missing target ⇒ the step
-   *  still runs, centred, with no ring — a tour that vanishes because a selector
-   *  drifted is worse than one that loses its ring. */
-  target?: string
-  title: string
-  body: string
-}
-
-/**
- * Seven steps is the ceiling (DemoDirections). Every body names money or the
- * work it removes — "See it land in Orders" is an instruction, "a ₾600 booking
- * that arrived at 23:40 while you slept" is an argument.
- */
-const STEPS: Step[] = [
-  {
-    route: '/',
-    target: 'booking-form',
-    title: 'Bookings arrive while you sleep',
-    body: 'This form takes the booking, prices it against the right rate, and emails the guest — at 23:40 on a Saturday if that is when they decide. No phone call, no Facebook thread, nobody writing it in a notebook.',
-  },
-  {
-    route: '/wines',
-    target: 'wine-catalogue',
-    title: 'Restaurants order cases without asking you',
-    body: 'Wine bars and importers order straight from this list, each at the discount you agreed with them. This winery has four trade buyers on four different rates.',
-  },
-  {
-    route: '/admin/orders',
-    target: 'orders-table',
-    title: 'Every booking in one place',
-    body: 'Nearly 400 bookings, eighteen months of them, and nobody here typed a single one. Filter by date, company or status; send an invoice without leaving the row.',
-  },
-  {
-    route: '/admin/orders',
-    target: 'orders-filters',
-    title: 'Pull up one operator in a second',
-    body: 'Six tour operators are in that company filter, each on its own rate ladder — per head, and different again for a group of 25 than for a group of 8. Every booking here was priced on the right one automatically. Filter to one operator and the whole season with them is in front of you.',
-  },
-  {
-    route: '/admin/statistics',
-    target: 'stats-future-revenue',
-    title: 'You know your season before it happens',
-    body: 'Around ₾31,000 is already committed for the months ahead, from bookings that are on the books today. That is the number that tells you whether to hire for the summer.',
-  },
-  {
-    route: '/admin/wine-orders',
-    target: 'wine-orders-list',
-    title: 'Tomorrow’s cases, already counted',
-    body: 'The packing view turns open trade orders into a physical list — which wine, which vintage, how many bottles, for whom. Hand it to whoever is loading the van.',
-  },
-  {
-    route: '/admin/content',
-    target: 'content-editor',
-    title: 'The website is yours to change',
-    body: 'Text, photos, prices, opening hours — all edited here, in both Georgian and English. No developer, no ticket, no waiting a week for a paragraph.',
-  },
-]
-
-type TourState = {
-  started: boolean
-  index: number
-  finished: boolean
-  /** Set once the auto-start has fired, so it never fires twice on this browser
-   *  even if the arming flag is somehow re-set. */
-  autoStarted: boolean
-}
-const EMPTY: TourState = { started: false, index: 0, finished: false, autoStarted: false }
-
-function load(): TourState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY
-  } catch {
-    return EMPTY
-  }
-}
-
-function save(s: TourState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-  } catch {
-    // Private mode — the tour just won't persist across reloads.
-  }
-}
-
 export default function DemoTour({ tenantId }: { tenantId: string }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -206,10 +124,10 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     setMounted(true)
-    if (isDemo) setState(load())
+    if (isDemo) setState(loadTourState())
   }, [isDemo])
 
-  const step = state && state.started && !state.finished ? STEPS[state.index] : null
+  const step = state && state.started && !state.finished ? TOUR_STEPS[state.index] : null
   const onStepRoute = step ? pathname === step.route : false
 
   // Resolve and track the target. Polled, not measured once — see
@@ -224,7 +142,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   })
 
   const update = useCallback((next: TourState) => {
-    save(next)
+    saveTourState(next)
     setState(next)
   }, [])
 
@@ -246,12 +164,38 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
         finished: false,
         autoStarted: auto || (prev?.autoStarted ?? false),
       }
-      save(next)
+      saveTourState(next)
       return next
     })
-    const dest = STEPS[index].route
+    const dest = TOUR_STEPS[index].route
     if (dest !== pathname) router.push(dest)
   }, [pathname, router])
+
+  /** End the tour where the visitor stands. Used by Skip, by the last step's
+   *  Close, and by the Explore pill's ✕. */
+  const endTour = useCallback(() => {
+    setState(prev => {
+      const next: TourState = { ...(prev ?? EMPTY_TOUR_STATE), started: false, finished: true }
+      saveTourState(next)
+      return next
+    })
+  }, [])
+
+  // ---- Commands from DemoExplore, which owns the entry control since the
+  // 2026-09-12 merge. It asks; the decision about what "begin" means (including
+  // the navigation in beginAt) stays here, so there is still exactly one writer
+  // of the tour's state. ----
+  useEffect(() => {
+    if (!isDemo || embedded) return
+    function onCommand(e: Event) {
+      const command = (e as CustomEvent<TourCommand>).detail
+      if (!command) return
+      if (command.action === 'begin') beginAt(command.index)
+      else if (command.action === 'end') endTour()
+    }
+    window.addEventListener(TOUR_COMMAND_EVENT, onCommand)
+    return () => window.removeEventListener(TOUR_COMMAND_EVENT, onCommand)
+  }, [isDemo, embedded, beginAt, endTour])
 
   // ---- Auto-start on the "I run a winery" path (approved in Plan-DemoFlowFixes'
   // "Decisions already made"). Armed by DemoFrontDoor, consumed exactly once. ----
@@ -277,10 +221,10 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     function onBooked() {
       setState(prev => {
         if (!prev?.started || prev.finished) return prev
-        const target = STEPS.findIndex(s => s.route === '/admin/orders')
+        const target = TOUR_STEPS.findIndex(s => s.route === '/admin/orders')
         if (target < 0 || prev.index >= target) return prev
         const next = { ...prev, index: target }
-        save(next)
+        saveTourState(next)
         return next
       })
     }
@@ -290,17 +234,16 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
 
   if (!isDemo || !mounted || !state || embedded) return null
 
-  const start = () => beginAt(0)
-  const skip = () => update({ ...state, started: false, finished: true })
+  const skip = endTour
   // Back navigates too: stepping back from /admin/orders to the /wines step used
   // to leave the visitor on the admin page staring at "Tour paused", which is the
   // same misfire as the start button's, just reached from the other direction.
   const back = () => beginAt(Math.max(0, state.index - 1))
   const next = () => {
-    if (state.index >= STEPS.length - 1) return update({ ...state, started: false, finished: true })
+    if (state.index >= TOUR_STEPS.length - 1) return endTour()
     beginAt(state.index + 1)
   }
-  const isLast = state.index >= STEPS.length - 1
+  const isLast = state.index >= TOUR_STEPS.length - 1
   /** Close the tour and hand the visitor to the live mirror, where the thing the
    *  tour has been describing actually happens in front of them. */
   const handOffToMirror = () => {
@@ -308,77 +251,11 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     router.push('/live')
   }
 
-  // ---- Not touring: a small invitation pill, never a takeover. ----
-  if (!step) {
-    return createPortal(
-      <button
-        onClick={start}
-        style={{
-          position: 'fixed',
-          bottom: 'calc(16px + var(--cart-bar-offset, 0px))',
-          left: '16px',
-          zIndex: 150,
-          backgroundColor: C.ink,
-          color: C.text,
-          border: `1px solid ${C.border}`,
-          borderRadius: '999px',
-          padding: '10px 18px',
-          fontSize: '0.82rem',
-          fontWeight: 600,
-          cursor: 'pointer',
-          boxShadow: DEMO_FX.shadowSm,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '7px',
-        }}
-      >
-        <Wine aria-hidden="true" size={14} strokeWidth={1.7} style={{ flexShrink: 0 }} />
-        {state.finished ? 'Replay the tour' : 'Show me what this does'}
-      </button>,
-      document.body,
-    )
-  }
-
-  // ---- Touring, but the visitor wandered off this step's screen. Do NOT dim
-  // a page they chose to visit; offer to resume instead. ----
-  if (!onStepRoute) {
-    return createPortal(
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 'calc(16px + var(--cart-bar-offset, 0px))',
-          left: '16px',
-          zIndex: 150,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          backgroundColor: C.ink,
-          color: C.text,
-          border: `1px solid ${C.border}`,
-          borderRadius: '999px',
-          padding: '8px 10px 8px 16px',
-          fontSize: '0.8rem',
-          boxShadow: DEMO_FX.shadowSm,
-        }}
-      >
-        <span>Tour paused · step {state.index + 1} of {STEPS.length}</span>
-        <button
-          onClick={() => router.push(step.route)}
-          style={{ backgroundColor: C.accent, color: DEMO_FX.onAccent, border: 'none', borderRadius: '999px', padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-        >
-          Resume →
-        </button>
-        <button
-          onClick={skip}
-          aria-label="End the tour"
-          style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.9rem', padding: '2px 6px' }}
-        >
-          ✕
-        </button>
-      </div>,
-      document.body,
-    )
-  }
+  // ---- Not touring, or touring but off this step's screen. Both used to draw a
+  // pill here; both are now the Explore control's job (bottom right), so that a
+  // visitor is never offered two floating invitations at once. Do NOT reinstate
+  // a pill here without removing the corresponding state from DemoExplore. ----
+  if (!step || !onStepRoute) return null
 
   // ---- Touring, on the right screen: dim, ring, explain. ----
   const scrim = DEMO_FX.scrimTour
@@ -463,7 +340,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
 
       <div
         role="dialog"
-        aria-label={`Tour step ${state.index + 1} of ${STEPS.length}`}
+        aria-label={`Tour step ${state.index + 1} of ${TOUR_STEPS.length}`}
         style={{
           position: 'fixed',
           zIndex: 152,
@@ -478,7 +355,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <span style={{ color: C.muted, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em' }}>
-            {state.index + 1} / {STEPS.length}
+            {state.index + 1} / {TOUR_STEPS.length}
           </span>
           <button
             onClick={skip}
@@ -511,7 +388,7 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
               Talk to us about your winery
             </a>
             {/* Both left-aligned on purpose: on the full-width dock this row's
-                right-hand end sits underneath the floating bug-report button. */}
+                right-hand end sits underneath the Explore pill. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
               <button
                 onClick={back}

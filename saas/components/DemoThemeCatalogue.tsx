@@ -26,8 +26,8 @@ import {
  * a visitor who thinks they have just recoloured a stranger's live website will
  * stop clicking.
  *
- * Rendered by `DemoFeatureRail` rather than mounted in the three layouts
- * alongside the other demo components. It is that rail's "Branding and theme
+ * Rendered by `DemoExplore` rather than mounted in the three layouts
+ * alongside the other demo components. It is that panel's "Branding and theme
  * presets" row opening in place, not an independent surface, and one fewer
  * mount point is one fewer thing for [[MaintenanceNotes]] §16 to fall out of
  * step on.

@@ -8,7 +8,7 @@ import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { useIsNarrow } from '@/lib/useIsNarrow'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { signInAsDemoAdmin } from '@/lib/demoAuth'
-import { TOUR_AUTOSTART_KEY } from '@/components/DemoTour'
+import { TOUR_AUTOSTART_KEY } from '@/lib/demoTour'
 
 /**
  * The front door for demo.vineworks.ge — Plan-DemoRedesign Phase 1,

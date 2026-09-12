@@ -8,6 +8,71 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-12 — one door into the demo: the tour pill and the feature rail become "Explore"
+
+The first of the two deferred items from [[DemoSite/Plan-DemoFlowFixes]]' "Deferred" list, and
+the last design finding left over from the 2026-09-11 teardown: a visitor met **two** floating
+invitations at once — the tour's bottom-left pill ("Show me what this does") and the feature
+rail's right-edge tab ("✦ What can it do?") — two guided experiences with no stated relationship
+between them.
+
+### The decision, before any code
+
+Not "keep one, delete the other". The tour is a linear argument (seven steps, each naming a
+figure, in an order that builds a case); the rail is a menu for a prospect who already knows
+which feature they came to check. Three options were put to Max with their costs:
+
+- **(A) a chooser** behind one pill — cheapest, but adds a click in front of a tour that needed
+  none, and a two-option screen is thin
+- **(B) one panel, the tour as its first row** — one mental model, no extra click for either path
+- **(C) fold the rail into the tour** — argued against: someone who wants one feature should not
+  have to enter a narrative to reach it
+
+Max picked **B**, bottom-right. Bottom-right was free because Chunk 6 had already taken the
+bug-report widget off the demo tenant.
+
+### What moved
+
+- `components/DemoFeatureRail.tsx` → **`components/DemoExplore.tsx`** (`git mv`, so history
+  follows). It now owns the single pill and the panel; the panel gained a lead card for the
+  guided tour above the sixteen capability rows, state-aware (Start / Resume at step N / Replay).
+- **`lib/demoTour.ts` is new** — the tour's seven steps, its localStorage shape, and two window
+  events. `DemoTour` renders *only* the spotlight now and remains the **only writer** of tour
+  state; Explore asks via `sendTourCommand()` and re-reads on `TOUR_STATE_EVENT`. Window events
+  rather than context because the two components are siblings in three layouts and, mid guest→
+  admin navigation, in two React trees at once.
+- All three layouts repointed (`(site)`, `admin/(panel)`, `admin/onboarding`) — §16's "both
+  files, or neither" now reads "all three". `DemoFrontDoor` takes `TOUR_AUTOSTART_KEY` from the
+  lib rather than from the component.
+- Mid-tour-off-script keeps a one-press Resume: the pill expands to "Tour paused · step N of 7"
+  + Resume + ✕, with the panel still reachable from the compass beside it.
+
+### Two things measurement caught that reading would not have
+
+- **The paused pill's three controls were 28px.** Fixed to a full 40×40 each rather than §17's
+  invisible-outset trick: they sit 6px apart, so two outset hit areas would both claim the same
+  gap — and a tap landing in it could have **ended** the tour instead of resuming it.
+- **Resume was the wrong red.** It inherited `DemoExplore`'s `C.accent` alias, which points at
+  `DEMO.accent` (the *ring* colour), where `DemoTour` aliases the same key to `accentSolid`.
+  Ivory text on the light token. §15's two-token rule, hit from the other end. Both files keep
+  their aliases; the two filled CTAs now name `accentSolid` explicitly, with a comment saying why.
+
+### Verified (Playwright, dev demo tenant)
+
+Front door → auto-start on the winery path → all seven steps ring their anchor, with **zero**
+`[demo]` anchor warnings once the routes are warm (the warnings on a cold dev server are
+first-compile latency; `useAnchorRect`'s observer resolves them late by design, §12) → step 7's
+two CTAs intact. Pill → panel → capability row → deep link + pinned callout. Paused → panel says
+paused → Resume returns to the step's screen → ✕ ends it → panel then offers Replay. `/live`:
+neither pane carries chrome. iPhone 13: every control ≥40px measured with `elementFromPoint`
+(not `getBoundingClientRect`), paused pill 240px wide inside a 390px viewport. Non-demo tenant:
+no pill, no banner, no front door, bug widget back — zero code paths changed for a real winery.
+
+**Next:** prompt 2 of the same file — analytics on the demo. Scope and tool choice need Max's
+sign-off before code.
+
+---
+
 ## 2026-09-12 — the product's mobile pass: hit area, not layout
 
 The handoff ([[HANDOFF-MobileProduct]]) opened by ruling things out, and re-measuring confirmed

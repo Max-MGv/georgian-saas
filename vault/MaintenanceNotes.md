@@ -216,10 +216,10 @@ The dev database normally holds exactly one tenant (Staging Winery). So the ever
 
 ---
 
-## 12. Demo tour / feature rail rings are anchored to `data-tour` attributes scattered across seven screens
+## 12. Demo tour / Explore panel rings are anchored to `data-tour` attributes scattered across seven screens
 
 **What the dependency is:**
-`saas/components/DemoTour.tsx` (each step's `target`) and `saas/components/DemoFeatureRail.tsx`
+`saas/components/DemoTour.tsx` (each step's `target`) and `saas/components/DemoExplore.tsx`
 (each capability's `target`) locate what to highlight with
 `document.querySelector('[data-tour="…"]')`. Both resolve it through the shared
 `useAnchorRect()` hook in **`saas/lib/demoAnchor.ts`** — that file is the single implementation
@@ -231,11 +231,11 @@ pages:
 | `booking-form` | `saas/app/(site)/page.tsx` — the `#book` section |
 | `wine-catalogue` | `saas/app/(site)/wines/WineCatalogueClient.tsx` — **on the wine list itself**, and it appears **twice**: once in the grid-view branch, once in the list-view branch. Only one is mounted at a time. (Moved off the page wrapper in Chunk 4 — the wrapper was the full viewport width, so the ring had no visible left or right edge.) |
 | `orders-table`, `orders-filters` | `saas/app/admin/(panel)/orders/page.tsx` |
-| `stats-cards` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — the three-card grid. Used by the **rail** only. |
+| `stats-cards` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — the three-card grid. Used by the **Explore panel** only. |
 | `stats-future-revenue` | `saas/app/admin/(panel)/statistics/StatisticsV2.tsx` — the wrapper around the Future Revenue `Card`. Used by the **tour's step 5**, whose copy names that specific number. |
 | `wine-orders-list` | `saas/app/admin/(panel)/wine-orders/page.tsx` |
 | `content-editor` | `saas/app/admin/(panel)/content/page.tsx` |
-| `company-rates` | `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — the company list. Added in Chunk 4 for the rail's "Per-company price ladders" link. |
+| `company-rates` | `saas/app/admin/(panel)/companies/CompaniesClient.tsx` — the company list. Added in Chunk 4 for the Explore panel's "Per-company price ladders" link. |
 
 **Why it bites:** nothing in the type system connects the two ends. Rename or drop an attribute
 while refactoring one of those pages and the tour step still runs — it just silently loses its
@@ -272,9 +272,9 @@ demo tenant with the console open.
 ## 13. Every demo-only component must hide itself inside a `/live` pane
 
 **What the dependency is:**
-`saas/app/live/` (the live mirror) embeds the real guest site and the real admin panel as same-origin iframes. Each demo component — `DemoModeBanner`, `DemoFrontDoor`, `DemoTour`, `DemoFeatureRail` — checks `isEmbeddedPane()` (`saas/lib/demoEmbed.ts`) and renders nothing when framed.
+`saas/app/live/` (the live mirror) embeds the real guest site and the real admin panel as same-origin iframes. Each demo component — `DemoModeBanner`, `DemoFrontDoor`, `DemoTour`, `DemoExplore` — checks `isEmbeddedPane()` (`saas/lib/demoEmbed.ts`) and renders nothing when framed.
 
-**Why it bites:** a new demo component that forgets the check will draw itself *inside both panes* of the mirror, which is the one screen where that chrome is most obviously wrong — a banner within a banner, two tour pills, the rail over itself.
+**Why it bites:** a new demo component that forgets the check will draw itself *inside both panes* of the mirror, which is the one screen where that chrome is most obviously wrong — a banner within a banner, two Explore pills, the panel over itself.
 
 **Also note:** `isEmbeddedPane()` must be resolved in an effect after mount, never during render. `window` does not exist on the server, and branching on it during the first client render is a hydration mismatch. All four existing components follow that shape — copy it.
 
@@ -296,7 +296,7 @@ demo tenant with the console open.
 **What the dependency is:**
 `saas/lib/demoTheme.ts` exports the eight "cellar dark" tokens (`DEMO`) plus the values derived
 from them (`DEMO_FX` — scrims, shadows, the spotlight ring glow, the text colour for filled
-CTAs). `DemoFrontDoor`, `DemoTour`, `DemoFeatureRail`, `DemoModeBanner` and `DemoLoginShortcut`
+CTAs). `DemoFrontDoor`, `DemoTour`, `DemoExplore`, `DemoModeBanner` and `DemoLoginShortcut`
 all read from it, each keeping its own local `C` object as a re-pointed alias so call sites did
 not have to change.
 
@@ -325,7 +325,7 @@ against **Deep harbor**, the darkest and coolest, which is the worst case for a 
 **What the dependency is:**
 The setup wizard renders **outside** `saas/app/admin/(panel)/layout.tsx`, which is where the demo
 chrome normally mounts. `saas/app/admin/onboarding/layout.tsx` exists solely to mount
-`DemoModeBanner`, `DemoTour` and `DemoFeatureRail` on that one route
+`DemoModeBanner`, `DemoTour` and `DemoExplore` on that one route
 ([[DemoSite/Plan-DemoFlowFixes]] Chunk 8, [[KnownBugs]] #28).
 
 **Why it bites two ways:**
@@ -366,3 +366,44 @@ outward from the control's centre until the hit stops resolving inside it.
 default `sm:` is 640px, which would hand 640–767px tablets the desktop sizes while the admin
 still served them the phone card list. If you add a narrow-only rule here, use `md:`.
 
+
+---
+
+## 18. The demo has exactly one floating entry control, and only `DemoTour` writes the tour's state
+
+**What the dependency is:**
+Since 2026-09-12 the tour's entry point and the capability menu are one control:
+`saas/components/DemoExplore.tsx` (was `DemoFeatureRail.tsx`) renders the bottom-right
+"Explore this demo" pill and the panel behind it. `saas/components/DemoTour.tsx` renders only
+the spotlight — it draws **nothing** when no step is showing. The contract between them lives in
+**`saas/lib/demoTour.ts`**: the steps, the localStorage shape, and two window events.
+
+| Direction | Mechanism |
+|---|---|
+| Explore → Tour | `sendTourCommand({ action: 'begin', index })` / `{ action: 'end' }` on `TOUR_COMMAND_EVENT` |
+| Tour → Explore | every `saveTourState()` dispatches `TOUR_STATE_EVENT`; Explore re-reads |
+
+**Why it bites three ways:**
+
+1. **Two writers would diverge.** `DemoTour` is the only thing that writes tour state, because
+   "begin" also means *navigate to that step's screen* (`beginAt`) and that decision has to live
+   with the component that owns the spotlight. Explore asks; it never sets the key itself.
+   If you add a control that changes the tour, dispatch a command — do not write localStorage.
+2. **The pill and the spotlight must never both be up.** `tourOffer()` returns `spotlight` when
+   the visitor is mid-tour *on the step's own route*, and Explore renders nothing in that state.
+   The old code enforced the same rule from the other side (DemoTour returned its pill when off
+   route). **Do not reinstate a pill in `DemoTour`** without deleting the matching state here —
+   two floating invitations at once is the exact finding this merge closed.
+3. **`window` events, not React context**, because the two components are siblings in three
+   different layouts and, mid-navigation from guest to admin, live in two React trees at once.
+   A provider would have to be added to all three layouts and would still not span that boundary.
+
+**Also:** `DemoExplore` aliases `C.accent` to `DEMO.accent` (the ring colour), where `DemoTour`
+aliases the same key to `DEMO.accentSolid`. The two filled CTAs in Explore — the panel's tour
+button and the paused pill's Resume — therefore name `C.accentSolid` explicitly. Copying a
+filled-button style between the two files without checking that alias gives ivory text on the
+light ring colour (§15's two-token rule, from the other end).
+
+**Mobile:** the paused pill's three controls (compass, Resume, ✕) are each a full 40×40 rather
+than a 28 px visual with §17's outset hit area — they sit 6 px apart, so two expanded hit areas
+would both claim the same gap and a tap there could end the tour instead of resuming it.

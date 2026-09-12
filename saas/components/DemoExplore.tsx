@@ -3,28 +3,53 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from 'next/navigation'
+import { Compass, Wine } from 'lucide-react'
 import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import { isEmbeddedPane } from '@/lib/demoEmbed'
 import { useAnchorRect } from '@/lib/demoAnchor'
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
+import { useIsNarrow } from '@/lib/useIsNarrow'
+import {
+  TOUR_STATE_EVENT,
+  TOUR_STEPS,
+  type TourState,
+  loadTourState,
+  sendTourCommand,
+  tourOffer,
+} from '@/lib/demoTour'
 import DemoThemeCatalogue, { THEME_CATALOGUE_EVENT } from '@/components/DemoThemeCatalogue'
 
 /**
- * The feature rail for demo.vineworks.ge — Plan-DemoRedesign Phase 3,
- * DemoDirections Direction 04. Renders nothing for every other tenant.
+ * The demo's single entry control — "Explore this demo" — and the panel behind
+ * it. Renders nothing for every other tenant.
  *
- * The problem: a deep product has been built and almost none of it is
- * discoverable. A visitor would have to *guess* that packing sheets, per-company
- * price ladders, masterclass add-ons, theme presets, card payments and a full
- * Georgian translation layer exist. This turns that invisible surface area into
- * a menu, and lets a prospect self-qualify on the feature they personally care
- * about instead of sitting through a fixed order.
+ * **Was `DemoFeatureRail`** (Plan-DemoRedesign Phase 3, DemoDirections
+ * Direction 04) until 2026-09-12, when the tour's bottom-left pill and this
+ * file's right-edge tab were merged into one control. The 2026-09-11 teardown's
+ * finding was that a visitor met two floating invitations at once, offering two
+ * guided experiences with no stated relationship to each other, and had to
+ * guess which one they wanted before knowing what either was.
  *
- * **Placement decision (task 3.1):** a right-edge slide-out, not a persistent
- * rail. The admin panel already carries a full nav row and a second permanent
- * rail would compete with it for the same glance — worse, it would push the
- * bookings table (the thing that actually sells) sideways. A drawer is invisible
- * until asked for and costs no layout.
+ * **The merge is not "keep one, delete the other."** The tour is a linear
+ * narrative — seven steps, each naming a figure, in an order that argues a case.
+ * The capability list is a menu for someone who already knows what they came to
+ * check. Those are different shapes of help, and a prospect who wants to look up
+ * one feature should not have to enter a narrative to reach it. So both survive
+ * intact; what changed is that there is now one door, and the tour is the first
+ * thing behind it (Max's call, 2026-09-12, option B of three).
+ *
+ * Why this file owns the control rather than `DemoTour`: the control opens a
+ * panel, and the panel is here. The tour's *state* is what had to be shared, so
+ * it moved to `lib/demoTour.ts` — this file reads it and asks
+ * (`sendTourCommand`), `DemoTour` still decides and is still the only writer.
+ *
+ * **Placement decision, revised.** The panel is still a right-edge slide-out,
+ * not a persistent rail, for the original reason: the admin panel already
+ * carries a full nav row, and a second permanent rail would push the bookings
+ * table — the thing that actually sells — sideways. The trigger moved from a
+ * vertical edge tab to a bottom-right pill, because a vertical tab cannot carry
+ * a state label like "Tour paused · step 4 of 7", and because bottom-right came
+ * free when Chunk 6 took the bug-report widget off the demo tenant.
  *
  * Each row deep-links to the screen that proves the claim and pins a short
  * callout to the relevant element once it arrives (task 3.3). The callout is
@@ -37,9 +62,19 @@ import DemoThemeCatalogue, { THEME_CATALOGUE_EVENT } from '@/components/DemoThem
 
 const CALLOUT_KEY = 'vineworks-demo-rail-callout'
 
+/**
+ * The mobile minimum from the 2026-09-12 passes (MaintenanceNotes §17). Applied
+ * as a `minHeight`/`minWidth` here rather than the invisible-hit-area trick,
+ * because unlike the three controls in §17 these float in their own space —
+ * growing them steals nothing from a neighbour, so the honest fix is available.
+ */
+const TAP = 40
+
 // Palette: lib/demoTheme ("cellar dark"), Plan-DemoFlowFixes Chunk 5 task 5.1.
 // Local key names kept so the swap is one place, not thirty call sites.
-// `accent` is the ring colour here — the rail has no filled CTA.
+// `accent` is the ring/callout colour; `accentSolid` backs the two filled CTAs
+// the merge added (the panel's tour button and the paused pill's Resume), which
+// carry ivory text and cannot sit on the lighter ring colour — §15's two tokens.
 const C = {
   ink: DEMO.surface,
   inkSoft: DEMO.raised,
@@ -47,6 +82,7 @@ const C = {
   text: DEMO.text,
   muted: DEMO.muted,
   accent: DEMO.accent,
+  accentSolid: DEMO.accentSolid,
 }
 
 export type Capability = {
@@ -144,7 +180,7 @@ function calloutPosition(rect: { top: number; left: number; width: number; heigh
 
 type PendingCallout = { note: string; target?: string; label: string }
 
-export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
+export default function DemoExplore({ tenantId }: { tenantId: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -155,14 +191,30 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
   const [embedded, setEmbedded] = useState(false)
   useEffect(() => { setEmbedded(isEmbeddedPane()) }, [])
   const [callout, setCallout] = useState<PendingCallout | null>(null)
+  const [tour, setTour] = useState<TourState | null>(null)
+  const isNarrow = useIsNarrow()
 
   const isDemo = tenantId === DEMO_TENANT_ID
 
   useEffect(() => { setMounted(true) }, [])
 
+  // ---- The tour's state, read but never written here (lib/demoTour.ts).
+  // Re-read on the event rather than polled: the tour writes on every
+  // transition and announces each one, so there is nothing to poll for. ----
+  useEffect(() => {
+    if (!isDemo) return
+    setTour(loadTourState())
+    function onState(e: Event) {
+      const next = (e as CustomEvent<TourState>).detail
+      setTour(next ?? loadTourState())
+    }
+    window.addEventListener(TOUR_STATE_EVENT, onState)
+    return () => window.removeEventListener(TOUR_STATE_EVENT, onState)
+  }, [isDemo])
+
   // Pick up a callout handed over by the previous route.
   //
-  // Deliberately deferred by a tick rather than read synchronously. The rail is
+  // Deliberately deferred by a tick rather than read synchronously. This is
   // mounted in BOTH layouts, and a guest→admin deep link crosses that boundary:
   // the outgoing instance re-renders once with the new pathname before React
   // unmounts it, so a synchronous read let it consume the token and then
@@ -199,7 +251,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
   const rect = useAnchorRect(callout?.target, !!callout, {
     maxHeightFraction: 0.6,
     pad: 6,
-    source: 'DemoFeatureRail',
+    source: 'DemoExplore',
     scrollIntoView: true,
   })
 
@@ -243,36 +295,122 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
 
   if (!isDemo || !mounted || embedded) return null
 
+  const offer = tourOffer(tour, pathname)
+  /** Mid-tour on the step's own screen: the spotlight is up and this control
+   *  must not draw over it. That branch used to live in DemoTour as "return the
+   *  pill or nothing"; it is the same rule, just enforced from the other side. */
+  const spotlighting = offer.kind === 'spotlight'
+  const paused = offer.kind === 'paused'
+
+  /** The tour card's button, which is the whole point of the merge: one door,
+   *  and the guided path is the first thing behind it. */
+  const tourAction =
+    offer.kind === 'replay' ? { label: 'Replay the tour', index: 0 }
+      : paused ? { label: `Resume at step ${offer.index + 1}`, index: offer.index }
+        : { label: 'Start the tour', index: 0 }
+
+  const beginTour = (index: number) => {
+    setOpen(false)
+    sendTourCommand({ action: 'begin', index })
+  }
+
+  const pillBase: React.CSSProperties = {
+    position: 'fixed',
+    // Lifts over the wine catalogue's sticky cart bar, which publishes this var
+    // (WineCatalogueClient.tsx). Defaults to 0px everywhere else.
+    bottom: 'calc(16px + var(--cart-bar-offset, 0px))',
+    right: '16px',
+    zIndex: 150,
+    backgroundColor: C.ink,
+    color: C.text,
+    border: `1px solid ${C.border}`,
+    borderRadius: '999px',
+    boxShadow: DEMO_FX.shadowSm,
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: TAP,
+  }
+
   return createPortal(
     <>
-      {/* Edge tab. Right side, vertically centred — the tour's pill sits bottom
-          left and the bug-report widget bottom right, so this collides with
-          neither. */}
-      {!open && (
+      {/* ---- The single entry control (bottom right). Replaces the tour's
+          bottom-left pill AND this component's old right-edge tab: a visitor
+          should meet one invitation, not two. ---- */}
+      {!open && !spotlighting && !paused && (
         <button
           onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
           style={{
-            position: 'fixed',
-            right: 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            zIndex: 140,
-            backgroundColor: C.ink,
-            color: C.text,
-            border: `1px solid ${C.border}`,
-            borderRight: 'none',
-            borderRadius: '12px 0 0 12px',
-            padding: '14px 10px',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            letterSpacing: '0.06em',
+            ...pillBase,
+            padding: '10px 18px',
+            fontSize: '0.82rem',
+            fontWeight: 600,
             cursor: 'pointer',
-            writingMode: 'vertical-rl',
-            boxShadow: DEMO_FX.shadowSm,
+            gap: '7px',
           }}
         >
-          ✦ What can it do?
+          <Compass aria-hidden="true" size={15} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+          Explore this demo
         </button>
+      )}
+
+      {/* Mid-tour, off the step's screen. Resume stays one press — the panel is
+          still reachable from the ✦ on the left of the pill, so pausing the
+          tour never costs access to the capability list. */}
+      {!open && paused && (
+        <div
+          style={{
+            ...pillBase,
+            // Each control is a full 40x40 (MaintenanceNotes §17) rather than a
+            // 28px visual with an outset hit area: the three sit 6px apart, so
+            // two expanded hit areas would both claim the same gap and a tap
+            // there could end the tour instead of resuming it.
+            padding: '6px',
+            gap: '6px',
+            fontSize: '0.8rem',
+          }}
+        >
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Explore this demo"
+            aria-haspopup="dialog"
+            style={{
+              background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: TAP, height: TAP, borderRadius: '999px', padding: 0,
+            }}
+          >
+            <Compass aria-hidden="true" size={16} strokeWidth={1.7} />
+          </button>
+          <span style={{ color: C.text }}>
+            {isNarrow ? `Step ${offer.index + 1}/${TOUR_STEPS.length}` : `Tour paused · step ${offer.index + 1} of ${TOUR_STEPS.length}`}
+          </span>
+          <button
+            onClick={() => beginTour(offer.index)}
+            style={{
+              // accentSolid, not accent: this is a filled CTA with ivory text on
+              // it, and §15's two-token rule exists precisely because the lighter
+              // ring colour cannot carry that text. The tour's old paused pill
+              // aliased `accent` to accentSolid; this file aliases it to the ring,
+              // so the merge had to name the token explicitly.
+              backgroundColor: C.accentSolid, color: DEMO_FX.onAccent, border: 'none', borderRadius: '999px',
+              padding: '0 14px', height: TAP, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Resume →
+          </button>
+          <button
+            onClick={() => sendTourCommand({ action: 'end' })}
+            aria-label="End the tour"
+            style={{
+              background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.9rem',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: TAP, height: TAP, padding: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {open && (
@@ -283,7 +421,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
           />
           <aside
             role="dialog"
-            aria-label="What Vineworks can do"
+            aria-label="Explore this demo"
             style={{
               position: 'fixed',
               top: 0, right: 0, bottom: 0,
@@ -302,18 +440,78 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
                 <p style={{ margin: 0, color: C.muted, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
                   Vineworks
                 </p>
-                <strong style={{ display: 'block', marginTop: '4px', fontSize: '1.05rem' }}>Everything it does</strong>
+                <strong style={{ display: 'block', marginTop: '4px', fontSize: '1.05rem' }}>Explore this demo</strong>
                 <p style={{ margin: '6px 0 0', color: C.muted, fontSize: '0.8rem', lineHeight: 1.5 }}>
-                  Pick anything. It opens the screen that proves it, on real data.
+                  Take the guided tour, or pick anything below. Either way it opens the real screen, on real data.
                 </p>
               </div>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                style={{ background: 'none', border: 'none', color: C.muted, fontSize: '1.1rem', cursor: 'pointer', padding: '2px 6px', lineHeight: 1 }}
+                style={{
+                  background: 'none', border: 'none', color: C.muted, fontSize: '1.1rem', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: TAP, height: TAP, padding: 0, lineHeight: 1, flexShrink: 0, margin: '-8px -8px 0 0',
+                }}
               >
                 ✕
               </button>
+            </div>
+
+            {/* ---- The guided path, first and visibly different from the rows
+                below it. The two experiences are not siblings: one argues a case
+                in a fixed order, the others answer a question you already have.
+                Making them look alike was what produced two competing entry
+                points in the first place. ---- */}
+            <div
+              style={{
+                marginTop: '18px',
+                backgroundColor: C.inkSoft,
+                border: `1px solid ${C.border}`,
+                borderRadius: '12px',
+                padding: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Wine aria-hidden="true" size={15} strokeWidth={1.7} style={{ flexShrink: 0, color: C.accent }} />
+                <strong style={{ fontSize: '0.92rem' }}>
+                  {paused ? 'Your tour is paused' : 'The guided tour'}
+                </strong>
+              </div>
+              <p style={{ margin: '6px 0 0', color: C.muted, fontSize: '0.8rem', lineHeight: 1.5 }}>
+                {paused
+                  ? `You are ${offer.index + 1} of ${TOUR_STEPS.length} steps in. Pick it back up where you left it.`
+                  : `${TOUR_STEPS.length} steps, about three minutes. Each one names what it is worth — not what to click.`}
+              </p>
+              <button
+                onClick={() => beginTour(tourAction.index)}
+                style={{
+                  width: '100%',
+                  marginTop: '12px',
+                  minHeight: TAP,
+                  backgroundColor: C.accentSolid,
+                  color: DEMO_FX.onAccent,
+                  border: 'none',
+                  borderRadius: '999px',
+                  padding: '10px 16px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {tourAction.label} →
+              </button>
+              {paused && (
+                <button
+                  onClick={() => { setOpen(false); sendTourCommand({ action: 'end' }) }}
+                  style={{
+                    width: '100%', marginTop: '6px', minHeight: TAP - 8, background: 'none', border: 'none',
+                    color: C.muted, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline',
+                  }}
+                >
+                  End the tour
+                </button>
+              )}
             </div>
 
             {CAPABILITY_GROUPS.map(g => (
@@ -328,6 +526,7 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
                         onClick={() => go(item)}
                         style={{
                           width: '100%',
+                          minHeight: TAP,
                           textAlign: 'left',
                           backgroundColor: C.inkSoft,
                           color: C.text,
@@ -393,7 +592,11 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
               <button
                 onClick={() => setCallout(null)}
                 aria-label="Dismiss"
-                style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.95rem', lineHeight: 1, padding: '0 2px' }}
+                style={{
+                  background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.95rem',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: TAP, height: TAP, padding: 0, lineHeight: 1, flexShrink: 0, margin: '-10px -10px 0 0',
+                }}
               >
                 ✕
               </button>
@@ -403,11 +606,11 @@ export default function DemoFeatureRail({ tenantId }: { tenantId: string }) {
         </>
       )}
 
-      {/* Mounted here rather than in the three layouts: it is this rail's
+      {/* Mounted here rather than in the three layouts: it is this panel's
           "Branding and theme presets" row opening in place, not an independent
           surface, and one fewer mount point is one fewer thing for
           MaintenanceNotes §16 to fall out of step on. It renders whether or not
-          the drawer is open, because it also re-applies a preview the visitor
+          the panel is open, because it also re-applies a preview the visitor
           chose before a reload. */}
       <DemoThemeCatalogue />
     </>,
