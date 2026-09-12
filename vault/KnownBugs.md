@@ -341,9 +341,11 @@ look; start by expanding the full error in the browser console on `/wines`.
 
 ---
 
-## Bug #30 — The nightly demo reseed did not run (2026-09-12)
+## Bug #30 — The 03:00 UTC scheduled reseed did not run; manual trigger works fine (2026-09-12)
 
-**Status: 🔴 Open.** This is the check [[SessionLog]]'s 2026-09-12 entry asked for, and it failed.
+**Status: 🔴 Open, narrowed.** This is the check [[SessionLog]]'s 2026-09-12 entry asked for, and
+it failed — but the manual trigger (Max, via super-admin's "Reset demo now") succeeded cleanly
+right after, which rules out the handler itself and points at the **schedule**, not the code.
 
 ### What the previous session established
 
@@ -368,30 +370,39 @@ within ±1 hour, [[MaintenanceNotes]] §14):
 `seedDemoTenant` does `db.order.deleteMany({ where: { tenantId } })` — there is no filter that
 could spare one row. So either the cron never fired, or the handler fired and failed.
 
+### The manual trigger, and what it settles
+
+Max pressed "Reset demo now" in `/super-admin/tenants` (production, logged in as
+`max.mghvdliashvili@gmail.com` — a real production super-admin account, contradicting an earlier
+guess in this same session that no such login existed; worth adding to `credentials.txt` once he
+shares it). The panel reported success immediately: *"Rebuilt Vineworks Estate: 393 bookings and
+45 wine orders (393 bookings total, 238,258₾) in 2.2s."* Re-measured on the live demo right after:
+**393 bookings, "Testashvili" gone.**
+
+Both the button and the cron call the identical `seedDemoTenant()` — the button through a server
+action, the cron through the route with a bearer token. So **the handler works.** This rules out
+the "handler fired and threw" branch entirely. What's left is narrower: the 03:00 UTC schedule
+itself either didn't fire, or fired against something that made it a no-op (wrong secret in that
+one invocation, a cold-start timeout, a Vercel Hobby cron quirk).
+
 ### What was NOT ruled out, and how to rule it out
 
-- **Whether the cron fired at all.** Vercel Hobby retains runtime logs for **1 hour**, so by the
-  time anyone looks in the morning the evidence is already gone. This is the single biggest
-  obstacle to diagnosing this bug and it will recur on every attempt.
-- **Whether the handler throws.** The route catches and returns 500 with a message, which would
-  also be invisible after an hour.
-- **Whether the row is genuinely the survivor** rather than a new booking a visitor made after
-  04:00 UTC. Checking `Order.createdAt` on the production demo tenant settles it in one query.
+- **Whether the cron fired at all last night.** Vercel Hobby retains runtime logs for **1 hour**,
+  so by the time anyone looks in the morning the evidence is already gone. This is the single
+  biggest obstacle to diagnosing this bug and it will recur on every attempt — the manual trigger
+  working does not tell us why the automatic one didn't.
+- **Whether tonight's 03:00 UTC run fires.** This is now the cleanest test available: the handler
+  is proven good, so if bookings are back above 393 (or a fresh stray row appears) tomorrow
+  morning, the schedule is working and last night was a one-off. If the count is still 393 with
+  no new activity, the schedule itself is broken.
 
-### Suggested first move
+### The fix that matters more than diagnosing last night
 
-Trigger the reseed by hand and watch what comes back — the route returns the created counts on
-success and the error message on failure, so a single call distinguishes "cron never fired"
-(manual run succeeds) from "handler is broken" (manual run fails with the reason):
-
-```
-curl -H "Authorization: Bearer $CRON_SECRET" https://demo.vineworks.ge/api/cron/reseed-demo
-```
-
-If that succeeds, the handler is fine and the problem is scheduling. The practical fix for the
-log-retention blind spot is to have the handler write its own result somewhere durable (a
-`Setting` row on the demo tenant — last-run timestamp and counts) so the next investigation does
-not depend on catching a 1-hour window.
+Whether or not last night's miss repeats, the log-retention blind spot is the real problem — it
+turned a two-minute question ("did the cron run?") into a session-length investigation with an
+inconclusive middle. Have the handler write its own last-run result somewhere durable (a
+`Setting` row on the demo tenant: timestamp, counts, success/failure) so the next check is one
+query instead of a race against a 1-hour log window.
 
 
 ## Bug #19 — No protection against concurrent-traffic bursts; production hits a hard DB connection ceiling around 100–150 simultaneous visitors, causing a whole-site outage that outlasts the burst
