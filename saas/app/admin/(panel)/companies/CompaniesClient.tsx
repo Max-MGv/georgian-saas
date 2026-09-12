@@ -295,7 +295,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
                       key={option}
                       type="button"
                       onClick={() => setSkipPayment(option)}
-                      className="text-xs px-3 py-2 rounded-lg font-medium flex-1"
+                      className="text-xs px-3 py-2.5 md:py-2 min-h-10 md:min-h-0 rounded-lg font-medium flex-1"
                       style={skipPayment === option
                         ? { backgroundColor: C.wine, color: '#fff', border: `1px solid ${C.wine}` }
                         : { backgroundColor: 'var(--site-surface)', color: C.muted, border: `1px solid ${C.border}` }}
@@ -716,7 +716,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
 
       {/* ── Add company ── */}
       {!adding && (
-        <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 rounded-lg text-sm font-medium mb-4">
+        <button onClick={() => setAdding(true)} className="btn-wine px-4 py-2 min-h-10 md:min-h-0 rounded-lg text-sm font-medium mb-4">
           {activeModule === 'BOOKING' ? at('companies.addCompanyBooking') : at('companies.addCompanyWineOrder')}
         </button>
       )}
@@ -796,17 +796,17 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                   {deletingId === company.id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: C.muted }}>{at('companies.deleteConfirm')}</span>
-                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? at('companies.deleting') : at('companies.yesDelete')}</button>
-                      <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+                      <button onClick={() => handleDelete(company.id)} disabled={loading} className="text-sm px-3 py-2.5 md:py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#b91c1c' }}>{loading ? at('companies.deleting') : at('companies.yesDelete')}</button>
+                      <button onClick={() => setDeletingId(null)} disabled={loading} className="text-sm px-3 py-2.5 md:py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setEditingCompany(company)}
-                        className="text-sm px-3 py-1.5 rounded-lg border"
+                        className="text-sm px-3 py-2.5 md:py-1.5 rounded-lg border"
                         style={{ borderColor: C.border, color: C.muted }}
                       >{at('companies.priceTiers.edit')}</button>
-                      <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
+                      <button onClick={() => setDeletingId(company.id)} className="text-sm px-3 py-2.5 md:py-1.5 rounded-lg border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
                     </div>
                   )}
                 </div>

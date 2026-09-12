@@ -772,7 +772,7 @@ export default function WineCatalogueClient({
           <div className="flex items-center gap-1 rounded-lg border p-0.5 flex-shrink-0" style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-surface)' }}>
             <button
               onClick={() => setView('grid')} title={t(locale, 'wines.view.grid')}
-              className={`p-2 rounded transition-colors ${view === 'grid' ? 'text-white' : 'hover:opacity-70'}`}
+              className={`p-2 min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center rounded transition-colors ${view === 'grid' ? 'text-white' : 'hover:opacity-70'}`}
               style={{ backgroundColor: view === 'grid' ? 'var(--color-brand)' : 'transparent', color: view === 'grid' ? 'white' : 'var(--site-muted)' }}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -782,7 +782,7 @@ export default function WineCatalogueClient({
             </button>
             <button
               onClick={() => setView('list')} title={t(locale, 'wines.view.list')}
-              className={`p-2 rounded transition-colors ${view === 'list' ? 'text-white' : 'hover:opacity-70'}`}
+              className={`p-2 min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center rounded transition-colors ${view === 'list' ? 'text-white' : 'hover:opacity-70'}`}
               style={{ backgroundColor: view === 'list' ? 'var(--color-brand)' : 'transparent', color: view === 'list' ? 'white' : 'var(--site-muted)' }}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -842,7 +842,7 @@ export default function WineCatalogueClient({
                     disabled={isDisabled}
                     aria-disabled={isDisabled}
                     onClick={() => { if (!isDisabled) row.set(opt.value) }}
-                    className="text-xs px-3 py-1.5 rounded-full font-medium border transition-colors"
+                    className="text-xs px-3 py-2.5 md:py-1.5 rounded-full font-medium border transition-colors"
                     style={isActive
                       ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#ffffff' }
                       : isDisabled
@@ -898,7 +898,7 @@ export default function WineCatalogueClient({
                       <span className="text-sm font-semibold" style={{ color: 'var(--site-text)' }}>{wine.price}₾ {t(locale, 'wine.perBottle')}</span>
                       {qty === 0 ? (
                         <button type="button" onClick={() => setQty(wine.vintageId, 1)}
-                          className="w-8 h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
+                          className="w-10 h-10 md:w-8 md:h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
                           style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
                           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
                           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
@@ -906,7 +906,7 @@ export default function WineCatalogueClient({
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <button type="button" onClick={() => setQty(wine.vintageId, -1)}
-                            className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
+                            className="w-9 h-9 md:w-7 md:h-7 rounded border font-bold text-base flex items-center justify-center"
                             style={{ borderColor: 'var(--site-border)', color: 'var(--site-text)', backgroundColor: 'var(--site-bg)' }}>−</button>
                           <input
                             type="text"
@@ -918,7 +918,7 @@ export default function WineCatalogueClient({
                             style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-surface)', color: 'var(--site-text)' }}
                           />
                           <button type="button" onClick={() => setQty(wine.vintageId, 1)}
-                            className="w-7 h-7 rounded border font-bold text-base flex items-center justify-center"
+                            className="w-9 h-9 md:w-7 md:h-7 rounded border font-bold text-base flex items-center justify-center"
                             style={{ borderColor: 'var(--site-border)', color: 'var(--site-text)', backgroundColor: 'var(--site-bg)' }}>+</button>
                         </div>
                       )}
@@ -967,7 +967,7 @@ export default function WineCatalogueClient({
                   <div className="flex items-center justify-center gap-1">
                     {qty === 0 ? (
                       <button type="button" onClick={() => setQty(wine.vintageId, 1)}
-                        className="w-7 h-7 rounded border-2 font-bold text-base flex items-center justify-center transition-colors hover:text-white"
+                        className="w-9 h-9 md:w-7 md:h-7 rounded border-2 font-bold text-base flex items-center justify-center transition-colors hover:text-white"
                         style={{ borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-brand)' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
@@ -975,7 +975,7 @@ export default function WineCatalogueClient({
                     ) : (
                       <>
                         <button type="button" onClick={() => setQty(wine.vintageId, -1)}
-                          className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
+                          className="w-9 h-9 md:w-6 md:h-6 rounded border text-sm font-bold flex items-center justify-center"
                           style={{ borderColor: 'var(--site-border)', color: 'var(--site-text)', backgroundColor: 'var(--site-bg)' }}>−</button>
                         <input type="text" inputMode="numeric" value={qty}
                           onChange={e => setQtyDirect(wine.vintageId, parseInt(e.target.value) || 0)}
@@ -983,7 +983,7 @@ export default function WineCatalogueClient({
                           className="w-10 text-center text-sm font-semibold border rounded outline-none"
                           style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-surface)', color: 'var(--site-text)' }} />
                         <button type="button" onClick={() => setQty(wine.vintageId, 1)}
-                          className="w-6 h-6 rounded border text-sm font-bold flex items-center justify-center"
+                          className="w-9 h-9 md:w-6 md:h-6 rounded border text-sm font-bold flex items-center justify-center"
                           style={{ borderColor: 'var(--site-border)', color: 'var(--site-text)', backgroundColor: 'var(--site-bg)' }}>+</button>
                       </>
                     )}

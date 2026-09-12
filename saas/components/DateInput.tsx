@@ -84,10 +84,15 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
         tabIndex={-1}
         aria-label="Open calendar"
         onClick={() => (hiddenRef.current as any)?.showPicker?.()}
+        // Hit area, not icon size: the glyph stays 15px, but the button fills
+        // the field's full height and ~40px of its width so a thumb can find it.
+        // The icon still lands at the same optical position (right: 0 + the
+        // 0.625rem it used to be offset by, now expressed as padding).
         style={{
-          position: 'absolute', right: '0.625rem',
-          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-          color: 'var(--site-secondary)', display: 'flex', alignItems: 'center',
+          position: 'absolute', right: 0, top: 0, bottom: 0,
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '0 0.625rem', minWidth: 40,
+          color: 'var(--site-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

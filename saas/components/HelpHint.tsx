@@ -72,7 +72,7 @@ export default function HelpHint({ text }: { text: string }) {
         aria-expanded={open}
         aria-controls={popoverId}
         onClick={toggle}
-        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0 transition-colors"
+        className="relative inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold flex-shrink-0 transition-colors"
         style={{
           backgroundColor: open ? 'var(--color-brand)' : 'var(--site-surface)',
           color: open ? '#fff' : 'var(--site-muted)',
@@ -80,6 +80,13 @@ export default function HelpHint({ text }: { text: string }) {
           lineHeight: 1,
         }}
       >
+        {/* Hit area, not icon size. The circle stays 16px so admin labels read
+            the same, but the tappable box is 40px tall and 32px wide — a 16x16
+            target is unhittable with a thumb. Deliberately wider vertically
+            than horizontally: HelpHint sits inline beside a label and, on
+            /admin/companies, beside another button (see KnownBugs #15), so a
+            symmetric expansion would start stealing that button's taps. */}
+        <span aria-hidden="true" className="absolute -inset-y-3 -inset-x-2" />
         ?
       </button>
       {open && rect && typeof document !== 'undefined' && createPortal(

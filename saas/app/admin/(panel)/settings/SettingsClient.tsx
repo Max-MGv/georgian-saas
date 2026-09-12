@@ -68,6 +68,10 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
       className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
       style={{ backgroundColor: enabled ? C.wine : '#d1c4b0' }}
     >
+      {/* Hit area only — the switch still reads as 44x24, the thumb gets 44x40.
+          Settings is a list of these, and a 24px-tall row is a coin-flip on a
+          phone. Vertical only: the rows are stacked, nothing sits beside it. */}
+      <span aria-hidden="true" className="absolute inset-x-0 -inset-y-2" />
       <span
         className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
         style={{ transform: enabled ? 'translateX(22px)' : 'translateX(2px)' }}
@@ -475,7 +479,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   key={l}
                   type="button"
                   onClick={() => handleAdminLanguage(l)}
-                  className="px-4 py-1.5 text-sm font-semibold uppercase transition-colors"
+                  className="px-4 py-2.5 md:py-1.5 text-sm font-semibold uppercase transition-colors"
                   style={{
                     backgroundColor: adminLanguage === l ? 'var(--color-brand)' : C.bg,
                     color: adminLanguage === l ? '#fff' : C.muted,
@@ -510,7 +514,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   key={l}
                   type="button"
                   onClick={() => handleDefaultLocale(l)}
-                  className="px-4 py-1.5 text-sm font-semibold uppercase transition-colors"
+                  className="px-4 py-2.5 md:py-1.5 text-sm font-semibold uppercase transition-colors"
                   style={{
                     backgroundColor: defaultLocale === l ? 'var(--color-brand)' : C.bg,
                     color: defaultLocale === l ? '#fff' : C.muted,
@@ -642,14 +646,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   )}
                   {isEditing ? (
                     <button type="button" onClick={() => handlePaymentSave(key)} title={at('settings.common.save')}
-                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
                     <button type="button" onClick={() => setPaymentEditing(key)} title={at('settings.common.edit')}
-                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -765,7 +769,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     <button
                       type="button"
                       onClick={() => setFlittClearConfirm(false)}
-                      className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                      className="text-xs px-3 py-2.5 md:py-1.5 rounded-lg font-medium"
                       style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: 'var(--site-surface)' }}
                     >
                       {at('settings.common.cancel')}
@@ -900,14 +904,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
                   {isEditing ? (
                     <button type="button" onClick={() => handleBookingRuleSave(row.key)} title={at('settings.common.save')}
-                      className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
                     <button type="button" onClick={() => setBookingRulesEditing(row.key)} title={at('settings.common.edit')}
-                      className="p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -946,7 +950,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 <button
                   type="button"
                   onClick={() => { setMapsDraft(mapsEmbedUrl); setMapsEditMode(true) }}
-                  className="text-xs px-3 py-1 rounded-lg font-medium"
+                  className="text-xs px-3 py-2.5 md:py-1 rounded-lg font-medium"
                   style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted }}
                 >
                   {at('settings.common.edit')}
@@ -985,7 +989,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 <button
                   type="button"
                   onClick={handleMapsCancel}
-                  className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                  className="text-xs px-3 py-2.5 md:py-1.5 rounded-lg font-medium"
                   style={{ border: `1px solid ${C.border}`, color: C.muted, backgroundColor: 'var(--site-surface)' }}
                 >
                   {at('settings.common.cancel')}
@@ -1035,7 +1039,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 type="button"
                 disabled={logoUploading}
                 onClick={() => logoInputRef.current?.click()}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                className="text-xs px-3 py-2.5 md:py-1.5 rounded-lg font-medium"
                 style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted, opacity: logoUploading ? 0.6 : 1 }}
               >
                 {logoUploading ? at('settings.branding.uploading') : logoUrl ? at('settings.branding.replaceLogo') : at('settings.branding.uploadLogo')}
@@ -1067,14 +1071,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   )}
                   {altEditing ? (
                     <button type="button" onClick={handleAltTextSave} title={at('settings.common.save')}
-                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
                       </svg>
                     </button>
                   ) : (
                     <button type="button" onClick={() => setAltEditing(true)} title={at('settings.common.edit')}
-                      className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                      className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -1103,7 +1107,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 type="button"
                 disabled={faviconUploading}
                 onClick={() => faviconInputRef.current?.click()}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                className="text-xs px-3 py-2.5 md:py-1.5 rounded-lg font-medium"
                 style={{ backgroundColor: 'var(--site-bg)', border: `1px solid ${C.border}`, color: C.muted, opacity: faviconUploading ? 0.6 : 1 }}
               >
                 {faviconUploading ? at('settings.branding.uploading') : faviconUrl ? at('settings.branding.replaceFavicon') : at('settings.branding.uploadFavicon')}
@@ -1169,7 +1173,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         type="button"
                         onClick={() => handleContactSave(key, value)}
                         title={at('settings.common.save')}
-                        className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
+                        className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity"
                         style={{ color: '#9b090c' }}
                       >
                         {/* return arrow ↵ */}
@@ -1183,7 +1187,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         type="button"
                         onClick={() => setContactEditing(key)}
                         title={at('settings.common.edit')}
-                        className="flex-shrink-0 p-1 rounded hover:opacity-70 transition-opacity"
+                        className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity"
                         style={{ color: '#9b090c' }}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1231,7 +1235,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               type="button"
               onClick={handleAddBlockedDate}
               disabled={!newBlockDate || isPending}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity"
+              className="px-4 py-2 min-h-10 md:min-h-0 rounded-lg text-sm font-medium text-white transition-opacity"
               style={{ backgroundColor: 'var(--color-brand)', opacity: !newBlockDate || isPending ? 0.5 : 1 }}
             >
               {at('settings.closedDays.blockDate')}

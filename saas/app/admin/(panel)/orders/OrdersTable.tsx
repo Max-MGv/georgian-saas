@@ -386,8 +386,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <span className="font-semibold" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
                   </span>
+                  {/* The click handler is on this wrapper, not the pill, so
+                      padding here buys hit area for free: the badge still reads
+                      as a 26px badge, the thumb gets 42px. Vertical only — the
+                      whole card is a link to the order, so widening sideways
+                      would turn taps meant for the guest's name into status
+                      changes. Card list = the phone view of /admin/orders. */}
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative flex-shrink-0 py-2 -my-2"
                     onClick={e => { e.stopPropagation(); setStatusMenuId(statusMenuId === order.id ? null : order.id) }}
                   >
                     <button

@@ -35,6 +35,7 @@ export default function ViewToggle({ view, params, locale = 'en' }: Props) {
     <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
       <button
         onClick={() => switchTo('table')}
+        className="min-h-10 md:min-h-0"
         style={{ ...base, border: 'none', borderRight: `1px solid ${C.border}`,
           backgroundColor: view === 'table' ? C.wine : C.inputBg,
           color: view === 'table' ? '#fff' : C.muted }}
@@ -43,6 +44,7 @@ export default function ViewToggle({ view, params, locale = 'en' }: Props) {
       </button>
       <button
         onClick={() => switchTo('calendar')}
+        className="min-h-10 md:min-h-0"
         style={{ ...base, border: 'none',
           backgroundColor: view === 'calendar' ? C.wine : C.inputBg,
           color: view === 'calendar' ? '#fff' : C.muted }}

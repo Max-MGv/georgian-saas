@@ -58,7 +58,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {user?.app_metadata?.role === 'super_admin' && (
               <a
                 href="/super-admin"
-                className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                className="text-xs px-3 py-2.5 md:py-1.5 rounded-lg transition-colors"
                 style={{ backgroundColor: '#1e1b4b', border: '1px solid #3730a3', color: '#a5b4fc' }}
               >
                 ⬡ {at('nav.platform')}
@@ -84,7 +84,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <a
               key={link.href}
               href={link.href}
-              className="text-sm whitespace-nowrap px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+              className="text-sm whitespace-nowrap px-3 py-2.5 md:py-1.5 rounded-lg transition-colors flex-shrink-0"
               style={{ color: 'var(--site-muted)' }}
             >
               {link.label}

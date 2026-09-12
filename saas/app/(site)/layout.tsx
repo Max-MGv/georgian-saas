@@ -66,9 +66,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <p className="mt-1">{t(locale, 'footer.cancel')}</p>
         {legalOn && (
           <p className="mt-3 flex items-center justify-center gap-4">
-            <a href="/terms" className="hover:opacity-70 transition-opacity" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.terms')}</a>
-            <a href="/privacy" className="hover:opacity-70 transition-opacity" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.privacy')}</a>
-            <a href="/returns" className="hover:opacity-70 transition-opacity" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.returns')}</a>
+            <a href="/terms" className="hover:opacity-70 transition-opacity inline-flex items-center py-2.5 -my-2.5 md:py-0 md:my-0" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.terms')}</a>
+            <a href="/privacy" className="hover:opacity-70 transition-opacity inline-flex items-center py-2.5 -my-2.5 md:py-0 md:my-0" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.privacy')}</a>
+            <a href="/returns" className="hover:opacity-70 transition-opacity inline-flex items-center py-2.5 -my-2.5 md:py-0 md:my-0" style={{ color: 'var(--color-brand)' }}>{t(locale, 'footer.returns')}</a>
           </p>
         )}
       </footer>

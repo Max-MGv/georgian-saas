@@ -172,7 +172,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <ViewToggle view={view} params={params} locale={locale} />
           <Link
             href="/admin/orders/new"
-            className="px-3 py-1.5 rounded-lg text-sm font-medium text-white"
+            className="px-3 py-1.5 min-h-10 md:min-h-0 inline-flex items-center rounded-lg text-sm font-medium text-white"
             style={{ backgroundColor: C.wine }}
           >
             {at('orders.newOrder')}
