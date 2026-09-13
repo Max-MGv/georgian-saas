@@ -8,6 +8,24 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 (even later) — packing sheet print-background bug (Feature 177 follow-up)
+
+Max flagged, with screenshots, that the actual printed packing sheet showed the numbered
+company badge and the bottle-count pill as flat washed-out grey — not the solid maroon
+circle / white-on-maroon pill from the approved mockup. Root cause: both rely entirely on
+`background-color` for legibility, and most browsers (Chrome included) drop background
+colors on an actual print/PDF export unless "Print backgrounds" is manually checked in the
+print dialog — borders always print regardless, which is why the card border and left
+spine looked fine in his screenshot while the two background-filled elements didn't.
+
+Fix: added `-webkit-print-color-adjust: exact; print-color-adjust: exact;` to the print
+document's universal (`*`) selector in `printPackingSheet()`
+(`app/admin/(panel)/wine-orders/PackingView.tsx`) — the standard override that forces a
+browser to honor explicit background colors when printing, independent of that checkbox.
+One-line CSS fix, `tsc --noEmit` clean, pushed to `staging` for Max to re-print and confirm.
+
+---
+
 ## 2026-09-13 (later still) — booking lead time + working hours/days (Feature 178)
 
 Built two new admin-configurable booking rules end to end, shipped to `staging`:

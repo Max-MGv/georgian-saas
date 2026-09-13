@@ -139,7 +139,7 @@ function printPackingSheet(orders: PackingOrder[], mode: BoxMode, locale: string
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${at('packing.sheetTitle')}</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { font-family: Georgia, 'Times New Roman', serif; font-size: 12px; padding: 24px; color: #241408; }
 h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
 .meta { font-family: 'Courier New', monospace; color: #5c4a38; margin-bottom: 20px; font-size: 11px; }
