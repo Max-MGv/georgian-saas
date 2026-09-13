@@ -55,6 +55,18 @@ export type TourCommand =
   /** End the tour and leave the visitor where they are. */
   | { action: 'end' }
 
+/**
+ * Which half of the product a step is standing in.
+ *
+ * The tour crosses from one to the other between steps 2 and 3, and until
+ * 2026-09-13 it did so silently: the visitor was teleported from a winery's
+ * public website into its admin panel with nothing saying so. That crossing is
+ * the *entire* product story — "the booking your guest makes lands here" — and
+ * it was the one thing the tour never said out loud. Max, reviewing the flow:
+ * "users should have a sense of what theyre looking at or whats next".
+ */
+export type TourSurface = 'guest' | 'admin'
+
 export type TourStep = {
   /** Route this step lives on. The spotlight only shows here. */
   route: string
@@ -62,8 +74,41 @@ export type TourStep = {
    *  still runs, centred, with no ring — a tour that vanishes because a selector
    *  drifted is worse than one that loses its ring. */
   target?: string
+  /** Guest site or back office. Drives the breadcrumb, the rail's two groups,
+   *  and the one-line note shown on the step where the two change over. */
+  surface: TourSurface
+  /** The screen's own name, in the visitor's words rather than the route's —
+   *  "Wine list", not `/wines`. Second half of the breadcrumb. */
+  screen: string
   title: string
   body: string
+}
+
+/** First half of the breadcrumb. Named for what the *visitor* is looking at,
+ *  not for the codebase's `(site)` / `admin` split. */
+export const SURFACE_LABEL: Record<TourSurface, string> = {
+  guest: 'Guest site',
+  admin: 'Back office',
+}
+
+/**
+ * Shown once, on the first step of each surface, instead of on every step —
+ * a banner that never goes away is furniture, and stops being read.
+ *
+ * Derived rather than stored: "is this the step where the surface changed?" is
+ * a question about the steps array, and storing the answer beside it is how two
+ * copies of one fact drift apart.
+ */
+export function isSurfaceChange(index: number): boolean {
+  if (index <= 0) return false
+  return TOUR_STEPS[index]?.surface !== TOUR_STEPS[index - 1]?.surface
+}
+
+/** The line shown when `isSurfaceChange` is true. Says what just happened to
+ *  the visitor, and why it is the point rather than a detour. */
+export const SURFACE_CHANGE_NOTE: Record<TourSurface, string> = {
+  guest: 'Back on the public website — this is what your guests see.',
+  admin: 'You have crossed into the winery’s back office. Same booking, other side of the counter.',
 }
 
 /**
@@ -78,42 +123,56 @@ export const TOUR_STEPS: TourStep[] = [
   {
     route: '/',
     target: 'booking-form',
+    surface: 'guest',
+    screen: 'Booking form',
     title: 'Bookings arrive while you sleep',
     body: 'This form takes the booking, prices it against the right rate, and emails the guest — at 23:40 on a Saturday if that is when they decide. No phone call, no Facebook thread, nobody writing it in a notebook.',
   },
   {
     route: '/wines',
     target: 'wine-catalogue',
+    surface: 'guest',
+    screen: 'Wine list',
     title: 'Restaurants order cases without asking you',
     body: 'Wine bars and importers order straight from this list, each at the discount you agreed with them. This winery has four trade buyers on four different rates.',
   },
   {
     route: '/admin/orders',
     target: 'orders-table',
+    surface: 'admin',
+    screen: 'Orders',
     title: 'Every booking in one place',
     body: 'Nearly 400 bookings, eighteen months of them, and nobody here typed a single one. Filter by date, company or status; send an invoice without leaving the row.',
   },
   {
     route: '/admin/orders',
     target: 'orders-filters',
+    surface: 'admin',
+    screen: 'Orders',
     title: 'Pull up one operator in a second',
     body: 'Six tour operators are in that company filter, each on its own rate ladder — per head, and different again for a group of 25 than for a group of 8. Every booking here was priced on the right one automatically. Filter to one operator and the whole season with them is in front of you.',
   },
   {
     route: '/admin/statistics',
     target: 'stats-future-revenue',
+    surface: 'admin',
+    screen: 'Statistics',
     title: 'You know your season before it happens',
     body: 'Around ₾31,000 is already committed for the months ahead, from bookings that are on the books today. That is the number that tells you whether to hire for the summer.',
   },
   {
     route: '/admin/wine-orders',
     target: 'wine-orders-list',
+    surface: 'admin',
+    screen: 'Wine orders',
     title: 'Tomorrow’s cases, already counted',
     body: 'The packing view turns open trade orders into a physical list — which wine, which vintage, how many bottles, for whom. Hand it to whoever is loading the van.',
   },
   {
     route: '/admin/content',
     target: 'content-editor',
+    surface: 'admin',
+    screen: 'Website editor',
     title: 'The website is yours to change',
     body: 'Text, photos, prices, opening hours — all edited here, in both Georgian and English. No developer, no ticket, no waiting a week for a paragraph.',
   },

@@ -14,6 +14,9 @@ import {
   TOUR_AUTOSTART_KEY,
   TOUR_COMMAND_EVENT,
   TOUR_STEPS,
+  SURFACE_LABEL,
+  SURFACE_CHANGE_NOTE,
+  isSurfaceChange,
   type TourCommand,
   type TourState,
   EMPTY_TOUR_STATE,
@@ -154,6 +157,25 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   const stateRef = useRef<TourState | null>(null)
   useEffect(() => { stateRef.current = state }, [state])
 
+  /**
+   * The one way this component writes tour state: persist, announce, then set.
+   *
+   * **Every write goes through here, and none of it belongs inside a `setState`
+   * updater.** `beginAt`, `endTour` and the booking listener each used to call
+   * `saveTourState` from within their updater, which produced a real React
+   * error on every step change — "Cannot update a component (DemoExplore) while
+   * rendering a different component (DemoTour)". `saveTourState` dispatches
+   * `TOUR_STATE_EVENT` synchronously; `DemoExplore` listens for it and calls its
+   * own setState; and an updater runs during DemoTour's render phase, so that
+   * setState landed mid-render. In StrictMode the updater also runs twice, so
+   * the write and the announcement both happened twice in development.
+   *
+   * The comment on `stateRef` below already stated the rule — an updater must be
+   * a pure function of its previous value — for the analytics calls. It applies
+   * just as much to the persistence, which is why `before` (the ref) is what
+   * these callers read instead of `prev`. Found 2026-09-13; predates the
+   * orientation work, surfaced by it.
+   */
   const update = useCallback((next: TourState) => {
     saveTourState(next)
     setState(next)
@@ -176,19 +198,15 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     if (!before?.started || before.finished) {
       trackDemo('tour_started', { step: index + 1, auto })
     }
-    setState(prev => {
-      const next: TourState = {
-        started: true,
-        index,
-        finished: false,
-        autoStarted: auto || (prev?.autoStarted ?? false),
-      }
-      saveTourState(next)
-      return next
+    update({
+      started: true,
+      index,
+      finished: false,
+      autoStarted: auto || (before?.autoStarted ?? false),
     })
     const dest = TOUR_STEPS[index].route
     if (dest !== pathname) router.push(dest)
-  }, [pathname, router])
+  }, [pathname, router, update])
 
   /** End the tour where the visitor stands. Used by Skip, by the last step's
    *  Close, and by the Explore pill's ✕. */
@@ -202,12 +220,8 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
       if (atEnd) trackDemo('tour_completed')
       else trackDemo('tour_abandoned', { step: before.index + 1 })
     }
-    setState(prev => {
-      const next: TourState = { ...(prev ?? EMPTY_TOUR_STATE), started: false, finished: true }
-      saveTourState(next)
-      return next
-    })
-  }, [])
+    update({ ...(before ?? EMPTY_TOUR_STATE), started: false, finished: true })
+  }, [update])
 
   // ---- Commands from DemoExplore, which owns the entry control since the
   // 2026-09-12 merge. It asks; the decision about what "begin" means (including
@@ -260,18 +274,15 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!isDemo) return
     function onBooked() {
-      setState(prev => {
-        if (!prev?.started || prev.finished) return prev
-        const target = TOUR_STEPS.findIndex(s => s.route === '/admin/orders')
-        if (target < 0 || prev.index >= target) return prev
-        const next = { ...prev, index: target }
-        saveTourState(next)
-        return next
-      })
+      const prev = stateRef.current
+      if (!prev?.started || prev.finished) return
+      const target = TOUR_STEPS.findIndex(s => s.route === '/admin/orders')
+      if (target < 0 || prev.index >= target) return
+      update({ ...prev, index: target })
     }
     window.addEventListener(DEMO_BOOKED_EVENT, onBooked)
     return () => window.removeEventListener(DEMO_BOOKED_EVENT, onBooked)
-  }, [isDemo])
+  }, [isDemo, update])
 
   if (!isDemo || !mounted || !state || embedded) return null
 
@@ -324,7 +335,13 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   const TOOLTIP_W = 340
   // The last step carries the hand-off — two stacked CTAs instead of one button
   // row — so it needs more clearance than the others or it runs off the bottom.
-  const TOOLTIP_H = isLast ? 300 : 190
+  //
+  // All three numbers grew on 2026-09-13 when the tooltip gained a progress
+  // rail, a breadcrumb and a "next up" line. This is only a *placement* budget —
+  // the card is auto-height, and under-estimating it just puts the card
+  // somewhere slightly worse, never clips it.
+  const surfaceChanged = isSurfaceChange(state.index)
+  const TOOLTIP_H = isLast ? 350 : surfaceChanged ? 310 : 265
   const clampLeft = (x: number) =>
     Math.min(Math.max(12, x), Math.max(12, window.innerWidth - TOOLTIP_W - 12))
 
@@ -398,13 +415,63 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           ...tooltipStyle,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-          <span style={{ color: C.muted, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em' }}>
-            {state.index + 1} / {TOUR_STEPS.length}
+        {/* ---- Where am I, and what is coming (2026-09-13) ------------------
+             What "3 / 7" could not tell a visitor: which of five screens they
+             had been teleported to, that they had crossed from a winery's
+             public site into its admin panel, or what pressing Next would do.
+             Max: "users should have a sense of what theyre looking at or whats
+             next in the flow".
+
+             Deliberately NOT a click-to-advance tour, which is what "let you
+             click yourself" would mean literally: on a cold sales visitor that
+             trades a known drop-off (people who stop pressing Next) for a worse
+             one (people who cannot find the thing to click and leave). Next
+             still drives; the rail makes the route visible and jumpable, and
+             the spotlight hole stays live so the visitor can poke at the real
+             screen underneath without losing their place. ---- */}
+        <div
+          role="group"
+          aria-label={`Tour progress: step ${state.index + 1} of ${TOUR_STEPS.length}`}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          {TOUR_STEPS.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => beginAt(i)}
+              // The native tooltip is the cheapest way to name a segment before
+              // it is pressed, and it needs no popover of its own inside a
+              // popover. aria-label carries the same for screen readers.
+              title={`${i + 1}. ${s.title} — ${SURFACE_LABEL[s.surface]}, ${s.screen}`}
+              aria-label={`Go to step ${i + 1}: ${s.title}`}
+              aria-current={i === state.index ? 'step' : undefined}
+              style={{
+                flex: 1,
+                height: i === state.index ? 6 : 4,
+                minWidth: 0,
+                padding: 0,
+                border: 'none',
+                borderRadius: 999,
+                cursor: 'pointer',
+                transition: 'height 120ms',
+                backgroundColor: i === state.index ? C.ring : i < state.index ? C.accent : C.border,
+                // The gap opens where the surface changes, so the two halves of
+                // the story are visible as two groups before either is read.
+                marginLeft: isSurfaceChange(i) ? 9 : 0,
+              }}
+            />
+          ))}
+          <span style={{ color: C.muted, fontSize: '0.68rem', fontWeight: 700, marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
+            {state.index + 1}/{TOUR_STEPS.length}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '9px' }}>
+          <span style={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted }}>
+            <span style={{ color: C.ring }}>{SURFACE_LABEL[step.surface]}</span> · {step.screen}
           </span>
           <button
             onClick={skip}
-            style={{ background: 'none', border: 'none', color: C.muted, fontSize: '0.75rem', cursor: 'pointer', padding: '2px 4px', textDecoration: 'underline' }}
+            style={{ background: 'none', border: 'none', color: C.muted, fontSize: '0.75rem', cursor: 'pointer', padding: '2px 4px', textDecoration: 'underline', whiteSpace: 'nowrap' }}
           >
             {/* "Skip the tour" is the wrong word once there is nothing left to
                 skip — but a dismissal must stay visible on every step. */}
@@ -412,8 +479,45 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           </button>
         </div>
 
+        {/* Shown only on the step where the surface changes — see
+            isSurfaceChange. A banner on every step becomes furniture. */}
+        {surfaceChanged && (
+          <p
+            style={{
+              margin: '10px 0 0',
+              padding: '7px 10px',
+              borderRadius: 8,
+              borderLeft: `2px solid ${C.ring}`,
+              backgroundColor: DEMO.raised,
+              fontSize: '0.76rem',
+              lineHeight: 1.45,
+              color: C.text,
+            }}
+          >
+            {SURFACE_CHANGE_NOTE[step.surface]}
+          </p>
+        )}
+
         <strong style={{ display: 'block', margin: '8px 0 0', fontSize: '1rem', lineHeight: 1.3 }}>{step.title}</strong>
         <p style={{ margin: '8px 0 0', fontSize: '0.85rem', lineHeight: 1.55, color: C.muted }}>{step.body}</p>
+
+        {/* What Next actually does, before it is pressed. The destination
+            screen is named whenever the step changes route, which is five of the
+            six transitions — that navigation was the disorienting part. */}
+        {!isLast && (() => {
+          const nextStep = TOUR_STEPS[state.index + 1]
+          const moves = nextStep.route !== step.route
+          return (
+            <p style={{ margin: '12px 0 0', fontSize: '0.72rem', lineHeight: 1.45, color: C.muted }}>
+              <span style={{ color: C.ring, fontWeight: 700 }}>Next</span> · {nextStep.title}
+              {moves && (
+                <span style={{ display: 'block', marginTop: 2 }}>
+                  Takes you to {SURFACE_LABEL[nextStep.surface].toLowerCase()} → {nextStep.screen}
+                </span>
+              )}
+            </p>
+          )
+        })()}
 
         {/* ---- The hand-off (task 3.3). The last step is the one moment the
              visitor has been given seven reasons to care, so it asks for

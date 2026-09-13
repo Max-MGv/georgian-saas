@@ -13,6 +13,7 @@ import { trackDemo } from '@/lib/demoAnalytics'
 import {
   TOUR_STATE_EVENT,
   TOUR_STEPS,
+  SURFACE_LABEL,
   type TourState,
   loadTourState,
   sendTourCommand,
@@ -56,9 +57,14 @@ import DemoThemeCatalogue, { THEME_CATALOGUE_EVENT } from '@/components/DemoThem
  * callout to the relevant element once it arrives (task 3.3). The callout is
  * handed over in sessionStorage because the destination is a fresh route render.
  *
- * This same list is the feature list for the vineworks.ge marketing site when
- * that gets built — each row deep-linking into live proof. Built with that reuse
- * in mind: the data is a plain exported array.
+ * **On reuse for vineworks.ge:** an earlier note here expected this array to
+ * become the marketing site's feature list. When that site was built
+ * (2026-09-13, `components/WelcomeLanding.tsx`) it deliberately did not: these
+ * are sixteen *capabilities* for someone already inside the product deciding
+ * what to go and look at, and the marketing page needs six *benefits* for
+ * someone deciding whether to look at all. Different granularity, different
+ * reader, and in Georgian first. The array stays a plain export, but nothing
+ * imports it from there and the two are allowed to diverge.
  */
 
 const CALLOUT_KEY = 'vineworks-demo-rail-callout'
@@ -85,6 +91,16 @@ const C = {
   accent: DEMO.accent,
   accentSolid: DEMO.accentSolid,
 }
+
+/**
+ * How the seven steps split between the guest site and the back office, counted
+ * from TOUR_STEPS rather than written down: the panel promises "two on the
+ * guest site, then five in the back office" before the visitor commits three
+ * minutes to it, and a hard-coded pair of numbers is a promise that goes stale
+ * the first time a step is added.
+ */
+const GUEST_STEPS = TOUR_STEPS.filter(s => s.surface === 'guest').length
+const ADMIN_STEPS = TOUR_STEPS.filter(s => s.surface === 'admin').length
 
 export type Capability = {
   label: string
@@ -491,10 +507,15 @@ export default function DemoExplore({ tenantId }: { tenantId: string }) {
                   {paused ? 'Your tour is paused' : 'The guided tour'}
                 </strong>
               </div>
+              {/* Both lines say where the tour goes, not just how long it is
+                  (2026-09-13). "You are 4 of 7 steps in" tells a visitor
+                  nothing they can decide on; the name of the step they would
+                  land on does. Same reasoning as the tooltip's "Next ·" line —
+                  see the note in DemoTour. */}
               <p style={{ margin: '6px 0 0', color: C.muted, fontSize: '0.8rem', lineHeight: 1.5 }}>
                 {paused
-                  ? `You are ${offer.index + 1} of ${TOUR_STEPS.length} steps in. Pick it back up where you left it.`
-                  : `${TOUR_STEPS.length} steps, about three minutes. Each one names what it is worth — not what to click.`}
+                  ? `Picks up at step ${offer.index + 1} of ${TOUR_STEPS.length} — “${TOUR_STEPS[offer.index].title}”, on ${SURFACE_LABEL[TOUR_STEPS[offer.index].surface].toLowerCase()} → ${TOUR_STEPS[offer.index].screen}.`
+                  : `${TOUR_STEPS.length} steps, about three minutes. ${GUEST_STEPS} on the guest site, then ${ADMIN_STEPS} in the back office — each one names what it is worth, not what to click.`}
               </p>
               <button
                 onClick={() => beginTour(tourAction.index)}
