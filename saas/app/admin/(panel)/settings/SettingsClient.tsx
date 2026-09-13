@@ -1103,7 +1103,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               <div className="flex items-center gap-2">
                 <input
                   type="time"
-                  style={{ ...inputStyle, width: 110 }}
+                  style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                   value={hoursOpen}
                   onChange={e => setHoursOpen(e.target.value)}
                   onBlur={() => handleUniformHoursBlur('open')}
@@ -1111,7 +1111,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
                 <input
                   type="time"
-                  style={{ ...inputStyle, width: 110 }}
+                  style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                   value={hoursClose}
                   onChange={e => setHoursClose(e.target.value)}
                   onBlur={() => handleUniformHoursBlur('close')}
@@ -1138,14 +1138,14 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     <>
                       <input
                         type="time"
-                        style={{ ...inputStyle, width: 110 }}
+                        style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                         value={day.open}
                         onChange={e => handleWeeklyDayChange(i, { open: e.target.value })}
                       />
                       <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
                       <input
                         type="time"
-                        style={{ ...inputStyle, width: 110 }}
+                        style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                         value={day.close}
                         onChange={e => handleWeeklyDayChange(i, { close: e.target.value })}
                       />
