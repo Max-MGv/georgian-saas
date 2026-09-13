@@ -8,6 +8,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 (final) — shipped to production
+
+Max confirmed both fixes on `staging` (print-color-adjust for the packing sheet — his
+first check was a stale already-open print popup from before the deploy landed, not an
+actual bug; the widened time inputs). Merged `staging` → `master` (fast-forward,
+`2e4ad20` → `bf31add`) and pushed. Vercel production deployment
+`dpl_9xRYzh8V5gNaneKKtWGAcGZzT3KM` built and went `READY`, aliased to
+`nikalasmarani.vercel.app` (and every other production domain) with no alias errors,
+confirmed still serving from `fra1` (`MaintenanceNotes.md` §8) via `X-Vercel-Id`.
+
+Live now: Feature 178 (booking lead time + working hours/days), the packing-sheet
+print-color-adjust fix, and the time-input width fix. Switched back to `staging`
+immediately after the push per the standing rule.
+
+---
+
 ## 2026-09-13 (even later) — packing sheet print-background bug (Feature 177 follow-up)
 
 Max flagged, with screenshots, that the actual printed packing sheet showed the numbered
