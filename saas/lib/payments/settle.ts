@@ -204,6 +204,7 @@ async function sendSettlementEmail(
         // This is the confirmation createBooking deliberately withheld — it only
         // becomes true here, once the money actually arrived.
         paid: true,
+        customMessage: settingValue(settings, 'booking_email_message'),
         ...common,
       })
     }
@@ -245,6 +246,7 @@ async function sendSettlementEmail(
       })),
       totalAmount: wineOrder.totalAmount ?? 0,
       discountPercent: wineOrder.discountPercent,
+      customMessage: settingValue(settings, 'wine_receipt_email_message'),
       ...common,
     })
   }

@@ -8,6 +8,48 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 (latest) — Automatic Messages page (Feature 181)
+
+Max asked for previews of every automatic email in the admin panel, then — after
+discussion narrowing scope down from full email-body editing — for a "Responses"-style
+catalog section: all automatic messages in one place, with an editable default where
+it makes sense, modeled on how `invoice_email_message` already works (a persisted
+per-tenant default, pre-filled into the send flow, editable in Settings).
+
+**Research first** (`vault/Research-DynamicContentEditing.md`): confirmed no preview
+mechanism existed for any of the 6 automatic emails (every `send*()` sends immediately,
+no render-without-sending mode), no existing super-admin "platform default" tier for
+SiteContent, and `invoice_email_message`'s pattern (pre-filled per-send textarea backed
+by a `Setting` row) was the one genuine precedent to copy for anything with no human in
+the loop at send time (booking confirmation, wine receipt — unlike invoice, these fire
+automatically from `createBooking.ts`/`settle.ts`, no admin present to type a message).
+
+**Built:** new `/admin/messages` page. Each of the 6 email files was split into a pure
+`render*Email(data)` template (`lib/emails/templates/`, zero server-only imports) plus
+its existing send wrapper — the split means the new page's preview runs entirely
+client-side (import the render function into the page, call it on every keystroke,
+zero round trip). Two new `Setting` keys (`booking_email_message`,
+`wine_receipt_email_message`) added following `invoice_email_message`'s exact shape,
+wired into `createBooking.ts` and `settle.ts`. Booking Confirmation and Wine Order
+Receipt are editable; Invoice Email is editable too (same setting Settings page already
+uses — verified live on staging, the page correctly showed the tenant's real existing
+"გმადლობთ სტუმრობისთვის!" message); New Booking Alert and New Company Request stay
+read-only ("Fixed content") since they're internal ops mail, not customer-facing.
+Bug-report notification excluded entirely (goes to Max, not tenant-relevant).
+
+Verified end-to-end on the staging dev server: all 5 rows render/expand, live preview
+updates on keystroke, save-and-reload confirmed the message actually persists,
+`npx tsc --noEmit` clean. Not yet verified: an actual real booking/payment/wine-order
+send on staging to confirm the live email matches the preview exactly.
+
+Full design: `Features/Feature 181 - Automatic Messages Page.md`. New Maintenance
+Notes §23 documents the template/wrapper split for future email changes.
+
+**Next up:** Max to test a real booking/payment on staging; the broader (deferred)
+super-admin-default + full-body editing ask from the research doc is still open.
+
+---
+
 ## 2026-09-13 (later) — New Company booking flow (Feature 180)
 
 Max flagged (with a screenshot from production) that a tour-company rep on a

@@ -603,3 +603,19 @@ differently depending on which code path last touched it.
 **Files involved:** `saas/app/actions/createBooking.ts`, `saas/app/actions/orders.ts`
 (`updateOrderEnhanced`, `assignOrderCompany`), `saas/lib/pricingUtils.ts` (`findTier`,
 `comboRatePerPerson`, the two functions that are already shared).
+
+---
+
+## 23. Every automatic email is split HTML-template vs. send-wrapper — edit the right half
+
+**What the dependency is:** since Feature 181, each file in `saas/lib/emails/` (`bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts`, `newBookingNotification.ts`) plus `app/actions/notifyNewCompany.ts` no longer contains any HTML. The markup lives in a sibling file under `saas/lib/emails/templates/` (`bookingConfirmationTemplate.ts` etc.), exporting a pure `render*Email(data): { subject, html }` — no `resend` import, no DB call, no `'use server'`. The original file just calls that render function, then `sendTenantEmail()`.
+
+**Why it's split this way:** `app/admin/(panel)/messages/MessagesClient.tsx` (the "Automatic Messages" preview page) imports the render functions directly into a `'use client'` component and calls them in the browser on every keystroke, so a tenant admin's live preview needs zero network round trip. That only works because the template files have no server-only imports — importing `bookingConfirmation.ts` itself (which pulls in `resend` via `sendEmail.ts`) into client code would bundle a chunk nothing there needs and could not run anyway.
+
+**What this means in practice:**
+- **Changing an email's markup, layout, or copy** → edit the file in `lib/emails/templates/`, never the wrapper. The wrapper has nothing left to change except the `sendTenantEmail()` call (`fromLocalPart`, demo suppression, etc.).
+- **Adding a new automatic email** → same split from the start: a pure template file, a thin wrapper. If it should appear on the Messages page, register it in `MessagesClient.tsx` with its own sample data.
+- **Never add a DB call, `headers()`/`cookies()`, or a `resend` import to a `templates/*.ts` file** — the moment one of these stops being pure, the admin preview page breaks (or silently starts making a server request on every keystroke, if you're not careful).
+- Two of the five templates (`bookingConfirmationTemplate.ts`, `wineOrderReceiptTemplate.ts`) accept an optional `customMessage` — a tenant-editable paragraph sourced from a `Setting` (`booking_email_message` / `wine_receipt_email_message`), escaped before interpolation since it's a persisted default reused on every future send, not a one-off admin-typed value. `invoiceEmailTemplate.ts`'s `customMessage` predates this and is deliberately **not** escaped — see Feature 181's note — don't "fix" that inconsistency without checking why first.
+
+**Files involved:** `saas/lib/emails/templates/*.ts`, `saas/lib/emails/*.ts`, `saas/app/actions/notifyNewCompany.ts`, `saas/app/admin/(panel)/messages/MessagesClient.tsx`. Full design: `Features/Feature 181 - Automatic Messages Page.md`.

@@ -22,6 +22,11 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   payment_bank_code: '',
   payment_iban: '',
   invoice_email_message: '',
+  // Feature 181 — same "persisted default, editable per send site" slot as
+  // invoice_email_message, applied to the two automatic (no-human-in-the-loop)
+  // customer emails. See app/admin/(panel)/messages.
+  booking_email_message: '',
+  wine_receipt_email_message: '',
   min_guests_tasting: '4',
   min_guests_tasting_lunch: '4',
   // Booking lead time (#178) — minimum hours-ahead a booking must be made.

@@ -80,6 +80,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: '/admin/menu-items', label: at('nav.menuItems'), show: bookingOn },
             { href: '/admin/masterclass', label: at('nav.masterclass'), show: bookingOn },
             { href: '/admin/content', label: at('nav.content'), show: true },
+            { href: '/admin/messages', label: at('nav.messages'), show: true },
             { href: '/admin/settings', label: at('nav.settings'), show: true },
             { href: '/admin/my-reports', label: at('nav.myReports'), show: true },
           ].filter(link => link.show).map(link => (
