@@ -57,9 +57,24 @@ afterward. The winery notification email (Feature 179) sent without error to Sta
 Winery's real contact address; the customer confirmation only failed because the test
 used `test@example.com`, which Resend's sandbox rejects — not a bug.
 
-Typechecked clean throughout. Pushed to `staging`. **Next: Max to test on the staging
-preview URL** (not localhost) with a real company-code-less booking, and confirm the
-email copy reads right.
+Typechecked clean throughout. Pushed to `staging`.
+
+**Follow-up same session:** Max tested on the staging preview and hit a loop — Staging
+Winery was in the **dropdown** variant (not direct-code), where the `<select required>`
+has no way to express "no company," so the browser's own "please select an item" prompt
+just kept blocking submission. He suggested adding a "New Company" option to the dropdown
+itself. Built it: a `'__new__'` sentinel option, checked at submit time (not selection
+time, since the rest of the form may not be filled in yet) by generalizing the same gate
+`handleSubmit` already had, and stripped back to `undefined` in `buildBookingPayload()`
+before it would reach the server as a fake companyId. Verified locally the same way —
+selected "+ New Company" from the real dropdown, filled the rest of the form, submitted;
+order landed with `companyId: null`, `requestedCompanyName: 'Dropdown Test Co'`,
+`totalPrice: 0`. Cleaned up the test order and left `hide_company_dropdown` set to `true`
+(matching production) for Max's next test. Typechecked clean, pushed to `staging`.
+
+**Next: Max to test both variants on the staging preview URL** (not localhost) — the
+direct-code one (current setting) and, if he wants, the dropdown one by asking to flip
+the setting back — and confirm the email copy reads right.
 
 ---
 

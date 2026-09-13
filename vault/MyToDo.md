@@ -17,11 +17,12 @@ request together (Feature 180, `vault/features/Feature 180 - New Company Booking
 I verified it end-to-end on my own local run against the dev DB, but you should check it
 on the actual staging preview:
 
-1. On the staging preview site, go to Book a Visit → Tour Company. Staging Winery
-   currently has the company **dropdown** shown (not the direct-code box you saw on
-   production) — if you want to test the exact same UI as production, ask me to flip its
-   `hide_company_dropdown` setting to match, or test directly against
-   nikalasmarani.vineworks.ge's staging equivalent if there is one.
+1. On the staging preview site, go to Book a Visit → Tour Company. Staging Winery's
+   `hide_company_dropdown` setting is currently `true` (matches production) so you'll see
+   the direct company-code box, same as your original screenshot. (If you also want to
+   test the dropdown variant — the one that showed you the "please select an item" loop —
+   ask me to flip it back to `false` temporarily; that variant now has a "+ New Company"
+   option right in the dropdown that does the same thing.)
 2. Fill in the whole form (date, time, guests, name, phone/email) but leave the company
    code blank, then hit "Request Booking".
 3. A "New Company?" popup should appear, pre-filled with your name/phone/email, saying

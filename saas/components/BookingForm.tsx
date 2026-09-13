@@ -329,7 +329,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     return {
       bookingType,
       visitType,
-      companyId: bookingType === 'COMPANY' ? (companyId || undefined) : undefined,
+      // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
+      // above) — never a real id, so it must never reach the server as one.
+      companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,
@@ -418,8 +420,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     // already valid at this point, so rather than blocking submission
     // outright, open the "New Company?" popup to collect the missing piece —
     // submitting it there sends this exact booking alongside the
-    // registration request (Feature 180).
-    if (bookingType === 'COMPANY' && hideCompanyDropdown && !companyId) {
+    // registration request (Feature 180). Covers both variants: the
+    // direct-entry one has no confirmed code (companyId still empty), and
+    // the dropdown one has its "+ New Company" sentinel selected instead of
+    // a real company — picking that couldn't just open the popup immediately
+    // on selection, since the rest of the form (date, guests, contact) may
+    // not be filled in yet at that point.
+    if (bookingType === 'COMPANY' && ((hideCompanyDropdown && !companyId) || companyId === '__new__')) {
       setNewCompanyIncludesBooking(true)
       setNewCoStatus('idle')
       setNewCoName('')
@@ -720,6 +727,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
                 className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
                 <option value="">{t(locale, 'form.company_placeholder')}</option>
+                {/* Sentinel, not a real company id — satisfies the <select required>
+                    constraint (which otherwise just loops the browser's own "select an
+                    item" prompt with no way to proceed) and is treated the same as a
+                    missing code in the direct-entry variant: handleSubmit below opens
+                    the "New Company?" popup for it instead of forwarding it to the
+                    server. Never sent to createBooking() as a companyId — stripped in
+                    buildBookingPayload(). */}
+                <option value="__new__">+ New Company</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>

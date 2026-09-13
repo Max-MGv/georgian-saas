@@ -21,6 +21,34 @@ whatever name/phone/email they'd already typed into the main form. Submitting it
 itself (`createBooking`), in one action. The success screen and confirmation email both
 say plainly that this isn't confirmed yet, since the company isn't set up in the system.
 
+## The dropdown variant (non-`hide_company_dropdown` tenants)
+
+Added same-day, on Max's request after he hit the browser's native "please select an
+item" loop on a `<select required>` with no way to express "no company" — the original
+fix above only covered the direct-code-entry variant.
+
+`BookingForm.tsx`'s company `<select>` now has a `+ New Company` option with the sentinel
+value `'__new__'`. It's a real, selectable option (satisfies `required`), but never a real
+company id:
+- `handleSubmit`'s gate that opens the popup was generalized from
+  `hideCompanyDropdown && !companyId` to also match `companyId === '__new__'` — checked at
+  submit time, not at selection time, since the rest of the form (date, guests, contact)
+  may not be filled in yet the moment someone picks it from the dropdown.
+- `buildBookingPayload()` strips the sentinel back to `undefined` before it would ever
+  reach `createBooking()` — otherwise `data.companyId` being truthy (`'__new__'`) would
+  make `isNewCompanyRequest` false server-side, silently losing the `requestedCompanyName`
+  save and the 0-price guard.
+- No other code needed touching: `companies.find(c => c.id === '__new__')` already
+  resolves to `undefined` everywhere it's looked up (`selectedCompany`, the access-code
+  `useEffect`), which is exactly the same "no company" state the rest of the form already
+  handles for the placeholder option.
+
+Verified locally the same way as the primary flow (temporarily flipped Staging Winery's
+`hide_company_dropdown` to `false`, selected "+ New Company" from the real dropdown, filled
+the rest of the form, submitted) — order landed with `companyId: null`,
+`requestedCompanyName: 'Dropdown Test Co'`, `totalPrice: 0`. Cleaned up and restored the
+setting to `true` afterward.
+
 ## Key design decisions
 
 - **`companyId` stays `null`.** No fake/placeholder Company row is created. The order is
@@ -68,7 +96,8 @@ say plainly that this isn't confirmed yet, since the company isn't set up in the
   `pendingNewCompany`/`requestedCompanyName` through to both emails
 - `saas/components/BookingForm.tsx` — `newCompanyIncludesBooking` state,
   `buildBookingPayload()`, reordered `handleSubmit` validation, `handleNewCompanySubmit`
-  now does both sends, success-screen note, popup copy changes
+  now does both sends, success-screen note, popup copy changes, `'__new__'` sentinel option
+  on the dropdown variant
 - `saas/lib/emails/bookingConfirmation.ts` — `pendingNewCompany` flag changes the intro
   paragraph and subject line
 - `saas/lib/emails/newBookingNotification.ts` — `requestedCompanyName` shown to the winery,
