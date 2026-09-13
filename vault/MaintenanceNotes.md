@@ -508,6 +508,41 @@ like a live error through three rounds of chasing it. Chrome's `read_console_mes
 
 **Files involved:** `saas/lib/demoAnchor.ts`, `saas/components/DemoTour.tsx`.
 
+### One loose end, explicitly UNVERIFIED
+
+Chasing the imaginary freeze turned up something that is still true and was never tested, because
+testing it needs a browser that is actually painting:
+
+`measure()` in `demoAnchor.ts` calls `setRect({...})` with a **brand-new object on every
+measurement**, even when all four numbers are unchanged. `setRect` with a new reference always
+re-renders `DemoTour`, whose portal lives in `document.body` — and the MutationObserver a few
+lines above is watching `document.body, {childList: true, subtree: true}`. So each measurement
+can mutate the very subtree that triggers the next one. The loop is bounded: `maybeStop()`
+disconnects the observer once the poll has ticked `SETTLE_ATTEMPTS` times, so in principle it
+only churns for the first ~0.5s of each step.
+
+**What is not known** is how many redundant renders that actually costs per step, or whether the
+poll's `attempts` counter can be starved by the render churn it is supposed to terminate (the
+`setInterval` is the only thing that stops the observer). It was never measured — a hidden tab
+pauses `requestAnimationFrame`, which is where the observer does its work, so every reading taken
+on 2026-09-13 was worthless for this question.
+
+**How to settle it in five minutes**, with the pane visible: count renders across one step change
+by logging in `measure()`, or diff the observer-callback count before and after adding an
+identity check. **The fix, if it is real, is one edit** — bail out when nothing moved:
+
+```ts
+setRect(prev =>
+  prev && prev.top === top && prev.left === left && prev.width === w && prev.height === h
+    ? prev
+    : { top, left, width: w, height: h })
+```
+
+React bails on an identical reference, which breaks the feedback edge at the source. Do not apply
+it as a "might as well" without measuring first — this file's own history (§20, and the two
+findings in `DemoSite/HANDOFF.md`) is a list of costs from building on an unmeasured hypothesis,
+and the freeze this came from was exactly that mistake.
+
 ---
 
 ## 21. The demo tour crosses two React trees — a ref cannot carry state across it

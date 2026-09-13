@@ -134,6 +134,13 @@ WHAT A NEXT SESSION WOULD ACTUALLY PICK UP:
   for the whole flow-fix plan.
 - KnownBugs.md #22 (wine-order total computed from client-supplied prices) is a real security
   issue and is still open. It has nothing to do with the demo.
+- **One five-minute UNVERIFIED item, needs a browser that is actually painting.** measure() in
+  lib/demoAnchor.ts calls setRect with a new object every time even when nothing moved, and the
+  MutationObserver above it watches document.body — which contains the tour's own portal. So a
+  measurement can mutate the subtree that triggers the next measurement. It is bounded by the
+  poll's disconnect, so it is probably just redundant renders in the first half-second of each
+  step, but nobody has counted them. MaintenanceNotes §20 has the one-line fix and the reason not
+  to apply it before measuring.
 ~~~
 
 ---
