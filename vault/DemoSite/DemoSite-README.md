@@ -14,7 +14,7 @@ platform. **If you are a new session picking this work up, read in this order.**
 | # | File | What it's for |
 |---|---|---|
 | 0 | **[[Plan-DemoFlowFixes]]** | ✅ **The task tracker — all eight chunks complete as of 2026-09-11.** Now the record of what was found and decided rather than a live to-do. Still **start here**: its per-chunk notes carry every measurement and every anti-pattern. |
-| 0.5 | **[[HANDOFF]]** | 🟢 **Ready-to-paste prompt for the next session.** Kept current — as of 2026-09-11 it says the plan is finished, names the two items that are Max's, and lists what a next session would pick up instead. |
+| 0.5 | **[[HANDOFF]]** | 🟢 **Ready-to-paste prompt for the next session.** Kept current — rewritten 2026-09-13. It now has to re-open the warning the previous version got to drop: **five commits sit on `staging` and not on `master`.** Names what is Max's, and carries the four anti-patterns worth outliving this work. |
 | 1 | [[Plan-DemoRedesign]] | The previous tracker — Phases 0–4, all ✅ complete. History now, but read it for why each piece exists and for the load-bearing constraints. |
 | 2 | [[DemoDirections]] | The design review that produced the plan. Why each direction exists, what it fixes, what to watch out for. |
 | 3 | [[Research-DemoPatterns]] | Industry research behind the decisions, with sources and a caveat about the numbers. |
