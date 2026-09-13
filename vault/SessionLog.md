@@ -8,6 +8,53 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 — fake wine orders + packing sheet readability
+
+Two small, unrelated asks in one session.
+
+**Fake wine orders for Nikalas Marani.** Needed test data to mock up a packing-sheet redesign.
+Discovered the dev database has no `nikalasmarani` tenant at all — dev's stand-in is
+`staging-winery` — the real Nikalas Marani tenant only exists in prod. Asked Max explicitly where
+to seed (per [[ClaudeInstructions]] Rule 0, prod is not touched casually); he chose prod. Wrote
+`scripts/seed-fake-wine-orders-nm.ts` (dry-run by default, `--confirm` to write, same shape as
+`seed-demo-data.ts`'s `.env.prod.backup` pattern), previewed it, then ran it for real: 5 wine
+orders for real NM companies pattern (Rustavi Wine & Dine, Batumi Seaside Restaurant, Tbilisi Old
+Town Hotel, Kutaisi Grand Cafe, Signagi Wine House), using NM's real active wines/vintages
+(Rkatsiteli, Rkatsiteli Amber, Mtsvane, Rosé, Kisi). No real wine orders existed yet on that tenant,
+so nothing to collide with.
+
+**Packing sheet print redesign.** Max's complaint: the current per-company print block
+(`PackingView.tsx` → `printPackingSheet()`) crams wine · vintage · qty into one pipe-joined line —
+hard to read at a glance while packing boxes. Mocked up 3 layouts as artifacts (Table, Checklist,
+Ledger) using the fake NM data above so the comparison was real, not lorem ipsum. Max picked
+**Checklist** (checkbox + wine/vintage + bold quantity pill per line), then flagged two follow-ups
+on a second look: company-to-company separation was too subtle (a light gold 1px border, easy to
+lose on paper) and the contact name/phone was in a pale gold that would wash out on a B&W printer.
+Fixed both — solid ink-toned card border + burgundy left spine + numbered badge per company, and
+contact text moved to dark ink / darker warm gray — and shipped a revised mockup with a literal
+"black & white preview" toggle (CSS grayscale filter) so the print-safety claim was checkable, not
+just asserted. Once approved, wired the exact same markup/CSS into `printPackingSheet()`'s template
+string in `app/admin/(panel)/wine-orders/PackingView.tsx` (kept to network-independent fonts —
+Georgia/Courier New/Arial — rather than the mockup's Google Fonts, since this prints from a
+back-office popup window that shouldn't depend on being online). Verified by reproducing the exact
+template function against sample data in a throwaway script and screenshotting the output — the
+dev DB has no comparable wine-order data to click through the real UI with.
+
+**Follow-up: intermittent checkbox/row clicks in Pack mode.** Max reported that clicking the
+per-order checkbox, or the row next to it, in `PackingTable` (`WineOrdersClient.tsx`) sometimes just
+didn't register. Root cause: the `<tr>` is click-to-toggle (`onClick={() => onToggle(order.id)}`)
+but nothing on the row disabled text selection — company names and wine-item badges are ordinary
+selectable text. Any click where the pointer drifts a pixel or two between mousedown and mouseup
+(completely normal with a trackpad or mouse) gets interpreted by the browser as a text drag-select
+instead of a click, which eats the click event entirely. That matches the "sometimes" exactly: it
+tracks pointer micro-movement, not anything about the checkbox itself. Fixed by adding `select-none`
+to the `<tr>` — cascades to every cell including the checkbox — so a drag never starts a selection
+and the click always lands. Verified live against real dev-DB staging-winery orders logged in as
+`maxb2bsaas@gmail.com`: reproduced the exact drag that used to eat a click, confirmed
+`window.getSelection().toString()` stays empty and the row toggles cleanly every time now.
+
+---
+
 ## 2026-09-13 — the introduction that was missing, at both ends
 
 Max, on the demo: *"i really like the demo flow itself, but i feel like an introduction is missing

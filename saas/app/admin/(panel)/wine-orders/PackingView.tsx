@@ -140,18 +140,53 @@ function printPackingSheet(orders: PackingOrder[], mode: BoxMode, locale: string
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${at('packing.sheetTitle')}</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Courier New', monospace; font-size: 12px; padding: 24px; color: #1c1008; }
-h1 { font-size: 17px; font-weight: bold; margin-bottom: 4px; }
-.meta { color: #6b5a47; margin-bottom: 20px; font-size: 11px; }
-.section-header { font-weight: bold; font-size: 13px; border-bottom: 2px solid #1c1008; padding-bottom: 4px; margin: 20px 0 10px; }
-.totals { background: #f5efe6; border: 1px solid #e0d4c0; padding: 12px; }
-.wine-row { display: flex; justify-content: space-between; padding: 2px 0; }
-.totals-line { font-weight: bold; border-top: 1px solid #e0d4c0; margin-top: 8px; padding-top: 8px; }
-.company { border: 1px solid #e0d4c0; padding: 10px; margin-bottom: 8px; page-break-inside: avoid; }
-.co-name { font-weight: bold; margin-bottom: 4px; }
-.co-wines { color: #6b5a47; margin-bottom: 4px; }
-.co-boxes { font-weight: bold; margin-bottom: 2px; }
-.co-contact { color: #a89070; font-size: 11px; }
+body { font-family: Georgia, 'Times New Roman', serif; font-size: 12px; padding: 24px; color: #241408; }
+h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+.meta { font-family: 'Courier New', monospace; color: #5c4a38; margin-bottom: 20px; font-size: 11px; }
+.section-header {
+  font-family: 'Courier New', monospace; font-weight: bold; font-size: 11px; letter-spacing: 1px;
+  color: #7c1d23; border-bottom: 1.5px solid #241408; padding-bottom: 5px; margin: 20px 0 10px;
+}
+.totals { background: #f1e2df; border: 1px solid #e4d7c2; border-radius: 6px; padding: 12px 14px; }
+.wine-row { display: flex; justify-content: space-between; padding: 2.5px 0; font-family: Arial, sans-serif; font-size: 12.5px; }
+.totals-line { font-weight: bold; border-top: 1px solid #e4d7c2; margin-top: 7px; padding-top: 7px; font-family: Arial, sans-serif; font-size: 12.5px; }
+.company {
+  position: relative; border: 1.5px solid rgba(36,20,8,.3); border-left: 5px solid #7c1d23;
+  border-radius: 8px; padding: 14px 16px 14px 18px; margin-bottom: 16px; page-break-inside: avoid;
+}
+.co-top { display: flex; align-items: center; gap: 9px; margin-bottom: 2px; }
+.co-index {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; background: #7c1d23; color: #fff;
+  font-family: 'Courier New', monospace; font-size: 10.5px; font-weight: bold; display: flex;
+  align-items: center; justify-content: center;
+}
+.co-name { font-weight: bold; font-size: 15px; flex: 1; }
+.co-bottles { font-family: 'Courier New', monospace; font-size: 11px; color: #5c4a38; white-space: nowrap; }
+.wine-list { margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(36,20,8,.14); }
+.wine-check {
+  display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; font-family: Arial, sans-serif;
+  border-bottom: 1px solid rgba(36,20,8,.1);
+}
+.wine-check:last-of-type { border-bottom: none; }
+.box { flex: none; width: 14px; height: 14px; border: 1.6px solid #241408; border-radius: 3px; }
+.wname { flex: 1; min-width: 0; }
+.wname b { font-weight: bold; }
+.wname .vint { color: #5c4a38; font-size: 11.5px; margin-left: 5px; }
+.qty-pill {
+  flex: none; font-family: 'Courier New', monospace; font-weight: bold; font-size: 12.5px; color: #fff;
+  background: #7c1d23; padding: 2.5px 9px; border-radius: 20px;
+}
+.co-boxes {
+  margin-top: 9px; padding-top: 9px; border-top: 1.5px solid #241408; font-size: 12.5px; font-weight: bold;
+  display: flex; justify-content: space-between; font-family: Arial, sans-serif;
+}
+.co-boxes .sub { font-weight: normal; font-size: 11px; opacity: .7; display: block; margin-top: 1px; }
+.co-contact {
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed rgba(36,20,8,.25);
+  font-size: 11.5px; color: #5c4a38; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-family: Arial, sans-serif;
+}
+.co-contact b { color: #241408; font-weight: bold; }
 </style></head><body>
 <h1>${at('packing.sheetTitle')}</h1>
 <div class="meta">${date} &nbsp;·&nbsp; ${at('packing.boxModeLabel')}: ${modeLabel} &nbsp;·&nbsp; ${orders.length} ${orderWord} &nbsp;·&nbsp; ${totalBoxes} ${at('packing.boxesTotal')}</div>
@@ -161,12 +196,14 @@ ${Object.entries(wineMap).map(([n, q]) => `<div class="wine-row"><span>${n}</spa
 <div class="totals-line">${totalBottles} ${at('packing.bottlesTotal')} &nbsp;·&nbsp; ${totalBoxes} ${at('packing.boxesNeeded')} ${at('packing.companiesPackedSeparately')}</div>
 </div>
 <div class="section-header">${at('packing.byCompanySeparate').toUpperCase()}</div>
-${perCompany.map(({ order: o, wines, bottles, boxes }) =>
+${perCompany.map(({ order: o, wines, bottles, boxes }, idx) =>
   `<div class="company">
-<div class="co-name">${o.businessName}</div>
-<div class="co-wines">${wines.map(w => `${itemLabel(w)} × ${w.quantity}`).join(' &nbsp;|&nbsp; ')}</div>
-<div class="co-boxes">${bottles} ${at('packing.bottlesTotal')} &nbsp;→&nbsp; ${boxes.display}</div>
-<div class="co-contact">${o.contactName} · ${o.contactPhone}</div>
+<div class="co-top"><span class="co-index">${idx + 1}</span><span class="co-name">${o.businessName}</span><span class="co-bottles">${bottles} ${at('packing.bottlesTotal')}</span></div>
+<div class="wine-list">
+${wines.map(w => `<div class="wine-check"><span class="box"></span><span class="wname"><b>${w.wineNameSnapshot}</b><span class="vint">${w.vintageYearSnapshot}</span></span><span class="qty-pill">× ${w.quantity}</span></div>`).join('')}
+</div>
+<div class="co-boxes"><span>${boxes.totalBoxes === 1 ? '1 box' : `${boxes.totalBoxes} boxes`}<span class="sub">${boxes.display}</span></span><span>${bottles} ${at('packing.bottlesTotal')}</span></div>
+<div class="co-contact"><b>${o.contactName}</b><span>${o.contactPhone}</span></div>
 </div>`).join('')}
 </body></html>`
 

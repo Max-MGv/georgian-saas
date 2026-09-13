@@ -561,7 +561,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
               <tr
                 key={order.id}
                 onClick={() => onToggle(order.id)}
-                className="transition-colors"
+                className="transition-colors select-none"
                 style={{
                   borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
                   borderLeft: `4px solid ${sc.border}`,
