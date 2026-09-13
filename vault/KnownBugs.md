@@ -36,6 +36,8 @@ tags: [bugs]
 | 27 | Feature rail's deep-link callouts pin to nothing (same anchor-resolution bug as #25) and land on collapsed data — "Per-company price ladders" arrives at `/admin/companies` with every ladder collapsed to "2 tiers" microtext, proving nothing  — **fix on `staging` (`9d3a2b2`), awaiting the `master` merge.** Same root cause as #25; the collapsed-data half fixed via `?expand=first`; see the 2026-09-11 update below | Demo / Feature rail | 🟢 Resolved |
 | 28 | `/admin/onboarding` renders outside the admin panel layout, so no demo chrome mounts — front-door path 4 of 4 silently drops the visitor out of the guided demo, and the wizard shows 4/7 steps already complete, disproving its own "how fast is setup?" promise | Demo / Onboarding | 🟢 Resolved |
 | 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🟢 Resolved |
+| 31 | Company booking form had no way to submit a real booking without an access code — hard-blocked with an error (direct-code tenants) or looped on the browser's own "please select an item" prompt with no escape (dropdown tenants), even though the only alternative ("New Company?") discarded whatever booking details had already been entered | Public / Booking form | 🟢 Resolved |
+| 32 | `createBooking.ts` silently priced a `COMPANY` booking with no `companyId` using the *individuals* pricing table (per-person rate × guest count) instead of confirming the price manually, same as any other unpriced company booking | Public / Booking form | 🟢 Resolved |
 
 ---
 
@@ -852,5 +854,41 @@ Full write-up with all findings (including 5 lower-severity/infrastructure items
 **Found:** 2026-09-10, same QA pass as above. Since the demo tenant's wine data was cloned from Nikalas Marani's real catalogue, this may be a real data entry mistake on NM's actual live site too — worth Max checking directly rather than assuming it's demo-only.
 
 **Status:** 🔴 Not fixed — not yet checked against the real NM site.
+
+---
+
+## Bug #31 — Company booking form had no way to submit without an access code
+
+> 🟢 **RESOLVED same day found, 2026-09-13.**
+
+**Severity:** High — a real revenue-blocking dead end on production. A tour company rep with no access code yet could not book at all, on either booking-form variant.
+
+**Found:** 2026-09-13, Max flagged with a production screenshot (direct-code variant: "Please enter and confirm your company code," booking silently discarded) and then live-tested the fix on staging, hitting the same class of problem on the dropdown variant (the browser's own "please select an item" prompt, looping with no way past it).
+
+**Root cause:** `BookingForm.tsx`'s `handleSubmit` hard-blocked with an error when `bookingType === 'COMPANY'` and no company code was confirmed (direct-code tenants), and the dropdown variant's `<select required>` had no option at all for "I don't have a company yet." The only escape hatch, the standalone "New Company?" popup, sent a bare registration inquiry and discarded whatever booking details had already been typed into the form — so either way, a legitimate first-time customer could not complete a booking in one visit.
+
+**Fix:** the company-code check in `handleSubmit` was moved to run *last*, after every other field validates, and on failure now opens the "New Company?" popup (pre-filled from the form) instead of blocking. Submitting the popup sends both the registration email and the booking itself (`companyId` stays `null`; a new `Order.requestedCompanyName` field records what was typed, for display only). The dropdown variant got a `'__new__'` sentinel `+ New Company` option — a real, selectable choice that satisfies the browser's `required` constraint — checked by the same generalized gate at submit time. Full design: [[Feature 180 - New Company Booking Flow]].
+
+**Verified:** end-to-end on staging for both variants — filled a full company booking with no code, confirmed the popup opened (not a block or a loop) pre-filled from the form, submitted, and confirmed in the dev DB that the order landed with `companyId: null`, `requestedCompanyName` set, and `totalPrice: 0`, and that the admin Orders table displayed it correctly. Cleaned up test data and reverted tenant settings each time. `npx tsc --noEmit` clean throughout.
+
+**Committed** 2026-09-13 (`7265b1b`, `ef9eece`) on `staging`. Not yet merged to `master`/production — pending Max's review on staging per the standing git workflow (Rule 0).
+
+---
+
+## Bug #32 — A no-`companyId` COMPANY booking was silently priced off the individuals table
+
+> 🟢 **RESOLVED same day found, 2026-09-13.**
+
+**Severity:** Medium — no customer ever saw this (the bug was in server-side pricing, not on-screen), but it would have shown the winery a fabricated price for a booking that was never actually priced.
+
+**Found:** 2026-09-13, while building Bug #31's fix — noticed `createBooking.ts`'s pricing calc fell through to the *individuals* pricing table whenever `bookingType === 'COMPANY'` had no `companyId`, the same code path a genuine COMPANY booking with no matching tier already avoids.
+
+**Root cause:** the initial `totalPrice` calc (`isEnhanced ? masterclassAmt : (pricePerPerson ?? 0) * guestCount`) used the individuals-table `pricePerPerson` regardless of `bookingType`, and the COMPANY-specific override block only ran `if (data.bookingType === 'COMPANY' && data.companyId)` — so a COMPANY booking with no `companyId` (Bug #31's new-company case) got the individuals rate multiplied by guest count instead of the usual "confirmed after submission" `0`.
+
+**Fix:** the initial calc now branches on `bookingType === 'INDIVIDUAL'` explicitly; any COMPANY booking (with or without a `companyId`) starts at `0` unless the company-tier override below finds a real match. See [[Feature 180 - New Company Booking Flow]] for the full change.
+
+**Verified:** same staging test as Bug #31 — a 6-guest new-company booking priced at `0`, not the individuals rate that would otherwise have applied for that guest count.
+
+**Committed** 2026-09-13 (`7265b1b`) on `staging`. Not yet merged to `master`/production.
 
 ---

@@ -582,3 +582,24 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 **Files involved:** `saas/components/DemoTour.tsx`, `saas/components/DemoExplore.tsx`,
 `saas/lib/demoTour.ts`.
+
+---
+
+## 22. Three separate places compute a company-tier price from `(tastingGuestCount, lunchGuestCount, guestCount)` — keep them in sync
+
+**What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
+an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
+no-company order to a real company after the fact) each independently re-derive a company's
+price from its `Price[]` tiers via `findTier()` + `comboRatePerPerson()`. All three branch the
+same way: if the order has split tasting/lunch counts (`tastingGuestCount + lunchGuestCount >
+0`), price each split count against the matched tier separately; otherwise price the flat
+`guestCount` against the tier using the single `visitType`-selected rate.
+
+**Why it bites:** there's no shared helper — the branch is copy-pasted three times. A change to
+the pricing formula (e.g. a new fee type, a rounding rule) made in one of these and not the
+other two will silently drift, and nothing will fail loudly — each order just gets priced
+differently depending on which code path last touched it.
+
+**Files involved:** `saas/app/actions/createBooking.ts`, `saas/app/actions/orders.ts`
+(`updateOrderEnhanced`, `assignOrderCompany`), `saas/lib/pricingUtils.ts` (`findTier`,
+`comboRatePerPerson`, the two functions that are already shared).
