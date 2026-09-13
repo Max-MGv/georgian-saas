@@ -8,6 +8,24 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✉️ 2026-09-13 — test the new winery booking notification email (staging only)
+
+You asked whether the winery gets emailed on a new booking — it didn't, so it's now built
+(Feature 179, `vault/FeatureLog.md`). Not yet live-tested with a real send.
+
+**To check on staging:**
+1. Make sure Staging Winery has a **Contact Email** set (Admin → Settings → Contact).
+2. Make a test booking on the staging preview site — both a reservation-only one and, if you
+   want to check the paid path too, one that goes through the online-payment flow.
+3. Check the inbox for that contact email — you should get a "New booking request" (or "New
+   paid booking") email with the guest's name, date, time, guest count, and price.
+4. Confirm the customer's own confirmation email still arrives as normal alongside it.
+
+If nothing arrives, check the server logs for `Winery notification email failed:` — that means
+it threw, and the error will say why.
+
+---
+
 ## 🚪 2026-09-13 (later) — vineworks.ge is a real site now, and the tour tells you where you are
 
 Both of these are on **`staging` only**. Nothing has gone to production. They are waiting on you.

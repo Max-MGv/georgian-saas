@@ -8,6 +8,34 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 — winery new-booking email notification (Feature 179)
+
+Max asked whether the winery gets emailed when a new booking comes in — it didn't. Only the
+customer ever received a confirmation; the winery's `contact_email` was used solely as a
+`replyTo`, never as a `to`. Investigated via a background agent, then built it.
+
+New file `saas/lib/emails/newBookingNotification.ts` (`sendNewBookingNotification()`), built on
+the shared `sendTenantEmail()` helper (`MaintenanceNotes.md` §11) — same pattern as
+`notifyNewCompany.ts`. Skips silently if the tenant has no `contact_email` set (deliberately no
+fallback inbox, since this fires on every booking, not a rare manual request).
+
+Wired into both places a booking becomes real:
+- `app/actions/createBooking.ts` — reservation-only path, fires right after the order is created.
+  The winery-settings fetch (`contact_phone`/`contact_email`/`contact_address`/tenant) was moved
+  out from under the existing `if (data.email)` block, since the winery notification must fire
+  even for phone-only bookings that get no customer confirmation email at all.
+- `lib/payments/settle.ts` — online-payment path, fires from `sendSettlementEmail()` once Flitt
+  confirms payment, same timing as the customer's paid confirmation. Same restructuring: the
+  `if (!order?.email) return` early-out was moved to guard only the customer email, not the
+  winery notification underneath it.
+
+Typechecked clean (`npx tsc --noEmit`). Not live-tested — no test booking was run through
+staging to confirm an actual email lands, since Resend sends real mail even on staging (the demo
+tenant is suppressed, but Staging Winery is not). **Next: Max to make a test booking on staging
+(with a contact_email set on Staging Winery) and confirm the notification actually arrives.**
+
+---
+
 ## 2026-09-13 (final) — shipped to production
 
 Max confirmed both fixes on `staging` (print-color-adjust for the packing sheet — his

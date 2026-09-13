@@ -6,6 +6,7 @@ import { settingValue } from '@/lib/settings'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendWineOrderReceipt } from '@/lib/emails/wineOrderReceipt'
+import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 
 /**
  * The single place a payment is marked settled.
@@ -181,26 +182,47 @@ async function sendSettlementEmail(
 
   if (orderId) {
     const order = await withTenantDb(tenantId, tx => tx.order.findUnique({ where: { id: orderId } }))
-    // No address on file is a legitimate state — phone-only bookings are
-    // allowed (createBooking requires phone OR email), so there is simply
-    // nobody to write to.
-    if (!order?.email) return
+    if (!order) return
 
-    await sendBookingConfirmation({
-      name: order.name,
-      surname: order.surname,
-      email: order.email,
-      date: order.date.toLocaleDateString('en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      }),
+    const formattedDate = order.date.toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    })
+
+    // No email on file is a legitimate state — phone-only bookings are
+    // allowed (createBooking requires phone OR email) — but the winery
+    // notification below must still fire regardless.
+    if (order.email) {
+      await sendBookingConfirmation({
+        name: order.name,
+        surname: order.surname,
+        email: order.email,
+        date: formattedDate,
+        timeSlot: order.timeSlot,
+        guestCount: order.guestCount,
+        visitType: order.visitType,
+        totalPrice: order.totalPrice ?? 0,
+        // This is the confirmation createBooking deliberately withheld — it only
+        // becomes true here, once the money actually arrived.
+        paid: true,
+        ...common,
+      })
+    }
+
+    await sendNewBookingNotification({
+      tenantId,
+      tenantName: common.wineryName,
+      wineryEmail: common.wineryEmail,
+      guestName: order.name,
+      guestSurname: order.surname,
+      guestEmail: order.email,
+      guestPhone: order.phone,
+      date: formattedDate,
       timeSlot: order.timeSlot,
       guestCount: order.guestCount,
       visitType: order.visitType,
       totalPrice: order.totalPrice ?? 0,
-      // This is the confirmation createBooking deliberately withheld — it only
-      // becomes true here, once the money actually arrived.
+      bookingType: order.bookingType,
       paid: true,
-      ...common,
     })
     return
   }

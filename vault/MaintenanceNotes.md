@@ -212,6 +212,7 @@ The dev database normally holds exactly one tenant (Staging Winery). So the ever
 - `saas/lib/emails/sendEmail.ts` — the shared helper
 - `saas/lib/emails/bookingConfirmation.ts`, `wineOrderReceipt.ts`, `invoiceEmail.ts` — customer-facing, all take `wineryEmail` (the tenant's `contact_email`) as Reply-To
 - `saas/app/actions/notifyNewCompany.ts`, `bugReports.ts` — internal notifications
+- `saas/lib/emails/newBookingNotification.ts` — internal notification, the winery's own `contact_email`, on every new booking (Feature 179)
 - Full build/verification log: [[Plan-EmailInfrastructure]]
 
 ---

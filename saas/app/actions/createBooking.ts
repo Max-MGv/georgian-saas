@@ -4,6 +4,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { BookingType, OrderStatus, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
+import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
@@ -316,16 +317,20 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       // fall through: checkout unavailable → reservation-only, email as today
     }
 
+    // Fetched unconditionally (not just under `if (data.email)`) because the
+    // winery notification below must fire even for phone-only bookings.
+    const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    })
+    const [wineryPhone, wineryEmail, wineryAddress, tenant] = await Promise.all([
+      getSetting('contact_phone'),
+      getSetting('contact_email'),
+      getSetting('contact_address'),
+      db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
+    ])
+    const wineryName = tenant?.displayName ?? tenant?.name ?? ''
+
     if (data.email) {
-      const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      })
-      const [wineryPhone, wineryEmail, wineryAddress, tenant] = await Promise.all([
-        getSetting('contact_phone'),
-        getSetting('contact_email'),
-        getSetting('contact_address'),
-        db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
-      ])
       sendBookingConfirmation({
         tenantId,
         name: data.name,
@@ -336,13 +341,29 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         guestCount,
         visitType: data.visitType,
         totalPrice,
-        wineryName: tenant?.displayName ?? tenant?.name ?? '',
+        wineryName,
         wineryAddress,
         wineryPhone,
         wineryEmail,
         theme: resolveTenantTheme(tenant?.theme ?? null),
       }).catch(err => console.error('Email send failed:', err))
     }
+
+    sendNewBookingNotification({
+      tenantId,
+      tenantName: wineryName,
+      wineryEmail,
+      guestName: data.name,
+      guestSurname: data.surname,
+      guestEmail: data.email,
+      guestPhone: data.phone,
+      date: formattedDate,
+      timeSlot: data.timeSlot,
+      guestCount,
+      visitType: data.visitType,
+      totalPrice,
+      bookingType: data.bookingType,
+    }).catch(err => console.error('Winery notification email failed:', err))
 
     return {
       success: true, totalPrice, bookingType: data.bookingType,
