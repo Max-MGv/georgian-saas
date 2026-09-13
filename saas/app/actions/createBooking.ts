@@ -32,6 +32,13 @@ export type BookingFormData = {
   hotDishMeat?: string | null
   foodNotes?: string | null
   masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
+  /**
+   * Company name typed into the "New Company?" popup when a COMPANY booking
+   * is submitted with no companyId (Feature 180) — display-only, stored on
+   * the order so the winery can tell which registration request it belongs
+   * to before a real Company row exists. Ignored unless companyId is absent.
+   */
+  requestedCompanyName?: string
 }
 
 export type BookingResult =
@@ -205,7 +212,16 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }
     }
     const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
-    let totalPrice = isEnhanced ? masterclassAmt : (pricePerPerson ?? 0) * guestCount
+    // A COMPANY booking with no companyId is a new-company request (Feature 180) —
+    // there's no company row to price against yet, so it must not fall through to
+    // the individuals table below. It stays 0 ("confirmed after submission") until
+    // the winery creates the company and prices it manually.
+    const isNewCompanyRequest = data.bookingType === 'COMPANY' && !data.companyId
+    let totalPrice = isEnhanced
+      ? masterclassAmt
+      : data.bookingType === 'INDIVIDUAL'
+        ? (pricePerPerson ?? 0) * guestCount
+        : 0
 
     if (data.bookingType === 'COMPANY' && data.companyId) {
       const company = await withTenantDb(tenantId, tx =>
@@ -255,6 +271,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         surname: data.surname,
         email: data.email || null,
         phone: data.phone || null,
+        requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
         tenantId,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
@@ -346,6 +363,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         wineryPhone,
         wineryEmail,
         theme: resolveTenantTheme(tenant?.theme ?? null),
+        pendingNewCompany: isNewCompanyRequest,
       }).catch(err => console.error('Email send failed:', err))
     }
 
@@ -363,6 +381,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       visitType: data.visitType,
       totalPrice,
       bookingType: data.bookingType,
+      requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
     }).catch(err => console.error('Winery notification email failed:', err))
 
     return {

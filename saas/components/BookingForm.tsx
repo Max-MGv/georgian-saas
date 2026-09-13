@@ -5,7 +5,7 @@
 // See vault/MaintenanceNotes.md §1 for full details.
 
 import { useState, useEffect } from 'react'
-import { createBooking } from '@/app/actions/createBooking'
+import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
@@ -110,6 +110,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // the customer what happened. Company bookings are never altered — just flagged.
   const [confirmedGuestAdjustedTo, setConfirmedGuestAdjustedTo] = useState<number | null>(null)
   const [confirmedOverMaxNotice, setConfirmedOverMaxNotice] = useState<number | null>(null)
+  // True when the just-submitted booking went through the "New Company?" flow
+  // (Feature 180) — the success screen adds a note that pricing/account setup
+  // is still pending, on top of the usual "we'll be in touch" copy.
+  const [confirmedPendingNewCompany, setConfirmedPendingNewCompany] = useState(false)
 
   // Auto-fill fields (controlled so we can populate them from company profile)
   const [firstName, setFirstName] = useState('')
@@ -137,6 +141,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [newCoPhone, setNewCoPhone] = useState('')
   const [newCoEmail, setNewCoEmail] = useState('')
   const [newCoStatus, setNewCoStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle')
+  // True when the popup was opened because "Request Booking" was pressed with
+  // no confirmed company code (Feature 180) — the rest of the form already
+  // validated, so submitting the popup also submits that booking alongside
+  // the registration request. False when opened via the standalone "New
+  // Company?" link, which is a pure inquiry and never touches createBooking.
+  const [newCompanyIncludesBooking, setNewCompanyIncludesBooking] = useState(false)
 
   // Enhanced company form state
   const [tastingGuestsStr, setTastingGuestsStr] = useState('0')
@@ -272,14 +282,71 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   async function handleNewCompanySubmit() {
     if (!newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) return
     setNewCoStatus('submitting')
-    const result = await notifyNewCompany({
+    const notifyResult = await notifyNewCompany({
       companyName: newCoName.trim(),
       contactName: newCoContact.trim(),
       phone: newCoPhone.trim(),
       email: newCoEmail.trim() || undefined,
       module: 'BOOKING',
     })
-    setNewCoStatus(result.success ? 'sent' : 'error')
+
+    if (!newCompanyIncludesBooking) {
+      setNewCoStatus(notifyResult.success ? 'sent' : 'error')
+      return
+    }
+
+    // Opened from "Request Booking" — the rest of the form already passed
+    // validation (see handleSubmit), so submit the booking itself alongside
+    // the registration request, carrying the typed-in name so the winery can
+    // tell which company it belongs to before a real Company row exists.
+    const bookingResult = await createBooking({
+      ...buildBookingPayload(),
+      requestedCompanyName: newCoName.trim(),
+    })
+
+    if (notifyResult.success && bookingResult.success) {
+      if (bookingResult.checkoutUrl) {
+        window.location.assign(bookingResult.checkoutUrl)
+        return
+      }
+      setConfirmedPrice(bookingResult.totalPrice)
+      setConfirmedType(bookingResult.bookingType)
+      setConfirmedGuestAdjustedTo(bookingResult.guestCountAdjustedTo ?? null)
+      setConfirmedOverMaxNotice(bookingResult.guestCountOverMax ? (bookingResult.guestCountMax ?? null) : null)
+      setConfirmedPendingNewCompany(true)
+      setShowNewCompanyPopup(false)
+      setStatus('success')
+      dispatchDemoBooked({ name: firstName, surname: lastName })
+    } else {
+      setNewCoStatus('error')
+    }
+  }
+
+  /** Shared with handleNewCompanySubmit so a booking submitted through the
+   * "New Company?" popup carries the exact same payload a normal submit
+   * would — only `requestedCompanyName` differs. */
+  function buildBookingPayload(): BookingFormData {
+    return {
+      bookingType,
+      visitType,
+      companyId: bookingType === 'COMPANY' ? (companyId || undefined) : undefined,
+      date: selectedDate,
+      timeSlot,
+      guestCount: isEnhanced ? totalGuests : guestCount,
+      name: firstName,
+      surname: lastName,
+      email,
+      phone,
+      ...(isEnhanced ? {
+        tastingGuestCount: tastingGuests,
+        lunchGuestCount: lunchGuests,
+        freeGuestCount: freeGuests,
+        hotDishVegetable: hotDishVeg || null,
+        hotDishMeat: hotDishMeat || null,
+        foodNotes: foodNotes || null,
+        masterclassLines: activeMcLines,
+      } : {}),
+    }
   }
 
   // Enhanced guest counts
@@ -340,9 +407,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (bookingType === 'COMPANY' && hideCompanyDropdown && !companyId) {
-      setStatus('error'); setErrorMsg('Please enter and confirm your company code.'); return
-    }
     if (!selectedDate) { setStatus('error'); setErrorMsg('Please select a date.'); return }
     if (!phone && !email) { setStatus('error'); setErrorMsg(t(locale, 'form.err_contact')); return }
     if (selectedDate < today) { setStatus('error'); setErrorMsg('Please choose a future date.'); return }
@@ -350,29 +414,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (isDayClosed(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_day_closed')); return }
     if (!timeSlot || !availableSlots.includes(timeSlot)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_lead_time', { hours: leadHours })); return }
     if (isEnhanced && totalGuests < minGuests) { setStatus('error'); setErrorMsg(t(locale, 'form.err_min_guests', { min: minGuests })); return }
+    // Checked last, deliberately: everything else about the booking is
+    // already valid at this point, so rather than blocking submission
+    // outright, open the "New Company?" popup to collect the missing piece —
+    // submitting it there sends this exact booking alongside the
+    // registration request (Feature 180).
+    if (bookingType === 'COMPANY' && hideCompanyDropdown && !companyId) {
+      setNewCompanyIncludesBooking(true)
+      setNewCoStatus('idle')
+      setNewCoName('')
+      setNewCoContact(`${firstName} ${lastName}`.trim())
+      setNewCoPhone(phone)
+      setNewCoEmail(email)
+      setShowNewCompanyPopup(true)
+      return
+    }
     setStatus('loading')
     setErrorMsg('')
-    const result = await createBooking({
-      bookingType,
-      visitType,
-      companyId: bookingType === 'COMPANY' ? companyId : undefined,
-      date: selectedDate,
-      timeSlot,
-      guestCount: isEnhanced ? totalGuests : guestCount,
-      name: firstName,
-      surname: lastName,
-      email,
-      phone,
-      ...(isEnhanced ? {
-        tastingGuestCount: tastingGuests,
-        lunchGuestCount: lunchGuests,
-        freeGuestCount: freeGuests,
-        hotDishVegetable: hotDishVeg || null,
-        hotDishMeat: hotDishMeat || null,
-        foodNotes: foodNotes || null,
-        masterclassLines: activeMcLines,
-      } : {}),
-    })
+    const result = await createBooking(buildBookingPayload())
     if (result.success) {
       // Payment tenants: the booking is saved; hand the customer to the
       // gateway. Keep the loading state — this page is about to unload, and
@@ -385,6 +444,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setConfirmedType(result.bookingType)
       setConfirmedGuestAdjustedTo(result.guestCountAdjustedTo ?? null)
       setConfirmedOverMaxNotice(result.guestCountOverMax ? (result.guestCountMax ?? null) : null)
+      setConfirmedPendingNewCompany(false)
       setStatus('success')
       // Name is carried so the live mirror can highlight this exact row.
       dispatchDemoBooked({ name: firstName, surname: lastName }) // no-op outside the demo tenant — see lib/demoEvents.ts
@@ -403,6 +463,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <div className="text-4xl mb-4">🍷</div>
         <h3 className="text-xl font-bold mb-2" style={{ color: C.text }}>{fc('form_success_heading', 'form.success_heading')}</h3>
         <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
+        {confirmedPendingNewCompany && (
+          <p className="text-sm mt-3" style={{ color: C.muted }}>
+            Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.
+          </p>
+        )}
         {confirmedGuestAdjustedTo != null && (
           <p className="text-sm mt-3" style={{ color: C.muted }}>
             {t(locale, 'form.guest_count_adjusted', { max: confirmedGuestAdjustedTo })}
@@ -523,7 +588,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
             <div>
               <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
-              <p className="text-sm" style={{ color: C.muted }}>Fill in your details and we'll get in touch to set up your account.</p>
+              <p className="text-sm" style={{ color: C.muted }}>
+                {newCompanyIncludesBooking
+                  ? "Fill in your company details — we'll submit your booking along with a request to set up your account. Your booking won't be confirmed until we do."
+                  : "Fill in your details and we'll get in touch to set up your account."}
+              </p>
             </div>
             {newCoStatus === 'sent' ? (
               <div className="py-4 text-center">
@@ -556,7 +625,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
                   className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
                   style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
-                  {newCoStatus === 'submitting' ? 'Sending…' : 'Send Request'}
+                  {newCoStatus === 'submitting'
+                    ? 'Sending…'
+                    : newCompanyIncludesBooking ? 'Send Booking & Request' : 'Send Request'}
                 </button>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="w-full py-2 rounded-lg text-xs font-medium border text-center"
@@ -590,7 +661,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                onClick={() => { setNewCompanyIncludesBooking(false); setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
                 className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
                 style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
               >
@@ -639,7 +710,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 <label style={{ ...labelStyle, marginBottom: 0 }}>{t(locale, 'form.company')}</label>
                 <button
                   type="button"
-                  onClick={() => { setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
+                  onClick={() => { setNewCompanyIncludesBooking(false); setShowNewCompanyPopup(true); setNewCoStatus('idle'); setNewCoName(''); setNewCoContact(''); setNewCoPhone(''); setNewCoEmail('') }}
                   className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
                   style={{ color: 'var(--color-brand)' }}
                 >

@@ -33,6 +33,14 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 - `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor, takes a `variant` prop; layout must stay in sync with `BookingForm.tsx`
 - `saas/scripts/seed-ka.ts` — Georgian locale seed data; run with `npx tsx scripts/seed-ka.ts` from `saas/` after adding new `form_*` keys
 
+**Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
+after every other field validates — on failure it opens the "New Company?" popup (pre-filled
+from the form) instead of erroring, and `buildBookingPayload()` is the one place both the
+normal submit and the popup's submit build the `createBooking` payload from. If you add a
+new required field to the booking form, make sure it's covered by `buildBookingPayload()`
+so a booking submitted through the popup carries it too — a field added only to the inline
+`createBooking(...)` call in `handleSubmit` would silently go missing on that path.
+
 ---
 
 ---

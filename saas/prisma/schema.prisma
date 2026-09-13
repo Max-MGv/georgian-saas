@@ -107,6 +107,11 @@ model Order {
   totalPrice        Float?
   tenantId          String?
   companyId         String?
+  // Set only when bookingType is COMPANY and companyId is null — a booking
+  // submitted through the "New Company?" flow, before the winery has created
+  // a real Company row. Display-only (admin Orders table + emails); never
+  // used for pricing or access-code lookups. See Feature 180.
+  requestedCompanyName String?
   company           Company?           @relation(fields: [companyId], references: [id])
   createdAt         DateTime           @default(now())
   masterclassLines  OrderMasterclass[]

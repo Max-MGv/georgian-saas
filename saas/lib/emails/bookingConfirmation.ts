@@ -24,6 +24,13 @@ type BookingEmailData = {
    * already drifted apart. One template, one flag.
    */
   paid?: boolean
+  /**
+   * Set when this booking was submitted with no companyId, through the "New
+   * Company?" flow (Feature 180) — there's no account for this company yet,
+   * so the copy must say this is a registration request, not a confirmed
+   * booking, on top of the usual unpaid "we'll be in touch" language.
+   */
+  pendingNewCompany?: boolean
 }
 
 export async function sendBookingConfirmation(data: BookingEmailData) {
@@ -65,7 +72,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
         <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6;">
           ${data.paid
             ? 'Thank you — your payment has been received and your booking is confirmed. We look forward to welcoming you.'
-            : 'Thank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.'}
+            : data.pendingNewCompany
+              ? 'Thank you for your booking and company registration request. <strong>This request is not yet confirmed</strong> — since your company isn\'t set up in our system yet, we\'ll review your details, set up your account, and contact you shortly to confirm both your booking and your company\'s pricing.'
+              : 'Thank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.'}
         </p>
 
         <div style="background-color: ${th.bg}; border-radius: 8px; padding: 20px 24px; margin: 0 0 24px;">
@@ -114,7 +123,9 @@ export async function sendBookingConfirmation(data: BookingEmailData) {
     replyTo: data.wineryEmail,
     subject: data.paid
       ? `Payment received — your booking on ${data.date} at ${data.timeSlot} is confirmed`
-      : `Booking request received — ${data.date} at ${data.timeSlot}`,
+      : data.pendingNewCompany
+        ? `Request received (not yet confirmed) — ${data.date} at ${data.timeSlot}`
+        : `Booking request received — ${data.date} at ${data.timeSlot}`,
     html,
   })
 }

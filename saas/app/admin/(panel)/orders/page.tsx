@@ -61,6 +61,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           visitType: true,
           status: true,
           totalPrice: true,
+          requestedCompanyName: true,
           company: { select: { name: true } },
         },
         orderBy: [{ date: 'asc' }, { timeSlot: 'asc' }],
@@ -79,7 +80,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ordersByDate[d].push({
       id: o.id, name: o.name, surname: o.surname, timeSlot: o.timeSlot,
       guestCount: o.guestCount, visitType: o.visitType, status: o.status,
-      totalPrice: o.totalPrice, companyName: o.company?.name ?? null,
+      totalPrice: o.totalPrice,
+      companyName: o.company?.name ?? (o.requestedCompanyName ? `${o.requestedCompanyName} (new)` : null),
     })
   }
 
@@ -225,6 +227,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             hotDishMeat: o.hotDishMeat,
             foodNotes: o.foodNotes,
             company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
+            requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(l => ({
               name: l.masterclassItem.name,
               quantity: l.quantity,

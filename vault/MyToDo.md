@@ -8,6 +8,36 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🏢 2026-09-13 (later) — test the New Company booking flow (staging only)
+
+This is the fix for what you flagged from the production screenshot — a company rep with
+no code couldn't submit a booking at all. Now "Request Booking" opens a "New Company?"
+popup instead of blocking, and submitting it sends both the booking and the registration
+request together (Feature 180, `vault/features/Feature 180 - New Company Booking Flow.md`).
+I verified it end-to-end on my own local run against the dev DB, but you should check it
+on the actual staging preview:
+
+1. On the staging preview site, go to Book a Visit → Tour Company. Staging Winery
+   currently has the company **dropdown** shown (not the direct-code box you saw on
+   production) — if you want to test the exact same UI as production, ask me to flip its
+   `hide_company_dropdown` setting to match, or test directly against
+   nikalasmarani.vineworks.ge's staging equivalent if there is one.
+2. Fill in the whole form (date, time, guests, name, phone/email) but leave the company
+   code blank, then hit "Request Booking".
+3. A "New Company?" popup should appear, pre-filled with your name/phone/email, saying
+   your booking won't be confirmed until the account is set up.
+4. Fill in a company name and submit. You should land on the normal success screen, but
+   with an extra line explaining it's not confirmed yet.
+5. Check the admin Orders table — the booking should show the company name with "(new)"
+   next to it, total 0₾.
+6. Check your winery inbox (Staging Winery's contact email) for **two** emails: the usual
+   "new company registration" one, and a "New booking request" one that also names the
+   company and says it won't auto-link once you create the real company.
+7. If you gave an email in step 2, check that inbox too — the confirmation email should
+   say clearly this isn't confirmed since the company isn't set up yet.
+
+---
+
 ## ✉️ 2026-09-13 — test the new winery booking notification email (staging only)
 
 You asked whether the winery gets emailed on a new booking — it didn't, so it's now built

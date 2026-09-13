@@ -8,6 +8,61 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 (later) — New Company booking flow (Feature 180)
+
+Max flagged (with a screenshot from production) that a tour-company rep on a
+`hide_company_dropdown` tenant with no company code gets hard-blocked at "Request
+Booking" — "Please enter and confirm your company code" — with no way to actually submit
+their booking. The only escape hatch, "New Company?", sent a bare registration inquiry
+with no booking details, meaning they'd have to wait for the winery, then redo the whole
+form. Reviewed the flow, proposed a fix (open the popup instead of blocking, send both
+requests together), and Max asked for it — with the requirement that the email/screen
+make clear the request isn't confirmed since it's a new company.
+
+Also caught a real pricing bug while building this: `createBooking.ts` fell through to
+the *individuals* pricing table whenever a COMPANY booking had no `companyId`, so this
+case would have been silently priced as an individual rate rather than "confirmed after
+submission." Fixed as part of the same change.
+
+Built:
+- Schema: `Order.requestedCompanyName String?` (migration
+  `20260913160233_add_requested_company_name`, applied to dev DB only so far — needs
+  `prisma migrate deploy` on prod once this ships to `master`).
+- `createBooking.ts`: `isNewCompanyRequest` forces `totalPrice = 0` instead of falling
+  through to individual pricing; stores `requestedCompanyName`; passes
+  `pendingNewCompany`/`requestedCompanyName` to both emails.
+- `BookingForm.tsx`: company-code check moved to run last (after every other field
+  validates) — on failure it now opens the "New Company?" popup pre-filled from the form
+  instead of erroring. New `buildBookingPayload()` shared between the normal submit and
+  the popup's submit so they can't drift apart. Success screen and popup copy both say
+  plainly this isn't confirmed yet.
+- `bookingConfirmation.ts` / `newBookingNotification.ts`: new copy for the pending/new-
+  company case, both for the guest and the winery.
+- Admin Orders table (`OrdersTable.tsx` + `page.tsx`): shows `requestedCompanyName`
+  (amber, "(new)") wherever a company name would render — table row, mobile card,
+  hover-preview card, calendar view — with an explicit note (in the winery email and the
+  admin display) that it will **not** auto-link if the winery later creates the real
+  company; they follow up with the guest directly.
+
+Full design writeup: `vault/features/Feature 180 - New Company Booking Flow.md`.
+
+**Verified end-to-end on staging** (cleared a stale local `.next`/Turbopack cache that
+was 404-ing every route first — unrelated pre-existing local quirk, fixed by deleting
+`.next`): temporarily flipped Staging Winery's `hide_company_dropdown` setting to `true`
+to match production's config, submitted a real company booking with no code through the
+running dev server, confirmed the popup opened correctly, the order landed in the dev DB
+with `companyId: null`, `requestedCompanyName: 'Acme Tours LLC'`, `totalPrice: 0`, and the
+admin Orders table displayed it correctly. Reverted the setting and deleted the test order
+afterward. The winery notification email (Feature 179) sent without error to Staging
+Winery's real contact address; the customer confirmation only failed because the test
+used `test@example.com`, which Resend's sandbox rejects — not a bug.
+
+Typechecked clean throughout. Pushed to `staging`. **Next: Max to test on the staging
+preview URL** (not localhost) with a real company-code-less booking, and confirm the
+email copy reads right.
+
+---
+
 ## 2026-09-13 — winery new-booking email notification (Feature 179)
 
 Max asked whether the winery gets emailed when a new booking comes in — it didn't. Only the

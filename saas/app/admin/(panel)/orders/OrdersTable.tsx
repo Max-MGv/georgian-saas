@@ -74,6 +74,7 @@ type Order = {
   hotDishMeat: string | null
   foodNotes: string | null
   company: { name: string; identificationCode: string | null } | null
+  requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
 }
@@ -431,8 +432,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <p className="text-sm mb-0.5" style={{ color: C.muted }}>
                   {order.guestCount} {order.guestCount === 1 ? at('orders.guest.singular') : at('orders.guest.plural')} · {visitLabel(locale, order.visitType)}
                 </p>
-                {order.company && (
-                  <p className="text-sm" style={{ color: C.faint }}>{order.company.name}</p>
+                {(order.company || order.requestedCompanyName) && (
+                  <p className="text-sm" style={{ color: order.requestedCompanyName && !order.company ? '#92400e' : C.faint }}>
+                    {order.company?.name ?? `${order.requestedCompanyName} (new)`}
+                  </p>
                 )}
 
                 {/* Footer row: total + arrow */}
@@ -532,7 +535,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
                 {/* Company */}
                 {col('company') && (
-                  <td className="px-4 py-3" style={{ color: C.muted }}>{order.company?.name ?? '—'}</td>
+                  <td className="px-4 py-3" style={{ color: order.requestedCompanyName && !order.company ? '#92400e' : C.muted }}>
+                    {order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : '—')}
+                  </td>
                 )}
 
                 {/* Tasting guests */}
@@ -1014,7 +1019,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             {/* Header */}
             <div style={{ backgroundColor: C.wine, padding: '10px 14px' }}>
               <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>
-                {o.company?.name ?? `${o.name} ${o.surname}`}
+                {o.company?.name ?? (o.requestedCompanyName ? `${o.requestedCompanyName} (new)` : `${o.name} ${o.surname}`)}
               </div>
               <div style={{ color: '#f5c6c8', fontSize: 11, marginTop: 2 }}>
                 {o.name} {o.surname}
