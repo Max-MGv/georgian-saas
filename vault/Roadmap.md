@@ -315,16 +315,27 @@ per-phase outcomes: [[DemoSite/Plan-DemoRedesign|Plan-DemoRedesign]]; design rat
 - [x] **Chunk 7** — admin landing readability: compact rows, revenue strip — ✅ shipped to `master` (`8e5203c`). Tallest row 147 px → 80 px on production; the truncation, not the column hiding, is what did it
 - [x] **Chunk 8** — onboarding path back inside the demo + a super-admin "Reset demo" button — ✅ shipped to `master` (`0919a6a`). Path 4 keeps its demo chrome on production; **the reset button itself is unpressed — it sits behind the super-admin login**
 
+**Closed after the teardown's two deferred items (2026-09-12):**
+- [x] Theme-preset catalogue inside the demo, so visitors see how colours can be changed — ✅
+      shipped to `master` (`0276ecf`), sixteen presets repainting the real site as you click
+      (#170). *Ticked 2026-09-12 during the Explore/analytics session — it had shipped two days
+      earlier and this line was simply never updated.*
+- [x] **One "Explore" control instead of two** — the tour's pill and the rail's edge tab merged
+      into a single bottom-right pill opening one panel, the guided tour as its first row
+      (#172, `a620ba7`). Max picked option B of three; verified live on production
+- [x] **Analytics** — the demo now measures itself (#173, `91854d8`): eleven named events in our
+      own `DemoEvent` table, read with `npx tsx scripts/demo-funnel.ts`. Live on production, RLS
+      applied and verified. The conversion figures in the design review are **still** benchmarks
+      and still labelled as such — see [[DemoSite/Research-DemoPatterns]]' rewritten Caveat for
+      what is now measured versus what is not
+
 **Still open (deliberately):**
-- [ ] Theme-preset catalogue inside the demo, so visitors see how colours can be changed
-      (Max's request 2026-09-11; needs the shared-sandbox collision question answered first)
 - [ ] Hero screenshot / GIF of the live mirror for the `vineworks.ge` marketing site
-- [ ] Analytics — the demo is not instrumented, so the conversion figures quoted in the
-      design review remain industry benchmarks rather than measurements of this site
 - [ ] Disposable tenant per visitor vs. one shared sandbox — still unresolved; the shared
       sandbox is what shipped
 
-**Reusable elsewhere:** `CAPABILITY_GROUPS` in `saas/components/DemoFeatureRail.tsx` is the
+**Reusable elsewhere:** `CAPABILITY_GROUPS` in `saas/components/DemoExplore.tsx` (renamed from
+`DemoFeatureRail.tsx` in the 2026-09-12 merge) is the
 feature list for the `vineworks.ge` marketing site when that gets built, each row already
 deep-linking into live proof.
 

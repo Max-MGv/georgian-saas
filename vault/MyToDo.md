@@ -8,6 +8,55 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🧭 2026-09-13 — one "Explore" button on the demo, and the demo now counts visitors
+
+Both of these are **already live on demo.vineworks.ge** — you said go ahead, so they went all the
+way to production, database included. Nothing here is waiting on a merge. What I need from you is
+a look with your own eyes.
+
+### 1. There is now one button, not two
+
+The demo used to greet a visitor with **two** floating invitations at once: a pill bottom-left
+("Show me what this does") and a tab stuck to the right edge ("✦ What can it do?"). Two different
+guided experiences, no explanation of how they related. Now there is **one** pill, bottom-right,
+that says **"Explore this demo"**. Everything that was behind both is behind it: the guided tour
+is the first thing in the panel, the sixteen capability rows are underneath.
+
+**What to check, on demo.vineworks.ge:**
+- Open it and click **Skip** on the front door. Bottom-right, you should see one pill. There
+  should be **nothing** on the left, and **nothing** stuck to the right edge.
+- Click it. The panel slides in from the right with **"The guided tour"** in a box at the top and
+  the feature list below.
+- Start the tour, then — halfway through — click something else to wander off it. The pill should
+  change to **"Tour paused · step 3 of 7"** with a **Resume** button. Press Resume; it should take
+  you back to the right screen and carry on.
+- **On your phone too.** The paused pill gets shorter there ("Step 3/7") so it fits. Every button
+  on it should be easy to hit with a thumb — that is the bit I measured hardest.
+
+**If anything looks wrong, the thing to tell me** is which of the three states you were in: the
+plain pill, the paused pill, or the open panel.
+
+### 2. The demo now tells us what visitors actually do
+
+Until now the demo measured **nothing**. Every "interactive demos convert better" figure behind
+its design came from a vendor's blog — not from your site. That is now fixed: it records which
+path people take at the front door, whether they finish the tour (**and which step loses them**),
+whether they reach the live mirror, which features they click, and whether anyone hits the
+"email Max" button at the end.
+
+**Nothing for you to test here** — it is invisible to visitors, uses no cookies, and collects no
+names, emails or IP addresses. Two things worth knowing:
+
+- **To see the numbers**, in a terminal in the `saas` folder: `npx tsx scripts/demo-funnel.ts 30`
+  (the 30 = last 30 days). It prints a readable summary, not a wall of rows.
+- **Ignore the first numbers.** Right now the data is me testing. A conversion rate over a handful
+  of visits is noise. Give it a few dozen real visitors before reading anything into it.
+
+**One question for you when you have a minute:** the demo is public, so the numbers only get
+interesting once people actually visit. Is anyone being sent there yet?
+
+---
+
 ## 📱 2026-09-12 — the mobile pass on the product, on staging now
 
 You said go, so this is done and pushed to **`staging`** — not to the real site yet. Check it at
