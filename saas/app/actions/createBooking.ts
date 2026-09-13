@@ -11,6 +11,7 @@ import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
+import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -87,6 +88,42 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     )
     if (blocked) {
       return { success: false, error: 'The winery is closed on this date. Please choose another date.' }
+    }
+
+    // Guard: working hours/days + minimum lead time (#178). Mirrors the client-side
+    // check in BookingForm.tsx via the shared lib/bookingHours.ts helpers — this is
+    // the authoritative copy, since the client check can be bypassed.
+    const [
+      workingHoursCustomStr, workingHoursOpen, workingHoursClose, workingHoursDaysJson,
+      bookingLeadSplitStr, bookingLeadHoursStr, bookingLeadHoursTastingStr, bookingLeadHoursLunchStr,
+    ] = await Promise.all([
+      getSetting('working_hours_custom'),
+      getSetting('working_hours_open'),
+      getSetting('working_hours_close'),
+      getSetting('working_hours_days_json'),
+      getSetting('booking_lead_split'),
+      getSetting('booking_lead_hours'),
+      getSetting('booking_lead_hours_tasting'),
+      getSetting('booking_lead_hours_tasting_lunch'),
+    ])
+    const weeklyHours = parseWeeklyHours(workingHoursDaysJson, workingHoursOpen, workingHoursClose)
+    const dayHours = getDayHours(dateStr, workingHoursCustomStr === 'true', weeklyHours, workingHoursOpen, workingHoursClose)
+    if (dayHours.closed) {
+      return { success: false, error: 'The winery is closed on this day of the week. Please choose another date.' }
+    }
+    const requestedHour = parseInt(data.timeSlot.split(':')[0]) || 0
+    const openHour = Math.ceil(parseInt(dayHours.open.split(':')[0]) || 0)
+    const closeHour = Math.floor(parseInt(dayHours.close.split(':')[0]) || 0)
+    if (requestedHour < openHour || requestedHour > closeHour) {
+      return { success: false, error: 'That time is outside the winery\'s working hours on this date. Please choose another time.' }
+    }
+    const leadHours = getLeadHours(
+      data.visitType, bookingLeadSplitStr === 'true',
+      parseInt(bookingLeadHoursStr) || 3, parseInt(bookingLeadHoursTastingStr) || 3, parseInt(bookingLeadHoursLunchStr) || 6
+    )
+    const minInstant = minBookableInstant(new Date(), leadHours)
+    if (!slotMeetsLeadTime(dateStr, data.timeSlot, minInstant)) {
+      return { success: false, error: `Bookings must be made at least ${leadHours} hours in advance. Please choose a later time.` }
     }
 
     // Guard: min guests from settings (tenant-scoped via getSetting)

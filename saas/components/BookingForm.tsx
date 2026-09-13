@@ -12,6 +12,7 @@ import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
+import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 
 type Price = {
   id: string; minGuests: number; maxGuests: number
@@ -27,8 +28,6 @@ type Company = {
 }
 type MenuItem = { id: string; name: string; type: string }
 type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
-
-const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
 const C = {
   bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
@@ -62,6 +61,15 @@ type Props = {
   minGuestsTasting?: number
   minGuestsTastingLunch?: number
   blockedDates?: string[]
+  /** Booking lead time + working hours/days (#178) — see lib/bookingHours.ts. */
+  bookingLeadSplit?: boolean
+  bookingLeadHours?: number
+  bookingLeadHoursTasting?: number
+  bookingLeadHoursTastingLunch?: number
+  workingHoursCustom?: boolean
+  workingHoursOpen?: string
+  workingHoursClose?: string
+  workingHoursDaysJson?: string
   formContent?: Record<string, string>
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
@@ -83,7 +91,7 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '' }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -142,17 +150,26 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const minGuests = visitType === 'TASTING' ? minGuestsTasting : minGuestsTastingLunch
   const guestCount = Math.max(parseInt(guestInput) || minGuests, minGuests)
   const today = new Date().toISOString().split('T')[0]
-  const currentHour = new Date().getHours()
-  const availableSlots = selectedDate === today
-    ? TIME_SLOTS.filter(s => parseInt(s) > currentHour)
-    : TIME_SLOTS
 
+  const weeklyHours = parseWeeklyHours(workingHoursDaysJson, workingHoursOpen, workingHoursClose)
+  const leadHours = getLeadHours(visitType, bookingLeadSplit, bookingLeadHours, bookingLeadHoursTasting, bookingLeadHoursTastingLunch)
+  const minInstant = minBookableInstant(new Date(), leadHours)
+
+  function slotsForDate(date: string): string[] {
+    if (!date) return []
+    const dayHours = getDayHours(date, workingHoursCustom, weeklyHours, workingHoursOpen, workingHoursClose)
+    if (dayHours.closed) return []
+    return generateHourlySlots(dayHours.open, dayHours.close).filter(s => slotMeetsLeadTime(date, s, minInstant))
+  }
+
+  const availableSlots = slotsForDate(selectedDate)
   const isDateBlocked = (date: string) => blockedDates.includes(date)
+  const isDayClosed = (date: string) => getDayHours(date, workingHoursCustom, weeklyHours, workingHoursOpen, workingHoursClose).closed
   const isPastDate = selectedDate !== '' && selectedDate < today
 
   function handleDateChange(date: string) {
     setSelectedDate(date)
-    const slots = date === today ? TIME_SLOTS.filter(s => parseInt(s) > currentHour) : TIME_SLOTS
+    const slots = slotsForDate(date)
     if (slots.length > 0 && !slots.includes(timeSlot)) setTimeSlot(slots[0])
   }
 
@@ -330,6 +347,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!phone && !email) { setStatus('error'); setErrorMsg(t(locale, 'form.err_contact')); return }
     if (selectedDate < today) { setStatus('error'); setErrorMsg('Please choose a future date.'); return }
     if (isDateBlocked(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_blocked')); return }
+    if (isDayClosed(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_day_closed')); return }
+    if (!timeSlot || !availableSlots.includes(timeSlot)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_lead_time', { hours: leadHours })); return }
     if (isEnhanced && totalGuests < minGuests) { setStatus('error'); setErrorMsg(t(locale, 'form.err_min_guests', { min: minGuests })); return }
     setStatus('loading')
     setErrorMsg('')
@@ -675,6 +694,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             )}
             {selectedDate && !isPastDate && isDateBlocked(selectedDate) && (
               <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.blocked_date')}</p>
+            )}
+            {selectedDate && !isPastDate && !isDateBlocked(selectedDate) && isDayClosed(selectedDate) && (
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.err_day_closed')}</p>
             )}
           </div>
           <div>

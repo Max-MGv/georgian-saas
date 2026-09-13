@@ -7,6 +7,9 @@ import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavico
 import { updatePaymentCredentials, clearPaymentSecretKey, updatePaymentSectionToggles } from '@/app/actions/paymentCredentials'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import { parseWeeklyHours, defaultWeeklyHours, type WeeklyHours } from '@/lib/bookingHours'
+
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -48,6 +51,15 @@ type Props = {
   maxGuestsTasting: string
   maxGuestsTastingLunch: string
   blockedDates?: { id: string; date: string; reason: string | null }[]
+  /** Booking lead time + working hours/days (#178) — Setting values, all strings. */
+  bookingLeadSplit: string
+  bookingLeadHours: string
+  bookingLeadHoursTasting: string
+  bookingLeadHoursTastingLunch: string
+  workingHoursCustom: string
+  workingHoursOpen: string
+  workingHoursClose: string
+  workingHoursDaysJson: string
   mapsEmbedUrl: string
   logoUrl?: string | null
   logoAlt?: string
@@ -91,7 +103,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -119,6 +131,16 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [maxTasting, setMaxTasting] = useState(maxGuestsTasting)
   const [maxTastingLunch, setMaxTastingLunch] = useState(maxGuestsTastingLunch)
   const [blockedDates, setBlockedDates] = useState(initialBlockedDates)
+  const [leadSplit, setLeadSplit] = useState(initialLeadSplit === 'true')
+  const [leadHours, setLeadHours] = useState(initialLeadHours)
+  const [leadHoursTasting, setLeadHoursTasting] = useState(initialLeadHoursTasting)
+  const [leadHoursLunch, setLeadHoursLunch] = useState(initialLeadHoursLunch)
+  const [hoursCustom, setHoursCustom] = useState(initialHoursCustom === 'true')
+  const [hoursOpen, setHoursOpen] = useState(initialHoursOpen)
+  const [hoursClose, setHoursClose] = useState(initialHoursClose)
+  const [weeklyDays, setWeeklyDays] = useState<WeeklyHours>(
+    parseWeeklyHours(initialHoursDaysJson, initialHoursOpen, initialHoursClose)
+  )
   const [mapsEmbedUrl, setMapsEmbedUrl] = useState(initialMapsEmbedUrl)
   const [mapsEditMode, setMapsEditMode] = useState(false)
   const [mapsDraft, setMapsDraft] = useState(initialMapsEmbedUrl)
@@ -316,6 +338,70 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       await updateSetting('min_guests_tasting_lunch', String(val))
       setSavedKey('min_guests_tasting_lunch')
       setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleLeadSplitToggle(value: boolean) {
+    setLeadSplit(value)
+    startTransition(async () => {
+      await updateSetting('booking_lead_split', value ? 'true' : 'false')
+      setSavedKey('booking_lead_split')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  type LeadHoursKey = 'booking_lead_hours' | 'booking_lead_hours_tasting' | 'booking_lead_hours_tasting_lunch'
+
+  function handleLeadHoursBlur(key: LeadHoursKey) {
+    const raw = key === 'booking_lead_hours' ? leadHours
+      : key === 'booking_lead_hours_tasting' ? leadHoursTasting
+      : leadHoursLunch
+    const setter = key === 'booking_lead_hours' ? setLeadHours
+      : key === 'booking_lead_hours_tasting' ? setLeadHoursTasting
+      : setLeadHoursLunch
+    const val = String(Math.max(parseInt(raw) || 0, 0))
+    setter(val)
+    startTransition(async () => {
+      await updateSetting(key, val)
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleHoursCustomToggle(value: boolean) {
+    setHoursCustom(value)
+    // First time switching to custom hours (no per-day rows saved yet): seed the
+    // 7 rows from the current uniform open/close so the admin edits from a
+    // sensible starting point instead of a blank/default slate.
+    const seedDays = value && !initialHoursDaysJson ? defaultWeeklyHours(hoursOpen, hoursClose) : null
+    if (seedDays) setWeeklyDays(seedDays)
+    startTransition(async () => {
+      await updateSetting('working_hours_custom', value ? 'true' : 'false')
+      if (seedDays) await updateSetting('working_hours_days_json', JSON.stringify(seedDays))
+      setSavedKey('working_hours_custom')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleUniformHoursBlur(field: 'open' | 'close') {
+    const key = field === 'open' ? 'working_hours_open' : 'working_hours_close'
+    const val = field === 'open' ? hoursOpen : hoursClose
+    startTransition(async () => {
+      await updateSetting(key, val)
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  function handleWeeklyDayChange(dayIndex: number, patch: Partial<WeeklyHours[number]>) {
+    setWeeklyDays(prev => {
+      const next = prev.map((d, i) => i === dayIndex ? { ...d, ...patch } : d) as WeeklyHours
+      startTransition(async () => {
+        await updateSetting('working_hours_days_json', JSON.stringify(next))
+        setSavedKey('working_hours_days_json')
+        setTimeout(() => setSavedKey(null), 2000)
+      })
+      return next
     })
   }
 
@@ -928,6 +1014,150 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               </div>
             )
           })}
+        </div>
+      </div>
+
+      {/* Booking Lead Time */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.leadTime.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.leadTime.sectionHint')}</p>
+        </div>
+        <div className="divide-y" style={{ borderColor: C.border }}>
+          <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm" style={{ color: C.muted }}>{at('settings.leadTime.splitToggle')}</label>
+            <Toggle enabled={leadSplit} onChange={handleLeadSplitToggle} />
+          </div>
+
+          {!leadSplit ? (
+            <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.single')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} max={168}
+                  style={{ ...inputStyle, width: 80 }}
+                  value={leadHours}
+                  onChange={e => setLeadHours(e.target.value)}
+                  onBlur={() => handleLeadHoursBlur('booking_lead_hours')}
+                />
+                <span className="text-xs" style={{ color: C.faint }}>{at('settings.leadTime.hours')}</span>
+                {savedKey === 'booking_lead_hours' && !isPending && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tasting')}</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={0} max={168}
+                    style={{ ...inputStyle, width: 80 }}
+                    value={leadHoursTasting}
+                    onChange={e => setLeadHoursTasting(e.target.value)}
+                    onBlur={() => handleLeadHoursBlur('booking_lead_hours_tasting')}
+                  />
+                  <span className="text-xs" style={{ color: C.faint }}>{at('settings.leadTime.hours')}</span>
+                  {savedKey === 'booking_lead_hours_tasting' && !isPending && (
+                    <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tastingLunch')}</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={0} max={168}
+                    style={{ ...inputStyle, width: 80 }}
+                    value={leadHoursLunch}
+                    onChange={e => setLeadHoursLunch(e.target.value)}
+                    onBlur={() => handleLeadHoursBlur('booking_lead_hours_tasting_lunch')}
+                  />
+                  <span className="text-xs" style={{ color: C.faint }}>{at('settings.leadTime.hours')}</span>
+                  {savedKey === 'booking_lead_hours_tasting_lunch' && !isPending && (
+                    <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Working Hours */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.workingHours.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.workingHours.sectionHint')}</p>
+        </div>
+        <div className="divide-y" style={{ borderColor: C.border }}>
+          <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm" style={{ color: C.muted }}>{at('settings.workingHours.customToggle')}</label>
+            <Toggle enabled={hoursCustom} onChange={handleHoursCustomToggle} />
+          </div>
+
+          {!hoursCustom ? (
+            <div className="flex items-center gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
+              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.workingHours.dailyHours')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="time"
+                  style={{ ...inputStyle, width: 110 }}
+                  value={hoursOpen}
+                  onChange={e => setHoursOpen(e.target.value)}
+                  onBlur={() => handleUniformHoursBlur('open')}
+                />
+                <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
+                <input
+                  type="time"
+                  style={{ ...inputStyle, width: 110 }}
+                  value={hoursClose}
+                  onChange={e => setHoursClose(e.target.value)}
+                  onBlur={() => handleUniformHoursBlur('close')}
+                />
+                {(savedKey === 'working_hours_open' || savedKey === 'working_hours_close') && !isPending && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            weeklyDays.map((day, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at(`settings.workingHours.day.${WEEKDAY_KEYS[i]}`)}</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs" style={{ color: C.faint }}>
+                    <input
+                      type="checkbox"
+                      checked={day.closed}
+                      onChange={e => handleWeeklyDayChange(i, { closed: e.target.checked })}
+                    />
+                    {at('settings.workingHours.closedDay')}
+                  </label>
+                  {!day.closed && (
+                    <>
+                      <input
+                        type="time"
+                        style={{ ...inputStyle, width: 110 }}
+                        value={day.open}
+                        onChange={e => handleWeeklyDayChange(i, { open: e.target.value })}
+                      />
+                      <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
+                      <input
+                        type="time"
+                        style={{ ...inputStyle, width: 110 }}
+                        value={day.close}
+                        onChange={e => handleWeeklyDayChange(i, { close: e.target.value })}
+                      />
+                    </>
+                  )}
+                  {savedKey === 'working_hours_days_json' && !isPending && (
+                    <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

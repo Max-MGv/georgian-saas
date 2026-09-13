@@ -23,6 +23,14 @@ export default async function SettingsPage() {
     minGuestsTastingLunch,
     maxGuestsTasting,
     maxGuestsTastingLunch,
+    bookingLeadSplit,
+    bookingLeadHours,
+    bookingLeadHoursTasting,
+    bookingLeadHoursTastingLunch,
+    workingHoursCustom,
+    workingHoursOpen,
+    workingHoursClose,
+    workingHoursDaysJson,
     blockedDates,
     defaultLocale,
     mapsEmbedUrl,
@@ -49,6 +57,14 @@ export default async function SettingsPage() {
     getSetting('min_guests_tasting_lunch'),
     getSetting('max_guests_tasting'),
     getSetting('max_guests_tasting_lunch'),
+    getSetting('booking_lead_split'),
+    getSetting('booking_lead_hours'),
+    getSetting('booking_lead_hours_tasting'),
+    getSetting('booking_lead_hours_tasting_lunch'),
+    getSetting('working_hours_custom'),
+    getSetting('working_hours_open'),
+    getSetting('working_hours_close'),
+    getSetting('working_hours_days_json'),
     getBlockedDates(),
     getSetting('default_locale'),
     getSetting('maps_embed_url'),
@@ -108,6 +124,14 @@ export default async function SettingsPage() {
         minGuestsTastingLunch={minGuestsTastingLunch}
         maxGuestsTasting={maxGuestsTasting}
         maxGuestsTastingLunch={maxGuestsTastingLunch}
+        bookingLeadSplit={bookingLeadSplit}
+        bookingLeadHours={bookingLeadHours}
+        bookingLeadHoursTasting={bookingLeadHoursTasting}
+        bookingLeadHoursTastingLunch={bookingLeadHoursTastingLunch}
+        workingHoursCustom={workingHoursCustom}
+        workingHoursOpen={workingHoursOpen}
+        workingHoursClose={workingHoursClose}
+        workingHoursDaysJson={workingHoursDaysJson}
         blockedDates={blockedDates}
         defaultLocale={defaultLocale ?? 'en'}
         mapsEmbedUrl={mapsEmbedUrl}

@@ -24,6 +24,20 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   invoice_email_message: '',
   min_guests_tasting: '4',
   min_guests_tasting_lunch: '4',
+  // Booking lead time (#178) — minimum hours-ahead a booking must be made.
+  // `booking_lead_split` off: `booking_lead_hours` applies to every visit type.
+  // On: the two per-visit-type values apply instead.
+  booking_lead_split: 'false',
+  booking_lead_hours: '3',
+  booking_lead_hours_tasting: '3',
+  booking_lead_hours_tasting_lunch: '6',
+  // Working hours/days (#178) — `working_hours_custom` off: `working_hours_open`/
+  // `working_hours_close` apply to every day. On: `working_hours_days_json`
+  // (a WeeklyHours JSON array, see lib/bookingHours.ts) overrides per weekday.
+  working_hours_custom: 'false',
+  working_hours_open: '12:00',
+  working_hours_close: '18:00',
+  working_hours_days_json: '',
   maps_embed_url: '',
   admin_language: 'en',
   // Onboarding wizard (#127) — 'yes' | 'no' | '' (unanswered)

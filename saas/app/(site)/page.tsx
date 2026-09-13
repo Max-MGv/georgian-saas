@@ -67,6 +67,14 @@ export default async function Home({ searchParams }: PageProps) {
   const hideCompanyDropdownStr  = settingValue(settings, 'hide_company_dropdown')
   const minGuestsTasting        = settingValue(settings, 'min_guests_tasting')
   const minGuestsTastingLunch   = settingValue(settings, 'min_guests_tasting_lunch')
+  const bookingLeadSplit        = settingValue(settings, 'booking_lead_split')
+  const bookingLeadHours        = settingValue(settings, 'booking_lead_hours')
+  const bookingLeadHoursTasting = settingValue(settings, 'booking_lead_hours_tasting')
+  const bookingLeadHoursLunch   = settingValue(settings, 'booking_lead_hours_tasting_lunch')
+  const workingHoursCustom      = settingValue(settings, 'working_hours_custom')
+  const workingHoursOpen        = settingValue(settings, 'working_hours_open')
+  const workingHoursClose       = settingValue(settings, 'working_hours_close')
+  const workingHoursDaysJson    = settingValue(settings, 'working_hours_days_json')
   const heroBgPath              = settingValue(settings, 'home_hero_bg_path')
   const heroBgX                 = settingValue(settings, 'home_hero_bg_x')
   const heroBgY                 = settingValue(settings, 'home_hero_bg_y')
@@ -377,6 +385,14 @@ export default async function Home({ searchParams }: PageProps) {
             masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
             minGuestsTasting={parseInt(minGuestsTasting) || 4}
             minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
+            bookingLeadSplit={bookingLeadSplit === 'true'}
+            bookingLeadHours={parseInt(bookingLeadHours) || 3}
+            bookingLeadHoursTasting={parseInt(bookingLeadHoursTasting) || 3}
+            bookingLeadHoursTastingLunch={parseInt(bookingLeadHoursLunch) || 6}
+            workingHoursCustom={workingHoursCustom === 'true'}
+            workingHoursOpen={workingHoursOpen || '12:00'}
+            workingHoursClose={workingHoursClose || '18:00'}
+            workingHoursDaysJson={workingHoursDaysJson}
             blockedDates={blockedDates.map(d => d.date)}
             formContent={formContent}
             displayPriceTasting={displayPriceTasting}

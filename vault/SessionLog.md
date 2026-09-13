@@ -8,6 +8,46 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 (later still) — booking lead time + working hours/days (Feature 178)
+
+Built two new admin-configurable booking rules end to end, shipped to `staging`:
+
+1. **Booking lead time** — minimum hours-ahead a booking must be made. Default: one
+   value (3h) for every visit type. A toggle splits it into separate Tasting (3h) and
+   Tasting + Lunch (6h) values — the numbers Max gave directly.
+2. **Working hours/days** — when the winery accepts bookings. Default: one open/close
+   time (12:00–18:00, Max's answer) applies every day. A toggle switches to custom
+   per-day hours, where each weekday gets its own open/close time or can be marked
+   fully closed.
+
+Both are `Setting` rows (no schema migration — same generic key/value pattern as
+`min_guests_tasting`). New shared `saas/lib/bookingHours.ts` resolves day hours, hourly
+slots, and lead-time checks once; `BookingForm.tsx` (client, drives the date/time picker)
+and `createBooking.ts` (server, the authoritative gate — the old code only checked past
+dates and manually-blocked dates, so today a booking outside working hours or inside the
+lead-time window could be submitted with nothing stopping it) both import it, so the two
+can't drift. Also replaced the old hardcoded `TIME_SLOTS` (`11:00`–`18:00` fixed array)
+and its "only filters today by current hour" lead-time gap — the old logic never blocked
+early-morning slots on a *future* day even with a large lead time.
+
+Admin UI: two new Settings panels ("Booking Lead Time", "Working Hours") mirroring the
+existing Booking Rules section's style. New EN+KA strings in both `adminT.ts` (admin
+panel) and `t.ts` (public-facing errors — closed-day and lead-time-not-met messages).
+Full design writeup: `Features/Feature 178 - Booking Lead Time and Working Hours.md`.
+
+Verified: `tsc --noEmit` clean; `eslint` on every touched file shows only pre-existing
+errors (confirmed via `git stash` — same errors present without this session's changes,
+all in unrelated parts of `BookingForm.tsx`). Pushed to `staging` for Max to check on the
+preview before merging to `master`.
+
+### Next up
+- Max to verify on the `staging` preview: split lead-time toggle, custom per-day hours
+  (including marking a day fully closed), and that the public booking form's available
+  time slots respect both.
+- Once confirmed good, merge `staging` → `master` for prod.
+
+---
+
 ## 2026-09-13 — fake wine orders + packing sheet readability
 
 Two small, unrelated asks in one session.
