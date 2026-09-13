@@ -380,6 +380,7 @@ export default async function Home({ searchParams }: PageProps) {
             formContent={formContent}
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceLunch}
+            individualPrices={individualsRow?.prices ?? []}
             onlinePaymentEnabled={{
               configured: paymentConfigured,
               individual: individualsPaymentReady,

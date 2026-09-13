@@ -65,6 +65,7 @@ type Props = {
   formContent?: Record<string, string>
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
+  individualPrices?: Price[]
   /**
    * Drives the submit button's "…& Pay" label and whether it redirects to
    * checkout when the server returns a checkoutUrl. The server decides
@@ -82,7 +83,7 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, onlinePaymentEnabled = DEFAULT_PAYMENT_READY }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
@@ -295,13 +296,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Simple form price preview
   const matchedTier = !isEnhanced && selectedCompany
     ? selectedCompany.prices.find(p => guestCount >= p.minGuests && guestCount <= p.maxGuests) ?? null
-    : null
+    : bookingType === 'INDIVIDUAL'
+      ? findTier(individualPrices, guestCount) ?? null
+      : null
   const tierGap = !isEnhanced && selectedCompany && selectedCompany.prices.length > 0 && !matchedTier
   // No invented default rates — when the tenant has no display price set,
   // the estimate is unknown and the form says "price confirmed after submission"
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
+  const matchedTierRate = matchedTier
+    ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : matchedTier.tastingLunchPricePerPerson || matchedTier.pricePerPerson)
+    : null
   const estimatedTotal = matchedTier
-    ? matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice
+    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice)
     : basePrice != null ? basePrice * guestCount : null
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
@@ -860,7 +866,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{matchedTierRate ?? basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
               </div>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
             </div>
