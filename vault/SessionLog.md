@@ -72,9 +72,28 @@ order landed with `companyId: null`, `requestedCompanyName: 'Dropdown Test Co'`,
 `totalPrice: 0`. Cleaned up the test order and left `hide_company_dropdown` set to `true`
 (matching production) for Max's next test. Typechecked clean, pushed to `staging`.
 
-**Next: Max to test both variants on the staging preview URL** (not localhost) — the
-direct-code one (current setting) and, if he wants, the dropdown one by asking to flip
-the setting back — and confirm the email copy reads right.
+**Second follow-up, same session:** Max asked directly what happens to one of these
+orders if he actually registers the company — the honest answer at that point was
+"nothing, ever, by design." He asked for that gap closed rather than just documented.
+Built `assignOrderCompany()` (`app/actions/orders.ts`) plus a "Link Company" control on
+the order detail page (`OrderDetail.tsx`), shown only for a `COMPANY` order with no
+`company` — pick a real company from a dropdown, it re-prices the order against that
+company's tiers (handles both the enhanced split-guest-count shape and the flat
+`guestCount` shape) and sets `companyId`. Refuses to touch an order that already has a
+company — one-time link-up, not a general reassignment tool. `page.tsx` now also fetches
+the tenant's real companies (`isIndividual: false`) to feed the dropdown.
+
+Verified end-to-end on staging: created a throwaway order with `companyId: null`,
+`requestedCompanyName: 'Pending Tours Ltd'`, `totalPrice: 0`; linked it to "Test Company #
+1" (50₾/pp tasting tier) through the real admin UI; confirmed the page refreshed showing
+"Company: Test Company # 1" and Order Total 250.00₾ (5 guests × 50₾); confirmed in the DB
+that `companyId`/`bookingType`/`totalPrice` all updated while `requestedCompanyName`
+stayed as a paper trail. Deleted the test order afterward. Typechecked clean, pushed to
+`staging`.
+
+**Next: Max to test all three pieces on the staging preview URL** (not localhost) — the
+direct-code company flow, the dropdown's "+ New Company" option, and linking a
+no-company order to a real company from its detail page.
 
 ---
 

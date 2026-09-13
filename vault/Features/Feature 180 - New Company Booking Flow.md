@@ -75,16 +75,50 @@ setting to `true` afterward.
   `handleSubmit`. Moved to run after every other validation (date, phone/email, blocked
   dates, lead time, min guests) — so the popup only opens once the rest of the booking is
   genuinely ready to submit, not on an empty form.
-- **No auto-link when the company is later created.** The Order's `requestedCompanyName`
-  is display-only. If the winery creates a real `Company` row afterward, this order does
-  **not** retroactively get a `companyId` — there's no mechanism for that. Both the winery
-  notification email and the admin Orders table say so explicitly, so the winery follows up
-  with the guest directly rather than expecting it to reconcile itself.
+- **No *automatic* link when the company is later created — but a manual one exists.**
+  The Order's `requestedCompanyName` is display-only and never retroactively gains a
+  `companyId` by itself. Both the winery notification email and the admin Orders table say
+  so explicitly. What closes the gap: `assignOrderCompany()` (`app/actions/orders.ts`) and
+  a "Link Company" control on the order detail page, shown only when
+  `!order.company && order.bookingType === 'COMPANY'` — pick a real company from a
+  dropdown, and it sets `companyId`, re-prices the order against that company's tiers
+  (same tier-lookup shape as `createBooking.ts`/`updateOrderEnhanced`, branching on
+  whether the order has split tasting/lunch counts or just a flat `guestCount`), and
+  `router.refresh()`s the page. `requestedCompanyName` is left in place afterward as a
+  paper trail, even though the UI no longer shows it once `company` is populated.
+  Refuses to touch an order that already has a `companyId` — one-time link-up, not a
+  general reassignment tool.
 - **"Not confirmed" messaging, three places:** the popup itself (before sending), the
   success screen (`confirmedPendingNewCompany` state), and the customer's own confirmation
   email (`pendingNewCompany` flag on `sendBookingConfirmation`) — all say this is a
   registration + booking *request*, not a confirmed booking, since a new company has no
   account or pricing yet.
+
+## Linking a no-company order to a real company (added same day)
+
+Max asked directly: "what happens to this specific request... if I register this company?"
+— and the honest answer at the time was "nothing, by design, forever." He asked for the
+gap to actually close, not just be documented. Built:
+
+- `assignOrderCompany(orderId, companyId)` in `app/actions/orders.ts` — admin-only, looks
+  up the order and the target company (both tenant-scoped), refuses if the order already
+  has a `companyId`, recomputes `totalPrice` from the company's price tiers (handles both
+  the enhanced split-guest-count shape and the flat `guestCount` shape), sets `companyId`
+  + `bookingType: 'COMPANY'` + the new price.
+- `OrderDetail.tsx` — a "Link Company" box in the Booking Info card, visible only for a
+  `COMPANY` order with no `company`, showing `requestedCompanyName` and a dropdown of the
+  tenant's real companies (`isIndividual: false`, fetched in `page.tsx` and passed down).
+  Calls the action then `router.refresh()` so the server-fetched `order`/`company` props
+  update in place — no local state patching, since the admin's own recompute logic already
+  lives server-side.
+
+Verified end-to-end on staging (dev DB): created a throwaway `COMPANY` order with
+`companyId: null`, `requestedCompanyName: 'Pending Tours Ltd'`, `totalPrice: 0`; linked it
+to "Test Company # 1" (5-guest tasting tier, 50₾/pp) through the actual admin UI; confirmed
+the page re-rendered with "Company: Test Company # 1", the price-tiers warning gone, and
+Order Total showing 250.00₾; confirmed in the DB that `companyId`, `bookingType`, and
+`totalPrice` all updated while `requestedCompanyName` was left in place as history. Deleted
+the test order afterward.
 
 ## Files touched
 
@@ -105,6 +139,9 @@ setting to `true` afterward.
 - `saas/app/admin/(panel)/orders/OrdersTable.tsx` + `page.tsx` — displays
   `requestedCompanyName` (styled amber, suffixed "(new)") wherever `company` would
   otherwise render, in the table row, mobile card, hover-preview card, and calendar view
+- `saas/app/actions/orders.ts` — `assignOrderCompany()`
+- `saas/app/admin/(panel)/orders/[id]/OrderDetail.tsx` + `[id]/page.tsx` — the "Link
+  Company" control and the `companies` list it's fed from
 
 ## Edge cases handled
 

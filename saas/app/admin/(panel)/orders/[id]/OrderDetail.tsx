@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, updateOrderStatus, sendOrderInvoice } from '@/app/actions/orders'
+import { updateOrderEnhanced, updateOrderStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
@@ -96,6 +97,7 @@ type OrderProp = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  requestedCompanyName: string | null
   company: {
     id: string
     name: string
@@ -157,6 +159,7 @@ export default function OrderDetail({
   displayName = 'Your Winery',
   menuItems,
   masterclassItems,
+  companies = [],
   locale = 'en',
 }: {
   order: OrderProp
@@ -165,9 +168,38 @@ export default function OrderDetail({
   displayName?: string
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  /** Real companies to link a no-company order to (Feature 180). Excludes
+   * the isIndividual pricing-container row — see page.tsx's fetch. */
+  companies?: { id: string; name: string }[]
   locale?: string
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+  const router = useRouter()
+
+  // ── Link to a real company (Feature 180) ───────────────────────────────────
+  // Only relevant for an order that came in with no companyId at all — see
+  // assignOrderCompany's own doc comment for why this never happens
+  // automatically.
+  const [assignCompanyId, setAssignCompanyId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [assignMsg, setAssignMsg] = useState('')
+  const [assignError, setAssignError] = useState(false)
+
+  async function handleAssignCompany() {
+    if (!assignCompanyId) return
+    setAssigning(true)
+    setAssignMsg('')
+    const result = await assignOrderCompany(order.id, assignCompanyId)
+    setAssigning(false)
+    if ('error' in result) {
+      setAssignError(true)
+      setAssignMsg(result.error)
+      return
+    }
+    setAssignError(false)
+    setAssignMsg('Linked — refreshing…')
+    router.refresh()
+  }
   // ── Guest / dish / notes state ─────────────────────────────────────────────
   // String state so the user can clear the field and type a new number freely
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
@@ -528,6 +560,43 @@ export default function OrderDetail({
           }
         />
         {order.company && <InfoRow label={at('orderDetail.bookingInfo.company')} value={order.company.name} />}
+        {!order.company && order.bookingType === 'COMPANY' && (
+          <div className="mt-2 mb-1 rounded-lg border p-3" style={{ borderColor: '#fbbf24', backgroundColor: '#fffbeb' }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: '#92400e' }}>
+              {order.requestedCompanyName
+                ? `Requested company: ${order.requestedCompanyName} — not linked yet`
+                : 'No company linked yet'}
+            </p>
+            <p className="text-xs mb-2" style={{ color: '#92400e' }}>
+              This came in through the "New Company?" flow before an account existed
+              (Feature 180). It stays unpriced and unlinked until you connect it below —
+              nothing does this automatically.
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={assignCompanyId}
+                onChange={e => { setAssignCompanyId(e.target.value); setAssignMsg('') }}
+                style={{ ...inputStyle, width: 'auto', flex: '1 1 200px' }}
+              >
+                <option value="">Select a company…</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button
+                onClick={handleAssignCompany}
+                disabled={!assignCompanyId || assigning}
+                className="px-3 py-2 rounded-lg text-sm font-medium text-white flex-shrink-0"
+                style={{ backgroundColor: C.wine, opacity: (!assignCompanyId || assigning) ? 0.6 : 1 }}
+              >
+                {assigning ? 'Linking…' : 'Link Company'}
+              </button>
+            </div>
+            {assignMsg && (
+              <p className="text-xs mt-1.5" style={{ color: assignError ? '#b91c1c' : '#166534' }}>
+                {assignMsg}
+              </p>
+            )}
+          </div>
+        )}
         <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
         <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
         <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />

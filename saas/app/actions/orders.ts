@@ -360,6 +360,77 @@ export async function exportOrdersCsv(filters: {
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
 }
 
+/**
+ * Links a booking that came in with no company (Feature 180's "New Company?"
+ * flow — `companyId: null`, `requestedCompanyName` set) to a real Company row
+ * once the winery has created one, and re-prices it against that company's
+ * tiers. There is no other way for such an order to ever gain a companyId —
+ * see vault/Features/Feature 180's "no auto-link" note — so this is the one
+ * place that gap gets closed, by hand, per order.
+ *
+ * Deliberately refuses to touch an order that already has a companyId: this
+ * is a one-time link-up for an order that has never had a company, not a
+ * general "reassign company" tool.
+ */
+export async function assignOrderCompany(
+  orderId: string,
+  companyId: string
+): Promise<{ success: true; totalPrice: number } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async (tx) => {
+    const order = await tx.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { masterclassLines: true, extras: true },
+    })
+    if (!order) return { error: 'Order not found.' } as const
+    if (order.companyId) return { error: 'This order already has a company linked.' } as const
+
+    const company = await tx.company.findFirst({
+      where: { id: companyId, tenantId },
+      include: { prices: true },
+    })
+    if (!company) return { error: 'Company not found.' } as const
+
+    const masterclassAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+    const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
+    const payingGuests = order.tastingGuestCount + order.lunchGuestCount
+
+    let totalPrice = 0
+    if (payingGuests > 0) {
+      // Enhanced/split booking — same shape as updateOrderEnhanced's calc.
+      const tier = findTier(company.prices, payingGuests)
+      if (tier) {
+        totalPrice =
+          order.tastingGuestCount * tier.pricePerPerson +
+          order.lunchGuestCount * comboRatePerPerson(tier) +
+          tier.registrationPrice + masterclassAmt + extrasAmt
+      }
+    } else {
+      // Simple booking — priced off guestCount + visitType, same shape as
+      // createBooking.ts's COMPANY-with-companyId branch.
+      const tier = findTier(company.prices, order.guestCount)
+      if (tier) {
+        const ratePerPerson = order.visitType === 'TASTING' ? tier.pricePerPerson : comboRatePerPerson(tier)
+        totalPrice = ratePerPerson * order.guestCount + tier.registrationPrice + masterclassAmt + extrasAmt
+      }
+    }
+    if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: { companyId, bookingType: 'COMPANY', totalPrice },
+    })
+    return { success: true as const, totalPrice }
+  })
+
+  if ('error' in result) return result
+  revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${orderId}`)
+  return result
+}
+
 export async function updateOrderStatus(
   orderId: string,
   status: 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'

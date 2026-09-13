@@ -23,6 +23,12 @@ on the actual staging preview:
    test the dropdown variant — the one that showed you the "please select an item" loop —
    ask me to flip it back to `false` temporarily; that variant now has a "+ New Company"
    option right in the dropdown that does the same thing.)
+2. Once you've submitted a no-code booking (from either variant), go create the matching
+   company in Admin → Companies (with at least one price tier, so you can see the price
+   update). Then open that order from Admin → Orders — you should see a "Link Company"
+   box quoting the requested company name. Pick the company you just created and hit
+   "Link Company" — the page should refresh showing the real company name and the
+   correctly priced total instead of 0₾.
 2. Fill in the whole form (date, time, guests, name, phone/email) but leave the company
    code blank, then hit "Request Booking".
 3. A "New Company?" popup should appear, pre-filled with your name/phone/email, saying

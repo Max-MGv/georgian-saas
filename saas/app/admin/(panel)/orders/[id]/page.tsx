@@ -18,7 +18,7 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage] = await Promise.all([
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -29,6 +29,14 @@ export default async function OrderDetailPage({
         },
         extras: { orderBy: { id: 'asc' } },
       },
+    })),
+    // For the "link this to a company" control (Feature 180) — the
+    // isIndividual row is a pricing-tier container, never a real company to
+    // link an order to (see createBooking.ts's own comment on the same row).
+    withTenantDb(tenantId, tx => tx.company.findMany({
+      where: { tenantId, isIndividual: false },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
     })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({
       where: { active: true, tenantId },
@@ -66,6 +74,7 @@ export default async function OrderDetailPage({
         detailed={invoiceDetailed === 'true'}
         displayName={displayName}
         locale={locale}
+        companies={companies}
         order={{
           id: order.id,
           status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
@@ -86,6 +95,7 @@ export default async function OrderDetailPage({
           phone: order.phone,
           notes: order.notes,
           totalPrice: order.totalPrice,
+          requestedCompanyName: order.requestedCompanyName,
           company: order.company
             ? {
                 id: order.company.id,
