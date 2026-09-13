@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, updateOrderStatus, sendOrderInvoice } from '@/app/actions/orders'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -263,13 +263,13 @@ export default function OrderDetail({
   const legacyBase = legacyTier
     ? order.guestCount *
         (order.visitType === 'TASTING_LUNCH'
-          ? legacyTier.tastingLunchPricePerPerson || legacyTier.pricePerPerson
+          ? comboRatePerPerson(legacyTier)
           : legacyTier.pricePerPerson) +
       legacyTier.registrationPrice
     : (order.totalPrice ?? 0)
 
   const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : null
-  const lunchAmt = tier ? lunchGuests * tier.tastingLunchPricePerPerson : null
+  const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : null
   const regFee = tier ? tier.registrationPrice : null
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
@@ -1008,7 +1008,7 @@ export default function OrderDetail({
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
             {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
             {' · '}
-            {at('orders.col.lunch')} <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{comboRatePerPerson(tier)}₾/pp</strong>
             {' · '}
             {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
           </div>
@@ -1039,7 +1039,7 @@ export default function OrderDetail({
           {tier && lunchGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier.tastingLunchPricePerPerson}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {comboRatePerPerson(tier)}₾)
               </span>
               <span style={{ color: C.text }}>{lunchAmt!.toFixed(2)}₾</span>
             </div>

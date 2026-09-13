@@ -13,6 +13,7 @@ import { preload } from 'react-dom'
 import EditableText from '@/components/EditableText'
 import EditModeSuppressor from '@/components/EditModeSuppressor'
 import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
+import { comboRatePerPerson } from '@/lib/pricingUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +81,7 @@ export default async function Home({ searchParams }: PageProps) {
   // No invented default prices — the price line is hidden until the tenant sets a display tier
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
   const displayPriceTasting = displayTier?.pricePerPerson ?? null
-  const displayPriceLunch = displayTier?.tastingLunchPricePerPerson ?? null
+  const displayPriceTastingLunch = displayTier ? comboRatePerPerson(displayTier) : null
 
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
@@ -331,7 +332,7 @@ export default async function Home({ searchParams }: PageProps) {
             tk: 'home_package2_title', dk: 'home_package2_desc',
             tFb: t(locale, 'form.tasting_lunch'),
             dFb: 'Wine tasting followed by a full traditional meal.',
-            price: displayPriceLunch, min: parseInt(minGuestsTastingLunch) || 4,
+            price: displayPriceTastingLunch, min: parseInt(minGuestsTastingLunch) || 4,
           },
         ].map(pkg => (
           <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}>
@@ -379,7 +380,7 @@ export default async function Home({ searchParams }: PageProps) {
             blockedDates={blockedDates.map(d => d.date)}
             formContent={formContent}
             displayPriceTasting={displayPriceTasting}
-            displayPriceLunch={displayPriceLunch}
+            displayPriceLunch={displayPriceTastingLunch}
             individualPrices={individualsRow?.prices ?? []}
             onlinePaymentEnabled={{
               configured: paymentConfigured,

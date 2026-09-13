@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react'
 import { createBooking } from '@/app/actions/createBooking'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -288,7 +288,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : null
   const enhancedTotal = enhancedTier
     ? tastingGuests * enhancedTier.pricePerPerson +
-      lunchGuests * enhancedTier.tastingLunchPricePerPerson +
+      lunchGuests * comboRatePerPerson(enhancedTier) +
       enhancedTier.registrationPrice +
       masterclassAmt
     : masterclassAmt
@@ -304,7 +304,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // the estimate is unknown and the form says "price confirmed after submission"
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
   const matchedTierRate = matchedTier
-    ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : matchedTier.tastingLunchPricePerPerson || matchedTier.pricePerPerson)
+    ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : comboRatePerPerson(matchedTier))
     : null
   const estimatedTotal = matchedTier
     ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice)
@@ -846,7 +846,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {enhancedTier.pricePerPerson}₾</p>
                 )}
                 {lunchGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {enhancedTier.tastingLunchPricePerPerson}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {comboRatePerPerson(enhancedTier)}₾</p>
                 )}
                 {enhancedTier.registrationPrice > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {enhancedTier.registrationPrice}₾</p>

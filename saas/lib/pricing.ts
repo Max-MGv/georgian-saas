@@ -1,5 +1,5 @@
 import { withTenantDb } from '@/lib/db'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 
 export async function recalcOrderTotal(orderId: string, tenantId: string): Promise<void> {
   await withTenantDb(tenantId, async (tx) => {
@@ -31,7 +31,7 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
       if (!tier) return
       totalPrice =
         tastingGuests * tier.pricePerPerson +
-        lunchGuests * tier.tastingLunchPricePerPerson +
+        lunchGuests * comboRatePerPerson(tier) +
         tier.registrationPrice +
         masterclassAmt +
         extrasAmt
@@ -41,7 +41,7 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
       if (!tier) return
       const rate =
         order.visitType === 'TASTING_LUNCH'
-          ? tier.tastingLunchPricePerPerson || tier.pricePerPerson
+          ? comboRatePerPerson(tier)
           : tier.pricePerPerson
       totalPrice = guestCount * rate + tier.registrationPrice + masterclassAmt + extrasAmt
     } else {

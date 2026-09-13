@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -96,7 +96,7 @@ export async function updateOrderEnhanced(
       if (tier) {
         totalPrice =
           tastingGuests * tier.pricePerPerson +
-          lunchGuests * tier.tastingLunchPricePerPerson +
+          lunchGuests * comboRatePerPerson(tier) +
           tier.registrationPrice +
           masterclassAmt +
           extrasAmt
@@ -175,7 +175,7 @@ export async function createOrderAdmin(data: {
         if (tier) {
           totalPrice =
             data.tastingGuestCount * tier.pricePerPerson +
-            data.lunchGuestCount * tier.tastingLunchPricePerPerson +
+            data.lunchGuestCount * comboRatePerPerson(tier) +
             tier.registrationPrice +
             masterclassAmt +
             extrasAmt

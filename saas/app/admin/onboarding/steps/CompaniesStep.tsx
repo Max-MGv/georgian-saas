@@ -26,7 +26,7 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   if (mode === 'simple') {
     const priceNum = Number(fields.price)
     if (fields.price.trim() === '' || !Number.isFinite(priceNum) || priceNum <= 0) return null
-    return { minGuests: 1, maxGuests: 999, pricePerPerson: priceNum, tastingLunchPricePerPerson: priceNum, registrationPrice: 0 }
+    return { minGuests: 1, maxGuests: 999, pricePerPerson: priceNum, tastingLunchPricePerPerson: 0, registrationPrice: 0 }
   }
   const min = Number(fields.minGuests)
   const max = Number(fields.maxGuests)
@@ -37,7 +37,7 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
     minGuests: min,
     maxGuests: max,
     pricePerPerson: tasting,
-    tastingLunchPricePerPerson: fields.tastingLunchPP.trim() === '' ? tasting : Number(fields.tastingLunchPP),
+    tastingLunchPricePerPerson: fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP),
     registrationPrice: fields.flatFee.trim() === '' ? 0 : Number(fields.flatFee),
   }
 }
@@ -510,7 +510,7 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
       minGuests: min,
       maxGuests: max,
       pricePerPerson: tasting,
-      tastingLunchPricePerPerson: tastingLunchPP.trim() === '' ? tasting : Number(tastingLunchPP),
+      tastingLunchPricePerPerson: tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP),
       registrationPrice: flatFee.trim() === '' ? 0 : Number(flatFee),
     })
     if ('error' in result) {

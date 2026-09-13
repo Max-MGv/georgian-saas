@@ -42,6 +42,9 @@ next-env.d.ts
 
 /app/generated/prisma
 
+# one-time migration flag files — per-database state, not repo state
+scripts/*.done
+
 # Playwright
 node_modules/
 /test-results/

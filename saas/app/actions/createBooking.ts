@@ -5,7 +5,7 @@ import { BookingType, OrderStatus, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
@@ -163,7 +163,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       const tier = findTier(individualsCompany.prices, guestCount)
       if (tier) {
         pricePerPersonTasting = tier.pricePerPerson
-        pricePerPersonLunch = tier.tastingLunchPricePerPerson || tier.pricePerPerson
+        pricePerPersonLunch = comboRatePerPerson(tier)
       }
     }
     const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
@@ -183,13 +183,13 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           if (isEnhanced) {
             totalPrice =
               (data.tastingGuestCount ?? 0) * tier.pricePerPerson +
-              (data.lunchGuestCount ?? 0) * tier.tastingLunchPricePerPerson +
+              (data.lunchGuestCount ?? 0) * comboRatePerPerson(tier) +
               tier.registrationPrice +
               masterclassAmt
           } else {
             const ratePerPerson = data.visitType === 'TASTING'
               ? tier.pricePerPerson
-              : tier.tastingLunchPricePerPerson || tier.pricePerPerson
+              : comboRatePerPerson(tier)
             totalPrice = ratePerPerson * guestCount + tier.registrationPrice
           }
         } else if (!isEnhanced) {

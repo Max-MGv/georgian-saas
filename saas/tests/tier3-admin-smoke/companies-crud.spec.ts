@@ -235,7 +235,7 @@ test.describe('Companies CRUD', () => {
     // guests"/"Tasting ₾/person" text is plain nearby text, not wired via
     // <label> or aria-label — confirmed live), so they can only be targeted
     // positionally: 0=Min guests (prefilled "1"), 1=Max guests (prefilled
-    // "10"), 2=Tasting ₾/person, 3=Tasting+Lunch ₾/person, 4=Flat fee
+    // "10"), 2=Tasting ₾/person, 3=+Lunch ₾/person (add-on), 4=Flat fee
     // (prefilled "0").
     // Real bug fixed here: clicking companyRow(page) (the row's outer <div>,
     // parent of the summary button) never toggled expansion — it silently

@@ -60,9 +60,9 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Kakheti Wine Routes', contactName: 'Nino Beridze', contactPhone: '+995 599 41 22 08',
     contactEmail: 'bookings@kakhetiwineroutes.example', identificationCode: '404512338', address: 'Telavi, Kakheti',
     tiers: [
-      { minGuests: 1, maxGuests: 10, pricePerPerson: 55, tastingLunchPricePerPerson: 95 },
-      { minGuests: 11, maxGuests: 20, pricePerPerson: 45, tastingLunchPricePerPerson: 85 },
-      { minGuests: 21, maxGuests: 100, pricePerPerson: 38, tastingLunchPricePerPerson: 75 },
+      { minGuests: 1, maxGuests: 10, pricePerPerson: 55, tastingLunchPricePerPerson: 40 },
+      { minGuests: 11, maxGuests: 20, pricePerPerson: 45, tastingLunchPricePerPerson: 40 },
+      { minGuests: 21, maxGuests: 100, pricePerPerson: 38, tastingLunchPricePerPerson: 37 },
     ],
     share: 9,
   },
@@ -70,8 +70,8 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Tbilisi Tour Collective', contactName: 'Giorgi Kapanadze', contactPhone: '+995 577 30 14 76',
     contactEmail: 'groups@tbilisitourcollective.example', identificationCode: '405118902', address: 'Rustaveli Ave 14, Tbilisi',
     tiers: [
-      { minGuests: 1, maxGuests: 10, pricePerPerson: 60, tastingLunchPricePerPerson: 100 },
-      { minGuests: 11, maxGuests: 30, pricePerPerson: 48, tastingLunchPricePerPerson: 88 },
+      { minGuests: 1, maxGuests: 10, pricePerPerson: 60, tastingLunchPricePerPerson: 40 },
+      { minGuests: 11, maxGuests: 30, pricePerPerson: 48, tastingLunchPricePerPerson: 40 },
     ],
     share: 7,
   },
@@ -79,8 +79,8 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Caucasus Vine Travel', contactName: 'Ana Tsereteli', contactPhone: '+995 595 88 60 31',
     contactEmail: 'ops@caucasusvinetravel.example', identificationCode: '406220145', address: 'Sighnaghi, Kakheti',
     tiers: [
-      { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 90 },
-      { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 80 },
+      { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 40 },
+      { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38 },
     ],
     share: 6,
   },
@@ -88,8 +88,8 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Alazani Valley Tours', contactName: 'Levan Chkheidze', contactPhone: '+995 558 12 47 90',
     contactEmail: 'hello@alazanivalleytours.example', identificationCode: '404907712', address: 'Gurjaani, Kakheti',
     tiers: [
-      { minGuests: 1, maxGuests: 12, pricePerPerson: 58, tastingLunchPricePerPerson: 98 },
-      { minGuests: 13, maxGuests: 100, pricePerPerson: 46, tastingLunchPricePerPerson: 86 },
+      { minGuests: 1, maxGuests: 12, pricePerPerson: 58, tastingLunchPricePerPerson: 40 },
+      { minGuests: 13, maxGuests: 100, pricePerPerson: 46, tastingLunchPricePerPerson: 40 },
     ],
     share: 5,
   },
@@ -97,8 +97,8 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Silk Road Journeys', contactName: 'Mariam Dolidze', contactPhone: '+995 591 76 20 55',
     contactEmail: 'reservations@silkroadjourneys.example', identificationCode: '405633208', address: 'Batumi, Adjara',
     tiers: [
-      { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 92 },
-      { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 78 },
+      { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 40 },
+      { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 38 },
     ],
     share: 4,
   },
@@ -106,9 +106,9 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
 
 /** Walk-ins and private visitors. Kept as its own company row, as the app expects. */
 const INDIVIDUALS_TIERS: TierSpec[] = [
-  { minGuests: 1, maxGuests: 2, pricePerPerson: 90, tastingLunchPricePerPerson: 150 },
-  { minGuests: 3, maxGuests: 6, pricePerPerson: 70, tastingLunchPricePerPerson: 120 },
-  { minGuests: 7, maxGuests: 100, pricePerPerson: 60, tastingLunchPricePerPerson: 105 },
+  { minGuests: 1, maxGuests: 2, pricePerPerson: 90, tastingLunchPricePerPerson: 60 },
+  { minGuests: 3, maxGuests: 6, pricePerPerson: 70, tastingLunchPricePerPerson: 50 },
+  { minGuests: 7, maxGuests: 100, pricePerPerson: 60, tastingLunchPricePerPerson: 45 },
 ]
 
 type WineCompanySpec = {
@@ -185,13 +185,13 @@ function computeTotal(opts: {
     const tier = findTier(tiers, paying)
     if (!tier) return null
     return tastingGuests * tier.pricePerPerson
-      + lunchGuests * tier.tastingLunchPricePerPerson
+      + lunchGuests * (tier.pricePerPerson + tier.tastingLunchPricePerPerson)
       + (tier.registrationPrice ?? 0) + masterclassAmt
   }
   const tier = findTier(tiers, guestCount)
   if (!tier) return null
   const rate = visitType === 'TASTING_LUNCH'
-    ? (tier.tastingLunchPricePerPerson || tier.pricePerPerson)
+    ? tier.pricePerPerson + tier.tastingLunchPricePerPerson
     : tier.pricePerPerson
   return guestCount * rate + (tier.registrationPrice ?? 0) + masterclassAmt
 }

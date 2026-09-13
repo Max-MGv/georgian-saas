@@ -7,6 +7,16 @@ export type PriceTier = {
 }
 
 /**
+ * Per-person rate for a guest doing tasting + lunch.
+ *
+ * `tastingLunchPricePerPerson` is the lunch add-on only — a combo guest is
+ * charged the tasting rate plus this add-on, not the add-on alone.
+ */
+export function comboRatePerPerson<T extends PriceTier>(tier: T): number {
+  return tier.pricePerPerson + tier.tastingLunchPricePerPerson
+}
+
+/**
  * Find the price tier for a given paying guest count.
  *
  * - Exact match: guest count falls within a tier's min/max range.

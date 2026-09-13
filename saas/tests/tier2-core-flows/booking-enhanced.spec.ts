@@ -4,12 +4,14 @@ import { loginAsTenantAdmin } from '../helpers/auth';
 
 // Reuses an existing real test company rather than creating one (per the
 // note's instruction to minimize footprint): "Test Company # 1" already has
-// two price tiers (1–10 guests: Tasting 50₾/pp + Lunch 30₾/pp; 11–20 guests:
-// Tasting 30₾/pp + Lunch 20₾/pp — confirmed live via /admin/companies) and a
-// real access code, and unlike some of the tenant's other test companies it
-// is NOT flagged "⚠ Needs details", so it's safe to treat as stable fixture
-// data. The access code itself is read fresh from the admin panel below
-// rather than hardcoded, in case it's ever regenerated.
+// two price tiers (1–10 guests: Tasting 50₾/pp, Lunch add-on 0₾/pp — a combo
+// guest pays the tasting rate; 11–20 guests: Tasting 30₾/pp, Lunch add-on
+// 0₾/pp — confirmed live via /admin/companies, and backfilled to this
+// add-on-only shape by scripts/migrate-lunch-price-to-addon.ts on 2026-09-13)
+// and a real access code, and unlike some of the tenant's other test
+// companies it is NOT flagged "⚠ Needs details", so it's safe to treat as
+// stable fixture data. The access code itself is read fresh from the admin
+// panel below rather than hardcoded, in case it's ever regenerated.
 const COMPANY_NAME = 'Test Company # 1';
 const TEST_EMAIL = `playwright-booking-enhanced-${Date.now()}@example.com`;
 
@@ -222,9 +224,9 @@ test.describe('Booking form — enhanced/company variant', () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
 
-    // expect: the estimated total reflects tier 1's rate (5×50 + 3×30 = 340)
-    // plus the masterclass add-on already selected above (10) = 350, before submitting
-    await expect(page.getByText('350₾', { exact: false })).toBeVisible();
+    // expect: the estimated total reflects tier 1's rate (5×50 + 3×(50+0) = 400)
+    // plus the masterclass add-on already selected above (10) = 410, before submitting
+    await expect(page.getByText('410₾', { exact: false })).toBeVisible();
 
     // Real finding, differs from the note's assumption: company bookings
     // (both simple and enhanced) never redirect to the Flitt payment
@@ -253,7 +255,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(cells.nth(8)).toContainText('khinkali'); // Masterclass
     await expect(cells.nth(9)).toContainText('აჯაფასნადალი'); // Food (hot dish)
     await expect(cells.nth(9)).toContainText('Playwright test notes');
-    await expect(cells.nth(10)).toHaveText('350₾'); // Total
+    await expect(cells.nth(10)).toHaveText('410₾'); // Total
 
     // 9. Cleanup: delete the test order. (No company/price tier was created
     // by this test, so there's nothing else to remove, and the settings

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
-import { findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
@@ -155,7 +155,7 @@ export default function NewOrderForm({
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
 
   const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : tastingGuests * manualTastingRate
-  const lunchAmt = tier ? lunchGuests * tier.tastingLunchPricePerPerson : lunchGuests * manualLunchRate
+  const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : lunchGuests * manualLunchRate
   const regFee = tier ? tier.registrationPrice : 0
 
   const showManualRates = !tier && (isCompany ? payingGuests > 0 : true)
@@ -583,7 +583,7 @@ export default function NewOrderForm({
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
             {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
             {' · '}
-            {at('orders.col.lunch')} <strong>{tier.tastingLunchPricePerPerson}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{comboRatePerPerson(tier)}₾/pp</strong>
             {' · '}
             {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
           </div>
@@ -632,7 +632,7 @@ export default function NewOrderForm({
           {(lunchGuests > 0 || (!isCompany && manualLunchRate > 0)) && (lunchAmt > 0) && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier ? tier.tastingLunchPricePerPerson : manualLunchRate}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier ? comboRatePerPerson(tier) : manualLunchRate}₾)
               </span>
               <span style={{ color: C.text }}>{lunchAmt.toFixed(2)}₾</span>
             </div>

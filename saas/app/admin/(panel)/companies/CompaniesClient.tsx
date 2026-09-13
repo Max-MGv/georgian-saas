@@ -5,6 +5,7 @@ import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setA
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import { comboRatePerPerson } from '@/lib/pricingUtils'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -460,7 +461,7 @@ function PriceTiersSection({
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
               <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{price.tastingLunchPricePerPerson}₾/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{comboRatePerPerson(price)}₾/pp</span></span>
               {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ {at('companies.priceTiers.flatFeeSuffix')}</span>}
 
               {isIndividual && (
@@ -693,7 +694,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {displayTier.pricePerPerson}₾ / {displayTier.tastingLunchPricePerPerson}₾ {at('companies.individuals.shownOnSite')}
+                    {displayTier.pricePerPerson}₾ / {comboRatePerPerson(displayTier)}₾ {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>
