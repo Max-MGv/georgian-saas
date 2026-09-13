@@ -11,8 +11,9 @@ self-contained.
 
 > **⚠️ This version has to re-open a warning the last one was able to drop.** The previous handoff
 > led with "there is nothing parked, `staging` and `master` are at the same commit." **That is no
-> longer true.** Five commits sit on `staging` and have not been merged to `master`, deliberately
-> — they are waiting on Max looking at them, not on more work.
+> longer true.** Seven commits sit on `staging` and have not been merged to `master`,
+> deliberately — they are waiting on Max looking at them, not on more work. Two of the seven are
+> vault-only, so the code is the five listed below.
 
 ---
 
@@ -35,8 +36,11 @@ READ FIRST, IN THIS ORDER:
    an hour each** (see below).
 
 WHERE THINGS STAND:
-`staging` is five commits ahead of `master`: 0fc0d75, 25d49d3, 48f78d2, b26f2f3, e8e0b10.
-`next build` is clean and every one has been tested. Nothing is half-finished.
+`staging` is seven commits ahead of `master`. Three touch code — 0fc0d75 (marketing site),
+25d49d3 (tour orientation), b26f2f3 (QA fixes) — and four are vault-only: 48f78d2, e8e0b10,
+fb3bdbf, 103fa0f. Rather than trusting this list, run:
+    git log --oneline origin/master..origin/staging
+`next build` is clean and everything has been tested. Nothing is half-finished.
 
   - **vineworks.ge is a real site now** (FeatureLog #174). It served a 67-line placeholder with
     THREE cards, a mailto, and no link to the demo at all. It is now a full landing page,
