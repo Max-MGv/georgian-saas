@@ -1,4 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { renderTokenizedText } from '@/lib/emails/templates/tokens'
 
 /**
  * Pure HTML-building half of bookingConfirmation.ts, split out (2026-09-13,
@@ -6,7 +7,21 @@ import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
  * render the exact email a customer would receive, client-side, with no
  * network round trip and without importing the `resend`/send-side code into
  * the browser bundle. Keep this file free of server-only imports.
+ *
+ * The intro paragraph is fully tenant-editable (Feature 181 follow-up,
+ * 2026-09-13) — three separate defaults, one per variant below, because the
+ * three variants carry different *factual* meaning (confirmed vs. not), not
+ * just different tone. A single shared box would let an admin accidentally
+ * paste "your payment is confirmed" wording into the unpaid variant. `{name}`
+ * is the one supported token, substituted by renderTokenizedText().
  */
+
+export const DEFAULT_BOOKING_INTRO_UNPAID =
+  'Dear {name},\n\nThank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.'
+export const DEFAULT_BOOKING_INTRO_PAID =
+  'Dear {name},\n\nThank you — your payment has been received and your booking is confirmed. We look forward to welcoming you.'
+export const DEFAULT_BOOKING_INTRO_PENDING_COMPANY =
+  "Dear {name},\n\nThank you for your booking and company registration request. This request is not yet confirmed — since your company isn't set up in our system yet, we'll review your details, set up your account, and contact you shortly to confirm both your booking and your company's pricing."
 
 export type BookingEmailData = {
   name: string
@@ -36,19 +51,14 @@ export type BookingEmailData = {
    */
   pendingNewCompany?: boolean
   /**
-   * Tenant's own note, e.g. "Thank you for visiting!" — sourced from the
-   * `booking_email_message` setting (Feature 181), same slot pattern as
-   * invoiceEmailTemplate's `customMessage`. Empty/omitted renders nothing.
+   * The tenant's editable intro block — greeting AND thank-you paragraph
+   * together, e.g. "Dear {name},\n\nThank you for..." — for whichever
+   * variant this send is (unpaid / paid / pendingNewCompany). Sourced from
+   * one of `booking_email_intro_unpaid` / `_paid` / `_pending_company`. Falls
+   * back to the matching DEFAULT_BOOKING_INTRO_* above when empty. `{name}`
+   * is the one supported token, substituted with `data.name`.
    */
-  customMessage?: string
-}
-
-// Same escaping used nowhere else in this file's siblings (their interpolated
-// values are all admin- or server-computed, not free text) — this one field
-// is a persisted tenant default reused on every future email, so a stray
-// pasted `<`/`&` shouldn't be able to break the markup for good until noticed.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  introText?: string
 }
 
 export function renderBookingConfirmationEmail(data: BookingEmailData): { subject: string; html: string } {
@@ -75,9 +85,12 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
     contactEmail ? `<p style="font-size: 13px; color: ${th.muted}; margin: 0 0 24px;">✉️ <a href="mailto:${contactEmail}" style="${linkStyle}">${contactEmail}</a></p>` : '',
   ].join('')
 
-  const customMessageHtml = data.customMessage?.trim()
-    ? `<p style="font-size: 14px; color: ${th.text}; margin: 0 0 24px; line-height: 1.7; white-space: pre-line;">${escapeHtml(data.customMessage.trim())}</p>`
-    : ''
+  const introTemplate = data.introText?.trim() || (
+    data.paid ? DEFAULT_BOOKING_INTRO_PAID
+      : data.pendingNewCompany ? DEFAULT_BOOKING_INTRO_PENDING_COMPANY
+        : DEFAULT_BOOKING_INTRO_UNPAID
+  )
+  const introHtml = renderTokenizedText(introTemplate, { name: data.name })
 
   const html = `
     <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto; color: ${th.text};">
@@ -89,17 +102,9 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
 
       <div style="background-color: ${th.surface}; padding: 32px 40px; border-radius: 0 0 8px 8px; border: 1px solid ${th.border}; border-top: none;">
 
-        <p style="font-size: 16px; margin: 0 0 24px;">Dear ${data.name},</p>
-
-        <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6;">
-          ${data.paid
-            ? 'Thank you — your payment has been received and your booking is confirmed. We look forward to welcoming you.'
-            : data.pendingNewCompany
-              ? 'Thank you for your booking and company registration request. <strong>This request is not yet confirmed</strong> — since your company isn\'t set up in our system yet, we\'ll review your details, set up your account, and contact you shortly to confirm both your booking and your company\'s pricing.'
-              : 'Thank you for your booking request. We have received your reservation and will contact you shortly to confirm the details.'}
+        <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6; white-space: pre-line;">
+          ${introHtml}
         </p>
-
-        ${customMessageHtml}
 
         <div style="background-color: ${th.bg}; border-radius: 8px; padding: 20px 24px; margin: 0 0 24px;">
           <p style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: ${th.secondary}; margin: 0 0 14px;">Booking Summary</p>

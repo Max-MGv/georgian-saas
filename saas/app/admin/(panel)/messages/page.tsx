@@ -27,8 +27,10 @@ export default async function MessagesPage() {
       }}
       theme={resolveTenantTheme(tenant?.theme ?? null)}
       defaults={{
-        booking: settingValue(settings, 'booking_email_message'),
-        wineReceipt: settingValue(settings, 'wine_receipt_email_message'),
+        bookingUnpaid: settingValue(settings, 'booking_email_intro_unpaid'),
+        bookingPaid: settingValue(settings, 'booking_email_intro_paid'),
+        bookingPendingCompany: settingValue(settings, 'booking_email_intro_pending_company'),
+        wineReceipt: settingValue(settings, 'wine_receipt_email_intro'),
         invoice: settingValue(settings, 'invoice_email_message'),
       }}
     />

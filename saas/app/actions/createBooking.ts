@@ -339,11 +339,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     })
-    const [wineryPhone, wineryEmail, wineryAddress, bookingEmailMessage, tenant] = await Promise.all([
+    const [wineryPhone, wineryEmail, wineryAddress, bookingIntroUnpaid, bookingIntroPendingCompany, tenant] = await Promise.all([
       getSetting('contact_phone'),
       getSetting('contact_email'),
       getSetting('contact_address'),
-      getSetting('booking_email_message'),
+      getSetting('booking_email_intro_unpaid'),
+      getSetting('booking_email_intro_pending_company'),
       db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     ])
     const wineryName = tenant?.displayName ?? tenant?.name ?? ''
@@ -365,7 +366,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         wineryEmail,
         theme: resolveTenantTheme(tenant?.theme ?? null),
         pendingNewCompany: isNewCompanyRequest,
-        customMessage: bookingEmailMessage,
+        introText: isNewCompanyRequest ? bookingIntroPendingCompany : bookingIntroUnpaid,
       }).catch(err => console.error('Email send failed:', err))
     }
 

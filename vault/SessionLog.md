@@ -45,6 +45,19 @@ send on staging to confirm the live email matches the preview exactly.
 Full design: `Features/Feature 181 - Automatic Messages Page.md`. New Maintenance
 Notes §23 documents the template/wrapper split for future email changes.
 
+**Same-day follow-up:** after seeing it live, Max asked why the editable slot was
+a bolt-on extra note instead of the actual greeting/intro paragraph being editable.
+Rebuilt: `customMessage` → `introText`, the old fixed "Dear {name}," line now lives
+*inside* the editable default text, `{name}` token substitution added
+(`lib/emails/templates/tokens.ts`, reusing `lib/t.ts`'s existing `{varName}`
+convention). Booking Confirmation kept 3 separate defaults (one per variant, since
+they're factually different, not just differently worded) rather than merging into
+one shared box. `booking_email_message`/`wine_receipt_email_message` replaced
+outright by `booking_email_intro_unpaid`/`_paid`/`_pending_company`/
+`wine_receipt_email_intro` — no migration needed, only test data existed on those
+keys. Verified live on staging dev server again after the change; `tsc --noEmit`
+clean. Full detail in the feature note's "Follow-up" section.
+
 **Next up:** Max to test a real booking/payment on staging; the broader (deferred)
 super-admin-default + full-body editing ask from the research doc is still open.
 

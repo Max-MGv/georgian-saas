@@ -73,6 +73,43 @@ Edited:
 - [ ] Max to test: actually place a booking / pay / order wine on staging and confirm the real sent email matches what the preview showed
 - [ ] Max to test: edit a message here, then edit the *same* invoice message from the Settings page, confirm they share state (same key)
 
+## Follow-up (same day, 2026-09-13): the intro itself became the editable text
+
+After seeing the page live, Max asked why the editable slot was a bolt-on
+extra note instead of the actual greeting/intro paragraph being editable —
+"Dear Ana," + the thank-you line, with the guest's name substituted. Agreed
+and rebuilt:
+
+- **`customMessage` → `introText`** on `bookingConfirmationTemplate.ts` and
+  `wineOrderReceiptTemplate.ts`. The old fixed `<p>Dear ${name},</p>` line is
+  gone — the greeting now lives *inside* the editable default text itself,
+  e.g. `'Dear {name},\n\nThank you for your booking request...'`.
+- **`{name}` token substitution** — `lib/emails/templates/tokens.ts`,
+  `renderTokenizedText(template, vars)`, reusing the same `{varName}`
+  convention `lib/t.ts` already uses elsewhere, rather than inventing new
+  syntax. Escapes both the template and every substituted value.
+- **Booking Confirmation kept its three separate defaults** rather than
+  merging into one — `booking_email_intro_unpaid` / `_paid` /
+  `_pending_company` — because the three variants are factually different,
+  not just differently worded (confirmed vs. not). The Messages page textarea
+  now swaps which setting it's bound to when the variant tab changes.
+  `booking_email_message` / `wine_receipt_email_message` (this morning's
+  first pass) were replaced outright by `booking_email_intro_unpaid` /
+  `_paid` / `_pending_company` / `wine_receipt_email_intro` — no migration
+  needed, nothing had been saved against the old keys beyond test data on
+  staging.
+- Defaults are pre-filled with **today's actual copy**, exported as
+  `DEFAULT_BOOKING_INTRO_UNPAID` etc. from the template files and imported
+  into `lib/settings.ts`'s `SETTING_DEFAULTS` — so the box is never empty on
+  first visit, matching what Max asked for ("whats already typed in the
+  editor... is what goes in the editor").
+- The pending-company variant's original default relied on an inline
+  `<strong>` tag for emphasis ("**this request is not yet confirmed**").
+  Since the box is now a plain, escaped `<textarea>` (not rich text), that
+  emphasis was dropped from the default wording rather than silently
+  breaking if a tenant edits the paragraph — consistent with how
+  `EditableText` treats every other admin-editable string as plain text.
+
 ## Known follow-on (not built, out of scope for this pass)
 
 Per `Research-DynamicContentEditing.md`, the bigger ask — full super-admin-default + tenant-override editing across all content, not just these two email slots — is still open and unplanned. This feature is deliberately narrow: preview everything, editable slot only where it was cheap and safe (customer-facing, single-paragraph, no conditional-HTML risk).

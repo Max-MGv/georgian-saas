@@ -29,7 +29,13 @@ type Props = {
   locale: string
   winery: Winery
   theme: ResolvedTheme
-  defaults: { booking: string; wineReceipt: string; invoice: string }
+  defaults: {
+    bookingUnpaid: string
+    bookingPaid: string
+    bookingPendingCompany: string
+    wineReceipt: string
+    invoice: string
+  }
 }
 
 // Fictitious data for every preview below — never a real booking or customer.
@@ -109,7 +115,9 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     return next
   })
 
-  const [bookingMsg, setBookingMsg] = useState(defaults.booking)
+  const [bookingIntroUnpaid, setBookingIntroUnpaid] = useState(defaults.bookingUnpaid)
+  const [bookingIntroPaid, setBookingIntroPaid] = useState(defaults.bookingPaid)
+  const [bookingIntroPendingCompany, setBookingIntroPendingCompany] = useState(defaults.bookingPendingCompany)
   const [wineMsg, setWineMsg] = useState(defaults.wineReceipt)
   const [invoiceMsg, setInvoiceMsg] = useState(defaults.invoice)
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
@@ -123,6 +131,16 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
+
+  // The three Booking Confirmation variants each have their own editable
+  // default (see bookingConfirmationTemplate.ts) — this maps the currently
+  // selected tab to its state/setter/setting-key triple.
+  const bookingVariantConfig: Record<BookingVariant, { value: string; setValue: (v: string) => void; settingKey: string }> = {
+    unpaid: { value: bookingIntroUnpaid, setValue: setBookingIntroUnpaid, settingKey: 'booking_email_intro_unpaid' },
+    paid: { value: bookingIntroPaid, setValue: setBookingIntroPaid, settingKey: 'booking_email_intro_paid' },
+    pendingCompany: { value: bookingIntroPendingCompany, setValue: setBookingIntroPendingCompany, settingKey: 'booking_email_intro_pending_company' },
+  }
+  const currentBookingIntro = bookingVariantConfig[variant]
 
   const inputStyle: React.CSSProperties = {
     backgroundColor: C.pageBg, borderColor: C.border, color: C.text,
@@ -144,7 +162,7 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     theme,
     paid: variant === 'paid',
     pendingNewCompany: variant === 'pendingCompany',
-    customMessage: bookingMsg,
+    introText: currentBookingIntro.value,
   })
 
   const wineReceiptPreview = renderWineOrderReceiptEmail({
@@ -161,7 +179,7 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     wineryPhone: winery.phone,
     wineryEmail: winery.email,
     theme,
-    customMessage: wineMsg,
+    introText: wineMsg,
   })
 
   const invoicePreview = renderInvoiceEmail({
@@ -246,19 +264,19 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
             ))}
           </div>
           <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('messages.messageLabel')}</label>
-          <div className="flex items-start gap-2 mb-4">
+          <div className="flex items-start gap-2 mb-1">
             <textarea
-              rows={3}
+              rows={5}
               style={{ ...inputStyle, resize: 'vertical' }}
-              value={bookingMsg}
-              placeholder={at('messages.messagePlaceholder')}
-              onChange={e => setBookingMsg(e.target.value)}
-              onBlur={() => save('booking_email_message', bookingMsg)}
+              value={currentBookingIntro.value}
+              onChange={e => currentBookingIntro.setValue(e.target.value)}
+              onBlur={() => save(currentBookingIntro.settingKey, currentBookingIntro.value)}
             />
-            {savedKey === 'booking_email_message' && (
+            {savedKey === currentBookingIntro.settingKey && (
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>
+          <p className="text-xs mb-4" style={{ color: C.faint }}>{at('messages.tokenHint')}</p>
           <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewNote')}</p>
           <IframePreview html={bookingPreview.html} />
         </Section>
@@ -272,19 +290,19 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
           onToggle={() => toggle('wineReceipt')}
         >
           <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('messages.messageLabel')}</label>
-          <div className="flex items-start gap-2 mb-4">
+          <div className="flex items-start gap-2 mb-1">
             <textarea
-              rows={3}
+              rows={5}
               style={{ ...inputStyle, resize: 'vertical' }}
               value={wineMsg}
-              placeholder={at('messages.messagePlaceholder')}
               onChange={e => setWineMsg(e.target.value)}
-              onBlur={() => save('wine_receipt_email_message', wineMsg)}
+              onBlur={() => save('wine_receipt_email_intro', wineMsg)}
             />
-            {savedKey === 'wine_receipt_email_message' && (
+            {savedKey === 'wine_receipt_email_intro' && (
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>
+          <p className="text-xs mb-4" style={{ color: C.faint }}>{at('messages.tokenHint')}</p>
           <IframePreview html={wineReceiptPreview.html} />
         </Section>
 

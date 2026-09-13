@@ -1,9 +1,16 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { renderTokenizedText } from '@/lib/emails/templates/tokens'
 
 /**
  * Pure HTML-building half of wineOrderReceipt.ts — see
- * bookingConfirmationTemplate.ts for why this split exists (Feature 181).
+ * bookingConfirmationTemplate.ts for why this split exists (Feature 181), and
+ * for why the intro paragraph (greeting + thank-you, together) is fully
+ * tenant-editable with `{name}` substitution rather than a fixed line plus a
+ * bolt-on note (Feature 181 follow-up, 2026-09-13).
  */
+
+export const DEFAULT_WINE_RECEIPT_INTRO =
+  'Dear {name},\n\nThank you — your payment has been received and your wine order is confirmed. We will be in touch about delivery.'
 
 export type WineOrderLine = {
   name: string
@@ -23,12 +30,12 @@ export type WineOrderReceiptData = {
   wineryPhone?: string
   wineryEmail?: string
   theme?: ResolvedTheme
-  /** Tenant's own note — `wine_receipt_email_message` setting (Feature 181). */
-  customMessage?: string
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  /**
+   * The tenant's editable intro block — sourced from `wine_receipt_email_intro`.
+   * Falls back to DEFAULT_WINE_RECEIPT_INTRO when empty. `{name}` is
+   * substituted with `data.contactName`.
+   */
+  introText?: string
 }
 
 export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subject: string; html: string } {
@@ -62,9 +69,7 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
     ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Discount</td><td style="color: ${th.muted}; text-align: right;">−${data.discountPercent}%</td></tr>`
     : ''
 
-  const customMessageHtml = data.customMessage?.trim()
-    ? `<p style="font-size: 14px; color: ${th.text}; margin: 0 0 24px; line-height: 1.7; white-space: pre-line;">${escapeHtml(data.customMessage.trim())}</p>`
-    : ''
+  const introHtml = renderTokenizedText(data.introText?.trim() || DEFAULT_WINE_RECEIPT_INTRO, { name: data.contactName })
 
   const html = `
     <div style="font-family: Georgia, serif; max-width: 560px; margin: 0 auto; color: ${th.text};">
@@ -76,13 +81,9 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
 
       <div style="background-color: ${th.surface}; padding: 32px 40px; border-radius: 0 0 8px 8px; border: 1px solid ${th.border}; border-top: none;">
 
-        <p style="font-size: 16px; margin: 0 0 24px;">Dear ${data.contactName},</p>
-
-        <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6;">
-          Thank you — your payment has been received and your wine order is confirmed. We will be in touch about delivery.
+        <p style="font-size: 15px; color: ${th.text}; margin: 0 0 24px; line-height: 1.6; white-space: pre-line;">
+          ${introHtml}
         </p>
-
-        ${customMessageHtml}
 
         <div style="background-color: ${th.bg}; border-radius: 8px; padding: 20px 24px; margin: 0 0 24px;">
           <p style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: ${th.secondary}; margin: 0 0 14px;">Order Summary</p>
