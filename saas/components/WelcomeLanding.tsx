@@ -8,7 +8,7 @@ import {
 import { DEMO, DEMO_FX } from '@/lib/demoTheme'
 import { useIsNarrow } from '@/lib/useIsNarrow'
 import {
-  type Lang, type Copy,
+  type Lang, type Copy, type FeatureIcon,
   NAV, HERO, PROBLEM, FEATURES, MIRROR, VISION, FINAL, FOOTER, LANG_LABEL,
   DEMO_URL, DEMO_MIRROR_URL, CONTACT_EMAIL,
 } from '@/lib/welcomeCopy'
@@ -42,7 +42,9 @@ import {
  * `lib/welcomeCopy.ts`; this file contains no user-visible text.
  */
 
-const ICONS: Record<string, LucideIcon> = {
+/** Keyed by `FeatureIcon`, so adding a name to the union without adding the
+ *  component here is a compile error rather than a silent wine-glass fallback. */
+const ICONS: Record<FeatureIcon, LucideIcon> = {
   calendar: CalendarCheck,
   wine: Wine,
   dashboard: LayoutDashboard,
@@ -117,8 +119,12 @@ export default function WelcomeLanding({
         <div style={{ ...wrap, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingTop: 14, paddingBottom: 14 }}>
           <a href="/welcome" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: DEMO.text }}>
             {platformLogo ? (
+              // maxWidth because the value comes from an operator-set
+              // x-platform-logo header with no shape constraint: a wide logo at
+              // 30px tall would squeeze the language toggle out of this
+              // space-between row.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={platformLogo} alt={platformLogoAlt} style={{ height: 30, width: 'auto' }} />
+              <img src={platformLogo} alt={platformLogoAlt} style={{ height: 30, width: 'auto', maxWidth: 180 }} />
             ) : (
               <>
                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 9, backgroundColor: DEMO.accentSolid, color: DEMO_FX.onAccent }}>
@@ -220,7 +226,7 @@ export default function WelcomeLanding({
           }}
         >
           {FEATURES.map(f => {
-            const Icon = ICONS[f.icon] ?? Wine
+            const Icon = ICONS[f.icon]
             return (
               <div
                 key={f.icon}

@@ -189,10 +189,29 @@ export type TourState = {
 
 export const EMPTY_TOUR_STATE: TourState = { started: false, index: 0, finished: false, autoStarted: false }
 
+/**
+ * Force a persisted index back into range.
+ *
+ * `TOUR_STORAGE_KEY` outlives deploys. A visitor who is mid-tour when a step is
+ * removed comes back holding an index that no longer exists, and so does anyone
+ * whose storage is hand-edited or corrupt. `DemoTour` was already defensive
+ * about it (`if (!step) return null`), but `DemoExplore`'s paused copy now reads
+ * `TOUR_STEPS[index].title` to name the step it resumes at — an unguarded deref
+ * that would throw inside a component mounted in the layout, taking the whole
+ * panel down. Clamping at the one place state is read fixes it for every reader
+ * at once, including `beginAt`'s `TOUR_STEPS[index].route`.
+ */
+function clampIndex(value: unknown): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : 0
+  return Math.min(Math.max(0, n), TOUR_STEPS.length - 1)
+}
+
 export function loadTourState(): TourState {
   try {
     const raw = localStorage.getItem(TOUR_STORAGE_KEY)
-    return raw ? { ...EMPTY_TOUR_STATE, ...JSON.parse(raw) } : EMPTY_TOUR_STATE
+    if (!raw) return EMPTY_TOUR_STATE
+    const parsed = { ...EMPTY_TOUR_STATE, ...JSON.parse(raw) } as TourState
+    return { ...parsed, index: clampIndex(parsed.index) }
   } catch {
     return EMPTY_TOUR_STATE
   }

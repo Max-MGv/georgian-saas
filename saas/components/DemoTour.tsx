@@ -110,6 +110,24 @@ const C = {
   ring: DEMO.accent,
 }
 
+/**
+ * "The last step change came from the keyboard, so move focus with it."
+ *
+ * Module scope, not a ref, and that is the whole point. Stepping between the
+ * guest site and the back office unmounts this component and mounts a fresh one
+ * in the other layout's React tree — see the note at the top of lib/demoTour.ts
+ * — so any ref holding this intent dies exactly at the crossing. Measured: the
+ * first arrow press moved focus, the one that crossed from /wines to
+ * /admin/orders did not, and a keyboard user was then stranded on <body> with
+ * the tour dialog last in tab order behind a whole admin page.
+ *
+ * A module-level `let` survives it, because both trees are the same document
+ * and the same module instance. Both instances may briefly be mounted at once;
+ * whichever one has actually rendered the rail consumes the flag, and the other
+ * returns early because its ref is still null.
+ */
+let railFocusPending = false
+
 export default function DemoTour({ tenantId }: { tenantId: string }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -157,6 +175,30 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
   const stateRef = useRef<TourState | null>(null)
   useEffect(() => { stateRef.current = state }, [state])
 
+  useEffect(() => {
+    if (!railFocusPending) return
+    // Do NOT clear the flag until the rail actually exists. An arrow press moves
+    // the step, which usually changes route; the tour then renders `null` for
+    // the frames between the command and the destination being on-screen, and
+    // `railCurrentRef` is null throughout. Clearing the flag on one of those
+    // renders — which is what the first version did — dropped the focus move on
+    // the floor, so the second arrow press went nowhere and the roving tabindex
+    // this pairs with became a keyboard trap. Verified by walking the rail with
+    // Home / arrows / End: every press moved the step, none moved focus.
+    // Found in the DOM rather than held in a ref. A conditional object ref
+    // (`ref={i === state.index ? r : undefined}`) has to be detached from the
+    // old segment and attached to the new one in the same commit, and the two
+    // are order-dependent: measured, moving *forward* along the rail focused
+    // correctly and moving *back* on the same route left the ref null, so the
+    // keyboard user's focus stayed on the segment they had just left. The
+    // attribute is rendered by this component one line below, so the query
+    // cannot disagree with the state the way a stale ref can.
+    const el = document.querySelector<HTMLButtonElement>('button[aria-current="step"][aria-label^="Go to step"]')
+    if (!el) return
+    railFocusPending = false
+    el.focus()
+  })
+
   /**
    * The one way this component writes tour state: persist, announce, then set.
    *
@@ -177,6 +219,12 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
    * orientation work, surfaced by it.
    */
   const update = useCallback((next: TourState) => {
+    // Keep the mirror in step here as well as in the effect above. The effect
+    // only runs after the commit, so "the ref is current" holds today purely
+    // because nothing writes twice in one tick — a property any future caller
+    // can break silently. Setting it here makes the invariant true by
+    // construction instead of by convention.
+    stateRef.current = next
     saveTourState(next)
     setState(next)
   }, [])
@@ -284,6 +332,29 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     return () => window.removeEventListener(DEMO_BOOKED_EVENT, onBooked)
   }, [isDemo, update])
 
+  /**
+   * Arrow-key movement inside the progress rail, the other half of the roving
+   * tabindex. Left/Right (and Home/End) move between steps; because moving to a
+   * step *is* going to it, this reuses `beginAt` rather than inventing a
+   * separate "focused but not active" concept — with seven steps the simpler
+   * model is the honest one.
+   */
+  const railKeyDown = (e: React.KeyboardEvent) => {
+    if (!state) return
+    const last = TOUR_STEPS.length - 1
+    let to: number | null = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to = Math.min(last, state.index + 1)
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to = Math.max(0, state.index - 1)
+    else if (e.key === 'Home') to = 0
+    else if (e.key === 'End') to = last
+    if (to === null || to === state.index) return
+    e.preventDefault()
+    // Focus has to follow the roving stop, or the next arrow press goes nowhere.
+    // Set only here, so a mouse click on a segment never steals focus.
+    railFocusPending = true
+    beginAt(to)
+  }
+
   if (!isDemo || !mounted || !state || embedded) return null
 
   const skip = endTour
@@ -359,8 +430,18 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
     // Below the ring.
     tooltipStyle = { top: rect.top + rect.height + 12, left: clampLeft(rect.left), width: TOOLTIP_W }
   } else if (rect.top - TOOLTIP_H - 12 > 0) {
-    // Above it.
-    tooltipStyle = { top: rect.top - TOOLTIP_H - 12, left: clampLeft(rect.left), width: TOOLTIP_W }
+    // Above it — anchored by its BOTTOM edge, not by a computed top.
+    //
+    // `TOOLTIP_H` is an estimate and the card is auto-height, so it is
+    // routinely wrong; the orientation work made it wronger by adding a rail, a
+    // breadcrumb and a "Next ·" block. With `top: rect.top - H - 12` the excess
+    // grows *downward*, straight over the ring — the card ends up covering the
+    // one thing the step is pointing at. Pinning `bottom` instead makes the card
+    // grow upward, away from the ring, so an underestimate can never obscure the
+    // spotlight. The `> 0` test above stays an estimate; being wrong about it
+    // now costs a card that runs off the top edge at worst, which `maxHeight`
+    // on the dialog then handles.
+    tooltipStyle = { bottom: window.innerHeight - rect.top + 12, left: clampLeft(rect.left), width: TOOLTIP_W }
   } else if (window.innerWidth - rect.left - rect.width > TOOLTIP_W + 24) {
     // Beside it, to the right — a tall ring that fills the vertical space still
     // gets a compact card instead of falling back to the dock.
@@ -412,6 +493,15 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
           borderRadius: '14px',
           padding: '16px 18px',
           boxShadow: DEMO_FX.shadowMd,
+          // The card is auto-height and every placement branch pins only one
+          // edge, so on a short viewport it grows past the opposite one with
+          // nothing to scroll — the mobile dock (`bottom: 12`, no `top`) grows
+          // upward off the top of the screen, taking the rail, the breadcrumb
+          // and Skip with it. A phone in landscape is ~375px tall and step 3
+          // carries both the crossing note and the two-line "Next ·" block, so
+          // this is reachable, not theoretical. Cap it and let the card scroll.
+          maxHeight: 'calc(100vh - 24px)',
+          overflowY: 'auto',
           ...tooltipStyle,
         }}
       >
@@ -431,13 +521,24 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
              screen underneath without losing their place. ---- */}
         <div
           role="group"
-          aria-label={`Tour progress: step ${state.index + 1} of ${TOUR_STEPS.length}`}
+          // The dialog's own aria-label already announces "Tour step N of 7", so
+          // this one names the control, not the position, rather than saying the
+          // count twice to a screen reader.
+          aria-label="Tour progress"
+          onKeyDown={railKeyDown}
           style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
         >
           {TOUR_STEPS.map((s, i) => (
             <button
               key={i}
               onClick={() => beginAt(i)}
+              // ---- Roving tabindex ----
+              // Only the current segment is a tab stop. Seven of them ahead of
+              // Skip / Back / Next meant a keyboard user tabbed through seven
+              // slivers to reach the primary action of the step. This is the
+              // standard pattern for a composite widget: one stop to enter it,
+              // arrow keys to move within it.
+              tabIndex={i === state.index ? 0 : -1}
               // The native tooltip is the cheapest way to name a segment before
               // it is pressed, and it needs no popover of its own inside a
               // popover. aria-label carries the same for screen readers.
@@ -445,20 +546,37 @@ export default function DemoTour({ tenantId }: { tenantId: string }) {
               aria-label={`Go to step ${i + 1}: ${s.title}`}
               aria-current={i === state.index ? 'step' : undefined}
               style={{
+                // ---- Hit area vs. visible bar ----
+                // The bar reads best at 4–6px and that is far too small to hit:
+                // WCAG 2.5.8 asks for 24px, and at 4px the `title` tooltip that
+                // names the step is hard to trigger with a mouse and impossible
+                // on touch. So the *button* is 22px of transparent padding and
+                // the coloured bar is a child of it. Same look, a target a
+                // thumb can find.
                 flex: 1,
-                height: i === state.index ? 6 : 4,
                 minWidth: 0,
+                height: 22,
+                display: 'flex',
+                alignItems: 'center',
                 padding: 0,
                 border: 'none',
-                borderRadius: 999,
+                background: 'none',
                 cursor: 'pointer',
-                transition: 'height 120ms',
-                backgroundColor: i === state.index ? C.ring : i < state.index ? C.accent : C.border,
-                // The gap opens where the surface changes, so the two halves of
-                // the story are visible as two groups before either is read.
                 marginLeft: isSurfaceChange(i) ? 9 : 0,
               }}
-            />
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: i === state.index ? 6 : 4,
+                  borderRadius: 999,
+                  transition: 'height 120ms',
+                  backgroundColor: i === state.index ? C.ring : i < state.index ? C.accent : C.border,
+                }}
+              />
+            </button>
           ))}
           <span style={{ color: C.muted, fontSize: '0.68rem', fontWeight: 700, marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
             {state.index + 1}/{TOUR_STEPS.length}

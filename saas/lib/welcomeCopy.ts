@@ -33,8 +33,6 @@ export const CONTACT_EMAIL = 'max.mghvdliashvili@gmail.com'
 
 export const NAV = {
   features: { ka: 'რას აკეთებს', en: 'What it does' },
-  demo: { ka: 'დემო', en: 'Demo' },
-  contact: { ka: 'კონტაქტი', en: 'Contact' },
   cta: { ka: 'ნახეთ დემო', en: 'See the demo' },
 } satisfies Record<string, Copy>
 
@@ -59,6 +57,13 @@ export const HERO = {
   },
 } satisfies Record<string, Copy>
 
+/**
+ * `satisfies` rather than a bare `as const`: with `as const` alone, `heading`
+ * and `close` were never checked against `Copy`, so a missing `en` here would
+ * have slipped past the compiler and surfaced as `undefined` on the page. The
+ * file header promises that a missing translation is a type error — this block
+ * was the one place that was not true.
+ */
 export const PROBLEM = {
   heading: { ka: 'დღეს ეს ასე მუშაობს', en: 'How this works today' },
   items: [
@@ -79,11 +84,22 @@ export const PROBLEM = {
     ka: 'არცერთი მათგანი არ ნიშნავს, რომ ცუდად მუშაობთ. ნიშნავს, რომ ინსტრუმენტი არ გაქვთ.',
     en: 'None of that means the winery is run badly. It means nobody ever built the tool.',
   },
-} as const
+} satisfies { heading: Copy; items: Copy[]; close: Copy }
 
-/** `icon` names a lucide component, resolved in the landing component's map —
- *  this file stays free of imports so it can be edited without touching code. */
-export type Feature = { icon: string; title: Copy; body: Copy }
+/**
+ * The lucide components the landing page can draw, named as strings so this file
+ * stays import-free and editable without touching code.
+ *
+ * A union rather than `string`: the component used to resolve it with
+ * `ICONS[f.icon] ?? Wine`, so a typo fell back silently to a wine glass with no
+ * type error anywhere. The map is now keyed by this union and the fallback is
+ * gone. It is also the React `key` for each card, which
+ * makes the union do double duty — reusing an icon is now a compile error rather
+ * than a duplicate key at runtime.
+ */
+export type FeatureIcon = 'calendar' | 'wine' | 'dashboard' | 'trending' | 'receipt' | 'pencil'
+
+export type Feature = { icon: FeatureIcon; title: Copy; body: Copy }
 
 export const FEATURES: Feature[] = [
   {
@@ -187,7 +203,6 @@ export const FOOTER = {
     ka: 'ღვინის მარნის პლატფორმა საქართველოში',
     en: 'The winery platform, built in Georgia',
   },
-  contact: { ka: 'დაგვიკავშირდით', en: 'Get in touch' },
 } satisfies Record<string, Copy>
 
 /** The toggle's own labels never translate — a Georgian speaker looking for
