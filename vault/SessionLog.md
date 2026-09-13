@@ -105,6 +105,95 @@ is probably too thin to act on, but the vault's own lesson from the performance 
 
 ---
 
+## 2026-09-13 (later) — the QA pass, and a testing constraint worth writing down
+
+Max: *"for all the rest you test it or sub agents test it... do some workflow
+iterations/optimizations to find bugs."* A subagent reviewed the diff while a hands-on walk went
+through the tour. Six real bugs, three of them introduced by the orientation work a few hours
+earlier. Commit `b26f2f3`.
+
+### The one that would have hurt
+
+`DemoExplore`'s new paused copy names the step it resumes at — `TOUR_STEPS[offer.index].title`.
+`tourOffer` returns `paused` for **any** index, including one that no longer exists, which is
+exactly what a visitor holds after a deploy removes a step. `DemoTour` was already defensive
+about that case; `DemoExplore` was not, and it is mounted in the layout, so the throw would have
+taken the whole panel down. Fixed in `loadTourState`, which now clamps — one place, every reader,
+including `beginAt`'s `TOUR_STEPS[index].route`. Verified with a hand-set index of 99.
+
+### Two placement bugs the extra content created
+
+- The **"above the ring" branch** computed `top: rect.top - TOOLTIP_H - 12` from an *estimate*,
+  and the rail/breadcrumb/next-line added ~100px to every card. The excess grew downward, over
+  the spotlight. Anchoring by the card's **bottom edge** makes an underestimate grow away from
+  the ring instead. This is the general lesson: **pin the edge nearest the thing you must not
+  cover.**
+- Every branch pins one edge and the card is auto-height, so the **mobile dock grew off the top
+  of the screen** on a short viewport, taking the rail, the breadcrumb and Skip with it. Capped
+  with `maxHeight` + `overflowY`. Verified at 667×280.
+
+### Three bugs in the roving tabindex — all found only by pressing the keys
+
+The rail was a 4px hit target (WCAG 2.5.8 asks 24) and added seven tab stops ahead of the step's
+primary action. Fixing both properly meant a roving tabindex, and the focus half of it was wrong
+three times over:
+
+1. The effect **cleared its "focus the rail" flag on renders where the rail was not mounted yet**
+   — which is most of them, because a step change usually navigates — so focus never moved and
+   the second arrow press did nothing. A keyboard trap, introduced by the fix for a keyboard
+   problem.
+2. The flag was a **ref**, and the guest→admin step unmounts `DemoTour` into the other layout's
+   React tree, so it died exactly at the crossing. **Module scope survives it** — same document,
+   same module instance — which is a cheaper channel than the localStorage one the tour state
+   needs, and worth remembering for anything else that has to cross that boundary.
+3. The current segment was a **conditional object ref** (`ref={i === index ? r : undefined}`),
+   whose detach/attach order left it null when stepping *backwards*. Replaced with a DOM query on
+   `aria-current`, which cannot disagree with the state that rendered it.
+
+Each of these passed `tsc`, passed review, and looked right. Only driving the keyboard found them.
+
+### The testing constraint — read this before the next browser QA session
+
+**Roughly an hour went into a bug that did not exist.** Screenshots came back blank in the
+preview pane *and* in real Chrome, a screenshot call timed out with "the renderer may be frozen",
+and the mechanism looked convincing: `useAnchorRect`'s MutationObserver watches `document.body`,
+the tour's portal lives in `document.body`, and `measure()` calls `setRect` with a **new object
+every time** — a plausible render loop.
+
+It was not that. `document.hidden === true` and **rAF fired once in four seconds**: neither
+browser was painting, because the Browser pane was hidden and the Chrome window was behind
+another. The "frozen renderer" was an unpainted one.
+
+Two things follow, both operational:
+
+- **A hidden pane or a background Chrome window cannot validate anything that depends on paint or
+  `requestAnimationFrame`** — which includes the tour's ring, since `useAnchorRect` measures
+  inside rAF. Screenshots lie by going blank rather than by erroring.
+- **What still works perfectly while hidden**: `javascript_tool` DOM assertions, `read_page`,
+  `get_page_text`, console reads. The entire seven-step walk, the keyboard tests and the viewport
+  tests in this session were done that way — `getBoundingClientRect` on the card versus the ring
+  is a better overlap test than looking at a picture anyway. **Prefer measurement to screenshots
+  for this codebase's demo work.**
+- `preview_start` with a `url` re-opens the pane if it has been hidden.
+
+One more trap: **the pane's console buffer survives reloads and even a dev-server restart**, so a
+stale `railKeyDown is not defined` from a broken hot-reload looked like a live error through three
+rounds of "fixing" it. Chrome's `read_console_messages` takes `clear: true`; use it, or read the
+console in a tab opened after the change.
+
+### Also settled
+
+Max deferred the **Georgian copy review** — parked in [[Roadmap]] under "Backlog — deferred, not
+dropped", still flagged as do-it-before-a-prospect-sees-it. [[MyToDo]] updated.
+
+Type gaps closed in `lib/welcomeCopy.ts`: `PROBLEM` used `as const` with no `satisfies`, so the
+file header's promise that a missing translation is a compile error was false for that one block;
+`Feature.icon` was `string` with a `?? Wine` fallback, so a typo rendered a wine glass silently.
+
+`next build` clean. All of it is on **`staging`** — still nothing on `master`.
+
+---
+
 ## 2026-09-12 — the demo starts counting, and an analytics write that blocked the demo
 
 The second deferred item from [[DemoSite/Plan-DemoFlowFixes]], and the one that makes

@@ -472,3 +472,69 @@ CREATE the table fails closed, so nothing leaks, but a live request can still er
 unrelated to the change. For one new table, apply the four statements it would produce (GRANT,
 ENABLE ROW LEVEL SECURITY, DROP POLICY IF EXISTS, CREATE POLICY) and verify with `pg_policies`.
 `setup-rls.ts` remains the source of truth and lists `DemoEvent`, so a future full run matches.
+
+---
+
+## 20. Browser QA on the demo: measure, don't screenshot — and check the tab is actually painting
+
+**What the dependency is:** the demo tour's ring is positioned by `lib/demoAnchor.ts`, which
+measures inside `requestAnimationFrame`. A browser tab that is not being painted — the Browser
+pane hidden, or the Chrome window behind another — **pauses rAF**. On 2026-09-13 this cost about
+an hour: screenshots came back blank in two independent browsers and one call timed out with
+*"the renderer may be frozen or unresponsive"*, which read as an infinite render loop in the tour.
+It was not. `document.hidden === true` and rAF had fired **once in four seconds**.
+
+**Before concluding anything from a blank screenshot**, run:
+
+```js
+let f=0; const t0=performance.now();
+(function g(){f++; if(performance.now()-t0<1000) requestAnimationFrame(g)})();
+await new Promise(r=>setTimeout(r,1300));
+({hidden: document.hidden, framesIn1s: f})
+```
+
+Healthy is ~60. One means nothing on screen can be trusted.
+
+**What to do instead.** DOM assertions work perfectly in a hidden tab, and for this component they
+are *better evidence* than a picture: comparing the tooltip's `getBoundingClientRect()` with the
+ring's is an exact overlap test, where a screenshot is a judgement call. The full seven-step walk,
+the keyboard tests and the short-viewport tests were all done that way. `preview_start` with a
+`url` re-opens the pane if it has been hidden.
+
+**Second trap, same session:** the Browser pane's console buffer **survives page reloads and a
+dev-server restart**. A stale `railKeyDown is not defined` from a half-applied hot reload looked
+like a live error through three rounds of chasing it. Chrome's `read_console_messages` accepts
+`clear: true` — use it, or read the console in a tab created *after* the change.
+
+**Files involved:** `saas/lib/demoAnchor.ts`, `saas/components/DemoTour.tsx`.
+
+---
+
+## 21. The demo tour crosses two React trees — a ref cannot carry state across it
+
+**What the dependency is:** stepping from the guest site into the back office (tour step 2 → 3)
+moves `DemoTour` from the `(site)` layout to `admin/(panel)`. The component **unmounts and a fresh
+one mounts**, so every `useRef` resets at exactly that point. `lib/demoTour.ts`'s header already
+says this about the tour's *state*, which is why that lives in localStorage; the same applies to
+anything smaller.
+
+Found 2026-09-13 by the progress rail's roving tabindex: "focus the rail after this arrow press"
+was a ref, so the first arrow press moved focus and the one that crossed did not, stranding a
+keyboard user on `<body>` with the tour dialog last in tab order.
+
+**The three channels, cheapest first:**
+
+| Need | Use |
+|---|---|
+| A transient intent within one page session | a **module-level `let`** — both trees are the same document and the same module instance, so it survives the remount (`railFocusPending` in `DemoTour.tsx`) |
+| State that must survive a reload | **localStorage** + a `CustomEvent` so readers re-read (`TOUR_STORAGE_KEY` / `TOUR_STATE_EVENT`) |
+| A one-shot handoff between two routes | **localStorage, consumed once** (`TOUR_AUTOSTART_KEY`) |
+
+**Also from the same fix:** do not identify an element with a conditional object ref
+(`ref={i === active ? r : undefined}`) inside a list. Detach and attach happen in the same commit
+and the order is not yours to rely on — moving *forward* along the rail worked and moving *back*
+left the ref null. Query the DOM for the attribute the component itself renders
+(`button[aria-current="step"]`) instead; it cannot go stale.
+
+**Files involved:** `saas/components/DemoTour.tsx`, `saas/components/DemoExplore.tsx`,
+`saas/lib/demoTour.ts`.

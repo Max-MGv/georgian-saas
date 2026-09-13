@@ -436,6 +436,16 @@ Full plan: `vault/Plan-MultiTenant.md`
 
 ---
 
+## Backlog — deferred, not dropped
+
+- [ ] **Georgian copy review on `vineworks.ge`** — deferred by Max 2026-09-13, to come back to later.
+  The landing page's Georgian was written by Claude, and Claude is the wrong judge of whether it
+  reads like a Georgian winery owner wrote it or like a translation. Every string is a `{ka,en}`
+  pair in `saas/lib/welcomeCopy.ts`, so this is a copy pass over one file — no layout work. Do it
+  before the page is promoted from `staging` to `master` and shown to a prospect.
+
+---
+
 ## Client Pipeline
 
 | Client | Type | Status |

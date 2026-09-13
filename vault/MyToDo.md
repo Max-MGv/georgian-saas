@@ -28,9 +28,10 @@ demo.**
 that is the default. The demo itself stays English.
 
 **What to check, on the staging preview:**
-- Read the Georgian. I wrote it, and I am the wrong person to judge whether it sounds like a
-  Georgian winery owner or like a translation. **Tell me any line that reads oddly and I will
-  rewrite it** — every word lives in one file and is quick to change.
+- ~~Read the Georgian.~~ **Backlogged 2026-09-13 at your call** — parked in [[Roadmap]] under
+  "Backlog — deferred, not dropped". Still worth doing before the page is shown to a prospect:
+  I wrote that Georgian and I am the wrong judge of whether it sounds native. Every word is in
+  one file, so it is a copy pass, not a rebuild.
 - Flip to ENG and back. It should remember your choice next visit.
 - Open it on your phone. The "See the demo" button in the header disappears there on purpose —
   it did not fit next to the language toggle, and the same button is a few centimetres below.
