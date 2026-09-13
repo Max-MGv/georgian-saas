@@ -8,6 +8,103 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-13 — the introduction that was missing, at both ends
+
+Max, on the demo: *"i really like the demo flow itself, but i feel like an introduction is missing
+and in 2 ways."* Both were real, and they are different problems.
+
+### 1. vineworks.ge pointed at nothing
+
+`app/welcome/page.tsx` was 67 lines that predated every piece of demo work: three feature cards, a
+`mailto:`, the indigo-violet [[DemoSite/Plan-DemoFlowFixes]] Chunk 5 had already ripped out of the
+demo as the source of the "out of date" feeling — and **no link to `demo.vineworks.ge` at all.**
+The company's own front door led to a dead end while the demo sat one subdomain away.
+
+**The decision that shaped the page** is the division of labour, agreed before writing any of it:
+**vineworks.ge explains and sells, demo.vineworks.ge shows.** `DemoFrontDoor` already answers
+"what is this, is it real, what is in it for me". If the marketing site did the same job the
+visitor would read the pitch twice and the front door would become a speed bump. So the front door
+stays a *path chooser* and is now allowed to assume the visitor arrived knowing what Vineworks is.
+This also retires a stale note in `DemoExplore` that expected `CAPABILITY_GROUPS` to become the
+marketing feature list: sixteen capabilities for someone already inside is the wrong granularity
+for six benefits aimed at someone deciding whether to come in.
+
+**Georgian by default with an EN toggle** — Max's call over English-only, and the right one: the
+buyer is a Georgian winery owner. Consequence worth recording: the root layout loads Geist with the
+**latin subset only**, so every Georgian glyph on that page was falling through to a system font.
+Noto Sans Georgian is now loaded *on that route only* — putting it in `app/layout.tsx` would bill
+every tenant's public site and both admin panels for a font one page uses.
+
+Copy lives in `lib/welcomeCopy.ts` as typed `{ka,en}` pairs. A missing translation is a compile
+error, and Max can rewrite a headline without opening a JSX file.
+
+**One thing measured and abandoned:** making the tab title follow the language toggle. A
+client-side `document.title` write loses a race with Next's own metadata pass on a hard
+navigation. Winning it would mean a timer or a `MutationObserver` on the head — a lot of machinery
+for a browser tab — so the static title carries both languages instead. Noted in the code so the
+next person does not re-litigate it.
+
+### 2. The tour moved you around and never said where
+
+Max: *"the demo should sort of highlight where its taking you... users should have a sense of what
+theyre looking at or whats next in the flow."* The tour crosses five routes and two entirely
+different surfaces, and its entire orientation was the string `3 / 7`.
+
+Four additions, all inside the tooltip that already existed: a **named progress rail** (seven
+clickable segments, titles on hover and in `aria-label`, a gap where the guest site ends), a
+**breadcrumb** from new `surface`/`screen` fields on `TourStep`, the **surface-change note** shown
+on step 3 and nowhere else, and **"Next · <title>"** naming the destination screen on the five of
+six transitions that navigate. `DemoExplore`'s panel got the same treatment, with the guest/admin
+split counted from `TOUR_STEPS` so the promise cannot go stale.
+
+**The push-back, and Max accepted it.** The other half of his idea was *"maybe let you click
+yourself"*. Click-to-advance is right for onboarding someone into software they already bought and
+wrong for a cold sales visitor: it swaps a known drop-off (people who stop pressing Next) for a
+worse one (people who cannot find the thing to click), and it means per-step click targets,
+validation and stuck-state fallbacks on a tour that Chunk 4 already had to rescue from an anchor
+race. Next still drives; the route is visible and jumpable instead.
+
+### The bug the work surfaced
+
+Adding seven clickable jump targets to the rail made an existing React error impossible to ignore:
+**`beginAt`, `endTour` and the booking listener each called `saveTourState` from inside a
+`setState` updater.** `saveTourState` dispatches `TOUR_STATE_EVENT`; `DemoExplore` listens and
+calls its own `setState`; and an updater runs during `DemoTour`'s render phase — so every step
+change logged *"Cannot update a component (DemoExplore) while rendering a different component
+(DemoTour)"*, and ran twice in StrictMode, writing and announcing twice in development.
+
+`DemoTour` already carried a comment stating the rule — an updater must be a pure function of its
+previous value — but had applied it only to the analytics calls, not to the persistence. All three
+writes now go through `update()` outside the updater and read `stateRef` instead of `prev`.
+Verified by walking the tour in a fresh tab with an empty console.
+
+### Verified
+
+- **Marketing page:** rendered at `hq.localhost:3000/welcome` — any host that resolves to no tenant
+  hits `proxy.ts`'s `/welcome` rule, which is how to preview it locally without touching `.env`.
+  Both languages, toggle persists and sets `<html lang>`, all four demo links resolve, no
+  horizontal overflow at 375px, `tsc --noEmit` clean.
+- **Tour:** walked steps 1→2→3→4 and 7 against the demo tenant locally (`DEFAULT_TENANT_ID`
+  temporarily pointed at `vineworks-demo`, restored afterwards — see [[MaintenanceNotes]] §4 for
+  why that is the only way to see the demo on `localhost`). Rail groups 2|5, breadcrumb correct on
+  every step, the crossing note fires on step 3 only, "Takes you to…" appears only when the route
+  changes, rail jump works, the last step's two CTAs still fit, and the 375px dock holds all of it.
+
+### Where it stands
+
+Both commits are on **`staging`** (`0fc0d75`, `25d49d3`) and **nothing has gone to production**.
+Rule 0 says staging is verified before the `master` merge, and the two things that most need a
+human are exactly the two a session cannot judge: **whether the Georgian reads like a Georgian
+winery owner wrote it**, and whether the tour's new orientation actually orients. Both are in
+[[MyToDo]].
+
+**Still open, and worth doing before more tour work:** the demo started counting on 2026-09-12, so
+`npx tsx scripts/demo-funnel.ts 30` can now say which step actually loses people. One day of data
+is probably too thin to act on, but the vault's own lesson from the performance work —
+*measure before building* — applies to the next round of tour changes, not this one.
+
+---
+
 ## 2026-09-12 — the demo starts counting, and an analytics write that blocked the demo
 
 The second deferred item from [[DemoSite/Plan-DemoFlowFixes]], and the one that makes

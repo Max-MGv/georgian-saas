@@ -124,6 +124,46 @@ the order on 2026-09-11.
 
 ---
 
+## State of play, 2026-09-13 — the introduction, at both ends
+
+Max: *"i really like the demo flow itself, but i feel like an introduction is missing and in 2
+ways."* Two different problems, both real, both now built and sitting on **`staging`**.
+
+**1. `vineworks.ge` now exists as a real site.** It served a 67-line placeholder with **no link to
+the demo at all**. It is now a Georgian-first landing page (EN toggle) with four routes into
+`demo.vineworks.ge`. See [[FeatureLog]] #174.
+
+> **The load-bearing decision: vineworks.ge explains and sells, demo.vineworks.ge shows.**
+> `DemoFrontDoor` stays a *path chooser* and is allowed to assume the visitor already knows what
+> Vineworks is. **Do not move a feature list into it** — the pitch would be read twice and the
+> front door would become a speed bump. This also retires the old note in `DemoExplore` that
+> expected `CAPABILITY_GROUPS` to become the marketing feature list.
+
+**2. The tour says where you are and what is next.** A progress rail with named, clickable steps;
+a `SURFACE · SCREEN` breadcrumb; a one-time note on step 3 where the visitor crosses from the
+guest site into the back office; and "Next · <title>" naming the destination screen. [[FeatureLog]]
+#175.
+
+> **Click-to-advance was considered and rejected**, which was the other half of Max's idea. For a
+> cold sales visitor it trades a known drop-off (stops pressing Next) for a worse one (cannot find
+> the thing to click), and it would add per-step click targets and stuck-state fallbacks to a tour
+> Chunk 4 already had to rescue from an anchor race. Next still drives; the route is visible and
+> jumpable. Max accepted the reasoning — revisit only with funnel data, not on instinct.
+
+**Also fixed here, and worth knowing:** `beginAt`, `endTour` and the booking listener each called
+`saveTourState` *inside* a `setState` updater. It dispatches `TOUR_STATE_EVENT`, `DemoExplore`
+setStates on it, and updaters run during render — so every step change threw "Cannot update a
+component while rendering a different component", twice over in StrictMode. All writes now go
+through `update()`. **Never persist or dispatch from inside an updater in these files.**
+
+**Two things are Max's** and are in [[MyToDo]]: judging whether the Georgian reads natively, and
+whether the tour's orientation actually orients. Neither ships to `master` before that.
+
+**Worth doing before the next round of tour work:** `npx tsx scripts/demo-funnel.ts 30` now
+answers "which step loses people". One day of data is thin, but *measure before building*.
+
+---
+
 ## Quick reference
 
 | Thing | Value |

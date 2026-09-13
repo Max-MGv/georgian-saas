@@ -8,6 +8,66 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🚪 2026-09-13 (later) — vineworks.ge is a real site now, and the tour tells you where you are
+
+Both of these are on **`staging` only**. Nothing has gone to production. They are waiting on you.
+
+### 1. vineworks.ge has an actual front page
+
+Until today your own domain served a placeholder: three cards, an email address, and — the part
+that mattered — **no link to demo.vineworks.ge anywhere on it.** Anyone who typed your company
+name into a browser hit a dead end while the demo sat one subdomain away.
+
+It is now a proper landing page: what the product is, the three things that are painful today
+(bookings in a notebook, rates worked out by hand, no idea what July looks like), six benefit
+cards, the live mirror given its own band because it is the thing nobody else has, a short "why
+we are building this" section, and a closing call to action. **Four separate buttons go to the
+demo.**
+
+**It is in Georgian by default, with an ENG toggle in the top right** — that was your buyer, so
+that is the default. The demo itself stays English.
+
+**What to check, on the staging preview:**
+- Read the Georgian. I wrote it, and I am the wrong person to judge whether it sounds like a
+  Georgian winery owner or like a translation. **Tell me any line that reads oddly and I will
+  rewrite it** — every word lives in one file and is quick to change.
+- Flip to ENG and back. It should remember your choice next visit.
+- Open it on your phone. The "See the demo" button in the header disappears there on purpose —
+  it did not fit next to the language toggle, and the same button is a few centimetres below.
+- Click all four demo links and check they land where you would want them to.
+
+**One thing I decided and you should overrule if you disagree:** the marketing site explains the
+product, and the demo's front door does *not* repeat that — it stays a "which way in do you
+want?" chooser. If you would rather the demo also re-pitch itself for people who arrive at it
+directly, say so and I will add it back.
+
+### 2. The tour now says where it has taken you
+
+You said the tour should highlight where it is taking you, and that users need a sense of what
+they are looking at. You were right — it moved you across five screens and two completely
+different halves of the product and the only thing it ever told you was "3 / 7".
+
+**What to check, once this is live:**
+- Start the tour. Above the text there is now a **row of seven bars** — hover one and it tells
+  you what that step is. Click one and it jumps there. The gap in the middle of the row is where
+  the guest website ends and your back office begins.
+- Under the bars, a line saying where you are: **"GUEST SITE · BOOKING FORM"**, then
+  **"BACK OFFICE · ORDERS"**, and so on.
+- **Step 3 is the one to watch.** That is where the tour throws you from the winery's public site
+  into its admin panel, and it used to happen with no warning at all. It should now say so in a
+  box before the step's text.
+- Above the Next button: **"Next · …"** naming the step you are about to get, and where it takes
+  you. Check that against where you actually land.
+
+**I pushed back on one half of your idea and you should know why.** You wondered about letting
+people click through the tour themselves. I did not build that: for a cold visitor who has never
+seen the product, "click the thing" tours lose more people than "press Next" tours — they cannot
+find the thing, and they leave. What I did instead is make the route visible and jumpable, so you
+can skip ahead or go back, and the highlighted thing on screen stays properly clickable. If you
+still want click-to-advance after seeing this, say so and I will build it.
+
+---
+
 ## 🧭 2026-09-13 — one "Explore" button on the demo, and the demo now counts visitors
 
 Both of these are **already live on demo.vineworks.ge** — you said go ahead, so they went all the
