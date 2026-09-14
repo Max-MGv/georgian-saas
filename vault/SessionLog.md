@@ -188,6 +188,49 @@ clean throughout.
 Committed and pushed to `staging` (`036e994`). Paused for confirmation before piece C, per the
 tracker's own rule about not touching `BookingForm.tsx` a second time unreviewed.
 
+**Follow-up, same session — candid review + piece C (access-code popup).** Max asked directly
+whether piece B followed best practice / single source of truth. Answered honestly rather than just
+confirming: the extraction itself was sound, but the `labels` object (9 lines of `t(locale, ...)`
+calls) was hand-copied verbatim in both `BookingForm.tsx` and `MessagesPanel.tsx` — a real
+duplication that could drift silently, since the object literal shape stays type-valid either way.
+Also surfaced, when asked "best practices" more broadly: no automated test coverage exists for this
+flow — true, but matches how the rest of the codebase already works (no test suite of any kind),
+so named as a pre-existing gap rather than something this work introduced. Max corrected that:
+a Playwright suite does exist (`saas/tests/`) — noted for next time. Asked to proceed with fixing
+the labels dedup and starting piece C.
+
+**Labels dedup:** extracted `lib/newCompanyPopupLabels.ts` (`buildNewCompanyLabels(locale)`), both
+call sites now call it instead of restating the object. Had to widen the param type from `'en'|'ka'`
+to plain `string` — `BookingForm.tsx`'s `locale` prop is typed `string`, matching `t()`'s own
+signature, so the narrower type broke the real caller (`tsc` caught it immediately).
+
+**Piece C (access-code popup):** `components/AccessCodePopupView.tsx`, same pattern as A/B, but the
+first of the three to keep local state — the password-visibility eye-icon toggle stays a `useState`
+inside the component (`'use client'`) rather than a prop, since both callers are already client
+components (unlike Payment Result, which needed to stay hookless to be importable from the real
+page's server component) and the toggle is pure ephemeral display state with nothing to report to
+either caller. This popup only has one real axis (unlike B's two), so the original
+`variant: 'entry' | 'error'` shape from the tracker survived, with `'checking'` added as a third
+status for the loading-label state. Removed `showCodeText` state and a now-dead reset line from
+`BookingForm.tsx` in the process — the popup unmounting/remounting on every `showCodePopup` toggle
+resets the view's internal state for free, so the manual reset was no longer needed.
+
+**Verified live** on Staging Winery, local dev — same tenant piece B flagged as blocking the
+dropdown variant (`hideCompanyDropdown` on by default). This time actually tested it rather than
+leaving the caveat on record: temporarily switched the setting off in Settings, selected a real
+company with a code from the dropdown ("Test Company # 1"), tested wrong-code (real
+`verifyCompanyCode()` round trip, correct error text), "Enter Manually" (closes popup, resets to
+Individual), and the real access code (Checking… → popup closed, company confirmed) — then switched
+the setting back on and confirmed via screenshot it returned to its original state. Admin preview's
+2-way pill switcher and the `{company}` token substitution (done by hand via `.replaceAll()` since
+`MessagesPanel.tsx`'s drafts are raw strings) both verified. All in Georgian, matching the rest of
+this session's testing. `npx tsc --noEmit` clean throughout.
+
+Committed and pushed to `staging` (`577bb14`, one commit covering both the labels dedup and piece
+C). Tracker (`vault/Plan-OnSiteMessagesVisualPreviews.md`) now shows all 3 pieces done — plan
+complete. Surfaced but did not act on: adding Playwright coverage for these 3 popups, since no
+spec currently exercises them and it wasn't what was asked for.
+
 ---
 
 ## 2026-09-14 (3) — Messages tab: collapsed-by-default + auto-fit preview height

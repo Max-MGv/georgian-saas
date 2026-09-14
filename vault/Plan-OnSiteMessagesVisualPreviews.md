@@ -39,7 +39,7 @@ flagged as a risk in the first place.
 |---|---|---|---|
 | **A** | Payment Result page → `PaymentResultView.tsx` | Low — small, already near-stateless server component | ✅ Done |
 | **B** | New Company popup → `NewCompanyPopupView.tsx` | High — tightly coupled to `BookingForm.tsx`'s state (~15-20 props: `companyId`, `newCoStatus`, handlers, etc.); this exact file already caused 2 production crashes this cycle ([[KnownBugs]] #33/#34) from a careless split | ✅ Done |
-| **C** | Access-code popup → `AccessCodePopupView.tsx` | High — same coupling risk as B | ⬜ Not started |
+| **C** | Access-code popup → `AccessCodePopupView.tsx` | High — same coupling risk as B | ✅ Done |
 | — | 9 validation-error strings | Not pursued as full mockups — they're one-line inline messages under a form field, not whole screens. Low value for the effort of a per-field mockup. If wanted later: a single generic "preview chip" (styled like the real red inline error, live text, no attempt to place it under a specific field) rather than 9 bespoke mockups. | Not planned |
 
 **Why B and C are gated on a separate go-ahead, not bundled with A:** the popups' JSX currently
@@ -135,12 +135,79 @@ dropdown case):
 **Files touched:** `components/NewCompanyPopupView.tsx` (new), `components/BookingForm.tsx`,
 `app/admin/(panel)/content/MessagesPanel.tsx`, `lib/adminT.ts`.
 
-## Piece C — Access-code popup ⬜
+**Post-piece-B fix (same day, before starting C):** Max asked for a candid review of the piece B
+work against single-source-of-truth/best-practice — the one real gap found was the `labels` object
+(9 lines of `t(locale, 'form.new_company_*')` calls) being hand-copied verbatim in both
+`BookingForm.tsx` and `MessagesPanel.tsx`. Extracted into `lib/newCompanyPopupLabels.ts`
+(`buildNewCompanyLabels(locale)`), both call sites now call it instead of restating the object.
+`locale` typed as plain `string` there (not `'en' | 'ka'`) to match `t()`'s own signature and
+`BookingForm.tsx`'s `locale?: string` prop — a narrower type broke the real caller.
 
-Not started. Same shape as B: `AccessCodePopupView.tsx`, `variant: 'entry' | 'error'`, the intro
-line's `{company}` token resolved against a sample company name in preview mode.
+Also surfaced in that review: Playwright test coverage exists in this repo
+(`saas/tests/tier2-core-flows/`, etc.) but has **no spec covering the New Company or access-code
+popups** — noted as a real gap, not acted on unprompted (see `Not in scope` below).
+
+## Piece C — Access-code popup ✅
+
+**Built:** `saas/components/AccessCodePopupView.tsx` — same pattern as A/B, taking
+`status: 'idle' | 'checking' | 'error'` (this popup only has one real axis, unlike B, so the
+plan's original `variant: 'entry' | 'error'` shape survived — `'checking'` added as a third status
+to cover the loading-label state without losing fidelity), `title`/`intro`/`errorMessage` (the
+`mc()`-driven content strings, `intro` pre-resolved with its `{company}` token already substituted
+by the caller), `companyName` (raw, for the hidden autofill field only), `code` + optional
+`onCodeChange`/`onSubmit`/`onEnterManually`, a `labels` object (placeholder + button text, built by
+the new `lib/accessCodePopupLabels.ts` — same dedup pattern as B's fix), and `preview?: boolean`.
+
+**One deliberate difference from A/B:** this component keeps a small piece of **local state** (the
+password-visibility eye-icon toggle, `useState` inside the component, `'use client'` at the top) —
+the first of the three view components to have any. Payment Result and New Company stayed hookless
+specifically so Payment Result could be imported by a server component (`payment/result/page.tsx`);
+this component is only ever rendered by two callers that are *already* client components
+(`BookingForm.tsx`, `MessagesPanel.tsx`), so that constraint doesn't apply, and the toggle is purely
+ephemeral display state with nothing to say to either caller. Flagged as a real change from the
+established pattern, not silently introduced.
+
+- `BookingForm.tsx` — the access-code popup JSX (previously inline, a `<form>` with the hidden
+  username field, password/eye-toggle input, error paragraph, Confirm/Enter-Manually buttons) is
+  now one `<AccessCodePopupView ... />` call. Removed `showCodeText` state entirely (now owned by
+  the view component) and the dead `setShowCodeText(false)` reset in the company-selection
+  `useEffect` — no longer needed since the popup unmounts/remounts on every `showCodePopup` toggle,
+  which resets the view's internal state for free.
+- `MessagesPanel.tsx`'s "Company Access-Code Popup" section — added a 2-way pill switcher
+  (Entry / Error) above the existing field list. Title + intro fields stay visible for both pills
+  (real popup always shows them); the Error-message field only appears under the Error pill. Live
+  preview card underneath resolves the intro's `{company}` token against `SAMPLE_COMPANY`
+  (`"Beridze LLC"`, already used elsewhere in this file) via `.replaceAll()` — the same substitution
+  `mc()` does in `BookingForm.tsx`, done by hand here since `MessagesPanel.tsx`'s drafts are raw
+  strings, not run through a `vars`-aware helper. The `"Code not recognised"` field
+  (`onsite_access_code_direct_not_recognised`) stays as its own plain `EditField`, unchanged — it
+  belongs to the *direct-entry* inline UI (`hideCompanyDropdown` tenants), a completely separate
+  code path from this popup that never touches `showCodePopup`.
+- `adminT.ts` — added `messages.onsiteAccessCode.variant.{entry,error}` pill labels, EN + KA.
+
+**Verified live** on Staging Winery, local dev server. Staging Winery has `hideCompanyDropdown` on
+by default (blocking the dropdown variant), so temporarily toggled it off in Settings for this
+verification, tested both variants, then toggled it back on afterward — confirmed via screenshot
+before and after that it returned to its original state:
+- **Admin preview:** both pills switch the field list and preview card correctly; the eye-icon
+  toggle inside the preview card works (reveals `MARANI42` sample code); `{company}` token resolves
+  to `Beridze LLC`.
+- **Dropdown-popup variant** (temporarily enabled): selected "Test Company # 1" from the dropdown →
+  popup opened with `{company}` resolved to the real company name in Georgian; entered a wrong code
+  → real `verifyCompanyCode()` round trip, "Incorrect code" error rendered; "Enter Manually" closed
+  the popup and reset to Individual Booking type; re-opened, entered the company's real access code
+  → "Checking…" state shown, then popup closed and the company was confirmed selected.
+- **Direct-entry variant:** already covered by piece B's verification (this tenant's default state);
+  not re-tested here since this popup component has no involvement in that code path at all.
+- Georgian locale confirmed throughout (all of the above was run with the site in KA).
+- `npx tsc --noEmit` clean before and after.
+
+**Files touched:** `components/AccessCodePopupView.tsx` (new), `lib/accessCodePopupLabels.ts` (new),
+`components/BookingForm.tsx`, `app/admin/(panel)/content/MessagesPanel.tsx`, `lib/adminT.ts`.
 
 ---
+
+## Plan complete — all 3 pieces done (2026-09-14)
 
 ## Not in scope
 
@@ -148,3 +215,9 @@ line's `{company}` token resolved against a sample company name in preview mode.
 - Touching `BookingFormVisualPanel.tsx` itself to make it genuinely live — that's the Visual tab's
   own pre-existing risk, out of scope for this plan, though worth a future look given the pattern
   proven here.
+- **Playwright coverage for these 3 popups.** The repo has a real Playwright suite
+  (`saas/tests/tier2-core-flows/` etc.), but no spec exercises the New Company or access-code
+  popups — found during the post-piece-B review, flagged to Max, not acted on since it wasn't
+  asked for and adding test coverage for 3 specific components is a different-shaped task than
+  "extract a shared view component." Worth a dedicated pass if wanted: `tier2-core-flows` is the
+  right tier for it (real user flows, not admin CRUD smoke-tests).
