@@ -155,6 +155,39 @@ New tracker: `vault/Plan-OnSiteMessagesVisualPreviews.md`. Pieces B (New Company
 (access-code popup) — the higher-risk ones — not started; gated on a separate go-ahead per the
 tracker's own sequencing rule.
 
+**Follow-up, later same day — piece B (New Company popup).** Read `MaintenanceNotes.md` §1 and
+`KnownBugs.md` #33/#34 first, per the tracker's own gate, before touching `BookingForm.tsx` again.
+
+Deviated from the tracker's original rough shape: instead of one `variant: 'withBooking' |
+'noBooking' | 'sent' | 'error'` prop, `NewCompanyPopupView.tsx` takes `includesBooking: boolean` and
+`status` as two separate props, mirroring `BookingForm.tsx`'s own two independent state variables
+exactly. They're not one axis in the real popup — an error can happen in either the with-booking or
+no-booking flow, and the body/button text depend on `includesBooking` even during an error — so a
+single enum would have silently lost fidelity for the real component, which defeats the point of
+extracting it in the first place. Flagged this to Max before writing code; he approved, saying he's
+fine with any shape as long as it stays "dynamic and easy to maintain... like the payment results
+page." The admin's 4-way pill switcher still exists — `MessagesPanel.tsx` maps each pill to an
+`{ includesBooking, status }` pair via a small lookup table.
+
+**Built:** `components/NewCompanyPopupView.tsx` (new, pure component, same shape as
+`PaymentResultView.tsx`); `BookingForm.tsx`'s inline popup JSX replaced with one component call,
+every prop wired 1:1 to the existing state/handlers (no behavior change); `MessagesPanel.tsx`'s
+"New Company Popup" section gained the 4-way pill switcher + live preview card; `adminT.ts` gained
+the 4 pill labels (EN+KA).
+
+**Verified live** on Staging Winery, local dev (`hideCompanyDropdown` is on for this tenant, so —
+same caveat piece C will hit — only the direct-entry variant was reachable, not the dropdown one):
+admin preview's 4 pills all switch correctly with instant live-typing reactivity; the standalone
+"New Company?" popup end-to-end (submit → real success screen); the booking-attached popup
+end-to-end (Tour Company → full valid booking with no code confirmed → "Request Booking" → popup
+opened pre-filled → submitted → booking created **and** company request sent together, landing on
+the real "pending company" success screen); and the same standalone popup again after switching the
+site to Georgian, confirming full KA localization through the shared component. `npx tsc --noEmit`
+clean throughout.
+
+Committed and pushed to `staging` (`036e994`). Paused for confirmation before piece C, per the
+tracker's own rule about not touching `BookingForm.tsx` a second time unreviewed.
+
 ---
 
 ## 2026-09-14 (3) — Messages tab: collapsed-by-default + auto-fit preview height
