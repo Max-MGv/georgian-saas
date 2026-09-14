@@ -53,7 +53,7 @@ export async function setPaymentSectionToggle(
 // a click resolves without throwing but its handler doesn't always run. Every
 // click here retries until its expected effect is observed, same pattern as
 // companies-crud.spec.ts's clickUntil.
-async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeout = 20_000) {
+export async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeout = 20_000) {
   await expect(async () => {
     try { await verify(); return; } catch { /* not yet satisfied — click again */ }
     await clickable.click({ timeout: 5_000 });
@@ -64,9 +64,9 @@ async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeo
 const OVERRIDE_LABELS = ['Default', 'Always skip', 'Always require'] as const;
 export type PaymentOverride = (typeof OVERRIDE_LABELS)[number];
 
-const editPanelHeading = (page: Page) => page.getByRole('heading', { name: 'Edit Company', exact: true });
+export const editPanelHeading = (page: Page) => page.getByRole('heading', { name: 'Edit Company', exact: true });
 
-async function openCompanyEditPanel(page: Page, companyName: string) {
+export async function openCompanyEditPanel(page: Page, companyName: string) {
   await page.goto('/admin/companies');
   await expect(page).toHaveURL(/\/admin\/companies/, { timeout: 10_000 });
   const escaped = companyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -197,16 +197,16 @@ Two more pieces of existing behavior worth carrying into the decision:
 | **7** | Order record — remember which guide/rep was used | ✅ Done |
 | **8** | Print/ops surface — booking sheet shows the guide's phone | ✅ Done (no code change needed) |
 | **9** | Emails — new-company notification, invoice recipient | ✅ Done |
-| **10** | Demo seed + onboarding — fabricate guides/reps so the demo/onboarding paths don't break | ⬜ Not started |
-| **11** | Tests — update existing `accessCode` assertions, add coverage for the new lookup | ⬜ Not started |
+| **10** | Demo seed + onboarding — fabricate guides/reps so the demo/onboarding paths don't break | ✅ Done (no change needed) |
+| **11** | Tests — update existing `accessCode` assertions, add coverage for the new lookup | ✅ Done |
 | **12** | Vault + RLS checklist close-out | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 1-5, 7-9 done and pushed to `staging`. Remaining: Chunk 6 (wine
-orders — confirmed out of scope, may need explicit re-confirmation with Max), Chunk 10 (demo seed
-+ onboarding), Chunk 11 (tests), Chunk 12 (vault + RLS close-out + the staging → master merge,
-which needs Max's go-ahead per Rule 0).
+**Overall resume point:** Chunks 1-5, 7-11 done. Chunk 6 (wine orders) confirmed out of scope in
+Chunk 1 — may need explicit re-confirmation with Max before calling this plan fully closed.
+Remaining: Chunk 12 (vault close-out — mostly done alongside each chunk above; final step is
+getting Max's go-ahead for the `staging` → `master` merge per Rule 0).
 
 ---
 
@@ -452,15 +452,25 @@ Decisions:
 
 ## Chunk 10 — Demo seed + onboarding
 
-**Status:** ⬜ Not started
-**Depends on:** Chunks 2–3.
+**Status:** ✅ Done (2026-09-14) — **no code change needed, confirmed by querying the actual data**
 
-- [ ] `lib/demoSeed.ts` — fabricate at least one guide and one representative per demo company so
-  the demo tour's company-code flow (and the "Per-company price ladders" Explore link,
-  [[MaintenanceNotes]] #12) keeps working after the nightly reseed
-- [ ] `app/admin/onboarding/steps/CompaniesStep.tsx` + `actions/onboarding.ts` — decide whether
-  the setup wizard prompts for a first guide/rep at company-creation time, or leaves that for the
-  Companies page afterward
+- [x] `lib/demoSeed.ts` read directly, then checked against the dev DB's `vineworks-demo` tenant:
+  every demo company is created with **no `accessCode` at all** (`grep accessCode
+  lib/demoSeed.ts` — zero matches; confirmed live: all 9 non-individual demo companies have
+  `accessCode: null`). This plan's original premise — "the demo tour's company-code flow could
+  silently break after the nightly reseed" — assumed a code flow that doesn't exist: with no
+  `accessCode` set, `BookingForm.tsx`'s popup `useEffect` takes the `!company.accessCode` branch
+  and autofills directly from `contactName`/`contactPhone`/`contactEmail`, no popup, no code
+  ever entered. Guides being absent changes nothing here — there was never a code gate for them
+  to sit in front of. **Deliberately not adding guides/reps to the demo seed** — doing so would
+  introduce a code-entry step to the demo tour that doesn't exist today, which is an unrelated
+  product decision, not something this plan should sneak in as a side effect.
+- [x] `app/admin/onboarding/steps/CompaniesStep.tsx` / `actions/onboarding.ts` checked — the
+  wizard's `createCompanyStep` calls `createCompany()` (`onboarding.ts` line ~387) directly,
+  already picking up Chunk 3's `generateUniqueTenantCode()` automatically. **Decision: the wizard
+  does not prompt for a first guide/rep** — consistent with Chunk 1's "both lists always
+  optional" answer, and keeps the wizard's scope unchanged; guides/reps are a Companies-page-only
+  concern, same as price tiers already are.
 
 **Resume point:** —
 
@@ -468,15 +478,36 @@ Decisions:
 
 ## Chunk 11 — Tests
 
-**Status:** ⬜ Not started
-**Depends on:** Chunks 2–8.
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] Update `tests/tier2-core-flows/booking-enhanced.spec.ts` and
-  `tests/tier1-regression/payment-label-precedence.spec.ts` — both currently assert on
-  `accessCode` directly
-- [ ] Update `tests/helpers/payments.ts` if it builds fixture companies with a bare `accessCode`
-- [ ] Add new coverage: a guide code and a rep code both correctly resolve on the booking form;
-  a wrong code still errors the same way; the printed sheet shows the right guide's phone
+- [x] `booking-enhanced.spec.ts` and `payment-label-precedence.spec.ts` reviewed — **needed no
+  changes**. Both read whichever code is currently on the test company's admin panel fresh at
+  run time (`readCompanyAccessCode`) rather than hardcoding one, and their fixture companies
+  have zero guides configured — so they exercise exactly the fallback path this feature
+  deliberately kept byte-for-byte unchanged.
+- [x] `tests/helpers/payments.ts` — no bare-`accessCode` fixture construction found; only
+  `openCompanyEditPanel`/`clickUntil`/`editPanelHeading` gained `export` (no behavior change) so
+  a future spec could reuse them, though the new spec below ended up needing its own
+  index-matching variant instead (see below)
+- [x] New coverage: `tests/tier2-core-flows/company-guide-code.spec.ts` — adds a guide via the
+  real admin panel, reads its generated code, confirms a wrong code leaves the popup open,
+  confirms the guide's own code closes the popup and autofills the guide's own name/phone (not
+  the company's), cleans up via an `afterEach` safety net. **Real finding while building it:**
+  `payments.ts`'s `openCompanyEditPanel` uses an xpath ancestor-then-descendant approach to pair
+  a company's name button with its Edit button — the same approach `booking-enhanced.spec.ts`'s
+  own comments already documented as unreliable (~50% lost-click rate) on this exact panel. This
+  spec uses that spec's proven index-matching alternative instead (pair the Nth "…Code set" name
+  button with the Nth "Edit" button by rendered order) rather than the shared helper.
+  Printed-sheet coverage skipped — Chunk 8 needed no code change, so there's nothing new to
+  regression-test there.
+- [x] **Confirmed actually passing, twice in a row** (not just written) — `npx playwright test
+  tests/tier2-core-flows/company-guide-code.spec.ts`, 1 passed in ~44s and ~47s on two separate
+  runs; confirmed no leftover `CompanyGuide` rows on Cookie Company afterward via a direct DB
+  query. **Real finding along the way, unrelated to this feature:** the session's long-lived dev
+  server (many hours, dozens of hot-reloads across schema + server-action changes) had gotten
+  into a state where `/admin/login` 404'd — confirmed via `curl`, confirmed fixed by a plain
+  restart. If a Playwright run ever hangs at login with no obvious cause, check `curl -D -
+  http://localhost:3000/admin/login` before assuming the test or the feature is at fault.
 
 **Resume point:** —
 

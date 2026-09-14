@@ -664,3 +664,15 @@ outputFileTracingIncludes: {
 **What this means for any future native dependency:** if you add another native-binary package (anything with per-platform npm packages, prebuilt `.node`/`.so` files), assume it needs an entry in `outputFileTracingIncludes` too, and verify by checking the relevant route's `.next/server/app/.../page.js.nft.json` after a real `next build` — don't trust that "it works in `next dev`" means the production trace is complete, since dev doesn't go through the same tracing step at all.
 
 **Files involved:** `saas/next.config.ts`, `saas/app/actions/uploadImage.ts`.
+
+---
+
+## 26. Guide/rep codes share one per-tenant pool with `Company.accessCode`, and the resolution logic exists in two places
+
+**What the dependency is:** since Plan-CompanyGuidesAndReps, a person's code (`CompanyGuide.code` / `CompanyRepresentative.code`) and a company's own `accessCode` all have to be unique across the same tenant — a guide's code and another company's `accessCode` must never collide, because both the wine-order flow's `findCompanyByCode` and the booking flow's `findBookingCodeByCode` do a **code-alone, tenant-wide** lookup with no company chosen first. Uniqueness is enforced only at the application level: `generateUniqueTenantCode()`/`codeExistsInTenant()` (`app/actions/companies.ts`) check all three sources (`Company`, `CompanyGuide`, `CompanyRepresentative`) before accepting a code, in every action that generates or manually sets one (`createCompany`, `regenerateAccessCode`, `setAccessCode`, and their guide/rep equivalents in `companyGuides.ts`). There is no DB-level constraint spanning the three tables — a direct `prisma.companyGuide.create()` or raw SQL insert that skips these helpers can silently create a colliding code.
+
+**The second half of the coupling:** the booking form has *two* code-resolution entry points that must stay in sync — `verifyBookingCode()` (dropdown flow: company already chosen, code just confirms the person) and `findBookingCodeByCode()` (direct-code-entry / `hideCompanyDropdown` flow: no company chosen, code alone is searched tenant-wide). Both independently implement "check this company's guides first, fall back to `Company.accessCode` when it has none" — a change to that fallback rule (e.g., changing what counts as "no guides", or extending it to reps) needs updating in both functions, the same shape as §22's three pricing call sites.
+
+**What this means in practice:** if you add a third way to look up a code (e.g., extending this to wine orders per Chunk 6, still unbuilt as of this note), route the code-uniqueness check through `generateUniqueTenantCode()`/`codeExistsInTenant()` rather than inventing a new check, and mirror whatever fallback order the other two resolvers use rather than picking a different one.
+
+**Files involved:** `saas/app/actions/companies.ts` (`generateUniqueTenantCode`, `codeExistsInTenant`, `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`), `saas/app/actions/companyGuides.ts`, `saas/components/BookingForm.tsx`. Full design: `Plan-CompanyGuidesAndReps.md`, `Features/Feature 185 - Company Guides and Representatives.md`.

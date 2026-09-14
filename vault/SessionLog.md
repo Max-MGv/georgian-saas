@@ -8,6 +8,78 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-14 (7) — Company Guides & Representatives (Feature 185)
+
+Max asked for the existing single `Company.accessCode` + contact-fields combo to split into two
+real per-company lists — Guides (phone, for "who to call during the dinner") and Representatives
+(email, for "who invoices go to") — each entry with its own unique code, per
+`vault/Plan-CompanyGuidesAndReps.md`. Told explicitly to just start building and push each chunk
+straight to `staging`, with the plan's own content treated as considerations rather than
+locked-in fact — so Chunk 1's data-model decisions were made and recorded directly rather than
+run past Max first, then all 11 in-scope chunks (1-5, 7-11; Chunk 6/wine-orders confirmed out of
+scope) were built and pushed to `staging` in one continuous session, each verified live before
+moving to the next.
+
+**Schema (Chunks 1-2):** new `CompanyGuide`/`CompanyRepresentative` tables, JOIN-to-Company RLS
+(same shape as `Price`), migration applied to dev DB, `setup-rls.ts` extended, new two-tenant
+isolation test (`test-guides-reps-rls.ts`, 8/8 passing). `Order` gained an optional `guideId` —
+representatives are never stored on an order, only guides (the phone-during-dinner case needs a
+specific person; invoicing doesn't).
+
+**Server actions (Chunk 3):** `companyGuides.ts` — full CRUD + code regen for both entity types,
+sharing a new `generateUniqueTenantCode()`/`codeExistsInTenant()` pair in `companies.ts` so
+guide codes, rep codes, and `Company.accessCode` all draw from one collision-checked pool per
+tenant (keeps the wine-order form's existing tenant-wide code lookup mechanically compatible).
+`verifyBookingCode()` and `findBookingCodeByCode()` added for the two booking-form entry points
+(dropdown-selected company vs. direct code-alone entry) — both try a company's guides first,
+fall back to `Company.accessCode` only when it has none.
+
+**Admin UI (Chunk 4):** Edit Company panel gained Guides/Representatives sections
+(`GuidesSection`/`RepresentativesSection`, `PersonCodeField`), mirroring the existing Price-tier
+rows pattern. Verified live: added/edited/deleted a guide and a representative through the real
+panel.
+
+**Booking form + order record (Chunks 5, 7):** the access-code popup and the direct-entry variant
+both resolve guides first; a matched guide's own name/phone autofills the form instead of the
+company's. Verified live end-to-end: added a guide, entered its code on the public form, confirmed
+First/Last Name and Phone filled with the *guide's* values, not the company's. `guideId` flows
+through to `createBooking()`, re-verified server-side before being stored.
+
+**Two of the plan's own assumptions turned out wrong once the real code was read — both corrected
+on the spot rather than carried through:**
+- Chunk 8 (print sheet): assumed `BookingSheetPrint.tsx` printed `Company.contactName`/
+  `contactPhone`. It actually prints the **guest's own form fields**, which the guide autofill
+  already populates — no code change needed at all.
+- Chunk 9 (invoice email): assumed the "Send Invoice by Email" modal had a manually-typed
+  recipient defaulting to `Company.contactEmail`. It actually **hardcoded the order's own email
+  with zero alternative** and never read `Company.contactEmail`. Built a recipient dropdown
+  (order's own email + each representative with an email) from scratch instead, with
+  `sendOrderInvoice()` re-validating a client-picked recipient server-side.
+
+**Chunk 10 (demo seed):** checked the actual dev DB rather than assuming — demo companies have
+never had `accessCode` set at all, so there's no code-entry step in the demo tour for guides to
+sit in front of. Deliberately left the demo seed untouched rather than adding a code gate that
+doesn't exist today.
+
+**Chunk 11 (tests):** existing `accessCode`-reading specs needed no changes (they read whatever
+code is live on the admin panel, and their fixture companies have no guides). New
+`company-guide-code.spec.ts` added and **actually run to a confirmed pass, twice** — not just
+written. Real finding along the way: the session's long-lived dev server (many hours of
+hot-reloading across schema + server-action changes) had gotten into a state where `/admin/login`
+404'd; a plain restart fixed it. Separately, `payments.ts`'s `openCompanyEditPanel` helper turned
+out to use the same xpath-ancestor pairing approach `booking-enhanced.spec.ts`'s own comments
+already flagged as ~50% unreliable on this exact panel — the new spec uses that spec's proven
+index-matching alternative instead.
+
+**Vault (Chunk 12):** `RLS-Architecture.md`'s table extended, `MaintenanceNotes.md` §26 added
+(the shared per-tenant code pool + the two independent code-resolution entry points that must
+stay in sync), `Features/Feature 185 - Company Guides and Representatives.md` written.
+
+**What's left:** confirm with Max whether Chunk 6 (wine orders) should stay out of scope
+permanently or get picked up later; get his go-ahead for the `staging` → `master` merge.
+
+---
+
 ## 2026-09-14 (6) — Booking Confirm Sheet (Feature 184)
 
 Max asked for a review step before a booking is actually sent — "so they don't make a mistake" —
