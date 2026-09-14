@@ -150,6 +150,17 @@ const en: Translations = {
   'form.access_code_direct_placeholder': 'Enter your company code',
   'form.access_code_direct_not_recognised': 'Code not recognised.',
 
+  // Chunk 4 — validation & server errors. All admin-editable (mc()), per
+  // Max's call: full consistency with the rest of this plan over the
+  // "translate only" option, even though these read more like system
+  // errors than brand copy. Several are shared between the client-side
+  // check and createBooking.ts's authoritative server-side re-check of the
+  // same rule — one editable field controls both surfaces rather than two
+  // near-duplicate fields that could drift out of sync.
+  'form.err_select_date': 'Please select a date.',
+  'form.err_future_date': 'Please choose a future date.',
+  'form.err_working_hours': "That time is outside the winery's working hours on this date. Please choose another time.",
+
   // Online payment result page
   'payment.success_heading': 'Payment received',
   'payment.success_body': 'Thank you — your payment went through and your booking is confirmed. A confirmation has been sent to you.',
@@ -325,6 +336,10 @@ const ka: Translations = {
   'form.access_code_enter_manually': 'ხელით შეყვანა',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
+
+  'form.err_select_date': 'გთხოვთ, აირჩიოთ თარიღი.',
+  'form.err_future_date': 'გთხოვთ, აირჩიოთ მომავალი თარიღი.',
+  'form.err_working_hours': 'ეს დრო მარნის სამუშაო საათების მიღმაა ამ თარიღისთვის. გთხოვთ, აირჩიოთ სხვა დრო.',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',

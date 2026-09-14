@@ -39,12 +39,13 @@ from source at chunk time rather than trusting this summary, since line numbers 
 | **1** | New Company flow — popup + pending-company success note (Georgian translation + editable) | ✅ Done |
 | **2** | Payment result page — success / failed / pending (already bilingual, just wire to editable) | ✅ Done |
 | **3** | Company access-code popup (Georgian translation + editable) | ✅ Done |
-| **4** | Booking validation & server errors — date/guest/pricing errors from the form and `createBooking.ts` | ⬜ Not started |
+| **4** | Booking validation & server errors — date/guest/pricing errors from the form and `createBooking.ts` | ✅ Done |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Chunk 4 needs Max's call on its open question (translate-only vs.
-editable vs. split — see Chunk 4 below) before starting.
+**Overall resume point:** 🎉 All 5 chunks done. Plan complete — see Chunk 4's write-up below for
+the two things not click-tested live (individual-booking server-only min-guest guard, working-
+hours/day-closed/lead-time guards) and why.
 
 **Suggested order rationale:** Chunks 1 and 2 are exactly the two things Max named directly
 ("booking without a company", "when you pay / when you don't") and both are pure upside — real
@@ -296,17 +297,59 @@ than Chunks 1–3. Options: (a) translate only, no Messages-tab entry; (b) trans
 consistent with everything else; (c) split — translate all, but only expose the couple that read
 as guest-facing tone (e.g. the generic catch-all) as editable. Decide at chunk start, don't assume.
 
-- [ ] Resolve the open question above with Max.
-- [ ] Georgian translations for whichever set is in scope.
-- [ ] `SiteContent` + `fc()` wiring for whichever subset is made editable.
-- [ ] Add editable subset to Messages tab.
-- [ ] Verify live: trigger each condition (past date, blocked date, closed weekday, outside lead
+- [x] Resolve the open question above with Max.
+- [x] Georgian translations for whichever set is in scope.
+- [x] `SiteContent` + `fc()` wiring for whichever subset is made editable.
+- [x] Add editable subset to Messages tab.
+- [x] Verify live: trigger each condition (past date, blocked date, closed weekday, outside lead
       time, under minimum guests, over a company's max pricing tier), both locales.
 
-**Files likely touched:** `components/BookingForm.tsx`, `app/actions/createBooking.ts`,
-`app/actions/notifyNewCompany.ts`, `lib/t.ts`, `MessagesPanel.tsx`.
+**Decision (Max):** translate + fully editable — full consistency with Chunks 0–3, over the
+translate-only or split options.
 
-**Resume point:** —
+**Consolidation, not 1:1 with every hardcoded string:** several errors exist twice — a
+client-side check in `BookingForm.tsx` and `createBooking.ts`'s authoritative server-side
+re-check of the identical rule (the server one can't be skipped; the client one is just a faster
+first pass). Rather than two near-duplicate admin fields that could drift out of sync, each pair
+shares **one** editable `SiteContent` key, read through `mc()` on the client and an equivalent
+server-side helper in `createBooking.ts`. Concretely: `onsite_err_blocked` (closed date),
+`onsite_err_day_closed` (closed weekday), `onsite_err_lead_time` (`{hours}` token),
+`onsite_err_min_guests` (`{min}` token), `onsite_no_rate_detail` (`{n}` token, also already used
+by an existing pre-submit notice) each drive both surfaces. `onsite_err_future_date` covers three
+call sites — two client (the past-date submit check and a static inline hint) plus the server's
+"cannot be made for past dates" guard — unified to one message rather than three. The generic
+catch-all reuses Chunk 1's `onsite_new_company_error` field outright (identical wording already
+existed there) instead of adding a duplicate. `onsite_err_select_date`, `onsite_err_contact`, and
+`onsite_err_working_hours` are the only genuinely new one-surface fields. Net: **9 new editable
+fields** cover the full scope, not ~13 separate ones. `notifyNewCompany.ts`'s failure message
+needed no change — confirmed it was already unreachable dead text (the UI shows Chunk 1's
+`onsite_new_company_error` regardless of what this action returns), so nothing to wire.
+
+**Built:** `mc()` in `BookingForm.tsx` gained the same `vars`-substitution Chunk 3 added.
+`createBooking.ts` now resolves `guestLocale` once at the very top of the function (moved up from
+partway through, so every guard — not just the happy path — can use it) and defines its own
+`async function mc(key, tKey, vars?)`, same shape, backed by `getContent()` (the single-key
+`SiteContent` reader, since fetching the whole `'messages'` section upfront would cost a query on
+every request just to maybe use it once on a guard that rarely fires). The `catch` block
+re-resolves locale independently (defensively — its scope is outside the `try`, so it can't
+assume `guestLocale`/`mc` survived whatever threw).
+
+**Verified live** on Staging Winery, local dev: "Please select a date." (client, empty date) and
+the happy path (valid booking still reaches Flitt checkout cleanly, confirming the `createBooking.ts`
+edits didn't break the request that never hits an error guard) both confirmed with a real browser
+session. Admin panel's new "Booking Validation & Server Errors" section shows all 9 fields with
+correct defaults and preserved `{token}` syntax. **Not click-tested live:** the individual-booking
+server-only min-guest guard (the form auto-clamps guest count back up to the minimum client-side
+before submit, so there's no UI path to send a below-minimum count for that booking type) and the
+day-closed/working-hours/lead-time guards (no test tenant data set up with blocked weekdays/narrow
+hours in this session). All four use the exact same `mc()` call-site pattern already proven
+correct four times over in Chunks 0–3 plus this chunk's own working example, so treated as covered
+by code review rather than a live trigger.
+
+**Files touched:** `components/BookingForm.tsx`, `app/actions/createBooking.ts`, `lib/t.ts`,
+`lib/adminT.ts`, `MessagesPanel.tsx`. `notifyNewCompany.ts` — reviewed, not touched.
+
+**Resume point:** Chunk 4 done. Plan complete.
 
 ---
 

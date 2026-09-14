@@ -231,6 +231,15 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_access_code_intro: c.onsite_access_code_intro ?? t(locale, 'form.access_code_intro'),
     onsite_access_code_error: c.onsite_access_code_error ?? t(locale, 'form.access_code_error'),
     onsite_access_code_direct_not_recognised: c.onsite_access_code_direct_not_recognised ?? t(locale, 'form.access_code_direct_not_recognised'),
+    onsite_err_select_date: c.onsite_err_select_date ?? t(locale, 'form.err_select_date'),
+    onsite_err_future_date: c.onsite_err_future_date ?? t(locale, 'form.err_future_date'),
+    onsite_err_contact: c.onsite_err_contact ?? t(locale, 'form.err_contact'),
+    onsite_err_blocked: c.onsite_err_blocked ?? t(locale, 'form.err_blocked'),
+    onsite_err_day_closed: c.onsite_err_day_closed ?? t(locale, 'form.err_day_closed'),
+    onsite_err_working_hours: c.onsite_err_working_hours ?? t(locale, 'form.err_working_hours'),
+    onsite_err_lead_time: c.onsite_err_lead_time ?? t(locale, 'form.err_lead_time'),
+    onsite_err_min_guests: c.onsite_err_min_guests ?? t(locale, 'form.err_min_guests'),
+    onsite_no_rate_detail: c.onsite_no_rate_detail ?? t(locale, 'form.no_rate_detail'),
   })
 
   function setDraft(key: string, value: string) {
@@ -549,6 +558,34 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsiteAccessCode.error')} draftKey="onsite_access_code_error"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsiteAccessCode.directNotRecognised')} draftKey="onsite_access_code_direct_not_recognised"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+        </Section>
+
+        <Section
+          title={at('messages.onsiteErrors.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteErrors.trigger')}
+          open={open.has('onsiteErrors')}
+          onToggle={() => toggle('onsiteErrors')}
+        >
+          <EditField label={at('messages.onsiteErrors.selectDate')} draftKey="onsite_err_select_date"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.futureDate')} draftKey="onsite_err_future_date"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.contact')} draftKey="onsite_err_contact"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.blocked')} draftKey="onsite_err_blocked"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.dayClosed')} draftKey="onsite_err_day_closed"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.workingHours')} draftKey="onsite_err_working_hours"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.leadTime')} draftKey="onsite_err_lead_time"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.minGuests')} draftKey="onsite_err_min_guests"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.noRateDetail')} draftKey="onsite_no_rate_detail"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
 

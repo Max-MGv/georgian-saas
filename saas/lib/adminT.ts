@@ -66,6 +66,17 @@ const en: Translations = {
   'messages.onsiteAccessCode.intro': 'Intro line — {company} is replaced with the company\'s name',
   'messages.onsiteAccessCode.error': 'Incorrect-code error',
   'messages.onsiteAccessCode.directNotRecognised': '"Code not recognised" error (direct-entry sites)',
+  'messages.onsiteErrors.title': 'Booking Validation & Server Errors',
+  'messages.onsiteErrors.trigger': 'Shown on the booking form when something stops a booking from going through — a closed date, too little notice, not enough guests, or a pricing gap. Most guests won\'t see these, but they matter when they do.',
+  'messages.onsiteErrors.selectDate': 'No date selected',
+  'messages.onsiteErrors.futureDate': 'Date is in the past',
+  'messages.onsiteErrors.contact': 'No phone or email given',
+  'messages.onsiteErrors.blocked': 'Date is closed (blocked by the winery)',
+  'messages.onsiteErrors.dayClosed': 'Day of the week is closed',
+  'messages.onsiteErrors.workingHours': 'Time is outside working hours',
+  'messages.onsiteErrors.leadTime': 'Not enough notice — {hours} is replaced with the required hours',
+  'messages.onsiteErrors.minGuests': 'Below minimum guest count — {min} is replaced with the minimum',
+  'messages.onsiteErrors.noRateDetail': 'No pricing tier for this guest count — {n} is replaced with the guest count',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
   // view of the reports this logged-in admin personally submitted.
@@ -1165,6 +1176,17 @@ const ka: Translations = {
   'messages.onsiteAccessCode.intro': 'შესავალი ტექსტი — {company} ჩანაცვლდება კომპანიის სახელით',
   'messages.onsiteAccessCode.error': 'არასწორი კოდის შეცდომა',
   'messages.onsiteAccessCode.directNotRecognised': '„კოდი ვერ მოიძებნა" შეცდომა (პირდაპირი შეყვანის საიტებზე)',
+  'messages.onsiteErrors.title': 'ჯავშნის ვალიდაციისა და სერვერის შეცდომები',
+  'messages.onsiteErrors.trigger': 'ჩნდება ჯავშნის ფორმაზე, როცა რაღაც აფერხებს ჯავშნის გაგზავნას — დახურული თარიღი, არასაკმარისი დრო წინასწარ, სტუმრების ნაკლებობა ან ფასების ხარვეზი. უმეტეს სტუმარს ეს არ ნახავს, მაგრამ მნიშვნელოვანია, როცა ხდება.',
+  'messages.onsiteErrors.selectDate': 'თარიღი არჩეული არ არის',
+  'messages.onsiteErrors.futureDate': 'თარიღი წარსულშია',
+  'messages.onsiteErrors.contact': 'ტელეფონი ან ელ-ფოსტა არ არის მითითებული',
+  'messages.onsiteErrors.blocked': 'თარიღი დახურულია (მარნის მიერ დაბლოკილი)',
+  'messages.onsiteErrors.dayClosed': 'კვირის ეს დღე დახურულია',
+  'messages.onsiteErrors.workingHours': 'დრო სამუშაო საათების მიღმაა',
+  'messages.onsiteErrors.leadTime': 'არასაკმარისი დრო წინასწარ — {hours} ჩანაცვლდება საჭირო საათების რაოდენობით',
+  'messages.onsiteErrors.minGuests': 'სტუმრების რაოდენობა მინიმუმზე ნაკლებია — {min} ჩანაცვლდება მინიმუმით',
+  'messages.onsiteErrors.noRateDetail': 'ამ რაოდენობის სტუმრისთვის ფასების კატეგორია არ არსებობს — {n} ჩანაცვლდება სტუმრების რაოდენობით',
 
   // My Reports page
   'myReports.pageTitle': 'ჩემი შეტყობინებები',

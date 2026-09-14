@@ -416,13 +416,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!selectedDate) { setStatus('error'); setErrorMsg('Please select a date.'); return }
-    if (!phone && !email) { setStatus('error'); setErrorMsg(t(locale, 'form.err_contact')); return }
-    if (selectedDate < today) { setStatus('error'); setErrorMsg('Please choose a future date.'); return }
-    if (isDateBlocked(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_blocked')); return }
-    if (isDayClosed(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_day_closed')); return }
-    if (!timeSlot || !availableSlots.includes(timeSlot)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_lead_time', { hours: leadHours })); return }
-    if (isEnhanced && totalGuests < minGuests) { setStatus('error'); setErrorMsg(t(locale, 'form.err_min_guests', { min: minGuests })); return }
+    if (!selectedDate) { setStatus('error'); setErrorMsg(mc('onsite_err_select_date', 'form.err_select_date')); return }
+    if (!phone && !email) { setStatus('error'); setErrorMsg(mc('onsite_err_contact', 'form.err_contact')); return }
+    if (selectedDate < today) { setStatus('error'); setErrorMsg(mc('onsite_err_future_date', 'form.err_future_date')); return }
+    if (isDateBlocked(selectedDate)) { setStatus('error'); setErrorMsg(mc('onsite_err_blocked', 'form.err_blocked')); return }
+    if (isDayClosed(selectedDate)) { setStatus('error'); setErrorMsg(mc('onsite_err_day_closed', 'form.err_day_closed')); return }
+    if (!timeSlot || !availableSlots.includes(timeSlot)) { setStatus('error'); setErrorMsg(mc('onsite_err_lead_time', 'form.err_lead_time', { hours: leadHours })); return }
+    if (isEnhanced && totalGuests < minGuests) { setStatus('error'); setErrorMsg(mc('onsite_err_min_guests', 'form.err_min_guests', { min: minGuests })); return }
     // Checked last, deliberately: everything else about the booking is
     // already valid at this point, so rather than blocking submission
     // outright, open the "New Company?" popup to collect the missing piece —
@@ -783,13 +783,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               style={inputStyle}
             />
             {isPastDate && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>Please choose a future date.</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_future_date', 'form.err_future_date')}</p>
             )}
             {selectedDate && !isPastDate && isDateBlocked(selectedDate) && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.blocked_date')}</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_blocked', 'form.err_blocked')}</p>
             )}
             {selectedDate && !isPastDate && !isDateBlocked(selectedDate) && isDayClosed(selectedDate) && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.err_day_closed')}</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_day_closed', 'form.err_day_closed')}</p>
             )}
           </div>
           <div>
@@ -994,7 +994,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           <div className="rounded-lg border p-4" style={{ backgroundColor: STATUS.errorBg, borderColor: STATUS.errorBorder }}>
             <p className="text-sm font-medium" style={{ color: STATUS.errorText }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
             <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-              {t(locale, 'form.no_rate_detail', { n: guestCount })}
+              {mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount })}
             </p>
           </div>
         ) : (

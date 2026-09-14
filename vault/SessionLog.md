@@ -90,10 +90,40 @@ as covered by code review.
 
 Updated `Plan-OnSiteMessages.md` (Chunks 0–3 all ✅) and `FeatureLog.md` (#182 detail extended).
 
-**Next:** Chunk 4 — validation & server errors. This one has an open question flagged for Max
-before starting: these read more like system/operational errors than brand copy, so the call is
-whether to just translate them to Georgian, make them properly editable, or split (translate all,
-expose only the ones that read as guest-facing tone).
+**Chunk 4 — validation & server errors, same session, plan complete.** Max chose "translate +
+fully editable" over translate-only or a split — full consistency with Chunks 0–3.
+
+**Consolidated rather than mirrored 1:1**: several errors exist as a pair — a client-side
+first-pass check in `BookingForm.tsx` and `createBooking.ts`'s authoritative server-side re-check
+of the identical rule. Gave each pair one shared editable field instead of two that could drift
+out of sync (`onsite_err_blocked`, `onsite_err_day_closed`, `onsite_err_lead_time` with a
+`{hours}` token, `onsite_err_min_guests` with `{min}`, `onsite_no_rate_detail` with `{n}`).
+`onsite_err_future_date` covers three call sites at once. The generic catch-all reuses Chunk 1's
+`onsite_new_company_error` field outright. Net: 9 new editable fields, not ~13. Also confirmed
+`notifyNewCompany.ts`'s failure message was already dead/unreachable text — the UI always shows
+Chunk 1's error field regardless — so nothing needed there.
+
+**Built:** `mc()` in `BookingForm.tsx` gained the same `vars`-substitution Chunk 3 added to it.
+`createBooking.ts` now resolves `guestLocale` once at the top of the function (moved up so every
+early-return guard can use it, not just the happy path) and gained its own local `async mc()`
+helper backed by `getContent()`. New "Booking Validation & Server Errors" Messages-tab section,
+9 fields.
+
+**Verified live**: "Please select a date." (client, empty date submit) and the full happy path
+(valid booking still reaches the real Flitt checkout cleanly, confirming the `createBooking.ts`
+edits didn't break the no-error path). Admin panel shows all 9 fields with correct defaults and
+preserved `{token}` syntax. Not click-tested live: the individual-booking min-guest guard (the
+form auto-clamps guest count back up before submit, so there's no UI path to trigger it for that
+booking type) and the day-closed/working-hours/lead-time guards (no test data set up for blocked
+weekdays/narrow hours this session) — same already-proven `mc()` pattern, treated as covered by
+code review.
+
+Updated `Plan-OnSiteMessages.md` (all 5 chunks ✅, plan complete) and `FeatureLog.md` (#182 → ✅ Done).
+
+**Next:** nothing pending on this plan. Worth a follow-up session at some point: click-test the
+day-closed/working-hours/lead-time/min-guest guards live with purpose-built test data, and the
+dropdown-variant company popups (Chunks 1 and 3) on a tenant that doesn't have
+`hideCompanyDropdown` set.
 
 ---
 
