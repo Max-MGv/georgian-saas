@@ -13,6 +13,7 @@ import {
   DEFAULT_BOOKING_INTRO_UNPAID, DEFAULT_BOOKING_INTRO_UNPAID_KA,
   DEFAULT_BOOKING_INTRO_PENDING_COMPANY, DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA,
 } from '@/lib/emails/templates/bookingConfirmationTemplate'
+import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
@@ -339,17 +340,16 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       // fall through: checkout unavailable → reservation-only, email as today
     }
 
-    // Fetched unconditionally (not just under `if (data.email)`) because the
-    // winery notification below must fire even for phone-only bookings.
-    const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    })
     // The guest's actual chosen language for this request — same cookie the
     // checkout-language branch above already reads. No Order.locale column
     // exists (nothing persists it), so this only works for requests made
     // directly by a browser; settle.ts's webhook path can't do the same (see
     // its own comment) and falls back to the tenant's site-wide default.
     const guestLocale = (await cookies()).get('site_locale')?.value === 'ka' ? 'ka' : 'en'
+
+    // Fetched unconditionally (not just under `if (data.email)`) because the
+    // winery notification below must fire even for phone-only bookings.
+    const formattedDate = formatLongDate(new Date(data.date), guestLocale)
 
     const [wineryPhone, wineryEmail, wineryAddress, bookingIntroUnpaid, bookingIntroPendingCompany, tenant] = await Promise.all([
       getSetting('contact_phone'),
@@ -379,6 +379,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         theme: resolveTenantTheme(tenant?.theme ?? null),
         pendingNewCompany: isNewCompanyRequest,
         introText: isNewCompanyRequest ? bookingIntroPendingCompany : bookingIntroUnpaid,
+        locale: guestLocale,
       }).catch(err => console.error('Email send failed:', err))
     }
 

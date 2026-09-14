@@ -38,6 +38,82 @@ tags: [bugs]
 | 29 | `BugReportWidget` is not suppressed inside `/live` panes (`isEmbeddedPane()` covers the other demo components but not this one), so the flagship screen shows **two** floating red bug buttons; it also overlaps the tour's Next button, the feature rail's list and the mobile front door | Demo / Live mirror | 🟢 Resolved |
 | 31 | Company booking form had no way to submit a real booking without an access code — hard-blocked with an error (direct-code tenants) or looped on the browser's own "please select an item" prompt with no escape (dropdown tenants), even though the only alternative ("New Company?") discarded whatever booking details had already been entered | Public / Booking form | 🟢 Resolved |
 | 32 | `createBooking.ts` silently priced a `COMPANY` booking with no `companyId` using the *individuals* pricing table (per-person rate × guest count) instead of confirming the price manually, same as any other unpriced company booking | Public / Booking form | 🟢 Resolved |
+| 33 | Public booking submission crashed with a 500 (error digest `2710274906`) and the UI hung on "Submitting…" forever — no order was created. Same digest on the "New Company?" registration request path | Public / Booking form | 🟢 Resolved |
+| 34 | Admin Messages tab (Site Content → Messages) crashed with a 500 (error digest `3471338459`) on `/admin/wines`, `/admin/content`, `/admin/onboarding` | Admin / Site Content | 🟢 Resolved |
+| 35 | Booking Confirmation message edits in the admin Messages tab appeared not to persist reliably — text reverted to the default after a reload | Admin / Site Content | 🟢 Resolved (unconfirmed root cause) |
+| 36 | Booking Confirmation email's summary block (labels + the date value itself) stayed in English even with the Georgian toggle selected — `bookingConfirmationTemplate.ts` had no `locale` param at all | Admin / Site Content, Public / Booking form | 🟢 Resolved |
+| 37 | Invoice email date rendered as an invalid `MM.DD.YYYY` in Georgian (e.g. `09.14.2026` for 14 September) instead of the day-first format used everywhere else — `toLocaleDateString('ka-GE', ...)` silently falls back to an en-US field order on this Vercel deployment's ICU data | Admin / Site Content, Public / Invoice | 🟢 Resolved |
+
+---
+
+## Bugs #33–#37 — 2026-09-14 staging QA report on the Messages tab + real booking/invoice flow
+
+Found by Max driving the actual staging site end-to-end (real login, real booking submission, real
+invoice send) — not a code read. Report: full transcript given inline in that session.
+
+> 🟢 **#33 and #34 RESOLVED 2026-09-14.** Both looked, from the report alone, like they needed a
+> guess at a fix — `createBooking.ts`'s whole body is already wrapped in a catch-all that returns
+> `{success:false}`, so it structurally cannot itself surface a raw 500, and nothing in
+> `MessagesPanel.tsx` obviously throws for one specific variant. Guessing was skipped in favor of
+> pulling the real Vercel runtime-error clusters for the project (`get_runtime_errors`, 7-day
+> window) and matching the two reported digests directly — both resolved to real, unrelated causes
+> in under a minute of log reading:
+>
+> **#33 (digest `2710274906`, "the booking submission itself crashed"):**
+> `ReferenceError: NotifyNewCompanyData is not defined` at module evaluation of the `(site)/page`
+> server-actions bundle — meaning **every** server action reachable from the home/booking page
+> failed to even load, which is why both the plain booking submit and the "New Company?" popup
+> submit (different UI paths, same page, same actions bundle) crashed identically. Root cause:
+> `app/actions/notifyNewCompany.ts` (a `'use server'` file) had `export type { NotifyNewCompanyData }`
+> — re-exporting anything besides an async function from a Server Actions module is invalid in this
+> Next.js version, and the compiler left a dangling runtime reference to an identifier that should
+> have been erased as type-only. Nothing actually imported that re-export (`BookingForm.tsx` just
+> calls `notifyNewCompany()` with an inline object and lets TypeScript infer the type), so the fix
+> is a pure deletion — no behavior to preserve. Verified: `next build` no longer contains the string
+> `NotifyNewCompanyData` anywhere in the compiled server chunks (previously present, confirmed by
+> reproducing the same grep before removing the line).
+>
+> **#34 (digest `3471338459`, admin Messages-panel crash on `/admin/wines`, `/admin/content`,
+> `/admin/onboarding`):** nothing to do with the Messages tab's variant-switching logic at all —
+> `Error: Could not load the "sharp" module using the linux-x64 runtime: ERR_DLOPEN_FAILED:
+> libvips-cpp.so.8.18.3: cannot open shared object file`. `app/actions/uploadImage.ts` imports
+> `sharp` at module scope; its native `.node`/`.so` binaries (in separate `@img/sharp-<platform>`
+> packages, not inside `sharp` itself) weren't being picked up by Next's build-time file tracing for
+> routes that only reach `uploadImage.ts` transitively through the server-actions layer. Fixed with
+> the documented remedy (`node_modules/next/dist/docs/.../output.md`, "Common include patterns for
+> native/runtime assets"): `outputFileTracingIncludes: { '/*': ['node_modules/sharp/**/*',
+> 'node_modules/@img/**/*'] }` in `next.config.ts`. Verified by inspecting the actual `.nft.json`
+> trace files after a local `next build` — before this config, `admin/(panel)/content` and
+> `admin/(panel)/wines`'s traces did not reliably carry the platform binary directory; after, both
+> do (checked against the locally-installed `@img/sharp-win32-x64` — the same glob picks up whatever
+> `@img/sharp-linux-x64`/`@img/sharp-libvips-linux-x64` npm installs on Vercel's build).
+>
+> The report's own repro steps for #34 ("edit a message, then click New company request") were a
+> red herring — any of the three affected routes could trigger it depending on whether that
+> particular request happened to load the actions chunk fresh; it wasn't actually about the
+> variant. Worth remembering next time a repro looks oddly specific to one UI action: check whether
+> the *page*, not the *action*, is the common factor.
+>
+> **#35 (edits not persisting) could not be reproduced after the #33/#34 fixes** — edited the
+> Booking Confirmation textarea with a distinctive marker, blurred it, did a full hard reload, and
+> the edit was still there. Most likely explanation: bug #34's crash was corrupting the admin
+> panel's render/save cycle during the original testing session (every third-or-so page load
+> throwing a 500 would be very consistent with "edits I definitely blurred cleanly still reverted"),
+> not an independent bug. Marked resolved but flagged **unconfirmed** since the original broken
+> state was never directly reproduced to compare against — worth Max double-checking on staging
+> after the other fixes land, just in case there's a second cause hiding behind the first.
+>
+> **Not yet pushed to `staging`** — fixed and verified locally (`tsc --noEmit` clean, `next build`
+> clean, both root causes confirmed absent from the build output); pending Max's go-ahead per the
+> Rule 0 workflow, then a live staging re-check of both flows before merging to `master`.
+
+> 🟢 **#36 and #37 RESOLVED 2026-09-14.** See `SessionLog.md` 2026-09-14 (2) for the full detail —
+> `bookingConfirmationTemplate.ts` gained a `locale` param and label table (it had none at all,
+> unlike `invoiceEmailTemplate.ts`'s existing one), and both templates' date formatting moved off
+> `toLocaleDateString('ka-GE', ...)` (unreliable field order on this deployment's ICU data) onto a
+> new `lib/emails/templates/dateFormat.ts` that builds the string explicitly and can't drift by
+> runtime. Verified live on the local dev server against both locales; no regression to the English
+> side of either template.
 
 ---
 

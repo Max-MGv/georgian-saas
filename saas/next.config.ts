@@ -20,6 +20,17 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // `sharp` (app/actions/uploadImage.ts) is a native module — Next's build-time
+  // file tracing doesn't pick up its platform-specific .node/.so binaries
+  // automatically, which is exactly the deployed "Could not load the sharp
+  // module using the linux-x64 runtime — ERR_DLOPEN_FAILED: libvips-cpp.so"
+  // crash on every route whose server-action bundle includes uploadImage.ts
+  // (/admin/wines, /admin/content, /admin/onboarding). Documented fix, see
+  // node_modules/next/dist/docs/.../output.md "Common include patterns for
+  // native/runtime assets".
+  outputFileTracingIncludes: {
+    '/*': ['node_modules/sharp/**/*', 'node_modules/@img/**/*'],
+  },
 };
 
 export default nextConfig;

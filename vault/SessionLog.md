@@ -8,6 +8,89 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-14 (2) — Fixed all 5 bugs from the Messages/Invoice staging QA report
+
+Max shared a staging QA report (Feature 181's Messages tab + real booking/invoice
+flow, tested as tenant admin on `georgian-saas-git-staging-...vercel.app`) listing
+5 bugs. Triaged first: 2 had clear, mechanical fixes; 3 (the public booking-submission
+500, the admin Messages-panel crash on the "New company request" variant after an
+edit, and edits not reliably persisting) could not be diagnosed from code alone —
+`createBooking.ts`'s entire body is already wrapped in a catch-all that can't itself
+surface a raw 500, so the real cause is outside what static reading can find. Max
+chose to fix the 2 clear ones now and investigate the crashes separately next.
+
+**Fixed — Booking Confirmation summary block stayed English under the Georgian
+toggle:** `bookingConfirmationTemplate.ts` never took a `locale` param at all —
+"Booking Summary", "Visit type", "Date", "Time", "Guests", "Paid"/"Estimated total",
+the visit-type text, and the cancellation-policy footer were hardcoded English
+literals, unlike `invoiceEmailTemplate.ts`'s existing `LABELS` pattern next to it.
+Added the same `LABELS` shape + `locale?: 'en'|'ka'` field, threaded `locale`
+through all 3 call sites (`createBooking.ts`, `settle.ts`, `MessagesPanel.tsx`
+preview). Also fixed a second half of the same bug: the `date` value itself (not
+just its caption) was baked to English at the call site via
+`toLocaleDateString('en-GB', ...)` regardless of guest locale.
+
+**Fixed — Invoice date flips to an invalid `MM.DD.YYYY` in Georgian:** confirmed
+via a direct Node check that this Vercel deployment's `ka-GE` Intl data doesn't
+carry Georgian's real day-first field order — it silently falls back to an
+en-US-shaped MM/DD/YYYY order while still accepting the `ka-GE` tag, which is
+exactly the `09.14.2026` the report saw for 14 September. Local dev has full ICU
+and never showed it, which is why it passed here before. **Fix avoids the ICU
+dependency entirely**: new `lib/emails/templates/dateFormat.ts` builds both the
+long-form date (with an explicit Georgian weekday/month name table, no `toLocaleDateString('ka-GE', ...)`
+anywhere) and the short `DD.MM.YYYY`/`DD/MM/YYYY` date from `getDate()`/`getMonth()`/`getFullYear()`
+directly — deterministic regardless of the runtime's locale data.
+
+**Verified live** on the local dev server (Staging Winery, tenant admin login):
+Messages tab preview in Georgian now shows "ჯავშნის დეტალები" / "ვიზიტის ტიპი" /
+"თარიღი" / "დრო" / "სტუმრები" / "სავარაუდო ჯამი" and the Georgian cancellation
+paragraph, date renders as "შაბათი, 12 სექტემბერი, 2026"; Invoice Email preview
+shows "14.09.2026" in Georgian and "14/09/2026" in English (day-first, both) for
+the same 14 September sample date. English side unchanged in both templates —
+no regression. `tsc --noEmit` clean.
+
+**Then fixed the 2 crashes too, same session** — pulled the real Vercel runtime-error
+clusters (Vercel MCP `get_runtime_errors`, 7-day window) instead of guessing, and
+both digests resolved to real, unrelated causes in one read: **#33** (public booking
++ "New Company?" registration, digest `2710274906`) was `ReferenceError:
+NotifyNewCompanyData is not defined` at module evaluation — `notifyNewCompany.ts`
+(a `'use server'` file) illegally re-exported a type (`export type {
+NotifyNewCompanyData }`), which this Next.js version leaves as a dangling runtime
+reference instead of erasing; nothing used the re-export, so the fix was a
+one-line deletion. **#34** (admin Messages-panel crash, digest `3471338459`, on
+`/admin/wines`/`/admin/content`/`/admin/onboarding`) was `sharp`'s native
+`linux-x64` binary failing to load — `uploadImage.ts` imports `sharp` at module
+scope and Next's build-time file tracing wasn't picking up its platform binaries
+(`@img/sharp-*` packages) for routes that only reach it transitively through the
+server-actions layer. **The report's own repro steps for #34 were a red
+herring** — it read as "editing a message, then clicking a specific variant,"
+but the actual trigger was just which page's actions bundle loaded, unrelated to
+the Messages UI at all. Fixed with Next's own documented remedy
+(`outputFileTracingIncludes` in `next.config.ts`, found in
+`node_modules/next/dist/docs`). Full write-up: `KnownBugs.md` bugs #33/#34.
+
+**Verified** both fixes against an actual `next build` (not just dev mode, since
+this class of bug only shows up in the compiled server-action bundle): grepped
+the compiled chunks for `NotifyNewCompanyData` (absent, was present before the
+fix) and inspected the `.nft.json` trace files for `/admin/(panel)/content` and
+`/admin/(panel)/wines` to confirm `@img/sharp-*` is now included (previously
+inconsistent). `tsc --noEmit` and `next build` both clean.
+
+**Bug #35 (edits not persisting) checked separately** — could not reproduce it
+after the #33/#34 fixes: edited a message with a distinctive test marker,
+blurred it, did a full hard reload, and it was still there (cleaned up
+afterward, no test data left behind). Most likely was a symptom of #34's crash
+corrupting the render/save cycle during the original session rather than an
+independent bug, but flagged as **unconfirmed** in `KnownBugs.md` since the
+original broken state was never directly reproduced to compare against.
+
+**Not yet pushed to `staging`** for any of the 4 fixes — all fixed and verified
+locally, pending Max's go-ahead per the Rule 0 workflow, then a live staging
+re-check of the real booking flow, the New Company popup, and the admin Messages
+tab before merging to `master`.
+
+---
+
 ## 2026-09-14 — Automatic Messages folded into Content + Invoice goes bilingual (Feature 181 follow-up)
 
 Continuing straight on from yesterday's Automatic Messages page: Max asked about

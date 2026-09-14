@@ -1,4 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 /**
  * Pure HTML-building half of invoiceEmail.ts — see
@@ -109,9 +110,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   // literal hex here, a genuinely separate mechanism from the --site-* pipeline
   // the rest of the app uses.
   const th = data.theme ?? resolveTenantTheme(null)
-  const dateStr = locale === 'ka'
-    ? new Date(data.date).toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
-    : new Date(data.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const dateStr = formatShortDate(new Date(data.date), locale)
 
   const companyDisplay = data.companyName ?? `${data.name} ${data.surname}`
   const hasSplit = data.tastingGuestCount > 0 || data.lunchGuestCount > 0 || data.freeGuestCount > 0

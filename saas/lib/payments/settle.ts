@@ -10,6 +10,7 @@ import { sendWineOrderReceipt } from '@/lib/emails/wineOrderReceipt'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { DEFAULT_BOOKING_INTRO_PAID, DEFAULT_BOOKING_INTRO_PAID_KA } from '@/lib/emails/templates/bookingConfirmationTemplate'
 import { DEFAULT_WINE_RECEIPT_INTRO, DEFAULT_WINE_RECEIPT_INTRO_KA } from '@/lib/emails/templates/wineOrderReceiptTemplate'
+import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 
 /**
  * The single place a payment is marked settled.
@@ -193,9 +194,7 @@ async function sendSettlementEmail(
     const order = await withTenantDb(tenantId, tx => tx.order.findUnique({ where: { id: orderId } }))
     if (!order) return
 
-    const formattedDate = order.date.toLocaleDateString('en-GB', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    })
+    const formattedDate = formatLongDate(order.date, emailLocale)
 
     // No email on file is a legitimate state — phone-only bookings are
     // allowed (createBooking requires phone OR email) — but the winery
@@ -215,6 +214,7 @@ async function sendSettlementEmail(
         paid: true,
         introText: messages.email_booking_intro_paid
           ?? (emailLocale === 'ka' ? DEFAULT_BOOKING_INTRO_PAID_KA : DEFAULT_BOOKING_INTRO_PAID),
+        locale: emailLocale,
         ...common,
       })
     }

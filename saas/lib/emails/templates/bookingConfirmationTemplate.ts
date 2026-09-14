@@ -32,14 +32,37 @@ export const DEFAULT_BOOKING_INTRO_PAID_KA =
 export const DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA =
   'ძვირფასო {name},\n\nმადლობთ ჯავშნისა და კომპანიის რეგისტრაციის მოთხოვნისთვის. მოთხოვნა ჯერ არ არის დადასტურებული — რადგან თქვენი კომპანია ჯერ არ არის დარეგისტრირებული ჩვენს სისტემაში, განვიხილავთ თქვენს დეტალებს, შევქმნით ანგარიშს და მალე დაგიკავშირდებით ჯავშნისა და ფასის დასადასტურებლად.'
 
+type BookingEmailLocale = 'en' | 'ka'
+
+const LABELS: Record<BookingEmailLocale, {
+  summary: string; visitType: string; date: string; time: string; guests: string
+  paid: string; estimatedTotal: string; cancellationPolicy: string
+  tasting: string; tastingLunch: string
+}> = {
+  en: {
+    summary: 'Booking Summary', visitType: 'Visit type', date: 'Date', time: 'Time', guests: 'Guests',
+    paid: 'Paid', estimatedTotal: 'Estimated total',
+    cancellationPolicy: '48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.',
+    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch',
+  },
+  ka: {
+    summary: 'ჯავშნის დეტალები', visitType: 'ვიზიტის ტიპი', date: 'თარიღი', time: 'დრო', guests: 'სტუმრები',
+    paid: 'გადახდილია', estimatedTotal: 'სავარაუდო ჯამი',
+    cancellationPolicy: 'მოქმედებს გაუქმების 48-საათიანი პოლიტიკა. გთხოვთ, გვაცნობოთ სტუმრობამდე მინიმუმ 48 საათით ადრე, თუ გჭირდებათ გაუქმება ან გადატანა.',
+    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი',
+  },
+}
+
 export type BookingEmailData = {
   name: string
   surname: string
-  date: string        // e.g. "Saturday, 24 May 2026"
+  date: string        // e.g. "Saturday, 24 May 2026" — pre-formatted by the caller, see lib/emails/templates/dateFormat.ts
   timeSlot: string    // e.g. "14:00"
   guestCount: number
   visitType: 'TASTING' | 'TASTING_LUNCH'
   totalPrice: number
+  /** Which language to render this send in. Defaults to 'en'. */
+  locale?: BookingEmailLocale
   wineryName?: string
   wineryAddress?: string
   wineryPhone?: string
@@ -76,7 +99,9 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
   // literal hex here, a genuinely separate mechanism from the --site-* pipeline
   // the rest of the app uses.
   const th = data.theme ?? resolveTenantTheme(null)
-  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : 'Wine Tasting + Lunch'
+  const locale = data.locale ?? 'en'
+  const L = LABELS[locale]
+  const visitLabel = data.visitType === 'TASTING' ? L.tasting : L.tastingLunch
   const winery = data.wineryName || ''
   const address = data.wineryAddress || ''
   const phone = data.wineryPhone || ''
@@ -117,26 +142,26 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
         </p>
 
         <div style="background-color: ${th.bg}; border-radius: 8px; padding: 20px 24px; margin: 0 0 24px;">
-          <p style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: ${th.secondary}; margin: 0 0 14px;">Booking Summary</p>
+          <p style="font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: ${th.secondary}; margin: 0 0 14px;">${L.summary}</p>
           <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <tr>
-              <td style="color: ${th.muted}; padding: 5px 0;">Visit type</td>
+              <td style="color: ${th.muted}; padding: 5px 0;">${L.visitType}</td>
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${visitLabel}</td>
             </tr>
             <tr>
-              <td style="color: ${th.muted}; padding: 5px 0;">Date</td>
+              <td style="color: ${th.muted}; padding: 5px 0;">${L.date}</td>
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${data.date}</td>
             </tr>
             <tr>
-              <td style="color: ${th.muted}; padding: 5px 0;">Time</td>
+              <td style="color: ${th.muted}; padding: 5px 0;">${L.time}</td>
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${data.timeSlot}</td>
             </tr>
             <tr>
-              <td style="color: ${th.muted}; padding: 5px 0;">Guests</td>
+              <td style="color: ${th.muted}; padding: 5px 0;">${L.guests}</td>
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${data.guestCount}</td>
             </tr>
             <tr style="border-top: 1px solid ${th.border};">
-              <td style="color: ${th.muted}; padding: 10px 0 5px;">${data.paid ? 'Paid' : 'Estimated total'}</td>
+              <td style="color: ${th.muted}; padding: 10px 0 5px;">${data.paid ? L.paid : L.estimatedTotal}</td>
               <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${data.totalPrice}₾</td>
             </tr>
           </table>
@@ -146,7 +171,7 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
 
         <div style="border-top: 1px solid ${th.border}; padding-top: 16px; ${contactLines ? '' : 'margin-top: 24px;'}">
           <p style="font-size: 12px; color: ${th.secondary}; margin: 0; line-height: 1.6;">
-            48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.
+            ${L.cancellationPolicy}
           </p>
         </div>
 

@@ -19,6 +19,7 @@ import {
 } from '@/lib/emails/templates/invoiceEmailTemplate'
 import { renderNewBookingNotificationEmail } from '@/lib/emails/templates/newBookingNotificationTemplate'
 import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCompanyTemplate'
+import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -51,7 +52,7 @@ type Props = {
 }
 
 // Fictitious data for every preview below — never a real booking or customer.
-const SAMPLE_DATE = 'Saturday, 12 September 2026'
+const SAMPLE_DATE_RAW = new Date(2026, 8, 12) // Saturday, 12 September 2026
 const SAMPLE_TIME = '14:00'
 const SAMPLE_GUEST = { name: 'Ana', surname: 'Beridze', email: 'ana.beridze@example.com', phone: '+995 555 12 34 56' }
 const SAMPLE_COMPANY = 'Beridze LLC'
@@ -172,11 +173,12 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
 
   const bookingKey = BOOKING_KEY_BY_VARIANT[variant]
   const bookingValue = drafts[bookingKey]
+  const sampleDate = formatLongDate(SAMPLE_DATE_RAW, locale)
 
   const bookingPreview = renderBookingConfirmationEmail({
     name: SAMPLE_GUEST.name,
     surname: SAMPLE_GUEST.surname,
-    date: SAMPLE_DATE,
+    date: sampleDate,
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
@@ -189,6 +191,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     paid: variant === 'paid',
     pendingNewCompany: variant === 'pendingCompany',
     introText: bookingValue,
+    locale,
   })
 
   const wineReceiptPreview = renderWineOrderReceiptEmail({
@@ -242,7 +245,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     guestSurname: SAMPLE_GUEST.surname,
     guestEmail: SAMPLE_GUEST.email,
     guestPhone: SAMPLE_GUEST.phone,
-    date: SAMPLE_DATE,
+    date: sampleDate,
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
