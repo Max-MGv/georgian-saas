@@ -227,6 +227,10 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_payment_failed_body: c.onsite_payment_failed_body ?? t(locale, 'payment.failed_body'),
     onsite_payment_pending_heading: c.onsite_payment_pending_heading ?? t(locale, 'payment.pending_heading'),
     onsite_payment_pending_body: c.onsite_payment_pending_body ?? t(locale, 'payment.pending_body'),
+    onsite_access_code_title: c.onsite_access_code_title ?? t(locale, 'form.access_code_title'),
+    onsite_access_code_intro: c.onsite_access_code_intro ?? t(locale, 'form.access_code_intro'),
+    onsite_access_code_error: c.onsite_access_code_error ?? t(locale, 'form.access_code_error'),
+    onsite_access_code_direct_not_recognised: c.onsite_access_code_direct_not_recognised ?? t(locale, 'form.access_code_direct_not_recognised'),
   })
 
   function setDraft(key: string, value: string) {
@@ -527,6 +531,24 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsitePayment.pendingHeading')} draftKey="onsite_payment_pending_heading"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsitePayment.pendingBody')} draftKey="onsite_payment_pending_body" multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+        </Section>
+
+        <Section
+          title={at('messages.onsiteAccessCode.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteAccessCode.trigger')}
+          open={open.has('onsiteAccessCode')}
+          onToggle={() => toggle('onsiteAccessCode')}
+        >
+          <EditField label={at('messages.onsiteAccessCode.titleField')} draftKey="onsite_access_code_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteAccessCode.intro')} draftKey="onsite_access_code_intro"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteAccessCode.error')} draftKey="onsite_access_code_error"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteAccessCode.directNotRecognised')} draftKey="onsite_access_code_direct_not_recognised"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
 

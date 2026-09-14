@@ -60,6 +60,12 @@ const en: Translations = {
   'messages.onsitePayment.failedBody': 'Payment failed — message',
   'messages.onsitePayment.pendingHeading': 'Still checking — heading',
   'messages.onsitePayment.pendingBody': 'Still checking — message',
+  'messages.onsiteAccessCode.title': 'Company Access-Code Popup',
+  'messages.onsiteAccessCode.trigger': 'Shown when a guest picks a company from the dropdown that needs an access code. Field placeholder and buttons are fixed and not shown here.',
+  'messages.onsiteAccessCode.titleField': 'Popup title',
+  'messages.onsiteAccessCode.intro': 'Intro line — {company} is replaced with the company\'s name',
+  'messages.onsiteAccessCode.error': 'Incorrect-code error',
+  'messages.onsiteAccessCode.directNotRecognised': '"Code not recognised" error (direct-entry sites)',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
   // view of the reports this logged-in admin personally submitted.
@@ -1153,6 +1159,12 @@ const ka: Translations = {
   'messages.onsitePayment.failedBody': 'გადახდა ვერ შესრულდა — შეტყობინება',
   'messages.onsitePayment.pendingHeading': 'მოწმდება — სათაური',
   'messages.onsitePayment.pendingBody': 'მოწმდება — შეტყობინება',
+  'messages.onsiteAccessCode.title': 'კომპანიის კოდის ფანჯარა',
+  'messages.onsiteAccessCode.trigger': 'ჩნდება, როცა სტუმარი ირჩევს ჩამონათვალიდან კომპანიას, რომელსაც სჭირდება წვდომის კოდი. ველის ველისმაგვარი ტექსტი და ღილაკები ფიქსირებულია და აქ არ ჩანს.',
+  'messages.onsiteAccessCode.titleField': 'ფანჯრის სათაური',
+  'messages.onsiteAccessCode.intro': 'შესავალი ტექსტი — {company} ჩანაცვლდება კომპანიის სახელით',
+  'messages.onsiteAccessCode.error': 'არასწორი კოდის შეცდომა',
+  'messages.onsiteAccessCode.directNotRecognised': '„კოდი ვერ მოიძებნა" შეცდომა (პირდაპირი შეყვანის საიტებზე)',
 
   // My Reports page
   'myReports.pageTitle': 'ჩემი შეტყობინებები',

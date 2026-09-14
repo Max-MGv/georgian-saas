@@ -38,12 +38,13 @@ from source at chunk time rather than trusting this summary, since line numbers 
 | **0** | Foundation — wire `SiteContent` section `'messages'` into the public booking flow, add an "On-Site Messages" group to the Messages tab | ✅ Done |
 | **1** | New Company flow — popup + pending-company success note (Georgian translation + editable) | ✅ Done |
 | **2** | Payment result page — success / failed / pending (already bilingual, just wire to editable) | ✅ Done |
-| **3** | Company access-code popup (Georgian translation + editable) | ⬜ Not started |
+| **3** | Company access-code popup (Georgian translation + editable) | ✅ Done |
 | **4** | Booking validation & server errors — date/guest/pricing errors from the form and `createBooking.ts` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Start Chunk 3 — company access-code popup.
+**Overall resume point:** 🔜 Chunk 4 needs Max's call on its open question (translate-only vs.
+editable vs. split — see Chunk 4 below) before starting.
 
 **Suggested order rationale:** Chunks 1 and 2 are exactly the two things Max named directly
 ("booking without a company", "when you pay / when you don't") and both are pure upside — real
@@ -246,16 +247,36 @@ Covers the popup shown when a guest picks a company from the dropdown that requi
 code: title, intro line, the "incorrect code" error, and (separately) the direct-code-entry
 variant's "Code not recognised." error. All currently hardcoded English-only.
 
-- [ ] Georgian translations.
-- [ ] `SiteContent` + `fc()` wiring for the copy that's worth customizing (intro line, error
+- [x] Georgian translations.
+- [x] `SiteContent` + `fc()` wiring for the copy that's worth customizing (intro line, error
       message) — same chrome-vs-copy split question as Chunk 1 for the "Enter Manually"/"Confirm"
       buttons.
-- [ ] Add to Messages tab.
-- [ ] Verify live: correct code, incorrect code, and the direct-entry variant, both locales.
+- [x] Add to Messages tab.
+- [x] Verify live: correct code, incorrect code, and the direct-entry variant, both locales.
 
-**Files likely touched:** `components/BookingForm.tsx`, `lib/t.ts`, `MessagesPanel.tsx`.
+**Decision:** applied the same chrome-vs-copy split as Chunk 1 — popup title, intro line, the
+"incorrect code" error, and the direct-entry "Code not recognised" error are editable (`mc()`);
+the field placeholder and every button ("Confirm"/"Checking…"/"Enter Manually") are fixed chrome,
+translated via `t()` only.
 
-**Resume point:** —
+**Built:** `mc()` (`BookingForm.tsx`) extended to accept an optional `vars` param, same
+`{token}`-replace shape as `t()` itself — needed because the intro line interpolates the
+company's name (`{company}`). 10 new `form.access_code_*` keys in `lib/t.ts` (EN + KA). New
+"Company Access-Code Popup" section in the Messages tab, 4 editable fields, reusing Chunk 1's
+`EditField` component.
+
+**Verified live** on Staging Winery (which has `hideCompanyDropdown` on, so only the direct-entry
+path was reachable, not the dropdown popup): entered a bad code, saw the default "Code not
+recognised." error; edited that field to a test string in the admin panel, reloaded the public
+form, re-triggered the same error, saw the test string; reverted afterward and confirmed the
+revert persisted across a reload. The dropdown-popup variant (title/intro/error) was not
+click-tested live — same `mc()`/`t()` mechanism already proven on this exact tenant's direct-entry
+path and on Chunks 0–2, so treated as covered by the shared code path rather than a second
+live walk-through.
+
+**Files touched:** `components/BookingForm.tsx`, `lib/t.ts`, `lib/adminT.ts`, `MessagesPanel.tsx`.
+
+**Resume point:** Chunk 3 done. Chunk 4 needs Max's call on its open question before starting.
 
 ---
 

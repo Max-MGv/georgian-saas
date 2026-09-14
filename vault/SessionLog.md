@@ -73,9 +73,27 @@ markup worth rendering.
 live gateway round trip needed, the page only reads the query param), got correct EN defaults;
 edited the success heading via the admin panel, confirmed it on the live result page, reverted.
 
-Updated `Plan-OnSiteMessages.md` (Chunks 0–2 all ✅) and `FeatureLog.md` (#182 detail extended).
+**Chunk 3 — company access-code popup, same session.** Applied the same chrome-vs-copy split
+Max already approved for Chunk 1: popup title, intro line, and both "wrong code" errors (the
+dropdown popup's and the direct-entry variant's) are editable; the field placeholder and every
+button are fixed chrome, translated only. Extended `mc()` to accept an optional `vars` param
+(same `{token}`-replace shape `t()` already has) since the intro line interpolates the company's
+name. 10 new `form.access_code_*` keys in `lib/t.ts`, new "Company Access-Code Popup" Messages-tab
+section with 4 fields, reusing Chunk 1's `EditField` component.
 
-**Next:** Chunk 3 — company access-code popup (Georgian translation + editable).
+**Verified live** on Staging Winery (only the direct-entry path is reachable there,
+`hideCompanyDropdown` is on): triggered the default "Code not recognised." error with a bad code,
+edited it to a test string via the admin panel, re-triggered on the public form and saw the test
+string, reverted and confirmed the revert persisted across a reload. The dropdown-popup variant
+wasn't click-tested live on this tenant — same already-proven `mc()`/`t()` mechanism, so treated
+as covered by code review.
+
+Updated `Plan-OnSiteMessages.md` (Chunks 0–3 all ✅) and `FeatureLog.md` (#182 detail extended).
+
+**Next:** Chunk 4 — validation & server errors. This one has an open question flagged for Max
+before starting: these read more like system/operational errors than brand copy, so the call is
+whether to just translate them to Georgian, make them properly editable, or split (translate all,
+expose only the ones that read as guest-facing tone).
 
 ---
 

@@ -95,7 +95,11 @@ const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: f
 
 export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '' }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
-  const mc = (key: string, tKey: string) => messagesContent[key] || t(locale, tKey)
+  const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
+    let str = messagesContent[key] || t(locale, tKey)
+    if (vars) for (const [k, v] of Object.entries(vars)) str = str.replaceAll(`{${k}}`, String(v))
+    return str
+  }
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
@@ -237,7 +241,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     const result = await verifyCompanyCode(companyId, codeInput)
     setCodeLoading(false)
     if ('error' in result) {
-      setCodeError('Incorrect code — please try again or contact the winery.')
+      setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
@@ -266,7 +270,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     const result = await findCompanyByCode(directCode, 'BOOKING')
     setDirectCodeLoading(false)
     if ('error' in result) {
-      setDirectCodeError('Code not recognised.')
+      setDirectCodeError(mc('onsite_access_code_direct_not_recognised', 'form.access_code_direct_not_recognised'))
       return
     }
     setCompanyId(result.company.id)
@@ -522,9 +526,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}
           >
             <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{mc('onsite_access_code_title', 'form.access_code_title')}</h3>
               <p className="text-sm" style={{ color: C.muted }}>
-                {companies.find(c => c.id === companyId)?.name} — enter the access code provided by the winery.
+                {mc('onsite_access_code_intro', 'form.access_code_intro', { company: companies.find(c => c.id === companyId)?.name ?? '' })}
               </p>
             </div>
 
@@ -546,7 +550,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 autoComplete="current-password"
                 value={codeInput}
                 onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
-                placeholder="e.g. MARANI42"
+                placeholder={t(locale, 'form.access_code_placeholder')}
                 className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
                 style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
               />
@@ -576,7 +580,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
               style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
             >
-              {codeLoading ? 'Checking…' : 'Confirm'}
+              {codeLoading ? t(locale, 'form.access_code_checking') : t(locale, 'form.access_code_confirm')}
             </button>
 
             <button
@@ -585,7 +589,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50"
               style={{ color: C.muted, borderColor: C.border }}
             >
-              Enter Manually
+              {t(locale, 'form.access_code_enter_manually')}
             </button>
           </form>
         </div>
@@ -692,7 +696,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Enter your company code"
+                    placeholder={t(locale, 'form.access_code_direct_placeholder')}
                     value={directCode}
                     onChange={e => { setDirectCode(e.target.value.toUpperCase()); setDirectCodeError('') }}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleDirectCodeSubmit() } }}
@@ -706,7 +710,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white flex-shrink-0 transition-opacity"
                     style={{ backgroundColor: 'var(--color-brand)', opacity: (directCodeLoading || !directCode.trim()) ? 0.6 : 1 }}
                   >
-                    {directCodeLoading ? '…' : 'Confirm'}
+                    {directCodeLoading ? '…' : t(locale, 'form.access_code_confirm')}
                   </button>
                 </div>
               )}

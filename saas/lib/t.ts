@@ -136,6 +136,20 @@ const en: Translations = {
   'form.new_company_chip': 'New Company?',
   'form.new_company_dropdown_option': '+ New Company',
 
+  // Company access-code popup (Chunk 3). Title/intro/error are admin-editable
+  // via SiteContent (mc()); placeholder + buttons are fixed chrome (t() only).
+  'form.access_code_title': 'Enter your company code',
+  'form.access_code_intro': '{company} — enter the access code provided by the winery.',
+  'form.access_code_error': 'Incorrect code — please try again or contact the winery.',
+  'form.access_code_placeholder': 'e.g. MARANI42',
+  'form.access_code_checking': 'Checking…',
+  'form.access_code_confirm': 'Confirm',
+  'form.access_code_enter_manually': 'Enter Manually',
+  // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
+  // not a popup, but shares the same "wrong code" concept.
+  'form.access_code_direct_placeholder': 'Enter your company code',
+  'form.access_code_direct_not_recognised': 'Code not recognised.',
+
   // Online payment result page
   'payment.success_heading': 'Payment received',
   'payment.success_body': 'Thank you — your payment went through and your booking is confirmed. A confirmation has been sent to you.',
@@ -301,6 +315,16 @@ const ka: Translations = {
   'form.new_company_cancel': 'გაუქმება',
   'form.new_company_chip': 'ახალი კომპანია?',
   'form.new_company_dropdown_option': '+ ახალი კომპანია',
+
+  'form.access_code_title': 'შეიყვანეთ კომპანიის კოდი',
+  'form.access_code_intro': '{company} — შეიყვანეთ მარნის მიერ მოწოდებული წვდომის კოდი.',
+  'form.access_code_error': 'არასწორი კოდი — გთხოვთ სცადოთ ხელახლა ან დაუკავშირდით მარანს.',
+  'form.access_code_placeholder': 'მაგ.: MARANI42',
+  'form.access_code_checking': 'მოწმდება…',
+  'form.access_code_confirm': 'დადასტურება',
+  'form.access_code_enter_manually': 'ხელით შეყვანა',
+  'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
+  'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',
