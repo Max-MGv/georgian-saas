@@ -289,19 +289,24 @@ Decisions:
 
 ## Chunk 3 — Server actions
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 2.
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] `createGuide(companyId, data)` / `updateGuide` / `deleteGuide` / `regenerateGuideCode` in
-  (new or existing) `saas/app/actions/companies.ts`, mirroring today's
-  `createCompany`/`regenerateAccessCode`/`setAccessCode` shape
-- [ ] Same set for representatives
-- [ ] New or extended code-verification action(s) — replace/extend `verifyCompanyCode` and
-  `findCompanyByCode` per the Chunk 1 answer on shared vs. separate code namespaces; must return
-  enough to know *which entity type* matched (guide vs. rep) so the booking form knows which
-  autofill fields to populate
-- [ ] All new actions wrapped in `withTenantDb`, scoped through the parent Company's `tenantId`
-  the same way `Price`-touching code already does
+- [x] `saas/app/actions/companyGuides.ts` — `createGuide` / `updateGuide` / `deleteGuide` /
+  `regenerateGuideCode` / `setGuideCode`, mirroring `createCompany`/`regenerateAccessCode`/
+  `setAccessCode`'s shape, plus the same 5 for representatives
+  (`createRepresentative`/etc.) in the same file
+- [x] `companies.ts` gained `generateUniqueTenantCode`/`codeExistsInTenant` (both async, so they
+  can be exported from a `'use server'` file per [[MaintenanceNotes]] #24 — `generateCode` itself
+  stays private/sync) — the shared per-tenant collision check used by every code-generating
+  action across Company/Guide/Representative
+- [x] `verifyBookingCode(companyId, code)` added to `companies.ts` for Chunk 5: tries the
+  company's guides first (returns `matchType: 'guide'`, guide's own name/phone as the profile),
+  falls back to legacy `Company.accessCode` (`matchType: 'company'`) only when the company has
+  zero guides. `verifyCompanyCode`/`findCompanyByCode` untouched — wine orders still use them
+  directly (Chunk 6 out of scope)
+- [x] All new actions wrapped in `withTenantDb`, re-verify the parent Company's `tenantId` before
+  touching a guide/rep row, same defense-in-depth pattern as `prices.ts`
+- [x] `npx tsc --noEmit` clean
 
 **Resume point:** —
 
