@@ -119,7 +119,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       ...(params.status ? { status: params.status as OrderStatus } : {}),
     },
     include: {
-      company: true,
+      company: { include: { representatives: true } },
       masterclassLines: { include: { masterclassItem: true } },
       extras: true,
     },
@@ -229,7 +229,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             hotDishVegetable: o.hotDishVegetable,
             hotDishMeat: o.hotDishMeat,
             foodNotes: o.foodNotes,
-            company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
+            company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode, representatives: o.company.representatives } : null,
             requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(l => ({
               name: l.masterclassItem.name,

@@ -196,17 +196,17 @@ Two more pieces of existing behavior worth carrying into the decision:
 | **6** | Wine order form — same code-resolution change | ⬜ Not started (out of scope per Chunk 1) |
 | **7** | Order record — remember which guide/rep was used | ✅ Done |
 | **8** | Print/ops surface — booking sheet shows the guide's phone | ✅ Done (no code change needed) |
-| **9** | Emails — new-company notification, invoice recipient | ⬜ Not started |
+| **9** | Emails — new-company notification, invoice recipient | ✅ Done |
 | **10** | Demo seed + onboarding — fabricate guides/reps so the demo/onboarding paths don't break | ⬜ Not started |
 | **11** | Tests — update existing `accessCode` assertions, add coverage for the new lookup | ⬜ Not started |
 | **12** | Vault + RLS checklist close-out | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 1-5, 7-8 done and pushed to `staging`. Remaining: Chunk 6 (wine
-orders — confirmed out of scope, may need explicit re-confirmation with Max), Chunk 9 (emails),
-Chunk 10 (demo seed + onboarding), Chunk 11 (tests), Chunk 12 (vault + RLS close-out + the
-staging → master merge, which needs Max's go-ahead per Rule 0).
+**Overall resume point:** Chunks 1-5, 7-9 done and pushed to `staging`. Remaining: Chunk 6 (wine
+orders — confirmed out of scope, may need explicit re-confirmation with Max), Chunk 10 (demo seed
++ onboarding), Chunk 11 (tests), Chunk 12 (vault + RLS close-out + the staging → master merge,
+which needs Max's go-ahead per Rule 0).
 
 ---
 
@@ -421,16 +421,30 @@ Decisions:
 
 ## Chunk 9 — Emails
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 3.
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] `notifyNewCompanyTemplate.ts` (internal "new company requested" email) — review whether it
-  needs to mention guides/reps at all, or stays company-level
-- [ ] Invoice send flow (`OrdersTable.tsx`'s "Send Invoice by Email" modal → `invoiceEmail.ts`) —
-  if a **Representative**'s email should become the default/suggested recipient instead of a
-  manually-typed address, wire that up here
-- [ ] Confirm no email template needs a DB call added directly (per [[MaintenanceNotes]] #23 —
-  templates in `lib/emails/templates/` must stay pure; any new lookup happens in the wrapper)
+- [x] `notifyNewCompanyTemplate.ts` reviewed — **left unchanged, deliberately**. This email fires
+  when a company doesn't exist yet (the "New Company?" flow, Feature 180); there is no company
+  row to have guides/reps on at that point, so nothing to mention.
+- [x] Invoice send flow: read the actual code first, which corrected two of this plan's original
+  assumptions — the "To" field was never a manually-typed address, and `Company.contactEmail` was
+  never consulted at all; `sendOrderInvoice()` (`orders.ts`) hardcoded `order.email` (the guest's
+  own address from the booking form) with no alternative, erroring outright when it was empty.
+  Now: `invoiceRecipientOptions()` (`OrdersTable.tsx`) builds a candidate list from
+  `order.email` (labelled "Guest") plus every Representative on the order's company with an
+  email set; a company order with Representatives shows a dropdown instead of plain text when
+  there's more than one candidate, defaulting to the order's own email when present. New optional
+  4th param on `sendOrderInvoice(orderId, message, locale, recipientEmail?)` re-validates a
+  client-sent recipient is actually one of that order's company's representatives (or the order's
+  own email) before using it — never trusts the client-picked address outright.
+  `orders/page.tsx`'s query and prop-mapping extended to include `company.representatives`.
+- [x] Confirmed no email template needed a DB call added — the new lookup (representatives) lives
+  in `OrdersTable.tsx`/`orders.ts`, never inside `lib/emails/templates/*.ts`, per
+  [[MaintenanceNotes]] #23
+- [x] `tsc --noEmit` + `next build` clean; verified live in dev — added a Representative to a
+  company with existing orders, opened Send Invoice on one of those orders, confirmed the "To"
+  dropdown listed both "Guest — {order email}" and "{rep name} — {rep email}"; closed without
+  sending (no real email dispatched), then deleted the test representative
 
 **Resume point:** —
 

@@ -235,7 +235,11 @@ export async function createOrderAdmin(data: {
 export async function sendOrderInvoice(
   orderId: string,
   customMessage: string,
-  locale: 'en' | 'ka' = 'ka'
+  locale: 'en' | 'ka' = 'ka',
+  // Lets the admin pick a company Representative's email as the recipient instead of the
+  // order's own (Plan-CompanyGuidesAndReps Chunk 9) — falls back to order.email when omitted.
+  // Re-checked against the order's own company's representatives below, not trusted as-is.
+  recipientEmail?: string
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -244,7 +248,7 @@ export async function sendOrderInvoice(
       tx.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
-          company: true,
+          company: { include: { representatives: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
         },
@@ -252,7 +256,13 @@ export async function sendOrderInvoice(
     )
 
     if (!order) return { error: 'Order not found.' }
-    if (!order.email) return { error: 'This order has no email address.' }
+    let recipient = order.email
+    if (recipientEmail && recipientEmail !== order.email) {
+      const validRep = order.company?.representatives.some(r => r.email === recipientEmail)
+      if (!validRep) return { error: 'That recipient is not valid for this order.' }
+      recipient = recipientEmail
+    }
+    if (!recipient) return { error: 'This order has no email address.' }
 
     const [recipientName, personalNumber, bankName, bankCode, iban, wineryAddress, wineryEmail, tenant] = await Promise.all([
       getSetting('payment_recipient_name'),
@@ -269,7 +279,7 @@ export async function sendOrderInvoice(
       tenantId,
       name: order.name,
       surname: order.surname,
-      email: order.email,
+      email: recipient,
       date: order.date,
       timeSlot: order.timeSlot,
       visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',

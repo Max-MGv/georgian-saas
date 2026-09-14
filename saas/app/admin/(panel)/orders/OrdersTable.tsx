@@ -73,7 +73,7 @@ type Order = {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  company: { name: string; identificationCode: string | null } | null
+  company: { name: string; identificationCode: string | null; representatives: { id: string; name: string; email: string | null }[] } | null
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
@@ -191,6 +191,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [sendLocale, setSendLocale] = useState<'en' | 'ka'>('ka')
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
+  // Which address to actually send to (Plan-CompanyGuidesAndReps Chunk 9) — defaults to the
+  // order's own email, but a company booking can pick one of its Representatives instead.
+  const [recipientEmail, setRecipientEmail] = useState('')
 
   // Edit form state
   const [editDate, setEditDate] = useState('')
@@ -235,11 +238,21 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   }
 
+  function invoiceRecipientOptions(order: Order): { label: string; email: string }[] {
+    const options: { label: string; email: string }[] = []
+    if (order.email) options.push({ label: at('orders.emailModal.guestEmail'), email: order.email })
+    for (const rep of order.company?.representatives ?? []) {
+      if (rep.email) options.push({ label: rep.name, email: rep.email })
+    }
+    return options
+  }
+
   function openEmail(order: Order) {
     setEmailOrder(order)
     setSendLocale('ka')
     setEmailMessage(defaultEmailMessageKa)
     setEmailStatus(null)
+    setRecipientEmail(invoiceRecipientOptions(order)[0]?.email ?? '')
   }
 
   function changeSendLocale(next: 'en' | 'ka') {
@@ -255,7 +268,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     if (!emailOrder) return
     setEmailSending(true)
     setEmailStatus(null)
-    const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale)
+    const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale, recipientEmail || undefined)
     setEmailSending(false)
     if ('error' in result) {
       setEmailStatus('error')
@@ -833,12 +846,27 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {emailOrder.name} {emailOrder.surname} · {formatDate(emailOrder.date)} {emailOrder.timeSlot}
               </p>
 
-              {emailOrder.email ? (
+              {invoiceRecipientOptions(emailOrder).length > 0 ? (
                 <>
-                  {/* To field + validation */}
+                  {/* To field + validation. A company order with Representatives configured
+                      can send to one of them instead of the guest's own email
+                      (Plan-CompanyGuidesAndReps Chunk 9). */}
                   <p className="text-xs mb-0.5" style={{ color: C.faint }}>{at('orders.emailModal.to')}</p>
-                  <p className="text-sm mb-1 font-mono" style={{ color: C.text }}>{emailOrder.email}</p>
-                  {!isValidEmail(emailOrder.email) ? (
+                  {invoiceRecipientOptions(emailOrder).length > 1 ? (
+                    <select
+                      value={recipientEmail}
+                      onChange={e => setRecipientEmail(e.target.value)}
+                      className="text-sm mb-1 font-mono w-full rounded-lg border px-2 py-1.5"
+                      style={{ borderColor: C.border, color: C.text, backgroundColor: 'var(--site-surface)' }}
+                    >
+                      {invoiceRecipientOptions(emailOrder).map(opt => (
+                        <option key={opt.email} value={opt.email}>{opt.label} — {opt.email}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm mb-1 font-mono" style={{ color: C.text }}>{recipientEmail}</p>
+                  )}
+                  {!isValidEmail(recipientEmail) ? (
                     <div className="flex items-center gap-1.5 rounded-lg px-3 py-2 mb-3 text-xs" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
                       {at('orders.emailModal.invalidEmail')}
                     </div>
@@ -895,7 +923,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <div className="flex gap-3">
                     <button
                       onClick={handleSendEmail}
-                      disabled={emailSending || emailStatus === 'sent' || !isValidEmail(emailOrder.email)}
+                      disabled={emailSending || emailStatus === 'sent' || !isValidEmail(recipientEmail)}
                       className="btn-wine flex-1 py-2 rounded-lg text-sm font-medium"
                     >
                       {emailSending ? at('orders.emailModal.sending') : emailStatus === 'sent' ? at('orders.emailModal.sent') : at('orders.emailModal.sendInvoice')}
