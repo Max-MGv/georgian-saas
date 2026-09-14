@@ -81,6 +81,36 @@ model Company {
   orders              Order[]
   wineOrders          WineOrder[]
   prices              Price[]
+  guides              CompanyGuide[]
+  representatives     CompanyRepresentative[]
+}
+
+// Person who can be contacted during the actual dinner/booking (Plan-CompanyGuidesAndReps).
+// Same code mechanism as Company.accessCode, but identifies a specific person, not just the
+// company. No own tenantId — RLS is JOIN-to-Company, same shape as Price.
+model CompanyGuide {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String?
+  code      String
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+// Person invoices get sent to. Picked manually by an admin at invoice-send time — never typed
+// into a public form, never stored on an Order (Chunk 1 decision). Same JOIN-to-Company RLS
+// shape as CompanyGuide/Price.
+model CompanyRepresentative {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  phone     String?
+  code      String
+  createdAt DateTime @default(now())
 }
 
 model Order {
@@ -113,6 +143,11 @@ model Order {
   // used for pricing or access-code lookups. See Feature 180.
   requestedCompanyName String?
   company           Company?           @relation(fields: [companyId], references: [id])
+  // Which guide's code matched at booking time — the phone-during-dinner case needs a
+  // specific order to remember which person, not just which company (Plan-CompanyGuidesAndReps
+  // Chunk 1). Representatives are not tracked per-order; see that plan for why.
+  guideId           String?
+  guide             CompanyGuide?      @relation(fields: [guideId], references: [id])
   createdAt         DateTime           @default(now())
   masterclassLines  OrderMasterclass[]
   extras            OrderExtra[]
