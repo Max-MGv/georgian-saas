@@ -23,6 +23,8 @@ export default async function CompaniesPage() {
       include: {
         _count: { select: { orders: true } },
         prices: { orderBy: { minGuests: 'asc' } },
+        guides: { orderBy: { createdAt: 'asc' } },
+        representatives: { orderBy: { createdAt: 'asc' } },
       },
     })
   )
@@ -60,6 +62,8 @@ export default async function CompaniesPage() {
           accessCode: c.accessCode,
           orderCount: c._count.orders,
           prices: c.prices,
+          guides: c.guides,
+          representatives: c.representatives,
         }))}
       />
     </div>

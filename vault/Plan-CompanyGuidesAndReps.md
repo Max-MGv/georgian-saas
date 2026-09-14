@@ -314,16 +314,24 @@ Decisions:
 
 ## Chunk 4 — Admin: Edit Company panel
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 3.
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] `CompaniesClient.tsx` edit panel gains two new sub-sections: **Guides** and
-  **Representatives**, each an addable/removable list (mirroring the existing Price-tier rows
-  pattern already in that panel)
-- [ ] Each row: name, the role-specific contact field(s) (guide: phone; rep: email, maybe phone),
-  code display + regenerate/set controls (reusing the existing access-code UI pattern —
-  show/hide, copy, Regenerate button)
-- [ ] Wire to the Chunk 3 actions; revalidate `/admin/companies` on every mutation
+- [x] `CompaniesClient.tsx` edit panel gains two new sub-sections: **Guides** and
+  **Representatives** (`GuidesSection`/`RepresentativesSection`), each an addable/removable list,
+  same visual language as the existing Price-tier rows
+- [x] Each row: name, role-specific field(s) (guide: phone; rep: email + phone), a compact
+  `PersonCodeField` (show/hide, copy, regenerate — same interaction as the company-level code
+  field, sized for a list row)
+- [x] Wired to the Chunk 3 actions; `companies/page.tsx` now includes `guides`/`representatives`
+  in its query; guide/rep edits update local panel state live (not a full-page reload like the
+  Price-tier "add" flow) and propagate into the parent's `companies` list immediately so
+  reopening the panel later in the same session isn't stale
+- [x] New `companies.people.*` label keys added to `lib/adminT.ts`, EN + KA
+- [x] `npx tsc --noEmit` and `npm run build` both clean
+- [x] Verified live in the browser (dev server, dev DB, Nikalas Marani/Staging tenant): opened
+  Edit Company, added a guide (name + phone, code auto-generated and masked, Show/Copy/Regenerate
+  all work), added a representative (name + email, same code controls), deleted both — test rows
+  removed, no leftover data
 
 **Resume point:** —
 
