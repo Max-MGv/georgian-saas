@@ -44,6 +44,14 @@ const en: Translations = {
   'messages.group.onsite': 'On-Site Messages',
   'messages.onsitePendingCompany.title': 'Pending Company Note',
   'messages.onsitePendingCompany.trigger': 'Shown on the booking page right after a customer submits a booking for a company that isn\'t set up in your system yet.',
+  'messages.onsiteNewCompany.title': 'New Company Popup',
+  'messages.onsiteNewCompany.trigger': 'Shown when a guest picks a company that isn\'t set up in your system yet, or asks to register a new one. Buttons and field labels are fixed and not shown here.',
+  'messages.onsiteNewCompany.titleField': 'Popup title',
+  'messages.onsiteNewCompany.bodyWithBooking': 'Body text — when a booking is attached',
+  'messages.onsiteNewCompany.bodyNoBooking': 'Body text — when no booking is attached',
+  'messages.onsiteNewCompany.successTitle': 'Success heading',
+  'messages.onsiteNewCompany.successBody': 'Success message',
+  'messages.onsiteNewCompany.errorText': 'Error message',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
   // view of the reports this logged-in admin personally submitted.
@@ -1121,6 +1129,14 @@ const ka: Translations = {
   'messages.group.onsite': 'საიტზე გამოსახული შეტყობინებები',
   'messages.onsitePendingCompany.title': 'მოლოდინში მყოფი კომპანიის შეტყობინება',
   'messages.onsitePendingCompany.trigger': 'ჩნდება ჯავშნის გვერდზე მომხმარებლის მიერ ჯავშნის გაგზავნისთანავე, თუ მისი კომპანია ჯერ არ არის რეგისტრირებული თქვენს სისტემაში.',
+  'messages.onsiteNewCompany.title': 'ახალი კომპანიის ფანჯარა',
+  'messages.onsiteNewCompany.trigger': 'ჩნდება, როცა სტუმარი ირჩევს კომპანიას, რომელიც ჯერ არ არის რეგისტრირებული თქვენს სისტემაში, ან ითხოვს ახალი კომპანიის რეგისტრაციას. ღილაკები და ველების ლეიბლები ფიქსირებულია და აქ არ ჩანს.',
+  'messages.onsiteNewCompany.titleField': 'ფანჯრის სათაური',
+  'messages.onsiteNewCompany.bodyWithBooking': 'ტექსტი — როცა ჯავშანი თან ერთვის',
+  'messages.onsiteNewCompany.bodyNoBooking': 'ტექსტი — როცა ჯავშანი არ ერთვის',
+  'messages.onsiteNewCompany.successTitle': 'წარმატების სათაური',
+  'messages.onsiteNewCompany.successBody': 'წარმატების შეტყობინება',
+  'messages.onsiteNewCompany.errorText': 'შეცდომის შეტყობინება',
 
   // My Reports page
   'myReports.pageTitle': 'ჩემი შეტყობინებები',

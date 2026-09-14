@@ -36,15 +36,14 @@ from source at chunk time rather than trusting this summary, since line numbers 
 | Chunk | What | Status |
 |---|---|---|
 | **0** | Foundation — wire `SiteContent` section `'messages'` into the public booking flow, add an "On-Site Messages" group to the Messages tab | ✅ Done |
-| **1** | New Company flow — popup + pending-company success note (Georgian translation + editable) | 🚧 In progress (pending-company note done as Chunk 0's proof field) |
+| **1** | New Company flow — popup + pending-company success note (Georgian translation + editable) | ✅ Done |
 | **2** | Payment result page — success / failed / pending (already bilingual, just wire to editable) | ⬜ Not started |
 | **3** | Company access-code popup (Georgian translation + editable) | ⬜ Not started |
 | **4** | Booking validation & server errors — date/guest/pricing errors from the form and `createBooking.ts` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Continue Chunk 1 — New Company popup (title/body/success/error) and the
-button chrome-vs-editable question are still open. The pending-company success note itself is done.
+**Overall resume point:** 🔜 Start Chunk 2 — payment result page (success/failed/pending).
 
 **Suggested order rationale:** Chunks 1 and 2 are exactly the two things Max named directly
 ("booking without a company", "when you pay / when you don't") and both are pure upside — real
@@ -153,19 +152,54 @@ Covers everything shown when a guest without a registered company books (Feature
   editable too. Recommend chrome-only (not editable) to match how `fc()` is already scoped
   elsewhere — buttons aren't customized, body copy is.
 
-- [ ] Write Georgian translations for every string in scope, checked against existing `form.*`
+- [x] Write Georgian translations for every string in scope, checked against existing `form.*`
       KA tone in `lib/t.ts`.
-- [ ] Add `SiteContent` keys + `fc()` wiring for the editable copy (per the chrome/copy split
+- [x] Add `SiteContent` keys + `fc()` wiring for the editable copy (per the chrome/copy split
       above).
-- [ ] Add the fields to the Messages tab's new "On-Site Messages" group with live preview
+- [x] Add the fields to the Messages tab's new "On-Site Messages" group with live preview
       (mirroring the popup's actual look, or a simplified text-only preview — decide at build
       time based on effort).
-- [ ] Verify live: trigger both the dropdown "+ New Company" path and the direct-code-entry path,
+- [x] Verify live: trigger both the dropdown "+ New Company" path and the direct-code-entry path,
       in both EN and KA site locale.
 
-**Files likely touched:** `components/BookingForm.tsx`, `lib/t.ts`, `MessagesPanel.tsx`.
+**Decision (Max, 2026-09-14):** button labels are fixed chrome — translated via `t()`, not made
+admin-editable. Matches how `fc()` is scoped everywhere else on the form.
 
-**Resume point:** —
+**Built:**
+- `lib/t.ts`: 17 new `form.new_company_*` keys, EN + KA — title, both body variants, success
+  title/body, error, the 4 field placeholders, the 4 button labels, plus 2 keys for the small
+  "New Company?" entry chip (shown above the company dropdown/code field) and the dropdown's
+  "+ New Company" option — found untranslated while verifying in Georgian and fixed in the same
+  pass since they're the entry point into this exact flow (not explicitly named in the original
+  chunk scope, but clearly the same flow).
+- `components/BookingForm.tsx`: popup title/both bodies/success title+body/error now read through
+  `mc()` (editable); placeholders, buttons, and the two entry chips + dropdown option read through
+  `t()` (fixed chrome, translated only).
+- `lib/adminT.ts` + `MessagesPanel.tsx`: new "New Company Popup" section (6 editable fields — title,
+  both body variants, success title, success body, error). Added a shared top-level `EditField`
+  component to avoid repeating the label+input+save-on-blur boilerplate 6 times — **kept outside**
+  `MessagesPanel`'s function body deliberately: a component defined inside another component's
+  render is a new type every render, which would have remounted it (and dropped input focus) on
+  every keystroke.
+
+**Verified live** on Staging Winery, local dev, both locales:
+- EN: the booking-attached variant (Tour Company → fill form → wrong code → popup opens pre-filled
+  → submit) — success screen showed the real booking confirmation (already verified in Chunk 0).
+- KA: switched `site_locale` cookie to `ka`, opened the popup via the entry chip (now correctly
+  translated), confirmed title/body/placeholders/buttons all rendered in Georgian, submitted the
+  no-booking-attached variant and got the Georgian success state ("მოთხოვნა მიღებულია!" /
+  "ჩვენ დაგიკავშირდებით..." / "დახურვა").
+- Admin Messages tab: all 6 fields render correct EN and KA defaults, section appears under the
+  "On-Site Messages" group.
+
+Not verified: the dropdown-variant entry point (Staging Winery has `hideCompanyDropdown` on, so
+only the direct-code-entry UI is reachable here) — the `+ New Company` option's translation uses
+the identical `t()` pattern already proven elsewhere, so treated as covered by code review rather
+than a live click-through.
+
+**Files touched:** `components/BookingForm.tsx`, `lib/t.ts`, `lib/adminT.ts`, `MessagesPanel.tsx`.
+
+**Resume point:** Chunk 1 done. Move to Chunk 2: payment result page.
 
 ---
 

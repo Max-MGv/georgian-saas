@@ -597,52 +597,52 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
             style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
             <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{mc('onsite_new_company_title', 'form.new_company_title')}</h3>
               <p className="text-sm" style={{ color: C.muted }}>
                 {newCompanyIncludesBooking
-                  ? "Fill in your company details — we'll submit your booking along with a request to set up your account. Your booking won't be confirmed until we do."
-                  : "Fill in your details and we'll get in touch to set up your account."}
+                  ? mc('onsite_new_company_body_with_booking', 'form.new_company_body_with_booking')
+                  : mc('onsite_new_company_body_no_booking', 'form.new_company_body_no_booking')}
               </p>
             </div>
             {newCoStatus === 'sent' ? (
               <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: STATUS.successText }}>Request received!</p>
-                <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
+                <p className="font-medium" style={{ color: STATUS.successText }}>{mc('onsite_new_company_success_title', 'form.new_company_success_title')}</p>
+                <p className="text-sm mt-1" style={{ color: C.muted }}>{mc('onsite_new_company_success_body', 'form.new_company_success_body')}</p>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
                   style={{ borderColor: C.border, color: C.text }}>
-                  Close
+                  {t(locale, 'form.new_company_close')}
                 </button>
               </div>
             ) : (
               <>
-                <input type="text" placeholder="Company Name *" value={newCoName}
+                <input type="text" placeholder={t(locale, 'form.new_company_name_placeholder')} value={newCoName}
                   onChange={e => setNewCoName(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="text" placeholder="Your Name *" value={newCoContact}
+                <input type="text" placeholder={t(locale, 'form.new_company_contact_placeholder')} value={newCoContact}
                   onChange={e => setNewCoContact(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="tel" placeholder="Phone Number *" value={newCoPhone}
+                <input type="tel" placeholder={t(locale, 'form.new_company_phone_placeholder')} value={newCoPhone}
                   onChange={e => setNewCoPhone(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="email" placeholder="Email (optional)" value={newCoEmail}
+                <input type="email" placeholder={t(locale, 'form.new_company_email_placeholder')} value={newCoEmail}
                   onChange={e => setNewCoEmail(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
                 {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: STATUS.errorText }}>Something went wrong. Please try again.</p>
+                  <p className="text-xs" style={{ color: STATUS.errorText }}>{mc('onsite_new_company_error', 'form.new_company_error')}</p>
                 )}
                 <button type="button" onClick={handleNewCompanySubmit}
                   disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
                   className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
                   style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
                   {newCoStatus === 'submitting'
-                    ? 'Sending…'
-                    : newCompanyIncludesBooking ? 'Send Booking & Request' : 'Send Request'}
+                    ? t(locale, 'form.new_company_sending')
+                    : newCompanyIncludesBooking ? t(locale, 'form.new_company_send_with_booking') : t(locale, 'form.new_company_send_request')}
                 </button>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="w-full py-2 rounded-lg text-xs font-medium border text-center"
                   style={{ color: C.muted, borderColor: C.border }}>
-                  Cancel
+                  {t(locale, 'form.new_company_cancel')}
                 </button>
               </>
             )}
@@ -675,7 +675,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
                 style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
               >
-                New Company?
+                {t(locale, 'form.new_company_chip')}
               </button>
               {directCompanyName ? (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
@@ -724,7 +724,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
                   style={{ color: 'var(--color-brand)' }}
                 >
-                  New Company?
+                  {t(locale, 'form.new_company_chip')}
                 </button>
               </div>
               <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
@@ -737,7 +737,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     the "New Company?" popup for it instead of forwarding it to the
                     server. Never sent to createBooking() as a companyId — stripped in
                     buildBookingPayload(). */}
-                <option value="__new__">+ New Company</option>
+                <option value="__new__">{t(locale, 'form.new_company_dropdown_option')}</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>

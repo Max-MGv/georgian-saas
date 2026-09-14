@@ -115,6 +115,27 @@ const en: Translations = {
   'form.guest_count_over_max_notice': 'Groups over {max} guests will be confirmed with you directly.',
   'form.onsite_pending_company_note': "Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.",
 
+  // New Company popup (Feature: On-Site Messages, Chunk 1). Body/success/error
+  // text is admin-editable via SiteContent; these are the code fallbacks.
+  // Field placeholders and buttons are fixed chrome (translated, not editable).
+  'form.new_company_title': 'New Company?',
+  'form.new_company_body_with_booking': "Fill in your company details — we'll submit your booking along with a request to set up your account. Your booking won't be confirmed until we do.",
+  'form.new_company_body_no_booking': "Fill in your details and we'll get in touch to set up your account.",
+  'form.new_company_success_title': 'Request received!',
+  'form.new_company_success_body': "We'll be in touch to set up your account.",
+  'form.new_company_error': 'Something went wrong. Please try again.',
+  'form.new_company_name_placeholder': 'Company Name *',
+  'form.new_company_contact_placeholder': 'Your Name *',
+  'form.new_company_phone_placeholder': 'Phone Number *',
+  'form.new_company_email_placeholder': 'Email (optional)',
+  'form.new_company_send_with_booking': 'Send Booking & Request',
+  'form.new_company_send_request': 'Send Request',
+  'form.new_company_sending': 'Sending…',
+  'form.new_company_close': 'Close',
+  'form.new_company_cancel': 'Cancel',
+  'form.new_company_chip': 'New Company?',
+  'form.new_company_dropdown_option': '+ New Company',
+
   // Online payment result page
   'payment.success_heading': 'Payment received',
   'payment.success_body': 'Thank you — your payment went through and your booking is confirmed. A confirmation has been sent to you.',
@@ -262,6 +283,24 @@ const ka: Translations = {
   'form.guest_count_adjusted': 'ჩვენ შეგვიძლია მივიღოთ მაქსიმუმ {max} სტუმარი ამ ვიზიტისთვის — თქვენი ჯავშანი შესწორდა {max} სტუმარზე.',
   'form.guest_count_over_max_notice': '{max}-ზე მეტი სტუმრის ჯგუფები დადასტურდება პირდაპირ თქვენთან.',
   'form.onsite_pending_company_note': 'რადგან თქვენი კომპანია ჯერ არ არის რეგისტრირებული ჩვენს სისტემაში, ეს ჯავშანი ჯერ არ არის დადასტურებული — ჩვენ შევქმნით თქვენს ანგარიშს და დაგიკავშირდებით ჯავშნისა და ფასის დასადასტურებლად.',
+
+  'form.new_company_title': 'ახალი კომპანია?',
+  'form.new_company_body_with_booking': 'შეავსეთ კომპანიის დეტალები — ჩვენ გავაგზავნით თქვენს ჯავშანს ანგარიშის შექმნის მოთხოვნასთან ერთად. თქვენი ჯავშანი დადასტურებული არ იქნება მანამ, სანამ ამას არ გავაკეთებთ.',
+  'form.new_company_body_no_booking': 'შეავსეთ თქვენი მონაცემები და ჩვენ დაგიკავშირდებით ანგარიშის შესაქმნელად.',
+  'form.new_company_success_title': 'მოთხოვნა მიღებულია!',
+  'form.new_company_success_body': 'ჩვენ დაგიკავშირდებით თქვენი ანგარიშის შესაქმნელად.',
+  'form.new_company_error': 'დაფიქსირდა შეცდომა. გთხოვთ სცადოთ ხელახლა.',
+  'form.new_company_name_placeholder': 'კომპანიის დასახელება *',
+  'form.new_company_contact_placeholder': 'თქვენი სახელი *',
+  'form.new_company_phone_placeholder': 'ტელეფონის ნომერი *',
+  'form.new_company_email_placeholder': 'ელ-ფოსტა (არასავალდებულო)',
+  'form.new_company_send_with_booking': 'ჯავშნისა და მოთხოვნის გაგზავნა',
+  'form.new_company_send_request': 'მოთხოვნის გაგზავნა',
+  'form.new_company_sending': 'იგზავნება…',
+  'form.new_company_close': 'დახურვა',
+  'form.new_company_cancel': 'გაუქმება',
+  'form.new_company_chip': 'ახალი კომპანია?',
+  'form.new_company_dropdown_option': '+ ახალი კომპანია',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',

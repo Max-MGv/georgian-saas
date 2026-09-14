@@ -35,12 +35,37 @@ test string appeared verbatim on the "Booking received!" success screen. Reverte
 default afterward. Note for next time: the browser tool's simulated `ctrl+a`/`Delete` didn't reach
 the textarea to clear it — `form_input` (sets the value directly) worked where that didn't.
 
-Updated `Plan-OnSiteMessages.md` (Chunk 0 ✅, Chunk 1 🚧 — pending-company note already done as the
-proof field) and `FeatureLog.md` (new row #182, 🚧 In progress).
+**Chunk 1 — New Company popup, same session.** Asked Max the flagged open question (editable
+buttons vs. fixed chrome) — he chose fixed chrome, matching how `fc()` is scoped elsewhere.
 
-**Next:** Chunk 1 — the New Company popup itself (title, both body variants, success state, error
-state) and the open question on whether its buttons should be editable or fixed chrome (plan
-recommends fixed, matching how `fc()` is scoped elsewhere).
+**Built:** 17 new `form.new_company_*` keys in `lib/t.ts` (EN + KA) — popup title, both body
+variants, success title/body, error, field placeholders, and button labels. Editable content
+(title/bodies/success/error) reads through the new `mc()` helper; placeholders and buttons read
+through plain `t()` as fixed chrome. New "New Company Popup" section in the Messages tab with 6
+editable fields, built on a new shared `EditField` component — **deliberately kept as a top-level
+function, not nested inside `MessagesPanel`**, since a component defined inside another
+component's render body is a new type every render and would remount (dropping input focus) on
+every keystroke.
+
+**Caught mid-verification:** switching the public site to Georgian to test the popup revealed the
+small "New Company?" entry chip (shown above the company dropdown/code field, two places) and the
+dropdown's "+ New Company" option were *still* hardcoded English — not explicitly named in the
+plan's chunk scope, but obviously the same flow, so translated them in the same pass
+(`form.new_company_chip`, `form.new_company_dropdown_option`).
+
+**Verified live**, both locales, Staging Winery on local dev: EN booking-attached variant (already
+covered by Chunk 0's test); KA no-booking variant — switched `site_locale` cookie to `ka`, opened
+the popup via the now-translated entry chip, confirmed every string (title, both bodies,
+placeholders, buttons, success state "მოთხოვნა მიღებულია!") rendered in Georgian, and admin
+Messages tab shows correct EN/KA defaults for all 6 fields. Not verified: the dropdown-variant
+entry point specifically — Staging Winery has `hideCompanyDropdown` on, so only the direct-entry
+UI is reachable there; that one line uses the identical already-proven `t()` pattern.
+
+Updated `Plan-OnSiteMessages.md` (Chunks 0 + 1 both ✅) and `FeatureLog.md` (#182 still 🚧, detail
+extended).
+
+**Next:** Chunk 2 — payment result page (success/failed/pending states, already bilingual via
+existing `payment.*` `t()` keys, just needs exposing as editable).
 
 ---
 

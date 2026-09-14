@@ -143,6 +143,55 @@ function bookingDefault(variant: BookingVariant, locale: 'en' | 'ka'): string {
   return locale === 'ka' ? DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA : DEFAULT_BOOKING_INTRO_PENDING_COMPANY
 }
 
+// Shared editable-field renderer for the small, plain (non-email) On-Site
+// Messages fields — a single label + input/textarea + save-on-blur, no
+// preview. Avoids repeating the boilerplate per field (used 6x for the New
+// Company popup below). Top-level, not nested in MessagesPanel — a component
+// defined inside another component's body is a new type every render, which
+// would remount this (and drop input focus) on every keystroke.
+function EditField({
+  label, draftKey, multiline, inputStyle, savedKey, savedLabel, setDraft, save, drafts,
+}: {
+  label: string
+  draftKey: string
+  multiline?: boolean
+  inputStyle: React.CSSProperties
+  savedKey: string | null
+  savedLabel: string
+  setDraft: (key: string, value: string) => void
+  save: (key: string, label: string, value: string) => void
+  drafts: Record<string, string>
+}) {
+  const value = drafts[draftKey]
+  return (
+    <div className="mb-4">
+      <label className="text-sm block mb-2" style={{ color: C.muted }}>{label}</label>
+      <div className="flex items-start gap-2">
+        {multiline ? (
+          <textarea
+            rows={3}
+            style={{ ...inputStyle, resize: 'vertical' }}
+            value={value}
+            onChange={e => setDraft(draftKey, e.target.value)}
+            onBlur={() => save(draftKey, label, value)}
+          />
+        ) : (
+          <input
+            type="text"
+            style={inputStyle}
+            value={value}
+            onChange={e => setDraft(draftKey, e.target.value)}
+            onBlur={() => save(draftKey, label, value)}
+          />
+        )}
+        {savedKey === draftKey && (
+          <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {savedLabel}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function MessagesPanel({ c, locale, adminLocale, winery, theme }: Props) {
   const at = (key: string) => adminT(adminLocale, key)
 
@@ -166,6 +215,12 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     email_wine_receipt_intro: c.email_wine_receipt_intro ?? (locale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
     email_invoice_message: c.email_invoice_message ?? (locale === 'ka' ? DEFAULT_INVOICE_MESSAGE_KA : DEFAULT_INVOICE_MESSAGE_EN),
     onsite_pending_company_note: c.onsite_pending_company_note ?? t(locale, 'form.onsite_pending_company_note'),
+    onsite_new_company_title: c.onsite_new_company_title ?? t(locale, 'form.new_company_title'),
+    onsite_new_company_body_with_booking: c.onsite_new_company_body_with_booking ?? t(locale, 'form.new_company_body_with_booking'),
+    onsite_new_company_body_no_booking: c.onsite_new_company_body_no_booking ?? t(locale, 'form.new_company_body_no_booking'),
+    onsite_new_company_success_title: c.onsite_new_company_success_title ?? t(locale, 'form.new_company_success_title'),
+    onsite_new_company_success_body: c.onsite_new_company_success_body ?? t(locale, 'form.new_company_success_body'),
+    onsite_new_company_error: c.onsite_new_company_error ?? t(locale, 'form.new_company_error'),
   })
 
   function setDraft(key: string, value: string) {
@@ -423,6 +478,28 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsiteNewCompany.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteNewCompany.trigger')}
+          open={open.has('onsiteNewCompany')}
+          onToggle={() => toggle('onsiteNewCompany')}
+        >
+          <EditField label={at('messages.onsiteNewCompany.titleField')} draftKey="onsite_new_company_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteNewCompany.bodyWithBooking')} draftKey="onsite_new_company_body_with_booking" multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteNewCompany.bodyNoBooking')} draftKey="onsite_new_company_body_no_booking" multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteNewCompany.successTitle')} draftKey="onsite_new_company_success_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteNewCompany.successBody')} draftKey="onsite_new_company_success_body"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteNewCompany.errorText')} draftKey="onsite_new_company_error"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
 
       </div>
