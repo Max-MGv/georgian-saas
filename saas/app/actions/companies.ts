@@ -229,6 +229,64 @@ export async function verifyBookingCode(companyId: string, code: string) {
   }
 }
 
+// Direct-code-entry booking form variant (Feature 113/114, `hideCompanyDropdown`) — the visitor
+// types a code with no company chosen first, so this searches every booking-enabled company's
+// guides in the tenant before falling back to `findCompanyByCode`'s existing Company.accessCode
+// search. Mirrors verifyBookingCode's guide-first/company-fallback shape from the other entry
+// point (Plan-CompanyGuidesAndReps Chunk 5).
+type BookingCodeMatch = {
+  success: true
+  matchType: 'guide' | 'company'
+  guideId: string | null
+  company: {
+    id: string
+    name: string
+    contactName: string | null
+    contactPhone: string | null
+    contactEmail: string | null
+    identificationCode: string | null
+    address: string | null
+    wineDiscountPercent: number | null
+  }
+}
+
+export async function findBookingCodeByCode(code: string): Promise<BookingCodeMatch | { error: string }> {
+  if (!code.trim()) return { error: 'Code not recognised.' as const }
+  const tenantId = await getTenantId()
+  const trimmed = code.trim().toUpperCase()
+
+  const guide = await withTenantDb(tenantId, tx =>
+    tx.companyGuide.findFirst({
+      where: { code: trimmed, company: { tenantId, isBookingCompany: true, isIndividual: false } },
+      select: {
+        id: true, name: true, phone: true,
+        company: { select: { id: true, name: true, contactEmail: true, identificationCode: true, address: true, wineDiscountPercent: true } },
+      },
+    })
+  )
+  if (guide) {
+    return {
+      success: true as const,
+      matchType: 'guide' as const,
+      guideId: guide.id,
+      company: {
+        id: guide.company.id,
+        name: guide.company.name,
+        contactName: guide.name,
+        contactPhone: guide.phone,
+        contactEmail: guide.company.contactEmail,
+        identificationCode: guide.company.identificationCode,
+        address: guide.company.address,
+        wineDiscountPercent: guide.company.wineDiscountPercent,
+      },
+    }
+  }
+
+  const result = await findCompanyByCode(code, 'BOOKING')
+  if ('error' in result) return result
+  return { success: true as const, matchType: 'company' as const, guideId: null, company: result.company }
+}
+
 export async function ensureIndividualsCompany(tenantId: string) {
   const existing = await withTenantDb(tenantId, tx =>
     tx.company.findFirst({ where: { tenantId, isIndividual: true } })
@@ -239,7 +297,10 @@ export async function ensureIndividualsCompany(tenantId: string) {
   )
 }
 
-export async function findCompanyByCode(code: string, module: 'BOOKING' | 'WINE_ORDER') {
+export async function findCompanyByCode(code: string, module: 'BOOKING' | 'WINE_ORDER'): Promise<
+  | { error: string }
+  | { success: true; company: { id: string; name: string; contactName: string | null; contactPhone: string | null; contactEmail: string | null; identificationCode: string | null; address: string | null; wineDiscountPercent: number | null } }
+> {
   if (!code.trim()) return { error: 'Code not recognised.' as const }
   const tenantId = await getTenantId()
   const company = await withTenantDb(tenantId, tx =>

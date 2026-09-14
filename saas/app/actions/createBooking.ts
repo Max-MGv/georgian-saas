@@ -24,6 +24,11 @@ import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMe
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   companyId?: string
+  // Which of the company's guides matched the code entered on the form (Plan-CompanyGuidesAndReps
+  // Chunk 5/7) — lets the admin panel know exactly who was contacted, even if the guest then
+  // edits the autofilled phone/name away from the guide's own. Ignored unless companyId is set
+  // and the guide actually belongs to that company (re-checked server-side below).
+  guideId?: string
   visitType: 'TASTING' | 'TASTING_LUNCH'
   date: string
   timeSlot: string
@@ -250,10 +255,18 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         ? (pricePerPerson ?? 0) * guestCount
         : 0
 
+    let verifiedGuideId: string | null = null
     if (data.bookingType === 'COMPANY' && data.companyId) {
       const company = await withTenantDb(tenantId, tx =>
         tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
       )
+
+      if (data.guideId) {
+        const guide = await withTenantDb(tenantId, tx =>
+          tx.companyGuide.findFirst({ where: { id: data.guideId, companyId: data.companyId } })
+        )
+        if (guide) verifiedGuideId = guide.id
+      }
 
       if (company?.prices.length) {
         const payingGuests = isEnhanced
@@ -302,6 +315,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         totalPrice,
         tenantId,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
+        guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
         masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
           create: (data.masterclassLines ?? []).map(l => ({
             masterclassItemId: l.masterclassItemId,

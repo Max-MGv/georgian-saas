@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
-import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
+import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
@@ -113,6 +113,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [guestInput, setGuestInput] = useState('4')
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
+  // Which guide's code matched, if any (Plan-CompanyGuidesAndReps Chunk 5/7) — flows through
+  // buildBookingPayload() into createBooking() so the order remembers who was contacted.
+  const [matchedGuideId, setMatchedGuideId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -242,6 +245,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!companyId || bookingType !== 'COMPANY' || hideCompanyDropdown) return
     const company = companies.find(c => c.id === companyId)
     if (!company) return
+    setMatchedGuideId(null)
     if (!company.accessCode) {
       applyProfile({ contactName: company.contactName, contactPhone: company.contactPhone, contactEmail: company.contactEmail })
       return
@@ -266,7 +270,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!codeInput.trim()) return
     setCodeLoading(true)
     setCodeError('')
-    const result = await verifyCompanyCode(companyId, codeInput)
+    const result = await verifyBookingCode(companyId, codeInput)
     setCodeLoading(false)
     if ('error' in result) {
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
@@ -281,6 +285,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         await navigator.credentials.store(cred)
       } catch {}
     }
+    setMatchedGuideId(result.guideId)
     applyProfile(result.profile)
     setShowCodePopup(false)
   }
@@ -288,6 +293,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
+    setMatchedGuideId(null)
     setBookingType('INDIVIDUAL')
   }
 
@@ -295,7 +301,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!directCode.trim()) return
     setDirectCodeLoading(true)
     setDirectCodeError('')
-    const result = await findCompanyByCode(directCode, 'BOOKING')
+    const result = await findBookingCodeByCode(directCode)
     setDirectCodeLoading(false)
     if ('error' in result) {
       setDirectCodeError(mc('onsite_access_code_direct_not_recognised', 'form.access_code_direct_not_recognised'))
@@ -303,6 +309,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
+    setMatchedGuideId(result.guideId)
     applyProfile({ contactName: result.company.contactName, contactPhone: result.company.contactPhone, contactEmail: result.company.contactEmail })
   }
 
@@ -311,6 +318,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCompanyName('')
     setDirectCode('')
     setDirectCodeError('')
+    setMatchedGuideId(null)
     setFirstName(''); setLastName(''); setPhone(''); setEmail('')
   }
 
@@ -367,6 +375,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
+      guideId: bookingType === 'COMPANY' && matchedGuideId ? matchedGuideId : undefined,
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,

@@ -188,14 +188,14 @@ Two more pieces of existing behavior worth carrying into the decision:
 
 | Chunk | What | Status |
 |---|---|---|
-| **1** | Data model decisions — lock the open questions before any code | ⬜ Not started |
-| **2** | Schema + migration (dev DB) | ⬜ Not started |
-| **3** | Server actions — CRUD + code verification for Guides/Reps | ⬜ Not started |
-| **4** | Admin: Edit Company panel — Guides & Representatives sub-lists | ⬜ Not started |
-| **5** | Booking form — code popup resolves to a guide/rep, not just a company | ⬜ Not started |
-| **6** | Wine order form — same code-resolution change | ⬜ Not started |
-| **7** | Order record — remember which guide/rep was used | ⬜ Not started |
-| **8** | Print/ops surface — booking sheet shows the guide's phone | ⬜ Not started |
+| **1** | Data model decisions — lock the open questions before any code | ✅ Done |
+| **2** | Schema + migration (dev DB) | ✅ Done |
+| **3** | Server actions — CRUD + code verification for Guides/Reps | ✅ Done |
+| **4** | Admin: Edit Company panel — Guides & Representatives sub-lists | ✅ Done |
+| **5** | Booking form — code popup resolves to a guide/rep, not just a company | ✅ Done |
+| **6** | Wine order form — same code-resolution change | ⬜ Not started (out of scope per Chunk 1) |
+| **7** | Order record — remember which guide/rep was used | ✅ Done |
+| **8** | Print/ops surface — booking sheet shows the guide's phone | ✅ Done (no code change needed) |
 | **9** | Emails — new-company notification, invoice recipient | ⬜ Not started |
 | **10** | Demo seed + onboarding — fabricate guides/reps so the demo/onboarding paths don't break | ⬜ Not started |
 | **11** | Tests — update existing `accessCode` assertions, add coverage for the new lookup | ⬜ Not started |
@@ -203,7 +203,10 @@ Two more pieces of existing behavior worth carrying into the decision:
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Start at Chunk 1 — nothing is built yet.
+**Overall resume point:** Chunks 1-5, 7-8 done and pushed to `staging`. Remaining: Chunk 6 (wine
+orders — confirmed out of scope, may need explicit re-confirmation with Max), Chunk 9 (emails),
+Chunk 10 (demo seed + onboarding), Chunk 11 (tests), Chunk 12 (vault + RLS close-out + the
+staging → master merge, which needs Max's go-ahead per Rule 0).
 
 ---
 
@@ -339,20 +342,29 @@ Decisions:
 
 ## Chunk 5 — Booking form code resolution
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 3.
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] `BookingForm.tsx`'s code check (runs last in `handleSubmit`, per
-  [[MaintenanceNotes]] #1 / Feature 180) resolves against guides (and reps, if Chunk 1 says wine
-  orders/booking share reps) instead of the company's single `accessCode`
-- [ ] `applyProfile()` autofill sources name/phone/email from the matched guide or rep, not from
-  `Company.contactName/contactPhone/contactEmail`
-- [ ] `AccessCodePopupView.tsx` / `accessCodePopupLabels.ts` copy reviewed — does the popup need
-  to say anything different when it's resolving a person rather than a company?
-- [ ] `buildBookingPayload()` — per [[MaintenanceNotes]] #1's Feature 180 note, any new field
-  (e.g. which guide matched) must flow through this shared payload builder, not just the inline
-  `createBooking(...)` call in `handleSubmit`, or the "New Company?" popup path will silently
-  drop it
+- [x] `BookingForm.tsx`'s dropdown-flow code popup now calls the new `verifyBookingCode()`
+  (companies.ts) instead of `verifyCompanyCode` — tries the company's guides first, falls back to
+  `Company.accessCode` only when the company has zero guides
+- [x] `applyProfile()` unchanged (already generic) but now receives the matched **guide's** own
+  name/phone when one exists, instead of always `Company.contactName/contactPhone`
+- [x] Direct-code-entry variant (`hideCompanyDropdown`, Feature 113/114) covered too — new
+  `findBookingCodeByCode()` does the same guide-first/company-fallback search **tenant-wide**
+  (no company chosen first, matching this variant's existing UX), used in
+  `handleDirectCodeSubmit` in place of the old `findCompanyByCode` call
+- [x] New `matchedGuideId` state tracks which guide (if any) matched; reset whenever the company
+  selection changes, the code popup is dismissed via "Not a rep", or direct-code entry is cleared
+- [x] `AccessCodePopupView.tsx` / `accessCodePopupLabels.ts` copy reviewed — left unchanged
+  (still generically "enter the access code provided by the winery", which reads fine whether it
+  resolves to a guide or the company fallback)
+- [x] `buildBookingPayload()` extended with `guideId` per [[MaintenanceNotes]] #1's Feature 180
+  note — flows through both the normal submit and the "New Company?" popup submit automatically
+  since both call this shared builder
+- [x] Verified live end-to-end in dev: added a guide with a distinct name/phone, entered that
+  guide's code on the public booking form (dropdown variant), confirmed the popup closed and
+  First Name/Last Name/Phone autofilled to the **guide's own** values (not the company's) — test
+  guide then deleted, no leftover data
 
 **Resume point:** —
 
@@ -373,14 +385,17 @@ Decisions:
 
 ## Chunk 7 — Order record
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 1's answer on whether `Order` needs new relation(s).
+**Status:** ✅ Done (2026-09-14)
 
-- [ ] If in scope: `createBooking.ts` stores the matched guide (and/or rep) on the new `Order`
-  columns from Chunk 2
-- [ ] Check `updateOrderEnhanced()` and `assignOrderCompany()` in `orders.ts` — anywhere a
-  no-company order gets linked to a real company after the fact should have the same option to
-  attach a guide/rep, or explicitly decide it doesn't
+- [x] `createBooking.ts` stores the matched guide on the new `Order.guideId` column — re-verifies
+  the guide actually belongs to `data.companyId` under the tenant before trusting a client-sent
+  id (`verifiedGuideId`), same defense-in-depth pattern as the rest of this file
+- [x] `updateOrderEnhanced()` / `assignOrderCompany()` in `orders.ts` reviewed — **left
+  unchanged, deliberately**. Both only run after a booking already exists with no company
+  attached (Feature 180's no-company path); there is no code-entry step at that point for an
+  admin to attach a guide to, so there's nothing to wire. An admin can still manually note which
+  guide a linked-after-the-fact order used, same as any other manual admin action — not a gap
+  worth a UI for in this pass.
 
 **Resume point:** —
 
@@ -388,13 +403,17 @@ Decisions:
 
 ## Chunk 8 — Print/ops surface
 
-**Status:** ⬜ Not started
-**Depends on:** Chunk 7.
+**Status:** ✅ Done (2026-09-14) — **no code change needed, confirmed by reading the file**
 
-- [ ] `BookingSheetPrint.tsx` — the printed sheet used during the actual dinner shows the
-  **guide's** name/phone (currently prints `Company.contactName`/`contactPhone`)
-- [ ] Check `OrdersTable.tsx` and any other admin order-detail surface that currently shows
-  company contact info for the same swap
+- [x] `BookingSheetPrint.tsx` read directly: its "contact name"/"contact phone" columns
+  (`orders.sheet.contactName`/`contactPhone`) print `o.name`/`o.surname`/`o.phone` — **the
+  guest's own form fields** — not `Company.contactName`/`contactPhone` as this plan's original
+  dependency map assumed. Since Chunk 5's `applyProfile()` already autofills those exact form
+  fields from the matched guide's name/phone, the printed sheet already shows the right guide's
+  phone for any order where the guest didn't overwrite the autofilled fields — with zero changes
+  here. `Order.guideId` (Chunk 7) remains useful as an unambiguous record of who matched even if
+  the guest *does* edit the phone field afterward, but nothing needs to read it for this sheet.
+- [x] `OrdersTable.tsx` checked — doesn't show company contact info at all today, nothing to swap
 
 **Resume point:** —
 
