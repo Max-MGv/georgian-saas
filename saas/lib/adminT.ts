@@ -15,7 +15,6 @@ const en: Translations = {
   'nav.platform': 'Platform',
   'nav.signOut': 'Sign out',
   'nav.myReports': 'My Reports',
-  'nav.messages': 'Messages',
 
   // Automatic Messages page (Feature 181) — catalog of every automated email,
   // with a live preview and, where a slot exists, an editable default.
@@ -299,6 +298,9 @@ const en: Translations = {
   'orders.emailModal.to': 'To',
   'orders.emailModal.invalidEmail': '⚠ Invalid email format — edit the order to fix before sending',
   'orders.emailModal.validEmail': '✓ Valid email',
+  'orders.emailModal.language': 'Language',
+  'orders.emailModal.languageKa': 'Georgian',
+  'orders.emailModal.languageEn': 'English',
   'orders.emailModal.message': 'Message (optional — edit before sending)',
   'orders.emailModal.messagePlaceholder': 'Add a personal message…',
   'orders.emailModal.invoicePreview': 'Invoice preview',
@@ -824,6 +826,7 @@ const en: Translations = {
   'content.section.form': 'Booking Form',
   'content.section.nav': 'Navigation',
   'content.section.legal': 'Legal',
+  'content.section.messages': 'Messages',
 
   // Site Content editor — field descriptor labels (Nav)
   'content.field.nav_home': 'Home link',
@@ -1086,7 +1089,6 @@ const ka: Translations = {
   'nav.platform': 'პლატფორმა',
   'nav.signOut': 'გასვლა',
   'nav.myReports': 'ჩემი შეტყობინებები',
-  'nav.messages': 'შეტყობინებები',
 
   // Automatic Messages page (Feature 181)
   'messages.pageTitle': 'ავტომატური შეტყობინებები',
@@ -1365,6 +1367,9 @@ const ka: Translations = {
   'orders.emailModal.to': 'მიმღები',
   'orders.emailModal.invalidEmail': '⚠ ელ-ფოსტის არასწორი ფორმატი — გაგზავნამდე შეასწორეთ შეკვეთაში',
   'orders.emailModal.validEmail': '✓ ელ-ფოსტა სწორია',
+  'orders.emailModal.language': 'ენა',
+  'orders.emailModal.languageKa': 'ქართული',
+  'orders.emailModal.languageEn': 'ინგლისური',
   'orders.emailModal.message': 'შეტყობინება (არასავალდებულო — გაგზავნამდე შეგიძლიათ შეასწოროთ)',
   'orders.emailModal.messagePlaceholder': 'დაამატეთ პირადი შეტყობინება…',
   'orders.emailModal.invoicePreview': 'ინვოისის გადახედვა',
@@ -1890,6 +1895,7 @@ const ka: Translations = {
   'content.section.form': 'ჯავშნის ფორმა',
   'content.section.nav': 'ნავიგაცია',
   'content.section.legal': 'იურიდიული',
+  'content.section.messages': 'შეტყობინებები',
 
   // Site Content editor — field descriptor labels (Nav)
   'content.field.nav_home': 'ბმული „მთავარი“',

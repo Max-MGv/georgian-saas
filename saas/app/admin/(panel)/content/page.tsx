@@ -2,6 +2,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
 import { createServiceClient } from '@/lib/supabase/service'
+import { resolveTenantTheme } from '@/lib/themePresets'
 import ContentClient from './ContentClient'
 
 const BG_KEYS = [
@@ -29,11 +30,15 @@ async function listUploadedImages(tenantId: string): Promise<string[]> {
 
 export default async function ContentPage() {
   const tenantId = await getTenantId()
-  const [allRows, bgRows, uploadedImages, adminLanguage] = await Promise.all([
+  const [allRows, bgRows, uploadedImages, adminLanguage, wineryPhone, wineryEmail, wineryAddress, tenant] = await Promise.all([
     withTenantDb(tenantId, tx => tx.siteContent.findMany({ where: { tenantId } })),
     withTenantDb(tenantId, tx => tx.setting.findMany({ where: { tenantId, key: { in: BG_KEYS } } })),
     listUploadedImages(tenantId),
     getSetting('admin_language'),
+    getSetting('contact_phone'),
+    getSetting('contact_email'),
+    getSetting('contact_address'),
+    db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
   ])
 
   const en = allRows.filter(r => r.locale === 'en')
@@ -43,7 +48,19 @@ export default async function ContentPage() {
 
   return (
     <div data-tour="content-editor">
-      <ContentClient rows={{ en, ka }} bgSettings={bgSettings} uploadedImages={uploadedImages} adminLocale={adminLocale} />
+      <ContentClient
+        rows={{ en, ka }}
+        bgSettings={bgSettings}
+        uploadedImages={uploadedImages}
+        adminLocale={adminLocale}
+        winery={{
+          name: tenant?.displayName ?? tenant?.name ?? '',
+          address: wineryAddress,
+          phone: wineryPhone,
+          email: wineryEmail,
+        }}
+        theme={resolveTenantTheme(tenant?.theme ?? null)}
+      />
     </div>
   )
 }

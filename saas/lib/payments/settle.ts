@@ -2,11 +2,14 @@ import { db, withTenantDb } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
 import { verifyCallbackSignature, toMinorUnits } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
+import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendWineOrderReceipt } from '@/lib/emails/wineOrderReceipt'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
+import { DEFAULT_BOOKING_INTRO_PAID, DEFAULT_BOOKING_INTRO_PAID_KA } from '@/lib/emails/templates/bookingConfirmationTemplate'
+import { DEFAULT_WINE_RECEIPT_INTRO, DEFAULT_WINE_RECEIPT_INTRO_KA } from '@/lib/emails/templates/wineOrderReceiptTemplate'
 
 /**
  * The single place a payment is marked settled.
@@ -170,6 +173,12 @@ async function sendSettlementEmail(
     db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     getAllSettings(tenantId),
   ])
+  // No guest-specific locale survives to a webhook/redirect callback (see
+  // createBooking.ts's comment on the same gap) — falls back to the
+  // tenant's site-wide default language instead of the guest's own choice.
+  const emailLocale = settingValue(settings, 'default_locale') === 'ka' ? 'ka' : 'en'
+  const content = await getAllContent(tenantId, emailLocale)
+  const messages = content.messages ?? {}
   const common = {
     // Carried so sendTenantEmail can suppress mail from the demo tenant.
     tenantId,
@@ -204,7 +213,8 @@ async function sendSettlementEmail(
         // This is the confirmation createBooking deliberately withheld — it only
         // becomes true here, once the money actually arrived.
         paid: true,
-        introText: settingValue(settings, 'booking_email_intro_paid'),
+        introText: messages.email_booking_intro_paid
+          ?? (emailLocale === 'ka' ? DEFAULT_BOOKING_INTRO_PAID_KA : DEFAULT_BOOKING_INTRO_PAID),
         ...common,
       })
     }
@@ -246,7 +256,8 @@ async function sendSettlementEmail(
       })),
       totalAmount: wineOrder.totalAmount ?? 0,
       discountPercent: wineOrder.discountPercent,
-      introText: settingValue(settings, 'wine_receipt_email_intro'),
+      introText: messages.email_wine_receipt_intro
+        ?? (emailLocale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
       ...common,
     })
   }

@@ -8,7 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-13 (latest) — Automatic Messages page (Feature 181)
+## 2026-09-14 — Automatic Messages folded into Content + Invoice goes bilingual (Feature 181 follow-up)
+
+Continuing straight on from yesterday's Automatic Messages page: Max asked about
+GE/EN support for the new message boxes, then proposed moving the whole feature
+under `/admin/content` so it could ride the page's existing EN/KA toggle instead
+of inventing a separate one — and, to make the Invoice box mean something under
+that toggle, asked to make the invoice email itself bilingual (it had been
+Georgian-only, always, since the feature was first built).
+
+**Built:** `/admin/messages` deleted; `app/admin/(panel)/content/MessagesPanel.tsx`
+is the new home, wired in as a `messages` section of `ContentClient.tsx`. Moved
+persistence off `Setting` (no locale column) onto `SiteContent` (section
+`messages`, real per-locale rows) — that's the whole reason the move was worth
+doing. New keys: `email_booking_intro_unpaid`/`_paid`/`_pending_company`,
+`email_wine_receipt_intro`, `email_invoice_message`, each with both an EN and a
+drafted (not native-reviewed) KA default. `invoiceEmailTemplate.ts` gained a full
+`LABELS` dict + locale-branched date formatting, making the invoice genuinely
+bilingual rather than Georgian-with-an-English-label. Since no `Order.locale`
+column exists anywhere, each email resolves its send-time language differently:
+`createBooking.ts` reads the guest's own `site_locale` cookie; `settle.ts` (a
+payment webhook, no cookie access) falls back to the tenant's `default_locale`
+setting instead; Invoice Email gets a manual EN/KA toggle in the "Send Invoice by
+Email" modal, defaulting to Georgian. Removed the now-redundant "Emails" section
+from the Settings page (was editing the `Setting` key nothing reads anymore).
+
+**Verified live on staging dev server:** both locale toggles on the Messages tab
+(EN/KA defaults load correctly, Georgian text renders and persists), the invoice
+preview fully re-labels in each language including date format, and the new
+language toggle in the orders page's send-invoice modal correctly swaps the
+pre-filled message without clobbering an admin's own edit. `tsc --noEmit` clean
+throughout. No real email was sent during testing — only previews and pre-fill
+behavior were checked.
+
+**⚠️ Flagged for Max, check before merging to master:** the old
+`invoice_email_message` Setting value (whatever a tenant had typed) is not
+migrated anywhere — nothing reads that key anymore. Coincidentally invisible on
+this dev tenant (its old value matched the new coded default), but worth
+checking whether Nikalas Marani (prod) has a real custom value there before this
+ships, or it'll silently revert to the default. Also: the Georgian translations
+for the five new defaults are AI-drafted, not native-reviewed — flagged inline
+in the template files, same treatment `legalContent.ts`'s KA text got before Max
+reviewed it.
+
+Full detail: `Features/Feature 181 - Automatic Messages Page.md`'s "Follow-up 2"
+section. New Maintenance Notes §23 updated to match the new architecture.
+
+---
+
+## 2026-09-13 — Automatic Messages page (Feature 181)
 
 Max asked for previews of every automatic email in the admin panel, then — after
 discussion narrowing scope down from full email-body editing — for a "Responses"-style

@@ -1,10 +1,3 @@
-import {
-  DEFAULT_BOOKING_INTRO_UNPAID,
-  DEFAULT_BOOKING_INTRO_PAID,
-  DEFAULT_BOOKING_INTRO_PENDING_COMPANY,
-} from '@/lib/emails/templates/bookingConfirmationTemplate'
-import { DEFAULT_WINE_RECEIPT_INTRO } from '@/lib/emails/templates/wineOrderReceiptTemplate'
-
 /**
  * Setting defaults + resolution helpers.
  *
@@ -28,17 +21,6 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   payment_bank_name: '',
   payment_bank_code: '',
   payment_iban: '',
-  invoice_email_message: '',
-  // Feature 181 follow-up (2026-09-13) — the full editable intro (greeting +
-  // thank-you, together, with a `{name}` token) for the two automatic
-  // (no-human-in-the-loop) customer emails, pre-filled with today's real
-  // copy so the admin "Messages" page never shows an empty box. Booking
-  // Confirmation gets three — see bookingConfirmationTemplate.ts's comment
-  // on why the three variants aren't allowed to share one default.
-  booking_email_intro_unpaid: DEFAULT_BOOKING_INTRO_UNPAID,
-  booking_email_intro_paid: DEFAULT_BOOKING_INTRO_PAID,
-  booking_email_intro_pending_company: DEFAULT_BOOKING_INTRO_PENDING_COMPANY,
-  wine_receipt_email_intro: DEFAULT_WINE_RECEIPT_INTRO,
   min_guests_tasting: '4',
   min_guests_tasting_lunch: '4',
   // Booking lead time (#178) — minimum hours-ahead a booking must be made.

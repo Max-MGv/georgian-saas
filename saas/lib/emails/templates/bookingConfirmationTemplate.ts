@@ -23,6 +23,15 @@ export const DEFAULT_BOOKING_INTRO_PAID =
 export const DEFAULT_BOOKING_INTRO_PENDING_COMPANY =
   "Dear {name},\n\nThank you for your booking and company registration request. This request is not yet confirmed — since your company isn't set up in our system yet, we'll review your details, set up your account, and contact you shortly to confirm both your booking and your company's pricing."
 
+// Georgian defaults (2026-09-14 follow-up) — drafted, not native-reviewed.
+// Flag to Max for a wording pass the way legalContent.ts's KA text got one.
+export const DEFAULT_BOOKING_INTRO_UNPAID_KA =
+  'ძვირფასო {name},\n\nმადლობთ ჯავშნის მოთხოვნისთვის. თქვენი დაჯავშნა მიღებულია და მალე დაგიკავშირდებით დეტალების დასადასტურებლად.'
+export const DEFAULT_BOOKING_INTRO_PAID_KA =
+  'ძვირფასო {name},\n\nმადლობთ — თქვენი გადახდა მიღებულია და ჯავშანი დადასტურებულია. მოუთმენლად ველით თქვენს სტუმრობას.'
+export const DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA =
+  'ძვირფასო {name},\n\nმადლობთ ჯავშნისა და კომპანიის რეგისტრაციის მოთხოვნისთვის. მოთხოვნა ჯერ არ არის დადასტურებული — რადგან თქვენი კომპანია ჯერ არ არის დარეგისტრირებული ჩვენს სისტემაში, განვიხილავთ თქვენს დეტალებს, შევქმნით ანგარიშს და მალე დაგიკავშირდებით ჯავშნისა და ფასის დასადასტურებლად.'
+
 export type BookingEmailData = {
   name: string
   surname: string
@@ -54,7 +63,8 @@ export type BookingEmailData = {
    * The tenant's editable intro block — greeting AND thank-you paragraph
    * together, e.g. "Dear {name},\n\nThank you for..." — for whichever
    * variant this send is (unpaid / paid / pendingNewCompany). Sourced from
-   * one of `booking_email_intro_unpaid` / `_paid` / `_pending_company`. Falls
+   * one of `email_booking_intro_unpaid` / `_paid` / `_pending_company` (Content
+   * page, section "messages"). Falls
    * back to the matching DEFAULT_BOOKING_INTRO_* above when empty. `{name}`
    * is the one supported token, substituted with `data.name`.
    */

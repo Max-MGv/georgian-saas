@@ -2,21 +2,38 @@
 
 import { useState, useTransition } from 'react'
 import { adminT } from '@/lib/adminT'
-import { updateSetting } from '@/app/actions/settings'
-import { renderBookingConfirmationEmail } from '@/lib/emails/templates/bookingConfirmationTemplate'
-import { renderWineOrderReceiptEmail } from '@/lib/emails/templates/wineOrderReceiptTemplate'
-import { renderInvoiceEmail } from '@/lib/emails/templates/invoiceEmailTemplate'
+import { saveContent } from '@/app/actions/siteContent'
+import {
+  renderBookingConfirmationEmail,
+  DEFAULT_BOOKING_INTRO_UNPAID, DEFAULT_BOOKING_INTRO_UNPAID_KA,
+  DEFAULT_BOOKING_INTRO_PAID, DEFAULT_BOOKING_INTRO_PAID_KA,
+  DEFAULT_BOOKING_INTRO_PENDING_COMPANY, DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA,
+} from '@/lib/emails/templates/bookingConfirmationTemplate'
+import {
+  renderWineOrderReceiptEmail,
+  DEFAULT_WINE_RECEIPT_INTRO, DEFAULT_WINE_RECEIPT_INTRO_KA,
+} from '@/lib/emails/templates/wineOrderReceiptTemplate'
+import {
+  renderInvoiceEmail,
+  DEFAULT_INVOICE_MESSAGE_EN, DEFAULT_INVOICE_MESSAGE_KA,
+} from '@/lib/emails/templates/invoiceEmailTemplate'
 import { renderNewBookingNotificationEmail } from '@/lib/emails/templates/newBookingNotificationTemplate'
 import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCompanyTemplate'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
- * Feature 181 — catalog of every automatic email the site sends. Each
- * template's `render*Email()` is a pure function (no server-only imports —
- * see lib/emails/templates/), so previews here run entirely client-side:
- * typing in a message box re-renders the iframe instantly, no round trip.
- * Saving still goes through the existing `updateSetting()` server action —
- * same one the Settings page's invoice message box already uses.
+ * "Messages" tab of the Content page (Feature 181, folded in from the
+ * standalone /admin/messages page on 2026-09-14 specifically so these
+ * strings could ride the same EN/KA toggle every other Content tab already
+ * has). Persistence is `SiteContent` (section 'messages'), not `Setting` —
+ * that's what makes the locale split possible at all; see
+ * MaintenanceNotes.md on why booking/wine-receipt/invoice each resolve
+ * their SEND-time locale differently even though they're all edited here.
+ *
+ * Preview rendering stays exactly as it was on the standalone page: each
+ * template's `render*Email()` is a pure function with no server-only
+ * imports, called directly in the browser so typing updates the iframe
+ * instantly, no round trip.
  */
 
 const C = {
@@ -26,16 +43,11 @@ const C = {
 
 type Winery = { name: string; address: string; phone: string; email: string }
 type Props = {
-  locale: string
+  c: Record<string, string>
+  locale: 'en' | 'ka'
+  adminLocale: string
   winery: Winery
   theme: ResolvedTheme
-  defaults: {
-    bookingUnpaid: string
-    bookingPaid: string
-    bookingPendingCompany: string
-    wineReceipt: string
-    invoice: string
-  }
 }
 
 // Fictitious data for every preview below — never a real booking or customer.
@@ -105,8 +117,20 @@ function Section({
   )
 }
 
-export default function MessagesClient({ locale, winery, theme, defaults }: Props) {
-  const at = (key: string) => adminT(locale, key)
+const BOOKING_KEY_BY_VARIANT: Record<BookingVariant, string> = {
+  unpaid: 'email_booking_intro_unpaid',
+  paid: 'email_booking_intro_paid',
+  pendingCompany: 'email_booking_intro_pending_company',
+}
+
+function bookingDefault(variant: BookingVariant, locale: 'en' | 'ka'): string {
+  if (variant === 'unpaid') return locale === 'ka' ? DEFAULT_BOOKING_INTRO_UNPAID_KA : DEFAULT_BOOKING_INTRO_UNPAID
+  if (variant === 'paid') return locale === 'ka' ? DEFAULT_BOOKING_INTRO_PAID_KA : DEFAULT_BOOKING_INTRO_PAID
+  return locale === 'ka' ? DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA : DEFAULT_BOOKING_INTRO_PENDING_COMPANY
+}
+
+export default function MessagesPanel({ c, locale, adminLocale, winery, theme }: Props) {
+  const at = (key: string) => adminT(adminLocale, key)
 
   const [open, setOpen] = useState<Set<string>>(new Set(['booking']))
   const toggle = (id: string) => setOpen(prev => {
@@ -115,37 +139,39 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     return next
   })
 
-  const [bookingIntroUnpaid, setBookingIntroUnpaid] = useState(defaults.bookingUnpaid)
-  const [bookingIntroPaid, setBookingIntroPaid] = useState(defaults.bookingPaid)
-  const [bookingIntroPendingCompany, setBookingIntroPendingCompany] = useState(defaults.bookingPendingCompany)
-  const [wineMsg, setWineMsg] = useState(defaults.wineReceipt)
-  const [invoiceMsg, setInvoiceMsg] = useState(defaults.invoice)
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
-  function save(key: string, value: string) {
+  // Local drafts, keyed by SiteContent key, seeded from `c` (the currently
+  // selected locale's map) with the matching default when no row exists yet.
+  const [drafts, setDrafts] = useState<Record<string, string>>({
+    email_booking_intro_unpaid: c.email_booking_intro_unpaid ?? bookingDefault('unpaid', locale),
+    email_booking_intro_paid: c.email_booking_intro_paid ?? bookingDefault('paid', locale),
+    email_booking_intro_pending_company: c.email_booking_intro_pending_company ?? bookingDefault('pendingCompany', locale),
+    email_wine_receipt_intro: c.email_wine_receipt_intro ?? (locale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
+    email_invoice_message: c.email_invoice_message ?? (locale === 'ka' ? DEFAULT_INVOICE_MESSAGE_KA : DEFAULT_INVOICE_MESSAGE_EN),
+  })
+
+  function setDraft(key: string, value: string) {
+    setDrafts(prev => ({ ...prev, [key]: value }))
+  }
+
+  function save(key: string, label: string, value: string) {
     startTransition(async () => {
-      await updateSetting(key, value)
+      await saveContent(key, value, 'messages', label, locale)
       setSavedKey(key)
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
 
-  // The three Booking Confirmation variants each have their own editable
-  // default (see bookingConfirmationTemplate.ts) — this maps the currently
-  // selected tab to its state/setter/setting-key triple.
-  const bookingVariantConfig: Record<BookingVariant, { value: string; setValue: (v: string) => void; settingKey: string }> = {
-    unpaid: { value: bookingIntroUnpaid, setValue: setBookingIntroUnpaid, settingKey: 'booking_email_intro_unpaid' },
-    paid: { value: bookingIntroPaid, setValue: setBookingIntroPaid, settingKey: 'booking_email_intro_paid' },
-    pendingCompany: { value: bookingIntroPendingCompany, setValue: setBookingIntroPendingCompany, settingKey: 'booking_email_intro_pending_company' },
-  }
-  const currentBookingIntro = bookingVariantConfig[variant]
-
   const inputStyle: React.CSSProperties = {
     backgroundColor: C.pageBg, borderColor: C.border, color: C.text,
     border: '1px solid', borderRadius: 8, padding: '8px 12px', fontSize: 14, width: '100%',
   }
+
+  const bookingKey = BOOKING_KEY_BY_VARIANT[variant]
+  const bookingValue = drafts[bookingKey]
 
   const bookingPreview = renderBookingConfirmationEmail({
     name: SAMPLE_GUEST.name,
@@ -162,7 +188,7 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     theme,
     paid: variant === 'paid',
     pendingNewCompany: variant === 'pendingCompany',
-    introText: currentBookingIntro.value,
+    introText: bookingValue,
   })
 
   const wineReceiptPreview = renderWineOrderReceiptEmail({
@@ -179,7 +205,7 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
     wineryPhone: winery.phone,
     wineryEmail: winery.email,
     theme,
-    introText: wineMsg,
+    introText: drafts.email_wine_receipt_intro,
   })
 
   const invoicePreview = renderInvoiceEmail({
@@ -204,10 +230,11 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
       bankCode: 'BAGAGE22',
       iban: 'GE00BG0000000123456789',
     },
-    customMessage: invoiceMsg,
+    customMessage: drafts.email_invoice_message,
     wineryName: winery.name,
     wineryAddress: winery.address,
     theme,
+    locale,
   })
 
   const newBookingPreview = renderNewBookingNotificationEmail({
@@ -234,10 +261,7 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
   })
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-xl font-semibold mb-1" style={{ color: C.text }}>{at('messages.pageTitle')}</h1>
-      <p className="text-sm mb-6" style={{ color: C.faint }}>{at('messages.pageHint')}</p>
-
+    <div className="max-w-3xl">
       <div className="flex flex-col gap-3">
 
         <Section
@@ -268,11 +292,11 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
             <textarea
               rows={5}
               style={{ ...inputStyle, resize: 'vertical' }}
-              value={currentBookingIntro.value}
-              onChange={e => currentBookingIntro.setValue(e.target.value)}
-              onBlur={() => save(currentBookingIntro.settingKey, currentBookingIntro.value)}
+              value={bookingValue}
+              onChange={e => setDraft(bookingKey, e.target.value)}
+              onBlur={() => save(bookingKey, `Booking confirmation intro (${variant})`, bookingValue)}
             />
-            {savedKey === currentBookingIntro.settingKey && (
+            {savedKey === bookingKey && (
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>
@@ -294,11 +318,11 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
             <textarea
               rows={5}
               style={{ ...inputStyle, resize: 'vertical' }}
-              value={wineMsg}
-              onChange={e => setWineMsg(e.target.value)}
-              onBlur={() => save('wine_receipt_email_intro', wineMsg)}
+              value={drafts.email_wine_receipt_intro}
+              onChange={e => setDraft('email_wine_receipt_intro', e.target.value)}
+              onBlur={() => save('email_wine_receipt_intro', 'Wine order receipt intro', drafts.email_wine_receipt_intro)}
             />
-            {savedKey === 'wine_receipt_email_intro' && (
+            {savedKey === 'email_wine_receipt_intro' && (
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>
@@ -319,12 +343,12 @@ export default function MessagesClient({ locale, winery, theme, defaults }: Prop
             <textarea
               rows={3}
               style={{ ...inputStyle, resize: 'vertical' }}
-              value={invoiceMsg}
+              value={drafts.email_invoice_message}
               placeholder={at('messages.messagePlaceholder')}
-              onChange={e => setInvoiceMsg(e.target.value)}
-              onBlur={() => save('invoice_email_message', invoiceMsg)}
+              onChange={e => setDraft('email_invoice_message', e.target.value)}
+              onBlur={() => save('email_invoice_message', 'Invoice email message', drafts.email_invoice_message)}
             />
-            {savedKey === 'invoice_email_message' && (
+            {savedKey === 'email_invoice_message' && (
               <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
             )}
           </div>

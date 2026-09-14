@@ -2,6 +2,8 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
+import { getContent } from '@/app/actions/siteContent'
+import { DEFAULT_INVOICE_MESSAGE_EN, DEFAULT_INVOICE_MESSAGE_KA } from '@/lib/emails/templates/invoiceEmailTemplate'
 import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
 import Link from 'next/link'
@@ -28,7 +30,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessage, adminLanguage] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessageKa, invoiceEmailMessageEn, adminLanguage] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -36,7 +38,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
-    getSetting('invoice_email_message'),
+    getContent('email_invoice_message', DEFAULT_INVOICE_MESSAGE_KA, 'ka'),
+    getContent('email_invoice_message', DEFAULT_INVOICE_MESSAGE_EN, 'en'),
     getSetting('admin_language'),
   ])
   const locale = adminLanguage || 'en'
@@ -206,7 +209,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} tenantId={tenantId} detailed={detailed} defaultEmailMessage={invoiceEmailMessage} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,

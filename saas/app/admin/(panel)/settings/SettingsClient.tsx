@@ -39,7 +39,6 @@ type Props = {
     paymentEnabledCompanies: boolean
     paymentEnabledWineOrders: boolean
   } | null
-  invoiceEmailMessage: string
   minGuestsTasting: string
   minGuestsTastingLunch: string
   /**
@@ -103,7 +102,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, invoiceEmailMessage, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -125,7 +124,6 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   // on every load and an empty draft means "leave the saved key alone".
   const [flittSecretDraft, setFlittSecretDraft] = useState('')
   const [flittClearConfirm, setFlittClearConfirm] = useState(false)
-  const [emailMessage, setEmailMessage] = useState(invoiceEmailMessage)
   const [minTasting, setMinTasting] = useState(minGuestsTasting)
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
   const [maxTasting, setMaxTasting] = useState(maxGuestsTasting)
@@ -287,14 +285,6 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       setFlittSecretDraft('')
       setFlittSecretKeySet(false)
       setSavedKey('flitt_secret_key')
-      setTimeout(() => setSavedKey(null), 2000)
-    })
-  }
-
-  function handleEmailMessageBlur() {
-    startTransition(async () => {
-      await updateSetting('invoice_email_message', emailMessage)
-      setSavedKey('invoice_email_message')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -927,32 +917,6 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           </div>
         </div>
       )}
-
-      {/* Emails */}
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
-        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.emails.sectionTitle')}</p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            {at('settings.emails.sectionHint')}
-          </p>
-        </div>
-        <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
-          <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('settings.emails.fieldLabel')}</label>
-          <div className="flex items-start gap-2">
-            <textarea
-              rows={4}
-              style={{ ...inputStyle, resize: 'vertical' }}
-              value={emailMessage}
-              placeholder={at('settings.emails.placeholder')}
-              onChange={e => setEmailMessage(e.target.value)}
-              onBlur={handleEmailMessageBlur}
-            />
-            {savedKey === 'invoice_email_message' && !isPending && (
-              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓</span>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Booking Rules */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>

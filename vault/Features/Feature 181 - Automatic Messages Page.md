@@ -110,6 +110,92 @@ and rebuilt:
   breaking if a tenant edits the paragraph — consistent with how
   `EditableText` treats every other admin-editable string as plain text.
 
+## Follow-up 2 (2026-09-14): folded into Content, invoice went bilingual
+
+Max asked why locale support wasn't there for the new message boxes, then
+proposed moving the whole "Messages" feature under `/admin/content` so it
+could share the page's existing EN/KA toggle — and, so the Invoice box would
+actually mean something under that toggle, asked to make the invoice email
+itself bilingual (it had been Georgian-only, always, since it was first
+built). Both done:
+
+**Messages is now a Content tab, not a standalone page.**
+`/admin/messages` is deleted. `app/admin/(panel)/content/MessagesPanel.tsx`
+is the new home — same 5 rows, same live preview, same variant tabs, now
+rendered as one more section inside `ContentClient.tsx` (`SectionKey` gained
+`'messages'`) and driven by the page's own locale toggle instead of its own.
+Persistence moved from `Setting` (flat, no locale) to `SiteContent` (section
+`'messages'`, real `locale` column) — `saveContent()`/`getContent()`/
+`getAllContent()` instead of `updateSetting()`/`getSetting()`/
+`getAllSettings()`. This is *why* the move was worth doing: `SiteContent`'s
+schema already had the locale split every other Content tab uses; `Setting`
+never did.
+
+**New keys** (replacing `booking_email_intro_unpaid`/`_paid`/
+`_pending_company`/`wine_receipt_email_intro`/`invoice_email_message`
+outright — those were only ever test data from the same day, no migration
+needed for them): `email_booking_intro_unpaid`, `email_booking_intro_paid`,
+`email_booking_intro_pending_company`, `email_wine_receipt_intro`,
+`email_invoice_message` — each now has both an EN and a KA default,
+exported from its template file (`DEFAULT_..._KA` alongside the existing
+English ones).
+
+**⚠️ The Georgian defaults are drafted, not native-reviewed.** Flagged
+inline in both template files. Same treatment `legalContent.ts` got before
+its Georgian went live — worth a real pass before this reaches production
+tenants who'll actually read it.
+
+**⚠️ Migration gap, check before merging to master:** the *old*
+`invoice_email_message` Setting value (whatever a tenant had typed via the
+Settings page box, now removed) is not copied anywhere — nothing reads that
+Setting key anymore. On this dev tenant it happened to coincidentally match
+the new coded default ("მადლობთ სტუმრობისთვის!"/"Thank you for visiting!"),
+so the switch was invisible here. **Check whether Nikalas Marani (prod) has
+a real custom value in `Setting.invoice_email_message` before merging** — if
+so, either hand-copy it into the new Content → Messages → Invoice box once,
+or write a 5-line one-time script that reads the old Setting row and
+`saveContent()`s it into `email_invoice_message`/`ka` for every tenant that
+has one.
+
+**Invoice email is now genuinely bilingual**, not just Georgian with an
+English label sitting oddly under a toggle. `invoiceEmailTemplate.ts` gained
+a `LABELS: Record<'en'|'ka', {...}>` dict covering every static string
+(section headers, field labels, "Total amount", the person-count unit) and
+a `locale` field on `InvoiceEmailData` (default `'ka'`, preserving prior
+behavior for any caller that doesn't pass one). Date format also branches:
+`ka` keeps the existing dot format (`12.09.2026`) via `'ka-GE'`; `en` uses
+`'en-GB'` slash format (`12/09/2026`) — same numeric compactness, locale-
+appropriate separator.
+
+**Someone has to pick the language at send time** — there's still no
+`Order.locale` column (see the original Feature 181 gap), so:
+- **Booking Confirmation / Wine Order Receipt** — `createBooking.ts` reads
+  the guest's own `site_locale` cookie (same one the checkout-language branch
+  already used) for the reservation-only path. `settle.ts` runs from a
+  payment webhook with no cookie access, so it falls back to the tenant's
+  `default_locale` Setting instead — **the paid-confirmation path uses the
+  site's default language, not necessarily the guest's own choice.** Flagged
+  as a known, accepted asymmetry rather than fixed by adding an `Order.locale`
+  column, which would have been a real schema migration for a gap this small.
+- **Invoice Email** — sent manually from Orders, so the admin picks EN/KA in
+  a new "Language" toggle in the "Send Invoice by Email" modal
+  (`OrdersTable.tsx`), defaulting to Georgian (prior behavior). Switching the
+  toggle only replaces the message box's text if it still matches the *other*
+  language's default — an admin's own edits are never silently overwritten.
+  `OrderDetail.tsx`'s one-click "resend" call passes no locale, so it keeps
+  defaulting to Georgian too.
+
+**Files touched (this follow-up):**
+New: `app/admin/(panel)/content/MessagesPanel.tsx`.
+Deleted: `app/admin/(panel)/messages/` (page + client), the Settings page's
+"Emails" section (box + state + handler), `nav.messages` adminT key.
+Edited: `ContentClient.tsx`, `content/page.tsx` (winery/theme props),
+`invoiceEmailTemplate.ts` (bilingual), `bookingConfirmationTemplate.ts` /
+`wineOrderReceiptTemplate.ts` (KA defaults), `createBooking.ts`, `settle.ts`,
+`app/actions/orders.ts` (`sendOrderInvoice` locale param), `orders/page.tsx`,
+`OrdersTable.tsx` (language toggle), `lib/settings.ts` (removed the now-
+obsolete SETTING_DEFAULTS entries), `lib/adminT.ts`.
+
 ## Known follow-on (not built, out of scope for this pass)
 
 Per `Research-DynamicContentEditing.md`, the bigger ask — full super-admin-default + tenant-override editing across all content, not just these two email slots — is still open and unplanned. This feature is deliberately narrow: preview everything, editable slot only where it was cheap and safe (customer-facing, single-paragraph, no conditional-HTML risk).

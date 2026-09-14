@@ -8,6 +8,11 @@ import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
+import { getContent } from '@/app/actions/siteContent'
+import {
+  DEFAULT_BOOKING_INTRO_UNPAID, DEFAULT_BOOKING_INTRO_UNPAID_KA,
+  DEFAULT_BOOKING_INTRO_PENDING_COMPANY, DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA,
+} from '@/lib/emails/templates/bookingConfirmationTemplate'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
@@ -339,12 +344,19 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const formattedDate = new Date(data.date).toLocaleDateString('en-GB', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     })
+    // The guest's actual chosen language for this request — same cookie the
+    // checkout-language branch above already reads. No Order.locale column
+    // exists (nothing persists it), so this only works for requests made
+    // directly by a browser; settle.ts's webhook path can't do the same (see
+    // its own comment) and falls back to the tenant's site-wide default.
+    const guestLocale = (await cookies()).get('site_locale')?.value === 'ka' ? 'ka' : 'en'
+
     const [wineryPhone, wineryEmail, wineryAddress, bookingIntroUnpaid, bookingIntroPendingCompany, tenant] = await Promise.all([
       getSetting('contact_phone'),
       getSetting('contact_email'),
       getSetting('contact_address'),
-      getSetting('booking_email_intro_unpaid'),
-      getSetting('booking_email_intro_pending_company'),
+      getContent('email_booking_intro_unpaid', guestLocale === 'ka' ? DEFAULT_BOOKING_INTRO_UNPAID_KA : DEFAULT_BOOKING_INTRO_UNPAID, guestLocale),
+      getContent('email_booking_intro_pending_company', guestLocale === 'ka' ? DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA : DEFAULT_BOOKING_INTRO_PENDING_COMPANY, guestLocale),
       db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     ])
     const wineryName = tenant?.displayName ?? tenant?.name ?? ''

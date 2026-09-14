@@ -11,6 +11,9 @@ import { renderTokenizedText } from '@/lib/emails/templates/tokens'
 
 export const DEFAULT_WINE_RECEIPT_INTRO =
   'Dear {name},\n\nThank you — your payment has been received and your wine order is confirmed. We will be in touch about delivery.'
+// Drafted, not native-reviewed — see bookingConfirmationTemplate.ts's note.
+export const DEFAULT_WINE_RECEIPT_INTRO_KA =
+  'ძვირფასო {name},\n\nმადლობთ — თქვენი გადახდა მიღებულია და ღვინის შეკვეთა დადასტურებულია. მალე დაგიკავშირდებით მიწოდებასთან დაკავშირებით.'
 
 export type WineOrderLine = {
   name: string
@@ -31,7 +34,8 @@ export type WineOrderReceiptData = {
   wineryEmail?: string
   theme?: ResolvedTheme
   /**
-   * The tenant's editable intro block — sourced from `wine_receipt_email_intro`.
+   * The tenant's editable intro block — sourced from `email_wine_receipt_intro`
+   * (Content page, section "messages").
    * Falls back to DEFAULT_WINE_RECEIPT_INTRO when empty. `{name}` is
    * substituted with `data.contactName`.
    */

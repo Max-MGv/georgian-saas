@@ -137,7 +137,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessage, displayName = 'Your Winery', locale = 'en', tenantId = null }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessage: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -185,6 +185,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // Email invoice state
   const [emailOrder, setEmailOrder] = useState<Order | null>(null)
   const [emailMessage, setEmailMessage] = useState('')
+  // Which language to send the invoice in — independent of the admin panel's
+  // own `locale` prop. Defaults to Georgian, the only language this email
+  // supported before the 2026-09-14 bilingual follow-up.
+  const [sendLocale, setSendLocale] = useState<'en' | 'ka'>('ka')
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
 
@@ -233,15 +237,25 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   function openEmail(order: Order) {
     setEmailOrder(order)
-    setEmailMessage(defaultEmailMessage)
+    setSendLocale('ka')
+    setEmailMessage(defaultEmailMessageKa)
     setEmailStatus(null)
+  }
+
+  function changeSendLocale(next: 'en' | 'ka') {
+    // Only swap the box's text if it still matches the *other* language's
+    // default — an admin's own edits are never silently overwritten.
+    if (emailMessage === defaultEmailMessageKa || emailMessage === defaultEmailMessageEn) {
+      setEmailMessage(next === 'ka' ? defaultEmailMessageKa : defaultEmailMessageEn)
+    }
+    setSendLocale(next)
   }
 
   async function handleSendEmail() {
     if (!emailOrder) return
     setEmailSending(true)
     setEmailStatus(null)
-    const result = await sendOrderInvoice(emailOrder.id, emailMessage)
+    const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale)
     setEmailSending(false)
     if ('error' in result) {
       setEmailStatus('error')
@@ -831,6 +845,26 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   ) : (
                     <p className="text-xs mb-3" style={{ color: '#16a34a' }}>{at('orders.emailModal.validEmail')}</p>
                   )}
+
+                  {/* Language */}
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orders.emailModal.language')}</label>
+                  <div className="flex gap-1 p-1 rounded-lg w-fit mb-3" style={{ backgroundColor: '#ede5d8' }}>
+                    {(['ka', 'en'] as const).map(l => (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => changeSendLocale(l)}
+                        className="px-4 py-1 rounded-md text-xs font-semibold uppercase transition-all"
+                        style={{
+                          backgroundColor: sendLocale === l ? 'var(--site-surface)' : 'transparent',
+                          color: sendLocale === l ? C.wine : C.muted,
+                          boxShadow: sendLocale === l ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        }}
+                      >
+                        {l === 'ka' ? at('orders.emailModal.languageKa') : at('orders.emailModal.languageEn')}
+                      </button>
+                    ))}
+                  </div>
 
                   {/* Message */}
                   <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orders.emailModal.message')}</label>

@@ -234,7 +234,8 @@ export async function createOrderAdmin(data: {
 
 export async function sendOrderInvoice(
   orderId: string,
-  customMessage: string
+  customMessage: string,
+  locale: 'en' | 'ka' = 'ka'
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -291,6 +292,7 @@ export async function sendOrderInvoice(
       wineryAddress,
       wineryEmail,
       theme: resolveTenantTheme(tenant?.theme ?? null),
+      locale,
     })
 
     const advanceStatuses = ['NEW', 'CONFIRMED']

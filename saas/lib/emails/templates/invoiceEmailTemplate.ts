@@ -3,12 +3,47 @@ import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 /**
  * Pure HTML-building half of invoiceEmail.ts — see
  * bookingConfirmationTemplate.ts for why this split exists (Feature 181).
- * `customMessage` here predates that split (it's the original per-send
- * "Send Invoice by Email" textarea) — unlike the two new slots in its
- * siblings, it is NOT escaped, to keep behavior identical to before the
- * extraction for the one flow that already shipped and is admin-typed
- * fresh on every send rather than a persisted default.
+ *
+ * Bilingual since the 2026-09-14 follow-up (previously Georgian-only, always)
+ * so its `customMessage` slot can sit under the same EN/KA toggle as every
+ * other admin-editable message on the Content page — the admin picks the
+ * send language per-send in the "Send Invoice by Email" modal, since there's
+ * no persisted per-order locale to infer it from (see MaintenanceNotes.md
+ * on why booking/wine-receipt emails resolve locale differently).
+ *
+ * `customMessage` predates the tokens.ts / escaping convention its siblings
+ * use — it is NOT escaped, to keep behavior identical to before the
+ * extraction for the one flow that's admin-typed fresh on every send rather
+ * than a persisted default rendered automatically.
  */
+
+export type InvoiceLocale = 'en' | 'ka'
+
+const LABELS: Record<InvoiceLocale, {
+  invoice: string; company: string; name: string; idCode: string
+  guests: string; tasting: string; lunch: string; free: string; total: string; lunchTasting: string
+  masterclass: string; amount: string; totalAmount: string
+  paymentDetails: string; recipientName: string; personalNumber: string; bank: string; bankCode: string; account: string
+  person: string
+}> = {
+  ka: {
+    invoice: 'ინვოისი', company: 'კომპანია', name: 'დასახელება', idCode: 'საიდენტიფიკაციო კოდი',
+    guests: 'სტუმრები', tasting: 'დეგუსტაცია', lunch: 'სადილი', free: 'თავისუფალი (გიდი/მძღოლი)', total: 'სულ', lunchTasting: 'სადილი + დეგუსტაცია',
+    masterclass: 'მასტერკლასი', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
+    paymentDetails: 'გადახდის რეკვიზიტები', recipientName: 'მიმღების სახელი', personalNumber: 'პირადი ნომერი', bank: 'მიმღები ბანკი', bankCode: 'ბანკის კოდი', account: 'მიმღების ანგარიში',
+    person: 'კაცი',
+  },
+  en: {
+    invoice: 'Invoice', company: 'Company', name: 'Name', idCode: 'ID code',
+    guests: 'Guests', tasting: 'Tasting', lunch: 'Lunch', free: 'Free (guide/driver)', total: 'Total', lunchTasting: 'Lunch + Tasting',
+    masterclass: 'Masterclass', amount: 'Amount', totalAmount: 'Total amount',
+    paymentDetails: 'Payment Details', recipientName: 'Recipient name', personalNumber: 'Personal number', bank: 'Bank', bankCode: 'Bank code', account: 'Account (IBAN)',
+    person: 'guest',
+  },
+}
+
+export const DEFAULT_INVOICE_MESSAGE_EN = 'Thank you for visiting!'
+export const DEFAULT_INVOICE_MESSAGE_KA = 'მადლობთ სტუმრობისთვის!'
 
 export type InvoiceEmailData = {
   name: string
@@ -36,6 +71,8 @@ export type InvoiceEmailData = {
   wineryName?: string
   wineryAddress?: string
   theme?: ResolvedTheme
+  /** Which language to render this send in. Defaults to 'ka' — the language this email has always been sent in. */
+  locale?: InvoiceLocale
 }
 
 function tableRow(th: ResolvedTheme, label: string, value: string) {
@@ -66,13 +103,15 @@ function section(th: ResolvedTheme, title: string, content: string) {
 }
 
 export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; html: string } {
+  const locale = data.locale ?? 'ka'
+  const L = LABELS[locale]
   // CSS variables don't resolve in email clients — colors are interpolated as
   // literal hex here, a genuinely separate mechanism from the --site-* pipeline
   // the rest of the app uses.
   const th = data.theme ?? resolveTenantTheme(null)
-  const dateStr = new Date(data.date)
-    .toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    .replace(/\//g, '.')
+  const dateStr = locale === 'ka'
+    ? new Date(data.date).toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
+    : new Date(data.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const companyDisplay = data.companyName ?? `${data.name} ${data.surname}`
   const hasSplit = data.tastingGuestCount > 0 || data.lunchGuestCount > 0 || data.freeGuestCount > 0
@@ -85,16 +124,16 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   // Guest rows
   let guestContent = ''
   if (hasSplit) {
-    if (data.tastingGuestCount > 0) guestContent += tableRow(th, 'დეგუსტაცია', `${data.tastingGuestCount} კაცი`)
-    if (data.lunchGuestCount > 0) guestContent += tableRow(th, 'სადილი', `${data.lunchGuestCount} კაცი`)
-    if (data.freeGuestCount > 0) guestContent += tableRow(th, 'თავისუფალი (გიდი/მძღოლი)', `${data.freeGuestCount} კაცი`)
-    guestContent += tableRow(th, 'სულ', `${data.guestCount} კაცი`)
+    if (data.tastingGuestCount > 0) guestContent += tableRow(th, L.tasting, `${data.tastingGuestCount} ${L.person}`)
+    if (data.lunchGuestCount > 0) guestContent += tableRow(th, L.lunch, `${data.lunchGuestCount} ${L.person}`)
+    if (data.freeGuestCount > 0) guestContent += tableRow(th, L.free, `${data.freeGuestCount} ${L.person}`)
+    guestContent += tableRow(th, L.total, `${data.guestCount} ${L.person}`)
   } else {
-    guestContent += tableRow(th, isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${data.guestCount} კაცი`)
+    guestContent += tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${data.guestCount} ${L.person}`)
   }
 
   // Amount rows
-  let amountContent = tableRow(th, isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია', `${bookingAmt} ₾`)
+  let amountContent = tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${bookingAmt} ₾`)
   for (const l of data.masterclassLines) {
     amountContent += tableRow(th, l.name, `${l.quantity * l.pricePerUnit} ₾`)
   }
@@ -102,14 +141,14 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
     amountContent += tableRow(th, e.label, `${e.amount} ₾`)
   }
   amountContent += `<tr><td colspan="2" style="padding:4px 0;border-top:1px solid ${th.border};"></td></tr>`
-  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">ჯამური თანხა: ${data.totalPrice} ₾</td></tr>`
+  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">${L.totalAmount}: ${data.totalPrice} ₾</td></tr>`
 
   const customMessageHtml = data.customMessage.trim()
     ? `<p style="font-size:15px;color:${th.text} !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`
     : ''
 
   const masterclassSection = data.masterclassLines.length > 0
-    ? section(th, 'მასტერკლასი', data.masterclassLines.map(l =>
+    ? section(th, L.masterclass, data.masterclassLines.map(l =>
         tableRow(th, `${l.name} × ${l.quantity}`, `${l.quantity * l.pricePerUnit} ₾`)
       ).join(''))
     : ''
@@ -124,37 +163,37 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
 
       <div style="background-color:${th.surface} !important;padding:32px 40px;border-radius:0 0 8px 8px;border:1px solid ${th.border};border-top:none;">
 
-        <h2 style="font-size:20px;font-weight:bold;margin:0 0 4px;color:${th.text} !important;">ინვოისი</h2>
+        <h2 style="font-size:20px;font-weight:bold;margin:0 0 4px;color:${th.text} !important;">${L.invoice}</h2>
         <p style="font-size:12px;color:${th.muted} !important;margin:0 0 24px;">${dateStr} · ${data.timeSlot}</p>
 
         ${customMessageHtml}
 
-        ${section(th, 'კომპანია',
-          tableRow(th, 'დასახელება', companyDisplay) +
-          tableRow(th, 'საიდენტიფიკაციო კოდი', data.identificationCode ?? '—')
+        ${section(th, L.company,
+          tableRow(th, L.name, companyDisplay) +
+          tableRow(th, L.idCode, data.identificationCode ?? '—')
         )}
 
-        ${section(th, 'სტუმრები', guestContent)}
+        ${section(th, L.guests, guestContent)}
 
         ${masterclassSection}
 
-        ${section(th, 'თანხა', amountContent)}
+        ${section(th, L.amount, amountContent)}
 
         <div style="border:1px solid ${th.border};border-radius:8px;padding:16px;background-color:${th.surface} !important;">
           <div style="border-left:3px solid ${th.brand};padding-left:10px;margin-bottom:10px;">
-            <strong style="font-size:14px;color:${th.text} !important;">გადახდის რეკვიზიტები</strong>
+            <strong style="font-size:14px;color:${th.text} !important;">${L.paymentDetails}</strong>
           </div>
           <table style="width:100%;border-collapse:collapse;">
-            ${tableRow(th, 'მიმღების სახელი', data.payment.recipientName || '—')}
-            ${codeTableRow(th, 'პირადი ნომერი', data.payment.personalNumber || '—')}
-            ${tableRow(th, 'მიმღები ბანკი', data.payment.bankName || '—')}
-            ${codeTableRow(th, 'ბანკის კოდი', data.payment.bankCode || '—')}
-            ${codeTableRow(th, 'მიმღების ანგარიში', data.payment.iban || '—')}
+            ${tableRow(th, L.recipientName, data.payment.recipientName || '—')}
+            ${codeTableRow(th, L.personalNumber, data.payment.personalNumber || '—')}
+            ${tableRow(th, L.bank, data.payment.bankName || '—')}
+            ${codeTableRow(th, L.bankCode, data.payment.bankCode || '—')}
+            ${codeTableRow(th, L.account, data.payment.iban || '—')}
           </table>
         </div>
 
       </div>
     </div>`
 
-  return { subject: `ინვოისი — ${companyDisplay} · ${dateStr} ${data.timeSlot}`, html }
+  return { subject: `${L.invoice} — ${companyDisplay} · ${dateStr} ${data.timeSlot}`, html }
 }

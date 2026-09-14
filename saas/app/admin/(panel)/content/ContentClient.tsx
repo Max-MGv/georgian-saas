@@ -7,7 +7,9 @@ import HelpHint from '@/components/HelpHint'
 import EditableLongText from '@/components/EditableLongText'
 import BackgroundsTab from './BackgroundsTab'
 import BookingFormVisualPanel from './BookingFormVisualPanel'
+import MessagesPanel from './MessagesPanel'
 import { LEGAL_CONTENT_EN, LEGAL_LABELS } from '@/lib/legalContent'
+import type { ResolvedTheme } from '@/lib/themePresets'
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
@@ -20,10 +22,18 @@ const C = {
 type ContentRow = { key: string; value: string; section: string; label: string; locale: string }
 type LocaleKey = 'en' | 'ka'
 type ModeKey = 'visual' | 'backgrounds'
-type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact' | 'legal'
+type SectionKey = 'nav' | 'home' | 'form' | 'about' | 'contact' | 'legal' | 'messages'
 
 const IFRAME_SECTIONS = new Set<SectionKey>(['home', 'about', 'contact'])
-type Props = { rows: { en: ContentRow[]; ka: ContentRow[] }; bgSettings: Record<string, string>; uploadedImages: string[]; adminLocale: string }
+type Winery = { name: string; address: string; phone: string; email: string }
+type Props = {
+  rows: { en: ContentRow[]; ka: ContentRow[] }
+  bgSettings: Record<string, string>
+  uploadedImages: string[]
+  adminLocale: string
+  winery: Winery
+  theme: ResolvedTheme
+}
 type FieldDef = { key: string; label: string; fallback: string }
 
 function buildMap(rows: ContentRow[]) {
@@ -124,6 +134,11 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'legal_privacy_body', label: LEGAL_LABELS.legal_privacy_body, fallback: LEGAL_CONTENT_EN.legal_privacy_body },
     { key: 'legal_returns_body', label: LEGAL_LABELS.legal_returns_body, fallback: LEGAL_CONTENT_EN.legal_returns_body },
   ],
+  // Messages has its own panel (MessagesPanel.tsx) with per-email defaults
+  // and a live preview — it doesn't use the FieldDef/EditableText pattern the
+  // other sections do, so this stays empty; it exists only so FIELDS still
+  // satisfies Record<SectionKey, FieldDef[]>.
+  messages: [],
 }
 
 // ── Legal panel (Terms/Privacy/Returns — long-form text, textarea editor) ────
@@ -188,7 +203,7 @@ function FieldsPanel({ section, c, locale, adminLocale }: { section: SectionKey;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ContentClient({ rows, bgSettings, uploadedImages, adminLocale }: Props) {
+export default function ContentClient({ rows, bgSettings, uploadedImages, adminLocale, winery, theme }: Props) {
   const [mode, setMode]       = useState<ModeKey>('visual')
   const [locale, setLocale]   = useState<LocaleKey>('en')
   const [section, setSection] = useState<SectionKey>('home')
@@ -222,12 +237,15 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
     { id: 'form',    label: at('content.section.form') },
     { id: 'nav',     label: at('content.section.nav') },
     { id: 'legal',   label: at('content.section.legal') },
+    { id: 'messages', label: at('content.section.messages') },
   ]
 
   const subtitle = mode === 'visual'
-    ? IFRAME_SECTIONS.has(section)
-      ? at('content.subtitle.iframeHover')
-      : at('content.subtitle.clickField')
+    ? section === 'messages'
+      ? at('messages.pageHint')
+      : IFRAME_SECTIONS.has(section)
+        ? at('content.subtitle.iframeHover')
+        : at('content.subtitle.clickField')
     : at('content.subtitle.backgrounds')
 
   return (
@@ -337,6 +355,8 @@ export default function ContentClient({ rows, bgSettings, uploadedImages, adminL
               </div>
             ) : section === 'legal' ? (
               <LegalPanel c={c} locale={locale} adminLocale={adminLocale} />
+            ) : section === 'messages' ? (
+              <MessagesPanel c={c} locale={locale} adminLocale={adminLocale} winery={winery} theme={theme} />
             ) : (
               <FieldsPanel section={section} c={c} locale={locale} adminLocale={adminLocale} />
             )}

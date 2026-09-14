@@ -18,7 +18,6 @@ export default async function SettingsPage() {
     bankName,
     bankCode,
     iban,
-    invoiceEmailMessage,
     minGuestsTasting,
     minGuestsTastingLunch,
     maxGuestsTasting,
@@ -52,7 +51,6 @@ export default async function SettingsPage() {
     getSetting('payment_bank_name'),
     getSetting('payment_bank_code'),
     getSetting('payment_iban'),
-    getSetting('invoice_email_message'),
     getSetting('min_guests_tasting'),
     getSetting('min_guests_tasting_lunch'),
     getSetting('max_guests_tasting'),
@@ -119,7 +117,6 @@ export default async function SettingsPage() {
           paymentEnabledCompanies: credentials.paymentEnabledCompanies,
           paymentEnabledWineOrders: credentials.paymentEnabledWineOrders,
         } : null}
-        invoiceEmailMessage={invoiceEmailMessage}
         minGuestsTasting={minGuestsTasting}
         minGuestsTastingLunch={minGuestsTastingLunch}
         maxGuestsTasting={maxGuestsTasting}
