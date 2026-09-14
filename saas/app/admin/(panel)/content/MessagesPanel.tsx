@@ -22,6 +22,7 @@ import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCom
 import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import { t } from '@/lib/t'
 import PaymentResultView, { type PaymentResultKind } from '@/components/PaymentResultView'
+import NewCompanyPopupView, { type NewCompanyPopupStatus } from '@/components/NewCompanyPopupView'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -60,6 +61,18 @@ const SAMPLE_GUEST = { name: 'Ana', surname: 'Beridze', email: 'ana.beridze@exam
 const SAMPLE_COMPANY = 'Beridze LLC'
 
 type BookingVariant = 'unpaid' | 'paid' | 'pendingCompany'
+type NewCompanyVariant = 'withBooking' | 'noBooking' | 'sent' | 'error'
+
+// Maps the admin's 4-way preview pill to the two independent props the real
+// popup takes (BookingForm.tsx's `newCompanyIncludesBooking` state and
+// `newCoStatus` state) — see NewCompanyPopupView.tsx's header for why those
+// stay separate props instead of being collapsed into this enum.
+const NEW_COMPANY_PREVIEW: Record<NewCompanyVariant, { includesBooking: boolean; status: NewCompanyPopupStatus }> = {
+  withBooking: { includesBooking: true, status: 'idle' },
+  noBooking: { includesBooking: false, status: 'idle' },
+  sent: { includesBooking: false, status: 'sent' },
+  error: { includesBooking: false, status: 'error' },
+}
 
 function IframePreview({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null)
@@ -205,6 +218,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
 
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
   const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind>('success')
+  const [newCompanyVariant, setNewCompanyVariant] = useState<NewCompanyVariant>('withBooking')
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -511,16 +525,73 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
         >
           <EditField label={at('messages.onsiteNewCompany.titleField')} draftKey="onsite_new_company_title"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteNewCompany.bodyWithBooking')} draftKey="onsite_new_company_body_with_booking" multiline
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteNewCompany.bodyNoBooking')} draftKey="onsite_new_company_body_no_booking" multiline
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteNewCompany.successTitle')} draftKey="onsite_new_company_success_title"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteNewCompany.successBody')} draftKey="onsite_new_company_success_body"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteNewCompany.errorText')} draftKey="onsite_new_company_error"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <div className="flex gap-2 mb-4">
+            {(['withBooking', 'noBooking', 'sent', 'error'] as NewCompanyVariant[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setNewCompanyVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={newCompanyVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsiteNewCompany.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          {newCompanyVariant === 'withBooking' && (
+            <EditField label={at('messages.onsiteNewCompany.bodyWithBooking')} draftKey="onsite_new_company_body_with_booking" multiline
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+          {newCompanyVariant === 'noBooking' && (
+            <EditField label={at('messages.onsiteNewCompany.bodyNoBooking')} draftKey="onsite_new_company_body_no_booking" multiline
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+          {newCompanyVariant === 'sent' && (
+            <>
+              <EditField label={at('messages.onsiteNewCompany.successTitle')} draftKey="onsite_new_company_success_title"
+                inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+              <EditField label={at('messages.onsiteNewCompany.successBody')} draftKey="onsite_new_company_success_body"
+                inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+            </>
+          )}
+          {newCompanyVariant === 'error' && (
+            <EditField label={at('messages.onsiteNewCompany.errorText')} draftKey="onsite_new_company_error"
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <NewCompanyPopupView
+              includesBooking={NEW_COMPANY_PREVIEW[newCompanyVariant].includesBooking}
+              status={NEW_COMPANY_PREVIEW[newCompanyVariant].status}
+              title={drafts.onsite_new_company_title}
+              bodyWithBooking={drafts.onsite_new_company_body_with_booking}
+              bodyNoBooking={drafts.onsite_new_company_body_no_booking}
+              successTitle={drafts.onsite_new_company_success_title}
+              successBody={drafts.onsite_new_company_success_body}
+              errorMessage={drafts.onsite_new_company_error}
+              name={SAMPLE_GUEST.name}
+              contact={`${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}`}
+              phone={SAMPLE_GUEST.phone}
+              email={SAMPLE_GUEST.email}
+              labels={{
+                namePlaceholder: t(locale, 'form.new_company_name_placeholder'),
+                contactPlaceholder: t(locale, 'form.new_company_contact_placeholder'),
+                phonePlaceholder: t(locale, 'form.new_company_phone_placeholder'),
+                emailPlaceholder: t(locale, 'form.new_company_email_placeholder'),
+                sending: t(locale, 'form.new_company_sending'),
+                sendWithBooking: t(locale, 'form.new_company_send_with_booking'),
+                sendRequest: t(locale, 'form.new_company_send_request'),
+                cancel: t(locale, 'form.new_company_cancel'),
+                close: t(locale, 'form.new_company_close'),
+              }}
+              preview
+            />
+          </div>
         </Section>
 
         <Section

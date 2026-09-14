@@ -11,6 +11,7 @@ import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
+import NewCompanyPopupView from '@/components/NewCompanyPopupView'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
 import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 
@@ -597,61 +598,37 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
       {/* New Company popup */}
       {showNewCompanyPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
-            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
-            <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{mc('onsite_new_company_title', 'form.new_company_title')}</h3>
-              <p className="text-sm" style={{ color: C.muted }}>
-                {newCompanyIncludesBooking
-                  ? mc('onsite_new_company_body_with_booking', 'form.new_company_body_with_booking')
-                  : mc('onsite_new_company_body_no_booking', 'form.new_company_body_no_booking')}
-              </p>
-            </div>
-            {newCoStatus === 'sent' ? (
-              <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: STATUS.successText }}>{mc('onsite_new_company_success_title', 'form.new_company_success_title')}</p>
-                <p className="text-sm mt-1" style={{ color: C.muted }}>{mc('onsite_new_company_success_body', 'form.new_company_success_body')}</p>
-                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
-                  className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
-                  style={{ borderColor: C.border, color: C.text }}>
-                  {t(locale, 'form.new_company_close')}
-                </button>
-              </div>
-            ) : (
-              <>
-                <input type="text" placeholder={t(locale, 'form.new_company_name_placeholder')} value={newCoName}
-                  onChange={e => setNewCoName(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="text" placeholder={t(locale, 'form.new_company_contact_placeholder')} value={newCoContact}
-                  onChange={e => setNewCoContact(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="tel" placeholder={t(locale, 'form.new_company_phone_placeholder')} value={newCoPhone}
-                  onChange={e => setNewCoPhone(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="email" placeholder={t(locale, 'form.new_company_email_placeholder')} value={newCoEmail}
-                  onChange={e => setNewCoEmail(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: STATUS.errorText }}>{mc('onsite_new_company_error', 'form.new_company_error')}</p>
-                )}
-                <button type="button" onClick={handleNewCompanySubmit}
-                  disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
-                  className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
-                  style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
-                  {newCoStatus === 'submitting'
-                    ? t(locale, 'form.new_company_sending')
-                    : newCompanyIncludesBooking ? t(locale, 'form.new_company_send_with_booking') : t(locale, 'form.new_company_send_request')}
-                </button>
-                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
-                  className="w-full py-2 rounded-lg text-xs font-medium border text-center"
-                  style={{ color: C.muted, borderColor: C.border }}>
-                  {t(locale, 'form.new_company_cancel')}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <NewCompanyPopupView
+          includesBooking={newCompanyIncludesBooking}
+          status={newCoStatus}
+          title={mc('onsite_new_company_title', 'form.new_company_title')}
+          bodyWithBooking={mc('onsite_new_company_body_with_booking', 'form.new_company_body_with_booking')}
+          bodyNoBooking={mc('onsite_new_company_body_no_booking', 'form.new_company_body_no_booking')}
+          successTitle={mc('onsite_new_company_success_title', 'form.new_company_success_title')}
+          successBody={mc('onsite_new_company_success_body', 'form.new_company_success_body')}
+          errorMessage={mc('onsite_new_company_error', 'form.new_company_error')}
+          name={newCoName}
+          contact={newCoContact}
+          phone={newCoPhone}
+          email={newCoEmail}
+          onNameChange={setNewCoName}
+          onContactChange={setNewCoContact}
+          onPhoneChange={setNewCoPhone}
+          onEmailChange={setNewCoEmail}
+          onSubmit={handleNewCompanySubmit}
+          onClose={() => setShowNewCompanyPopup(false)}
+          labels={{
+            namePlaceholder: t(locale, 'form.new_company_name_placeholder'),
+            contactPlaceholder: t(locale, 'form.new_company_contact_placeholder'),
+            phonePlaceholder: t(locale, 'form.new_company_phone_placeholder'),
+            emailPlaceholder: t(locale, 'form.new_company_email_placeholder'),
+            sending: t(locale, 'form.new_company_sending'),
+            sendWithBooking: t(locale, 'form.new_company_send_with_booking'),
+            sendRequest: t(locale, 'form.new_company_send_request'),
+            cancel: t(locale, 'form.new_company_cancel'),
+            close: t(locale, 'form.new_company_close'),
+          }}
+        />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
