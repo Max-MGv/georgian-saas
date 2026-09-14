@@ -8,107 +8,87 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-14 (2) — Fixed all 5 bugs from the Messages/Invoice staging QA report
+## 2026-09-14 (4) — On-Site Messages Chunk 0 (foundation) — done and verified live
 
-Max shared a staging QA report (Feature 181's Messages tab + real booking/invoice
-flow, tested as tenant admin on `georgian-saas-git-staging-...vercel.app`) listing
-5 bugs. Triaged first: 2 had clear, mechanical fixes; 3 (the public booking-submission
-500, the admin Messages-panel crash on the "New company request" variant after an
-edit, and edits not reliably persisting) could not be diagnosed from code alone —
-`createBooking.ts`'s entire body is already wrapped in a catch-all that can't itself
-surface a raw 500, so the real cause is outside what static reading can find. Max
-chose to fix the 2 clear ones now and investigate the crashes separately next.
+Max shared `vault/Plan-OnSiteMessages.md` (written last session) and said to start working
+through its 5 chunks sequentially, verifying each before moving on.
 
-**Fixed — Booking Confirmation summary block stayed English under the Georgian
-toggle:** `bookingConfirmationTemplate.ts` never took a `locale` param at all —
-"Booking Summary", "Visit type", "Date", "Time", "Guests", "Paid"/"Estimated total",
-the visit-type text, and the cancellation-policy footer were hardcoded English
-literals, unlike `invoiceEmailTemplate.ts`'s existing `LABELS` pattern next to it.
-Added the same `LABELS` shape + `locale?: 'en'|'ka'` field, threaded `locale`
-through all 3 call sites (`createBooking.ts`, `settle.ts`, `MessagesPanel.tsx`
-preview). Also fixed a second half of the same bug: the `date` value itself (not
-just its caption) was baked to English at the call site via
-`toLocaleDateString('en-GB', ...)` regardless of guest locale.
+**Chunk 0 decision:** reuse `SiteContent` section `'messages'` (the same section email intros
+already use — see `MaintenanceNotes.md` §23) rather than a new section, with an `onsite_` key
+prefix to stay distinct from the existing `email_*` keys. `getAllContent()` already fetches every
+section in one query, so this costs nothing extra.
 
-**Fixed — Invoice date flips to an invalid `MM.DD.YYYY` in Georgian:** confirmed
-via a direct Node check that this Vercel deployment's `ka-GE` Intl data doesn't
-carry Georgian's real day-first field order — it silently falls back to an
-en-US-shaped MM/DD/YYYY order while still accepting the `ka-GE` tag, which is
-exactly the `09.14.2026` the report saw for 14 September. Local dev has full ICU
-and never showed it, which is why it passed here before. **Fix avoids the ICU
-dependency entirely**: new `lib/emails/templates/dateFormat.ts` builds both the
-long-form date (with an explicit Georgian weekday/month name table, no `toLocaleDateString('ka-GE', ...)`
-anywhere) and the short `DD.MM.YYYY`/`DD/MM/YYYY` date from `getDate()`/`getMonth()`/`getFullYear()`
-directly — deterministic regardless of the runtime's locale data.
+**Built:**
+- `lib/t.ts` — `form.onsite_pending_company_note`, EN + KA (first hardcoded-English string in
+  scope, now translated).
+- `components/BookingForm.tsx` — new `messagesContent` prop + `mc(key, tKey)` helper mirroring the
+  existing `fc()`; the pending-company success paragraph now reads through it.
+- `app/(site)/page.tsx` — fetches `content['messages']`, passes it down as `messagesContent`.
+- `lib/adminT.ts` + `MessagesPanel.tsx` — two new group headings ("Automatic Emails" /
+  "On-Site Messages") and one new editable field, "Pending Company Note", same
+  textarea/save-on-blur pattern as the existing email fields.
 
-**Verified live** on the local dev server (Staging Winery, tenant admin login):
-Messages tab preview in Georgian now shows "ჯავშნის დეტალები" / "ვიზიტის ტიპი" /
-"თარიღი" / "დრო" / "სტუმრები" / "სავარაუდო ჯამი" and the Georgian cancellation
-paragraph, date renders as "შაბათი, 12 სექტემბერი, 2026"; Invoice Email preview
-shows "14.09.2026" in Georgian and "14/09/2026" in English (day-first, both) for
-the same 14 September sample date. English side unchanged in both templates —
-no regression. `tsc --noEmit` clean.
+**Verified live** on Staging Winery, local dev: edited the field in the admin Messages tab to a
+test string, then ran the actual pending-company booking flow (Tour Company → fill form → wrong
+access code → "New Company?" popup opens pre-filled with the booking attached → submit) and the
+test string appeared verbatim on the "Booking received!" success screen. Reverted to the real EN
+default afterward. Note for next time: the browser tool's simulated `ctrl+a`/`Delete` didn't reach
+the textarea to clear it — `form_input` (sets the value directly) worked where that didn't.
 
-**Then fixed the 2 crashes too, same session** — pulled the real Vercel runtime-error
-clusters (Vercel MCP `get_runtime_errors`, 7-day window) instead of guessing, and
-both digests resolved to real, unrelated causes in one read: **#33** (public booking
-+ "New Company?" registration, digest `2710274906`) was `ReferenceError:
-NotifyNewCompanyData is not defined` at module evaluation — `notifyNewCompany.ts`
-(a `'use server'` file) illegally re-exported a type (`export type {
-NotifyNewCompanyData }`), which this Next.js version leaves as a dangling runtime
-reference instead of erasing; nothing used the re-export, so the fix was a
-one-line deletion. **#34** (admin Messages-panel crash, digest `3471338459`, on
-`/admin/wines`/`/admin/content`/`/admin/onboarding`) was `sharp`'s native
-`linux-x64` binary failing to load — `uploadImage.ts` imports `sharp` at module
-scope and Next's build-time file tracing wasn't picking up its platform binaries
-(`@img/sharp-*` packages) for routes that only reach it transitively through the
-server-actions layer. **The report's own repro steps for #34 were a red
-herring** — it read as "editing a message, then clicking a specific variant,"
-but the actual trigger was just which page's actions bundle loaded, unrelated to
-the Messages UI at all. Fixed with Next's own documented remedy
-(`outputFileTracingIncludes` in `next.config.ts`, found in
-`node_modules/next/dist/docs`). Full write-up: `KnownBugs.md` bugs #33/#34.
+Updated `Plan-OnSiteMessages.md` (Chunk 0 ✅, Chunk 1 🚧 — pending-company note already done as the
+proof field) and `FeatureLog.md` (new row #182, 🚧 In progress).
 
-**Verified** both fixes against an actual `next build` (not just dev mode, since
-this class of bug only shows up in the compiled server-action bundle): grepped
-the compiled chunks for `NotifyNewCompanyData` (absent, was present before the
-fix) and inspected the `.nft.json` trace files for `/admin/(panel)/content` and
-`/admin/(panel)/wines` to confirm `@img/sharp-*` is now included (previously
-inconsistent). `tsc --noEmit` and `next build` both clean.
+**Next:** Chunk 1 — the New Company popup itself (title, both body variants, success state, error
+state) and the open question on whether its buttons should be editable or fixed chrome (plan
+recommends fixed, matching how `fc()` is scoped elsewhere).
 
-**Bug #35 (edits not persisting) checked separately** — could not reproduce it
-after the #33/#34 fixes: edited a message with a distinctive test marker,
-blurred it, did a full hard reload, and it was still there (cleaned up
-afterward, no test data left behind). Most likely was a symptom of #34's crash
-corrupting the render/save cycle during the original session rather than an
-independent bug, but flagged as **unconfirmed** in `KnownBugs.md` since the
-original broken state was never directly reproduced to compare against.
+---
 
-**Shipped to production 2026-09-14, same session.** Max asked to push to
-staging, then straight to prod. Pushing `staging` → `master` turned out to be a
-much bigger merge than just this session's 2 commits — `master` was last synced
-at Feature 178 (`a7f7533`), so the fast-forward also carried **3 previously
-unshipped features**: #179 (winery new-booking notification email), #180 (New
-Company booking flow), and #181 (the Automatic Messages page this whole session
-was about) — 38 files, including a pending Prisma migration
-(`20260913160233_add_requested_company_name`, adds `Order.requestedCompanyName`
-for #180). Flagged this to Max before pushing rather than assuming "push to
-prod" meant only today's bugfixes; he confirmed ship everything.
+## 2026-09-14 (3) — Messages tab: collapsed-by-default + auto-fit preview height
 
-**Sequence used:** pushed `master` first, then immediately ran
-`prisma migrate deploy` against the **production** database (`.env.prod.backup`,
-confirmed connected to `aws-1-eu-central-1` — Nikalas Marani's prod project, not
-dev) before any real traffic could hit code expecting the new column — only the
-one migration was pending, so prod schema was otherwise already in sync. Verified
-after: new deployment `dpl_6mmY4smHrJALzDs8DHrE5qvTfSCC` READY on
-`target: production`, and Vercel runtime logs clean (no errors/fatals) for 10
-minutes post-deploy. Switched back to `staging` afterward per Rule 0's
-guardrails.
+Max flagged two UX issues on the Messages tab of Site Content while testing on
+staging: (1) the Booking Confirmation section opened expanded by default when
+the tab was clicked, and (2) the email preview iframes (especially Invoice)
+had a hardcoded 420px height, so taller previews scrolled internally inside a
+small box instead of fitting the page.
 
-**Not personally re-verified against live production traffic** — a real booking,
-a real "New Company?" submission, and the admin Messages tab on
-`nikalasmarani.vercel.app` are still worth Max checking directly, same as any
-other production ship.
+**Fix 1:** `MessagesPanel.tsx`'s `open` state started as `new Set(['booking'])`
+— changed to `new Set()` so all 5 sections (Booking Confirmation, Wine Order
+Receipt, Invoice Email, New Booking Alert, New Company Request) start
+collapsed.
+
+**Fix 2:** `IframePreview` now measures `contentDocument.documentElement.scrollHeight`
+after the srcDoc loads and sets the iframe's own height to match, instead of a
+fixed 420px. Required changing `sandbox=""` to `sandbox="allow-same-origin"`
+(still no scripts run in the preview — `allow-same-origin` only lets the
+parent read the iframe's rendered height) since a fully sandboxed srcDoc
+iframe has an opaque origin and blocks `contentDocument` access entirely.
+Previews now grow to their natural content height; the outer page scrolls
+instead of a nested scrollbar.
+
+**Verified** on local dev (Staging Winery, tenant admin login): Messages tab
+loads with every section collapsed; expanded Invoice Email renders the full
+invoice (Company/Guests/Masterclass/Amount/Payment Details blocks) with no
+internal scrollbar.
+
+**Also discussed but not implemented:** Max asked about researching what
+other messages could be added here — clarified this means **on-site UI
+messages** (e.g. confirmation shown after "Book & Pay"), not more
+transactional emails. Researched the full public booking flow
+(`BookingForm.tsx`, `createBooking.ts`, `notifyNewCompany.ts`,
+`payment/result/page.tsx`) and found three tiers: already-dynamic (booking
+success heading/body, via existing `fc()`/SiteContent section `'form'`),
+translated-but-not-editable (most validation errors, payment result page —
+`lib/t.ts` only), and hardcoded-English-only-untranslated (New Company popup,
+pending-company note, access-code popup, several inline/server errors).
+Wrote up `vault/Plan-OnSiteMessages.md` — 5 sequential chunks (foundation
+wiring, New Company flow, payment result page, access-code popup, booking
+validation/server errors) — not yet started, awaiting Max's go-ahead on
+Chunk 0.
+
+---
+
+## 2026-09-14 (2) — Fixed all 5 bugs from the Messages/Invoice staging QA report (Booking Confirmation KA translation, invoice KA date format, #33 server-action crash, #34 sharp/native-binary crash; #35 unconfirmed), shipped to production same session along with previously-unshipped #179/#180/#181 — see `KnownBugs.md` #33–#37 and `FeatureLog.md` #181 for detail.
 
 ---
 

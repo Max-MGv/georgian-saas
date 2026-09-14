@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { adminT } from '@/lib/adminT'
 import { saveContent } from '@/app/actions/siteContent'
 import {
@@ -20,6 +20,7 @@ import {
 import { renderNewBookingNotificationEmail } from '@/lib/emails/templates/newBookingNotificationTemplate'
 import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCompanyTemplate'
 import { formatLongDate } from '@/lib/emails/templates/dateFormat'
+import { t } from '@/lib/t'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -60,11 +61,23 @@ const SAMPLE_COMPANY = 'Beridze LLC'
 type BookingVariant = 'unpaid' | 'paid' | 'pendingCompany'
 
 function IframePreview({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null)
+  const [height, setHeight] = useState(420)
+
+  const measure = () => {
+    const doc = ref.current?.contentDocument
+    if (doc) setHeight(doc.documentElement.scrollHeight)
+  }
+
+  useEffect(measure, [html])
+
   return (
     <iframe
+      ref={ref}
       srcDoc={`<div style="padding:24px;background:#f4f1ec;">${html}</div>`}
-      sandbox=""
-      style={{ width: '100%', height: 420, border: 'none', borderRadius: 8, backgroundColor: '#f4f1ec' }}
+      sandbox="allow-same-origin"
+      onLoad={measure}
+      style={{ width: '100%', height, border: 'none', borderRadius: 8, backgroundColor: '#f4f1ec' }}
       title="Email preview"
     />
   )
@@ -133,7 +146,7 @@ function bookingDefault(variant: BookingVariant, locale: 'en' | 'ka'): string {
 export default function MessagesPanel({ c, locale, adminLocale, winery, theme }: Props) {
   const at = (key: string) => adminT(adminLocale, key)
 
-  const [open, setOpen] = useState<Set<string>>(new Set(['booking']))
+  const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (id: string) => setOpen(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
@@ -152,6 +165,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     email_booking_intro_pending_company: c.email_booking_intro_pending_company ?? bookingDefault('pendingCompany', locale),
     email_wine_receipt_intro: c.email_wine_receipt_intro ?? (locale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
     email_invoice_message: c.email_invoice_message ?? (locale === 'ka' ? DEFAULT_INVOICE_MESSAGE_KA : DEFAULT_INVOICE_MESSAGE_EN),
+    onsite_pending_company_note: c.onsite_pending_company_note ?? t(locale, 'form.onsite_pending_company_note'),
   })
 
   function setDraft(key: string, value: string) {
@@ -267,6 +281,10 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     <div className="max-w-3xl">
       <div className="flex flex-col gap-3">
 
+        <h3 className="text-xs font-semibold uppercase tracking-wider mt-1" style={{ color: C.faint }}>
+          {at('messages.group.emails')}
+        </h3>
+
         <Section
           title={at('messages.booking.title')}
           editable
@@ -378,6 +396,33 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           onToggle={() => toggle('newCompany')}
         >
           <IframePreview html={newCompanyPreview.html} />
+        </Section>
+
+        <h3 className="text-xs font-semibold uppercase tracking-wider mt-3" style={{ color: C.faint }}>
+          {at('messages.group.onsite')}
+        </h3>
+
+        <Section
+          title={at('messages.onsitePendingCompany.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsitePendingCompany.trigger')}
+          open={open.has('onsitePendingCompany')}
+          onToggle={() => toggle('onsitePendingCompany')}
+        >
+          <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('messages.messageLabel')}</label>
+          <div className="flex items-start gap-2">
+            <textarea
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical' }}
+              value={drafts.onsite_pending_company_note}
+              onChange={e => setDraft('onsite_pending_company_note', e.target.value)}
+              onBlur={() => save('onsite_pending_company_note', 'On-site: pending company note', drafts.onsite_pending_company_note)}
+            />
+            {savedKey === 'onsite_pending_company_note' && (
+              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
+            )}
+          </div>
         </Section>
 
       </div>

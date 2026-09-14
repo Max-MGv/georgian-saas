@@ -113,6 +113,7 @@ const en: Translations = {
   'form.est_total_label': 'Total',
   'form.guest_count_adjusted': 'We can accommodate up to {max} guests for this visit — your booking has been adjusted to {max} guests.',
   'form.guest_count_over_max_notice': 'Groups over {max} guests will be confirmed with you directly.',
+  'form.onsite_pending_company_note': "Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.",
 
   // Online payment result page
   'payment.success_heading': 'Payment received',
@@ -260,6 +261,7 @@ const ka: Translations = {
   'form.est_total_label': 'ჯამი',
   'form.guest_count_adjusted': 'ჩვენ შეგვიძლია მივიღოთ მაქსიმუმ {max} სტუმარი ამ ვიზიტისთვის — თქვენი ჯავშანი შესწორდა {max} სტუმარზე.',
   'form.guest_count_over_max_notice': '{max}-ზე მეტი სტუმრის ჯგუფები დადასტურდება პირდაპირ თქვენთან.',
+  'form.onsite_pending_company_note': 'რადგან თქვენი კომპანია ჯერ არ არის რეგისტრირებული ჩვენს სისტემაში, ეს ჯავშანი ჯერ არ არის დადასტურებული — ჩვენ შევქმნით თქვენს ანგარიშს და დაგიკავშირდებით ჯავშნისა და ფასის დასადასტურებლად.',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',

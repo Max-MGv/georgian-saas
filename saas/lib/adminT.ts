@@ -40,6 +40,10 @@ const en: Translations = {
   'messages.newBooking.trigger': 'Sent to your own contact email every time a new booking comes in. Internal — customers never see this one, so its wording is fixed.',
   'messages.newCompany.title': 'New Company Request',
   'messages.newCompany.trigger': 'Sent to your own contact email when a customer requests a new company account. Internal — customers never see this one, so its wording is fixed.',
+  'messages.group.emails': 'Automatic Emails',
+  'messages.group.onsite': 'On-Site Messages',
+  'messages.onsitePendingCompany.title': 'Pending Company Note',
+  'messages.onsitePendingCompany.trigger': 'Shown on the booking page right after a customer submits a booking for a company that isn\'t set up in your system yet.',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
   // view of the reports this logged-in admin personally submitted.
@@ -1113,6 +1117,10 @@ const ka: Translations = {
   'messages.newBooking.trigger': 'იგზავნება თქვენს საკონტაქტო ელფოსტაზე ყოველი ახალი ჯავშნის დროს. შიდა შეტყობინებაა — მომხმარებლები მას ვერ ხედავენ, ამიტომ მისი ტექსტი ფიქსირებულია.',
   'messages.newCompany.title': 'ახალი კომპანიის მოთხოვნა',
   'messages.newCompany.trigger': 'იგზავნება თქვენს საკონტაქტო ელფოსტაზე, როცა მომხმარებელი ითხოვს ახალი კომპანიის ანგარიშს. შიდა შეტყობინებაა — მომხმარებლები მას ვერ ხედავენ, ამიტომ მისი ტექსტი ფიქსირებულია.',
+  'messages.group.emails': 'ავტომატური ელფოსტები',
+  'messages.group.onsite': 'საიტზე გამოსახული შეტყობინებები',
+  'messages.onsitePendingCompany.title': 'მოლოდინში მყოფი კომპანიის შეტყობინება',
+  'messages.onsitePendingCompany.trigger': 'ჩნდება ჯავშნის გვერდზე მომხმარებლის მიერ ჯავშნის გაგზავნისთანავე, თუ მისი კომპანია ჯერ არ არის რეგისტრირებული თქვენს სისტემაში.',
 
   // My Reports page
   'myReports.pageTitle': 'ჩემი შეტყობინებები',

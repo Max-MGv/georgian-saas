@@ -59,8 +59,9 @@ export default async function Home({ searchParams }: PageProps) {
     isPaymentConfigured(tenantId, { section: 'COMPANY' }),
   ])
 
-  const c           = content['home'] ?? {}
-  const formContent = content['form'] ?? {}
+  const c               = content['home'] ?? {}
+  const formContent     = content['form'] ?? {}
+  const messagesContent = content['messages'] ?? {}
 
   const showCompanyPrice        = settingValue(settings, 'show_company_price_after_booking')
   const enhancedBookingStr      = settingValue(settings, 'enable_enhanced_company_booking')
@@ -395,6 +396,7 @@ export default async function Home({ searchParams }: PageProps) {
             workingHoursDaysJson={workingHoursDaysJson}
             blockedDates={blockedDates.map(d => d.date)}
             formContent={formContent}
+            messagesContent={messagesContent}
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceTastingLunch}
             individualPrices={individualsRow?.prices ?? []}

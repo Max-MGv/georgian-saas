@@ -71,6 +71,8 @@ type Props = {
   workingHoursClose?: string
   workingHoursDaysJson?: string
   formContent?: Record<string, string>
+  /** On-site UI copy (SiteContent section 'messages', 'onsite_*' keys) — see MaintenanceNotes §23. */
+  messagesContent?: Record<string, string>
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
   individualPrices?: Price[]
@@ -91,8 +93,9 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '' }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '' }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
+  const mc = (key: string, tKey: string) => messagesContent[key] || t(locale, tKey)
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
@@ -472,7 +475,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
         {confirmedPendingNewCompany && (
           <p className="text-sm mt-3" style={{ color: C.muted }}>
-            Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.
+            {mc('onsite_pending_company_note', 'form.onsite_pending_company_note')}
           </p>
         )}
         {confirmedGuestAdjustedTo != null && (
