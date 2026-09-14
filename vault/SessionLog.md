@@ -84,10 +84,31 @@ corrupting the render/save cycle during the original session rather than an
 independent bug, but flagged as **unconfirmed** in `KnownBugs.md` since the
 original broken state was never directly reproduced to compare against.
 
-**Not yet pushed to `staging`** for any of the 4 fixes — all fixed and verified
-locally, pending Max's go-ahead per the Rule 0 workflow, then a live staging
-re-check of the real booking flow, the New Company popup, and the admin Messages
-tab before merging to `master`.
+**Shipped to production 2026-09-14, same session.** Max asked to push to
+staging, then straight to prod. Pushing `staging` → `master` turned out to be a
+much bigger merge than just this session's 2 commits — `master` was last synced
+at Feature 178 (`a7f7533`), so the fast-forward also carried **3 previously
+unshipped features**: #179 (winery new-booking notification email), #180 (New
+Company booking flow), and #181 (the Automatic Messages page this whole session
+was about) — 38 files, including a pending Prisma migration
+(`20260913160233_add_requested_company_name`, adds `Order.requestedCompanyName`
+for #180). Flagged this to Max before pushing rather than assuming "push to
+prod" meant only today's bugfixes; he confirmed ship everything.
+
+**Sequence used:** pushed `master` first, then immediately ran
+`prisma migrate deploy` against the **production** database (`.env.prod.backup`,
+confirmed connected to `aws-1-eu-central-1` — Nikalas Marani's prod project, not
+dev) before any real traffic could hit code expecting the new column — only the
+one migration was pending, so prod schema was otherwise already in sync. Verified
+after: new deployment `dpl_6mmY4smHrJALzDs8DHrE5qvTfSCC` READY on
+`target: production`, and Vercel runtime logs clean (no errors/fatals) for 10
+minutes post-deploy. Switched back to `staging` afterward per Rule 0's
+guardrails.
+
+**Not personally re-verified against live production traffic** — a real booking,
+a real "New Company?" submission, and the admin Messages tab on
+`nikalasmarani.vercel.app` are still worth Max checking directly, same as any
+other production ship.
 
 ---
 
