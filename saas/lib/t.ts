@@ -106,6 +106,18 @@ const en: Translations = {
   'form.flat': 'flat',
   'form.pc': 'pc',
 
+  // Confirm-your-visit step (Feature 184) — shown after validation passes,
+  // before the booking is actually sent.
+  'form.confirm_heading': 'Review your visit',
+  'form.confirm_subheading': 'Take a second look — nothing is booked yet.',
+  'form.confirm_section_visit': 'Visit',
+  'form.confirm_section_guests': 'Guests & contact',
+  'form.confirm_arrive': 'Arrive',
+  'form.confirm_duration_note': '~{hours} hrs · plan to finish around {end}',
+  'form.confirm_edit': 'Edit details',
+  'form.confirm_button': 'Confirm & Request Booking',
+  'form.confirm_button_pay': 'Confirm & Book',
+
   // Success state
   'form.submit_pay': 'Book & Pay',
   'form.success_heading': 'Booking received!',
@@ -299,6 +311,16 @@ const ka: Translations = {
   'form.pp': 'პ',
   'form.flat': 'ფიქს.',
   'form.pc': 'ცალი',
+
+  'form.confirm_heading': 'გადაამოწმეთ ვიზიტი',
+  'form.confirm_subheading': 'გადახედეთ დეტალებს — ჯავშანი ჯერ არ არის გაგზავნილი.',
+  'form.confirm_section_visit': 'ვიზიტი',
+  'form.confirm_section_guests': 'სტუმრები და კონტაქტი',
+  'form.confirm_arrive': 'ჩამოსვლა',
+  'form.confirm_duration_note': '~{hours} სთ · დასრულება დაახლოებით {end}-ზე',
+  'form.confirm_edit': 'დეტალების რედაქტირება',
+  'form.confirm_button': 'დადასტურება და ჯავშნის მოთხოვნა',
+  'form.confirm_button_pay': 'დადასტურება და ჯავშანი',
 
   // Success state
   'form.submit_pay': 'დაჯავშნა და გადახდა',

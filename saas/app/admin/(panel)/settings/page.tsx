@@ -26,6 +26,8 @@ export default async function SettingsPage() {
     bookingLeadHours,
     bookingLeadHoursTasting,
     bookingLeadHoursTastingLunch,
+    visitDurationTasting,
+    visitDurationTastingLunch,
     workingHoursCustom,
     workingHoursOpen,
     workingHoursClose,
@@ -59,6 +61,8 @@ export default async function SettingsPage() {
     getSetting('booking_lead_hours'),
     getSetting('booking_lead_hours_tasting'),
     getSetting('booking_lead_hours_tasting_lunch'),
+    getSetting('visit_duration_tasting'),
+    getSetting('visit_duration_tasting_lunch'),
     getSetting('working_hours_custom'),
     getSetting('working_hours_open'),
     getSetting('working_hours_close'),
@@ -125,6 +129,8 @@ export default async function SettingsPage() {
         bookingLeadHours={bookingLeadHours}
         bookingLeadHoursTasting={bookingLeadHoursTasting}
         bookingLeadHoursTastingLunch={bookingLeadHoursTastingLunch}
+        visitDurationTasting={visitDurationTasting}
+        visitDurationTastingLunch={visitDurationTastingLunch}
         workingHoursCustom={workingHoursCustom}
         workingHoursOpen={workingHoursOpen}
         workingHoursClose={workingHoursClose}

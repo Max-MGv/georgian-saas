@@ -69,6 +69,24 @@ export function getLeadHours(
   return visitType === 'TASTING' ? tastingHours : tastingLunchHours
 }
 
+/** Expected visit length in minutes, by visit type (Feature 184's confirm-step duration line). */
+export function getVisitDurationMinutes(
+  visitType: VisitType,
+  tastingMinutes: number,
+  tastingLunchMinutes: number
+): number {
+  return visitType === 'TASTING' ? tastingMinutes : tastingLunchMinutes
+}
+
+/** Adds `minutes` to a "HH:MM" slot, wrapping past midnight if needed (e.g. "17:00" + 180 → "20:00"). */
+export function addMinutesToSlot(timeSlot: string, minutes: number): string {
+  const [h, m] = timeSlot.split(':').map(Number)
+  const total = ((h || 0) * 60 + (m || 0) + minutes + 1440 * 7) % 1440
+  const outH = Math.floor(total / 60)
+  const outM = total % 60
+  return `${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}`
+}
+
 /** The earliest instant (as a Date) a booking may start, given the lead time in hours. */
 export function minBookableInstant(now: Date, leadHours: number): Date {
   return new Date(now.getTime() + leadHours * 60 * 60 * 1000)

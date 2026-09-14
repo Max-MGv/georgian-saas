@@ -72,6 +72,8 @@ export default async function Home({ searchParams }: PageProps) {
   const bookingLeadHours        = settingValue(settings, 'booking_lead_hours')
   const bookingLeadHoursTasting = settingValue(settings, 'booking_lead_hours_tasting')
   const bookingLeadHoursLunch   = settingValue(settings, 'booking_lead_hours_tasting_lunch')
+  const visitDurationTasting    = settingValue(settings, 'visit_duration_tasting')
+  const visitDurationLunch      = settingValue(settings, 'visit_duration_tasting_lunch')
   const workingHoursCustom      = settingValue(settings, 'working_hours_custom')
   const workingHoursOpen        = settingValue(settings, 'working_hours_open')
   const workingHoursClose       = settingValue(settings, 'working_hours_close')
@@ -390,6 +392,8 @@ export default async function Home({ searchParams }: PageProps) {
             bookingLeadHours={parseInt(bookingLeadHours) || 3}
             bookingLeadHoursTasting={parseInt(bookingLeadHoursTasting) || 3}
             bookingLeadHoursTastingLunch={parseInt(bookingLeadHoursLunch) || 6}
+            visitDurationTasting={parseInt(visitDurationTasting) || 90}
+            visitDurationTastingLunch={parseInt(visitDurationLunch) || 180}
             workingHoursCustom={workingHoursCustom === 'true'}
             workingHoursOpen={workingHoursOpen || '12:00'}
             workingHoursClose={workingHoursClose || '18:00'}

@@ -193,6 +193,19 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         <ET k="form_cancel_policy" fb="48-hour cancellation policy. We will contact you to confirm." />
       </p>
 
+      {/* Confirm-your-visit sheet (#184) — shown to guests as a last review step
+          before their booking is actually sent. Not gated behind the simple/
+          detailed toggle since its shape (Visit / Guests & contact / Total)
+          doesn't change between them — see BookingConfirmPopupView.tsx. */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border, backgroundColor: 'color-mix(in srgb, var(--site-surface) 92%, var(--site-secondary))' }}>
+        <div className="px-5 py-3.5 border-b border-dashed" style={{ borderColor: C.border }}>
+          <h3 className="font-semibold text-sm" style={{ color: C.text }}>Review your visit</h3>
+        </div>
+        <div className="px-5 py-3.5 text-xs" style={{ color: C.muted }}>
+          Shown to guests as a last review step before their booking is sent. Its heading, subheading, duration line, and button text are edited on the <strong>Messages</strong> tab, under "Booking Confirm Sheet" — same place as the other on-site popups, not here.
+        </div>
+      </div>
+
       {/* Success state */}
       <div className="rounded-xl border p-8 text-center" style={{ backgroundColor: C.bg, borderColor: C.border }}>
         <div className="text-3xl mb-3">🍷</div>

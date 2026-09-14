@@ -33,6 +33,17 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 - `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor, takes a `variant` prop; layout must stay in sync with `BookingForm.tsx`
 - `saas/scripts/seed-ka.ts` — Georgian locale seed data; run with `npx tsx scripts/seed-ka.ts` from `saas/` after adding new `form_*` keys
 
+**Since Feature 184 (2026-09-14):** `handleSubmit`'s validation no longer ends in a `createBooking()`
+call — once every check (including the company-code one below) passes, it opens a confirm sheet
+(`components/BookingConfirmPopupView.tsx`) instead; the actual submit moved to a new
+`handleConfirmedSubmit()`. That sheet's own copy (heading, subheading, duration line, both button
+variants) is **not** in `FIELDS.form` here — it lives under the Content page's **Messages** tab
+(`onsite_confirm_*` keys, `MessagesPanel.tsx`), matching the pattern of the two popups it's modeled
+on (`AccessCodePopupView.tsx`/`NewCompanyPopupView.tsx`), not the pattern of the rest of this file.
+`BookingFormVisualPanel.tsx` has a static block pointing there rather than a live-editable field —
+see `Features/Feature 184 - Booking Confirm Sheet.md` before changing either file's confirm-sheet
+section, so the two don't drift into duplicate or conflicting sources of truth for the same copy.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the

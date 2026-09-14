@@ -55,6 +55,9 @@ type Props = {
   bookingLeadHours: string
   bookingLeadHoursTasting: string
   bookingLeadHoursTastingLunch: string
+  /** Expected visit length, minutes, by visit type (#184) — shown on the public confirm sheet as "~{hours} hrs · finish around {end}". */
+  visitDurationTasting: string
+  visitDurationTastingLunch: string
   workingHoursCustom: string
   workingHoursOpen: string
   workingHoursClose: string
@@ -102,7 +105,7 @@ const inputStyle = {
   width: '100%',
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, visitDurationTasting: initialDurationTasting, visitDurationTastingLunch: initialDurationLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -133,6 +136,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [leadHours, setLeadHours] = useState(initialLeadHours)
   const [leadHoursTasting, setLeadHoursTasting] = useState(initialLeadHoursTasting)
   const [leadHoursLunch, setLeadHoursLunch] = useState(initialLeadHoursLunch)
+  const [durationTasting, setDurationTasting] = useState(initialDurationTasting)
+  const [durationLunch, setDurationLunch] = useState(initialDurationLunch)
   const [hoursCustom, setHoursCustom] = useState(initialHoursCustom === 'true')
   const [hoursOpen, setHoursOpen] = useState(initialHoursOpen)
   const [hoursClose, setHoursClose] = useState(initialHoursClose)
@@ -349,6 +354,20 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     const setter = key === 'booking_lead_hours' ? setLeadHours
       : key === 'booking_lead_hours_tasting' ? setLeadHoursTasting
       : setLeadHoursLunch
+    const val = String(Math.max(parseInt(raw) || 0, 0))
+    setter(val)
+    startTransition(async () => {
+      await updateSetting(key, val)
+      setSavedKey(key)
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  type VisitDurationKey = 'visit_duration_tasting' | 'visit_duration_tasting_lunch'
+
+  function handleVisitDurationBlur(key: VisitDurationKey) {
+    const raw = key === 'visit_duration_tasting' ? durationTasting : durationLunch
+    const setter = key === 'visit_duration_tasting' ? setDurationTasting : setDurationLunch
     const val = String(Math.max(parseInt(raw) || 0, 0))
     setter(val)
     startTransition(async () => {
@@ -1046,6 +1065,48 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               </div>
             </>
           )}
+        </div>
+      </div>
+
+      {/* Visit Duration (#184) — feeds the public confirm sheet's "~{hours} hrs · finish around {end}" line */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: C.border }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: 'var(--site-bg)', borderColor: C.border }}>
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>{at('settings.visitDuration.sectionTitle')}</p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.visitDuration.sectionHint')}</p>
+        </div>
+        <div className="divide-y" style={{ borderColor: C.border }}>
+          <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tasting')}</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} max={600} step={15}
+                style={{ ...inputStyle, width: 80 }}
+                value={durationTasting}
+                onChange={e => setDurationTasting(e.target.value)}
+                onBlur={() => handleVisitDurationBlur('visit_duration_tasting')}
+              />
+              <span className="text-xs" style={{ color: C.faint }}>{at('settings.visitDuration.minutes')}</span>
+              {savedKey === 'visit_duration_tasting' && !isPending && (
+                <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tastingLunch')}</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} max={600} step={15}
+                style={{ ...inputStyle, width: 80 }}
+                value={durationLunch}
+                onChange={e => setDurationLunch(e.target.value)}
+                onBlur={() => handleVisitDurationBlur('visit_duration_tasting_lunch')}
+              />
+              <span className="text-xs" style={{ color: C.faint }}>{at('settings.visitDuration.minutes')}</span>
+              {savedKey === 'visit_duration_tasting_lunch' && !isPending && (
+                <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

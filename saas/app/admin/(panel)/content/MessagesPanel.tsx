@@ -26,6 +26,7 @@ import NewCompanyPopupView, { type NewCompanyPopupStatus } from '@/components/Ne
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
 import AccessCodePopupView, { type AccessCodePopupStatus } from '@/components/AccessCodePopupView'
 import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
+import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -247,6 +248,12 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_new_company_success_title: c.onsite_new_company_success_title ?? t(locale, 'form.new_company_success_title'),
     onsite_new_company_success_body: c.onsite_new_company_success_body ?? t(locale, 'form.new_company_success_body'),
     onsite_new_company_error: c.onsite_new_company_error ?? t(locale, 'form.new_company_error'),
+    onsite_confirm_heading: c.onsite_confirm_heading ?? t(locale, 'form.confirm_heading'),
+    onsite_confirm_subheading: c.onsite_confirm_subheading ?? t(locale, 'form.confirm_subheading'),
+    onsite_confirm_duration_note: c.onsite_confirm_duration_note ?? t(locale, 'form.confirm_duration_note'),
+    onsite_confirm_edit: c.onsite_confirm_edit ?? t(locale, 'form.confirm_edit'),
+    onsite_confirm_button: c.onsite_confirm_button ?? t(locale, 'form.confirm_button'),
+    onsite_confirm_button_pay: c.onsite_confirm_button_pay ?? t(locale, 'form.confirm_button_pay'),
     onsite_payment_success_heading: c.onsite_payment_success_heading ?? t(locale, 'payment.success_heading'),
     onsite_payment_success_body: c.onsite_payment_success_body ?? t(locale, 'payment.success_body'),
     onsite_payment_failed_heading: c.onsite_payment_failed_heading ?? t(locale, 'payment.failed_heading'),
@@ -589,6 +596,56 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               phone={SAMPLE_GUEST.phone}
               email={SAMPLE_GUEST.email}
               labels={buildNewCompanyLabels(locale)}
+              preview
+            />
+          </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsiteConfirm.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteConfirm.trigger')}
+          open={open.has('onsiteConfirm')}
+          onToggle={() => toggle('onsiteConfirm')}
+        >
+          <EditField label={at('messages.onsiteConfirm.titleField')} draftKey="onsite_confirm_heading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.subheadingField')} draftKey="onsite_confirm_subheading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.durationNoteField')} draftKey="onsite_confirm_duration_note"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.editField')} draftKey="onsite_confirm_edit"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.buttonField')} draftKey="onsite_confirm_button"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.buttonPayField')} draftKey="onsite_confirm_button_pay"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <BookingConfirmPopupView
+              labels={{
+                heading: drafts.onsite_confirm_heading,
+                subheading: drafts.onsite_confirm_subheading,
+                sectionVisit: t(locale, 'form.confirm_section_visit'),
+                sectionGuests: t(locale, 'form.confirm_section_guests'),
+                edit: drafts.onsite_confirm_edit,
+                confirm: drafts.onsite_confirm_button,
+              }}
+              visitRows={[
+                { label: t(locale, 'form.visit_type'), value: t(locale, 'form.tasting_lunch') },
+                { label: t(locale, 'form.date'), value: '20/09/2026' },
+                { label: t(locale, 'form.confirm_arrive'), value: SAMPLE_TIME },
+              ] as ReviewRow[]}
+              guestRows={[
+                { label: t(locale, 'form.num_guests'), value: '4' },
+                { label: `${t(locale, 'form.first_name')} ${t(locale, 'form.last_name')}`, value: `${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}` },
+                { label: t(locale, 'form.phone'), value: SAMPLE_GUEST.phone },
+              ] as ReviewRow[]}
+              durationNote={drafts.onsite_confirm_duration_note.replaceAll('{hours}', '2.5').replaceAll('{end}', '16:30')}
+              totalLabel={t(locale, 'form.est_total')}
+              totalValue="320₾"
               preview
             />
           </div>
