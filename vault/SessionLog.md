@@ -120,10 +120,40 @@ code review.
 
 Updated `Plan-OnSiteMessages.md` (all 5 chunks ✅, plan complete) and `FeatureLog.md` (#182 → ✅ Done).
 
-**Next:** nothing pending on this plan. Worth a follow-up session at some point: click-test the
-day-closed/working-hours/lead-time/min-guest guards live with purpose-built test data, and the
-dropdown-variant company popups (Chunks 1 and 3) on a tenant that doesn't have
-`hideCompanyDropdown` set.
+**Follow-up, same session — visual previews for the new fields.** Max: liked that everything's
+editable now, but found the plain-textarea On-Site Messages fields confusing next to the Site
+Content editor and email previews, which are "visual and intuitive." Asked to brainstorm, then to
+go dynamic "like the site content editor."
+
+Diagnosed the actual difference between the two existing editors first, since it changes which
+one is worth copying: the **email previews are genuinely live** (call the real `render*Email()`
+template functions — zero drift risk), but **Site Content's "Visual" tab is a hand-maintained
+replica** (`BookingFormVisualPanel.tsx`) that has to be kept in sync with `BookingForm.tsx` by
+hand — already flagged as an ongoing risk in `MaintenanceNotes.md` §1. Recommended copying the
+email pattern (shared stateless view component, both callers render it) rather than the Visual
+tab's pattern. Max agreed, asked for a sketch, then to proceed.
+
+**Sequenced by risk rather than doing everything at once**, since two of the three pieces
+(New Company popup, access-code popup) are tightly coupled to `BookingForm.tsx`'s live state —
+the exact file where a careless split already caused 2 production crashes this cycle
+([[KnownBugs]] #33/#34). Started with Payment Result page: small, near-stateless, low blast
+radius, proves the pattern before touching anything riskier.
+
+**Built (Payment Result page, piece A):** new `components/PaymentResultView.tsx` — pure, no
+hooks, `preview?` flag shrinks the layout and makes the "Back to home" link inert for the admin
+context. The real page (`app/(site)/payment/result/page.tsx`) now just resolves data and renders
+it; no markup left inline. `MessagesPanel.tsx`'s Payment Result section reworked from a flat
+6-field list into a 3-way pill switcher (matching Booking Confirmation email's existing pattern)
+with a live preview card underneath, using this exact same component.
+
+**Verified live**: the real `/payment/result` pages render unchanged through the new shared
+component; admin preview's pill switch, live-typing reactivity, and edit/revert round trip all
+confirmed working, with a fresh reload confirming the revert actually persisted and the real
+public page was unaffected by the unsaved draft.
+
+New tracker: `vault/Plan-OnSiteMessagesVisualPreviews.md`. Pieces B (New Company popup) and C
+(access-code popup) — the higher-risk ones — not started; gated on a separate go-ahead per the
+tracker's own sequencing rule.
 
 ---
 

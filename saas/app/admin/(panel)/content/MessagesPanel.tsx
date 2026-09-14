@@ -21,6 +21,7 @@ import { renderNewBookingNotificationEmail } from '@/lib/emails/templates/newBoo
 import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCompanyTemplate'
 import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import { t } from '@/lib/t'
+import PaymentResultView, { type PaymentResultKind } from '@/components/PaymentResultView'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -203,6 +204,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
   })
 
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
+  const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind>('success')
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -529,18 +531,36 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           open={open.has('onsitePayment')}
           onToggle={() => toggle('onsitePayment')}
         >
-          <EditField label={at('messages.onsitePayment.successHeading')} draftKey="onsite_payment_success_heading"
+          <div className="flex gap-2 mb-4">
+            {(['success', 'failed', 'pending'] as PaymentResultKind[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPaymentVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={paymentVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsitePayment.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+          <EditField label={at('messages.onsitePayment.headingLabel')} draftKey={`onsite_payment_${paymentVariant}_heading`}
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsitePayment.successBody')} draftKey="onsite_payment_success_body" multiline
+          <EditField label={at('messages.onsitePayment.bodyLabel')} draftKey={`onsite_payment_${paymentVariant}_body`} multiline
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsitePayment.failedHeading')} draftKey="onsite_payment_failed_heading"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsitePayment.failedBody')} draftKey="onsite_payment_failed_body" multiline
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsitePayment.pendingHeading')} draftKey="onsite_payment_pending_heading"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsitePayment.pendingBody')} draftKey="onsite_payment_pending_body" multiline
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <PaymentResultView
+              kind={paymentVariant}
+              heading={drafts[`onsite_payment_${paymentVariant}_heading`]}
+              body={drafts[`onsite_payment_${paymentVariant}_body`]}
+              contactPhone={paymentVariant === 'success' ? undefined : (winery.phone || '+995 555 00 00 00')}
+              backHomeLabel={t(locale, 'payment.back_home')}
+              preview
+            />
+          </div>
         </Section>
 
         <Section

@@ -47,6 +47,17 @@ Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 the two things not click-tested live (individual-booking server-only min-guest guard, working-
 hours/day-closed/lead-time guards) and why.
 
+**Follow-up, same day — Chunk 5: shared-component visual previews.** Max liked the editability
+but found the plain-textarea fields (no visual context) confusing compared to the Site Content
+editor and the email previews. Discussed the gap: email previews are genuinely *live* (they call
+the real `render*Email()` template functions, so there's zero drift risk), while the Booking Form
+"Visual" tab is a hand-maintained replica ([[MaintenanceNotes]] §1) — the wrong pattern to copy.
+Decided to extract each on-site UI piece into a shared, stateless view component that both the
+real page and the admin preview import and render — same move Feature 181 already made for
+emails. Starting with the lowest-risk piece (Payment Result page, small/stateless) before
+deciding whether the higher-risk popups (tightly coupled to `BookingForm.tsx`'s state) are worth
+the same treatment. See `Plan-OnSiteMessagesVisualPreviews.md` for the write-up.
+
 **Suggested order rationale:** Chunks 1 and 2 are exactly the two things Max named directly
 ("booking without a company", "when you pay / when you don't") and both are pure upside — real
 copy a winery owner would want in their own words, in Georgian, editable. Chunk 3 is smaller,
