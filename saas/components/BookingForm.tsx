@@ -12,6 +12,9 @@ import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import NewCompanyPopupView from '@/components/NewCompanyPopupView'
+import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
+import AccessCodePopupView from '@/components/AccessCodePopupView'
+import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
 import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 
@@ -132,7 +135,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
   const [codeInput, setCodeInput] = useState('')
-  const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
 
@@ -220,7 +222,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCodeInput('')
     setCodeError('')
-    setShowCodeText(false)
     setShowCodePopup(true)
   }, [companyId, bookingType, hideCompanyDropdown])
 
@@ -520,80 +521,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     <>
       {/* Access code popup */}
       {showCodePopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <form
-            onSubmit={handleCodeSubmit}
-            className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4"
-            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}
-          >
-            <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{mc('onsite_access_code_title', 'form.access_code_title')}</h3>
-              <p className="text-sm" style={{ color: C.muted }}>
-                {mc('onsite_access_code_intro', 'form.access_code_intro', { company: companies.find(c => c.id === companyId)?.name ?? '' })}
-              </p>
-            </div>
-
-            {/* Hidden username field — tells the browser what account this password belongs to */}
-            <input
-              type="text"
-              name="username"
-              autoComplete="username"
-              value={companies.find(c => c.id === companyId)?.name ?? ''}
-              readOnly
-              style={{ display: 'none' }}
-            />
-
-            <div className="relative">
-              <input
-                autoFocus
-                name="password"
-                type={showCodeText ? 'text' : 'password'}
-                autoComplete="current-password"
-                value={codeInput}
-                onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
-                placeholder={t(locale, 'form.access_code_placeholder')}
-                className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
-                style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCodeText(s => !s)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
-              >
-                {showCodeText ? (
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            {codeError && <p className="text-sm" style={{ color: STATUS.errorText }}>{codeError}</p>}
-
-            <button
-              type="submit"
-              disabled={codeLoading || !codeInput.trim()}
-              className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
-              style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
-            >
-              {codeLoading ? t(locale, 'form.access_code_checking') : t(locale, 'form.access_code_confirm')}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNotARep}
-              className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50"
-              style={{ color: C.muted, borderColor: C.border }}
-            >
-              {t(locale, 'form.access_code_enter_manually')}
-            </button>
-          </form>
-        </div>
+        <AccessCodePopupView
+          status={codeLoading ? 'checking' : codeError ? 'error' : 'idle'}
+          title={mc('onsite_access_code_title', 'form.access_code_title')}
+          intro={mc('onsite_access_code_intro', 'form.access_code_intro', { company: companies.find(c => c.id === companyId)?.name ?? '' })}
+          errorMessage={codeError}
+          companyName={companies.find(c => c.id === companyId)?.name ?? ''}
+          code={codeInput}
+          onCodeChange={value => { setCodeInput(value); setCodeError('') }}
+          onSubmit={handleCodeSubmit}
+          onEnterManually={handleNotARep}
+          labels={buildAccessCodeLabels(locale)}
+        />
       )}
 
       {/* New Company popup */}
@@ -617,17 +556,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           onEmailChange={setNewCoEmail}
           onSubmit={handleNewCompanySubmit}
           onClose={() => setShowNewCompanyPopup(false)}
-          labels={{
-            namePlaceholder: t(locale, 'form.new_company_name_placeholder'),
-            contactPlaceholder: t(locale, 'form.new_company_contact_placeholder'),
-            phonePlaceholder: t(locale, 'form.new_company_phone_placeholder'),
-            emailPlaceholder: t(locale, 'form.new_company_email_placeholder'),
-            sending: t(locale, 'form.new_company_sending'),
-            sendWithBooking: t(locale, 'form.new_company_send_with_booking'),
-            sendRequest: t(locale, 'form.new_company_send_request'),
-            cancel: t(locale, 'form.new_company_cancel'),
-            close: t(locale, 'form.new_company_close'),
-          }}
+          labels={buildNewCompanyLabels(locale)}
         />
       )}
 

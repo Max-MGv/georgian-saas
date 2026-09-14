@@ -23,6 +23,9 @@ import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import { t } from '@/lib/t'
 import PaymentResultView, { type PaymentResultKind } from '@/components/PaymentResultView'
 import NewCompanyPopupView, { type NewCompanyPopupStatus } from '@/components/NewCompanyPopupView'
+import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
+import AccessCodePopupView, { type AccessCodePopupStatus } from '@/components/AccessCodePopupView'
+import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -62,6 +65,12 @@ const SAMPLE_COMPANY = 'Beridze LLC'
 
 type BookingVariant = 'unpaid' | 'paid' | 'pendingCompany'
 type NewCompanyVariant = 'withBooking' | 'noBooking' | 'sent' | 'error'
+type AccessCodeVariant = 'entry' | 'error'
+
+const ACCESS_CODE_PREVIEW: Record<AccessCodeVariant, AccessCodePopupStatus> = {
+  entry: 'idle',
+  error: 'error',
+}
 
 // Maps the admin's 4-way preview pill to the two independent props the real
 // popup takes (BookingForm.tsx's `newCompanyIncludesBooking` state and
@@ -219,6 +228,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
   const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind>('success')
   const [newCompanyVariant, setNewCompanyVariant] = useState<NewCompanyVariant>('withBooking')
+  const [accessCodeVariant, setAccessCodeVariant] = useState<AccessCodeVariant>('entry')
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -578,17 +588,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               contact={`${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}`}
               phone={SAMPLE_GUEST.phone}
               email={SAMPLE_GUEST.email}
-              labels={{
-                namePlaceholder: t(locale, 'form.new_company_name_placeholder'),
-                contactPlaceholder: t(locale, 'form.new_company_contact_placeholder'),
-                phonePlaceholder: t(locale, 'form.new_company_phone_placeholder'),
-                emailPlaceholder: t(locale, 'form.new_company_email_placeholder'),
-                sending: t(locale, 'form.new_company_sending'),
-                sendWithBooking: t(locale, 'form.new_company_send_with_booking'),
-                sendRequest: t(locale, 'form.new_company_send_request'),
-                cancel: t(locale, 'form.new_company_cancel'),
-                close: t(locale, 'form.new_company_close'),
-              }}
+              labels={buildNewCompanyLabels(locale)}
               preview
             />
           </div>
@@ -646,8 +646,42 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsiteAccessCode.intro')} draftKey="onsite_access_code_intro"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
-          <EditField label={at('messages.onsiteAccessCode.error')} draftKey="onsite_access_code_error"
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <div className="flex gap-2 mb-4">
+            {(['entry', 'error'] as AccessCodeVariant[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setAccessCodeVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={accessCodeVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsiteAccessCode.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          {accessCodeVariant === 'error' && (
+            <EditField label={at('messages.onsiteAccessCode.error')} draftKey="onsite_access_code_error"
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <AccessCodePopupView
+              status={ACCESS_CODE_PREVIEW[accessCodeVariant]}
+              title={drafts.onsite_access_code_title}
+              intro={drafts.onsite_access_code_intro.replaceAll('{company}', SAMPLE_COMPANY)}
+              errorMessage={drafts.onsite_access_code_error}
+              companyName={SAMPLE_COMPANY}
+              code="MARANI42"
+              labels={buildAccessCodeLabels(locale)}
+              preview
+            />
+          </div>
+
           <EditField label={at('messages.onsiteAccessCode.directNotRecognised')} draftKey="onsite_access_code_direct_not_recognised"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
