@@ -37,13 +37,13 @@ from source at chunk time rather than trusting this summary, since line numbers 
 |---|---|---|
 | **0** | Foundation — wire `SiteContent` section `'messages'` into the public booking flow, add an "On-Site Messages" group to the Messages tab | ✅ Done |
 | **1** | New Company flow — popup + pending-company success note (Georgian translation + editable) | ✅ Done |
-| **2** | Payment result page — success / failed / pending (already bilingual, just wire to editable) | ⬜ Not started |
+| **2** | Payment result page — success / failed / pending (already bilingual, just wire to editable) | ✅ Done |
 | **3** | Company access-code popup (Georgian translation + editable) | ⬜ Not started |
 | **4** | Booking validation & server errors — date/guest/pricing errors from the form and `createBooking.ts` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Start Chunk 2 — payment result page (success/failed/pending).
+**Overall resume point:** 🔜 Start Chunk 3 — company access-code popup.
 
 **Suggested order rationale:** Chunks 1 and 2 are exactly the two things Max named directly
 ("booking without a company", "when you pay / when you don't") and both are pure upside — real
@@ -210,16 +210,33 @@ than a live click-through.
 already fully bilingual, just not tenant-editable. This is the direct answer to "message shown
 when you pay, when you don't."
 
-- [ ] Wire the existing `payment.*` `t()` keys through `fc()`-equivalent `SiteContent` fields
+- [x] Wire the existing `payment.*` `t()` keys through `fc()`-equivalent `SiteContent` fields
       (same fallback pattern — no new translation needed, just exposing what's already there).
-- [ ] Add to the Messages tab with a live preview per state (mirrors the Booking Confirmation
+- [x] Add to the Messages tab with a live preview per state (mirrors the Booking Confirmation
       email's variant-switcher UI already built for Feature 181).
-- [ ] Verify live: a real successful test payment, a real declined/failed one, and the pending
+- [x] Verify live: a real successful test payment, a real declined/failed one, and the pending
       state if reachable without a live gateway round trip.
 
-**Files likely touched:** `app/(site)/payment/result/page.tsx`, `MessagesPanel.tsx`.
+**Built:** the page fetches `content['messages']` via `getAllContent(tenantId, locale)` (added,
+this page didn't call it before) and gets its own `mc()` helper, identical shape to
+`BookingForm.tsx`'s. Heading and body for all 3 states (`onsite_payment_{success,failed,pending}_
+{heading,body}`, 6 keys) now read through it. No new `lib/t.ts` strings needed — `payment.*` was
+already fully bilingual, this chunk only exposed it. **Simplified from the plan's original idea**
+of a variant-switcher preview like Booking Confirmation's — went with the same plain 6-field
+`EditField` list as Chunk 1's popup instead (no live-rendered preview, since this page has no
+sample-data preview infrastructure the way the email templates do, and it's simple heading+body
+text, not markup).
 
-**Resume point:** —
+**Verified live** on Staging Winery, local dev: visited `/payment/result?status=success` and
+`?status=failed` directly (no live gateway round trip needed — the page reads only the query
+param) and got the correct default EN text for each; edited the success heading in the admin
+panel to a test string, reloaded the live result page, saw the edit; reverted afterward. Pending
+state not clicked through live but uses the identical mechanism as the other two — code-reviewed
+instead.
+
+**Files touched:** `app/(site)/payment/result/page.tsx`, `lib/adminT.ts`, `MessagesPanel.tsx`.
+
+**Resume point:** Chunk 2 done. Move to Chunk 3: company access-code popup.
 
 ---
 

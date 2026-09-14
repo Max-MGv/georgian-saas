@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { getAllSettings } from '@/app/actions/settings'
+import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
 import { getTenantId } from '@/lib/tenant'
 import { t } from '@/lib/t'
@@ -27,6 +28,8 @@ export default async function PaymentResultPage({
   const settings = await getAllSettings(tenantId)
   // Same locale resolution as the site layout, `??` semantics included.
   const locale = cookieStore.get('site_locale')?.value ?? settingValue(settings, 'default_locale') ?? 'en'
+  const messagesContent = (await getAllContent(tenantId, locale))['messages'] ?? {}
+  const mc = (key: string, tKey: string) => messagesContent[key] || t(locale, tKey)
 
   const kind = status === 'success' ? 'success' : status === 'pending' ? 'pending' : 'failed'
   const icon = kind === 'success' ? '🍷' : kind === 'pending' ? '⏳' : '💳'
@@ -43,9 +46,9 @@ export default async function PaymentResultPage({
       >
         <div className="text-4xl mb-4">{icon}</div>
         <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--site-text)' }}>
-          {t(locale, `payment.${kind}_heading`)}
+          {mc(`onsite_payment_${kind}_heading`, `payment.${kind}_heading`)}
         </h1>
-        <p style={{ color: 'var(--site-muted)' }}>{t(locale, `payment.${kind}_body`)}</p>
+        <p style={{ color: 'var(--site-muted)' }}>{mc(`onsite_payment_${kind}_body`, `payment.${kind}_body`)}</p>
         {contactPhone && (
           <p className="mt-4 font-medium" style={{ color: 'var(--site-text)' }}>
             <a href={`tel:${contactPhone}`}>{contactPhone}</a>

@@ -221,6 +221,12 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_new_company_success_title: c.onsite_new_company_success_title ?? t(locale, 'form.new_company_success_title'),
     onsite_new_company_success_body: c.onsite_new_company_success_body ?? t(locale, 'form.new_company_success_body'),
     onsite_new_company_error: c.onsite_new_company_error ?? t(locale, 'form.new_company_error'),
+    onsite_payment_success_heading: c.onsite_payment_success_heading ?? t(locale, 'payment.success_heading'),
+    onsite_payment_success_body: c.onsite_payment_success_body ?? t(locale, 'payment.success_body'),
+    onsite_payment_failed_heading: c.onsite_payment_failed_heading ?? t(locale, 'payment.failed_heading'),
+    onsite_payment_failed_body: c.onsite_payment_failed_body ?? t(locale, 'payment.failed_body'),
+    onsite_payment_pending_heading: c.onsite_payment_pending_heading ?? t(locale, 'payment.pending_heading'),
+    onsite_payment_pending_body: c.onsite_payment_pending_body ?? t(locale, 'payment.pending_body'),
   })
 
   function setDraft(key: string, value: string) {
@@ -499,6 +505,28 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsiteNewCompany.successBody')} draftKey="onsite_new_company_success_body"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsiteNewCompany.errorText')} draftKey="onsite_new_company_error"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+        </Section>
+
+        <Section
+          title={at('messages.onsitePayment.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsitePayment.trigger')}
+          open={open.has('onsitePayment')}
+          onToggle={() => toggle('onsitePayment')}
+        >
+          <EditField label={at('messages.onsitePayment.successHeading')} draftKey="onsite_payment_success_heading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.successBody')} draftKey="onsite_payment_success_body" multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.failedHeading')} draftKey="onsite_payment_failed_heading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.failedBody')} draftKey="onsite_payment_failed_body" multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.pendingHeading')} draftKey="onsite_payment_pending_heading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.pendingBody')} draftKey="onsite_payment_pending_body" multiline
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
 

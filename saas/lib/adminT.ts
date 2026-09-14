@@ -52,6 +52,14 @@ const en: Translations = {
   'messages.onsiteNewCompany.successTitle': 'Success heading',
   'messages.onsiteNewCompany.successBody': 'Success message',
   'messages.onsiteNewCompany.errorText': 'Error message',
+  'messages.onsitePayment.title': 'Payment Result Page',
+  'messages.onsitePayment.trigger': 'Shown after a customer pays online, depending on whether the payment succeeded, failed, or is still being confirmed.',
+  'messages.onsitePayment.successHeading': 'Success — heading',
+  'messages.onsitePayment.successBody': 'Success — message',
+  'messages.onsitePayment.failedHeading': 'Payment failed — heading',
+  'messages.onsitePayment.failedBody': 'Payment failed — message',
+  'messages.onsitePayment.pendingHeading': 'Still checking — heading',
+  'messages.onsitePayment.pendingBody': 'Still checking — message',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
   // view of the reports this logged-in admin personally submitted.
@@ -1137,6 +1145,14 @@ const ka: Translations = {
   'messages.onsiteNewCompany.successTitle': 'წარმატების სათაური',
   'messages.onsiteNewCompany.successBody': 'წარმატების შეტყობინება',
   'messages.onsiteNewCompany.errorText': 'შეცდომის შეტყობინება',
+  'messages.onsitePayment.title': 'გადახდის შედეგის გვერდი',
+  'messages.onsitePayment.trigger': 'ჩნდება მომხმარებლის ონლაინ გადახდის შემდეგ — იმის მიხედვით, წარმატებული იყო გადახდა, ვერ შესრულდა, თუ ჯერ კიდევ მოწმდება.',
+  'messages.onsitePayment.successHeading': 'წარმატება — სათაური',
+  'messages.onsitePayment.successBody': 'წარმატება — შეტყობინება',
+  'messages.onsitePayment.failedHeading': 'გადახდა ვერ შესრულდა — სათაური',
+  'messages.onsitePayment.failedBody': 'გადახდა ვერ შესრულდა — შეტყობინება',
+  'messages.onsitePayment.pendingHeading': 'მოწმდება — სათაური',
+  'messages.onsitePayment.pendingBody': 'მოწმდება — შეტყობინება',
 
   // My Reports page
   'myReports.pageTitle': 'ჩემი შეტყობინებები',

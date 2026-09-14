@@ -61,11 +61,21 @@ Messages tab shows correct EN/KA defaults for all 6 fields. Not verified: the dr
 entry point specifically — Staging Winery has `hideCompanyDropdown` on, so only the direct-entry
 UI is reachable there; that one line uses the identical already-proven `t()` pattern.
 
-Updated `Plan-OnSiteMessages.md` (Chunks 0 + 1 both ✅) and `FeatureLog.md` (#182 still 🚧, detail
-extended).
+**Chunk 2 — payment result page, same session.** `app/(site)/payment/result/page.tsx` already had
+fully bilingual `payment.*` keys in `lib/t.ts`, so this was purely exposing them: added a
+`getAllContent()` fetch (the page didn't call it before) and an `mc()` helper, same shape as
+`BookingForm.tsx`'s, for the 3 states' heading + body (6 keys). Simplified from the plan's
+original idea of a variant-switcher live preview (like Booking Confirmation's) to a plain 6-field
+list — this page has no sample-data preview infrastructure and is just heading+body text, not
+markup worth rendering.
 
-**Next:** Chunk 2 — payment result page (success/failed/pending states, already bilingual via
-existing `payment.*` `t()` keys, just needs exposing as editable).
+**Verified live**: visited `/payment/result?status=success` and `?status=failed` directly (no
+live gateway round trip needed, the page only reads the query param), got correct EN defaults;
+edited the success heading via the admin panel, confirmed it on the live result page, reverted.
+
+Updated `Plan-OnSiteMessages.md` (Chunks 0–2 all ✅) and `FeatureLog.md` (#182 detail extended).
+
+**Next:** Chunk 3 — company access-code popup (Georgian translation + editable).
 
 ---
 
