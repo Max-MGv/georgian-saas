@@ -45,6 +45,7 @@ tags: [bugs]
 | 37 | Invoice email date rendered as an invalid `MM.DD.YYYY` in Georgian (e.g. `09.14.2026` for 14 September) instead of the day-first format used everywhere else — `toLocaleDateString('ka-GE', ...)` silently falls back to an en-US field order on this Vercel deployment's ICU data | Admin / Site Content, Public / Invoice | 🟢 Resolved |
 | 38 | Booking form's Time Slot dropdown said "No slots available today" before any date was even picked — `slotsForDate('')` returns `[]`, and the empty-slots fallback text didn't distinguish "no date chosen yet" from "this date is genuinely full" | Public / Booking form | 🟢 Resolved |
 | 39 | On mobile, tapping the booking form's Date field (or its calendar icon) did nothing — no native picker opened, only manual DD/MM/YYYY typing worked. The real `<input type="date">` behind the styled field was hidden with a 0×0 box and relied on a JS `.showPicker()` call, which is unreliable on some mobile engines | Public / Booking form | 🟢 Resolved |
+| 40 | Settings → Booking Rules has no validation that a visit type's maximum guest count is ≥ its minimum. Found live on Staging Winery: Wine Tasting minimum is 4, maximum is 3 — any Wine Tasting booking for 4 or 5 guests is silently clamped down to 3 server-side before pricing (confirmed: a 5-guest submission settled at 150GEL/3 guests, not 250GEL/5), with no warning to the admin who set it or the guest who booked it | Admin / Settings, Public / Booking form | 🟢 Resolved |
 
 ---
 

@@ -212,6 +212,8 @@ const en: Translations = {
   'settings.bookingRules.tastingMax': 'Wine Tasting maximum',
   'settings.bookingRules.tastingLunchMax': 'Tasting + Lunch maximum',
   'settings.bookingRules.maxHint': 'Leave blank for no limit.',
+  'settings.bookingRules.maxBelowMin': "Maximum can't be less than the minimum.",
+  'settings.bookingRules.minAboveMax': "Minimum can't be more than the maximum.",
   'settings.bookingRules.guests': 'guests',
 
   'settings.leadTime.sectionTitle': 'Booking Lead Time',
@@ -1388,6 +1390,10 @@ const ka: Translations = {
   'settings.bookingRules.tastingMax': 'ღვინის დეგუსტაციის მაქსიმუმი',
   'settings.bookingRules.tastingLunchMax': 'დეგუსტაცია + სადილის მაქსიმუმი',
   'settings.bookingRules.maxHint': 'დატოვეთ ცარიელი, თუ შეზღუდვა არ გსურთ.',
+  // Drafted, not native-reviewed (same caveat as the New Wine Order strings
+  // above). Flag to Max for a wording pass.
+  'settings.bookingRules.maxBelowMin': 'მაქსიმუმი ვერ იქნება მინიმუმზე ნაკლები.',
+  'settings.bookingRules.minAboveMax': 'მინიმუმი ვერ იქნება მაქსიმუმზე მეტი.',
   'settings.bookingRules.guests': 'სტუმარი',
 
   'settings.leadTime.sectionTitle': 'ჯავშნის მინიმალური ვადა',

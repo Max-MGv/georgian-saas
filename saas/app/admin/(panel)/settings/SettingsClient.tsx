@@ -168,6 +168,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [paymentEditing, setPaymentEditing] = useState<string | null>(null)
   const [altEditing, setAltEditing] = useState(false)
   const [bookingRulesEditing, setBookingRulesEditing] = useState<string | null>(null)
+  const [bookingRulesError, setBookingRulesError] = useState<string | null>(null)
   const [contactOpen, setContactOpen] = useState(true)
   const [contactEditing, setContactEditing] = useState<string | null>(null)
 
@@ -436,7 +437,6 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   type BookingRuleKey = 'min_guests_tasting' | 'min_guests_tasting_lunch' | 'max_guests_tasting' | 'max_guests_tasting_lunch'
 
   function handleBookingRuleSave(key: BookingRuleKey) {
-    setBookingRulesEditing(null)
     // Min-guest keys always clamp to >= 1 (they have a hardcoded default of 4
     // and can never be "off"). Max-guest keys are optional — a blank value is
     // a real, intentional "no limit" state, not something to coerce to 1.
@@ -446,6 +446,31 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
       : key === 'max_guests_tasting' ? maxTasting
       : maxTastingLunch
     const val = isMax && raw.trim() === '' ? '' : String(Math.max(parseInt(raw) || 1, 1))
+
+    // Real bug fixed here (KnownBugs.md #40): nothing previously stopped a
+    // max below its own min from being saved — createBooking.ts then
+    // silently clamps any guest count above that max, which is real money
+    // (a 5-guest booking priced and charged as 3 guests), with no warning to
+    // either the admin who set it or the guest who booked it. Cross-checked
+    // against the PAIRED field only (Wine Tasting's own min/max, or Tasting +
+    // Lunch's own) — the two visit types are independent, never compared
+    // against each other.
+    const pairedRaw = key === 'min_guests_tasting' ? maxTasting
+      : key === 'min_guests_tasting_lunch' ? maxTastingLunch
+      : key === 'max_guests_tasting' ? minTasting
+      : minTastingLunch
+    const pairedVal = parseInt(pairedRaw)
+    const thisVal = val === '' ? null : parseInt(val)
+    const invalid = isMax
+      ? (thisVal !== null && !Number.isNaN(pairedVal) && thisVal < pairedVal)
+      : (!Number.isNaN(pairedVal) && pairedRaw.trim() !== '' && thisVal !== null && thisVal > pairedVal)
+    if (invalid) {
+      setBookingRulesError(at(isMax ? 'settings.bookingRules.maxBelowMin' : 'settings.bookingRules.minAboveMax'))
+      return // stays in edit mode — nothing saved, nothing else touched
+    }
+
+    setBookingRulesEditing(null)
+    setBookingRulesError(null)
     const setter = key === 'min_guests_tasting' ? setMinTasting
       : key === 'min_guests_tasting_lunch' ? setMinTastingLunch
       : key === 'max_guests_tasting' ? setMaxTasting
@@ -951,49 +976,55 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             { key: 'max_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMax'), value: maxTastingLunch, set: setMaxTastingLunch, isMax: true },
           ]).map(row => {
             const isEditing = bookingRulesEditing === row.key
+            const rowError = isEditing ? bookingRulesError : null
             return (
-              <div key={row.key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
-                <div className="flex items-center gap-2">
-                  {isEditing ? (
-                    <input
-                      type="number" min={1} max={200}
-                      placeholder={row.isMax ? '∞' : undefined}
-                      style={{ ...inputStyle, width: 80 }}
-                      value={row.value}
-                      autoFocus
-                      onChange={e => row.set(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') setBookingRulesEditing(null) }}
-                    />
-                  ) : (
-                    <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
-                      <span style={{ color: row.value ? C.text : C.faint }}>{row.value || '∞'}</span>
-                    </div>
-                  )}
-                  <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
-                  {isEditing ? (
-                    <button type="button" onClick={() => handleBookingRuleSave(row.key)} title={at('settings.common.save')}
-                      className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
-                      </svg>
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => setBookingRulesEditing(row.key)} title={at('settings.common.edit')}
-                      className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                      </svg>
-                    </button>
-                  )}
-                  {row.isMax && isEditing && (
-                    <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.maxHint')}</span>
-                  )}
-                  {savedKey === row.key && !isPending && (
-                    <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
-                  )}
+              <div key={row.key} className="flex flex-col gap-1 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <div className="flex items-center gap-4">
+                  <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
+                  <div className="flex items-center gap-2">
+                    {isEditing ? (
+                      <input
+                        type="number" min={1} max={200}
+                        placeholder={row.isMax ? '∞' : undefined}
+                        style={{ ...inputStyle, width: 80, borderColor: rowError ? '#b91c1c' : C.border }}
+                        value={row.value}
+                        autoFocus
+                        onChange={e => { row.set(e.target.value); if (bookingRulesError) setBookingRulesError(null) }}
+                        onKeyDown={e => { if (e.key === 'Escape') { setBookingRulesEditing(null); setBookingRulesError(null) } }}
+                      />
+                    ) : (
+                      <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
+                        <span style={{ color: row.value ? C.text : C.faint }}>{row.value || '∞'}</span>
+                      </div>
+                    )}
+                    <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
+                    {isEditing ? (
+                      <button type="button" onClick={() => handleBookingRuleSave(row.key)} title={at('settings.common.save')}
+                        className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>
+                        </svg>
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => { setBookingRulesEditing(row.key); setBookingRulesError(null) }} title={at('settings.common.edit')}
+                        className="p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity" style={{ color: '#9b090c' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                      </button>
+                    )}
+                    {row.isMax && isEditing && !rowError && (
+                      <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.maxHint')}</span>
+                    )}
+                    {savedKey === row.key && !isPending && (
+                      <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
+                    )}
+                  </div>
                 </div>
+                {rowError && (
+                  <p className="text-xs" style={{ color: '#b91c1c', marginLeft: 'calc(12rem + 1rem)' }}>{rowError}</p>
+                )}
               </div>
             )
           })}

@@ -8,6 +8,96 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-16 — Fixed KnownBugs #40: no validation that Booking Rules max ≥ min
+
+Follow-up to the payment-integrity testing session below, which had found this live on Staging
+Winery (Wine Tasting min=4, max=3, silently clamping any 4-5 guest booking down to 3). Max asked
+to fix it directly.
+
+**Fix:** `SettingsClient.tsx`'s `handleBookingRuleSave()` now cross-checks a max/min pair (Wine
+Tasting's own min/max, or Tasting + Lunch's own — the two visit types are never compared against
+each other) before saving either one. An invalid save is rejected client-side — the row stays in
+edit mode, a red border + inline message appears (`settings.bookingRules.maxBelowMin`/`minAboveMax`,
+both locales, KA drafted/not native-reviewed per the usual caveat), and nothing is written. A
+max left blank ("no limit") never blocks a min, matching the field's existing intentional-blank
+semantics.
+
+**Also fixed the live bad data**, since leaving it would mean the bug's real-world symptom
+survived the code fix: Staging Winery's Wine Tasting maximum cleared to "no limit" (the safe
+default — no way to know what real cap, if any, was originally intended). Verified live: entering
+an invalid value now shows the inline error and saves nothing; both directions tested (max-below-min
+and min-above-max); confirmed the final state (min 4, max ∞) persisted after reload. `tsc --noEmit`
+clean; only pre-existing lint warnings remain (unrelated to this change).
+
+Not yet pushed to `staging`.
+
+---
+
+## 2026-09-15 (3) — Payment amount-integrity testing + new Playwright regression coverage
+
+Max asked for extensive testing of the payment enable/disable flows — does the correct amount
+actually carry over to Flitt in every scenario — plus recording the flows as permanent Playwright
+automation, matching the existing `saas/tests/` suite.
+
+**Manual pass (live, against real Flitt checkout):** walked every combination in
+`shouldTakePayment.ts` — Individual on/off, Company section-toggle × per-company override
+(Default/Always skip/Always require) × the hidden-price hard block, Wine Orders on/off, a
+company's override applying to wine orders too, and a missing-Flitt-credentials fallback — driving
+each all the way to Flitt's real hosted checkout page (`pay.flitt.com`) and reading the displayed
+amount, per Max's go-ahead to hit the real gateway rather than mock it. Every scenario confirmed
+correct. One notable finding along the way: the amount that reaches Flitt is always the
+**server-recomputed** total, not whatever the client showed — caught live when a 5-guest booking
+got silently clamped to 3 guests server-side (see the KnownBugs entry below) and Flitt correctly
+billed for 3, not 5. Recorded to `vault/Playwright/recordings/payment-flows-exploration-2026-09-15.webm`.
+
+**New automated spec:** `saas/tests/tier1-regression/payment-amount-integrity.spec.ts` — 4 tests
+covering the same matrix, verified via the admin panel (order/wine-order price + Awaiting-Payment
+status) rather than hitting Flitt on every run, to stay CI-safe. Extended `tests/helpers/payments.ts`
+with `readShowCompanyPriceToggle`/`setShowCompanyPriceToggle`, `readFlittMerchantId`/`setFlittMerchantId`,
+and widened the payment-section-toggle type to include `'Wine orders'`.
+
+**Real bugs found and fixed while building it — all in test code, not the app:**
+- `openCompanyEditPanel()` (shared by this file, `payment-label-precedence.spec.ts`, and — unfixed,
+  out of scope — `companies-crud.spec.ts`'s own identical `companyRow()`) used an `xpath=..`
+  locator to find a company's Edit button that resolves to zero elements against the current
+  `CompaniesClient.tsx` DOM (Edit lives in a sibling wrapper one level up, not the name button's
+  own parent). This was silently breaking every test that opens a company's edit panel —
+  confirmed by re-running `payment-label-precedence.spec.ts` (previously assumed passing) and
+  watching it fail identically. Fixed to `xpath=../..`, confirmed live via `page.evaluate`, and
+  both previously-affected specs now pass.
+- Same helper didn't know `/admin/companies` splits companies across a "Bookings" tab and a "Wine
+  Orders" tab — a wine-only company like "Wine Test Company" was invisible under the default tab.
+  Fixed to fall back to the Wine Orders tab when the name isn't found on the default one.
+- A double-click bug in my own first draft (clicking the booking form's "Confirm & Book" twice —
+  once via a helper, once explicitly) hung a test for its full timeout the first time it was
+  hit — root-caused via a manual reproduction that succeeded on the first try, proving it wasn't
+  the flaky-click bug it initially looked like.
+- A combobox-ambiguity bug: once a company is selected, the company form has *two* unlabeled
+  comboboxes (company picker, then Time Slot) — `.first()` meant for Time Slot actually
+  reassigned the *company* picker to "+ New Company," silently popping the New-Company modal and
+  blocking every further click. Fixed by just not touching Time Slot (it auto-selects a default).
+
+**Confirmed broken by drift, not touched (flagged for Max, not fixed — out of scope for this
+task):** `booking-simple.spec.ts` and `booking-enhanced.spec.ts` both predate Feature 184's
+booking-confirm review sheet (2026-09-14) and click their submit button expecting an immediate
+redirect / "Booking received!" heading — they very likely now hang on the intermediate sheet.
+`companies-crud.spec.ts` has the identical `xpath=..` Edit-button bug described above and failed
+live when checked (also left an orphan test company behind, cleaned up manually).
+
+**Full run, serial (payment tests mutate shared tenant-wide settings, so parallel workers raced
+each other and once produced a genuine DB "Transaction already closed" error during login):**
+4 passed, 11.0m total. Tenant settings/company overrides verified back at their original baseline
+after every run. One accepted, unavoidable exception: `WineOrdersClient.tsx` only offers a
+"Cancelled" control for orders in payment limbo (`pending_payment`/`payment_failed`) — a plain
+reservation-only wine order this suite creates has no cancel/delete path at all, so 2 small
+`ZZ`-prefixed debris rows accumulate in the dev DB per run (harmless, matches the wine-orders
+admin's already-documented "no delete action" limitation).
+
+Not pushed to `staging` — Max's request was to test and automate, not ship; the two changed files
+(`tests/helpers/payments.ts`, the new spec) sit uncommitted pending his review.
+
+---
+
 ## 2026-09-15 (2) — Manual Wine Order Entry (Feature 187)
 
 Max asked whether admin already had a way to manually enter a booking for a customer who didn't
