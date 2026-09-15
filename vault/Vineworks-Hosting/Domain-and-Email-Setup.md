@@ -107,6 +107,43 @@ Verified live: homepage, `/wines`, `/admin/login` all `200` on the new domain wi
 
 **Not addressed by this migration:** `nikalasmarani.ge` (the actual `.ge` custom domain Max separately owns) does **not** point at this app at all — it currently serves something else entirely (redirects to a `/ka` path-based locale structure this codebase doesn't have). Found while testing 2026-09-10, not investigated further — likely an old/different site still live on that domain's DNS. Worth Max checking directly if he wants `nikalasmarani.ge` itself pointed here too.
 
+## Staging given its own subdomain: staging.vineworks.ge (2026-09-15)
+
+The `staging` git branch's preview deployment moved from the auto-generated
+`georgian-saas-git-staging-mg-productions-projects.vercel.app` to `staging.vineworks.ge`,
+so the platform's own staging environment gets a readable URL, matching the
+pattern already used for `nikalasmarani.vineworks.ge` and `demo.vineworks.ge`.
+
+Steps taken (all on the `georgian-saas` Vercel project):
+1. Project → Settings → Domains → Add Domain → `staging.vineworks.ge`, connected to
+   an environment → **Preview**, branch **`staging`** (Vercel labels this
+   "Pre-Production" in the UI). DNS auto-configured with zero manual records
+   needed — `vineworks.ge`'s zone already lives on Vercel from the original setup.
+2. Updated the **dev** database's `Tenant.domain` for Staging Winery,
+   `georgian-saas-git-staging-mg-productions-projects.vercel.app` →
+   `staging.vineworks.ge`. Same single-unique-string caveat as the Nikalas
+   Marani migration: `proxy.ts` matches by exact string, so this is a hard
+   cutover, not a dual-URL period.
+3. Verified live: `staging.vineworks.ge/` renders the full Staging Winery site,
+   `/admin/login` shows the tenant-branded admin login.
+
+4. **Old URL retired the same day.** Initially assumed the auto-generated branch
+   alias (`georgian-saas-git-staging-mg-productions-projects.vercel.app`) had no
+   redirect control surface since it's not a domain you "own" the way a custom
+   one is — wrong. Vercel's **Add Domains** modal accepts that exact `.vercel.app`
+   string as an entry too (same mechanism `nikalasmarani.vercel.app` already used
+   to redirect to `nikalasmarani.vineworks.ge`), so it was added with **"Redirect
+   to Another Domain" → 308 Permanent → `staging.vineworks.ge`**. Verified live:
+   hitting any path on the old URL (e.g. `/admin/login`) 308s straight to the
+   same path on `staging.vineworks.ge`. No dead link remains anywhere.
+
+Any bookmark, script, or doc still pointing at the old URL will keep working
+(redirected), but should still move to `staging.vineworks.ge` directly —
+`credentials.txt`, `ClaudeInstructions.md`, `MigrationNotes.md`, and
+`Plan-DevProdEnvironments.md` were updated same-day; `SessionLog.md`/
+`KnownBugs.md`/`MyToDo.md`/`HANDOFF-MobileProduct.md` were left as-is since
+those are dated historical entries, not live references.
+
 ## Outstanding / not yet done
 
 - [ ] Upgrade Vercel team off the Hobby plan before real paying customers (see above)

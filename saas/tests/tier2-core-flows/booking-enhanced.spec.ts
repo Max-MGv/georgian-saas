@@ -81,7 +81,9 @@ test.describe('Booking form — enhanced/company variant', () => {
     // label's container div (confirmed live via DOM inspection), not a
     // direct sibling button.
     const enhancedToggle = enhancedToggleLabel.locator('xpath=../following-sibling::div[1]//button');
-    const toggleTransform = await enhancedToggle.locator('span').evaluate(el => (el as HTMLElement).style.transform);
+    // .last() — the Toggle component also renders a leading aria-hidden hit-area
+    // <span> (mobile tap-target pass); the thumb is always the second/last span.
+    const toggleTransform = await enhancedToggle.locator('span').last().evaluate(el => (el as HTMLElement).style.transform);
     expect(toggleTransform, 'enable_enhanced_company_booking must already be on for this test — see note for the toggle fallback plan').toBe('translateX(22px)');
 
     // Read the company's real access code fresh from admin rather than

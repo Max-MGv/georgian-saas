@@ -117,7 +117,7 @@ When you hit ~25–30 clients on a single Supabase account, open a new account a
 | Name | Slug | Domain | Tenant ID | Database |
 |---|---|---|---|---|
 | Nikalas Marani | nikalasmarani | nikalasmarani.vercel.app | `cmqou94er0000vl1sl9v0yv54` | **prod** |
-| Staging Winery | staging-winery | georgian-saas-git-staging-mg-productions-projects.vercel.app | `cmrxb85wo0000vlc0d964nzf8` | **dev** |
+| Staging Winery | staging-winery | staging.vineworks.ge (changed 2026-09-15; old `georgian-saas-git-staging-...vercel.app` now 308-redirects here) | `cmrxb85wo0000vlc0d964nzf8` | **dev** |
 | Vineworks Demo (dev copy) | vineworks-demo | `demo.placeholder.local` (dev-only, used for local testing) | `cmtvgl6e60000vl6w9se65t86` | **dev** |
 | Vineworks Demo | vineworks-demo | `demo.vineworks.ge` — **live** | `cmtvi582n0000vl7kjq44ir5p` | **prod** |
 

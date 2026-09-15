@@ -12,7 +12,10 @@ function sectionToggle(page: Page, section: 'Individual bookings' | 'Company boo
 }
 
 async function readToggleOn(toggle: Locator): Promise<boolean> {
-  const style = await toggle.locator('span').getAttribute('style');
+  // .last() — the Toggle component (SettingsClient.tsx) also renders a leading
+  // aria-hidden hit-area <span> (mobile tap-target pass); the thumb with the
+  // translateX() style is always the second/last span.
+  const style = await toggle.locator('span').last().getAttribute('style');
   return !!style && style.includes('translateX(22px)');
 }
 
