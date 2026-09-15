@@ -8,6 +8,47 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🧑‍🌾 2026-09-14 — test Company Guides & Representatives (staging only, nothing merged yet)
+
+You asked for the single company access code to split into two real lists — Guides (phone,
+for who to call during the dinner) and Representatives (email, for who invoices go to), each
+with their own code. All 11 in-scope chunks are built, self-tested, and pushed to `staging` —
+**none of it has been reviewed by you or merged to `master` yet.** Full design log:
+`vault/Plan-CompanyGuidesAndReps.md`, `vault/Features/Feature 185 - Company Guides and Representatives.md`.
+
+**Two decisions I made without checking with you first** (you said to treat the plan as
+considerations and just build, so I didn't loop back mid-build — but you should know what I
+picked):
+1. **Wine orders are excluded.** The wine-order form still uses the old single company code
+   exactly as before. Guides/Reps only apply to the booking form. Say the word if you want
+   wine orders covered too — it's a real fork, not a small add-on.
+2. **No backfill.** Existing companies keep their old access code working exactly as today.
+   Nothing was auto-converted into a first "Guide" — you add guides/reps by hand, only when
+   you want to.
+
+**What to check on the staging preview:**
+1. `/admin/companies` → Edit any company → scroll down past the existing Access Code box →
+   you should see two new sections, **Guides** and **Representatives**, each with an
+   "+ Add guide/representative" button.
+2. Add a guide: name + phone. It gets its own code immediately (Show/Copy/↻ Regenerate, same
+   controls as the company's own code). Add a representative the same way (name, email, phone).
+3. On the public booking form: pick that company, and when the code popup appears, use the
+   **guide's** code instead of the company's own. It should accept it and fill in the
+   **guide's** name and phone — not whatever's in the company's own Contact Person fields.
+4. A company with **no** guides added should behave exactly as before — its old access code
+   still gates the popup, nothing changed there.
+5. On `/admin/orders`, find (or make) a booking for a company that has a Representative with
+   an email set, click the envelope icon (Send Invoice by Email) → you should now see a
+   dropdown letting you pick the guest's own email **or** the representative's, instead of
+   just the guest's.
+6. Try a wrong code on the booking form's popup → it should still reject it exactly as before.
+
+**When you're happy:** tell me and I'll merge `staging` → `master` — that's the one step I
+won't do without you saying so, plus running the schema migration against the **production**
+database as its own separate step right after (same rule as every other schema change).
+
+---
+
 ## 🏢 2026-09-13 (later) — test the New Company booking flow (staging only)
 
 This is the fix for what you flagged from the production screenshot — a company rep with
