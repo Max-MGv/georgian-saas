@@ -837,7 +837,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               style={{ ...inputStyle, borderColor: timeSlotHasError ? STATUS.errorBorder : inputStyle.borderColor }}>
               {availableSlots.length > 0
                 ? availableSlots.map(s => <option key={s} value={s}>{s}</option>)
-                : <option value="">{t(locale, 'form.no_slots')}</option>}
+                : <option value="">{t(locale, selectedDate ? 'form.no_slots' : 'form.select_date_first')}</option>}
             </select>
             {timeSlotHasError && (
               <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_lead_time', 'form.err_lead_time', { hours: leadHours })}</p>

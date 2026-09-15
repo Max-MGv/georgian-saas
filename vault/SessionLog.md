@@ -8,6 +8,79 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-15 (2) — Manual Wine Order Entry (Feature 187)
+
+Max asked whether admin already had a way to manually enter a booking for a customer who didn't
+use the website (like a real-world walk-in/phone order) — confirmed yes (`/admin/orders/new`) —
+and whether the same existed for wine orders. Confirmed no: no `/admin/wine-orders/new`, no
+admin-side create action, only the public `submitWineOrder.ts`. Wrote a plan
+(`Plan-ManualWineOrderEntry.md`) mirroring the booking pattern, then built it same session on
+Max's go-ahead ("yeah sure" → "yeah start on it").
+
+**Built:** `createWineOrderAdmin()` in `app/actions/wineOrders.ts` (`requireAdmin()`-gated,
+re-fetches real `WineVintage.price`/`Company.wineDiscountPercent` server-side rather than
+trusting client numbers — same discipline as `submitWineOrder.ts`'s fix for `KnownBugs.md` #22;
+no online-payment branch, same as bookings' admin path never touching Flitt). New
+`/admin/wine-orders/new` page + `NewWineOrderForm.tsx`: optional company picker that autofills
+business/LLC/contact/address fields from the company record (mirrors
+`WineCatalogueClient.tsx`'s `applyProfile()` exactly — name fields always overwrite, others only
+when the company actually has that field set) and shows the company's wine discount; wine +
+vintage + quantity line list; live total. "New Order" link added to the Wine Orders page header,
+same placement as bookings'. New `newWineOrder.*` translation keys, both EN and KA (KA flagged
+drafted/not native-reviewed, consistent with other KA additions in `adminT.ts`).
+
+**Scope decision (Max, explicit):** no manual discount-percent override for a walk-in with no
+company on file — discount stays strictly tied to a linked company's `wineDiscountPercent`, same
+as the public flow. Simpler, and avoids two different discount mechanisms to keep in sync.
+
+**Verified live** on local dev against the dev DB (tenant "Staging Winery," same one
+`staging.vineworks.ge` points at): a company-linked order (autofill checked field-by-field
+against "Wine Test Company," wine line priced from the real server-side vintage price, correct
+total), a walk-in/no-company order (no discount line, as expected), empty-submit validation
+(inline "Business / customer name is required."), both new orders appearing correctly in the
+Wine Orders list with the right amount/wine-line/contact info, and the Georgian admin locale
+rendering every new string translated. `tsc --noEmit` clean; `eslint` clean on every
+changed/new file (two pre-existing unused-`db`-import warnings, not introduced by this work).
+Both test orders marked Cancelled afterward — no delete action exists for wine orders, Cancelled
+is the closest cleanup the existing UI offers.
+
+**Not yet pushed to `staging`** — built and verified on local dev only, pending Max's go-ahead
+per Rule 0.
+
+---
+
+## 2026-09-15 (1) — Booking form Date/Time Slot fixes (Feature 186, `KnownBugs.md` #38–#39)
+
+Max reported two bugs from `staging.vineworks.ge`, driven by a screenshot then a real-phone test.
+
+**#38 — misleading "No slots available today":** the Time Slot dropdown showed that text before
+any date was even picked, because `slotsForDate('')` returns `[]` and the fallback text didn't
+distinguish "no date chosen" from "date is genuinely full." Fixed with a new
+`form.select_date_first` string (`lib/t.ts`, both locales) and a ternary in `BookingForm.tsx:840`
+picking between the two messages based on `selectedDate`.
+
+**#39 — mobile calendar tap did nothing:** `DateInput.tsx` kept the real `<input type="date">`
+at a `width:0; height:0` box, opened only via a JS `.showPicker()` call triggered from the styled
+text field's `onFocus`/icon `onClick`. Confirmed via `getBoundingClientRect()` on a mobile-emulated
+session that the hidden input really was 0×0 — a known trigger for `showPicker()` misbehaving on
+mobile engines (iOS Safari is stricter than desktop Chrome about the user-gesture requirement).
+Rebuilt so the real date input is sized to exactly cover the calendar-icon zone (40px, confirmed
+by measuring both elements' rects) and sits on top of it — a tap now hits the native input
+directly and the browser opens its own picker via normal default behavior, no JS trigger needed.
+The rest of the field (the typing area) stayed uncovered; verified by typing a full date there
+after the fix and confirming Time Slot still populated correctly, both on mobile and desktop.
+`showPicker()` calls removed entirely.
+
+Verified on a local dev server (`saas`), not yet pushed to `staging` — pending Max's go-ahead
+per Rule 0. Also created `saas/tests/Playwright Testing Ideas.md`, an informal running list Max
+will add to as bugs are found, to seed future Playwright regression coverage; first entry covers
+the #39 mobile-tap case.
+
+**Next:** push to `staging`, verify live, then merge to `master` once Max confirms both fixes on
+staging.
+
+---
+
 ## 2026-09-14 (7) — Company Guides & Representatives (Feature 185)
 
 Max asked for the existing single `Company.accessCode` + contact-fields combo to split into two

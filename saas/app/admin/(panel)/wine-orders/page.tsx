@@ -3,7 +3,10 @@ import { getTenantId } from '@/lib/tenant'
 import { requireWineOrdersModule } from '@/lib/requireModule'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
+import Link from 'next/link'
 import WineOrdersClient from './WineOrdersClient'
+
+const C = { wine: 'var(--color-brand)' }
 
 export default async function WineOrdersPage() {
   await requireWineOrdersModule()
@@ -26,11 +29,20 @@ export default async function WineOrdersPage() {
 
   return (
     <div data-tour="wine-orders-list" className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
         <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(locale, 'nav.wineOrders')}</h1>
-        <span className="text-sm px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
-          {orders.length} {adminT(locale, 'wineOrders.total')}
-        </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
+            {orders.length} {adminT(locale, 'wineOrders.total')}
+          </span>
+          <Link
+            href="/admin/wine-orders/new"
+            className="px-3 py-1.5 min-h-10 md:min-h-0 inline-flex items-center rounded-lg text-sm font-medium text-white"
+            style={{ backgroundColor: C.wine }}
+          >
+            {adminT(locale, 'wineOrders.newOrder')}
+          </Link>
+        </div>
       </div>
       <WineOrdersClient orders={ordersWithTotal} locale={locale} />
     </div>
