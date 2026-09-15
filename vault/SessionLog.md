@@ -44,8 +44,8 @@ changed/new file (two pre-existing unused-`db`-import warnings, not introduced b
 Both test orders marked Cancelled afterward — no delete action exists for wine orders, Cancelled
 is the closest cleanup the existing UI offers.
 
-**Not yet pushed to `staging`** — built and verified on local dev only, pending Max's go-ahead
-per Rule 0.
+**Pushed to `staging`** together with the Date/Time Slot fixes below, commit `b784394`. Not yet
+checked live on `staging.vineworks.ge`, and not yet merged to `master`.
 
 ---
 
@@ -71,13 +71,13 @@ The rest of the field (the typing area) stayed uncovered; verified by typing a f
 after the fix and confirming Time Slot still populated correctly, both on mobile and desktop.
 `showPicker()` calls removed entirely.
 
-Verified on a local dev server (`saas`), not yet pushed to `staging` — pending Max's go-ahead
-per Rule 0. Also created `saas/tests/Playwright Testing Ideas.md`, an informal running list Max
-will add to as bugs are found, to seed future Playwright regression coverage; first entry covers
-the #39 mobile-tap case.
+Verified on a local dev server (`saas`), then pushed to `staging` together with the Manual Wine
+Order Entry work above, commit `b784394`. Also created `saas/tests/Playwright Testing Ideas.md`,
+an informal running list Max will add to as bugs are found, to seed future Playwright regression
+coverage; first entry covers the #39 mobile-tap case.
 
-**Next:** push to `staging`, verify live, then merge to `master` once Max confirms both fixes on
-staging.
+**Next:** verify both fixes live on `staging.vineworks.ge`, then merge to `master` once Max
+confirms.
 
 ---
 

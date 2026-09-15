@@ -4,8 +4,9 @@ tags: [plan]
 
 # Plan — Manual Wine Order Entry (admin panel)
 
-**Status:** ✅ Done, built and verified live on local dev 2026-09-15 (see `SessionLog.md` and
-`FeatureLog.md` #187). Not yet pushed to `staging` — pending Max's go-ahead per Rule 0.
+**Status:** ✅ Done, built and verified live on local dev, pushed to `staging` 2026-09-15
+(commit `b784394`) — see `SessionLog.md` and `FeatureLog.md` #187. Not yet checked live on
+`staging.vineworks.ge`, and not yet merged to `master`.
 
 Discount override question resolved: **no manual override** — discount stays strictly tied to a
 linked company's `wineDiscountPercent`, same as the public flow, on Max's explicit call.
