@@ -53,6 +53,11 @@ model Tenant {
   paymentEnabledIndividuals Boolean @default(true)
   paymentEnabledCompanies   Boolean @default(true)
   paymentEnabledWineOrders  Boolean @default(true)
+  // Company-booking nationality tagging (Plan-CompanyNationality). Super-admin only, like
+  // wineDetailLevel above — never exposed in the tenant's own SettingsClient.tsx. Gates whether
+  // BookingForm.tsx offers the nationality picker for COMPANY bookings; does not retroactively
+  // hide nationalities already stored on existing orders when turned off.
+  enableCompanyNationalityBreakdown Boolean @default(false)
   createdAt            DateTime @default(now())
 }
 
@@ -148,6 +153,10 @@ model Order {
   // Chunk 1). Representatives are not tracked per-order; see that plan for why.
   guideId           String?
   guide             CompanyGuide?      @relation(fields: [guideId], references: [id])
+  // ISO 3166-1 alpha-2 codes, COMPANY bookings only (Plan-CompanyNationality). No per-country
+  // counts — "at most a mix" per Max, not a headcount breakdown. Plain array on the already
+  // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
+  nationalities     String[]           @default([])
   createdAt         DateTime           @default(now())
   masterclassLines  OrderMasterclass[]
   extras            OrderExtra[]

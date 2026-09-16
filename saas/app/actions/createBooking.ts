@@ -20,6 +20,9 @@ import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
+import { COUNTRIES } from '@/lib/countries'
+
+const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -44,6 +47,13 @@ export type BookingFormData = {
   hotDishMeat?: string | null
   foodNotes?: string | null
   masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
+  /**
+   * ISO 3166-1 alpha-2 codes for the nationalities present on a COMPANY booking
+   * (Plan-CompanyNationality) — a small tag set, no per-country headcount.
+   * Ignored for INDIVIDUAL bookings and re-validated against the real country
+   * list server-side below before it's ever written.
+   */
+  nationalities?: string[]
   /**
    * Company name typed into the "New Company?" popup when a COMPANY booking
    * is submitted with no companyId (Feature 180) — display-only, stored on
@@ -316,6 +326,11 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         tenantId,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
+        // Never trust a client-sent array outright — filter to real ISO codes and
+        // dedupe, same defense-in-depth discipline as verifiedGuideId above.
+        nationalities: data.bookingType === 'COMPANY'
+          ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
+          : [],
         masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
           create: (data.masterclassLines ?? []).map(l => ({
             masterclassItemId: l.masterclassItemId,

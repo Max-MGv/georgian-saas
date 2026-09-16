@@ -72,6 +72,7 @@ export async function getTenant(id: string) {
     modulesLegalPages: t.modulesLegalPages,
     modulesOnlinePayment: t.modulesOnlinePayment,
     wineDetailLevel: t.wineDetailLevel,
+    enableCompanyNationalityBreakdown: t.enableCompanyNationalityBreakdown,
   }
 }
 
@@ -91,6 +92,7 @@ export async function createTenant(data: {
   modulesLegalPages: boolean
   modulesOnlinePayment?: boolean
   wineDetailLevel: WineDetailLevel
+  enableCompanyNationalityBreakdown: boolean
 }) {
   await requireSuperAdmin()
   let tenant
@@ -111,6 +113,7 @@ export async function createTenant(data: {
         modulesLegalPages: data.modulesLegalPages,
         modulesOnlinePayment: data.modulesOnlinePayment ?? false,
         wineDetailLevel: data.wineDetailLevel,
+        enableCompanyNationalityBreakdown: data.enableCompanyNationalityBreakdown,
       },
     })
   } catch (e) {
@@ -144,6 +147,7 @@ export async function updateTenant(id: string, data: {
   modulesLegalPages: boolean
   modulesOnlinePayment?: boolean
   wineDetailLevel: WineDetailLevel
+  enableCompanyNationalityBreakdown: boolean
 }) {
   await requireSuperAdmin()
   try {
@@ -166,6 +170,7 @@ export async function updateTenant(id: string, data: {
         // older client that doesn't send the field must not switch payment off.
         modulesOnlinePayment: data.modulesOnlinePayment,
         wineDetailLevel: data.wineDetailLevel,
+        enableCompanyNationalityBreakdown: data.enableCompanyNationalityBreakdown,
       },
     })
   } catch (e) {

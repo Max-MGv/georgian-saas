@@ -3,6 +3,7 @@ import { getTenantId } from '@/lib/tenant'
 import { OrderStatus } from '@prisma/client'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
+import { getDistinctOrderNationalities } from '@/app/actions/orders'
 import { DEFAULT_INVOICE_MESSAGE_EN, DEFAULT_INVOICE_MESSAGE_KA } from '@/lib/emails/templates/invoiceEmailTemplate'
 import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
@@ -22,6 +23,7 @@ type SearchParams = {
   dateTo?: string
   companyId?: string   // a real company ID, or '__individual__' for individual-only
   status?: string      // NEW | CONFIRMED | INVOICE_SENT | PENDING_PAYMENT | PAID | COMPLETED | CANCELLED
+  nationality?: string // ISO 3166-1 code (Plan-CompanyNationality)
   view?: 'table' | 'calendar'
 }
 
@@ -30,7 +32,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessageKa, invoiceEmailMessageEn, adminLanguage] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessageKa, invoiceEmailMessageEn, adminLanguage, nationalityOptions] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -41,6 +43,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     getContent('email_invoice_message', DEFAULT_INVOICE_MESSAGE_KA, 'ka'),
     getContent('email_invoice_message', DEFAULT_INVOICE_MESSAGE_EN, 'en'),
     getSetting('admin_language'),
+    // Plan-CompanyNationality Chunk 8 — distinct nationalities actually on this tenant's orders,
+    // not the full ~195-country list, same "only show what's in use" pattern as the company filter.
+    getDistinctOrderNationalities(tenantId),
   ])
   const locale = adminLanguage || 'en'
   const at = (key: string) => adminT(locale, key)
@@ -106,6 +111,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       : params.companyId
         ? { companyId: params.companyId }
         : {}),
+    ...(params.nationality ? { nationalities: { has: params.nationality } } : {}),
   }
 
   const statusCountRows = view === 'table'
@@ -200,7 +206,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {revenueStrip && <RevenueStrip {...revenueStrip} locale={locale} />}
 
       <div data-tour="orders-filters">
-        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} tenantId={tenantId} />
+        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} locale={locale} tenantId={tenantId} nationalityOptions={nationalityOptions} />
       </div>
 
       {orders.length === 0 ? (
@@ -209,7 +215,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,
@@ -229,6 +235,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             hotDishVegetable: o.hotDishVegetable,
             hotDishMeat: o.hotDishMeat,
             foodNotes: o.foodNotes,
+            nationalities: o.nationalities,
             company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode, representatives: o.company.representatives } : null,
             requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(l => ({

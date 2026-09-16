@@ -47,7 +47,7 @@ export default async function Home({ searchParams }: PageProps) {
   // boolean per booking type would make it impossible to tell "module off" apart
   // from "COMPANY section merely off by default" client-side — the former must
   // never be overridable, the latter must be (see Feature 148's build-time notes).
-  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady] = await Promise.all([
+  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
@@ -57,6 +57,15 @@ export default async function Home({ searchParams }: PageProps) {
     isPaymentConfigured(tenantId),
     isPaymentConfigured(tenantId, { section: 'INDIVIDUAL' }),
     isPaymentConfigured(tenantId, { section: 'COMPANY' }),
+    // Super-admin-only flag (Plan-CompanyNationality) — plain `db`, NOT withTenantDb.
+    // Verified live: Tenant has RLS *enabled* at the DB level (Supabase's own default)
+    // but zero policies defined for it, so a read through withTenantDb's app_user role
+    // silently returns null (RLS default-denies with no matching policy) even though
+    // GRANT SELECT succeeds — exactly why isPaymentConfigured() below also reads Tenant
+    // via the plain unrestricted client, never withTenantDb. This isn't a routing
+    // concern either, so it doesn't belong in proxy.ts's edge-cached x-tenant-modules-*
+    // headers — those exist for whole-module gates, not a single booking-form field.
+    db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
   ])
 
   const c               = content['home'] ?? {}
@@ -383,6 +392,7 @@ export default async function Home({ searchParams }: PageProps) {
             companies={companies}
             showCompanyPrice={showCompanyPrice === 'true'}
             enhancedEnabled={enhancedBookingStr === 'true'}
+            nationalityBreakdownEnabled={tenantFlags?.enableCompanyNationalityBreakdown ?? false}
             hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
             masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}

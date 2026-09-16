@@ -8,6 +8,7 @@ import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import { countryName } from '@/lib/countries'
 
 const C = {
   border: 'var(--site-border)',
@@ -31,20 +32,22 @@ const STATUSES = [
 
 type Props = {
   companies: Company[]
-  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
+  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; nationality?: string }
   statusCounts: Record<string, number>
   locale?: string
   /** Only to pick the first-visit column defaults — see defaultVisibleFor. */
   tenantId?: string | null
+  /** ISO codes actually present on this tenant's orders (Plan-CompanyNationality) — not the full country list. */
+  nationalityOptions?: string[]
 }
 
-export default function OrdersFilters({ companies, params, statusCounts, locale = 'en', tenantId = null }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, locale = 'en', tenantId = null, nationalityOptions = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const at = (key: string) => adminT(locale, key)
   const [isExporting, startExport] = useTransition()
   const [isNavigating, setIsNavigating] = useState(false)
-  const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`
+  const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`
   const prevNavKey = useRef(navKey)
 
   // Local state so date inputs don't visually reset while navigation is in-flight
@@ -98,10 +101,11 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   // ── Filters ──────────────────────────────────────────────────────────────────
   function buildQuery(overrides: Record<string, string | undefined>) {
     const merged: Record<string, string> = {}
-    if (params.dateFrom)  merged.dateFrom  = params.dateFrom
-    if (params.dateTo)    merged.dateTo    = params.dateTo
-    if (params.companyId) merged.companyId = params.companyId
-    if (params.status)    merged.status    = params.status
+    if (params.dateFrom)    merged.dateFrom    = params.dateFrom
+    if (params.dateTo)      merged.dateTo      = params.dateTo
+    if (params.companyId)   merged.companyId   = params.companyId
+    if (params.status)      merged.status      = params.status
+    if (params.nationality) merged.nationality = params.nationality
     for (const [k, v] of Object.entries(overrides)) {
       if (v) merged[k] = v
       else   delete merged[k]
@@ -132,7 +136,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
 
   function handleExport() {
     startExport(async () => {
-      const csv = await exportOrdersCsv({ dateFrom: params.dateFrom, dateTo: params.dateTo, companyId: params.companyId, status: params.status })
+      const csv = await exportOrdersCsv({ dateFrom: params.dateFrom, dateTo: params.dateTo, companyId: params.companyId, status: params.status, nationality: params.nationality })
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -143,7 +147,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     })
   }
 
-  const hasFilters = params.dateFrom || params.dateTo || params.companyId || params.status
+  const hasFilters = params.dateFrom || params.dateTo || params.companyId || params.status || params.nationality
   const today = new Date().toISOString().split('T')[0]
   const isUpcoming = params.dateFrom === today && !params.dateTo
 
@@ -157,7 +161,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     outline: 'none',
   }
 
-  const activeFilterCount = [params.dateFrom, params.dateTo, params.companyId, params.status].filter(Boolean).length
+  const activeFilterCount = [params.dateFrom, params.dateTo, params.companyId, params.status, params.nationality].filter(Boolean).length
 
   return (
     <>
@@ -240,6 +244,19 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
             })}
           </select>
         </div>
+        {nationalityOptions.length > 0 && (
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.nationality')}</label>
+            <select
+              value={params.nationality ?? ''}
+              onChange={e => update('nationality', e.target.value)}
+              style={{ ...inputStyle, width: '100%', minHeight: 40 }}
+            >
+              <option value="">{at('orders.filters.allNationalities')}</option>
+              {nationalityOptions.map(code => <option key={code} value={code}>{countryName(code)}</option>)}
+            </select>
+          </div>
+        )}
       </div>
     )}
 
@@ -311,6 +328,21 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
           })}
         </select>
       </div>
+
+      {/* Nationality (Plan-CompanyNationality) — only shown once at least one order has one */}
+      {nationalityOptions.length > 0 && (
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.nationality')}</label>
+          <select
+            value={params.nationality ?? ''}
+            onChange={e => update('nationality', e.target.value)}
+            style={{ ...inputStyle, minWidth: 160 }}
+          >
+            <option value="">{at('orders.filters.allNationalities')}</option>
+            {nationalityOptions.map(code => <option key={code} value={code}>{countryName(code)}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Clear filters — same presence as Upcoming */}
       {hasFilters && (

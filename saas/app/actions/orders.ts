@@ -10,6 +10,7 @@ import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { OrderStatus } from '@prisma/client'
+import { countryName } from '@/lib/countries'
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
@@ -324,11 +325,26 @@ function csvCell(val: string | number | null | undefined): string {
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+/**
+ * Distinct ISO codes actually present across this tenant's orders (Plan-CompanyNationality) —
+ * drives the Orders filter dropdown's options, not the full ~195-country list. Prisma's
+ * `distinct` doesn't unnest array columns, so this is a raw query; `unnest` + `DISTINCT` is the
+ * standard Postgres way to flatten `nationalities` across every row into one deduped list.
+ */
+export async function getDistinctOrderNationalities(tenantId: string): Promise<string[]> {
+  const rows = await withTenantDb(tenantId, tx =>
+    tx.$queryRaw<{ code: string }[]>`SELECT DISTINCT unnest("nationalities") as code FROM "Order" WHERE "tenantId" = ${tenantId} ORDER BY code ASC`
+  )
+  return rows.map(r => r.code)
+}
+
 export async function exportOrdersCsv(filters: {
   dateFrom?: string
   dateTo?: string
   companyId?: string
   status?: string
+  /** ISO 3166-1 code (Plan-CompanyNationality) — matches orders whose `nationalities` array includes it. */
+  nationality?: string
 }): Promise<string> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -347,12 +363,13 @@ export async function exportOrdersCsv(filters: {
           ? { companyId: filters.companyId }
           : {}),
       ...(filters.status ? { status: filters.status as OrderStatus } : {}),
+      ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
     include: { company: true },
     orderBy: { date: 'desc' },
   }))
 
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Total (GEL)', 'Status', 'Email', 'Phone', 'Notes']
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
@@ -362,6 +379,7 @@ export async function exportOrdersCsv(filters: {
     o.bookingType,
     o.visitType,
     o.guestCount,
+    o.nationalities.map(countryName).join('; '),
     o.totalPrice ?? '',
     o.status,
     o.email ?? '',

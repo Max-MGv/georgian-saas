@@ -8,6 +8,83 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-16 (3) — Built Chunks 2–10 of Company Booking Nationality Tagging (Feature 188)
+
+Max said to start building [[Plan-CompanyNationality]] after its plan + critical review were
+done (see (2) below). Built and verified live, end-to-end, in dev:
+
+- **Schema:** `Tenant.enableCompanyNationalityBreakdown` (super-admin-only flag) and
+  `Order.nationalities String[]` — one migration, no new table, no new RLS work (`Order` was
+  already tenant-scoped).
+- **Country list + picker:** `lib/countries.ts` (static ISO 3166-1 list, ~195 countries) and a new
+  `NationalityPicker.tsx` — type-ahead multi-select tags, no new dependency. Went with the flat
+  static-list default from the plan since Max hadn't objected to it.
+- **Super-admin toggle:** new section in `TenantFormClient.tsx`, wired through
+  `createTenant`/`updateTenant`.
+- **Booking form:** new block in `BookingForm.tsx`, independent of the existing `isEnhanced`
+  ("enhanced company booking") mode per Max's earlier call — shows for any COMPANY booking once
+  the tenant flag is on. Feeds into `buildBookingPayload()` at the same placement as `guideId`,
+  and into the confirm-review popup.
+- **Persistence:** `createBooking.ts` stores it only for COMPANY bookings, filtering the
+  client-sent array down to real ISO codes first (same defense-in-depth as the existing
+  `verifiedGuideId` check).
+
+**Real bug found and fixed via live testing, not just typechecking:** the tenant flag rendered as
+`false` on the public site even though the DB had it set to `true`. Root cause: `Tenant` has RLS
+*enabled* at the database level (Supabase's own default) but **zero policies** defined for it —
+so fetching it through `withTenantDb`'s `app_user` role silently returns `null` (Postgres RLS
+with no policy = deny all rows to non-owners), with no error. `isPaymentConfigured()` and
+`proxy.ts` already worked around this by reading `Tenant` via the plain unrestricted `db` client
+instead — undocumented until now. Fixed the same way; wrote up the trap as
+[[MaintenanceNotes]] #27 so it doesn't get rediscovered the hard way next time.
+
+Verified live end-to-end on Staging Winery (dev DB): flipped the flag on via
+`/super-admin/tenants`, booked as "Test Company # 1" tagging France + Germany, removed Germany,
+confirmed the review popup showed "Nationality (optional): France", submitted, confirmed the
+order's `nationalities` column was `['FR']`, then confirmed switching to Individual Booking hides
+the field and clears the tags. Test order deleted afterward. `tsc --noEmit` clean throughout.
+
+**Continued the same session — Max said to keep going.** Finished the rest of the plan:
+
+- **Print sheet:** new "Nationality" column on `BookingSheetPrint.tsx`. **Deliberately skipped
+  both automatic emails** (booking confirmation, internal new-booking notification) — both
+  templates are already intentionally minimal (no company name, no guest-count split, no hot
+  dish/masterclass either), so adding this field to either would have been inconsistent with
+  that existing design, not a gap. Verified live via a temporary DB-inserted test order.
+- **Admin filter/column:** corrected the mechanism the original plan got wrong (no shared
+  `getOrders()` — the table's query is inline in `orders/page.tsx`, `exportOrdersCsv` has its own
+  separate filter). New `getDistinctOrderNationalities()` in `orders.ts` (a raw `unnest()` query
+  — Prisma's `distinct` doesn't unnest arrays) drives the filter dropdown's options. New optional
+  table column, new CSV column. Verified live: filtering to "France" correctly narrowed the
+  table to a temporary test order; the CSV export ran successfully with the filter applied
+  (checked the dev server log directly, since the browser sandbox blocks inspecting a
+  script-triggered download).
+- **i18n:** landed incrementally alongside each surface above rather than as a separate pass —
+  all EN + KA, KA flagged not-native-reviewed per usual.
+- **Tests:** new `tests/tier2-core-flows/company-nationality-tagging.spec.ts` — one real
+  end-to-end pass covering the toggle, the picker, the confirm-review sheet, persistence, the
+  admin filter/column/print-sheet, and (the one the original plan left undefined) that turning
+  the flag off afterward never hides an already-submitted order's nationality data. Runs
+  `.serial` since it mutates the tenant-wide flag, same reason the payment tests do. **Confirmed
+  passing twice in a row**, no leftover test data, flag restored to its pre-test value both
+  times. Two real bugs fixed while writing it (both in the test/component, not the app): a
+  `useEffect` in `NationalityPicker.tsx` calling `setState` synchronously on every `[text, open]`
+  change (a real eslint `react-hooks/set-state-in-effect` error, not a style nit — moved the
+  reset into the actual event handlers instead); and the super-admin section header + the Orders
+  filter's `<label>` are both plain, unassociated `<label>` elements, not real headings or
+  `for`-linked labels, so the test's first draft using `getByRole('heading', ...)` /
+  `getByLabel(...)` silently found nothing. The two-tenant RLS cross-visibility requirement
+  needed no new script — `nationalities` is a plain column on the already-covered `Order` row,
+  so re-running the existing `scripts/test-rls.ts` (21/21 passed) already exercises it.
+- Wrote `Features/Feature 188 - Company Booking Nationality Tagging.md` per Rule 9, and updated
+  `FeatureLog.md`'s row 188 to ✅ Done / Claude tested ✅.
+
+The country-list-vs-editable-table open question from Chunk 1 is still technically unanswered by
+Max but no longer blocking — the flat static list already shipped. **Nothing has been committed
+or pushed to `staging` yet** — that's still a separate step awaiting Max's go-ahead.
+
+---
+
 ## 2026-09-16 — Fixed KnownBugs #40: no validation that Booking Rules max ≥ min
 
 Follow-up to the payment-integrity testing session below, which had found this live on Staging
@@ -29,7 +106,61 @@ an invalid value now shows the inline error and saves nothing; both directions t
 and min-above-max); confirmed the final state (min 4, max ∞) persisted after reload. `tsc --noEmit`
 clean; only pre-existing lint warnings remain (unrelated to this change).
 
-Not yet pushed to `staging`.
+Pushed to `staging` (`9d7404f`) later the same day, bundled with the payment-integrity testing
+work below — Max asked to push both together. The 26MB manual-exploration screen recording from
+that session was deliberately left out of git (26MB binary, not test code) and
+`vault/Playwright/recordings/` added to `.gitignore` so future recordings don't show up as
+untracked either.
+
+---
+
+## 2026-09-16 (2) — Dependency review + plan for Company Booking Nationality Tagging
+
+Max asked to add a nationality field to **company** bookings — gated by a super-admin-only tenant
+toggle, so it can later be used to filter company bookings by nationality in admin. Reviewed the
+codebase for what this touches before building anything (no code changed yet).
+
+Key findings from the review: closest precedent for a super-admin-only per-tenant flag is
+`Tenant.wineDetailLevel` (exposed only in `TenantFormClient.tsx`, never the tenant's own
+`SettingsClient.tsx`); closest precedent for a COMPANY-only conditional block in the booking form
+is the existing `isEnhanced` branch, though Max confirmed this new feature should be **independent**
+of that mode, not nested inside it.
+
+Clarified with Max: this is **not** a per-country guest-count breakdown (rejected a design with a
+new `OrderNationality` child table) — just a small set of nationality tags per booking, "at most a
+mix," no counts. That collapses the data model to a single `Order.nationalities String[]` column
+(no new table, no new RLS work) instead of a whole new tenanted table.
+
+Picker UX: Max wants a full country list, either browsable or type-to-filter. Decided this is a
+static ~195-country hardcoded list (`lib/countries.ts`, ISO 3166-1 codes) behind a new
+`NationalityPicker.tsx` component — explicitly **not** a real DB table (no per-tenant meaning, no
+edits needed, a DB round-trip would be pure overhead over a constant) despite Max's "create a
+table" phrasing suggesting a database table at first.
+
+Full plan with locked decisions and a build sequence written to [[Plan-CompanyNationality]].
+
+**Follow-up same day:** Max asked for a sub-agent to critically stress-test the plan (nothing was
+coded yet, so this was a plan audit, not a test run against real code) before any implementation
+started. It caught one real factual error and several missing surfaces, all folded back into the
+plan:
+
+- The plan's filter mechanism assumed a shared `getOrders()` function — it doesn't exist. The
+  orders table's query is inline in `orders/page.tsx`, and `exportOrdersCsv` builds its own
+  separate filter/where clause. Corrected in the plan's Chunk 8 to touch both by hand.
+- `BookingSheetPrint.tsx` (the sheet kitchen/host staff use *during* the actual visit) was missing
+  entirely — arguably the highest-value surface for the stated motivation, added as a new Chunk 7,
+  alongside an explicit include/skip decision for the confirmation and internal-notification
+  emails.
+- Toggle-off behavior was undefined (does turning the flag off later hide already-entered data?)
+  — now explicitly decided: no, admin-side display stays independent of the flag once data exists.
+- The "static list, not a DB table" call was locking out a real alternative (a per-tenant-curated
+  shortlist would actually fit the RLS model fine) — turned into an open question for Max rather
+  than a silent decision.
+- RLS handling and the `buildBookingPayload()`/`guideId`-placement mechanism were both verified
+  correct against the real code, not just assumed.
+
+Plan now has 11 chunks. Chunk 1 done; **awaiting Max's answer on the country-list open question**,
+then his go-ahead to start Chunk 2, per [[ClaudeInstructions]] Rule 8.
 
 ---
 

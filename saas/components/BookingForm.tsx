@@ -11,6 +11,8 @@ import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
+import NationalityPicker from '@/components/NationalityPicker'
+import { countryName } from '@/lib/countries'
 import NewCompanyPopupView from '@/components/NewCompanyPopupView'
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
 import AccessCodePopupView from '@/components/AccessCodePopupView'
@@ -60,6 +62,9 @@ type Props = {
   companies: Company[]
   showCompanyPrice: boolean
   enhancedEnabled?: boolean
+  /** Company-booking nationality tagging (Plan-CompanyNationality), super-admin only —
+   * independent of `enhancedEnabled`/`isEnhanced` below, not nested inside it. */
+  nationalityBreakdownEnabled?: boolean
   hideCompanyDropdown?: boolean
   menuItems?: MenuItem[]
   masterclassItems?: MasterclassItem[]
@@ -101,7 +106,7 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
     let str = messagesContent[key] || t(locale, tKey)
@@ -116,6 +121,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Which guide's code matched, if any (Plan-CompanyGuidesAndReps Chunk 5/7) — flows through
   // buildBookingPayload() into createBooking() so the order remembers who was contacted.
   const [matchedGuideId, setMatchedGuideId] = useState<string | null>(null)
+  // Company-booking nationality tags (Plan-CompanyNationality) — ISO codes, no per-country
+  // count. Reset whenever the visitor switches to an INDIVIDUAL booking (see the toggle below).
+  const [nationalities, setNationalities] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -223,6 +231,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   }
 
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
+  // Independent of isEnhanced by design (Plan-CompanyNationality Chunk 1) — shows for any
+  // COMPANY booking once the tenant flag is on, enhanced mode or not.
+  const showNationalityPicker = !!nationalityBreakdownEnabled && bookingType === 'COMPANY'
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (configured) first — nothing beats it — then, for COMPANY bookings, the
@@ -376,6 +387,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
       guideId: bookingType === 'COMPANY' && matchedGuideId ? matchedGuideId : undefined,
+      nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,
@@ -460,6 +472,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
   ]
 
+  // Shown on the review sheet for either branch below — nationality tagging is independent
+  // of isEnhanced, so it isn't specific to one guest-count layout or the other.
+  const nationalityReviewRows: ReviewRow[] = showNationalityPicker && nationalities.length > 0
+    ? [{ label: t(locale, 'form.nationality'), value: nationalities.map(countryName).join(', ') }]
+    : []
+
   const confirmGuestRows: ReviewRow[] = isEnhanced
     ? [
         ...(tastingGuests > 0 ? [{ label: t(locale, 'form.guests_tasting'), value: String(tastingGuests) }] : []),
@@ -469,12 +487,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...nationalityReviewRows,
       ]
     : [
         { label: fc('form_num_guests', 'form.num_guests'), value: String(guestCount) },
         { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...nationalityReviewRows,
       ]
 
   // Same "don't invent a number" rule as the live price preview below: only a
@@ -695,7 +715,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <div>
           <label style={labelStyle}>{fc('form_booking_type', 'form.booking_type')}</label>
           <div className="grid grid-cols-2 gap-3">
-            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId('') }}>
+            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId(''); setNationalities([]) }}>
               {fc('form_individual', 'form.individual')}
             </ToggleButton>
             <ToggleButton active={bookingType === 'COMPANY'} onClick={() => setBookingType('COMPANY')}>
@@ -781,6 +801,19 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               </select>
             </div>
           )
+        )}
+
+        {/* Nationality tagging (Plan-CompanyNationality) — independent of isEnhanced */}
+        {showNationalityPicker && (
+          <div>
+            <label style={labelStyle}>{t(locale, 'form.nationality')}</label>
+            <NationalityPicker
+              value={nationalities}
+              onChange={setNationalities}
+              placeholder={t(locale, 'form.nationality_placeholder')}
+              emptyText={t(locale, 'form.nationality_empty')}
+            />
+          </div>
         )}
 
         {/* Visit type */}

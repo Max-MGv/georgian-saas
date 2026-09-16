@@ -7,6 +7,7 @@ import { deleteOrder, updateOrder, sendOrderInvoice, updateOrderStatus } from '@
 import { adminT } from '@/lib/adminT'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
+import { countryName } from '@/lib/countries'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -73,6 +74,7 @@ type Order = {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
+  nationalities: string[]
   company: { name: string; identificationCode: string | null; representatives: { id: string; name: string; email: string | null }[] } | null
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
@@ -564,6 +566,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('company') && (
                   <td className="px-4 py-3" style={{ color: order.requestedCompanyName && !order.company ? '#92400e' : C.muted }}>
                     {order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : '—')}
+                  </td>
+                )}
+
+                {/* Nationality (Plan-CompanyNationality) — company bookings only, may be empty */}
+                {col('nationality') && (
+                  <td className="px-4 py-3" style={{ color: order.nationalities.length > 0 ? C.muted : C.faint }}>
+                    {order.nationalities.length > 0 ? order.nationalities.map(countryName).join(', ') : '—'}
                   </td>
                 )}
 
