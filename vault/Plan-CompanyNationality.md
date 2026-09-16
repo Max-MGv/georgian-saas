@@ -213,8 +213,9 @@ found and fixed along the way — see [[MaintenanceNotes]] #27 (`Tenant` RLS tra
 scope decision — booking confirmation and internal notification emails skip nationality, staying
 consistent with those templates' existing minimalism (see Chunk 7). The country-list-vs-editable-
 table open question from Chunk 1 is still technically unanswered by Max but no longer blocking.
-**Not yet done:** the actual `staging` push (nothing has been committed/pushed yet — Max's
-go-ahead was to build, not necessarily to ship) and the final vault close-out items below.
+Committed and pushed to `staging` (`fb816f4`) on Max's explicit go-ahead. **Not yet done:**
+verifying the live `staging.vineworks.ge` deploy, and getting Max's approval for the
+`staging` → `master` merge (production) — see Chunk 11.
 
 ---
 
@@ -470,11 +471,16 @@ pass, since each new label was needed at the moment its surface was built:
 
 ## Chunk 11 — Vault close-out
 
-**Status:** ⬜ Not started
-**Depends on:** all prior chunks done and verified on `staging`.
+**Status:** 🚧 In progress — pushed to `staging`, awaiting the `master` merge decision
 
-- [ ] `SessionLog.md`, `FeatureLog.md`, `Roadmap.md` updated per Rules 1/4
-- [ ] `vault/features/Feature 188 - Company Booking Nationality Tagging.md` written per Rule 9
+- [x] `SessionLog.md`, `FeatureLog.md` updated per Rules 1/4 (`Roadmap.md` skipped — same as
+  Features 185/186/187, ad-hoc same-day features aren't added there, only pre-planned versioned
+  milestones are)
+- [x] `vault/Features/Feature 188 - Company Booking Nationality Tagging.md` written per Rule 9
+- [x] Committed and pushed to `staging` (`fb816f4`) on Max's go-ahead
+- [ ] Verify on the live `staging.vineworks.ge` preview (auto-deploys from this push) before
+  asking for the `master` merge
 - [ ] Confirm with Max, get the `staging` → `master` merge approval
 
-**Resume point:** —
+**Resume point:** Pushed to staging. Next: verify live on staging.vineworks.ge, then get Max's
+go-ahead to merge to `master` (production).
