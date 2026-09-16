@@ -5,7 +5,7 @@ import { adminT } from '@/lib/adminT'
 
 const C = { border: 'var(--site-border)', muted: 'var(--site-muted)', wine: 'var(--color-brand)', inputBg: 'var(--site-surface)' }
 
-type View = 'table' | 'list' | 'calendar'
+type View = 'table' | 'list' | 'calendar' | 'board'
 
 type Props = {
   view: View
@@ -38,6 +38,7 @@ export default function ViewToggle({ view, params, locale = 'en' }: Props) {
     { v: 'table', labelKey: 'orders.view.table' },
     { v: 'list', labelKey: 'orders.view.list' },
     { v: 'calendar', labelKey: 'orders.view.calendar' },
+    { v: 'board', labelKey: 'orders.view.board' },
   ]
 
   return (

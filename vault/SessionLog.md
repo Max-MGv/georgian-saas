@@ -8,6 +8,89 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-16 (5) — Status Board view, for both Booking Orders and Wine Orders (Feature 190)
+
+Max liked the Status Board option from the three-way mockup built for the List view session below
+(4) and asked to build it too, for both order types — "spend a lot of effort thinking about the
+design, the plan, the integration, ui/ux, then start building." Read the mockup back from its
+Artifact (`DVMLBHcyPNsUbKSkEb8FP4`, tab C) to work from the exact design Max already approved, wrote
+`Plan-StatusBoard.md` with the design decisions before touching code (no DnD — reuses each page's
+existing status-pill dropdown; board cards skip the row-action icons List has; the two boards
+deliberately differ on whether empty columns show), then built both.
+
+- **Booking Orders** (`/admin/orders?view=board`): `ViewToggle.tsx` is now a 4-way Table/List/
+  Calendar/Board switch. `page.tsx`'s `isTableLike` fetch branch now covers `board` too. New
+  `OrdersBoardColumns` in `OrdersTable.tsx` — all 7 `OrderStatus` columns always shown (even empty),
+  reusing the parent's existing portal-rendered status dropdown and `router.push` for click-to-open,
+  same as Table/List already do.
+- **Wine Orders** (`/admin/wine-orders`): mode switch is now Cards/Table/**Board**/Pack. New
+  `BoardView` in `WineOrdersClient.tsx` — Pending → Confirmed → Paid → Delivered → Cancelled, then
+  the two payment-limbo statuses appended only when non-empty (matching `FilterBar`'s existing
+  show-only-if-present convention there — deliberately different from the booking board, not an
+  inconsistency).
+- New translation keys: `orders.view.board`, `orders.board.empty`, `wineOrders.mode.board`,
+  `wineOrders.board.wine`/`wines`/`bottles` (EN/KA, KA drafted not native-reviewed per usual).
+
+**Real bug found and fixed while verifying live, not just by typechecking:** Wine Orders' `BoardView`
+was first fed `filteredOrders` — the same set Cards/Table use, which excludes payment-limbo orders by
+default (a rule that exists so an undifferentiated list isn't cluttered by permanently-accumulating
+unpaid gateway leftovers). The board already isolates every status into its own column, so that rule
+just left Awaiting Payment/Payment Failed permanently empty — confirmed live on Staging Winery: 3 real
+`pending_payment` orders existed, the board showed "None." Fixed with a new `boardOrders` memo
+(identical filters, minus that one exclusion line) and made `BoardView` decide which limbo columns to
+show from its own `orders` prop directly, instead of a separate `statusCounts` prop that could point
+at a different filtered set than what was actually rendered inside the column.
+
+Verified live on Staging Winery / local dev (super-admin-dev, `localhost:3000` at desktop width — the
+board is desktop-only, same as Table/List/Calendar; mobile keeps its own untouched card list
+regardless of `view`): both boards render every column with correct counts; clicking a board card's
+status pill opens the same dropdown as Table/List and moves the card to the new column live (tested
+Invoice Sent → Paid → back on Booking Orders, confirmed the Wine Orders dropdown opens with the right
+options); a Booking Orders board card click navigates to `/admin/orders/[id]`; after the `boardOrders`
+fix, Wine Orders' Awaiting Payment column correctly shows its 3 real orders. `tsc --noEmit` clean
+throughout, both before and after the fix. Wrote
+`Features/Feature 190 - Status Board.md` and updated `FeatureLog.md` row 190 to ✅ Done / Claude
+tested ✅.
+
+**Not yet done:** Max hasn't confirmed in the live UI yet — mark `FeatureLog.md` User tested once he
+has. Nothing pushed to `staging` yet, that's still a separate step awaiting his go-ahead.
+
+**Same-day follow-up — QA pass + 1 fix.** Max asked for a subagent to QA-test the new Board views
+like a real user — bugs, loopholes, bad design, brand/design continuity. It found one real bug and
+two lower-priority notes:
+
+- **Fixed:** Wine Orders' board status dropdown could become geometrically unreachable. `BoardView`'s
+  dropdown was `position: absolute`, nested inside its own column's `overflow-y-auto` container
+  (`maxHeight: 65vh`) — for a card near or past that container's bottom edge, the menu got clipped by
+  its own ancestor, to the point a hit-test at the menu's own screen position resolved to nothing.
+  Booking Orders' board never had this because it already portals its dropdown to `document.body`
+  (`position: fixed`, built for the table/list views' own sticky-column clipping problem). Gave Wine
+  Orders' board the identical portal treatment — new `statusMenuRect` state, `toggleStatusMenu()`
+  capturing the trigger's rect, the same viewport-edge flip-up-if-it-would-overflow math Booking
+  Orders' portal already uses, a single portal render at the bottom of `BoardView` instead of one
+  inline `<div>` per card. Verified live: reproduced the original clipped/unreachable state at a
+  1400×700 viewport, then confirmed after the fix (1400×1000, scrolled a 7-card Cancelled column to
+  its last card) the menu renders at a real `position: fixed` rect, flips upward correctly since
+  opening downward would have overflowed, and a hit-test at its center now resolves to the menu
+  itself with all 5 status options present and clickable.
+- **Confirmed not a regression, left as-is:** a payment-limbo order's status pill shows nothing
+  highlighted in its own dropdown (no option matches `order.status` since limbo statuses are
+  deliberately excluded from the manually-settable list). Pre-existing in Wine Orders' `TableView`,
+  inherited unchanged by Board — not new, not fixed.
+- **Noted, not fixed:** neither board has an explicit horizontal-scroll affordance (fade/chevron) or
+  keyboard focus on the scroll container itself. Minor, not asked for.
+
+Everything else in the QA pass came back clean: column counts matched rendered cards in every filter
+state, status changes round-tripped correctly on both boards (each reverted to its original value
+after testing), Booking Orders card-click navigation matched the right order, the `boardOrders`
+empty-column fix from earlier in this session held up under direct testing, per-column scroll was
+confirmed independent of page scroll, and brand/visual continuity matched the rest of the admin panel
+(same `--color-brand`, `STATUS_CONFIG`/`STATUS_COLOR` palettes, border radii). `tsc --noEmit` clean
+after the fix. Updated `Features/Feature 190 - Status Board.md` and `Plan-StatusBoard.md` with the bug
+and fix.
+
+---
+
 ## 2026-09-16 (4) — Booking Orders: new "List" view (compact rows)
 
 Max wanted an easier-to-scan alternative to the dense Orders table — "similar to wine orders,"

@@ -24,7 +24,7 @@ type SearchParams = {
   companyId?: string   // a real company ID, or '__individual__' for individual-only
   status?: string      // NEW | CONFIRMED | INVOICE_SENT | PENDING_PAYMENT | PAID | COMPLETED | CANCELLED
   nationality?: string // ISO 3166-1 code (Plan-CompanyNationality)
-  view?: 'table' | 'list' | 'calendar'
+  view?: 'table' | 'list' | 'calendar' | 'board'
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -53,8 +53,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
   const detailed = invoiceDetailed === 'true'
 
-  const view = params.view === 'calendar' ? 'calendar' : params.view === 'list' ? 'list' : 'table'
-  const isTableLike = view === 'table' || view === 'list'
+  const view = params.view === 'calendar' ? 'calendar' : params.view === 'list' ? 'list' : params.view === 'board' ? 'board' : 'table'
+  const isTableLike = view === 'table' || view === 'list' || view === 'board'
 
   // For calendar view: fetch all orders with enough detail for day hover preview
   const calendarOrders = view === 'calendar'
@@ -216,7 +216,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`} view={view === 'list' ? 'list' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,

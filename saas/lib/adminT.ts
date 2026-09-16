@@ -442,6 +442,8 @@ const en: Translations = {
   'orders.view.table': 'Table',
   'orders.view.list': 'List',
   'orders.view.calendar': 'Calendar',
+  'orders.view.board': 'Board',
+  'orders.board.empty': 'None',
 
   // Order Detail page
   'orderDetail.backToOrders': '← Back to orders',
@@ -650,6 +652,10 @@ const en: Translations = {
   'wineOrders.table.bottles': 'Bottles',
   'wineOrders.mode.cards': 'Cards',
   'wineOrders.mode.pack': '📦 Pack',
+  'wineOrders.mode.board': 'Board',
+  'wineOrders.board.wine': 'wine',
+  'wineOrders.board.wines': 'wines',
+  'wineOrders.board.bottles': 'bottles',
   'wineOrders.card.inPack': '✓ In pack',
   'wineOrders.card.addPack': '+ Pack',
   'wineOrders.total': 'total',
@@ -1630,6 +1636,8 @@ const ka: Translations = {
   'orders.view.table': 'ცხრილი',
   'orders.view.list': 'სია',
   'orders.view.calendar': 'კალენდარი',
+  'orders.view.board': 'დაფა',
+  'orders.board.empty': 'არცერთი',
 
   // Order Detail page
   'orderDetail.backToOrders': '← შეკვეთებზე დაბრუნება',
@@ -1838,6 +1846,10 @@ const ka: Translations = {
   'wineOrders.table.bottles': 'ბოთლი',
   'wineOrders.mode.cards': 'ბარათები',
   'wineOrders.mode.pack': '📦 შეფუთვა',
+  'wineOrders.mode.board': 'დაფა',
+  'wineOrders.board.wine': 'ღვინო',
+  'wineOrders.board.wines': 'ღვინო',
+  'wineOrders.board.bottles': 'ბოთლი',
   'wineOrders.card.inPack': '✓ შეფუთვაშია',
   'wineOrders.card.addPack': '+ შეფუთვა',
   'wineOrders.total': 'სულ',

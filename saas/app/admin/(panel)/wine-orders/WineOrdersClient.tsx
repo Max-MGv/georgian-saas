@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
@@ -72,7 +73,7 @@ const ALL_STATUSES = ['pending', 'confirmed', 'paid', 'delivered', 'cancelled'] 
 // Limbo tabs come last — they are an exception list, not part of the normal flow.
 const STATUS_FILTER_OPTIONS = [...ALL_STATUSES, ...PAYMENT_LIMBO_STATUSES] as const
 
-type Mode = 'cards' | 'table' | 'pack'
+type Mode = 'cards' | 'table' | 'pack' | 'board'
 type PendingChange = { orderId: string; toStatus: string }
 
 // ── Icons ──────────────────────────────────────────────────────────────
@@ -514,6 +515,196 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
   )
 }
 
+// ── BoardView ──────────────────────────────────────────────────────────
+
+// Fulfilment stages, then Cancelled, then the two payment-limbo statuses —
+// but only when they actually hold something. Matches FilterBar's own
+// show-only-if-present rule for limbo tabs (a winery not taking card
+// payments should never see two permanently-empty columns). This is the one
+// deliberate difference from the Booking Orders board, which always shows
+// every column — see Plan-StatusBoard.md.
+const BOARD_STAGE_COLUMNS = [...STAGES, 'cancelled'] as const
+const BOARD_COL_WIDTH = 232
+
+/**
+ * Status Board — wine orders grouped into columns by fulfilment stage,
+ * horizontally scrollable. No navigation (wine orders have no detail page,
+ * unlike bookings) — the card itself is the whole surface. Status changes
+ * reuse the same pill → dropdown → confirm/cancel interaction as `TableView`,
+ * not drag-and-drop (see Plan-StatusBoard.md).
+ */
+function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
+  orders: WineOrder[]
+  pendingChange: PendingChange | null
+  onRequestChange: (orderId: string, toStatus: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+  locale: string
+}) {
+  // Menu renders in a portal (see bottom of this component), not inline —
+  // each column scrolls independently (`overflow-y-auto`, `maxHeight: 65vh`
+  // below), and an absolutely-positioned menu nested inside that container
+  // gets silently clipped by it for any card near the column's bottom edge.
+  // Found live during QA of this feature: the dropdown became geometrically
+  // unreachable (not just visually cut off — a hit-test at its own position
+  // resolved to nothing) for the last card in a 7-card Cancelled column.
+  // Booking Orders' equivalent board never had this bug because it already
+  // portals to `document.body`; this mirrors that fix.
+  const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
+  const [statusMenuRect, setStatusMenuRect] = useState<{ top: number; bottom: number; left: number } | null>(null)
+  const at = (key: string) => adminT(locale, key)
+
+  useEffect(() => {
+    if (!statusMenuId) return
+    function close() { setStatusMenuId(null); setStatusMenuRect(null) }
+    document.addEventListener('click', close)
+    document.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('click', close)
+      document.removeEventListener('scroll', close, true)
+    }
+  }, [statusMenuId])
+
+  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
+    if (statusMenuId === orderId) {
+      setStatusMenuId(null)
+      setStatusMenuRect(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    setStatusMenuRect({ top: rect.top, bottom: rect.bottom, left: rect.left })
+    setStatusMenuId(orderId)
+  }
+
+  const columns = [
+    ...BOARD_STAGE_COLUMNS,
+    ...PAYMENT_LIMBO_STATUSES.filter(s => orders.some(o => o.status === s)),
+  ]
+
+  if (orders.length === 0) {
+    return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('wineOrders.noOrdersMatch')}</p>
+  }
+
+  return (
+    <div className="mt-2 overflow-x-auto pb-2">
+      <div className="flex gap-3 items-start" style={{ width: 'max-content' }}>
+        {columns.map(status => {
+          const items = orders.filter(o => o.status === status)
+          const sc = STATUS_COLOR[status]
+          return (
+            <div
+              key={status}
+              className="flex flex-col rounded-xl border flex-shrink-0"
+              style={{ width: BOARD_COL_WIDTH, backgroundColor: 'rgba(0,0,0,0.015)', borderColor: C.border }}
+            >
+              <div className="flex items-center justify-between px-3 py-2.5 border-b" style={{ borderColor: C.border }}>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: sc.border }}>{at(sc.labelKey)}</span>
+                <span
+                  className="text-xs font-bold rounded-full px-2 py-0.5 flex-shrink-0"
+                  style={{ backgroundColor: '#fff', border: `1px solid ${C.border}`, color: C.muted }}
+                >
+                  {items.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 p-2 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+                {items.length === 0 ? (
+                  <p className="text-center text-xs py-5" style={{ color: C.faint }}>{at('orders.board.empty')}</p>
+                ) : items.map(order => {
+                  const bottles = order.wineItems.reduce((s, item) => s + item.quantity, 0)
+                  const isPending = pendingChange?.orderId === order.id
+                  return (
+                    <div
+                      key={order.id}
+                      className="rounded-lg border p-2.5"
+                      style={{ borderColor: C.border, backgroundColor: '#ffffff', boxShadow: '0 1px 2px rgba(28,16,8,0.04)' }}
+                    >
+                      <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={order.businessName}>
+                        {order.businessName}
+                      </div>
+                      <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }}>
+                        {order.wineItems.length} {order.wineItems.length === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="font-bold" style={{ fontSize: '0.8125rem', color: order.displayTotal != null ? C.wine : C.faint }}>
+                          {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾` : '—'}
+                        </span>
+                        {order.discountPercent && order.discountPercent > 0 && (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                            −{order.discountPercent}%
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t" style={{ borderColor: C.border }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); toggleStatusMenu(order.id, e) }}
+                          className="w-full text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                          style={{ backgroundColor: sc.pill, color: sc.pillText, border: `1px solid ${sc.border}44` }}
+                        >
+                          {at(sc.labelKey)} ▾
+                        </button>
+                        {isPending && (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-xs">
+                            <span style={{ color: C.muted }}>
+                              → {STATUS_COLOR[pendingChange.toStatus] ? at(STATUS_COLOR[pendingChange.toStatus].labelKey) : pendingChange.toStatus}?
+                            </span>
+                            <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
+                            <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Status dropdown portal — see the comment above `statusMenuId`'s
+          declaration for why this can't render inline inside a column. */}
+      {statusMenuId && statusMenuRect && typeof document !== 'undefined' && (() => {
+        const order = orders.find(o => o.id === statusMenuId)
+        if (!order) return null
+        const menuW = 150
+        const menuH = ALL_STATUSES.length * 33 + 8
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        const left = Math.min(statusMenuRect.left, vw - menuW - 8)
+        const top = statusMenuRect.bottom + 4 + menuH > vh
+          ? Math.max(statusMenuRect.top - menuH - 4, 8)
+          : statusMenuRect.bottom + 4
+        return createPortal(
+          <div
+            className="rounded-xl border shadow-lg py-1"
+            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: C.bg, borderColor: C.border }}
+            onClick={e => e.stopPropagation()}
+          >
+            {ALL_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={() => { setStatusMenuId(null); setStatusMenuRect(null); onRequestChange(order.id, s) }}
+                className="w-full text-left px-3 py-2 text-sm flex items-center gap-2"
+                style={{
+                  color: s === order.status ? STATUS_COLOR[s].pillText : C.text,
+                  fontWeight: s === order.status ? 600 : 400,
+                  backgroundColor: s === order.status ? STATUS_COLOR[s].pill : 'transparent',
+                }}
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_COLOR[s].border }} />
+                {at(STATUS_COLOR[s].labelKey)}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )
+      })()}
+    </div>
+  )
+}
+
 // ── PackingTable ───────────────────────────────────────────────────────
 
 function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
@@ -648,6 +839,21 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
     return true
   }), [orders, filters, search, dateFrom, dateTo])
 
+  // Same filters as `filteredOrders`, minus the "hide limbo unless a tab is
+  // picked" rule — the board already isolates every status into its own
+  // column, so a limbo order isn't clutter there the way it would be in an
+  // undifferentiated Cards/Table list. Using `filteredOrders` here silently
+  // left the Awaiting Payment / Payment Failed columns permanently empty
+  // (caught live while verifying: 3 real pending_payment orders, board showed
+  // "None").
+  const boardOrders = useMemo(() => orders.filter(o => {
+    if (filters.size > 0 && !filters.has(o.status)) return false
+    if (search && !o.businessName.toLowerCase().includes(search.toLowerCase())) return false
+    if (dateFrom && new Date(o.createdAt) < new Date(dateFrom + 'T00:00:00')) return false
+    if (dateTo && new Date(o.createdAt) > new Date(dateTo + 'T23:59:59')) return false
+    return true
+  }), [orders, filters, search, dateFrom, dateTo])
+
   const cardsVisible = useMemo(() => [...filteredOrders].sort((a, b) => {
     const aI = (a.status === 'delivered' || a.status === 'cancelled') && !recentlyInactive.has(a.id)
     const bI = (b.status === 'delivered' || b.status === 'cancelled') && !recentlyInactive.has(b.id)
@@ -701,12 +907,12 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
     return <div className="text-center py-20 text-sm" style={{ color: 'var(--site-secondary)' }}>{at('wineOrders.noOrdersYet')}</div>
   }
 
-  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : at('wineOrders.mode.pack')
+  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : at('wineOrders.mode.pack')
 
   const modeToggle = (
     <div className="flex items-center gap-1.5 mb-5 self-start">
       <div className="flex gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: '#f0e8dc' }}>
-        {(['cards', 'table', 'pack'] as const).map(m => (
+        {(['cards', 'table', 'board', 'pack'] as const).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -853,6 +1059,25 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
         {filterBar}
         <TableView
           orders={filteredOrders}
+          pendingChange={pendingChange}
+          onRequestChange={requestChange}
+          onConfirm={confirmChange}
+          onCancel={cancelChange}
+          locale={locale}
+        />
+      </div>
+    )
+  }
+
+  // ── Board ───────────────────────────────────────────────────
+
+  if (mode === 'board') {
+    return (
+      <div className="flex flex-col">
+        {modeToggle}
+        {filterBar}
+        <BoardView
+          orders={boardOrders}
           pendingChange={pendingChange}
           onRequestChange={requestChange}
           onConfirm={confirmChange}

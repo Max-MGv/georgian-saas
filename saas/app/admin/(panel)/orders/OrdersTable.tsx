@@ -282,7 +282,120 @@ function OrdersListRows({
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' }) {
+// Column order matches STATUS_CONFIG's own declaration order, which already
+// mirrors the Status Board mockup Max approved (Artifact DVMLBHcyPNsUbKSkEb8FP4,
+// tab C): New → Confirmed → Invoice Sent → Pending Payment → Paid → Completed,
+// with Cancelled held apart at the end. Unlike the wine-orders board (whose
+// payment-limbo columns hide when empty, matching that page's existing
+// FilterBar convention), every column here is always shown — that's what the
+// approved mockup does, and a booking board that hides "no orders confirmed
+// today" is a worse tool for exactly the winery that most needs to see it.
+const BOARD_COLUMNS: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PENDING_PAYMENT', 'PAID', 'COMPLETED', 'CANCELLED']
+const BOARD_COL_WIDTH = 232
+
+/**
+ * Status Board — orders grouped into columns by pipeline stage, horizontally
+ * scrollable. Same click-to-open as every other view; status changes go
+ * through the same portal-rendered dropdown Table and List already share
+ * (`onToggleStatusMenu` → `statusMenuId`/`statusMenuRect` in the parent), not
+ * drag-and-drop — see Plan-StatusBoard.md for why.
+ *
+ * Deliberately no print/email/edit/delete icons on the card (unlike List,
+ * which got full action-icon parity): a 232px column has no room for four
+ * icons without cramming, and the order detail page (one click away) already
+ * has all of them.
+ */
+function OrdersBoardColumns({
+  orders, locale, onRowClick, onToggleStatusMenu,
+}: {
+  orders: Order[]
+  locale: string
+  onRowClick: (id: string) => void
+  onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  return (
+    <div className="mt-4 overflow-x-auto pb-2">
+      <div className="flex gap-3 items-start" style={{ width: 'max-content' }}>
+        {BOARD_COLUMNS.map(status => {
+          const items = orders.filter(o => o.status === status)
+          const cfg = STATUS_CONFIG[status]
+          return (
+            <div
+              key={status}
+              className="flex flex-col rounded-xl border flex-shrink-0"
+              style={{ width: BOARD_COL_WIDTH, backgroundColor: 'rgba(0,0,0,0.015)', borderColor: C.border }}
+            >
+              <div className="flex items-center justify-between px-3 py-2.5 border-b" style={{ borderColor: C.border }}>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: cfg.color }}>{at(cfg.labelKey)}</span>
+                <span
+                  className="text-xs font-bold rounded-full px-2 py-0.5 flex-shrink-0"
+                  style={{ backgroundColor: '#fff', border: `1px solid ${C.border}`, color: C.muted }}
+                >
+                  {items.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 p-2 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+                {items.length === 0 ? (
+                  <p className="text-center text-xs py-5" style={{ color: C.faint }}>{at('orders.board.empty')}</p>
+                ) : items.map(order => {
+                  const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
+                  const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
+                  return (
+                    <div
+                      key={order.id}
+                      onClick={() => onRowClick(order.id)}
+                      className="rounded-lg border p-2.5 cursor-pointer hover:shadow-md transition-shadow"
+                      style={{ borderColor: C.border, backgroundColor: '#ffffff', boxShadow: '0 1px 2px rgba(28,16,8,0.04)' }}
+                    >
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
+                          <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
+                        </div>
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0"
+                          style={{
+                            backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
+                            color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
+                          }}
+                        >
+                          {order.bookingType === 'COMPANY' ? at('orders.type.company') : at('orders.type.individual')}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2" style={{ fontSize: '0.7rem', color: C.muted }}>
+                        <span>{formatDate(order.date)} · {order.timeSlot}</span>
+                        <span>{order.guestCount} {order.guestCount === 1 ? at('orders.guest.singular') : at('orders.guest.plural')}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: C.border }}>
+                        <div onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={e => onToggleStatusMenu(order.id, e)}
+                            className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
+                            style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
+                          >
+                            {at(cfg.labelKey)} ▾
+                          </button>
+                        </div>
+                        <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.8125rem' }}>
+                          {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -630,7 +743,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
       {/* ── Desktop table (hidden on mobile) ──────────────────── */}
       <div className="hidden md:block">
-      {view === 'list' ? (
+      {view === 'board' ? (
+        <OrdersBoardColumns
+          orders={orders}
+          locale={locale}
+          onRowClick={id => router.push(`/admin/orders/${id}`)}
+          onToggleStatusMenu={toggleStatusMenu}
+        />
+      ) : view === 'list' ? (
         <OrdersListRows
           orders={orders}
           locale={locale}
