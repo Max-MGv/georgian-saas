@@ -32,7 +32,7 @@ const STATUSES = [
 
 type Props = {
   companies: Company[]
-  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; nationality?: string }
+  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; nationality?: string; view?: string }
   statusCounts: Record<string, number>
   locale?: string
   /** Only to pick the first-visit column defaults — see defaultVisibleFor. */
@@ -99,6 +99,9 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   }
 
   // ── Filters ──────────────────────────────────────────────────────────────────
+  // `view` is carried through here too (not just the filter fields) — otherwise
+  // every filter change silently bounces List/Calendar back to Table, since
+  // Next's router.push replaces the whole query string, not just what changed.
   function buildQuery(overrides: Record<string, string | undefined>) {
     const merged: Record<string, string> = {}
     if (params.dateFrom)    merged.dateFrom    = params.dateFrom
@@ -106,6 +109,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     if (params.companyId)   merged.companyId   = params.companyId
     if (params.status)      merged.status      = params.status
     if (params.nationality) merged.nationality = params.nationality
+    if (params.view)        merged.view        = params.view
     for (const [k, v] of Object.entries(overrides)) {
       if (v) merged[k] = v
       else   delete merged[k]
@@ -131,7 +135,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     setIsNavigating(true)
     setLocalDateFrom('')
     setLocalDateTo('')
-    router.push(pathname)
+    router.push(buildQuery({ dateFrom: undefined, dateTo: undefined, companyId: undefined, status: undefined, nationality: undefined }))
   }
 
   function handleExport() {

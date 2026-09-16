@@ -37,6 +37,35 @@ list untouched, and Table ↔ Calendar still work. `tsc --noEmit` clean.
 `FeatureLog.md` User tested once he has. Grid Cards and Status Board mockups were not built for
 real — only List was picked.
 
+**Same-day follow-up — QA pass + 3 fixes.** Max asked for a subagent to test the new List view
+like a real user, on staging. It found 2 real bugs and 2 minor notes:
+- **Fixed:** any filter change (status, date, "Clear filters") silently dropped `?view=list`/
+  `?view=calendar` back to Table — `OrdersFilters.tsx`'s `buildQuery()`/`clearFilters()` only ever
+  carried the filter fields into `router.push()`, never `view`. Now carries it through explicitly.
+  `ViewToggle.tsx`'s own `switchTo()` had the mirror-image gap (dropped `nationality` when
+  switching views) — fixed the same way while in there.
+- **Fixed, per Max's own call rather than a patch:** the hover-preview card could render on top of
+  the status dropdown / delete confirm in List rows (the table's equivalent cells call
+  `suppressRowHover` to prevent this; the ported `OrdersListRows` version only called
+  `stopPropagation`, missing that wiring). Max's call: don't patch the overlap, remove hover
+  entirely from List — a list row is already a one-line summary, so the preview card was
+  redundant there anyway. `OrdersListRows` no longer takes `onRowMouseEnter/Move/Leave` props at
+  all.
+- **Fixed, new ask (not from the QA report):** on a wide monitor the List row's name/company
+  column (a `1.7fr` grid track) stretched to fill the full viewport width, unrelated to the width
+  of the date/total columns beside it and hard to scan. Capped the list container at `max-width:
+  900px` (kept `min-width: 640px` + horizontal scroll for narrow desktop widths).
+- **Not a bug (confirmed, no change):** ₾0 totals on 2 seeded "(new)" company orders — correct
+  persisted value (company not yet linked → no pricing tier), matches the order detail page's
+  stored total.
+- **Noted, not fixed:** name truncation is tight right at the 768px `md` breakpoint; the email
+  button's "no email on file" state is a subtle color-only signal. Left as-is, not asked for.
+
+Verified all three fixes live on staging (localhost): `?view=list&status=NEW` now round-trips
+correctly through both a filter change and Clear Filters; status dropdown opens on a list row with
+no hover card in the DOM at all; list stays capped at 900px on a 1024px+ viewport instead of
+stretching edge-to-edge. `tsc --noEmit` clean throughout.
+
 ---
 
 ## 2026-09-16 (3) — Built Chunks 2–10 of Company Booking Nationality Tagging (Feature 188)

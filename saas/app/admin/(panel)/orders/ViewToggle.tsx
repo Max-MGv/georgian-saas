@@ -9,7 +9,7 @@ type View = 'table' | 'list' | 'calendar'
 
 type Props = {
   view: View
-  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
+  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; nationality?: string }
   locale?: string
 }
 
@@ -20,10 +20,11 @@ export default function ViewToggle({ view, params, locale = 'en' }: Props) {
 
   function switchTo(v: View) {
     const sp = new URLSearchParams()
-    if (params.dateFrom)  sp.set('dateFrom',  params.dateFrom)
-    if (params.dateTo)    sp.set('dateTo',    params.dateTo)
-    if (params.companyId) sp.set('companyId', params.companyId)
-    if (params.status)    sp.set('status',    params.status)
+    if (params.dateFrom)    sp.set('dateFrom',    params.dateFrom)
+    if (params.dateTo)      sp.set('dateTo',      params.dateTo)
+    if (params.companyId)   sp.set('companyId',   params.companyId)
+    if (params.status)      sp.set('status',      params.status)
+    if (params.nationality) sp.set('nationality', params.nationality)
     if (v !== 'table') sp.set('view', v)
     router.push(sp.toString() ? `${pathname}?${sp.toString()}` : pathname)
   }

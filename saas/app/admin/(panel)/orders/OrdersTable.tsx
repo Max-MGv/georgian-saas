@@ -148,12 +148,16 @@ const LIST_GRID_COLS = '108px minmax(0,1.7fr) 70px 90px 130px 150px'
  * list quickly. Same click-to-open, same status dropdown portal (rendered once
  * in the parent, keyed off statusMenuId) and the same print/email/edit/delete
  * handlers as the table — this only changes row density, not what a row does.
+ *
+ * No hover-preview card here (unlike the table): a row is already a one-line
+ * summary, so the card would duplicate what's already visible — and it used to
+ * sit on top of the status dropdown and delete confirm, since those need their
+ * own click target inside a row that's otherwise one big click-to-open link.
  */
 function OrdersListRows({
   orders, locale, deletingId, loading, detailed,
   onRowClick, onToggleStatusMenu, onPrint, onEmail, onEdit,
   onRequestDelete, onConfirmDelete, onCancelDelete,
-  onRowMouseEnter, onRowMouseMove, onRowMouseLeave,
 }: {
   orders: Order[]
   locale: string
@@ -168,14 +172,15 @@ function OrdersListRows({
   onRequestDelete: (id: string | null) => void
   onConfirmDelete: (id: string) => void
   onCancelDelete: () => void
-  onRowMouseEnter: (order: Order, e: React.MouseEvent) => void
-  onRowMouseMove: (e: React.MouseEvent) => void
-  onRowMouseLeave: () => void
 }) {
   const at = (key: string) => adminT(locale, key)
   return (
     <div className="mt-4 overflow-x-auto">
-      <div style={{ minWidth: 640 }}>
+      {/* Capped, not full-bleed — a name/company column that's already narrow
+          gets unreadably wide (and unrelated to the date/total columns beside
+          it) on a wide monitor otherwise. Min-width is the horizontal-scroll
+          floor for narrow desktop widths; max-width is the readability ceiling. */}
+      <div style={{ minWidth: 640, maxWidth: 900 }}>
       <div className="grid px-4 pb-2" style={{ gridTemplateColumns: LIST_GRID_COLS, gap: 12 }}>
         {['orders.col.date', 'orders.col.contact', 'orders.col.guests', 'orders.col.total', 'orders.col.status'].map((k, i) => (
           <span key={k} className={i === 2 ? 'text-center' : ''} style={{ color: C.faint, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{at(k)}</span>
@@ -191,9 +196,6 @@ function OrdersListRows({
             <div
               key={order.id}
               onClick={() => onRowClick(order.id)}
-              onMouseEnter={e => onRowMouseEnter(order, e)}
-              onMouseMove={onRowMouseMove}
-              onMouseLeave={onRowMouseLeave}
               className="grid items-center rounded-xl border cursor-pointer hover:bg-amber-50 transition-colors relative overflow-hidden"
               style={{ gridTemplateColumns: LIST_GRID_COLS, borderColor: C.border, backgroundColor: '#ffffff', padding: '10px 14px 10px 16px', gap: 12 }}
             >
@@ -215,7 +217,7 @@ function OrdersListRows({
                 {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
               </div>
 
-              <div onClick={e => e.stopPropagation()} onMouseEnter={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
+              <div onClick={e => e.stopPropagation()}>
                 <button
                   onClick={e => onToggleStatusMenu(order.id, e)}
                   className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
@@ -642,9 +644,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           onRequestDelete={setDeletingId}
           onConfirmDelete={handleDelete}
           onCancelDelete={() => setDeletingId(null)}
-          onRowMouseEnter={handleRowMouseEnter}
-          onRowMouseMove={handleRowMouseMove}
-          onRowMouseLeave={handleRowMouseLeave}
           detailed={detailed}
         />
       ) : (
