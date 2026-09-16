@@ -24,7 +24,7 @@ type SearchParams = {
   companyId?: string   // a real company ID, or '__individual__' for individual-only
   status?: string      // NEW | CONFIRMED | INVOICE_SENT | PENDING_PAYMENT | PAID | COMPLETED | CANCELLED
   nationality?: string // ISO 3166-1 code (Plan-CompanyNationality)
-  view?: 'table' | 'calendar'
+  view?: 'table' | 'list' | 'calendar'
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -53,7 +53,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const payment = { recipientName, personalNumber, bankName, bankCode, iban }
   const detailed = invoiceDetailed === 'true'
 
-  const view = params.view === 'calendar' ? 'calendar' : 'table'
+  const view = params.view === 'calendar' ? 'calendar' : params.view === 'list' ? 'list' : 'table'
+  const isTableLike = view === 'table' || view === 'list'
 
   // For calendar view: fetch all orders with enough detail for day hover preview
   const calendarOrders = view === 'calendar'
@@ -114,12 +115,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ...(params.nationality ? { nationalities: { has: params.nationality } } : {}),
   }
 
-  const statusCountRows = view === 'table'
+  const statusCountRows = isTableLike
     ? await withTenantDb(tenantId, tx => tx.order.groupBy({ by: ['status'], where: baseWhere, _count: { status: true } }))
     : []
   const statusCounts = Object.fromEntries(statusCountRows.map(r => [r.status, r._count.status]))
 
-  const orders = view === 'table' ? await withTenantDb(tenantId, tx => tx.order.findMany({
+  const orders = isTableLike ? await withTenantDb(tenantId, tx => tx.order.findMany({
     where: {
       ...baseWhere,
       ...(params.status ? { status: params.status as OrderStatus } : {}),
@@ -140,7 +141,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // Chunk 7 task 7.3, rolled out to every tenant on Max's call 2026-09-11.
   // The design decisions behind it are documented in RevenueStrip.tsx.
   //
-  // Two queries, both only on the table view — the calendar view has its own
+  // Two queries, only on the table/list views — the calendar view has its own
   // shape and does not need them:
   //  - `upcoming` drives the numbers. Deliberately unfiltered: it is the whole
   //    business, not the current view.
@@ -151,7 +152,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   //
   // Same definition Statistics uses (date >= today, cancelled excluded) so the
   // two screens cannot disagree.
-  const [upcoming, hasAnyOrders] = view === 'table'
+  const [upcoming, hasAnyOrders] = isTableLike
     ? await Promise.all([
         (() => {
           const today = new Date()
@@ -179,7 +180,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
         <h1 className="text-xl font-bold" style={{ color: C.text }}>{at('orders.pageTitle')}</h1>
         <div className="flex items-center gap-3 flex-wrap">
-          {view === 'table' && <span className="text-sm" style={{ color: C.faint }}>{orders.length} {orders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}</span>}
+          {isTableLike && <span className="text-sm" style={{ color: C.faint }}>{orders.length} {orders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}</span>}
           <ViewToggle view={view} params={params} locale={locale} />
           <Link
             href="/admin/orders/new"
@@ -215,7 +216,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.nationality}`} view={view === 'list' ? 'list' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
             status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
             date: o.date,

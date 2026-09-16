@@ -8,6 +8,37 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-16 (4) — Booking Orders: new "List" view (compact rows)
+
+Max wanted an easier-to-scan alternative to the dense Orders table — "similar to wine orders,"
+which already has a cards/table/pack toggle. Mocked up three options as an HTML artifact (Grid
+Cards, Compact List, Status Board) with sample data so Max could compare before any code changed;
+he picked **Compact List** and asked for the row action buttons (print/email/edit/delete) added.
+
+Built and verified live on staging (localhost, super-admin-dev):
+- **`ViewToggle.tsx`** now a 3-way Table / List / Calendar switch (was Table / Calendar), same
+  `?view=` URL param pattern.
+- **`OrdersTable.tsx`** gained a `view: 'table' | 'list'` prop and a new `OrdersListRows` component
+  rendered on desktop when `view === 'list'` — one row per booking (date/time, guest or company
+  name, guest count, total, status pill, action icons), a left color stripe by status instead of
+  the table's pinned status column. Deliberately reuses all the existing state/handlers from the
+  table (status dropdown portal, edit slide-over, delete confirm, print portal, send-invoice-email
+  modal, hover preview) rather than duplicating them — so List gets full parity with Table's row
+  actions for free. Mobile is untouched: it already had its own compact card list.
+- **`orders/page.tsx`**: `list` now fetches the same `orders` query as `table` (added an
+  `isTableLike` flag) instead of only firing for `table`; `calendar` fetching unchanged.
+- **`adminT.ts`**: added `orders.view.list` (EN "List" / KA "სია").
+
+Verified in the browser: edit slide-over opens from a list row, status dropdown changes status,
+row click navigates to the order detail page same as the table, mobile still shows its own card
+list untouched, and Table ↔ Calendar still work. `tsc --noEmit` clean.
+
+**Not yet done:** Max hasn't confirmed in the live UI yet (only Claude tested) — mark
+`FeatureLog.md` User tested once he has. Grid Cards and Status Board mockups were not built for
+real — only List was picked.
+
+---
+
 ## 2026-09-16 (3) — Built Chunks 2–10 of Company Booking Nationality Tagging (Feature 188)
 
 Max said to start building [[Plan-CompanyNationality]] after its plan + critical review were

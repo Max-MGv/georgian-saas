@@ -440,6 +440,7 @@ const en: Translations = {
 
   // Orders — view toggle
   'orders.view.table': 'Table',
+  'orders.view.list': 'List',
   'orders.view.calendar': 'Calendar',
 
   // Order Detail page
@@ -1627,6 +1628,7 @@ const ka: Translations = {
 
   // Orders — view toggle
   'orders.view.table': 'ცხრილი',
+  'orders.view.list': 'სია',
   'orders.view.calendar': 'კალენდარი',
 
   // Order Detail page

@@ -139,7 +139,148 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null }) {
+const LIST_GRID_COLS = '108px minmax(0,1.7fr) 70px 90px 130px 150px'
+
+/**
+ * Compact-density desktop rows — one line per booking, a color stripe for
+ * status instead of a pinned pill column, everything else the table's Contact/
+ * Type/Company/Guests/Total/Status/Actions reduced to what's needed to scan a
+ * list quickly. Same click-to-open, same status dropdown portal (rendered once
+ * in the parent, keyed off statusMenuId) and the same print/email/edit/delete
+ * handlers as the table — this only changes row density, not what a row does.
+ */
+function OrdersListRows({
+  orders, locale, deletingId, loading, detailed,
+  onRowClick, onToggleStatusMenu, onPrint, onEmail, onEdit,
+  onRequestDelete, onConfirmDelete, onCancelDelete,
+  onRowMouseEnter, onRowMouseMove, onRowMouseLeave,
+}: {
+  orders: Order[]
+  locale: string
+  deletingId: string | null
+  loading: boolean
+  detailed: boolean
+  onRowClick: (id: string) => void
+  onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
+  onPrint: (order: Order) => void
+  onEmail: (order: Order) => void
+  onEdit: (order: Order) => void
+  onRequestDelete: (id: string | null) => void
+  onConfirmDelete: (id: string) => void
+  onCancelDelete: () => void
+  onRowMouseEnter: (order: Order, e: React.MouseEvent) => void
+  onRowMouseMove: (e: React.MouseEvent) => void
+  onRowMouseLeave: () => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <div style={{ minWidth: 640 }}>
+      <div className="grid px-4 pb-2" style={{ gridTemplateColumns: LIST_GRID_COLS, gap: 12 }}>
+        {['orders.col.date', 'orders.col.contact', 'orders.col.guests', 'orders.col.total', 'orders.col.status'].map((k, i) => (
+          <span key={k} className={i === 2 ? 'text-center' : ''} style={{ color: C.faint, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{at(k)}</span>
+        ))}
+        <span />
+      </div>
+      <div className="flex flex-col gap-2">
+        {orders.map(order => {
+          const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+          const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
+          const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
+          return (
+            <div
+              key={order.id}
+              onClick={() => onRowClick(order.id)}
+              onMouseEnter={e => onRowMouseEnter(order, e)}
+              onMouseMove={onRowMouseMove}
+              onMouseLeave={onRowMouseLeave}
+              className="grid items-center rounded-xl border cursor-pointer hover:bg-amber-50 transition-colors relative overflow-hidden"
+              style={{ gridTemplateColumns: LIST_GRID_COLS, borderColor: C.border, backgroundColor: '#ffffff', padding: '10px 14px 10px 16px', gap: 12 }}
+            >
+              <span className="absolute left-0 top-0 bottom-0" style={{ width: 4, backgroundColor: cfg.color }} />
+
+              <div style={{ color: C.text, fontSize: '0.8125rem' }}>
+                {formatDate(order.date)}
+                <div style={{ color: C.faint, fontSize: '0.75rem' }}>{order.timeSlot}</div>
+              </div>
+
+              <div className="min-w-0">
+                <div className="font-medium truncate" style={{ color: C.text, fontSize: '0.875rem' }} title={heading}>{heading}</div>
+                <div className="truncate" style={{ color: C.faint, fontSize: '0.75rem' }} title={subheading}>{subheading}</div>
+              </div>
+
+              <div className="text-center" style={{ color: C.text, fontSize: '0.8125rem' }}>{order.guestCount}</div>
+
+              <div className="font-semibold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.875rem' }}>
+                {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+              </div>
+
+              <div onClick={e => e.stopPropagation()} onMouseEnter={e => e.stopPropagation()} onMouseMove={e => e.stopPropagation()}>
+                <button
+                  onClick={e => onToggleStatusMenu(order.id, e)}
+                  className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
+                  style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
+                >
+                  {at(cfg.labelKey)} ▾
+                </button>
+              </div>
+
+              <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
+                {deletingId === order.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => onConfirmDelete(order.id)} disabled={loading}
+                      className="text-xs px-2 py-1 rounded font-medium text-white"
+                      style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+                    <button onClick={onCancelDelete}
+                      className="text-xs px-2 py-1 rounded border"
+                      style={{ borderColor: C.border, color: C.muted }}>{at('orders.no')}</button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => onPrint(order)} title={detailed ? at('orders.printDetailedInvoice') : at('orders.printInvoice')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: C.muted }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 6 2 18 2 18 9"/>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onEmail(order)} title={at('orders.sendInvoiceEmail')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: order.email ? C.muted : C.faint }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onEdit(order)} title={at('orders.editOrder')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: C.muted }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onRequestDelete(order.id)} title={at('orders.deleteOrder')}
+                      className="p-1 rounded border transition-colors hover:bg-red-50" style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      </div>
+    </div>
+  )
+}
+
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -487,6 +628,26 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
       {/* ── Desktop table (hidden on mobile) ──────────────────── */}
       <div className="hidden md:block">
+      {view === 'list' ? (
+        <OrdersListRows
+          orders={orders}
+          locale={locale}
+          deletingId={deletingId}
+          loading={loading}
+          onRowClick={id => router.push(`/admin/orders/${id}`)}
+          onToggleStatusMenu={toggleStatusMenu}
+          onPrint={handlePrint}
+          onEmail={openEmail}
+          onEdit={openEdit}
+          onRequestDelete={setDeletingId}
+          onConfirmDelete={handleDelete}
+          onCancelDelete={() => setDeletingId(null)}
+          onRowMouseEnter={handleRowMouseEnter}
+          onRowMouseMove={handleRowMouseMove}
+          onRowMouseLeave={handleRowMouseLeave}
+          detailed={detailed}
+        />
+      ) : (
       <div className="rounded-xl border overflow-auto max-h-[70vh] mt-4" style={{ borderColor: C.border }}>
         <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
@@ -751,6 +912,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           </tbody>
         </table>
       </div>
+      )}
       </div>{/* end hidden md:block */}
 
       {/* Status dropdown portal — renders into <body> as a fixed-position overlay so it
