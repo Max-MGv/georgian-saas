@@ -45,10 +45,24 @@ something is wrong — that one behaviour is the entire point of this redesign.
 - **Pack mode**: it pre-selects confirmed orders. Worth checking the packing list looks right to you,
   because the old rule quietly dropped paid wine off it.
 
+### One thing I fixed after you asked
+
+Answering your question about what the statuses look like end to end, I found that **"Invoice Sent"
+had gone invisible on booking rows.** You could still set it and still filter by it, but nothing on
+the row showed it — and it used to *be* the status pill. That was my miss: bookings have three
+payment states (unpaid → invoice sent → paid) and I had been treating payment as a simple yes/no.
+
+There is now a small amber `✉` beside the pill meaning "invoiced, not yet paid", the same way `₾✓`
+means paid. A booking reads `Completed ▾ ✉` while you are waiting for the money and
+`Completed ▾ ₾✓` once it arrives — never both. It shows on the list, the board, the calendar and the
+booking's own page.
+
 ### Two things I'd like you to judge
 
-1. **Is the ₾✓ marker readable enough?** It's deliberately small, so it doesn't compete with the
-   status pill. If it's too quiet on the board, say so — it's a one-line change.
+1. **Are the ₾✓ and ✉ markers readable enough?** They're deliberately small, so they don't compete
+   with the status pill. If either is too quiet on the board, say so — it's a one-line change. If
+   the ✉ in particular turns out to be too subtle for chasing invoices, the alternative is putting
+   Invoice Sent on the flow-line itself, which needs one extra column to place it honestly.
 2. **Does the Booking Orders flow-line belong on the detail page only**, or would you want it on the
    list too? I put it only on the detail page because the list has no room, but you use that screen
    more than I do.

@@ -84,6 +84,18 @@ reading `New → Paid → Confirmed → Completed`. Plus `check-status-backfill.
 remaining gaps, `test-status-bridge.ts` green with zero failures, `npx tsc --noEmit` clean, i18n
 parity clean, and the three `data-tour` anchors (§12) confirmed present before and after.
 
+**Follow-up the same session, after Max asked what the statuses now look like end to end.** Walking
+through the bookings side to answer him surfaced a real regression I had not noticed: `invoiced` is
+a genuine `FinancialStatus` row, set automatically by `sendOrderInvoice` and settable by hand, but
+nothing drew it — the pill shows the process axis and the flow-line's only payment step is Paid. It
+had previously *been* the pill. Fixed on his approval with a second marker (`✉`, amber) beside the
+pill on the table, list, card list, board, hover card, calendar and the order's own page;
+`PaymentMark` holds the paid-beats-invoiced precedence in one component rather than repeating the
+conditional at five call sites. Rejected putting it on the flow-line: no `invoicedAtStage` snapshot
+exists, so its position would be a guess, and it records a step we took rather than a state the
+order reached. Verified live — an invoiced booking shows `New ▾ ✉`, a paid one `New ▾ ₾✓`, never
+both.
+
 **Chunk 5 (not started):** retire `paid`/`PAID`/`INVOICE_SENT` from the old columns, re-point
 `OrdersTable.tsx` / `OrderDetail.tsx`'s hand-written unions at Prisma's generated type, add the
 approved CHECK constraint, wipe and regenerate the transactional data.

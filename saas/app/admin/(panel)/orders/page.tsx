@@ -77,6 +77,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           visitType: true,
           status: true,
           processStatus: { select: { code: true } },
+          financialStatus: { select: { code: true } },
           paidAt: true,
           totalPrice: true,
           requestedCompanyName: true,
@@ -93,6 +94,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     status: string
     processCode: string | null
     paid: boolean
+    /** Invoice sent, money not yet in. Bookings only — wine has no invoice flow. */
+    invoiced: boolean
     companyName: string | null
   }
   const ordersByDate: Record<string, CalendarOrder[]> = {}
@@ -104,6 +107,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       guestCount: o.guestCount, visitType: o.visitType, status: o.status,
       processCode: o.processStatus?.code ?? null,
       paid: o.paidAt != null,
+      invoiced: o.financialStatus?.code === 'invoiced' && o.paidAt == null,
       totalPrice: o.totalPrice,
       companyName: o.company?.name ?? (o.requestedCompanyName ? `${o.requestedCompanyName} (new)` : null),
     })

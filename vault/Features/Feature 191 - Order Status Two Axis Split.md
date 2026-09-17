@@ -66,6 +66,22 @@ Decisions inside that, worth not re-deriving:
   order skipping over it to Delivered and then moving *back* into it once paid — at which point
   the column asserts that a delivered order's stage is "Paid", the exact conflation the split
   exists to remove. Payment is a ₾✓ marker on the card instead, and cards only ever move forward.
+- **Bookings have three payment states, so one paid/not-paid mark was not
+  enough.** `invoiced` is a real `FinancialStatus` row (`fs_invoiced`, sortOrder
+  200, `appliesTo = BOOKING`), set automatically by `sendOrderInvoice` and by
+  hand from the dropdown — but it sits *before* Paid on the financial axis, so
+  it appears nowhere in the flow-line, and the pill shows the process axis.
+  First pass left it settable and filterable but invisible on every row, which
+  silently removed something the old pill had shown at a glance. Closed with a
+  second marker (`✉`, amber) beside the pill on the table, list, card list,
+  board, hover card, calendar and the order's own page. `PaymentMark` holds the
+  precedence — paid beats invoiced — in one component rather than as a
+  conditional at five call sites, since the rule has to be identical everywhere.
+  **Rejected alternative:** putting Invoice Sent on the flow-line before Paid.
+  There is no `invoicedAtStage` snapshot, so its position would be a guess — an
+  invoice sent before the visit would still draw after Completed — and it is a
+  step *we* took, not a state the order reached. Placing it truthfully would
+  mean a third snapshot column; Max's call was the marker.
 - **Writes still go through the legacy path.** `updateWineOrderStatus` / `updateOrderStatus`
   already dual-write, so the UI translates its vocabulary codes back through new reverse maps
   (`legacyWineStatusForCode` / `legacyOrderStatusForCode`) rather than a second write path existing
@@ -195,6 +211,8 @@ Chunk 4 is user-visible, so the browser checks below matter more than the script
 7. Status and Payment are two separate selects whose counts partition the total.
 8. A booking's detail page shows the flow-line; marking one Paid puts Paid second (after New).
 9. "Invoice Sent" is offered on an unpaid booking and absent on one already invoiced.
+10. An invoiced booking carries an amber `✉` beside its pill on the list and on its own page; a
+    paid one carries `₾✓` instead, never both.
 
 **Scripts:**
 

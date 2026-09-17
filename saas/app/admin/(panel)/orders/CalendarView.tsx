@@ -30,6 +30,8 @@ type CalendarOrder = {
   status: string
   processCode: string | null
   paid: boolean
+  /** Invoice sent, money not yet in. Bookings only — wine has no invoice flow. */
+  invoiced: boolean
   companyName: string | null
 }
 
@@ -218,9 +220,11 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                         const key = STATUS_LABEL_KEYS[code]
                         return key ? at(key) : code
                       })()}
-                      {o.paid && (
+                      {o.paid ? (
                         <span title={at('orders.status.paid')} style={{ color: '#14532d' }}>₾✓</span>
-                      )}
+                      ) : o.invoiced ? (
+                        <span title={at('orders.status.invoiceSent')} style={{ color: '#92400e' }}>✉</span>
+                      ) : null}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">

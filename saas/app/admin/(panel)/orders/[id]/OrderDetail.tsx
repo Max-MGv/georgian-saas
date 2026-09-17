@@ -74,6 +74,29 @@ function labelFor(locale: string, code: string | null): string {
 }
 
 /**
+ * "We have asked for money but it hasn't arrived" — the one financial state the
+ * flow-line below cannot show, because the line's payment step is Paid and
+ * `invoiced` sits before it. Without this the winery could set Invoice Sent and
+ * then see no trace of it anywhere, which is what it used to say on the pill.
+ *
+ * Paid needs no marker here: the flow-line already ticks it, in the position it
+ * actually happened.
+ */
+function InvoiceSentMark({ locale }: { locale: string }) {
+  const label = adminT(locale, 'orders.status.invoiceSent')
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center rounded-full font-bold flex-shrink-0"
+      style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', padding: '0.1rem 0.4rem', lineHeight: 1.5 }}
+    >
+      ✉
+    </span>
+  )
+}
+
+/**
  * The merged one-line flow (Plan-StatusModel chunk 4) — horizontal here,
  * because the detail page's action bar runs across the top rather than down a
  * card's edge like the wine-orders list.
@@ -559,7 +582,7 @@ export default function OrderDetail({
         {/* Action bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Status dropdown */}
-          <div className="relative" onClick={e => e.stopPropagation()}>
+          <div className="relative flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
             {(() => {
               const cfg = styleFor(displayCode)
               return (
@@ -572,6 +595,7 @@ export default function OrderDetail({
                 </button>
               )
             })()}
+            {financialCode === 'invoiced' && axes.paidAt == null && <InvoiceSentMark locale={locale} />}
             {statusMenuOpen && (
               <div
                 className="absolute left-0 z-30 rounded-lg shadow-lg border py-1 mt-1"

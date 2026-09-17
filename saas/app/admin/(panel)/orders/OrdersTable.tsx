@@ -126,6 +126,7 @@ function flowStateOf(o: { processCode: string | null; paidAt: Date | string | nu
 }
 
 const isPaid = (o: { paidAt: Date | string | null }) => o.paidAt != null
+const isInvoiced = (o: { financialCode: string | null }) => o.financialCode === 'invoiced'
 const isLimbo = (o: { status: string }) => o.status === LIMBO_STATUS
 
 /** Which pill an order shows, and which board column it lands in. */
@@ -158,23 +159,47 @@ function menuSteps(processSteps: StatusOption[], financialSteps: StatusOption[],
     .filter((s): s is MenuStep => s.legacy != null)
 }
 
-/**
- * The paid marker, for surfaces laid out along the process axis — the table
- * rows, the card list and the board, none of which have room for a second
- * status. The two axes are merged into one line on the order's own page; here
- * payment is a mark on the row rather than a position in it.
- */
-function PaidMark({ locale }: { locale: string }) {
+function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: string; color: string }) {
   return (
     <span
-      title={adminT(locale, 'orders.status.paid')}
-      aria-label={adminT(locale, 'orders.status.paid')}
+      title={label}
+      aria-label={label}
       className="inline-flex items-center rounded-full font-bold flex-shrink-0"
-      style={{ backgroundColor: '#dcfce7', color: '#14532d', fontSize: '0.65rem', padding: '0.05rem 0.3rem', lineHeight: 1.5 }}
+      style={{ backgroundColor: bg, color, fontSize: '0.65rem', padding: '0.05rem 0.3rem', lineHeight: 1.5 }}
     >
-      ₾✓
+      {glyph}
     </span>
   )
+}
+
+/**
+ * Where the money is, for surfaces laid out along the process axis — the table
+ * rows, the list, the card list, the board and the hover card, none of which
+ * have room for a second status pill. The two axes are merged into one line on
+ * the order's own page; here the financial axis is a mark on the row rather
+ * than a position in it.
+ *
+ * Bookings have three payment states, not two, so a single paid/not-paid mark
+ * was not enough: it left `invoiced` — which the winery sets by sending the
+ * invoice, and which used to be the pill itself — with nowhere to show at all.
+ * Deliberately one component with the precedence inside it rather than a
+ * conditional at five call sites, since the rule ("paid beats invoiced") has to
+ * be the same everywhere.
+ *
+ * Paid wins, and cannot collide in practice anyway: once money arrives the
+ * financial axis has already moved off `invoiced`.
+ */
+function PaymentMark({ order, locale }: {
+  order: { paidAt: Date | string | null; financialCode: string | null }
+  locale: string
+}) {
+  if (isPaid(order)) {
+    return <Mark label={adminT(locale, 'orders.status.paid')} glyph="₾✓" bg="#dcfce7" color="#14532d" />
+  }
+  if (isInvoiced(order)) {
+    return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
+  }
+  return null
 }
 
 type Payment = {
@@ -321,7 +346,7 @@ function OrdersListRows({
                 >
                   {labelFor(locale, displayCodeOf(order))} ▾
                 </button>
-                {isPaid(order) && <PaidMark locale={locale} />}
+                <PaymentMark order={order} locale={locale} />
               </div>
 
               <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
@@ -458,7 +483,7 @@ function OrdersBoardColumns({
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
-                            {isPaid(order) && <PaidMark locale={locale} />}
+                            <PaymentMark order={order} locale={locale} />
                           </div>
                           <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
                         </div>
@@ -791,7 +816,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
-                    {isPaid(order) && <PaidMark locale={locale} />}
+                    <PaymentMark order={order} locale={locale} />
                   </span>
                   {/* The click handler is on this wrapper, not the pill, so
                       padding here buys hit area for free: the badge still reads
@@ -1086,7 +1111,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                           </button>
                         )
                       })()}
-                      {isPaid(order) && <PaidMark locale={locale} />}
+                      <PaymentMark order={order} locale={locale} />
                     </div>
                   </td>
                 )}
@@ -1508,7 +1533,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                 <span style={{ color: C.muted }}>{formatDate(o.date)} · {o.timeSlot}</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, displayCodeOf(o))}</span>
-                  {isPaid(o) && <PaidMark locale={locale} />}
+                  <PaymentMark order={o} locale={locale} />
                 </span>
               </div>
               <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(locale, o.visitType)}</div>

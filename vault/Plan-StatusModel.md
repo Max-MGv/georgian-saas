@@ -227,6 +227,18 @@ see:
   because the same orders were counted under both `new` and `PENDING_PAYMENT`. The process count
   now excludes limbo so the two entries partition rather than overlap.
 
+**The gap that the near-miss below exposed, and how it closed.** Bookings have three payment
+states where wine has two, and the first pass treated the financial axis as a boolean: paid or not.
+That left `invoiced` — a real `FinancialStatus` row, set automatically whenever an invoice is
+emailed — settable and filterable but drawn nowhere, since the pill shows the process axis and the
+flow-line's only payment step is Paid. It had previously *been* the pill, so this quietly removed
+something the winery could see at a glance. Closed 2026-09-17 on Max's call with a second marker
+(`✉`) beside the pill, on every surface that shows a pill. The alternative — putting Invoice Sent on
+the flow-line ahead of Paid — was rejected twice over: there is no `invoicedAtStage` snapshot, so
+the position would be a guess (an invoice sent before the visit would still draw after Completed),
+and it records a step *we* took rather than a state the order reached. Placing it honestly would
+need a third snapshot column, which is available if the marker ever proves too quiet.
+
 **One near-miss worth recording.** The bookings dropdown appeared to have lost "Invoice Sent", and
 it took a while to see that the row I kept testing was the single already-invoiced order — whose
 pill reads "New ▾" because the pill shows the *process* axis. The menu was correctly omitting a
