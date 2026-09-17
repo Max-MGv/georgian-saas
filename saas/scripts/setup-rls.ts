@@ -206,7 +206,38 @@ async function main() {
       );
   `)
 
-  console.log('\nDone. RLS policies created for all 16 tables.')
+  // ── Status dimension tables (Plan-StatusModel) ────────────────────────────
+  // A third policy shape, and the reason these are not in `writableTables`
+  // above: reference data, not tenant business data.
+  //
+  // 1. SELECT only. Status definitions are seeded by migrations as superuser —
+  //    application code must never INSERT/UPDATE/DELETE them, so app_user is
+  //    not granted those. A missing SELECT grant would be worse than a missing
+  //    policy: any `include: { processStatus: true }` inside withTenantDb would
+  //    throw "permission denied", since that transaction runs as app_user.
+  //
+  // 2. "global OR own", not the plain `tenantId = current_setting(...)` used by
+  //    tenantedTables. Adding these to that loop would be a silent disaster:
+  //    every seeded row has tenantId NULL, and `NULL = 'some-tenant'` is NULL
+  //    (not true), so the policy would hide EVERY status from EVERY tenant and
+  //    the app would see an empty vocabulary.
+  const statusDimensionTables = ['ProcessStatus', 'FinancialStatus']
+  for (const t of statusDimensionTables) {
+    console.log(`Granting SELECT + global-or-own policy on "${t}"...`)
+    await db.$executeRawUnsafe(`GRANT SELECT ON "${t}" TO app_user;`)
+    await db.$executeRawUnsafe(`ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY;`)
+    await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "${t}";`)
+    await db.$executeRawUnsafe(`
+      CREATE POLICY tenant_isolation ON "${t}"
+        FOR SELECT
+        USING (
+          "tenantId" IS NULL
+          OR "tenantId" = current_setting('app.tenant_id', true)
+        );
+    `)
+  }
+
+  console.log('\nDone. RLS policies created for all 16 tables, plus the 2 status dimension tables.')
   console.log('Verify with: npx ts-node --compiler-options \'{"module":"CommonJS"}\' scripts/check-rls.ts')
 }
 

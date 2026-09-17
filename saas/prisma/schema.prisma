@@ -16,33 +16,33 @@ model PlatformConfig {
 }
 
 model Tenant {
-  id                   String   @id @default(cuid())
-  name                 String
-  domain               String   @unique
-  slug                 String   @unique
-  theme                Json?
-  logoUrl              String?
-  logoAlt              String?
-  faviconUrl           String?
-  displayName          String?
-  modulesBooking       Boolean  @default(true)
-  modulesWineOrders    Boolean  @default(false)
-  modulesPublicSite    Boolean  @default(true)
-  modulesLegalPages    Boolean  @default(true)
+  id                                String          @id @default(cuid())
+  name                              String
+  domain                            String          @unique
+  slug                              String          @unique
+  theme                             Json?
+  logoUrl                           String?
+  logoAlt                           String?
+  faviconUrl                        String?
+  displayName                       String?
+  modulesBooking                    Boolean         @default(true)
+  modulesWineOrders                 Boolean         @default(false)
+  modulesPublicSite                 Boolean         @default(true)
+  modulesLegalPages                 Boolean         @default(true)
   // Online payment (Flitt). Off by default so every existing tenant is
   // unaffected — the whole payment path is a no-op unless this is on AND
   // both credentials below are filled in.
-  modulesOnlinePayment Boolean  @default(false)
+  modulesOnlinePayment              Boolean         @default(false)
   // PRODUCT: wine-level type/sweetness/sparkling/alcohol shared across all vintages (today's behavior).
   // VINTAGE: those four live per-vintage instead, no fallback to the wine's value when unset.
   // Tenant-wide, super-admin only — see vault/Plan-WineVintageDetails.md.
-  wineDetailLevel      WineDetailLevel @default(PRODUCT)
+  wineDetailLevel                   WineDetailLevel @default(PRODUCT)
   // Per-tenant Flitt merchant credentials. Deliberately NOT in `Setting`:
   // `getAllSettings()` returns that whole map and MaintenanceNotes §9 documents
   // the hazard of it reaching a client component. Keeping the secret here makes
   // that leak structurally impossible. Never return flittSecretKey to a browser.
-  flittMerchantId      String?
-  flittSecretKey       String?
+  flittMerchantId                   String?
+  flittSecretKey                    String?
   // Granular payment controls (#148). Independent per-section switches for
   // whether a tenant takes online payment at all in that section — separate
   // from modulesOnlinePayment (can the tenant take payment at all) and from
@@ -50,19 +50,19 @@ model Tenant {
   // decision #5). All three default true so a tenant flipping modulesOnlinePayment
   // on for the first time gets today's "payment everywhere it's structurally
   // possible" behavior with no extra steps.
-  paymentEnabledIndividuals Boolean @default(true)
-  paymentEnabledCompanies   Boolean @default(true)
-  paymentEnabledWineOrders  Boolean @default(true)
+  paymentEnabledIndividuals         Boolean         @default(true)
+  paymentEnabledCompanies           Boolean         @default(true)
+  paymentEnabledWineOrders          Boolean         @default(true)
   // Company-booking nationality tagging (Plan-CompanyNationality). Super-admin only, like
   // wineDetailLevel above — never exposed in the tenant's own SettingsClient.tsx. Gates whether
   // BookingForm.tsx offers the nationality picker for COMPANY bookings; does not retroactively
   // hide nationalities already stored on existing orders when turned off.
-  enableCompanyNationalityBreakdown Boolean @default(false)
-  createdAt            DateTime @default(now())
+  enableCompanyNationalityBreakdown Boolean         @default(false)
+  createdAt                         DateTime        @default(now())
 }
 
 model Company {
-  id                  String      @id @default(cuid())
+  id                  String                  @id @default(cuid())
   name                String
   identificationCode  String?
   contactName         String?
@@ -70,9 +70,9 @@ model Company {
   contactEmail        String?
   address             String?
   accessCode          String?
-  isIndividual        Boolean     @default(false)
-  isBookingCompany    Boolean     @default(true)
-  isWineOrderCompany  Boolean     @default(false)
+  isIndividual        Boolean                 @default(false)
+  isBookingCompany    Boolean                 @default(true)
+  isWineOrderCompany  Boolean                 @default(false)
   wineDiscountPercent Float?
   // Per-company override of the tenant's Companies section toggle (#148).
   // null = follow paymentEnabledCompanies; true = always skip (trusted,
@@ -82,12 +82,14 @@ model Company {
   // orders alike — see edge case notes in Feature 148 on why it isn't split per-module.
   skipPayment         Boolean?
   tenantId            String?
-  createdAt           DateTime    @default(now())
+  createdAt           DateTime                @default(now())
   orders              Order[]
   wineOrders          WineOrder[]
   prices              Price[]
   guides              CompanyGuide[]
   representatives     CompanyRepresentative[]
+
+  @@index([tenantId])
 }
 
 // Person who can be contacted during the actual dinner/booking (Plan-CompanyGuidesAndReps).
@@ -119,48 +121,76 @@ model CompanyRepresentative {
 }
 
 model Order {
-  id                String             @id @default(cuid())
-  status            OrderStatus        @default(NEW)
-  bookingType       BookingType        @default(INDIVIDUAL)
-  visitType         VisitType
-  date              DateTime
-  timeSlot          String
-  guestCount        Int
+  id                   String             @id @default(cuid())
+  // Still the live column that everything reads and writes. The four fields
+  // below are the replacement, added and backfilled ahead of the application
+  // code that will use them (Plan-StatusModel chunks 3–5). Nothing drops
+  // PAID/INVOICE_SENT from this enum until those chunks land — doing so now
+  // would break every surface that still writes them.
+  status               OrderStatus        @default(NEW)
+  // Restrict, not the default SET NULL: deleting a status that orders still
+  // point at must be refused outright, not silently blank the reference on
+  // every one of them.
+  processStatusId      String?
+  processStatus        ProcessStatus?     @relation(fields: [processStatusId], references: [id], onDelete: Restrict)
+  financialStatusId    String?
+  financialStatus      FinancialStatus?   @relation(fields: [financialStatusId], references: [id], onDelete: Restrict)
+  // The hot-path payment fact, deliberately on the row rather than behind a
+  // join — "is this paid" is read on every board render, filter and email.
+  paidAt               DateTime?
+  // Which process stage was current the instant payment landed. A frozen code
+  // string, not a foreign key, following this schema's existing snapshot
+  // convention (wineNameSnapshot, priceSnapshot): history must not change when
+  // the referenced row does. This is what lets the flow-line place the Paid
+  // step where it actually happened instead of a fixed slot.
+  paidAtStage          String?
+  bookingType          BookingType        @default(INDIVIDUAL)
+  visitType            VisitType
+  date                 DateTime
+  timeSlot             String
+  guestCount           Int
   // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
-  lunchGuestCount   Int                @default(0)
-  tastingGuestCount Int                @default(0)
-  freeGuestCount    Int                @default(0)
+  lunchGuestCount      Int                @default(0)
+  tastingGuestCount    Int                @default(0)
+  freeGuestCount       Int                @default(0)
   // Hot dish selections (v1.2)
-  hotDishVegetable  String?
-  hotDishMeat       String?
-  foodNotes         String?
-  name              String
-  surname           String
-  email             String?
-  phone             String?
-  notes             String?
-  totalPrice        Float?
-  tenantId          String?
-  companyId         String?
+  hotDishVegetable     String?
+  hotDishMeat          String?
+  foodNotes            String?
+  name                 String
+  surname              String
+  email                String?
+  phone                String?
+  notes                String?
+  totalPrice           Float?
+  tenantId             String?
+  companyId            String?
   // Set only when bookingType is COMPANY and companyId is null — a booking
   // submitted through the "New Company?" flow, before the winery has created
   // a real Company row. Display-only (admin Orders table + emails); never
   // used for pricing or access-code lookups. See Feature 180.
   requestedCompanyName String?
-  company           Company?           @relation(fields: [companyId], references: [id])
+  company              Company?           @relation(fields: [companyId], references: [id])
   // Which guide's code matched at booking time — the phone-during-dinner case needs a
   // specific order to remember which person, not just which company (Plan-CompanyGuidesAndReps
   // Chunk 1). Representatives are not tracked per-order; see that plan for why.
-  guideId           String?
-  guide             CompanyGuide?      @relation(fields: [guideId], references: [id])
+  guideId              String?
+  guide                CompanyGuide?      @relation(fields: [guideId], references: [id])
   // ISO 3166-1 alpha-2 codes, COMPANY bookings only (Plan-CompanyNationality). No per-country
   // counts — "at most a mix" per Max, not a headcount breakdown. Plain array on the already
   // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
-  nationalities     String[]           @default([])
-  createdAt         DateTime           @default(now())
-  masterclassLines  OrderMasterclass[]
-  extras            OrderExtra[]
-  payments          Payment[]
+  nationalities        String[]           @default([])
+  createdAt            DateTime           @default(now())
+  masterclassLines     OrderMasterclass[]
+  extras               OrderExtra[]
+  payments             Payment[]
+
+  // Every query here is tenant-scoped by RLS, and the admin list/calendar both
+  // filter-and-order by date while the board and its filter pills group by
+  // status. Without a tenantId-leading index these are sequential scans across
+  // every tenant's rows at once.
+  @@index([tenantId, date])
+  @@index([tenantId, status])
 }
 
 model Price {
@@ -183,6 +213,8 @@ model MenuItem {
   sortOrder Int      @default(0)
   tenantId  String?
   createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model MasterclassItem {
@@ -195,6 +227,8 @@ model MasterclassItem {
   tenantId     String?
   createdAt    DateTime           @default(now())
   orderLines   OrderMasterclass[]
+
+  @@index([tenantId])
 }
 
 model OrderMasterclass {
@@ -216,26 +250,41 @@ model OrderExtra {
 }
 
 model WineOrder {
-  id              String          @id @default(cuid())
-  businessName    String
-  llcName         String?
-  llcId           String?
-  address         String
-  workingHours    String?
-  contactName     String
-  contactPhone    String
+  id                String           @id @default(cuid())
+  businessName      String
+  llcName           String?
+  llcId             String?
+  address           String
+  workingHours      String?
+  contactName       String
+  contactPhone      String
   // Optional in general; the wine order form requires it only when the tenant
   // has online payment on, since a paying B2B customer needs a receipt.
-  contactEmail    String?
-  totalAmount     Float?
-  discountPercent Float?
-  status          String          @default("pending")
-  tenantId        String?
-  companyId       String?
-  company         Company?        @relation(fields: [companyId], references: [id])
-  createdAt       DateTime        @default(now())
-  wineItems       WineOrderItem[]
-  payments        Payment[]
+  contactEmail      String?
+  totalAmount       Float?
+  discountPercent   Float?
+  // Unconstrained String, unlike Order's enum — so unlike Order this gets no
+  // migration-time safety net when 'paid' is eventually retired from it. See
+  // Plan-StatusModel's silent-failure table. Still the live column; the fields
+  // below are its replacement, backfilled ahead of the code that uses them.
+  status            String           @default("pending")
+  processStatusId   String?
+  processStatus     ProcessStatus?   @relation(fields: [processStatusId], references: [id], onDelete: Restrict)
+  financialStatusId String?
+  financialStatus   FinancialStatus? @relation(fields: [financialStatusId], references: [id], onDelete: Restrict)
+  paidAt            DateTime?
+  paidAtStage       String?
+  tenantId          String?
+  companyId         String?
+  company           Company?         @relation(fields: [companyId], references: [id])
+  createdAt         DateTime         @default(now())
+  wineItems         WineOrderItem[]
+  payments          Payment[]
+
+  // Mirrors Order: the board groups by status, and the list's date-range
+  // filters run on createdAt (wine orders have no separate business date).
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -285,6 +334,10 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@unique([key, tenantId])
+  // The unique above can't serve a tenant lookup — tenantId is its trailing
+  // column, and an index is only usable from its leading column onwards.
+  // getAllSettings(tenantId) reads the whole per-tenant map on every request.
+  @@index([tenantId])
 }
 
 model SiteContent {
@@ -298,6 +351,9 @@ model SiteContent {
   updatedAt DateTime @updatedAt
 
   @@unique([key, locale, tenantId])
+  // Same trailing-column problem as Setting. getAllContent(tenantId, locale)
+  // is the hot path — every public page render goes through it.
+  @@index([tenantId, locale])
 }
 
 model BlockedDate {
@@ -308,6 +364,7 @@ model BlockedDate {
   createdAt DateTime @default(now())
 
   @@unique([date, tenantId])
+  @@index([tenantId, date])
 }
 
 model Wine {
@@ -326,18 +383,20 @@ model Wine {
   tenantId     String?
   createdAt    DateTime      @default(now())
   vintages     WineVintage[]
+
+  @@index([tenantId])
 }
 
 model WineVintage {
-  id         String          @id @default(cuid())
-  wineId     String
-  year       Int
-  price      Float
-  imagePath  String?
-  active     Boolean         @default(true)
-  sortOrder  Int             @default(0)
-  tenantId   String?
-  createdAt  DateTime        @default(now())
+  id           String          @id @default(cuid())
+  wineId       String
+  year         Int
+  price        Float
+  imagePath    String?
+  active       Boolean         @default(true)
+  sortOrder    Int             @default(0)
+  tenantId     String?
+  createdAt    DateTime        @default(now())
   // Only meaningful when the tenant's wineDetailLevel is VINTAGE. No fallback
   // to the parent Wine's value when unset — an unset field means "not
   // specified", never a guess. sparkling is nullable (not default false) so
@@ -346,8 +405,11 @@ model WineVintage {
   sweetness    Sweetness?
   sparkling    Boolean?
   alcoholLevel Float?
-  wine       Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
-  orderItems WineOrderItem[]
+  wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  orderItems   WineOrderItem[]
+
+  @@index([tenantId])
+  @@index([wineId])
 }
 
 model WineOrderItem {
@@ -370,9 +432,9 @@ model WineOrderItem {
 /// application layer only — see RLS-Architecture.md's table list and
 /// vault/Plan-BugReportWidget.md Phase 1.
 model BugReport {
-  id              String            @id @default(cuid())
+  id              String           @id @default(cuid())
   type            BugReportType
-  status          BugReportStatus   @default(NEW)
+  status          BugReportStatus  @default(NEW)
   surface         BugReportSurface
   comment         String
   screenshotUrl   String?
@@ -389,11 +451,68 @@ model BugReport {
   // public-site submissions.
   submitterEmail  String?
   submitterUserId String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([tenantId])
   @@index([status])
+}
+
+/// Reference data for the two status axes an order moves along, split apart
+/// because a single column cannot express "delivered but not yet paid" — the
+/// normal case for a B2B customer on invoice terms. Full reasoning and the
+/// rejected alternatives: vault/Plan-StatusModel.md.
+///
+/// Two separate tables rather than one shared table with a `category` column:
+/// a foreign key can then only ever resolve to a value valid for its own axis,
+/// with no discriminator to drift and no schema shape that would let a combined
+/// process+financial row reappear.
+///
+/// Chosen over two Postgres enums because adding an enum value is a schema
+/// migration and *removing* one has no native support at all (new type, rewrite
+/// every row). Here a new status is an INSERT — which matters as this goes from
+/// one tenant to many.
+///
+/// `tenantId` is null for the shared rows every tenant sees; a real id marks a
+/// row belonging to that tenant alone. Nothing writes tenant-specific rows yet —
+/// the column exists so enabling that later needs no schema change. Same shape
+/// as BugReport's nullable tenantId.
+///
+/// `sortOrder` is gap-seeded (100/200/300/400) so a status can later be inserted
+/// *between* two existing ones without renumbering everything after it.
+model ProcessStatus {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  code      String
+  sortOrder Int
+  createdAt DateTime @default(now())
+
+  orders     Order[]
+  wineOrders WineOrder[]
+
+  // Covers tenant-specific rows only: Postgres treats NULLs as distinct in a
+  // unique constraint, so this does NOT stop duplicate global rows. A partial
+  // unique index on (code) WHERE "tenantId" IS NULL handles those — added as
+  // raw SQL in the migration, since Prisma cannot express a partial index.
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+/// The payment axis. `invoiced` exists for bookings, where sending an invoice is
+/// a real tracked step today (OrderStatus.INVOICE_SENT); wine orders have no
+/// invoice-send flow and will only ever use unpaid/paid for now.
+model FinancialStatus {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  code      String
+  sortOrder Int
+  createdAt DateTime @default(now())
+
+  orders     Order[]
+  wineOrders WineOrder[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
 }
 
 enum OrderStatus {

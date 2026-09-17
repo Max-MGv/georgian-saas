@@ -8,6 +8,58 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-17 (1) — Payment-flow redesign: process vs financial status (design only, nothing built)
+
+Max: "for many orders first we give the wine or provide the service — and then people pay." Individuals
+pay at checkout; companies settle invoices weeks or months after delivery. The current single status
+column can't represent that — `paid` is wedged between `confirmed` and `delivered` in
+`WineOrdersClient`'s `STAGES`, and `PAID` sits before `COMPLETED` in `OrderStatus`, so a
+delivered-but-unpaid order has nowhere honest to sit. **No code or schema was changed this session** —
+output is `Plan-StatusModel.md`.
+
+Also answered what "Awaiting Payment" actually is, since it wasn't obvious: it's `pending_payment`
+(+ `payment_failed`), set only on the online-checkout path (`submitWineOrder.ts:159`) and moved on only
+by `settle.ts`. It is deliberately *not* a fulfilment stage — held outside `STAGES`, excluded from
+"All", hidden when empty, never auto-expired. It survives this redesign untouched.
+
+**Design agreed** (full reasoning in `Plan-StatusModel.md`): two independent axes in the database —
+process (`pending → confirmed → delivered`) and financial (`unpaid → invoiced → paid`) — merged in the
+UI into **one** flow-line, where the Paid step floats to its true chronological position rather than a
+fixed slot. A prepaid individual sees `Pending → Paid → Confirmed → Delivered`; an invoiced company
+sees `Pending → Confirmed → Delivered → Paid`. Max rejected an earlier proposal that made payment a
+separate badge beside a fulfilment-only stepper — payment must be a real step in the same line. Two
+separate dimension tables (`ProcessStatus`, `FinancialStatus`), not one shared table with a category
+column, so a foreign key can only ever resolve to values valid for its own axis. Globally scoped with a
+nullable `tenantId` for future per-tenant rows (the `BugReport` pattern). `sortOrder` gap-seeded
+100/200/300 so a status can later be inserted *between* two existing ones — and gaps belong on
+`sortOrder` only, never on the `cuid()` primary keys.
+
+**Two findings worth acting on independently of the redesign:**
+1. **Only 2 of 12 tenant-scoped tables have an index on `tenantId`** (`Payment`, `BugReport`). The other
+   ten — including `Order` and `WineOrder` — have the column and no index, so every RLS-filtered query
+   scans all tenants' rows combined. Invisible at one tenant, linear degradation as tenants accumulate.
+   Agreed to ship as its own add-only migration first (Chunk 1), ahead of the status work.
+2. **`OrdersTable.tsx:17` and `OrderDetail.tsx:33` keep hand-written copies of the status union** instead
+   of importing Prisma's generated type — which is exactly why some of this refactor would break loudly
+   and some silently. Re-pointing them converts a class of silent failures into compile errors.
+
+**Dependency audit done before planning** (subagent sweep, findings in the plan). Cleared the scariest
+class: **no revenue or analytics calculation anywhere filters on `paid`** — every total sums
+`totalPrice` over a date/company slice with no payment predicate. Also confirmed nothing reads
+`Payment.settledAt` to infer paid-ness except `settle.ts`'s own idempotency gate, so there's no existing
+disagreement to reconcile, but also no read-side source of payment truth today. Highest silent risks
+found: `WineOrder.status` is a bare `String` with no DB constraint, so unlike `Order`'s enum (which
+*fails* the migration while rows hold `PAID` — a useful safety net) stale `'paid'` wine rows would
+silently render as **"Pending"**, the stepper's `currentIdx` would go to `-1` (a finished order looks
+brand new), and pack pre-selection (`:818`) filters `'confirmed' || 'paid'` — **paid wine would silently
+drop off the packing list**.
+
+**Next:** Max to review `Plan-StatusModel.md`, then Chunk 1 (indexes) as its own dev → staging → prod
+migration. Three open questions logged at the bottom of the plan (board leftward-move behaviour; whether
+wine orders need an `invoiced` sub-state; whether display metadata moves into the dimension rows).
+
+---
+
 ## 2026-09-16 (5) — Status Board view, for both Booking Orders and Wine Orders (Feature 190)
 
 Max liked the Status Board option from the three-way mockup built for the List view session below
