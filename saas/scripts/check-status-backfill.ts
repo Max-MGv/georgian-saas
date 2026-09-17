@@ -29,6 +29,7 @@
  */
 import { PrismaClient } from '@prisma/client'
 import { withTenantDb } from '../lib/db'
+import { getProcessStatuses, getFinancialStatuses } from '../lib/statusVocabulary'
 
 const db = new PrismaClient()
 
@@ -70,12 +71,44 @@ async function main() {
     )
   }
 
+  console.log('\n=== 1b. Vocabulary is scoped to the asking order type ===')
+  // The point of appliesTo: both types share new/confirmed/cancelled, but a
+  // wine order must never be offered "Completed" as a step it cannot reach,
+  // and a booking must never be offered "Delivered".
+  if (tenants.length > 0) {
+    const t = tenants[0].id
+    const [wineProcess, bookingProcess, wineFinancial, bookingFinancial] = await Promise.all([
+      getProcessStatuses(t, 'WINE_ORDER'),
+      getProcessStatuses(t, 'BOOKING'),
+      getFinancialStatuses(t, 'WINE_ORDER'),
+      getFinancialStatuses(t, 'BOOKING'),
+    ])
+
+    const wp = wineProcess.map(r => r.code)
+    const bp = bookingProcess.map(r => r.code)
+    check('wine flow is new → confirmed → delivered → cancelled',
+      wp.join(' → ') === 'new → confirmed → delivered → cancelled', wp.join(' → '))
+    check('wine flow excludes the bookings-only step', !wp.includes('completed'))
+    check('booking flow is new → confirmed → completed → cancelled',
+      bp.join(' → ') === 'new → confirmed → completed → cancelled', bp.join(' → '))
+    check('booking flow excludes the wine-only step', !bp.includes('delivered'))
+
+    const wf = wineFinancial.map(r => r.code)
+    const bf = bookingFinancial.map(r => r.code)
+    check('wine payment states are unpaid → paid (no invoice flow exists)',
+      wf.join(' → ') === 'unpaid → paid', wf.join(' → '))
+    check('booking payment states are unpaid → invoiced → paid',
+      bf.join(' → ') === 'unpaid → invoiced → paid', bf.join(' → '))
+  }
+
   console.log('\n=== 2. Cross-tenant isolation of tenant-specific rows ===')
   try {
     await db.processStatus.createMany({
+      // sortOrder 250 is the gap-seeding paying off: a custom step slots
+      // between confirmed (200) and delivered (300) with nothing renumbered.
       data: [
-        { id: 'zz_ps_a', tenantId: TENANT_A, code: 'zz-packed-a', sortOrder: 250 },
-        { id: 'zz_ps_b', tenantId: TENANT_B, code: 'zz-packed-b', sortOrder: 250 },
+        { id: 'zz_ps_a', tenantId: TENANT_A, code: 'zz-packed-a', sortOrder: 250, appliesTo: 'WINE_ORDER' },
+        { id: 'zz_ps_b', tenantId: TENANT_B, code: 'zz-packed-b', sortOrder: 250, appliesTo: 'WINE_ORDER' },
       ],
     })
 
@@ -97,7 +130,9 @@ async function main() {
     let writeRefused = false
     try {
       await withTenantDb(TENANT_A, tx =>
-        tx.processStatus.create({ data: { tenantId: TENANT_A, code: 'zz-should-fail', sortOrder: 999 } })
+        tx.processStatus.create({
+          data: { tenantId: TENANT_A, code: 'zz-should-fail', sortOrder: 999, appliesTo: 'WINE_ORDER' },
+        })
       )
     } catch {
       writeRefused = true

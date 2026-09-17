@@ -4,7 +4,9 @@ tags: [plan, orders, wine-orders, schema, data-model]
 
 # Plan: Status data model — process vs financial split
 
-**Status:** 🚧 **Chunks 1–3 built and verified on the dev DB (2026-09-17). Not yet on staging or prod.** Chunks 4–5 (UI + contract) not started — Max: "we will do the statuses front ui stuff later."
+**Status:** 🚧 **Chunks 1–3.5 built and verified on the dev DB (2026-09-17). Not yet on staging or prod.** Chunks 4–5 (UI + contract) not started — Max: "we will do the statuses front ui stuff later."
+
+**The flow-line is now buildable straight off the schema.** Render algorithm, for the record: take `getProcessStatuses(tenantId, kind)` as the spine; if `paidAt` is null append the Paid step last (the pay-later default), otherwise insert it immediately after the step whose `code` equals `paidAtStage`; mark process steps done at or below the current `processStatusId`'s `sortOrder`, and Paid done iff `paidAt` is set. Every input that needs resolves from a column that now exists.
 **Trigger:** Max, 2026-09-17: "for many orders first we give the wine or provide the service — and then people pay." B2B customers get wine delivered (or a visit completed) and settle the invoice weeks or months later. A single linear status column cannot represent that.
 
 **The one-line version:** payment comes out of the status column and becomes its own axis, so an order can be *delivered and unpaid* — but the admin still sees **one** flow-line, with the Paid step positioned wherever it actually happened.
@@ -169,6 +171,28 @@ Re-pointed:
 - **`ON DELETE RESTRICT`** blocks deleting a status that orders still reference.
 
 `npx tsc --noEmit` clean. One pre-existing lint error remains in `WineOrdersClient.tsx:821` (`set-state-in-effect` on the pack pre-selection) — confirmed present before this chunk by linting the stashed tree, and left alone as chunk 4 work.
+
+## Chunk 3.5 — scoping the vocabulary ✅ built on dev
+
+Migration `20260917080000_add_status_scope`. Adds `appliesTo` (`StatusScope` enum: `BOOKING` / `WINE_ORDER` / `BOTH`) to both dimension tables, plus `lib/statusVocabulary.ts` as the only place the vocabulary is read.
+
+**Why it was needed.** Both order types share `new`/`confirmed`/`cancelled`, but `delivered` is wine-only and `completed` is bookings-only — and nothing in the schema could say so. Query `ProcessStatus` unfiltered and you get all five rows including both 300-slot entries, with no way to tell which belong to you.
+
+**What it is not.** Max's question, worth recording: *doesn't the transactional table already know its type?* It does — but from **which table the row lives in**, not a column (`Order` vs `WineOrder`; `Order.bookingType` is INDIVIDUAL/COMPANY, a different axis). So `appliesTo` does not identify orders. It scopes the *vocabulary*, which is a property of the dimension rows and had nowhere else to live.
+
+**Why not hardcode the two code lists in the frontend.** That genuinely works, and was the alternative. It was rejected because the entire argument for dimension tables over Postgres enums was *a new status is an INSERT, not a migration plus a deploy*. Hardcoding the lists means a newly inserted status stays invisible until someone ships code — paying for the tables without getting what they were bought for.
+
+**Why it isn't "filter every query".** Max's follow-up, and the answer that settled the design: the filter applies only when **listing the vocabulary** (flow-line, dropdown, board columns, filter pills), never when reading an order's own status — that follows the row's foreign key and is already unambiguous. So order reads, board queries, statistics and exports are all untouched. And the decisive part: **a filtered accessor has to exist regardless**, because the nullable-`tenantId` design already requires every vocabulary read to filter `tenantId IS NULL OR tenantId = :current` or one tenant sees another's custom statuses. `appliesTo` adds one condition inside a function that must exist anyway.
+
+Other decisions:
+- **An enum, not a third table.** Unlike the statuses themselves this is a fixed code-level concept — a third order type would mean a new table and new code regardless, so there is nothing to gain from making it insertable.
+- **No default value.** There is no safe guess, so any future insert must state its scope. Prisma generates this as a bare `ADD COLUMN ... NOT NULL` which cannot run on populated tables; the migration is hand-written as add-nullable → backfill → `SET NOT NULL`, where step 3 fails loudly if step 2 missed a row.
+- **`invoiced` is `BOOKING`-only** — only bookings have an invoice-send flow (`sendOrderInvoice`). One row `UPDATE` if open question 2 resolves the other way.
+- **Deliberately uncached.** Two tiny tables, and this project has a documented lesson about building for a performance problem before measuring one (`Plan-Performance`). React `cache()` per-request dedup is the obvious move if a page turns out to ask repeatedly.
+
+### Verification
+
+`check-status-backfill.ts` gained a scoping section, all green: wine resolves to `new → confirmed → delivered → cancelled` and excludes `completed`; bookings to `new → confirmed → completed → cancelled` and exclude `delivered`; wine payment states are `unpaid → paid` while bookings get `unpaid → invoiced → paid`. The throwaway custom row in the isolation test now sits at `sortOrder` 250 — the gap-seeding paying off, slotting between `confirmed` (200) and `delivered` (300) with nothing renumbered.
 
 ## Chunks 4–5 — UI and contract (not started)
 

@@ -480,12 +480,36 @@ model BugReport {
 ///
 /// `sortOrder` is gap-seeded (100/200/300/400) so a status can later be inserted
 /// *between* two existing ones without renumbering everything after it.
+/// Which order type a status row belongs to.
+///
+/// Not a discriminator for the orders themselves — an order's type is already
+/// unambiguous from which table it lives in. This scopes the *vocabulary*: both
+/// order types share `new`/`confirmed`/`cancelled`, but `delivered` is wine-only
+/// and `completed` is bookings-only, and nothing else in the schema could say so.
+///
+/// It is what makes the dimension tables deliver the thing they were chosen for
+/// over Postgres enums — a new status appearing on insert rather than needing a
+/// deploy. Without it the frontend would hardcode which codes each order type
+/// shows, and a tenant's custom step would stay invisible until someone shipped
+/// code. Read through lib/statusVocabulary.ts, never filtered at call sites.
+///
+/// Deliberately an enum rather than another table: unlike the statuses
+/// themselves this is a fixed, code-level concept — a third order type would
+/// mean a new table and new code regardless, so there is nothing to gain from
+/// making it insertable.
+enum StatusScope {
+  BOOKING
+  WINE_ORDER
+  BOTH
+}
+
 model ProcessStatus {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   tenantId  String?
   code      String
   sortOrder Int
-  createdAt DateTime @default(now())
+  appliesTo StatusScope
+  createdAt DateTime    @default(now())
 
   orders     Order[]
   wineOrders WineOrder[]
@@ -502,11 +526,15 @@ model ProcessStatus {
 /// a real tracked step today (OrderStatus.INVOICE_SENT); wine orders have no
 /// invoice-send flow and will only ever use unpaid/paid for now.
 model FinancialStatus {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   tenantId  String?
   code      String
   sortOrder Int
-  createdAt DateTime @default(now())
+  // `invoiced` is BOOKING-only: bookings have a real invoice-send step
+  // (sendOrderInvoice), wine orders have no such flow. One row UPDATE if that
+  // changes — see open question 2 in Plan-StatusModel.
+  appliesTo StatusScope
+  createdAt DateTime    @default(now())
 
   orders     Order[]
   wineOrders WineOrder[]
