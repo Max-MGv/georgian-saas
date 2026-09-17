@@ -32,7 +32,7 @@ import { withTenantDb } from '../lib/db'
 
 const db = new PrismaClient()
 
-const EXPECTED_PROCESS = ['pending', 'confirmed', 'delivered', 'completed', 'cancelled']
+const EXPECTED_PROCESS = ['new', 'confirmed', 'delivered', 'completed', 'cancelled']
 const EXPECTED_FINANCIAL = ['unpaid', 'invoiced', 'paid']
 
 const TENANT_A = 'zz-test-statusdim-a'

@@ -94,11 +94,14 @@ Postgres can add these without locking (`CREATE INDEX CONCURRENTLY`). Dev → st
 
 ## Chunk 2 — schema + backfill ✅ built on dev
 
-Migration `20260917063954_add_status_dimensions`. Strictly **additive** — the old `status` columns are untouched and still authoritative. Nothing drops `paid`/`PAID`/`INVOICE_SENT` until chunks 3–5 land; doing it now would break every surface still writing them. This is the expand half of expand-migrate-contract.
+Migration `20260917063954_add_status_dimensions`. Strictly **additive** — the old `status` columns are untouched and still authoritative.
+
+**Why the old columns survive this chunk** (Max asked, and it's worth not re-deriving): the constraint is *code*, not data. Around forty call sites still read and write `status` — `settle.ts`, `updateWineOrderStatus`, the board columns, the filter pills, the stepper, the CSV export, the invoice-send flow (full list in the breakage inventory below). Nothing reads the new columns yet, so dropping the old ones today would leave every order screen with nothing to render from. They are redundant in *intent* from this chunk onward, but load-bearing in *practice* until chunks 3–5 re-point that code. This is the expand half of expand-migrate-contract, and the reason it's two steps rather than one is that a schema change and forty code changes cannot land atomically.
 
 **Decisions taken while building** (not pre-agreed — flag any you disagree with):
 
-1. **One shared process vocabulary across both order types.** They agree on `pending`/`confirmed`/`cancelled` and differ only on the final word, so `delivered` (wine) and `completed` (bookings) are two rows *both at sortOrder 300* — the same position in two domains. `NEW` collapses into `pending` (same state, different word). Display labels stay per-order-type in the frontend, which is already how it works today.
+1. **One shared process vocabulary across both order types.** They agree on the first, second and terminal states and differ only on the final fulfilment word, so `delivered` (wine) and `completed` (bookings) are two rows *both at sortOrder 300* — the same position in two domains. Display labels stay per-order-type in the frontend, which is already how it works today.
+   - **Corrected by Max, same day** (migration `20260917071500_rename_pending_status_to_new`): the first state is coded **`new`**, not `pending`. I had collapsed `NEW` into `pending`; wrong way round, since `NEW` is a booking's genuine first state and `pending` was only ever the wine-order word for it. The wine UI keeps displaying "Pending" as its label. Done as a rename migration rather than an edit to the migration that seeded it, because that one was already applied and Prisma checksums applied migrations. The id moved with it (`ps_pending` → `ps_new`) so it wouldn't become a lie; both foreign keys are `ON UPDATE CASCADE`, so referencing rows followed automatically — verified by the gaps report staying unchanged.
 2. **`ON DELETE RESTRICT` on all four foreign keys**, overriding Prisma's default `SET NULL` for optional relations. Deleting a status that orders still point at must be refused, not silently blank the reference on every one of them.
 3. **Partial unique indexes for the global rows.** Postgres treats NULLs as *distinct* in a unique constraint, so `@@unique([tenantId, code])` does **not** prevent duplicate global rows. Added as raw SQL (`CREATE UNIQUE INDEX ... WHERE "tenantId" IS NULL`) since Prisma can't express partial indexes. Without this the "one shared vocabulary" guarantee was unenforced.
 4. **Stable readable ids for reference rows** (`ps_pending`, `fs_paid`, …) instead of cuids, so backfill SQL and future migrations can reference them and every environment is byte-identical.
@@ -133,7 +136,12 @@ Only the unambiguous half was filled. Where the old single column simply could n
 
 > **The finding that makes this much less alarming than it looks:** 290 `COMPLETED` bookings versus 31 `PAID` means **the winery has never used this column to track payment.** Most bookings go straight to COMPLETED without passing through PAID — and the dropdown always allowed that, since every status was freely selectable. So the split isn't destroying payment information; it's creating somewhere to put information that was never captured. NULL is the truthful value for those rows, not a loss.
 
-**Still to decide before chunks 3–5** (needs a business rule, not a technical one): what should those ~330 unresolved rows become? Options are leave-NULL-forever for history, treat `COMPLETED`/`delivered` as paid-with-unknown-date, or treat them as unpaid. The last would manufacture a fake ~330-row debt list the winery would have to clear by hand.
+**Resolved 2026-09-17 — no business rule needed.** Max: there are **zero real orders on either prod or dev**; every row in both databases is test/seed data, and he's happy to wipe and regenerate it. So the ~330 unresolved rows carry no meaning and need no decision. Two consequences:
+
+- Chunks 3–5 don't need a careful historical backfill at all — once the new columns are authoritative, orders can simply be wiped and regenerated.
+- Not worth regenerating *now*: the seed scripts (`demoSeed.ts`, `seed-fake-wine-orders-nm.ts`) write the **old** status column, so reseeding today would just produce more rows with NULL in the new columns.
+
+The gaps report in `check-status-backfill.ts` stays useful as a chunk 3–5 completeness check, but its current numbers are noise rather than a to-do list.
 
 ## Chunks 3–5 — writes and UI (not started)
 

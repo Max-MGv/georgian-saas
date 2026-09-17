@@ -1,0 +1,15 @@
+-- Rename the first process status from 'pending' to 'new'.
+--
+-- The previous migration collapsed Order's NEW into wine orders' 'pending'.
+-- Wrong way round: NEW is a booking's genuine first state, while 'pending' was
+-- only ever the wine-order word for it. The shared vocabulary should carry the
+-- better name and let the wine-order UI keep displaying "Pending" as its label.
+--
+-- A rename rather than an edit to the migration that seeded it: that one is
+-- already applied, and Prisma checksums applied migrations. Safe to do as data
+-- because no application code references these rows yet.
+--
+-- The id moves with the code to stop 'ps_pending' becoming a lie. Both foreign
+-- keys to ProcessStatus are ON UPDATE CASCADE, so every Order/WineOrder row
+-- currently pointing at 'ps_pending' follows automatically.
+UPDATE "ProcessStatus" SET "id" = 'ps_new', "code" = 'new' WHERE "id" = 'ps_pending';
