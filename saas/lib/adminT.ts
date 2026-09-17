@@ -327,6 +327,7 @@ const en: Translations = {
   'orders.status.invoiceSent': 'Invoice Sent',
   'orders.status.pendingPayment': 'Awaiting Payment',
   'orders.status.paid': 'Paid',
+  'orders.status.unpaid': 'Unpaid',
   'orders.status.completed': 'Completed',
   'orders.status.cancelled': 'Cancelled',
 
@@ -410,6 +411,8 @@ const en: Translations = {
   'orders.filters.allBookings': 'All bookings',
   'orders.filters.individualsOnly': 'Individuals only',
   'orders.filters.allStatuses': 'All statuses',
+  'orders.filters.payment': 'Payment',
+  'orders.filters.allPayments': 'All payments',
   'orders.filters.nationality': 'Nationality',
   'orders.filters.allNationalities': 'All nationalities',
   'orders.filters.exportCsv': 'Export CSV',
@@ -635,6 +638,7 @@ const en: Translations = {
   // Wine Orders — list/table/cards
   'wineOrders.status.pending': 'Pending',
   'wineOrders.status.delivered': 'Delivered',
+  'wineOrders.status.unpaid': 'Unpaid',
   'wineOrders.status.pendingPayment': 'Awaiting Payment',
   'wineOrders.status.paymentFailed': 'Payment Failed',
   'wineOrders.payment.awaitingHint': 'Sent to the payment page but not paid yet. They may still pay, or you can take payment another way.',
@@ -643,6 +647,7 @@ const en: Translations = {
   'wineOrders.undo': 'Undo',
   'wineOrders.revertTo': 'Revert to {label}',
   'wineOrders.advanceTo': 'Advance to {label}',
+  'wineOrders.stepNotSettable': 'This step cannot be set yet.',
   'wineOrders.filter.all': 'All',
   'wineOrders.filter.searchPlaceholder': 'Search company…',
   'wineOrders.filter.clear': 'Clear',
@@ -1519,6 +1524,7 @@ const ka: Translations = {
   'orders.status.invoiceSent': 'ინვოისი გაგზავნილია',
   'orders.status.pendingPayment': 'გადახდის მოლოდინში',
   'orders.status.paid': 'გადახდილი',
+  'orders.status.unpaid': 'გადაუხდელი',
   'orders.status.completed': 'დასრულებული',
   'orders.status.cancelled': 'გაუქმებული',
 
@@ -1602,6 +1608,8 @@ const ka: Translations = {
   'orders.filters.allBookings': 'ყველა ჯავშანი',
   'orders.filters.individualsOnly': 'მხოლოდ ინდივიდუალური',
   'orders.filters.allStatuses': 'ყველა სტატუსი',
+  'orders.filters.payment': 'გადახდა',
+  'orders.filters.allPayments': 'ყველა გადახდა',
   // Drafted, not native-reviewed (Plan-CompanyNationality) — flag for Max.
   'orders.filters.nationality': 'ეროვნება',
   'orders.filters.allNationalities': 'ყველა ეროვნება',
@@ -1829,6 +1837,7 @@ const ka: Translations = {
   // Wine Orders — list/table/cards
   'wineOrders.status.pending': 'მოლოდინში',
   'wineOrders.status.delivered': 'მიწოდებული',
+  'wineOrders.status.unpaid': 'გადაუხდელი',
   'wineOrders.status.pendingPayment': 'გადახდის მოლოდინში',
   'wineOrders.status.paymentFailed': 'გადახდა ვერ შესრულდა',
   'wineOrders.payment.awaitingHint': 'გადახდის გვერდზე გადავიდა, მაგრამ ჯერ არ გადაუხდია. შესაძლოა მოგვიანებით გადაიხადოს, ან სხვა გზით მიიღოთ თანხა.',
@@ -1837,6 +1846,7 @@ const ka: Translations = {
   'wineOrders.undo': 'დაბრუნება',
   'wineOrders.revertTo': 'დაბრუნება {label}-ზე',
   'wineOrders.advanceTo': 'გადასვლა {label}-ზე',
+  'wineOrders.stepNotSettable': 'ამ ეტაპის დაყენება ჯერ შეუძლებელია.',
   'wineOrders.filter.all': 'ყველა',
   'wineOrders.filter.searchPlaceholder': 'მოძებნეთ კომპანია…',
   'wineOrders.filter.clear': 'გასუფთავება',

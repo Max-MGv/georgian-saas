@@ -10,6 +10,14 @@ import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
+import {
+  legacyOrderStatusForCode,
+  statusPatchCodes,
+  orderStatusPatch,
+  type SettableOrderStatus,
+} from '@/lib/statusBridge'
+import { buildFlowLine, unreachedSteps, unreachedFinancialSteps, isCancelled, type FlowState } from '@/lib/statusFlow'
+import type { StatusOption } from '@/lib/statusVocabulary'
 import InvoicePrint from '../InvoicePrint'
 
 const C = {
@@ -32,20 +40,80 @@ const inputStyle: React.CSSProperties = {
 
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
-const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
+type StatusStyle = { labelKey: string; bg: string; color: string }
+
+/**
+ * Keyed by vocabulary code since chunk 4. Mirrors OrdersTable's own map — the
+ * same statuses have to look the same on the list and on the order's own page.
+ * PENDING_PAYMENT stays keyed by its legacy value: payment limbo is machine-set
+ * only and is the one thing the two axes deliberately cannot express.
+ */
+const STATUS_CONFIG: Record<string, StatusStyle> = {
+  new:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
+  confirmed: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
+  completed: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
+  cancelled: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
+  unpaid:    { labelKey: 'orders.status.unpaid',      bg: '#f5f5f4', color: '#44403c' },
+  invoiced:  { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  paid:      { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
   PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
-  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
-  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
 }
 
-/** Set by hand from the dropdown. PENDING_PAYMENT is machine-set only — see OrdersTable. */
-type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+const UNKNOWN_STATUS_STYLE: StatusStyle = { labelKey: '', bg: '#f3f4f6', color: '#374151' }
 
-const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+const LIMBO_STATUS = 'PENDING_PAYMENT'
+
+function styleFor(code: string | null): StatusStyle {
+  return (code && STATUS_CONFIG[code]) || UNKNOWN_STATUS_STYLE
+}
+
+function labelFor(locale: string, code: string | null): string {
+  if (!code) return '—'
+  const cfg = STATUS_CONFIG[code]
+  return cfg ? adminT(locale, cfg.labelKey) : code
+}
+
+/**
+ * The merged one-line flow (Plan-StatusModel chunk 4) — horizontal here,
+ * because the detail page's action bar runs across the top rather than down a
+ * card's edge like the wine-orders list.
+ *
+ * One line, with Paid where payment actually happened: an individual who paid
+ * at checkout reads new → paid → confirmed → completed, a company on invoice
+ * terms reads new → confirmed → completed → paid, both off the same two
+ * columns. Read-only — the dropdown beside it is what changes the status, and
+ * duplicating that as click targets would give the same action two places to
+ * disagree.
+ */
+function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; locale: string }) {
+  return (
+    <div className="flex items-center flex-wrap gap-x-1 gap-y-1.5 mb-4">
+      {steps.map((step, i) => (
+        <div key={step.code} className="flex items-center gap-1">
+          <span
+            className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
+            style={{
+              backgroundColor: step.done ? styleFor(step.code).bg : 'transparent',
+              color: step.done ? styleFor(step.code).color : C.faint,
+              border: `1px solid ${step.done ? styleFor(step.code).color + '44' : C.border}`,
+              fontWeight: step.active ? 700 : 400,
+            }}
+          >
+            {step.done && (
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
+                <path d="M1.5 5l2.5 2.5 4.5-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            {labelFor(locale, step.code)}
+          </span>
+          {i < steps.length - 1 && (
+            <span style={{ color: step.done && steps[i + 1].done ? C.wine : C.border, fontSize: '0.75rem' }}>→</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 type Payment = { recipientName: string; personalNumber: string; bankName: string; bankCode: string; iban: string }
 
@@ -79,7 +147,12 @@ type MenuItemRow = { id: string; name: string; type: string }
 
 type OrderProp = {
   id: string
+  /** Legacy column — still read for payment limbo, which the axes cannot say. */
   status: OrderStatus
+  processCode: string | null
+  financialCode: string | null
+  paidAt: Date | string | null
+  paidAtStage: string | null
   date: Date
   timeSlot: string
   bookingType: string
@@ -160,9 +233,15 @@ export default function OrderDetail({
   menuItems,
   masterclassItems,
   companies = [],
+  processSteps,
+  financialSteps,
   locale = 'en',
 }: {
   order: OrderProp
+  /** The fulfilment vocabulary for bookings, resolved once on the server. */
+  processSteps: StatusOption[]
+  /** The payment vocabulary — its pre-Paid states are settable by hand. */
+  financialSteps: StatusOption[]
   payment: Payment
   detailed: boolean
   displayName?: string
@@ -220,7 +299,15 @@ export default function OrderDetail({
   const [saveMsg, setSaveMsg] = useState('')
 
   // ── Top action bar state ───────────────────────────────────────────────────
+  // Both axes are local state now, so the flow-line and the pill move on click
+  // rather than waiting for the server round trip.
   const [status, setStatus] = useState<OrderStatus>(order.status)
+  const [axes, setAxes] = useState<FlowState>({
+    processCode: order.processCode,
+    paidAt: order.paidAt,
+    paidAtStage: order.paidAtStage,
+  })
+  const [financialCode, setFinancialCode] = useState(order.financialCode)
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
@@ -241,9 +328,25 @@ export default function OrderDetail({
     }
   }, [printReady])
 
-  async function handleStatusChange(s: SettableStatus) {
-    setStatusMenuOpen(false)
+  function applyLocally(s: SettableOrderStatus) {
     setStatus(s)
+    // The same patch the server is about to write, restated in codes. Derived
+    // from statusBridge rather than re-implemented, so the two cannot drift.
+    const patch = statusPatchCodes(orderStatusPatch(s, {
+      processCode: axes.processCode,
+      paidAt: axes.paidAt ? new Date(axes.paidAt) : null,
+    }))
+    setAxes(prev => ({
+      processCode: patch.processCode ?? prev.processCode,
+      paidAt: patch.paidAt ?? prev.paidAt,
+      paidAtStage: patch.paidAtStage ?? prev.paidAtStage,
+    }))
+    if (patch.financialCode) setFinancialCode(patch.financialCode)
+  }
+
+  async function handleStatusChange(s: SettableOrderStatus) {
+    setStatusMenuOpen(false)
+    applyLocally(s)
     await updateOrderStatus(order.id, s)
   }
 
@@ -256,7 +359,9 @@ export default function OrderDetail({
       setSendMsg(at('orderDetail.sendFailed'))
     } else {
       setSendMsg(at('orders.emailModal.sent'))
-      if (status === 'NEW' || status === 'CONFIRMED') setStatus('INVOICE_SENT')
+      // Invoice-sent moves the financial axis only — it records that we asked
+      // for money, not that the visit happened.
+      if (status === 'NEW' || status === 'CONFIRMED') applyLocally('INVOICE_SENT')
       setTimeout(() => setSendMsg(''), 3000)
     }
   }
@@ -419,6 +524,23 @@ export default function OrderDetail({
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
   const meatItems = menuItems.filter(i => i.type === 'MEAT')
 
+  // ── Derived status view ────────────────────────────────────────────────────
+  // Payment limbo shows its own pill; everything else reads the process axis.
+  const displayCode = status === LIMBO_STATUS ? LIMBO_STATUS : axes.processCode
+  const flowSteps = buildFlowLine(processSteps, axes)
+  // Only what this order has not reached, so the menu can never offer a step
+  // the flow-line above it already shows as done. Financial states before Paid
+  // ("Invoice Sent") have no place in the line but are still settable by hand,
+  // so they slot in just ahead of Cancelled, which is always last.
+  const flowAhead = unreachedSteps(processSteps, axes)
+  const financialAhead = unreachedFinancialSteps(financialSteps, financialCode, axes.paidAt)
+  const cancelAt = flowAhead.findIndex(step => step.code === 'cancelled')
+  const menuSteps = (cancelAt >= 0
+    ? [...flowAhead.slice(0, cancelAt), ...financialAhead, ...flowAhead.slice(cancelAt)]
+    : [...flowAhead, ...financialAhead])
+    .map(step => ({ code: step.code, legacy: legacyOrderStatusForCode(step.code) }))
+    .filter((step): step is { code: string; legacy: SettableOrderStatus } => step.legacy != null)
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
@@ -439,14 +561,14 @@ export default function OrderDetail({
           {/* Status dropdown */}
           <div className="relative" onClick={e => e.stopPropagation()}>
             {(() => {
-              const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.NEW
+              const cfg = styleFor(displayCode)
               return (
                 <button
                   onClick={() => setStatusMenuOpen(o => !o)}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
                 >
-                  {at(cfg.labelKey)} ▾
+                  {labelFor(locale, displayCode)} ▾
                 </button>
               )
             })()}
@@ -456,15 +578,15 @@ export default function OrderDetail({
                 style={{ minWidth: 150, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                 onClick={e => e.stopPropagation()}
               >
-                {ALL_STATUSES.map(s => (
+                {menuSteps.map(step => (
                   <button
-                    key={s}
-                    onClick={() => handleStatusChange(s)}
+                    key={step.code}
+                    onClick={() => handleStatusChange(step.legacy)}
                     className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
-                    style={{ color: s === status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === status ? 600 : 400 }}
+                    style={{ color: C.text }}
                   >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                    {at(STATUS_CONFIG[s].labelKey)}
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                    {labelFor(locale, step.code)}
                   </button>
                 ))}
               </div>
@@ -508,6 +630,13 @@ export default function OrderDetail({
           )}
         </div>
       </div>
+
+      {/* The merged one-line flow. Sits under the header rather than beside the
+          pill because it is the whole story of the order, and the pill is only
+          its current position. */}
+      {status !== LIMBO_STATUS && !isCancelled(axes) && (
+        <FlowLine steps={flowSteps} locale={locale} />
+      )}
 
       {/* Print portal */}
       {printReady && typeof document !== 'undefined' && createPortal(

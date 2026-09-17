@@ -8,6 +8,64 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🍷 2026-09-17 (2) — the flow-line is built: please look at it on staging
+
+The thing you actually asked for is now on screen. Chunk 4 is done and **pushed to `staging`** — so
+`staging.vineworks.ge` should show it against the dev database. Nothing is on prod.
+
+**What changed, in one sentence:** payment came out of the status column, so an order can be
+*delivered and still unpaid* — but you still see **one** line, with the Paid step sitting wherever
+payment actually happened.
+
+### The one thing to look at first
+
+Go to **Wine Orders → Cards** on staging. You should see two different-shaped lines on the same
+screen:
+
+- an order that was paid up front reads `Pending → Paid → Confirmed → Delivered`
+- an order on invoice terms reads `Pending → Confirmed → Delivered → Paid`, with Paid not ticked
+
+Same code drawing both. The difference is only *when* the money arrived.
+
+Then the test that matters most: **find a Delivered order that hasn't been paid and mark it Paid.**
+The pill must stay **Delivered** and gain a small green ₾✓. It must *not* flip to "Paid". If it flips,
+something is wrong — that one behaviour is the entire point of this redesign.
+
+### The rest, if you want to poke at it
+
+- **Dropdowns only offer what's ahead.** Open the status menu on an order that's already paid — there
+  should be no "Paid" to click. It can't contradict the line next to it any more.
+- **Filters now ask two questions.** The pills are in two groups with a divider. Picking one from each
+  *narrows*: "Delivered" + "Unpaid" gives you the invoices you're still chasing. That list was
+  impossible to produce before — an order was either delivered or paid, never both facts at once.
+  Booking Orders has the same thing as two dropdowns, Status and Payment.
+- **The board changed shape, as you decided.** Columns are New / Confirmed / Delivered / Cancelled —
+  no Paid column. Paid orders carry the ₾✓ on the card instead. Cards only ever move forward now.
+- **Booking Orders got a flow-line too**, on an individual booking's page — it never had one.
+- **Pack mode**: it pre-selects confirmed orders. Worth checking the packing list looks right to you,
+  because the old rule quietly dropped paid wine off it.
+
+### Two things I'd like you to judge
+
+1. **Is the ₾✓ marker readable enough?** It's deliberately small, so it doesn't compete with the
+   status pill. If it's too quiet on the board, say so — it's a one-line change.
+2. **Does the Booking Orders flow-line belong on the detail page only**, or would you want it on the
+   list too? I put it only on the detail page because the list has no room, but you use that screen
+   more than I do.
+
+### What's still coming (chunk 5, not started)
+
+Retiring `paid` / `PAID` / `Invoice Sent` from the *old* column, which is still being written
+alongside the new ones, plus the database rule you approved that stops the payment date and the
+payment status ever drifting apart. Nothing you need to do for that.
+
+**On your earlier question about clearing the fake data:** both databases are still test data only.
+I filled in the half-empty status columns on dev so the screens had something honest to draw, and set
+four wine orders to the interesting shapes so you'd have something to look at. Chunk 5 is where the
+wipe-and-regenerate happens for real.
+
+---
+
 ## 🧱 2026-09-17 — the status split: nothing to look at yet, but two decisions are yours
 
 You asked to restructure the database so wine orders and bookings can be *delivered but not yet paid* —
@@ -27,6 +85,8 @@ all five migrations applied.
    coupling. Worth it or not is your call.
 2. **Should status labels and colours live in the database or stay in code?** Only worth moving if you want
    a client renaming "Delivered" to "Shipped" without waiting on a deploy. Otherwise code is simpler.
+
+> **Superseded by the entry above (2026-09-17 #2).** Both decisions below have since been made, and the work is on staging. Kept for the reasoning.
 
 **And one when you're ready:** say the word and I'll push the five commits to staging. It won't *look*
 different — the value is confirming the build passes against the new schema. Prod is a separate step after

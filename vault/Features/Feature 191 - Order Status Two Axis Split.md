@@ -4,8 +4,9 @@ tags: [feature, orders, wine-orders, schema, data-model]
 
 # Feature 191 — Order status: two-axis split
 
-**Status: chunks 1–3.5 done (schema, dual-write, scoping). Chunks 4–5 (UI, contract) not started.**
-Old `status` columns remain authoritative meanwhile. Design log: `Plan-StatusModel.md`.
+**Status: chunks 1–4 done (schema, dual-write, scoping, UI). Chunk 5 (contract) not started.**
+Reads now come off the new columns on both order screens; the old `status` column survives for
+payment limbo and is still dual-written until chunk 5 retires it. Design log: `Plan-StatusModel.md`.
 
 ## What it does
 
@@ -16,7 +17,63 @@ Splits what an order's status means into two facts that move independently:
 
 The reason, in Max's words: *"for many orders first we give the wine or provide the service — and then people pay."* An individual pays at checkout. A restaurant or hotel gets the wine delivered and settles the invoice weeks or months later. The old single column could not represent that — `paid` sat *between* `confirmed` and `delivered` in the wine stepper, and `PAID` sat before `COMPLETED` in `OrderStatus`, so a delivered-but-unpaid order had nowhere honest to sit and the only way to move the card forward was to mark it paid when it wasn't.
 
-What the winery will eventually see (chunk 4) is still **one** flow-line, not two trackers. The Paid step floats to where it actually happened: a prepaid individual sees `new → paid → confirmed → delivered`, an invoiced company sees `new → confirmed → delivered → paid`.
+What the winery sees is **one** flow-line, not two trackers. The Paid step sits where it actually
+happened: a prepaid individual sees `new → paid → confirmed → delivered`, an invoiced company sees
+`new → confirmed → delivered → paid` — both from the same function, off the same two columns.
+
+## The flow-line (chunk 4)
+
+`lib/statusFlow.ts` is pure and DB-free: it takes the vocabulary as an argument rather than
+fetching it, so both order types share it, the server resolves the vocabulary once per page, and
+it is testable without a database.
+
+```
+spine   = getProcessStatuses(tenantId, kind), minus `cancelled`
+done    = every spine step at or below the current processStatusId's sortOrder
+Paid    = done iff paidAt is set
+placed  = paidAt null   → appended last (the pay-later default)
+          paidAt set    → spliced in immediately after the step named by paidAtStage
+```
+
+Decisions inside that, worth not re-deriving:
+
+- **`active` is always a process step, never Paid.** "Where is this order" is a question about
+  fulfilment; an order that has been paid and delivered is *at* delivered. Paid is only ever done
+  or not yet done.
+- **`cancelled` is not the end of the line.** It comes back from `getProcessStatuses` like any
+  other row (the dropdown needs it), but a cancelled order has not progressed to the end of the
+  flow — it left it. Rendering it as the final step would read as success, so the whole line greys
+  out and the undo affordance appears instead.
+- **A `paidAtStage` that no longer resolves appends rather than drops.** Losing the placement is a
+  display imperfection; losing the fact that money arrived would be a lie.
+- **Paid is never un-done from the line.** Reversing a payment is a deliberate correction, not a
+  click away from a step label, so a done Paid step is not clickable.
+
+## What chunk 4 changed beyond the line
+
+- **Per-order dropdowns.** `unreachedSteps` offers only what this order has not reached, which is
+  what stops the menu and the line contradicting each other. `unreachedFinancialSteps` keeps
+  bookings' "Invoice Sent" settable by hand without putting it in the line — driven by the
+  vocabulary, not by naming the code, so wine orders (whose financial vocabulary is only
+  `unpaid → paid`) correctly get nothing and no call site has to know which type has an invoice flow.
+- **Filters gained a second axis, AND-combined with the first.** Pills OR within a group, AND
+  across groups. "Delivered" + "Unpaid" is the list of invoices still outstanding — which the old
+  single column could not express at all, since an order was either delivered or paid, never both
+  facts at once. Bookings get the same thing as two `<select>`s and two URL params (`status`,
+  `payment`).
+- **Boards regrouped onto the process axis only** (Max, 2026-09-17). A grid has one shared
+  left-to-right layout, so it can only group by one axis. Giving Paid a column meant an unpaid
+  order skipping over it to Delivered and then moving *back* into it once paid — at which point
+  the column asserts that a delivered order's stage is "Paid", the exact conflation the split
+  exists to remove. Payment is a ₾✓ marker on the card instead, and cards only ever move forward.
+- **Writes still go through the legacy path.** `updateWineOrderStatus` / `updateOrderStatus`
+  already dual-write, so the UI translates its vocabulary codes back through new reverse maps
+  (`legacyWineStatusForCode` / `legacyOrderStatusForCode`) rather than a second write path existing
+  alongside the first. Optimistic client updates are derived from `statusPatchCodes(…)` applied to
+  the same bridge patch the server is about to write, so the two cannot drift.
+  **Known limitation, gone in chunk 5:** a status a tenant inserts later has no legacy equivalent
+  to write, so it renders as a position on the line but cannot be clicked. Nothing creates tenant
+  rows today, so this is a guard rather than a live path.
 
 ## Key design decisions
 
@@ -59,6 +116,33 @@ What the winery will eventually see (chunk 4) is still **one** flow-line, not tw
 - `lib/demoSeed.ts`, `scripts/seed.ts`, `scripts/seed-fake-wine-orders-nm.ts` — derive the new columns via `seedStatusColumns()`
 - `scripts/setup-rls.ts` — the status-dimension block
 
+**Chunk 4 — UI (reads moved onto the new columns)**
+- `lib/statusFlow.ts` (new) — the flow-line algorithm, `unreachedSteps`, `unreachedFinancialSteps`.
+  Pure and DB-free so both order types share it and it is testable without a database.
+- `lib/statusBridge.ts` — reverse maps (`legacyWineStatusForCode` / `legacyOrderStatusForCode`,
+  narrowed to the settable subset so the machine-only limbo values can't be written by hand) and
+  `statusPatchCodes`, which restates a bridge patch in codes for optimistic client updates.
+- `app/admin/(panel)/wine-orders/page.tsx` — includes both status relations, resolves the
+  vocabulary once, flattens to plain codes at the boundary
+- `app/admin/(panel)/wine-orders/WineOrdersClient.tsx` — `VerticalStepper` → `FlowLine`;
+  `STATUS_COLOR` re-keyed to vocabulary codes with a neutral fallback; pill, label, dimming, card
+  sort, counts and filters all off the new columns; two-axis filter pills; process-only board with
+  the ₾✓ marker; pack pre-selection fixed and its `set-state-in-effect` lint error removed
+- `app/admin/(panel)/orders/page.tsx` — two `groupBy`s for two axes, `status` + `payment` params,
+  limbo excluded from the process counts and filter so the two entries partition rather than overlap
+- `app/admin/(panel)/orders/OrdersFilters.tsx` — options come from the vocabulary, not a constant;
+  second Payment select
+- `app/admin/(panel)/orders/OrdersTable.tsx` — table, list, board and card list; per-order menus;
+  ₾✓ markers. The card-list pill's invisible expanded hit area (MaintenanceNotes §17) was left
+  alone — the marker sits outside that wrapper.
+- `app/admin/(panel)/orders/CalendarView.tsx` — label/colour off the process axis, paid marker
+- `app/admin/(panel)/orders/[id]/OrderDetail.tsx` + `page.tsx` — a horizontal flow-line, which this
+  screen never had, plus the per-order dropdown
+- `app/actions/orders.ts` — `exportOrdersCsv` filters on both axes and exports Status, Payment and
+  Paid At as three columns; the `filters.status as OrderStatus` cast is gone
+- `lib/adminT.ts` — `orders.status.unpaid`, `wineOrders.status.unpaid`,
+  `wineOrders.stepNotSettable`, `orders.filters.payment`, `orders.filters.allPayments`, EN and KA
+
 **Verification scripts (new)**
 - `scripts/check-status-backfill.ts` — RLS read path, per-type vocabulary scoping, cross-tenant isolation with two throwaway tenants, `app_user` write refusal, remaining backfill gaps
 - `scripts/test-status-bridge.ts` — 21 checks proving the axes move independently
@@ -73,21 +157,57 @@ What the winery will eventually see (chunk 4) is still **one** flow-line, not tw
 - **Backfill is deliberately partial.** Where the old column could not say what the other axis was, the row is left NULL rather than guessed. Safe because nothing reads these columns yet, and moot in the end: both databases hold zero real orders.
 - **A `COMPLETED` booking seeds as unpaid and a `PAID` one as not-yet-confirmed.** Looks odd, is correct — those are exactly the two shapes the old column couldn't represent, so demo data now exercises them.
 
+## Decided by Max, 2026-09-17
+
+- **Board columns are the process axis only**, payment as a ₾✓ card marker. See above for why the
+  plan's original "skip the Paid column and move back into it" proposal was dropped.
+- **The `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` constraint is approved**,
+  deferred to chunk 5 so it rides with the contract migration instead of adding one mid-UI-work.
+  Cost, accepted: the seeded id `fs_paid` gets hardcoded into a constraint.
+- **Display metadata stays in frontend code.** `STATUS_COLOR` (wine) and `STATUS_CONFIG`
+  (bookings) were re-keyed from legacy values to vocabulary codes rather than moved into the
+  dimension rows. The consequence is a deliberate fallback: a status a tenant inserts later renders
+  in neutral grey under its own raw code until someone ships a label for it. Adding
+  `labelKey`/`colorHex` columns later is purely additive, so nothing is foreclosed.
+
 ## Still open
 
-- Nothing enforces that `paidAt` is set exactly when `financialStatusId = 'fs_paid'`, so they can drift. Closable with a `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))`, at the cost of hardcoding a seeded id in the constraint. **Max's call.**
-- Whether display metadata (`labelKey` / `colorHex`) moves into the dimension rows, or stays in the frontend constants. Only worth moving if a tenant should be able to rename a status without a deploy. **Max's call.**
 - `cancelled` is still special-cased in the frontend rather than modelled as terminal (`isTerminal`).
-- Whether wine orders ever need the `invoiced` sub-state — one row `UPDATE` if so.
+- Whether wine orders ever need the `invoiced` sub-state — one row `UPDATE` if so. Until then
+  `unreachedFinancialSteps` correctly returns nothing for them, with no call site knowing why.
 
 ## What to test
 
-Nothing is visible in the UI yet — chunks 1–3.5 are schema and write paths only, and the old columns still drive every screen. So the meaningful checks are:
+Chunk 4 is user-visible, so the browser checks below matter more than the scripts.
+
+**On `/admin/wine-orders`:**
+1. A prepaid order's card reads `Pending → Paid → Confirmed → Delivered`; an invoiced one reads
+   `Pending → Confirmed → Delivered → Paid` with Paid not yet done. Same screen, same code.
+2. Mark a delivered, unpaid order Paid. The pill must stay **Delivered** and gain a ₾✓ — it must
+   not become "Paid". That single behaviour is the whole point of the split.
+3. Open the dropdown on an already-paid order: no "Paid" entry.
+4. Filter pills: "Delivered" + "Unpaid" together should narrow, not widen.
+5. Board: no Paid column; paid cards carry ₾✓; the Awaiting Payment column disappears when a
+   process pill is active.
+6. Pack mode pre-selects confirmed orders (and no longer misses paid ones).
+
+**On `/admin/orders`:**
+7. Status and Payment are two separate selects whose counts partition the total.
+8. A booking's detail page shows the flow-line; marking one Paid puts Paid second (after New).
+9. "Invoice Sent" is offered on an unpaid booking and absent on one already invoiced.
+
+**Scripts:**
 
 1. `npx tsx scripts/check-status-backfill.ts` — expect all structural checks green, and the per-type flows to read `new → confirmed → delivered → cancelled` (wine) and `new → confirmed → completed → cancelled` (bookings).
 2. `npx tsx scripts/test-status-bridge.ts` — expect 21/21 and "Both axes move independently".
 3. `npx tsx scripts/check-rls.ts` — the two new tables should show RLS enabled with a policy.
-4. **Regression, not new behaviour:** the admin order screens should look and behave exactly as before. Change a wine order's status through the stepper and the dropdown; change a booking's status; send an invoice. All should work identically — the new columns are being written alongside, invisibly.
+4. **Regression check:** sending an invoice, printing, editing and deleting orders should behave exactly as before — none of those paths moved.
 5. `npx prisma migrate status` — expect no drift, all migrations applied.
 
-Nothing is on staging or prod yet.
+Pushed to `staging` 2026-09-17. Not on prod.
+
+**Dev data note:** chunk 2's backfill was deliberately partial, which left rows the new columns
+could not render. Those were completed on dev from each row's legacy status (the same derivation
+`seedStatusColumns` uses) and four wine orders were arranged into the shapes worth looking at by
+eye — prepaid, delivered-unpaid, delivered-then-paid, paid-then-cancelled. `check-status-backfill.ts`
+now reports no gaps on either table. Throwaway data; chunk 5's plan is wipe-and-regenerate.

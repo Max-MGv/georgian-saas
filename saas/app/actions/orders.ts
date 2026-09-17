@@ -351,7 +351,16 @@ export async function exportOrdersCsv(filters: {
   dateFrom?: string
   dateTo?: string
   companyId?: string
+  /**
+   * Process status **code**, or the legacy `PENDING_PAYMENT`. Was the legacy
+   * enum value cast straight through (`filters.status as OrderStatus`) — which
+   * is why a stale `?status=PAID` bookmark used to cast cleanly and silently
+   * return zero rows. An unknown code now simply matches nothing in the
+   * relation filter, with no cast to hide it.
+   */
   status?: string
+  /** Financial status code: unpaid | invoiced | paid. AND'd with `status`. */
+  payment?: string
   /** ISO 3166-1 code (Plan-CompanyNationality) — matches orders whose `nationalities` array includes it. */
   nationality?: string
 }): Promise<string> {
@@ -371,14 +380,25 @@ export async function exportOrdersCsv(filters: {
         : filters.companyId
           ? { companyId: filters.companyId }
           : {}),
-      ...(filters.status ? { status: filters.status as OrderStatus } : {}),
+      ...(filters.status === 'PENDING_PAYMENT'
+        ? { status: 'PENDING_PAYMENT' as const }
+        : filters.status
+          ? { processStatus: { code: filters.status } }
+          : {}),
+      ...(filters.payment ? { financialStatus: { code: filters.payment } } : {}),
       ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
-    include: { company: true },
+    include: {
+      company: true,
+      processStatus: { select: { code: true } },
+      financialStatus: { select: { code: true } },
+    },
     orderBy: { date: 'desc' },
   }))
 
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Email', 'Phone', 'Notes']
+  // Two status columns since chunk 4 — the export has to carry both axes, or a
+  // completed-but-unpaid booking exports as indistinguishable from a paid one.
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
@@ -390,7 +410,9 @@ export async function exportOrdersCsv(filters: {
     o.guestCount,
     o.nationalities.map(countryName).join('; '),
     o.totalPrice ?? '',
-    o.status,
+    o.processStatus?.code ?? '',
+    o.financialStatus?.code ?? '',
+    o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
     o.email ?? '',
     o.phone ?? '',
     o.notes ?? '',

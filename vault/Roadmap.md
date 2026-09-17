@@ -352,11 +352,14 @@ Full tracking: `Plan-StatusModel.md` (design decisions, the audit of ~40 affecte
 - [x] Chunk 2b — `rename_pending_status_to_new`: Max corrected my call — `NEW` is a booking's genuine first state, not wine's `pending`
 - [x] Chunk 3 — `lib/statusBridge.ts` dual-writes old and new columns; `updateWineOrderStatus`'s unvalidated `status: string` (the audit's root cause) is now the legacy union, which immediately surfaced one bare-`string` caller as a compile error
 - [x] Chunk 3.5 — `add_status_scope`: `appliesTo` scopes the vocabulary per order type (`delivered` wine-only, `completed` bookings-only), read only through `lib/statusVocabulary.ts`
-- [ ] Chunk 4 — UI: the merged one-line flow (Paid floats to where it actually happened rather than a fixed slot), per-order dropdown options, board column skip/backfill, switching reads onto the new columns
-- [ ] Chunk 5 — retire `paid`/`PAID`/`INVOICE_SENT` from the old columns; re-point `OrdersTable.tsx`/`OrderDetail.tsx`'s hand-written status unions at Prisma's generated type
-- [ ] Not pushed to staging or prod yet — five commits sit on `staging` locally, dev DB has all migrations applied
+- [x] Chunk 4 — UI: `lib/statusFlow.ts` builds the merged one-line flow, with Paid placed where it actually happened (`paidAtStage`) rather than a fixed slot; every read on both order screens moved onto the new columns; dropdowns offer only steps this order has not reached; filters gained a second, AND-combined payment axis; boards regrouped onto the process axis with a paid marker
+- [ ] Chunk 5 — retire `paid`/`PAID`/`INVOICE_SENT` from the old columns; re-point `OrdersTable.tsx`/`OrderDetail.tsx`'s hand-written status unions at Prisma's generated type; add the `paidAt` ⇔ `financialStatusId` CHECK constraint Max approved
+- [ ] Not on prod yet — pushed to `staging` 2026-09-17, dev DB has all migrations applied
 
-**Two open decisions for Max** (also listed at the bottom of the plan): whether `paidAt` and `financialStatusId` should be held in agreement by a `CHECK` constraint (cost: hardcoding a seeded id), and whether display metadata (`labelKey`/`colorHex`) moves into the dimension rows or stays in the frontend.
+**Three decisions taken by Max, 2026-09-17:**
+- **Board columns are the process axis only**, with payment shown as a ₾✓ marker on the card. The plan had proposed keeping a Paid column that cards skip over and move back into; rejected because once a delivered order landed in Paid, the column would be asserting its *stage* was "Paid" — the exact conflation the split exists to remove. Cards now only ever move forward.
+- **The `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` constraint is approved, deferred to chunk 5** so it rides with the contract migration rather than adding one mid-UI-work.
+- **Display metadata stays in frontend code** for now. A status a tenant inserts later renders in neutral grey under its raw code until someone ships a label; adding `labelKey`/`colorHex` columns later is purely additive.
 
 **Findings worth keeping:** `Payment.settledAt` is empty on dev, so `paidAt` was not recoverable as the plan first assumed; and 290 `COMPLETED` bookings against 31 `PAID` showed the winery had never used that column to track payment at all. Max then confirmed both databases hold zero real orders, which removed the backfill decision entirely.
 

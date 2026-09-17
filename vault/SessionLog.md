@@ -8,6 +8,88 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-17 (2) — Status split chunk 4: reads moved onto the new columns, the flow-line built
+
+Chunk 4 of `Plan-StatusModel.md`. Every read on both order screens now comes off `processStatusId` /
+`financialStatusId` / `paidAt` / `paidAtStage`; the old `status` column survives only for payment
+limbo and is still dual-written until chunk 5. Pushed to `staging`. Not on prod.
+
+**Three decisions Max made at the start of the session**, all recorded in the plan and the feature
+note:
+
+1. **Board columns are the process axis only**, with payment as a ₾✓ card marker — overturning the
+   plan's decision 8, which had proposed keeping a Paid column that cards skip over and move back
+   into. The argument that changed it: once a delivered-then-paid order lands in a Paid column, the
+   column is asserting that the order's *stage* is "Paid", which is not a stage at all and is exactly
+   the conflation this redesign exists to remove. Cards now only ever move forward.
+2. **The `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` constraint is approved**,
+   deferred to chunk 5 so it rides with the contract migration.
+3. **Display metadata stays in frontend code.** `STATUS_COLOR` / `STATUS_CONFIG` were re-keyed from
+   legacy values to vocabulary codes rather than moved into the dimension rows.
+
+**What was built.** `lib/statusFlow.ts` — pure, DB-free, shared by both order types — holds the whole
+algorithm: spine from `getProcessStatuses`, Paid appended last when `paidAt` is null or spliced in
+after the step named by `paidAtStage` when it isn't. Two shapes fall out of one function: prepaid
+reads `new → paid → confirmed → delivered`, invoiced reads `new → confirmed → delivered → paid`.
+`unreachedSteps` drives every dropdown, so a paid order has no "Paid" entry and the menu can't
+contradict the line. Wine's four-stage `STAGES` array (which hard-coded `paid` between `confirmed`
+and `delivered` — the original bug) is gone; bookings gained a horizontal flow-line on the detail
+page, which never had one. Filters gained a second payment axis, AND-combined with the process one.
+
+**Deliberate non-changes, both load-bearing:**
+- **The write path did not move.** Writes already dual-write, so the UI translates its vocabulary
+  codes back through new reverse maps rather than growing a second write path. Optimistic client
+  updates are derived from `statusPatchCodes(…)` off the same bridge patch the server writes — an
+  optimistic mirror is precisely where a second copy of that mapping would drift invisibly.
+- **Payment limbo still reads the legacy column.** `pending_payment` / `payment_failed` /
+  `PENDING_PAYMENT` all map to process `new` + financial `unpaid` by design, so the axes genuinely
+  cannot tell them apart. That's why the old column survives chunk 5 too.
+
+**Two silent-failure cases from the audit closed:** the pack pre-selection now reads
+`processCode === 'confirmed'` (it only ever needed its `|| 'paid'` half because `paid` used to sit
+*after* `confirmed` in the single column), and `exportOrdersCsv` no longer casts
+`filters.status as OrderStatus`, so a stale `?status=PAID` bookmark can't cast cleanly and silently
+return zero rows. The standing `set-state-in-effect` lint error on the pack pre-selection is also
+gone — it moved into the mode-toggle handler, where the selection is a consequence of the click
+rather than of the render that follows it.
+
+**Two bugs only found by driving the screens**, neither visible to a typecheck:
+- Limbo orders ignored an active process filter on the wine board, so asking for "Delivered" still
+  returned abandoned checkouts.
+- Booking status counts double-counted limbo — `All statuses (31)` against 21 actual bookings,
+  because the same rows were counted under both `new` and `PENDING_PAYMENT`.
+
+**One near-miss worth not repeating.** The bookings dropdown looked like it had lost "Invoice Sent".
+It hadn't: the row I kept testing was the one already-invoiced order, whose pill reads "New ▾"
+because the pill shows the *process* axis — the menu was correctly omitting a step it had reached.
+The investigation did surface a real gap, though: `invoiced` sits *before* Paid on the financial
+axis, so it appears nowhere in the flow-line and would have become unsettable by hand.
+`unreachedFinancialSteps` closes it, reading the vocabulary rather than naming the code, so wine
+orders correctly get nothing back without any call site knowing why.
+
+**Dev data.** Chunk 2's backfill was deliberately partial, which left rows the new columns couldn't
+render. Completed on dev from each row's legacy status (the same derivation `seedStatusColumns` uses)
+— 46 wine orders, 358 bookings — plus four wine orders set to the shapes worth seeing by eye.
+`check-status-backfill.ts` now reports no gaps on either table. Throwaway data; chunk 5 wipes and
+regenerates.
+
+**Verified live, not off a typecheck.** On `/admin/wine-orders`: the two flow-line shapes render side
+by side; marking a delivered unpaid order Paid left `processStatus=delivered`,
+`financialStatus=paid`, `paidAtStage=delivered` in the database and the pill stayed "Delivered" with
+a ₾✓ rather than flipping to "Paid"; the paid order's dropdown offered only "Cancelled"; "Delivered"
++ "Unpaid" narrowed correctly; the board showed no Paid column; pack mode pre-selected the confirmed
+order. On `/admin/orders`: two filter selects whose counts partition the total, "Invoice Sent"
+offered on an unpaid booking and absent on an invoiced one, and a prepaid booking's detail flow-line
+reading `New → Paid → Confirmed → Completed`. Plus `check-status-backfill.ts` all green with no
+remaining gaps, `test-status-bridge.ts` green with zero failures, `npx tsc --noEmit` clean, i18n
+parity clean, and the three `data-tour` anchors (§12) confirmed present before and after.
+
+**Chunk 5 (not started):** retire `paid`/`PAID`/`INVOICE_SENT` from the old columns, re-point
+`OrdersTable.tsx` / `OrderDetail.tsx`'s hand-written unions at Prisma's generated type, add the
+approved CHECK constraint, wipe and regenerate the transactional data.
+
+---
+
 ## 2026-09-17 (1) — Payment-flow redesign: process vs financial status (design only, nothing built)
 
 Max: "for many orders first we give the wine or provide the service — and then people pay." Individuals

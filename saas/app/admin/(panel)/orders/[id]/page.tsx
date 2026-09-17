@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
+import { getProcessStatuses, getFinancialStatuses } from '@/lib/statusVocabulary'
 import { adminT } from '@/lib/adminT'
 
 const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
@@ -28,6 +29,8 @@ export default async function OrderDetailPage({
           orderBy: { id: 'asc' },
         },
         extras: { orderBy: { id: 'asc' } },
+        processStatus: { select: { code: true } },
+        financialStatus: { select: { code: true } },
       },
     })),
     // For the "link this to a company" control (Feature 180) — the
@@ -57,6 +60,13 @@ export default async function OrderDetailPage({
 
   if (!order) notFound()
   const locale = adminLanguage || 'en'
+  // The fulfilment vocabulary for the flow-line and the status dropdown.
+  // Fetched after the order rather than alongside it, since notFound() above
+  // makes the work pointless when there is nothing to render.
+  const [processSteps, financialSteps] = await Promise.all([
+    getProcessStatuses(tenantId, 'BOOKING'),
+    getFinancialStatuses(tenantId, 'BOOKING'),
+  ])
 
   return (
     <div className="max-w-2xl">
@@ -75,9 +85,15 @@ export default async function OrderDetailPage({
         displayName={displayName}
         locale={locale}
         companies={companies}
+        processSteps={processSteps}
+        financialSteps={financialSteps}
         order={{
           id: order.id,
           status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
+          processCode: order.processStatus?.code ?? null,
+          financialCode: order.financialStatus?.code ?? null,
+          paidAt: order.paidAt,
+          paidAtStage: order.paidAtStage,
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,

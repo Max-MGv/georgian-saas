@@ -4,7 +4,7 @@ tags: [plan, orders, wine-orders, schema, data-model]
 
 # Plan: Status data model — process vs financial split
 
-**Status:** 🚧 **Chunks 1–3.5 built and verified on the dev DB (2026-09-17). Not yet on staging or prod.** Chunks 4–5 (UI + contract) not started — Max: "we will do the statuses front ui stuff later."
+**Status:** 🚧 **Chunks 1–4 built and verified on the dev DB (2026-09-17), pushed to `staging`. Not on prod.** Chunk 5 (contract) not started.
 
 **The flow-line is now buildable straight off the schema.** Render algorithm, for the record: take `getProcessStatuses(tenantId, kind)` as the spine; if `paidAt` is null append the Paid step last (the pay-later default), otherwise insert it immediately after the step whose `code` equals `paidAtStage`; mark process steps done at or below the current `processStatusId`'s `sortOrder`, and Paid done iff `paidAt` is set. Every input that needs resolves from a column that now exists.
 **Trigger:** Max, 2026-09-17: "for many orders first we give the wine or provide the service — and then people pay." B2B customers get wine delivered (or a visit completed) and settle the invoice weeks or months later. A single linear status column cannot represent that.
@@ -45,7 +45,7 @@ The admin stepper (`STAGES = ['pending','confirmed','paid','delivered']`, `WineO
 7. **`sortOrder` is gap-seeded 100 / 200 / 300 / 400.** Gaps exist so a status can later be *inserted between* two existing ones (a tenant's "Packed" step slots in at 250) without renumbering every row after it. Appending at the end never needed gaps; inserting in the middle always would.
    - **Gaps belong on `sortOrder` only, never on primary keys.** Every table in this schema uses `cuid()` — ids are opaque and unordered by design, and the moment an id encodes sequence position you can't reorder a status without rewriting the id every transactional row points at.
 
-8. **Board columns stay fixed; the flow-line is what reorders.** A Kanban grid needs one shared left-to-right layout — the same column can't mean different positions for different cards. So the board keeps its columns, and an unpaid order simply skips over the Paid column on its way to Delivered, then moves back into it once marked paid. (The board already supports moving a card to a non-adjacent status, so this is not a new interaction.)
+8. **~~Board columns stay fixed; an unpaid order skips the Paid column and moves back into it.~~ Superseded 2026-09-17 — board columns are the process axis only.** The original reasoning still holds as far as it goes: a Kanban grid needs one shared left-to-right layout, so it can only group by one axis. What it missed is which axis. Keeping a Paid column means that once a delivered-then-paid order lands in it, the *column* is asserting that the order's stage is "Paid" — which is not a stage at all, and is precisely the conflation this whole redesign exists to remove. Max's call: columns are New / Confirmed / Delivered (or Completed) / Cancelled, payment shows as a ₾✓ marker on the card, and cards only ever move forward. The cost, accepted: you can no longer scan a whole Paid column at a glance — the payment filter answers that instead.
 
 9. **The status dropdown becomes per-order, not a hard-coded constant.** Today `ALL_STATUSES` is a fixed list where every value is always selectable. After the split it must offer only steps *this* order hasn't reached — so a prepaid individual's menu simply has no "Paid" entry to click, which is what stops the flow-line and the menu from contradicting each other. Reversing a mistaken Paid stays a deliberate correction (the existing undo affordance), not an everyday menu option.
 
@@ -194,10 +194,54 @@ Other decisions:
 
 `check-status-backfill.ts` gained a scoping section, all green: wine resolves to `new → confirmed → delivered → cancelled` and excludes `completed`; bookings to `new → confirmed → completed → cancelled` and exclude `delivered`; wine payment states are `unpaid → paid` while bookings get `unpaid → invoiced → paid`. The throwaway custom row in the isolation test now sits at `sortOrder` 250 — the gap-seeding paying off, slotting between `confirmed` (200) and `delivered` (300) with nothing renumbered.
 
-## Chunks 4–5 — UI and contract (not started)
+## Chunk 4 — UI ✅ built on dev, pushed to staging
 
-4. **UI** — merged flow-line, per-order dropdown options, board column skip/backfill, filters, and switching reads onto the new columns. Includes the pack pre-selection at `WineOrdersClient.tsx:818`, which still filters `'confirmed' || 'paid'` on the old column — correct while that column is authoritative, and one of the audit's silent-failure cases the moment it isn't.
-5. **Tests, docs**, then the contract step: retire `paid`/`PAID`/`INVOICE_SENT` from the old columns, and re-point `OrdersTable.tsx:17` / `OrderDetail.tsx:33`'s hand-written unions at Prisma's generated type. With zero real orders, the cleanest path is wipe-and-regenerate rather than a backfill.
+Reads moved onto the new columns across both order screens, and the merged one-line flow built in
+`lib/statusFlow.ts`. Full detail in `Features/Feature 191`; what belongs here is the reasoning that
+only became visible while building.
+
+**The write path deliberately did not move.** Writes already dual-write correctly (chunk 3), so the
+UI speaks vocabulary codes and translates back through new reverse maps at the moment of writing,
+rather than a second write path existing alongside the first. The known cost: a status a tenant
+inserts later has no legacy equivalent to write, so the flow-line renders it as a position but
+cannot make it clickable. Nothing creates tenant rows today; chunk 5 removes the restriction with
+the old column.
+
+**Optimistic updates are derived, not re-implemented.** The client applies
+`statusPatchCodes(wineOrderStatusPatch(…))` — the same patch the server is about to write, restated
+in codes. Two copies of "which axis does this legacy value move" is exactly the drift the bridge
+exists to prevent, and an optimistic mirror is where that drift would be invisible.
+
+**Payment limbo is the one read that stays on the old column**, and this is load-bearing rather
+than laziness: `pending_payment` / `payment_failed` / `PENDING_PAYMENT` all map to process `new` +
+financial `unpaid` by design (decision 11), so the axes genuinely cannot tell them apart. The
+legacy value is the only thing that can. It survives chunk 5 for the same reason.
+
+**Two bugs that only driving the screens would have found**, both of the kind a typecheck cannot
+see:
+- Limbo orders ignored an active process filter on the wine board, so asking for "Delivered" still
+  showed abandoned checkouts. They must not come back through the "Pending" pill either — on the
+  axes a limbo order *does* sit at `new`, which would read as "the winery has work to do on this",
+  the thing holding limbo apart is meant to prevent.
+- Booking status counts double-counted limbo: `All statuses (31)` against 21 actual bookings,
+  because the same orders were counted under both `new` and `PENDING_PAYMENT`. The process count
+  now excludes limbo so the two entries partition rather than overlap.
+
+**One near-miss worth recording.** The bookings dropdown appeared to have lost "Invoice Sent", and
+it took a while to see that the row I kept testing was the single already-invoiced order — whose
+pill reads "New ▾" because the pill shows the *process* axis. The menu was correctly omitting a
+step that order had already reached. But the investigation surfaced a real gap: `invoiced` is a
+financial state that sits *before* Paid, so it appears nowhere in the flow-line and would have
+become unsettable by hand. `unreachedFinancialSteps` closes that, driven by the vocabulary rather
+than by naming the code — so wine orders, whose financial vocabulary is only `unpaid → paid`,
+correctly get nothing back and no call site has to know which order type has an invoice flow.
+
+## Chunk 5 — contract (not started)
+
+**Tests, docs**, then the contract step: retire `paid`/`PAID`/`INVOICE_SENT` from the old columns,
+re-point `OrdersTable.tsx` / `OrderDetail.tsx`'s hand-written unions at Prisma's generated type,
+and add the `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` constraint Max
+approved. With zero real orders, the cleanest path is wipe-and-regenerate rather than a backfill.
 
 ---
 
@@ -257,6 +301,18 @@ Translation keys, **EN and KA in pairs** or `check-i18n-parity.ts` fails: `order
 
 ## Open questions
 
-1. Does the board's "skip the Paid column, move back into it later" behaviour feel right in practice, or should the board never show a card moving leftward into an earlier column?
-2. Does `WineOrder` need an `invoiced` financial sub-state like bookings have, or is `unpaid → paid` enough for wine? (No invoice-sending flow exists for wine orders today.)
-3. Do dimension rows need a `colorHex` / `labelKey` column (moving display metadata out of the frontend constants), or does that stay in code for now?
+1. ~~Does the board's "skip the Paid column, move back into it later" behaviour feel right?~~
+   **Resolved 2026-09-17 — no.** Board columns are the process axis only; payment is a ₾✓ card
+   marker. See decision 8 above for the reasoning that changed.
+2. Does `WineOrder` need an `invoiced` financial sub-state like bookings have, or is
+   `unpaid → paid` enough for wine? (No invoice-sending flow exists for wine orders today.) **Still
+   open** — and now costless to leave open, since `unreachedFinancialSteps` reads the vocabulary
+   and would pick up the row the moment it existed.
+3. ~~Do dimension rows need a `colorHex` / `labelKey` column?~~ **Resolved 2026-09-17 — not yet.**
+   Display metadata stays in the frontend constants, re-keyed from legacy values to vocabulary
+   codes. A status a tenant inserts later renders in neutral grey under its raw code until someone
+   ships a label; adding the columns later is purely additive.
+4. ~~Should a CHECK constraint hold `paidAt` and `financialStatusId` in agreement?~~ **Resolved
+   2026-09-17 — yes, in chunk 5.** `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))`,
+   riding with the contract migration rather than adding one mid-UI-work. Cost accepted: the seeded
+   id gets hardcoded into a constraint.

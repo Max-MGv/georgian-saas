@@ -8,35 +8,69 @@ import { adminT } from '@/lib/adminT'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 import { countryName } from '@/lib/countries'
+import {
+  legacyOrderStatusForCode,
+  statusPatchCodes,
+  orderStatusPatch,
+  type SettableOrderStatus,
+} from '@/lib/statusBridge'
+import { unreachedSteps, unreachedFinancialSteps, type FlowState } from '@/lib/statusFlow'
+import type { StatusOption } from '@/lib/statusVocabulary'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
   border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
-
 type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
 
-const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
-  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
-  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
-  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
-}
+type StatusStyle = { labelKey: string; bg: string; color: string }
 
 /**
- * Statuses an admin may set by hand. PENDING_PAYMENT is deliberately excluded:
- * it means "sent to the card gateway, not settled yet" and is only ever written
- * by the checkout/settle path — a human setting it would claim a payment attempt
- * that never happened. These orders are never auto-expired (Plan-OnlinePayment
- * §7.2), so they accumulate for the winery to chase, and are moved on from here
- * by picking any of the statuses below.
+ * Keyed by **vocabulary code** since chunk 4, not by the legacy `OrderStatus`
+ * value. `NEW` → `new`, `COMPLETED` → `completed`, and `INVOICE_SENT` moves to
+ * the financial axis as `invoiced` — it records that we asked for money, not
+ * that the visit happened.
+ *
+ * Display metadata stays in frontend code rather than moving into the
+ * dimension rows (Max's call, 2026-09-17), which is why `UNKNOWN_STATUS_STYLE`
+ * exists: a status a tenant inserts later renders in neutral grey under its
+ * own code until someone ships a label.
  */
-type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+const STATUS_CONFIG: Record<string, StatusStyle> = {
+  new:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
+  confirmed: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
+  completed: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
+  cancelled: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
+  // Financial axis.
+  unpaid:   { labelKey: 'orders.status.unpaid',      bg: '#f5f5f4', color: '#44403c' },
+  invoiced: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  paid:     { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
+  /**
+   * Still keyed by the legacy value. Payment limbo means "sent to the card
+   * gateway, not settled yet" and is only ever written by the checkout/settle
+   * path — the two axes deliberately cannot express it (both put it at process
+   * `new`), so the old column is the only thing that can still pick it out.
+   * These orders are never auto-expired (Plan-OnlinePayment §7.2), so they
+   * accumulate for the winery to chase, and are moved on from here by picking
+   * any step from the dropdown.
+   */
+  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
+}
 
-const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+const UNKNOWN_STATUS_STYLE: StatusStyle = { labelKey: '', bg: '#f3f4f6', color: '#374151' }
+
+const LIMBO_STATUS = 'PENDING_PAYMENT'
+
+function styleFor(code: string | null): StatusStyle {
+  return (code && STATUS_CONFIG[code]) || UNKNOWN_STATUS_STYLE
+}
+
+/** Falls back to the raw code, so an unlabelled status is legible, not blank. */
+function labelFor(locale: string, code: string | null): string {
+  if (!code) return '—'
+  const cfg = STATUS_CONFIG[code]
+  return cfg ? adminT(locale, cfg.labelKey) : code
+}
 
 import { COLUMN_DEFS, defaultVisibleFor, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
 
@@ -56,7 +90,12 @@ const inputStyle = {
 
 type Order = {
   id: string
+  /** Legacy column — still read for payment limbo, which the axes cannot say. */
   status: OrderStatus
+  processCode: string | null
+  financialCode: string | null
+  paidAt: Date | string | null
+  paidAtStage: string | null
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -79,6 +118,63 @@ type Order = {
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+}
+
+/** The subset the flow-line needs — every order row already satisfies it. */
+function flowStateOf(o: { processCode: string | null; paidAt: Date | string | null; paidAtStage: string | null }): FlowState {
+  return { processCode: o.processCode, paidAt: o.paidAt, paidAtStage: o.paidAtStage }
+}
+
+const isPaid = (o: { paidAt: Date | string | null }) => o.paidAt != null
+const isLimbo = (o: { status: string }) => o.status === LIMBO_STATUS
+
+/** Which pill an order shows, and which board column it lands in. */
+const displayCodeOf = (o: { status: string; processCode: string | null }) =>
+  isLimbo(o) ? LIMBO_STATUS : o.processCode
+
+/**
+ * The statuses this order can still be moved to, for a dropdown.
+ *
+ * `unreachedSteps` decides *what* is offered — only steps ahead of where this
+ * order actually is, so an already-paid booking simply has no "Paid" entry to
+ * click and the menu can never contradict the flow-line on its detail page.
+ * A step with no legacy equivalent is dropped rather than shown, because there
+ * would be nothing to write while the old column is still dual-written.
+ */
+type MenuStep = { code: string; legacy: SettableOrderStatus }
+
+function menuSteps(processSteps: StatusOption[], financialSteps: StatusOption[], order: Order): MenuStep[] {
+  const flow = unreachedSteps(processSteps, flowStateOf(order))
+  // Financial states that sit *before* Paid (bookings' "Invoice Sent") have no
+  // place in the flow-line, but are still things an admin sets by hand. They go
+  // just ahead of Cancelled, which is always last.
+  const financial = unreachedFinancialSteps(financialSteps, order.financialCode, order.paidAt)
+  const cancelAt = flow.findIndex(s => s.code === 'cancelled')
+  const ordered = cancelAt >= 0
+    ? [...flow.slice(0, cancelAt), ...financial, ...flow.slice(cancelAt)]
+    : [...flow, ...financial]
+  return ordered
+    .map(s => ({ code: s.code, legacy: legacyOrderStatusForCode(s.code) }))
+    .filter((s): s is MenuStep => s.legacy != null)
+}
+
+/**
+ * The paid marker, for surfaces laid out along the process axis — the table
+ * rows, the card list and the board, none of which have room for a second
+ * status. The two axes are merged into one line on the order's own page; here
+ * payment is a mark on the row rather than a position in it.
+ */
+function PaidMark({ locale }: { locale: string }) {
+  return (
+    <span
+      title={adminT(locale, 'orders.status.paid')}
+      aria-label={adminT(locale, 'orders.status.paid')}
+      className="inline-flex items-center rounded-full font-bold flex-shrink-0"
+      style={{ backgroundColor: '#dcfce7', color: '#14532d', fontSize: '0.65rem', padding: '0.05rem 0.3rem', lineHeight: 1.5 }}
+    >
+      ₾✓
+    </span>
+  )
 }
 
 type Payment = {
@@ -189,7 +285,7 @@ function OrdersListRows({
       </div>
       <div className="flex flex-col gap-2">
         {orders.map(order => {
-          const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+          const cfg = styleFor(displayCodeOf(order))
           const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
           const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
           return (
@@ -217,14 +313,15 @@ function OrdersListRows({
                 {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
               </div>
 
-              <div onClick={e => e.stopPropagation()}>
+              <div onClick={e => e.stopPropagation()} className="flex items-center gap-1.5">
                 <button
                   onClick={e => onToggleStatusMenu(order.id, e)}
                   className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
                 >
-                  {at(cfg.labelKey)} ▾
+                  {labelFor(locale, displayCodeOf(order))} ▾
                 </button>
+                {isPaid(order) && <PaidMark locale={locale} />}
               </div>
 
               <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
@@ -282,15 +379,19 @@ function OrdersListRows({
   )
 }
 
-// Column order matches STATUS_CONFIG's own declaration order, which already
-// mirrors the Status Board mockup Max approved (Artifact DVMLBHcyPNsUbKSkEb8FP4,
-// tab C): New → Confirmed → Invoice Sent → Pending Payment → Paid → Completed,
-// with Cancelled held apart at the end. Unlike the wine-orders board (whose
+// Columns are the **process axis only** since chunk 4 (Max's call,
+// 2026-09-17). A grid has one shared left-to-right layout, so it can only
+// group by one axis; giving Paid a column of its own meant an unpaid booking
+// skipping over it to Completed and then moving back leftward into it once
+// paid, at which point the column would be asserting that a completed visit's
+// stage is "Paid" — the exact conflation the split exists to remove. Payment
+// shows as a marker on the card instead, and cards only ever move forward.
+//
+// Every process column is always shown, unlike the wine-orders board (whose
 // payment-limbo columns hide when empty, matching that page's existing
-// FilterBar convention), every column here is always shown — that's what the
-// approved mockup does, and a booking board that hides "no orders confirmed
+// FilterBar convention): a booking board that hides "no orders confirmed
 // today" is a worse tool for exactly the winery that most needs to see it.
-const BOARD_COLUMNS: OrderStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PENDING_PAYMENT', 'PAID', 'COMPLETED', 'CANCELLED']
+// The limbo column is the one exception, since it is not a stage at all.
 const BOARD_COL_WIDTH = 232
 
 /**
@@ -306,20 +407,25 @@ const BOARD_COL_WIDTH = 232
  * has all of them.
  */
 function OrdersBoardColumns({
-  orders, locale, onRowClick, onToggleStatusMenu,
+  orders, processSteps, locale, onRowClick, onToggleStatusMenu,
 }: {
   orders: Order[]
+  processSteps: StatusOption[]
   locale: string
   onRowClick: (id: string) => void
   onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
 }) {
   const at = (key: string) => adminT(locale, key)
+  const columns: string[] = [
+    ...processSteps.map(s => s.code),
+    ...(orders.some(isLimbo) ? [LIMBO_STATUS] : []),
+  ]
   return (
     <div className="mt-4 overflow-x-auto pb-2">
       <div className="flex gap-3 items-start" style={{ width: 'max-content' }}>
-        {BOARD_COLUMNS.map(status => {
-          const items = orders.filter(o => o.status === status)
-          const cfg = STATUS_CONFIG[status]
+        {columns.map(status => {
+          const items = orders.filter(o => displayCodeOf(o) === status)
+          const cfg = styleFor(status)
           return (
             <div
               key={status}
@@ -327,7 +433,7 @@ function OrdersBoardColumns({
               style={{ width: BOARD_COL_WIDTH, backgroundColor: 'rgba(0,0,0,0.015)', borderColor: C.border }}
             >
               <div className="flex items-center justify-between px-3 py-2.5 border-b" style={{ borderColor: C.border }}>
-                <span className="text-xs font-bold whitespace-nowrap" style={{ color: cfg.color }}>{at(cfg.labelKey)}</span>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: cfg.color }}>{labelFor(locale, status)}</span>
                 <span
                   className="text-xs font-bold rounded-full px-2 py-0.5 flex-shrink-0"
                   style={{ backgroundColor: '#fff', border: `1px solid ${C.border}`, color: C.muted }}
@@ -350,7 +456,10 @@ function OrdersBoardColumns({
                     >
                       <div className="flex items-start justify-between gap-1.5">
                         <div className="min-w-0">
-                          <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
+                            {isPaid(order) && <PaidMark locale={locale} />}
+                          </div>
                           <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
                         </div>
                         <span
@@ -376,7 +485,7 @@ function OrdersBoardColumns({
                             className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
                             style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
                           >
-                            {at(cfg.labelKey)} ▾
+                            {labelFor(locale, displayCodeOf(order))} ▾
                           </button>
                         </div>
                         <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.8125rem' }}>
@@ -395,7 +504,7 @@ function OrdersBoardColumns({
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
+export default function OrdersTable({ orders: initial, processSteps, financialSteps, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; /** The fulfilment vocabulary for bookings, resolved once on the server. */ processSteps: StatusOption[]; /** The payment vocabulary — its pre-Paid states are settable by hand. */ financialSteps: StatusOption[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -568,10 +677,21 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     handleRowMouseLeave()
   }
 
-  async function handleStatusChange(orderId: string, newStatus: SettableStatus) {
+  async function handleStatusChange(orderId: string, newStatus: SettableOrderStatus) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o
+      // The same patch the server is about to write, restated in codes, so the
+      // pill and the paid marker move on click instead of waiting for the
+      // round trip. Derived from `statusBridge` rather than re-implemented, so
+      // the two cannot drift.
+      const patch = statusPatchCodes(orderStatusPatch(newStatus, {
+        processCode: o.processCode,
+        paidAt: o.paidAt ? new Date(o.paidAt) : null,
+      }))
+      return { ...o, status: newStatus, ...patch }
+    }))
     await updateOrderStatus(orderId, newStatus)
   }
 
@@ -656,7 +776,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         )}
         {orders.map(order => {
-          const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+          const cfg = styleFor(displayCodeOf(order))
           return (
             <div
               key={order.id}
@@ -669,8 +789,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               >
                 {/* Name + status badge */}
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="font-semibold" style={{ color: C.text, fontSize: '0.9375rem' }}>
+                  <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
+                    {isPaid(order) && <PaidMark locale={locale} />}
                   </span>
                   {/* The click handler is on this wrapper, not the pill, so
                       padding here buys hit area for free: the badge still reads
@@ -686,7 +807,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
                       style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
                     >
-                      {at(cfg.labelKey)} ▾
+                      {labelFor(locale, displayCodeOf(order))} ▾
                     </button>
                     {statusMenuId === order.id && (
                       <div
@@ -694,15 +815,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                         style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                         onClick={e => e.stopPropagation()}
                       >
-                        {ALL_STATUSES.map(s => (
+                        {menuSteps(processSteps, financialSteps, order).map(step => (
                           <button
-                            key={s}
-                            onClick={() => handleStatusChange(order.id, s)}
+                            key={step.code}
+                            onClick={() => handleStatusChange(order.id, step.legacy)}
                             className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors active:bg-amber-100"
-                            style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                            style={{ color: C.text }}
                           >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                            {at(STATUS_CONFIG[s].labelKey)}
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                            {labelFor(locale, step.code)}
                           </button>
                         ))}
                       </div>
@@ -745,6 +866,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       <div className="hidden md:block">
       {view === 'board' ? (
         <OrdersBoardColumns
+          processSteps={processSteps}
           orders={orders}
           locale={locale}
           onRowClick={id => router.push(`/admin/orders/${id}`)}
@@ -947,9 +1069,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('status') && (
                   <td className="px-4 py-3 sticky-status" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()}
                     style={{ position: 'sticky', right: ACTIONS_COL_WIDTH, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
-                    <div className="relative">
+                    <div className="relative flex items-center gap-1.5">
                       {(() => {
-                        const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+                        const cfg = styleFor(displayCodeOf(order))
                         return (
                           <button
                             onClick={e => toggleStatusMenu(order.id, e)}
@@ -960,10 +1082,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                               border: `1px solid ${cfg.color}22`,
                             }}
                           >
-                            {at(cfg.labelKey)} ▾
+                            {labelFor(locale, displayCodeOf(order))} ▾
                           </button>
                         )
                       })()}
+                      {isPaid(order) && <PaidMark locale={locale} />}
                     </div>
                   </td>
                 )}
@@ -1040,7 +1163,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const order = orders.find(o => o.id === statusMenuId)
         if (!order) return null
         const menuW = 140
-        const menuH = ALL_STATUSES.length * 33 + 8
+        const steps = menuSteps(processSteps, financialSteps, order)
+        const menuH = steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
         const left = Math.min(statusMenuRect.left, vw - menuW - 8)
@@ -1053,15 +1177,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
-            {ALL_STATUSES.map(s => (
+            {steps.map(step => (
               <button
-                key={s}
-                onClick={() => handleStatusChange(order.id, s)}
+                key={step.code}
+                onClick={() => handleStatusChange(order.id, step.legacy)}
                 className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
-                style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                style={{ color: C.text }}
               >
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                {at(STATUS_CONFIG[s].labelKey)}
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                {labelFor(locale, step.code)}
               </button>
             ))}
           </div>,
@@ -1353,7 +1477,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
         const left = hoverPos.x + 20 + cardW > vw - pad ? hoverPos.x - cardW - 12 : hoverPos.x + 20
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
-        const cfg = STATUS_CONFIG[o.status] ?? STATUS_CONFIG.NEW
+        const cfg = styleFor(displayCodeOf(o))
         const hasSplit = o.tastingGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
         const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
         const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
@@ -1382,7 +1506,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Date / time / visit */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: C.muted }}>{formatDate(o.date)} · {o.timeSlot}</span>
-                <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{at(cfg.labelKey)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, displayCodeOf(o))}</span>
+                  {isPaid(o) && <PaidMark locale={locale} />}
+                </span>
               </div>
               <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(locale, o.visitType)}</div>
 

@@ -186,3 +186,83 @@ export function seedStatusColumns(
     paidAtStage: patch.paidAtStage ?? null,
   }
 }
+
+// ── Reverse maps: vocabulary code → legacy value (chunk 4) ───────────────
+//
+// Chunk 4 moves *reads* onto the two new axes while writes keep going through
+// `updateWineOrderStatus` / `updateOrderStatus`, which already dual-write. So
+// the UI speaks vocabulary codes and translates back here at the moment of
+// writing, rather than a second write path existing alongside the first.
+//
+// The translation is deliberately partial. A code with no legacy equivalent
+// returns null, and the caller renders that step as non-clickable instead of
+// guessing — a tenant-inserted status ("Packed" at sortOrder 250) is exactly
+// the case the dimension tables exist to allow, and silently writing the
+// nearest legacy value would put the row in a state nobody asked for. Nothing
+// creates tenant rows today, so this is a guard rather than a live path; the
+// limitation disappears in chunk 5 when writes go code-first.
+
+/**
+ * Legacy values an admin may set by hand. The payment-limbo values are
+ * machine-set only — they mean "went to the card gateway and never came back",
+ * and a human writing one would claim a payment attempt that never happened.
+ * No vocabulary code maps to them, which is what the narrowing records.
+ */
+export type SettableWineOrderStatus = Exclude<LegacyWineOrderStatus, 'pending_payment' | 'payment_failed'>
+export type SettableOrderStatus = Exclude<LegacyOrderStatus, 'PENDING_PAYMENT'>
+
+export function legacyWineStatusForCode(code: string): SettableWineOrderStatus | null {
+  switch (code) {
+    case 'new':       return 'pending'
+    case 'confirmed': return 'confirmed'
+    case 'delivered': return 'delivered'
+    case 'cancelled': return 'cancelled'
+    case 'paid':      return 'paid'
+    default:          return null
+  }
+}
+
+export function legacyOrderStatusForCode(code: string): SettableOrderStatus | null {
+  switch (code) {
+    case 'new':       return 'NEW'
+    case 'confirmed': return 'CONFIRMED'
+    case 'completed': return 'COMPLETED'
+    case 'cancelled': return 'CANCELLED'
+    case 'paid':      return 'PAID'
+    case 'invoiced':  return 'INVOICE_SENT'
+    default:          return null
+  }
+}
+
+const PROCESS_CODE_BY_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(PROCESS_STATUS).map(([code, id]) => [id, code])
+)
+const FINANCIAL_CODE_BY_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(FINANCIAL_STATUS).map(([code, id]) => [id, code])
+)
+
+/** A patch restated in vocabulary codes, which is what the UI renders from. */
+export type StatusCodePatch = {
+  processCode?: string
+  financialCode?: string
+  paidAt?: Date
+  paidAtStage?: string
+}
+
+/**
+ * The same patch the server will write, expressed in codes — so a client can
+ * apply it optimistically and see the flow-line move before the round trip.
+ *
+ * Derived from the id patch rather than re-implementing the mapping, because
+ * two copies of "which axis does this legacy value move" is exactly the drift
+ * the bridge exists to prevent. Partial in, partial out: an absent axis stays
+ * absent, so the caller's spread leaves the existing value alone.
+ */
+export function statusPatchCodes(patch: StatusPatch): StatusCodePatch {
+  return {
+    ...(patch.processStatusId ? { processCode: PROCESS_CODE_BY_ID[patch.processStatusId] } : {}),
+    ...(patch.financialStatusId ? { financialCode: FINANCIAL_CODE_BY_ID[patch.financialStatusId] } : {}),
+    ...(patch.paidAt ? { paidAt: patch.paidAt } : {}),
+    ...(patch.paidAtStage ? { paidAtStage: patch.paidAtStage } : {}),
+  }
+}
