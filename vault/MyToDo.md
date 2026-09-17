@@ -8,6 +8,47 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🧱 2026-09-17 — the status split: nothing to look at yet, but two decisions are yours
+
+You asked to restructure the database so wine orders and bookings can be *delivered but not yet paid* —
+the normal case for a company on invoice terms. Chunks 1–3.5 are built: the schema, the dual-write, and
+the per-order-type scoping. **Nothing is visible in the UI**, deliberately — the old status columns still
+drive every screen, and the new ones are being written alongside them invisibly. The flow-line you
+actually want to see is chunk 4, which you said to do later.
+
+Five commits sit on `staging` locally. **Nothing is pushed, and nothing is on prod.** The dev database has
+all five migrations applied.
+
+**Two decisions I parked rather than guessing:**
+
+1. **Should `paidAt` and the payment status be held in agreement by the database?** Right now nothing stops
+   them drifting — an order could say "paid" with no payment date, or vice versa. A `CHECK` constraint
+   closes it, but the constraint has to name a seeded row id (`fs_paid`) in the schema, which is a small
+   coupling. Worth it or not is your call.
+2. **Should status labels and colours live in the database or stay in code?** Only worth moving if you want
+   a client renaming "Delivered" to "Shipped" without waiting on a deploy. Otherwise code is simpler.
+
+**And one when you're ready:** say the word and I'll push the five commits to staging. It won't *look*
+different — the value is confirming the build passes against the new schema. Prod is a separate step after
+that, and per your go-ahead I'll clear the fake transactional data as part of it.
+
+**If you want to sanity-check my work rather than take my word for it**, the honest test is a *regression*
+test, not a new-feature one — everything should behave exactly as before:
+
+- Change a wine order's status via the stepper and via the dropdown. Change a booking's status. Send an
+  invoice. All should work identically to yesterday.
+- If you want the machine-checkable version: `npx tsx scripts/check-status-backfill.ts` (expect all green,
+  and wine's flow to read `new → confirmed → delivered → cancelled` while bookings read
+  `new → confirmed → completed → cancelled`) and `npx tsx scripts/test-status-bridge.ts` (expect 21/21).
+
+**Two things I found that are worth you knowing**, both in `Plan-StatusModel.md`: only 2 of your 12
+tenant-scoped tables had an index on `tenantId`, so every query was scanning every winery's rows at once —
+invisible today, a real problem at a hundred clients, now fixed. And your booking data showed 290
+`COMPLETED` against 31 `PAID`, which means that column was never actually being used to track payment.
+That's partly why this redesign is worth doing rather than just tidying.
+
+---
+
 ## 🧑‍🌾 2026-09-14 — test Company Guides & Representatives (staging only, nothing merged yet)
 
 You asked for the single company access code to split into two real lists — Guides (phone,

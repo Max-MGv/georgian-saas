@@ -69,8 +69,19 @@ drop off the packing list**.
   it right: a legacy status determines only one axis, so the bridge returns a **partial** patch and leaves
   the other axis alone. Typing `updateWineOrderStatus`'s `status: string` parameter — the audit's root
   cause — surfaced exactly one bare-`string` caller as a compile error.
+- **Chunk 3.5** (`add_status_scope`): `appliesTo` scopes the vocabulary per order type — both types share
+  new/confirmed/cancelled, but `delivered` is wine-only and `completed` bookings-only, and nothing in the
+  schema could say which. Max pushed back twice, usefully: *doesn't the transactional table already know its
+  type?* (it does — from **which table** the row is in, not a column; so `appliesTo` scopes the *vocabulary*,
+  a property of the dimension rows, not the orders) and *doesn't that mean filtering every query?* (no —
+  only vocabulary **listing** needs it, never an order's own status read, which follows its FK; and a filtered
+  accessor had to exist anyway for the nullable-`tenantId` rows). Landed as `lib/statusVocabulary.ts` owning
+  both filters so no call site remembers either.
 - **Max corrected one of my calls:** I'd collapsed `NEW` into `pending`; he wanted it the other way, so the
   canonical first code is now `new` (rename migration, id moved too, FK cascade verified).
+- **I also had to correct myself:** I'd justified `paidAt` as the join-free hot-path fact. Wrong —
+  `financialStatusId` is a column on the order row, so testing it needs no join either. So there is no paid
+  boolean: the FK is the truth for paid-ness (and carries three states), `paidAt` only answers *when*.
 
 **Two data findings that killed earlier assumptions:** `Payment.settledAt` is empty on dev, so `paidAt` was
 not "recoverable" as the plan claimed; and **290 `COMPLETED` bookings vs 31 `PAID`** means the winery never
@@ -82,10 +93,20 @@ throwaway tenants per MaintenanceNotes §10, app_user write refusal, remaining g
 `test-status-bridge.ts` (21 checks proving the two axes move independently — delivered stays unpaid, paying
 later doesn't reset fulfilment, paying first isn't cleared by progressing, cancelling doesn't erase payment).
 
+**The flow-line is now buildable straight off the schema:** take `getProcessStatuses(tenantId, kind)` as the
+spine; if `paidAt` is null append Paid last (the pay-later default), else insert it after the step whose `code`
+matches `paidAtStage`; mark process steps done at or below the current `processStatusId`'s `sortOrder`, Paid
+done iff `paidAt` is set.
+
+**Tracking (Max asked, and he was right to — I'd skipped some):** `Plan-StatusModel.md` was current, but
+`FeatureLog.md` (#191), `Roadmap.md` (new v1.12 section), `MyToDo.md` and
+`Features/Feature 191 - Order Status Two Axis Split.md` were all missing and have now been written.
+
 **Next:** chunks 4–5 — UI (merged flow-line, per-order dropdown options, board skip/backfill, switching reads
-over) then the contract step retiring `paid`/`PAID`/`INVOICE_SENT`. Nothing pushed to staging yet. Three open
-questions still at the bottom of the plan (board leftward-move behaviour; whether wine orders need an
-`invoiced` sub-state; whether display metadata moves into the dimension rows).
+over) then the contract step retiring `paid`/`PAID`/`INVOICE_SENT`. Five commits on `staging`, nothing pushed,
+nothing on prod. Open decisions for Max: whether a `CHECK` should hold `paidAt` and `financialStatusId` in
+agreement (cost: hardcoding a seeded id); whether display metadata moves into the dimension rows; board
+leftward-move behaviour; whether wine orders ever need the `invoiced` sub-state.
 
 ---
 

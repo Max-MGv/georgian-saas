@@ -341,6 +341,27 @@ deep-linking into live proof.
 
 ---
 
+## v1.12 — Order Status: Two-Axis Split (Active Plan)
+
+Full tracking: `Plan-StatusModel.md` (design decisions, the audit of ~40 affected call sites, breakage inventory with silent failures separated from loud ones) · `Features/Feature 191 - Order Status Two Axis Split.md`.
+
+**#191 — Process and financial status as independent axes.** Driven by Max, 2026-09-17: individuals pay at checkout, companies settle invoices weeks after delivery, and a single linear status column cannot express "delivered but not yet paid". Old columns stay authoritative until the UI work lands.
+
+- [x] Chunk 1 — `add_tenant_indexes`: only 2 of 12 tenant-scoped tables had an index on `tenantId`, so every RLS-filtered query scanned every tenant's rows at once. 13 indexes, add-only, shipped as its own migration deliberately ahead of the redesign
+- [x] Chunk 2 — `add_status_dimensions`: `ProcessStatus` + `FinancialStatus` reference tables, `processStatusId`/`financialStatusId`/`paidAt`/`paidAtStage` on both order tables, RLS given a third policy shape (SELECT-only grant + "global OR own"), partial unique indexes for the global rows
+- [x] Chunk 2b — `rename_pending_status_to_new`: Max corrected my call — `NEW` is a booking's genuine first state, not wine's `pending`
+- [x] Chunk 3 — `lib/statusBridge.ts` dual-writes old and new columns; `updateWineOrderStatus`'s unvalidated `status: string` (the audit's root cause) is now the legacy union, which immediately surfaced one bare-`string` caller as a compile error
+- [x] Chunk 3.5 — `add_status_scope`: `appliesTo` scopes the vocabulary per order type (`delivered` wine-only, `completed` bookings-only), read only through `lib/statusVocabulary.ts`
+- [ ] Chunk 4 — UI: the merged one-line flow (Paid floats to where it actually happened rather than a fixed slot), per-order dropdown options, board column skip/backfill, switching reads onto the new columns
+- [ ] Chunk 5 — retire `paid`/`PAID`/`INVOICE_SENT` from the old columns; re-point `OrdersTable.tsx`/`OrderDetail.tsx`'s hand-written status unions at Prisma's generated type
+- [ ] Not pushed to staging or prod yet — five commits sit on `staging` locally, dev DB has all migrations applied
+
+**Two open decisions for Max** (also listed at the bottom of the plan): whether `paidAt` and `financialStatusId` should be held in agreement by a `CHECK` constraint (cost: hardcoding a seeded id), and whether display metadata (`labelKey`/`colorHex`) moves into the dimension rows or stays in the frontend.
+
+**Findings worth keeping:** `Payment.settledAt` is empty on dev, so `paidAt` was not recoverable as the plan first assumed; and 290 `COMPLETED` bookings against 31 `PAID` showed the winery had never used that column to track payment at all. Max then confirmed both databases hold zero real orders, which removed the backfill decision entirely.
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.
