@@ -9,6 +9,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import { seedStatusColumns, type LegacyWineOrderStatus } from '../lib/statusBridge'
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env' })
@@ -108,6 +109,7 @@ async function seedWineOrders() {
     await db.wineOrder.create({
       data: {
         ...biz,
+        ...seedStatusColumns('wineOrder', biz.status as LegacyWineOrderStatus, new Date()),
         totalAmount: items.reduce((sum, i) => sum + i.quantity * i.price, 0),
         wineItems: {
           create: items.map(i => ({

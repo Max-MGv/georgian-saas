@@ -4,7 +4,7 @@ tags: [plan, orders, wine-orders, schema, data-model]
 
 # Plan: Status data model — process vs financial split
 
-**Status:** 🚧 **Chunks 1–2 built and verified on the dev DB (2026-09-17). Not yet on staging or prod.** Chunks 3–5 (writes + UI) not started — Max: "we will do the statuses front ui stuff later."
+**Status:** 🚧 **Chunks 1–3 built and verified on the dev DB (2026-09-17). Not yet on staging or prod.** Chunks 4–5 (UI + contract) not started — Max: "we will do the statuses front ui stuff later."
 **Trigger:** Max, 2026-09-17: "for many orders first we give the wine or provide the service — and then people pay." B2B customers get wine delivered (or a visit completed) and settle the invoice weeks or months later. A single linear status column cannot represent that.
 
 **The one-line version:** payment comes out of the status column and becomes its own axis, so an order can be *delivered and unpaid* — but the admin still sees **one** flow-line, with the Paid step positioned wherever it actually happened.
@@ -143,11 +143,37 @@ Only the unambiguous half was filled. Where the old single column simply could n
 
 The gaps report in `check-status-backfill.ts` stays useful as a chunk 3–5 completeness check, but its current numbers are noise rather than a to-do list.
 
-## Chunks 3–5 — writes and UI (not started)
+## Chunk 3 — writes ✅ built on dev
 
-3. **Re-point every write** — `settle.ts`, `updateWineOrderStatus`, `updateOrderStatus`, `sendOrderInvoice`, the limbo escape hatch. Also re-point the two hand-written status unions at Prisma's generated type.
-4. **UI** — merged flow-line, per-order dropdown options, board column skip/backfill, filters.
-5. **Tests, seed data, docs**, then the contract step: retire `paid`/`PAID`/`INVOICE_SENT` from the old columns.
+Every write now sets **both** the old column and the two new axes. The old column stays authoritative because the ~40 read sites still depend on it; the new ones are kept accurate in parallel, so flipping reads over in chunk 4 needs no backfill.
+
+**`lib/statusBridge.ts`** is the single place the translation lives — deliberately one module rather than the same mapping inlined at six call sites, the same reasoning `settle.ts` already documents for its own "one function, two callers" shape.
+
+**The rule that makes it correct:** a legacy status only determines *one* axis, so the bridge returns a **partial** patch and the other axis is left untouched. Setting a wine order to `delivered` says nothing about payment, so `financialStatusId` is absent from the patch and whatever was there survives. Setting `paid` says nothing about fulfilment, so `processStatusId` is absent. Returning a complete pair either way is exactly what the old single column did wrong.
+
+Re-pointed:
+- `updateWineOrderStatus` — and its `status: string` parameter is now the legacy union. That was the root cause the audit flagged: nothing in app or DB rejected a retired or mistyped value. Typing it surfaced exactly one caller passing a bare `string` (`WineOrdersClient.tsx:877`), which is the silent failure becoming a compile error. The union is now threaded through `PendingChange`, `handleUpdate`, `requestChange` and both view components' props.
+- `updateOrderStatus`, `sendOrderInvoice` (invoice-sent moves the financial axis only).
+- `settle.ts` both branches. Also hoisted a single `settledAt` instant shared by the `Payment` row and the order's `paidAt`, so the gateway record and the order can't disagree about when money arrived. `paidAtStage` is `'new'` there because the existing status guards already pin settlement to un-progressed orders.
+- All four creation paths (`submitWineOrder`, `createWineOrderAdmin`, `createBooking`, `createOrderAdmin`) now start rows at `NEW_ORDER_STATUS_COLUMNS`.
+- Seed data (`demoSeed.ts`, `seed.ts`, `seed-fake-wine-orders-nm.ts`) derives the new columns from its chosen legacy status via `seedStatusColumns()`. Worth noting what falls out and is *correct*: a `COMPLETED` booking seeds as unpaid and a `PAID` one as not-yet-confirmed — the two shapes the old column couldn't represent.
+
+### Verification
+
+`scripts/test-status-bridge.ts` (new) — 21 checks against a real database on a throwaway tenant, proving the property a typecheck cannot:
+
+- **Pay-later**: confirmed → delivered leaves it `unpaid` with no invented payment date; paying afterwards keeps `process=delivered` and snapshots `paidAtStage=delivered`.
+- **Pay-first**: paid before anything else snapshots `paidAtStage=new`; confirming and delivering afterwards neither clears the payment, moves `paidAt`, nor rewrites the snapshot.
+- **Bookings**: `INVOICE_SENT` moves financial only; `COMPLETED` leaves it invoiced rather than paid; settling afterwards keeps the visit completed.
+- **Cancelling** a paid order does not erase that it was paid.
+- **`ON DELETE RESTRICT`** blocks deleting a status that orders still reference.
+
+`npx tsc --noEmit` clean. One pre-existing lint error remains in `WineOrdersClient.tsx:821` (`set-state-in-effect` on the pack pre-selection) — confirmed present before this chunk by linting the stashed tree, and left alone as chunk 4 work.
+
+## Chunks 4–5 — UI and contract (not started)
+
+4. **UI** — merged flow-line, per-order dropdown options, board column skip/backfill, filters, and switching reads onto the new columns. Includes the pack pre-selection at `WineOrdersClient.tsx:818`, which still filters `'confirmed' || 'paid'` on the old column — correct while that column is authoritative, and one of the audit's silent-failure cases the moment it isn't.
+5. **Tests, docs**, then the contract step: retire `paid`/`PAID`/`INVOICE_SENT` from the old columns, and re-point `OrdersTable.tsx:17` / `OrderDetail.tsx:33`'s hand-written unions at Prisma's generated type. With zero real orders, the cleanest path is wipe-and-regenerate rather than a backfill.
 
 ---
 

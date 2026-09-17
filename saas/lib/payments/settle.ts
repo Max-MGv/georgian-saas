@@ -1,5 +1,6 @@
 import { db, withTenantDb } from '@/lib/db'
 import { OrderStatus } from '@prisma/client'
+import { FINANCIAL_STATUS } from '@/lib/statusBridge'
 import { verifyCallbackSignature, toMinorUnits } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
@@ -98,13 +99,17 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // something goes wrong. Only an approval advances the order.
   const approved = orderStatus === APPROVED
 
+  // One instant shared by the Payment row and the order's own paidAt, so the
+  // gateway record and the order can never disagree about when money arrived.
+  const settledAt = new Date()
+
   await withTenantDb(tenantId, async tx => {
     await tx.payment.update({
       where: { id: payment.id },
       data: {
         status: orderStatus || 'unknown',
         rawResponse: body as object,
-        settledAt: approved ? new Date() : null,
+        settledAt: approved ? settledAt : null,
       },
     })
 
@@ -122,20 +127,30 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
       return
     }
 
+    // Both branches also write the two-axis columns (Plan-StatusModel chunk 3).
+    // `paidAtStage` is 'new' rather than a value read from the row because the
+    // status guards below already pin these to un-progressed orders — a
+    // settlement can only land on something nobody has moved on yet.
+    const paidColumns = {
+      financialStatusId: FINANCIAL_STATUS.paid,
+      paidAt: settledAt,
+      paidAtStage: 'new',
+    }
+
     if (payment.orderId) {
       // Guarded on status rather than blindly set: an order a human already
       // moved on (to COMPLETED, or CANCELLED) must not be dragged back to PAID
       // by a late callback.
       await tx.order.updateMany({
         where: { id: payment.orderId, status: { in: [OrderStatus.NEW, OrderStatus.PENDING_PAYMENT] } },
-        data: { status: OrderStatus.PAID },
+        data: { status: OrderStatus.PAID, ...paidColumns },
       })
     } else if (payment.wineOrderId) {
       // WineOrder.status is a bare String, not the OrderStatus enum — a
       // different convention from Order, and one to keep in mind here.
       await tx.wineOrder.updateMany({
         where: { id: payment.wineOrderId, status: { in: ['pending', 'pending_payment'] } },
-        data: { status: 'paid' },
+        data: { status: 'paid', ...paidColumns },
       })
     }
   })

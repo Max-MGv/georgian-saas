@@ -54,9 +54,38 @@ silently render as **"Pending"**, the stepper's `currentIdx` would go to `-1` (a
 brand new), and pack pre-selection (`:818`) filters `'confirmed' || 'paid'` — **paid wine would silently
 drop off the packing list**.
 
-**Next:** Max to review `Plan-StatusModel.md`, then Chunk 1 (indexes) as its own dev → staging → prod
-migration. Three open questions logged at the bottom of the plan (board leftward-move behaviour; whether
-wine orders need an `invoiced` sub-state; whether display metadata moves into the dimension rows).
+**Then built, same session — chunks 1–3, all on the dev DB only, three commits on `staging`, unpushed:**
+
+- **Chunk 1** (`add_tenant_indexes`): 13 indexes, nothing else.
+- **Chunk 2** (`add_status_dimensions`): `ProcessStatus` + `FinancialStatus` reference tables and four new
+  columns on both order tables. Strictly additive — old columns still authoritative. **The trap worth
+  remembering:** adding these to `setup-rls.ts`'s normal `tenantedTables` loop would have applied
+  `tenantId = current_setting(...)`, and since every seeded row has `tenantId` NULL — and `NULL = 'x'` is
+  NULL, not true — **every status would have been invisible to every tenant, silently.** They needed a
+  SELECT-only grant plus a "global OR own" policy, a third policy shape this codebase didn't have.
+  Also: Postgres treats NULLs as distinct in a unique constraint, so `@@unique([tenantId, code])` does not
+  stop duplicate *global* rows — needed hand-written partial unique indexes.
+- **Chunk 3** (`lib/statusBridge.ts`): every write now sets both old and new columns. The rule that makes
+  it right: a legacy status determines only one axis, so the bridge returns a **partial** patch and leaves
+  the other axis alone. Typing `updateWineOrderStatus`'s `status: string` parameter — the audit's root
+  cause — surfaced exactly one bare-`string` caller as a compile error.
+- **Max corrected one of my calls:** I'd collapsed `NEW` into `pending`; he wanted it the other way, so the
+  canonical first code is now `new` (rename migration, id moved too, FK cascade verified).
+
+**Two data findings that killed earlier assumptions:** `Payment.settledAt` is empty on dev, so `paidAt` was
+not "recoverable" as the plan claimed; and **290 `COMPLETED` bookings vs 31 `PAID`** means the winery never
+used that column to track payment at all. Max then confirmed **both databases hold zero real orders** — all
+fake — which dissolved the ~330-row backfill decision entirely.
+
+**Verification scripts added:** `check-status-backfill.ts` (RLS read path, cross-tenant isolation with two
+throwaway tenants per MaintenanceNotes §10, app_user write refusal, remaining gaps) and
+`test-status-bridge.ts` (21 checks proving the two axes move independently — delivered stays unpaid, paying
+later doesn't reset fulfilment, paying first isn't cleared by progressing, cancelling doesn't erase payment).
+
+**Next:** chunks 4–5 — UI (merged flow-line, per-order dropdown options, board skip/backfill, switching reads
+over) then the contract step retiring `paid`/`PAID`/`INVOICE_SENT`. Nothing pushed to staging yet. Three open
+questions still at the bottom of the plan (board leftward-move behaviour; whether wine orders need an
+`invoiced` sub-state; whether display metadata moves into the dimension rows).
 
 ---
 

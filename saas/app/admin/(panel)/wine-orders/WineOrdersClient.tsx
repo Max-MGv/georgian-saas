@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { updateWineOrderStatus } from '@/app/actions/wineOrders'
+import type { LegacyWineOrderStatus } from '@/lib/statusBridge'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
@@ -74,7 +75,10 @@ const ALL_STATUSES = ['pending', 'confirmed', 'paid', 'delivered', 'cancelled'] 
 const STATUS_FILTER_OPTIONS = [...ALL_STATUSES, ...PAYMENT_LIMBO_STATUSES] as const
 
 type Mode = 'cards' | 'table' | 'pack' | 'board'
-type PendingChange = { orderId: string; toStatus: string }
+// Typed rather than `string` since chunk 3: updateWineOrderStatus now takes the
+// legacy union, so a retired or mistyped status fails to compile here instead
+// of being written straight through to the database.
+type PendingChange = { orderId: string; toStatus: LegacyWineOrderStatus }
 
 // ── Icons ──────────────────────────────────────────────────────────────
 
@@ -142,7 +146,7 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
 function VerticalStepper({ orderId, status, onRequestChange, pendingToStatus, onConfirm, onCancel, locale }: {
   orderId: string
   status: string
-  onRequestChange: (toStatus: string) => void
+  onRequestChange: (toStatus: LegacyWineOrderStatus) => void
   pendingToStatus?: string
   onConfirm: () => void
   onCancel: () => void
@@ -379,7 +383,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
 function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
   orders: WineOrder[]
   pendingChange: PendingChange | null
-  onRequestChange: (orderId: string, toStatus: string) => void
+  onRequestChange: (orderId: string, toStatus: LegacyWineOrderStatus) => void
   onConfirm: () => void
   onCancel: () => void
   locale: string
@@ -536,7 +540,7 @@ const BOARD_COL_WIDTH = 232
 function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
   orders: WineOrder[]
   pendingChange: PendingChange | null
-  onRequestChange: (orderId: string, toStatus: string) => void
+  onRequestChange: (orderId: string, toStatus: LegacyWineOrderStatus) => void
   onConfirm: () => void
   onCancel: () => void
   locale: string
@@ -865,7 +869,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
     [orders, selected]
   )
 
-  function handleUpdate(id: string, status: string) {
+  function handleUpdate(id: string, status: LegacyWineOrderStatus) {
     const prev = orders.find(o => o.id === id)
     const wasActive = prev && prev.status !== 'delivered' && prev.status !== 'cancelled'
     const isNowInactive = status === 'delivered' || status === 'cancelled'
@@ -877,7 +881,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: { o
     startTransition(async () => { await updateWineOrderStatus(id, status) })
   }
 
-  function requestChange(orderId: string, toStatus: string) {
+  function requestChange(orderId: string, toStatus: LegacyWineOrderStatus) {
     if (timerRef.current) clearTimeout(timerRef.current)
     setPendingChange({ orderId, toStatus })
     timerRef.current = setTimeout(() => setPendingChange(null), 5000)

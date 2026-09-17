@@ -4,13 +4,42 @@ import { db, withTenantDb } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import {
+  wineOrderStatusPatch,
+  NEW_ORDER_STATUS_COLUMNS,
+  type LegacyWineOrderStatus,
+} from '@/lib/statusBridge'
 
-export async function updateWineOrderStatus(id: string, status: string) {
+/**
+ * `status` was a bare `string` until chunk 3 — nothing in the app or the
+ * database rejected a typo or a retired value, which is why the status split
+ * would otherwise have failed silently here (Plan-StatusModel's silent-failure
+ * table). It is now the legacy union.
+ *
+ * Writes both the old column and the two new axes. Reads the row first so the
+ * patch can preserve whichever axis this status says nothing about, and so a
+ * paid write can snapshot the stage it landed at.
+ */
+export async function updateWineOrderStatus(id: string, status: LegacyWineOrderStatus) {
   await requireAdmin()
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx =>
-    tx.wineOrder.updateMany({ where: { id, tenantId }, data: { status } })
-  )
+  await withTenantDb(tenantId, async tx => {
+    const current = await tx.wineOrder.findFirst({
+      where: { id, tenantId },
+      select: { paidAt: true, processStatus: { select: { code: true } } },
+    })
+    if (!current) return
+    await tx.wineOrder.updateMany({
+      where: { id, tenantId },
+      data: {
+        status,
+        ...wineOrderStatusPatch(status, {
+          processCode: current.processStatus?.code ?? null,
+          paidAt: current.paidAt,
+        }),
+      },
+    })
+  })
   revalidatePath('/admin/wine-orders')
 }
 
@@ -85,6 +114,7 @@ export async function createWineOrderAdmin(data: {
         discountPercent: discountPercent || null,
         tenantId,
         companyId: data.companyId || null,
+        ...NEW_ORDER_STATUS_COLUMNS,
       },
     })
     await tx.wineOrderItem.createMany({

@@ -21,6 +21,7 @@ import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
+import { NEW_ORDER_STATUS_COLUMNS } from '@/lib/statusBridge'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
@@ -324,6 +325,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
         tenantId,
+        ...NEW_ORDER_STATUS_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
         // Never trust a client-sent array outright — filter to real ISO codes and

@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
+import { seedStatusColumns, type LegacyWineOrderStatus } from '../lib/statusBridge'
 
 const NM_TENANT_ID = 'cmqou94er0000vl1sl9v0yv54'
 const CONFIRMED = process.argv.includes('--confirm')
@@ -139,6 +140,7 @@ async function main() {
       data: {
         ...biz,
         tenantId: nm.id,
+        ...seedStatusColumns('wineOrder', biz.status as LegacyWineOrderStatus, new Date()),
         totalAmount: items.reduce((sum, i) => sum + i.quantity * i.price, 0),
         wineItems: {
           create: items.map(i => ({

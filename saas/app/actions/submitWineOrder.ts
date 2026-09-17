@@ -6,6 +6,7 @@ import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_WINE_ORDER_LIMIT } from '@/lib/demoRateLimit'
+import { NEW_ORDER_STATUS_COLUMNS } from '@/lib/statusBridge'
 
 export type WineSelection = {
   vintageId: string
@@ -120,6 +121,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           discountPercent: discountPercent || null,
           tenantId,
           companyId: companyId || null,
+          ...NEW_ORDER_STATUS_COLUMNS,
         },
       })
       await tx.wineOrderItem.createMany({

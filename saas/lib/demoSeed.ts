@@ -19,6 +19,7 @@
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
 import type { PrismaClient, OrderStatus, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
+import { seedStatusColumns } from '@/lib/statusBridge'
 
 export const DEMO_SLUG = 'vineworks-demo'
 
@@ -436,6 +437,10 @@ export async function seedDemoTenant(
           phone: company ? company.contactPhone : `+995 5${rand(50, 99)} ${rand(10, 99)} ${rand(10, 99)} ${rand(10, 99)}`,
           companyId: company ? company.id : individuals.id,
           totalPrice, createdAt,
+          // Derived from the legacy status rather than hardcoded, so demo data
+          // exercises the two shapes the old column couldn't express: a
+          // COMPLETED visit still unpaid, and a PAID order not yet confirmed.
+          ...seedStatusColumns('order', status, createdAt),
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
       }
       orderWrites.push(() => db.order.create({ data: orderData }))
@@ -483,6 +488,7 @@ export async function seedDemoTenant(
           workingHours: pick(['10:00–20:00', '11:00–23:00', '09:00–18:00', 'Mon–Sat 10:00–19:00']),
           contactName: buyer.contactName, contactPhone: buyer.contactPhone, contactEmail: buyer.contactEmail,
           discountPercent: buyer.discount, totalAmount, status, createdAt,
+          ...seedStatusColumns('wineOrder', status, createdAt),
           wineItems: { create: items },
       }
       wineWrites.push(() => db.wineOrder.create({ data: wineData }))

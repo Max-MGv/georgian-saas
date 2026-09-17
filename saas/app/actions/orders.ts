@@ -11,6 +11,7 @@ import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { OrderStatus } from '@prisma/client'
 import { countryName } from '@/lib/countries'
+import { orderStatusPatch, FINANCIAL_STATUS, NEW_ORDER_STATUS_COLUMNS } from '@/lib/statusBridge'
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
@@ -216,6 +217,7 @@ export async function createOrderAdmin(data: {
         notes: data.notes?.trim() || null,
         totalPrice,
         tenantId,
+        ...NEW_ORDER_STATUS_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
         masterclassLines: data.masterclassLines.length
           ? { create: data.masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
@@ -308,8 +310,15 @@ export async function sendOrderInvoice(
 
     const advanceStatuses = ['NEW', 'CONFIRMED']
     if (advanceStatuses.includes(order.status)) {
+      // Sending an invoice moves the financial axis only: it records that we
+      // have asked for money, and says nothing about whether the visit has
+      // happened. The legacy column still gets INVOICE_SENT until chunk 5
+      // retires it from the process vocabulary.
       await withTenantDb(tenantId, tx =>
-        tx.order.update({ where: { id: orderId }, data: { status: 'INVOICE_SENT' } })
+        tx.order.update({
+          where: { id: orderId },
+          data: { status: 'INVOICE_SENT', financialStatusId: FINANCIAL_STATUS.invoiced },
+        })
       )
     }
 
@@ -468,9 +477,25 @@ export async function updateOrderStatus(
   await requireAdmin()
   const tenantId = await getTenantId()
   try {
-    const result = await withTenantDb(tenantId, tx =>
-      tx.order.updateMany({ where: { id: orderId, tenantId }, data: { status } })
-    )
+    // Reads first so the patch can leave alone whichever axis this status says
+    // nothing about, and so a PAID write snapshots the stage it landed at.
+    const result = await withTenantDb(tenantId, async tx => {
+      const current = await tx.order.findFirst({
+        where: { id: orderId, tenantId },
+        select: { paidAt: true, processStatus: { select: { code: true } } },
+      })
+      if (!current) return { count: 0 }
+      return tx.order.updateMany({
+        where: { id: orderId, tenantId },
+        data: {
+          status,
+          ...orderStatusPatch(status, {
+            processCode: current.processStatus?.code ?? null,
+            paidAt: current.paidAt,
+          }),
+        },
+      })
+    })
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
     return { success: true }
