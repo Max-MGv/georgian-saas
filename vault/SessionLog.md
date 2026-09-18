@@ -124,10 +124,48 @@ Verified live to the exact tetri: bookings 2026 ₾112,783 → **₾104,462**, w
 > the real numbers immediately. **Always cache-bust when verifying a deploy on a URL you
 > have already loaded.**
 
+### Chunk 3 — money off `Float`, effectively complete (**Feature 194**)
+
+Eleven money columns are now integer tetri. Migration `20260918124045_money_to_tetri`,
+**hand-written** — `prisma migrate dev` refused to run non-interactively and its warning
+revealed it would emit a plain cast turning `45.0` into `45` rather than `4500`, silently
+dividing every catalog price by 100. The file uses `USING ROUND(col * 100)`.
+
+The wipe ran as authorised (`Payment`, the three line tables, `Order`, `WineOrder`);
+`Company` was spared, so its price tiers survived and were converted — **116 values
+checked against a pre-migration dump, zero mismatches.**
+
+**The lesson worth carrying: `tsc` catches none of this.** Prisma maps both `Float` and
+`Int` to `number`, so the column change produced **zero type errors project-wide**. The
+`Dependencies.md` prediction that most files would "break loudly, verified by tsc" was
+wrong, and is corrected there. What worked was the `Tetri` **branded type** in the new
+`lib/money.ts` — typing a single field surfaced three invisible call sites, and every
+later tightening of a server action found more. That is the whole case for the brand,
+demonstrated rather than argued.
+
+Two real bugs fixed in passing, both invisible to every tool: `OrderDetail`/`NewOrderForm`
+mixed GEL rates with tetri line amounts (a manually-priced order would have been 100%
+wrong on part of its total), and `demoSeed` would have seeded the sales demo at ₾0.55
+per person.
+
+Verified on staging after confirming the deploy READY: the public booking form renders
+**`70₾ × 4 guests` → `280₾`**, byte-identical to before the migration.
+
+> ⚠️ **Deploy-check discipline, learned twice in one session.** Both times a staging check
+> appeared to show a failed fix, and both times the cause was infrastructure: first the
+> browser/router cache serving a stale RSC payload, then a deployment still `BUILDING`.
+> **Confirm Vercel reports READY, then cache-bust with `?cb=`.** Without both, a staging
+> check is not evidence.
+
 ### Next
 
-**Chunk 3** — the money conversion off `Float`. The large one, six sub-steps, and it
-carries the destructive migration.
+- **Chunk 3f** — `payment-amount-integrity.spec.ts` was still running at session end.
+  **Check its result before treating chunk 3 as closed.**
+- Then **Chunk 4** (price snapshot on `Order`, which fixes the live repricing bug),
+  **Chunk 5** (`OrderEvent`), **Chunk 6** (`Payment` as a ledger), **Chunk 7** (display
+  tables).
+- Production is still untouched and internally consistent on the pre-chunk-5 schema.
+  Nothing here has gone near `master`.
 
 **Before Chunk 3 runs, re-confirm the wipe with Max on the day.** Scope settled as
 `Payment` + line tables + `Order` + `WineOrder`; **`Company` is deliberately excluded**,

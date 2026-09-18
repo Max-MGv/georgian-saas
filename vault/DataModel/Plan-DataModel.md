@@ -317,8 +317,9 @@ Real scope is **49 application files** under `app/`, `lib/` and `components/` (t
 - **3c — Write / compute paths + the Flitt boundary.** ✅ **Complete 2026-09-18.** (3e was
   folded in here — the boundary and the writes are the same money path and splitting them
   would have left an incoherent intermediate state.)
-- **3d — Read/display paths.** ⬜ **NOT STARTED. This is the current resume point.**
-- **3f — Green the Playwright suite.** ⬜ Not started. Blocked on 3d.
+- **3d — Read/display paths, inputs and contracts.** ✅ **Complete 2026-09-18.** See below.
+- **3f — Green the Playwright suite.** 🚧 `payment-amount-integrity.spec.ts` running at
+  session end; result not yet recorded. **Check this before assuming chunk 3 is closed.**
 
 ### 🔴 The biggest finding of the chunk: `tsc` catches nothing
 
@@ -368,25 +369,52 @@ confirmed, Rule 10).
 **Verified:** `tsc --noEmit` **0 errors** project-wide; `test-money.ts` **47/47**;
 `test-flitt-signature.ts` **37/37**.
 
-### ⚠️ Resume point — READ BEFORE CONTINUING
+### 3d — what happened
 
-**3d has not started, so every screen currently renders raw tetri** — a ₾45 booking shows
-as `4500₾`. Staging is mid-migration and *looks* broken. It is not data loss; it is
-formatting.
+Three kinds of change, not one. The sweep started as "198 occurrences of `₾`", but 46 of
+those were translation labels in `lib/adminT.ts` (literal `₾` in strings like
+"Amount (₾)") which needed **no** change, and a further handful are deliberate
+non-money: four `₾✓` paid-marker glyphs, the hardcoded sample prices in
+`BookingFormVisualPanel.tsx` and `MessagesPanel.tsx`, and prose in `demoTour.ts`.
 
-**The sweep:** 198 occurrences of `₾` across 33 files. Replace raw interpolation
-(`${order.totalPrice}₾`) with `formatTetri(asTetri(...))`. `formatTetri`'s default output
-is byte-identical to the old rendering for whole-GEL amounts, so correct screens should
-not visibly change.
+| | |
+|---|---|
+| **Display** | ~150 sites across 30 files onto `formatTetri`. Grouping for the statistics cards and charts — **including the axis `tickFormatter`s**, which would otherwise have read in hundreds of thousands. Leading space for the Georgian invoice print. Forced decimals for invoices and receipts. |
+| **Input** | Every form where a human types a price converts with `fromMajor`: company tiers, masterclass items, wine vintages, the onboarding wizard, order extras, manual per-person rates. Those inputs still hold **GEL** — that is what an admin types — and the conversion is the boundary. |
+| **Contracts** | Server actions that take money now take `Tetri`: `prices.ts`, `masterclassItems.ts`, `wines.ts`, `onboarding.ts`, `orders.ts`. **Tightening these is what made the compiler useful**, and each tightening surfaced real call sites. |
 
-Largest first: `lib/adminT.ts` (46 — mostly translation strings, check before touching),
-`OrderDetail.tsx` (21), `NewOrderForm.tsx` (15), `BookingForm.tsx` (13),
-`OrdersTable.tsx` (11), `StatisticsClient.tsx` (10), `InvoicePrint.tsx` (10).
+### 🔴 Two real bugs found in 3d, both invisible to `tsc`
 
-**Also still to do in 3d:** admin forms where a human *types* a price
-(`prices.ts`, `masterclassItems.ts`, wines/vintages, onboarding) must convert input with
-`fromMajor()`, and `lib/demoSeed.ts` + `scripts/seed*.ts` hold hardcoded major-unit
-literals that now mean 1/100 of what they say.
+1. **`OrderDetail.tsx` and `NewOrderForm.tsx` mixed units.** Both parsed the manual
+   tasting/lunch rates as GEL and then added them to `masterclassAmt` and `extrasAmt`,
+   which were already tetri. A manually-priced order would have been wrong by 100× on
+   part of its total. Found by tracing what `orders.ts` did with the values, not by any
+   tool.
+2. **`demoSeed.ts` would have seeded ₾0.55 per person.** Its tier and masterclass literals
+   were written straight through. The literals stay readable as GEL; a `tierToTetri`
+   helper converts once, at the write.
+
+### Verification
+
+`next build` passes · `tsc --noEmit` **0 errors** · `eslint` clean · `test-money.ts`
+**47/47** · `test-flitt-signature.ts` **37/37**.
+
+Driven on staging after deploy, with a cache-busting query param:
+
+| Screen | Renders |
+|---|---|
+| Public booking form | **`70₾ × 4 guests` → `280₾`** — byte-identical to pre-migration |
+| Companies | `50₾ / 100₾ defaults` |
+| Masterclass | `35₾` |
+| Wine catalogue | `15₾` / `40₾` / `22₾` / `25₾` per bottle |
+
+An audit for raw currency interpolation outside `formatTetri` now returns only the
+deliberate cases listed above.
+
+> ⚠️ **Deploy timing, again.** The first check after pushing 3d showed `7000₾ × 4 guests`
+> and looked like a failed fix. The deployment was still `BUILDING`. **Confirm the Vercel
+> deployment reports `READY` before concluding anything from a staging check** — and then
+> still cache-bust. This has now cost time twice in one session.
 
 ---
 

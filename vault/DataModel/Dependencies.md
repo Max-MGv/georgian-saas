@@ -70,7 +70,23 @@ the one that needs doing by hand.)
 **58 files** reference money fields. **38 files** reference currency formatting. Heavy
 overlap.
 
-### ✅ Breaks loudly — safe, the compiler catches it
+### 🔴 CORRECTION 2026-09-18 — the compiler catches NOTHING
+
+**The section below was wrong and is kept only so the mistake is legible.** Prisma maps
+both `Float` and `Int` to TypeScript `number`, so changing the column type produced
+**zero type errors across the entire project**. There is no compiler safety net for a
+unit change of this kind, and every affected site is a silent breakage.
+
+What actually provided coverage was the `Tetri` branded type in `lib/money.ts`: typing
+`CreateCheckoutInput.amount` surfaced three real call sites immediately, and each
+subsequent tightening of a server action's signature found more. **Extend the brand
+outward to get coverage; grep is the only alternative.**
+
+Two bugs that no tool found, and that a careful reading of the money flow did:
+`OrderDetail`/`NewOrderForm` mixed GEL rates into tetri totals, and `demoSeed` would have
+seeded the sales demo at 1/100 of every price.
+
+### ~~✅ Breaks loudly — safe, the compiler catches it~~ (WRONG — see above)
 
 Anything that reads a money field into typed code. Changing `Float` → `Int` in Prisma
 regenerates the client, and every arithmetic or assignment mismatch becomes a TypeScript
