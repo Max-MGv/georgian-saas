@@ -74,10 +74,46 @@ site** still runs pre-chunk-5 code — the two commits are unpushed (`staging...
 - **`OrderExtra.label` cannot be investigated from data** — all of it is fake and the wipe
   removes it. Has to be answered by asking Nikalas Marani what they type there.
 
+### Chunks 0 and 1 — both done, both pushed to staging
+
+**Chunk 0 confirmed the suspicion.** Staging *was* broken: the dev DB had been migrated
+on 2026-09-17 while the two commits sat unpushed, so the site had spent a day querying
+`Order.status`, a dropped column. Pushing was the fix — no new code. Orders, Wine Orders
+and `/admin/abandoned` all verified rendering afterwards.
+
+Column-level check also confirmed Chunk 1's premise empirically: `Price` and `OrderExtra`
+carry **no timestamp columns at all**, and `Order`/`WineOrder`/`Payment` have no
+`updatedAt`.
+
+**Chunk 1 shipped as Feature 192** — migration
+`20260918120357_add_timestamps_and_payment_cascade`. Eight timestamp columns,
+`WineOrder.invoiceSentAt`, and `onDelete: Cascade` on both `Payment` order relations.
+Schema only; no application code changed.
+
+Three things worth carrying forward:
+
+- **`@default(now())` alongside `@updatedAt` is load-bearing.** It emits
+  `DEFAULT CURRENT_TIMESTAMP`, which is the only reason a `NOT NULL` column could be added
+  to populated tables. Reuse this for any future `updatedAt`.
+- **Adding a column never needs an RLS change.** `setup-rls.ts` grants at table level, so
+  Postgres covers new columns automatically. Only new *tables* need policy work. Now
+  recorded in the plan so it is not re-investigated.
+- **The cascade is what makes the wipe safe by construction.** Without it, deleting orders
+  would have left orphaned `Payment` rows with null foreign keys, real amounts, and no
+  screen showing them.
+
 ### Next
 
-Chunk 0 — verify staging, map the true schema state of dev/staging/prod, re-confirm the
-wipe on the day it runs. Nothing else starts until that is written down.
+**Chunk 2** — write `vault/DataModel/Definitions.md` (orders are attempts not sales;
+revenue is booked not collected; grain rules). No code. Then **Chunk 3**, the money
+conversion off `Float`, which is the large one and carries the destructive migration.
+
+**Before Chunk 3 runs, re-confirm the wipe with Max on the day.** Scope settled as
+`Payment` + line tables + `Order` + `WineOrder`; **`Company` is deliberately excluded**,
+since deleting it cascades away the price tiers, which are configuration rather than fake
+data.
+
+Production remains untouched — `master` is 39 commits behind and internally consistent.
 
 ---
 
