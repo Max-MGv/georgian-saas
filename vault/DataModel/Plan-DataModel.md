@@ -318,8 +318,8 @@ Real scope is **49 application files** under `app/`, `lib/` and `components/` (t
   folded in here — the boundary and the writes are the same money path and splitting them
   would have left an incoherent intermediate state.)
 - **3d — Read/display paths, inputs and contracts.** ✅ **Complete 2026-09-18.** See below.
-- **3f — Green the Playwright suite.** 🚧 `payment-amount-integrity.spec.ts` running at
-  session end; result not yet recorded. **Check this before assuming chunk 3 is closed.**
+- **3f — Green the Playwright suite.** ✅ **Test 1 passes; tests 2–3 blocked on missing
+  fixtures, which predates this work.** See below.
 
 ### 🔴 The biggest finding of the chunk: `tsc` catches nothing
 
@@ -393,6 +393,52 @@ non-money: four `₾✓` paid-marker glyphs, the hardcoded sample prices in
 2. **`demoSeed.ts` would have seeded ₾0.55 per person.** Its tier and masterclass literals
    were written straight through. The literals stay readable as GEL; a `tierToTetri`
    helper converts once, at the write.
+
+### 3f — the money path, proven end to end
+
+`tier1-regression/payment-amount-integrity.spec.ts`, test 1 (**individual booking, payment
+on/off**) now **passes**. Its output is the proof this chunk needed:
+
+```
+ZZPaymentIntegrity On · 19/09/2026 · 13:00 · 4
+zz-payment-integrity-on-…@example.invalid
+Incomplete since 18/09/2026 · 480 ₾
+```
+
+₾480 quoted on the public form → sent to the **real Flitt gateway** → stored as 48000 tetri
+→ rendered back as ₾480. The redirect only happens after `createCheckout` accepts the
+amount, so the gateway leg is covered too.
+
+#### The spec was stale, and not because of money
+
+It had been broken since Feature 191 landed **the same day**, and nothing re-ran it. It
+followed the Flitt redirect and then looked for the order in `/admin/orders` with an
+**"Awaiting Payment"** control — but Feature 191 stamps such an order `abandonedAt`, moves
+it to `/admin/abandoned`, and removed those limbo statuses entirely. Re-pointed at the
+Incomplete screen; the money assertion moved screens unchanged.
+
+Two further fixes worth knowing:
+- **An assertion had become vacuous.** The reservation-only branch checked an
+  "Awaiting Payment" button had count 0 — trivially true once the control exists nowhere.
+  Now asserts the real invariant: such a booking must **not** appear on the Incomplete
+  screen.
+- **Whitespace is stripped before comparing the amount**, because the Incomplete screen
+  renders `480 ₾` and the orders table renders `480₾`. Both come from `formatTetri`, which
+  takes the separator as an option; the assertion is about the amount, not the spacing.
+
+#### 🔴 Open, and NOT caused by this work: tests 2–3 cannot run
+
+They require fixture companies **`Test Company # 1`** and **`Wine Test Company`**, each
+with a real access code. The dev database holds `demoSeed`'s companies instead —
+Individuals, Kakheti Wine Routes, Tbilisi Tour Collective, Caucasus Vine Travel, Alazani
+Valley Tours, Silk Road Journeys, Sighnaghi Wine Bar, Restaurant Kakhuri, Vinoteka
+Batumi, Marani Import GmbH — **all with `accessCode: null`**. A demo reset replaced the
+fixtures at some point before this session.
+
+Chunk 3's migration deletes six tables and `Company` is not one of them, so this is not
+fallout from the wipe. **To close it:** create the two fixture companies with access codes
+and price tiers, then re-run. Test 2 alone takes ~8 minutes and drives several real Flitt
+redirects, so it wants its own pass.
 
 ### Verification
 
