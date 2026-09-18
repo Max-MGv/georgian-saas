@@ -32,6 +32,26 @@ export const NOT_ABANDONED = { abandonedAt: null } as const
 /** Only the abandoned ones — the inverse, for `/admin/abandoned`. */
 export const ONLY_ABANDONED = { abandonedAt: { not: null } } as const
 
+/**
+ * A cancelled order is not revenue.
+ *
+ * Distinct from `NOT_ABANDONED`, and the two are not interchangeable. An
+ * abandoned order never reached the winery at all; a cancelled one did, was
+ * real, and then fell through. So cancelled rows stay visible in the order
+ * screens — a winery needs to see what it cancelled — but they must not be
+ * counted in any money or volume total.
+ *
+ * Spread this into **statistics** queries, never into the list/board/calendar.
+ *
+ * Added 2026-09-18 after the Orders page and Statistics were found to disagree:
+ * `orders/page.tsx` already excluded cancelled from its revenue strip, while
+ * Statistics excluded only abandoned. On the dev tenant that put 15,017 GEL of
+ * cancelled bookings inside a reported 208,202 GEL, and 6,498 GEL of cancelled
+ * wine orders inside 116,797 GEL. Both enums spell the value `CANCELLED`, so
+ * this fragment is valid against `Order` and `WineOrder` alike.
+ */
+export const NOT_CANCELLED = { stage: { not: 'CANCELLED' } } as const
+
 /** The three values the payment filter accepts. */
 export const PAYMENT_FILTERS = ['paid', 'invoiced', 'unpaid'] as const
 export type PaymentFilter = (typeof PAYMENT_FILTERS)[number]
