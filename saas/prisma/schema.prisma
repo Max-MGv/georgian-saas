@@ -122,13 +122,13 @@ model CompanyRepresentative {
 }
 
 model Order {
-  id                   String             @id @default(cuid())
+  id                      String             @id @default(cuid())
   // Where the booking is, and nothing about money (Feature 191). Its own enum
   // rather than one shared with WineOrder, so a booking is structurally
   // incapable of holding the wine-only DELIVERED — which the previous shared
   // reference table could not prevent: its `appliesTo` column filtered the
   // dropdown, never the foreign key.
-  stage                BookingStage       @default(NEW)
+  stage                   BookingStage       @default(NEW)
   // Milestones as dates, not as a status ladder. The ladder was the bug: it
   // was `unpaid → invoiced → paid`, so marking an invoiced order paid erased
   // the fact that an invoice had ever been sent. Independent dates cannot
@@ -139,10 +139,10 @@ model Order {
   // They are also what places the Paid step on the flow-line. That used to be
   // `paidAtStage`, a snapshotted code string; a timestamp cannot go stale the
   // way a snapshot of a since-renamed status could.
-  confirmedAt          DateTime?
-  completedAt          DateTime?
-  invoiceSentAt        DateTime?
-  paidAt               DateTime?
+  confirmedAt             DateTime?
+  completedAt             DateTime?
+  invoiceSentAt           DateTime?
+  paidAt                  DateTime?
   // Set when the guest is sent to the card gateway, cleared the moment the
   // order completes. So it reads literally: this order has been incomplete
   // since <date>. Replaces the three legacy limbo values (PENDING_PAYMENT,
@@ -150,48 +150,68 @@ model Order {
   // and a declined card are the same thing to the winery, an order that never
   // happened. Abandoned orders are excluded from every order surface and live
   // on their own screen; see MaintenanceNotes.
-  abandonedAt          DateTime?
-  bookingType          BookingType        @default(INDIVIDUAL)
-  visitType            VisitType
-  date                 DateTime
-  timeSlot             String
-  guestCount           Int
+  abandonedAt             DateTime?
+  bookingType             BookingType        @default(INDIVIDUAL)
+  visitType               VisitType
+  date                    DateTime
+  timeSlot                String
+  guestCount              Int
   // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
-  lunchGuestCount      Int                @default(0)
-  tastingGuestCount    Int                @default(0)
-  freeGuestCount       Int                @default(0)
+  lunchGuestCount         Int                @default(0)
+  tastingGuestCount       Int                @default(0)
+  freeGuestCount          Int                @default(0)
   // Hot dish selections (v1.2)
-  hotDishVegetable     String?
-  hotDishMeat          String?
-  foodNotes            String?
-  name                 String
-  surname              String
-  email                String?
-  phone                String?
-  notes                String?
-  totalPrice           Int?
-  tenantId             String?
-  companyId            String?
+  hotDishVegetable        String?
+  hotDishMeat             String?
+  foodNotes               String?
+  name                    String
+  surname                 String
+  email                   String?
+  phone                   String?
+  notes                   String?
+  totalPrice              Int?
+  tenantId                String?
+  companyId               String?
   // Set only when bookingType is COMPANY and companyId is null — a booking
   // submitted through the "New Company?" flow, before the winery has created
   // a real Company row. Display-only (admin Orders table + emails); never
   // used for pricing or access-code lookups. See Feature 180.
-  requestedCompanyName String?
-  company              Company?           @relation(fields: [companyId], references: [id])
+  requestedCompanyName    String?
+  company                 Company?           @relation(fields: [companyId], references: [id])
   // Which guide's code matched at booking time — the phone-during-dinner case needs a
   // specific order to remember which person, not just which company (Plan-CompanyGuidesAndReps
   // Chunk 1). Representatives are not tracked per-order; see that plan for why.
-  guideId              String?
-  guide                CompanyGuide?      @relation(fields: [guideId], references: [id])
+  guideId                 String?
+  guide                   CompanyGuide?      @relation(fields: [guideId], references: [id])
   // ISO 3166-1 alpha-2 codes, COMPANY bookings only (Plan-CompanyNationality). No per-country
   // counts — "at most a mix" per Max, not a headcount breakdown. Plain array on the already
   // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
-  nationalities        String[]           @default([])
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @default(now()) @updatedAt
-  masterclassLines     OrderMasterclass[]
-  extras               OrderExtra[]
-  payments             Payment[]
+  nationalities           String[]           @default([])
+  // Rate snapshots, in TETRI (chunk 4, 2026-09-18). Taken at booking time from
+  // whichever tier priced the order, or from the rates an admin typed when
+  // there is no tier.
+  //
+  // They exist because `recalcOrderTotal` used to re-read the company's *live*
+  // Price rows: change a company's rates in March, add a 20 GEL extra to their
+  // February booking, and the whole booking silently re-priced at March rates.
+  // A fact must not move when a dimension changes — the same reason
+  // OrderMasterclass.pricePerUnit and WineOrderItem.priceSnapshot exist. This
+  // makes bookings consistent with those rather than inventing anything.
+  //
+  // Nullable only for orders created before this column existed; recalc falls
+  // back to the old live-tier lookup for those and logs when it does.
+  //
+  // registrationFeeSnapshot is 0 for individuals: that path never applied the
+  // tier's registration fee, and the snapshot records what was *used*, not what
+  // the tier happened to hold.
+  tastingRateSnapshot     Int?
+  lunchRateSnapshot       Int?
+  registrationFeeSnapshot Int?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @default(now()) @updatedAt
+  masterclassLines        OrderMasterclass[]
+  extras                  OrderExtra[]
+  payments                Payment[]
 
   // Every query here is tenant-scoped by RLS, and the admin list/calendar both
   // filter-and-order by date while the board and its filter pills group by
@@ -211,8 +231,8 @@ model Price {
   minGuests                  Int
   maxGuests                  Int
   pricePerPerson             Int
-  tastingLunchPricePerPerson Int    @default(0)
-  registrationPrice          Int    @default(0)
+  tastingLunchPricePerPerson Int      @default(0)
+  registrationPrice          Int      @default(0)
   isDisplayPrice             Boolean  @default(false)
   // Pricing is edited in place, so without these there is no record of when a
   // company's rates changed — and every booking is priced from them. Chunk 4

@@ -104,9 +104,20 @@ export async function updateOrderEnhanced(
     const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
     const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
 
+    // An admin editing guest counts or rates is deliberately re-pricing the
+    // order, so the snapshot moves with it and records what the order is sold
+    // at *now*. That is the opposite of `recalcOrderTotal`, where a line change
+    // must never disturb the agreed rates (chunk 4).
+    let tastingRateSnapshot: number | null = null
+    let lunchRateSnapshot: number | null = null
+    let registrationFeeSnapshot: number | null = null
+
     if (totalPayingGuests > 0 && order.company?.prices?.length) {
       const tier = findTier(order.company.prices, totalPayingGuests)
       if (tier) {
+        tastingRateSnapshot = tier.pricePerPerson
+        lunchRateSnapshot = comboRatePerPerson(tier)
+        registrationFeeSnapshot = tier.registrationPrice
         totalPrice =
           tastingGuests * tier.pricePerPerson +
           lunchGuests * comboRatePerPerson(tier) +
@@ -117,6 +128,9 @@ export async function updateOrderEnhanced(
     } else if (totalPayingGuests > 0 && (data.manualTastingRate != null || data.manualLunchRate != null)) {
       const tr = data.manualTastingRate ?? 0
       const lr = data.manualLunchRate ?? 0
+      tastingRateSnapshot = tr
+      lunchRateSnapshot = lr
+      registrationFeeSnapshot = 0
       totalPrice = tastingGuests * tr + lunchGuests * lr + masterclassAmt + extrasAmt
     }
 
@@ -130,6 +144,11 @@ export async function updateOrderEnhanced(
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
         totalPrice,
+        // Only when this edit actually re-priced the order; a null here would
+        // erase a snapshot the order still needs.
+        ...(tastingRateSnapshot != null
+          ? { tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot }
+          : {}),
       },
     })
     return { success: true as const }
@@ -173,6 +192,10 @@ export async function createOrderAdmin(data: {
   const tenantId = await getTenantId()
 
   const masterclassAmt = data.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+  // Rate snapshots — see schema.prisma on Order (chunk 4).
+  let tastingRateSnapshot: number | null = null
+  let lunchRateSnapshot: number | null = null
+  let registrationFeeSnapshot: number | null = null
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
 
   let totalPrice: number | null = null
@@ -187,6 +210,11 @@ export async function createOrderAdmin(data: {
       if (company?.prices.length) {
         const tier = findTier(company.prices, payingGuests)
         if (tier) {
+          // Freeze the rates this order is sold at, so a later edit cannot
+          // reprice it from tiers that have since changed (chunk 4).
+          tastingRateSnapshot = tier.pricePerPerson
+          lunchRateSnapshot = comboRatePerPerson(tier)
+          registrationFeeSnapshot = tier.registrationPrice
           totalPrice =
             data.tastingGuestCount * tier.pricePerPerson +
             data.lunchGuestCount * comboRatePerPerson(tier) +
@@ -199,6 +227,12 @@ export async function createOrderAdmin(data: {
 
     if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
       const tastingCount = data.companyId ? data.tastingGuestCount : data.guestCount
+      // Hand-typed rates are just as much "what this was sold at" as a tier is,
+      // and until now they were used once and thrown away — which is why an
+      // order priced this way could never be recalculated at all.
+      tastingRateSnapshot = data.manualTastingRate
+      lunchRateSnapshot = data.manualLunchRate
+      registrationFeeSnapshot = 0
       totalPrice =
         tastingCount * data.manualTastingRate +
         data.lunchGuestCount * data.manualLunchRate +
@@ -228,6 +262,9 @@ export async function createOrderAdmin(data: {
         email: data.email?.trim() || null,
         notes: data.notes?.trim() || null,
         totalPrice,
+        tastingRateSnapshot,
+        lunchRateSnapshot,
+        registrationFeeSnapshot,
         tenantId,
         ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),

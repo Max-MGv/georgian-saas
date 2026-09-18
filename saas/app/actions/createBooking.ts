@@ -256,6 +256,23 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }
     }
     const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
+
+    // What this order is actually sold at, frozen onto the row (chunk 4).
+    //
+    // Seeded from the individuals tier ONLY for an individual booking. A company
+    // booking that no tier prices keeps a null snapshot deliberately: its total
+    // stays 0 ("confirmed after submission"), and seeding it with the
+    // individuals rate would let a later recalc invent a price the winery never
+    // quoted.
+    //
+    // Registration is 0 rather than the tier's fee because the individual path
+    // never applies that fee — the snapshot records what was *used*, not what
+    // the tier happened to hold.
+    const isIndividual = data.bookingType === 'INDIVIDUAL'
+    let tastingRateSnapshot: number | null = isIndividual ? pricePerPersonTasting : null
+    let lunchRateSnapshot: number | null = isIndividual ? pricePerPersonLunch : null
+    let registrationFeeSnapshot: number | null =
+      isIndividual && pricePerPersonTasting != null ? 0 : null
     // A COMPANY booking with no companyId is a new-company request (Feature 180) —
     // there's no company row to price against yet, so it must not fall through to
     // the individuals table below. It stays 0 ("confirmed after submission") until
@@ -286,6 +303,9 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           : guestCount
         const tier = findTier(company.prices, payingGuests)
         if (tier) {
+          tastingRateSnapshot = tier.pricePerPerson
+          lunchRateSnapshot = comboRatePerPerson(tier)
+          registrationFeeSnapshot = tier.registrationPrice
           if (isEnhanced) {
             totalPrice =
               (data.tastingGuestCount ?? 0) * tier.pricePerPerson +
@@ -325,6 +345,9 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         phone: data.phone || null,
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
+        tastingRateSnapshot,
+        lunchRateSnapshot,
+        registrationFeeSnapshot,
         tenantId,
         ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
