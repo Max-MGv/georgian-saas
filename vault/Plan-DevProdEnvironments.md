@@ -14,7 +14,7 @@ All 7 steps executed 2026-07-23 (one session). This doc is now the **reference f
 ```
 
 1. **All code changes go to the `staging` branch first.** Never push straight to `master`.
-2. **Staging auto-deploys** to `georgian-saas-git-staging-mg-productions-projects.vercel.app`, reading the **dev** database — safe to break, no real customer ever sees it.
+2. **Staging auto-deploys** to `staging.vineworks.ge` (a custom domain added 2026-09-15, pinned to the `staging` git branch — see below), reading the **dev** database — safe to break, no real customer ever sees it.
 3. **Check it on the staging URL.** Only once it looks right does the change move on.
 4. **Merge `staging` → `master` → push.** This is the one step that reaches real customers on `nikalasmarani.vercel.app` — always with Max's explicit go-ahead, same as any other production-affecting action.
 5. **If the change included a database/schema change**, it runs through the same shape: `prisma migrate dev` against dev first → verified on staging → `prisma migrate deploy` against prod as its own separate, deliberate step (never automatic, never bundled silently into the code push).
@@ -33,14 +33,16 @@ It's not one "dev/prod switch" — it's three independent layers chained togethe
 
 **Key thing that isn't obvious:** `nikalasmarani.vercel.app`, `georgian-saas.vercel.app`, and `testwinery.vercel.app` are all the exact same production deployment — same code, same (prod) database. They look different only because the tenant lookup inside prod's DB succeeds for one domain and fails for the other two (`testwinery.vercel.app`'s tenant row was deleted in this same #79 session — see `MigrationNotes.md`).
 
-**Where to actually find the staging URL:** it will never appear on Vercel's Domains tab — that page only lists explicitly-attached domains + Production system URLs. `georgian-saas-git-staging-mg-productions-projects.vercel.app` is a **branch deployment alias**, auto-created on push to any non-`master` branch, visible under the **Deployments** tab (filter by branch), not Domains.
+**Where to actually find the staging URL:** since 2026-09-15, `staging.vineworks.ge` **does** appear on Vercel's Domains tab — it's a real custom domain (Project Settings → Domains), assigned to the `staging` git branch under "Connect to an environment → Preview → staging" (Vercel labels this "Pre-Production"). `vineworks.ge`'s DNS already lives on Vercel from the original vineworks.ge setup, so adding it needed no manual DNS records, same as `nikalasmarani.vineworks.ge` and `demo.vineworks.ge` before it.
+
+The **old** auto-generated alias, `georgian-saas-git-staging-mg-productions-projects.vercel.app`, still exists (Vercel creates one of these on push to any non-`master` branch) but now **308-redirects to `staging.vineworks.ge`** — added to the Domains tab as its own entry with "Redirect to Another Domain," the same mechanism `nikalasmarani.vercel.app` already used. No dead link; anything still pointing at the old URL just gets bounced to the new one.
 
 ## The two lanes
 
 | | URL | Database | Deploys from |
 |---|---|---|---|
 | **Production** | nikalasmarani.vercel.app | prod Supabase (`dshsfkffcsgerdqinqst`) | `master` branch |
-| **Staging** | georgian-saas-git-staging-mg-productions-projects.vercel.app | dev Supabase (`jpbkkngpgtvqmsocitjx`) | `staging` branch |
+| **Staging** | staging.vineworks.ge (custom domain, since 2026-09-15) | dev Supabase (`jpbkkngpgtvqmsocitjx`) | `staging` branch |
 | **Local dev** | localhost:3000 | dev Supabase (same as staging) | `saas/.env` |
 
 - Env split lives in Vercel: Production-scoped vars → prod DB; Preview-scoped vars → dev DB. All values in `credentials.txt` (repo root, gitignored).

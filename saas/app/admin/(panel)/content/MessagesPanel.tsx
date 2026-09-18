@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { adminT } from '@/lib/adminT'
 import { saveContent } from '@/app/actions/siteContent'
 import {
@@ -20,6 +20,13 @@ import {
 import { renderNewBookingNotificationEmail } from '@/lib/emails/templates/newBookingNotificationTemplate'
 import { renderNotifyNewCompanyEmail } from '@/lib/emails/templates/notifyNewCompanyTemplate'
 import { formatLongDate } from '@/lib/emails/templates/dateFormat'
+import { t } from '@/lib/t'
+import PaymentResultView, { type PaymentResultKind } from '@/components/PaymentResultView'
+import NewCompanyPopupView, { type NewCompanyPopupStatus } from '@/components/NewCompanyPopupView'
+import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
+import AccessCodePopupView, { type AccessCodePopupStatus } from '@/components/AccessCodePopupView'
+import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
+import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import type { ResolvedTheme } from '@/lib/themePresets'
 
 /**
@@ -58,13 +65,43 @@ const SAMPLE_GUEST = { name: 'Ana', surname: 'Beridze', email: 'ana.beridze@exam
 const SAMPLE_COMPANY = 'Beridze LLC'
 
 type BookingVariant = 'unpaid' | 'paid' | 'pendingCompany'
+type NewCompanyVariant = 'withBooking' | 'noBooking' | 'sent' | 'error'
+type AccessCodeVariant = 'entry' | 'error'
+
+const ACCESS_CODE_PREVIEW: Record<AccessCodeVariant, AccessCodePopupStatus> = {
+  entry: 'idle',
+  error: 'error',
+}
+
+// Maps the admin's 4-way preview pill to the two independent props the real
+// popup takes (BookingForm.tsx's `newCompanyIncludesBooking` state and
+// `newCoStatus` state) — see NewCompanyPopupView.tsx's header for why those
+// stay separate props instead of being collapsed into this enum.
+const NEW_COMPANY_PREVIEW: Record<NewCompanyVariant, { includesBooking: boolean; status: NewCompanyPopupStatus }> = {
+  withBooking: { includesBooking: true, status: 'idle' },
+  noBooking: { includesBooking: false, status: 'idle' },
+  sent: { includesBooking: false, status: 'sent' },
+  error: { includesBooking: false, status: 'error' },
+}
 
 function IframePreview({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null)
+  const [height, setHeight] = useState(420)
+
+  const measure = () => {
+    const doc = ref.current?.contentDocument
+    if (doc) setHeight(doc.documentElement.scrollHeight)
+  }
+
+  useEffect(measure, [html])
+
   return (
     <iframe
+      ref={ref}
       srcDoc={`<div style="padding:24px;background:#f4f1ec;">${html}</div>`}
-      sandbox=""
-      style={{ width: '100%', height: 420, border: 'none', borderRadius: 8, backgroundColor: '#f4f1ec' }}
+      sandbox="allow-same-origin"
+      onLoad={measure}
+      style={{ width: '100%', height, border: 'none', borderRadius: 8, backgroundColor: '#f4f1ec' }}
       title="Email preview"
     />
   )
@@ -130,10 +167,59 @@ function bookingDefault(variant: BookingVariant, locale: 'en' | 'ka'): string {
   return locale === 'ka' ? DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA : DEFAULT_BOOKING_INTRO_PENDING_COMPANY
 }
 
+// Shared editable-field renderer for the small, plain (non-email) On-Site
+// Messages fields — a single label + input/textarea + save-on-blur, no
+// preview. Avoids repeating the boilerplate per field (used 6x for the New
+// Company popup below). Top-level, not nested in MessagesPanel — a component
+// defined inside another component's body is a new type every render, which
+// would remount this (and drop input focus) on every keystroke.
+function EditField({
+  label, draftKey, multiline, inputStyle, savedKey, savedLabel, setDraft, save, drafts,
+}: {
+  label: string
+  draftKey: string
+  multiline?: boolean
+  inputStyle: React.CSSProperties
+  savedKey: string | null
+  savedLabel: string
+  setDraft: (key: string, value: string) => void
+  save: (key: string, label: string, value: string) => void
+  drafts: Record<string, string>
+}) {
+  const value = drafts[draftKey]
+  return (
+    <div className="mb-4">
+      <label className="text-sm block mb-2" style={{ color: C.muted }}>{label}</label>
+      <div className="flex items-start gap-2">
+        {multiline ? (
+          <textarea
+            rows={3}
+            style={{ ...inputStyle, resize: 'vertical' }}
+            value={value}
+            onChange={e => setDraft(draftKey, e.target.value)}
+            onBlur={() => save(draftKey, label, value)}
+          />
+        ) : (
+          <input
+            type="text"
+            style={inputStyle}
+            value={value}
+            onChange={e => setDraft(draftKey, e.target.value)}
+            onBlur={() => save(draftKey, label, value)}
+          />
+        )}
+        {savedKey === draftKey && (
+          <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {savedLabel}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function MessagesPanel({ c, locale, adminLocale, winery, theme }: Props) {
   const at = (key: string) => adminT(adminLocale, key)
 
-  const [open, setOpen] = useState<Set<string>>(new Set(['booking']))
+  const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (id: string) => setOpen(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
@@ -141,6 +227,9 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
   })
 
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
+  const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind>('success')
+  const [newCompanyVariant, setNewCompanyVariant] = useState<NewCompanyVariant>('withBooking')
+  const [accessCodeVariant, setAccessCodeVariant] = useState<AccessCodeVariant>('entry')
   const [savedKey, setSavedKey] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -152,6 +241,38 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     email_booking_intro_pending_company: c.email_booking_intro_pending_company ?? bookingDefault('pendingCompany', locale),
     email_wine_receipt_intro: c.email_wine_receipt_intro ?? (locale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
     email_invoice_message: c.email_invoice_message ?? (locale === 'ka' ? DEFAULT_INVOICE_MESSAGE_KA : DEFAULT_INVOICE_MESSAGE_EN),
+    onsite_pending_company_note: c.onsite_pending_company_note ?? t(locale, 'form.onsite_pending_company_note'),
+    onsite_new_company_title: c.onsite_new_company_title ?? t(locale, 'form.new_company_title'),
+    onsite_new_company_body_with_booking: c.onsite_new_company_body_with_booking ?? t(locale, 'form.new_company_body_with_booking'),
+    onsite_new_company_body_no_booking: c.onsite_new_company_body_no_booking ?? t(locale, 'form.new_company_body_no_booking'),
+    onsite_new_company_success_title: c.onsite_new_company_success_title ?? t(locale, 'form.new_company_success_title'),
+    onsite_new_company_success_body: c.onsite_new_company_success_body ?? t(locale, 'form.new_company_success_body'),
+    onsite_new_company_error: c.onsite_new_company_error ?? t(locale, 'form.new_company_error'),
+    onsite_confirm_heading: c.onsite_confirm_heading ?? t(locale, 'form.confirm_heading'),
+    onsite_confirm_subheading: c.onsite_confirm_subheading ?? t(locale, 'form.confirm_subheading'),
+    onsite_confirm_duration_note: c.onsite_confirm_duration_note ?? t(locale, 'form.confirm_duration_note'),
+    onsite_confirm_edit: c.onsite_confirm_edit ?? t(locale, 'form.confirm_edit'),
+    onsite_confirm_button: c.onsite_confirm_button ?? t(locale, 'form.confirm_button'),
+    onsite_confirm_button_pay: c.onsite_confirm_button_pay ?? t(locale, 'form.confirm_button_pay'),
+    onsite_payment_success_heading: c.onsite_payment_success_heading ?? t(locale, 'payment.success_heading'),
+    onsite_payment_success_body: c.onsite_payment_success_body ?? t(locale, 'payment.success_body'),
+    onsite_payment_failed_heading: c.onsite_payment_failed_heading ?? t(locale, 'payment.failed_heading'),
+    onsite_payment_failed_body: c.onsite_payment_failed_body ?? t(locale, 'payment.failed_body'),
+    onsite_payment_pending_heading: c.onsite_payment_pending_heading ?? t(locale, 'payment.pending_heading'),
+    onsite_payment_pending_body: c.onsite_payment_pending_body ?? t(locale, 'payment.pending_body'),
+    onsite_access_code_title: c.onsite_access_code_title ?? t(locale, 'form.access_code_title'),
+    onsite_access_code_intro: c.onsite_access_code_intro ?? t(locale, 'form.access_code_intro'),
+    onsite_access_code_error: c.onsite_access_code_error ?? t(locale, 'form.access_code_error'),
+    onsite_access_code_direct_not_recognised: c.onsite_access_code_direct_not_recognised ?? t(locale, 'form.access_code_direct_not_recognised'),
+    onsite_err_select_date: c.onsite_err_select_date ?? t(locale, 'form.err_select_date'),
+    onsite_err_future_date: c.onsite_err_future_date ?? t(locale, 'form.err_future_date'),
+    onsite_err_contact: c.onsite_err_contact ?? t(locale, 'form.err_contact'),
+    onsite_err_blocked: c.onsite_err_blocked ?? t(locale, 'form.err_blocked'),
+    onsite_err_day_closed: c.onsite_err_day_closed ?? t(locale, 'form.err_day_closed'),
+    onsite_err_working_hours: c.onsite_err_working_hours ?? t(locale, 'form.err_working_hours'),
+    onsite_err_lead_time: c.onsite_err_lead_time ?? t(locale, 'form.err_lead_time'),
+    onsite_err_min_guests: c.onsite_err_min_guests ?? t(locale, 'form.err_min_guests'),
+    onsite_no_rate_detail: c.onsite_no_rate_detail ?? t(locale, 'form.no_rate_detail'),
   })
 
   function setDraft(key: string, value: string) {
@@ -267,6 +388,10 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     <div className="max-w-3xl">
       <div className="flex flex-col gap-3">
 
+        <h3 className="text-xs font-semibold uppercase tracking-wider mt-1" style={{ color: C.faint }}>
+          {at('messages.group.emails')}
+        </h3>
+
         <Section
           title={at('messages.booking.title')}
           editable
@@ -378,6 +503,272 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           onToggle={() => toggle('newCompany')}
         >
           <IframePreview html={newCompanyPreview.html} />
+        </Section>
+
+        <h3 className="text-xs font-semibold uppercase tracking-wider mt-3" style={{ color: C.faint }}>
+          {at('messages.group.onsite')}
+        </h3>
+
+        <Section
+          title={at('messages.onsitePendingCompany.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsitePendingCompany.trigger')}
+          open={open.has('onsitePendingCompany')}
+          onToggle={() => toggle('onsitePendingCompany')}
+        >
+          <label className="text-sm block mb-2" style={{ color: C.muted }}>{at('messages.messageLabel')}</label>
+          <div className="flex items-start gap-2">
+            <textarea
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical' }}
+              value={drafts.onsite_pending_company_note}
+              onChange={e => setDraft('onsite_pending_company_note', e.target.value)}
+              onBlur={() => save('onsite_pending_company_note', 'On-site: pending company note', drafts.onsite_pending_company_note)}
+            />
+            {savedKey === 'onsite_pending_company_note' && (
+              <span className="text-xs flex-shrink-0 mt-2" style={{ color: '#16a34a' }}>✓ {at('messages.saved')}</span>
+            )}
+          </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsiteNewCompany.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteNewCompany.trigger')}
+          open={open.has('onsiteNewCompany')}
+          onToggle={() => toggle('onsiteNewCompany')}
+        >
+          <EditField label={at('messages.onsiteNewCompany.titleField')} draftKey="onsite_new_company_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <div className="flex gap-2 mb-4">
+            {(['withBooking', 'noBooking', 'sent', 'error'] as NewCompanyVariant[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setNewCompanyVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={newCompanyVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsiteNewCompany.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          {newCompanyVariant === 'withBooking' && (
+            <EditField label={at('messages.onsiteNewCompany.bodyWithBooking')} draftKey="onsite_new_company_body_with_booking" multiline
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+          {newCompanyVariant === 'noBooking' && (
+            <EditField label={at('messages.onsiteNewCompany.bodyNoBooking')} draftKey="onsite_new_company_body_no_booking" multiline
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+          {newCompanyVariant === 'sent' && (
+            <>
+              <EditField label={at('messages.onsiteNewCompany.successTitle')} draftKey="onsite_new_company_success_title"
+                inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+              <EditField label={at('messages.onsiteNewCompany.successBody')} draftKey="onsite_new_company_success_body"
+                inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+            </>
+          )}
+          {newCompanyVariant === 'error' && (
+            <EditField label={at('messages.onsiteNewCompany.errorText')} draftKey="onsite_new_company_error"
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <NewCompanyPopupView
+              includesBooking={NEW_COMPANY_PREVIEW[newCompanyVariant].includesBooking}
+              status={NEW_COMPANY_PREVIEW[newCompanyVariant].status}
+              title={drafts.onsite_new_company_title}
+              bodyWithBooking={drafts.onsite_new_company_body_with_booking}
+              bodyNoBooking={drafts.onsite_new_company_body_no_booking}
+              successTitle={drafts.onsite_new_company_success_title}
+              successBody={drafts.onsite_new_company_success_body}
+              errorMessage={drafts.onsite_new_company_error}
+              name={SAMPLE_GUEST.name}
+              contact={`${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}`}
+              phone={SAMPLE_GUEST.phone}
+              email={SAMPLE_GUEST.email}
+              labels={buildNewCompanyLabels(locale)}
+              preview
+            />
+          </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsiteConfirm.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteConfirm.trigger')}
+          open={open.has('onsiteConfirm')}
+          onToggle={() => toggle('onsiteConfirm')}
+        >
+          <EditField label={at('messages.onsiteConfirm.titleField')} draftKey="onsite_confirm_heading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.subheadingField')} draftKey="onsite_confirm_subheading"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.durationNoteField')} draftKey="onsite_confirm_duration_note"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.editField')} draftKey="onsite_confirm_edit"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.buttonField')} draftKey="onsite_confirm_button"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteConfirm.buttonPayField')} draftKey="onsite_confirm_button_pay"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <BookingConfirmPopupView
+              labels={{
+                heading: drafts.onsite_confirm_heading,
+                subheading: drafts.onsite_confirm_subheading,
+                sectionVisit: t(locale, 'form.confirm_section_visit'),
+                sectionGuests: t(locale, 'form.confirm_section_guests'),
+                edit: drafts.onsite_confirm_edit,
+                confirm: drafts.onsite_confirm_button,
+              }}
+              visitRows={[
+                { label: t(locale, 'form.visit_type'), value: t(locale, 'form.tasting_lunch') },
+                { label: t(locale, 'form.date'), value: '20/09/2026' },
+                { label: t(locale, 'form.confirm_arrive'), value: SAMPLE_TIME },
+              ] as ReviewRow[]}
+              guestRows={[
+                { label: t(locale, 'form.num_guests'), value: '4' },
+                { label: `${t(locale, 'form.first_name')} ${t(locale, 'form.last_name')}`, value: `${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}` },
+                { label: t(locale, 'form.phone'), value: SAMPLE_GUEST.phone },
+              ] as ReviewRow[]}
+              durationNote={drafts.onsite_confirm_duration_note.replaceAll('{hours}', '2.5').replaceAll('{end}', '16:30')}
+              totalLabel={t(locale, 'form.est_total')}
+              totalValue="320₾"
+              preview
+            />
+          </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsitePayment.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsitePayment.trigger')}
+          open={open.has('onsitePayment')}
+          onToggle={() => toggle('onsitePayment')}
+        >
+          <div className="flex gap-2 mb-4">
+            {(['success', 'failed', 'pending'] as PaymentResultKind[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPaymentVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={paymentVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsitePayment.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+          <EditField label={at('messages.onsitePayment.headingLabel')} draftKey={`onsite_payment_${paymentVariant}_heading`}
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsitePayment.bodyLabel')} draftKey={`onsite_payment_${paymentVariant}_body`} multiline
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <PaymentResultView
+              kind={paymentVariant}
+              heading={drafts[`onsite_payment_${paymentVariant}_heading`]}
+              body={drafts[`onsite_payment_${paymentVariant}_body`]}
+              contactPhone={paymentVariant === 'success' ? undefined : (winery.phone || '+995 555 00 00 00')}
+              backHomeLabel={t(locale, 'payment.back_home')}
+              preview
+            />
+          </div>
+        </Section>
+
+        <Section
+          title={at('messages.onsiteAccessCode.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteAccessCode.trigger')}
+          open={open.has('onsiteAccessCode')}
+          onToggle={() => toggle('onsiteAccessCode')}
+        >
+          <EditField label={at('messages.onsiteAccessCode.titleField')} draftKey="onsite_access_code_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteAccessCode.intro')} draftKey="onsite_access_code_intro"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <div className="flex gap-2 mb-4">
+            {(['entry', 'error'] as AccessCodeVariant[]).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setAccessCodeVariant(v)}
+                className="text-xs px-3 py-1.5 rounded-full flex-shrink-0"
+                style={accessCodeVariant === v
+                  ? { backgroundColor: 'var(--color-brand)', color: '#fff' }
+                  : { backgroundColor: C.pageBg, color: C.muted, border: `1px solid ${C.border}` }}
+              >
+                {at(`messages.onsiteAccessCode.variant.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          {accessCodeVariant === 'error' && (
+            <EditField label={at('messages.onsiteAccessCode.error')} draftKey="onsite_access_code_error"
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <AccessCodePopupView
+              status={ACCESS_CODE_PREVIEW[accessCodeVariant]}
+              title={drafts.onsite_access_code_title}
+              intro={drafts.onsite_access_code_intro.replaceAll('{company}', SAMPLE_COMPANY)}
+              errorMessage={drafts.onsite_access_code_error}
+              companyName={SAMPLE_COMPANY}
+              code="MARANI42"
+              labels={buildAccessCodeLabels(locale)}
+              preview
+            />
+          </div>
+
+          <EditField label={at('messages.onsiteAccessCode.directNotRecognised')} draftKey="onsite_access_code_direct_not_recognised"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+        </Section>
+
+        <Section
+          title={at('messages.onsiteErrors.title')}
+          editable
+          badgeLabel={at('messages.editableBadge')}
+          trigger={at('messages.onsiteErrors.trigger')}
+          open={open.has('onsiteErrors')}
+          onToggle={() => toggle('onsiteErrors')}
+        >
+          <EditField label={at('messages.onsiteErrors.selectDate')} draftKey="onsite_err_select_date"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.futureDate')} draftKey="onsite_err_future_date"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.contact')} draftKey="onsite_err_contact"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.blocked')} draftKey="onsite_err_blocked"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.dayClosed')} draftKey="onsite_err_day_closed"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.workingHours')} draftKey="onsite_err_working_hours"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.leadTime')} draftKey="onsite_err_lead_time"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.minGuests')} draftKey="onsite_err_min_guests"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.noRateDetail')} draftKey="onsite_no_rate_detail"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
         </Section>
 
       </div>

@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import type { Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -12,7 +13,8 @@ import { getTenantId } from '@/lib/tenant'
 export async function createMasterclassItem(data: {
   name: string
   unitType: MasterclassUnit
-  pricePerUnit: number
+  /** TETRI — the form converts what the admin typed (chunk 3). */
+  pricePerUnit: Tetri
   sortOrder?: number
 }) {
   await requireAdmin()
@@ -35,7 +37,8 @@ export async function createMasterclassItem(data: {
 export async function updateMasterclassItem(id: string, data: {
   name?: string
   unitType?: MasterclassUnit
-  pricePerUnit?: number
+  /** TETRI — the form converts what the admin typed (chunk 3). */
+  pricePerUnit?: Tetri
   active?: boolean
   sortOrder?: number
 }) {

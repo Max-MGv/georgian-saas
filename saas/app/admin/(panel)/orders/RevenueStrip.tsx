@@ -1,4 +1,5 @@
 import { adminT } from '@/lib/adminT'
+import { asTetri, formatTetri } from '@/lib/money'
 
 /**
  * Three numbers above the bookings table: upcoming bookings, the revenue those
@@ -72,7 +73,7 @@ export default function RevenueStrip({
     },
     {
       label: at('statistics.card.futureRevenue'),
-      value: `${revenue.toLocaleString('en-US')}₾`,
+      value: formatTetri(asTetri(revenue), { grouping: true }),
       // No sub-label: "Future revenue" already says it, and any extra word here
       // competes with the number, which is the whole point of the strip.
       sub: '',

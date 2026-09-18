@@ -9,6 +9,8 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import { seedStageColumns } from '../lib/statusWrite'
+import type { WineOrderStage } from '@prisma/client'
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env' })
@@ -58,7 +60,7 @@ async function seedWineOrders() {
       workingHours: 'Mon-Sat 10:00-22:00',
       contactName: 'Giorgi Beridze',
       contactPhone: '+995 598 100 200',
-      status: 'pending',
+      stage: 'NEW' as const,
     },
     {
       businessName: 'Batumi Seaside Restaurant',
@@ -68,7 +70,7 @@ async function seedWineOrders() {
       workingHours: 'Daily 12:00-23:00',
       contactName: 'Nino Tsiklauri',
       contactPhone: '+995 577 300 400',
-      status: 'confirmed',
+      stage: 'CONFIRMED' as const,
     },
     {
       businessName: 'Tbilisi Old Town Hotel',
@@ -78,7 +80,7 @@ async function seedWineOrders() {
       workingHours: '24/7',
       contactName: 'Luka Jikia',
       contactPhone: '+995 591 500 600',
-      status: 'pending',
+      stage: 'NEW' as const,
     },
     {
       businessName: 'Kutaisi Grand Cafe',
@@ -88,7 +90,7 @@ async function seedWineOrders() {
       workingHours: 'Tue-Sun 11:00-21:00',
       contactName: 'Mariam Kvaratskhelia',
       contactPhone: '+995 555 700 800',
-      status: 'pending',
+      stage: 'NEW' as const,
     },
     {
       businessName: 'Signagi Wine House',
@@ -98,7 +100,7 @@ async function seedWineOrders() {
       workingHours: 'Mon-Sun 10:00-20:00',
       contactName: 'Davit Alavidze',
       contactPhone: '+995 599 900 100',
-      status: 'confirmed',
+      stage: 'CONFIRMED' as const,
     },
   ]
 
@@ -108,6 +110,7 @@ async function seedWineOrders() {
     await db.wineOrder.create({
       data: {
         ...biz,
+        ...seedStageColumns('wineOrder', biz.stage as WineOrderStage, new Date()),
         totalAmount: items.reduce((sum, i) => sum + i.quantity * i.price, 0),
         wineItems: {
           create: items.map(i => ({
@@ -121,7 +124,7 @@ async function seedWineOrders() {
       },
     })
     created++
-    console.log(`  + ${biz.businessName} (${biz.status})`)
+    console.log(`  + ${biz.businessName} (${biz.stage})`)
   }
 
   console.log(`  -> ${created} wine order(s) created.`)

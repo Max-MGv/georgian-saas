@@ -37,6 +37,10 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   working_hours_open: '12:00',
   working_hours_close: '18:00',
   working_hours_days_json: '',
+  // Visit duration (#184) — expected length of the visit, minutes, shown on the
+  // public confirm-your-booking sheet as an estimated finish time.
+  visit_duration_tasting: '90',
+  visit_duration_tasting_lunch: '180',
   maps_embed_url: '',
   admin_language: 'en',
   // Onboarding wizard (#127) — 'yes' | 'no' | '' (unanswered)

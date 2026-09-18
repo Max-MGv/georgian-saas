@@ -22,7 +22,8 @@ export type PackingOrder = {
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
-  status: string
+  /** Unused by the packing sheet itself; kept so the row type stays complete. */
+  stage: string
 }
 
 function itemLabel(i: WineOrderItem) {

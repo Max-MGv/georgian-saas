@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import StatisticsClient from './StatisticsClient'
+import { NOT_ABANDONED, NOT_CANCELLED } from '@/lib/orderFilters'
 
 export default async function StatisticsPage() {
   const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
@@ -14,7 +15,19 @@ export default async function StatisticsPage() {
   const [rawOrders, companies, rawWineOrders] = await Promise.all([
     bookingOn
       ? withTenantDb(tenantId, tx => tx.order.findMany({
-          where: { tenantId },
+          // Abandoned checkouts never reached the winery, so they are not
+          // revenue and not activity — they are excluded here as on every
+          // other order surface.
+          //
+          // Cancelled bookings are excluded too (2026-09-18). They are real
+          // and they stay visible in the order screens, but they are not
+          // money and not volume. This page had counted them while the Orders
+          // page's own revenue strip did not, so the two disagreed by 7.2% on
+          // the dev tenant. Every figure below derives from this one query, so
+          // excluding here keeps counts and revenue consistent with each other
+          // — an average order value computed from a revenue that skips
+          // cancellations and a count that does not would be wrong.
+          where: { tenantId, ...NOT_ABANDONED, ...NOT_CANCELLED },
           include: { company: { select: { name: true } } },
           orderBy: { date: 'asc' },
         }))
@@ -22,7 +35,11 @@ export default async function StatisticsPage() {
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     wineOrdersOn
       ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
-          where: { tenantId },
+          // Same exclusions, same reasoning — WineStatistics.tsx summed
+          // cancelled wine orders into its revenue total while already
+          // excluding them from its "active orders" count, so the two
+          // contradicted each other on one screen.
+          where: { tenantId, ...NOT_ABANDONED, ...NOT_CANCELLED },
           include: { wineItems: true },
           orderBy: { createdAt: 'desc' },
         }))
@@ -103,7 +120,7 @@ export default async function StatisticsPage() {
       businessName: o.businessName,
       wines: items,
       displayTotal: Math.round(displayTotal),
-      status: o.status,
+      stage: o.stage,
       createdAt: o.createdAt.toISOString(),
     }
   })

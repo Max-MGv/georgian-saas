@@ -35,11 +35,18 @@ async function main() {
     'Order', 'Company', 'Price', 'Wine', 'WineVintage', 'WineOrder', 'WineOrderItem',
     'MenuItem', 'MasterclassItem', 'OrderMasterclass', 'OrderExtra',
     'BlockedDate', 'SiteContent', 'Setting', 'Payment',
+    // Guides/Reps (Plan-CompanyGuidesAndReps) — JOIN-to-Company RLS, same shape as Price.
+    'CompanyGuide', 'CompanyRepresentative',
     // Demo analytics (2026-09-12). Only ever holds the demo tenant's rows, and
     // the server action refuses any other tenant — but it carries a tenantId and
     // goes through the same GRANT + policy as everything else, because a table
     // that opts out of RLS is a table someone has to remember is special.
     'DemoEvent',
+    // Order history (chunk 5, 2026-09-18). Append-only by convention in the
+    // application, not by grant: UPDATE/DELETE are granted like every other
+    // table so that deleting an order can cascade its events away. Nothing in
+    // the app ever updates a row here.
+    'OrderEvent',
   ]
   for (const t of writableTables) {
     console.log(`  GRANT SELECT/INSERT/UPDATE/DELETE on "${t}"`)
@@ -63,6 +70,9 @@ async function main() {
     'Order', 'Company', 'Wine', 'WineVintage', 'WineOrder',
     'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting', 'Payment',
     'DemoEvent',
+    // Carries its own tenantId, so it takes the simplest of the three policy
+    // shapes rather than the JOIN-to-parent one Price and the line tables need.
+    'OrderEvent',
   ]
 
   for (const t of tenantedTables) {
@@ -162,7 +172,49 @@ async function main() {
       );
   `)
 
-  console.log('\nDone. RLS policies created for all 14 tables.')
+  // CompanyGuide: JOIN to Company
+  console.log('Creating policy on "CompanyGuide" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyGuide";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyGuide"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyGuide"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyGuide"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  // CompanyRepresentative: JOIN to Company
+  console.log('Creating policy on "CompanyRepresentative" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyRepresentative";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyRepresentative"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyRepresentative"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyRepresentative"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  console.log('\nDone. RLS policies created for all 16 tables.')
   console.log('Verify with: npx ts-node --compiler-options \'{"module":"CommonJS"}\' scripts/check-rls.ts')
 }
 

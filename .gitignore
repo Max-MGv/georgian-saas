@@ -28,3 +28,6 @@ saas/.env.test
 # playwright-cli session artifacts (snapshots, console/network logs) — ephemeral,
 # can appear here if playwright-cli was ever run with the repo root as cwd
 .playwright-cli/
+
+# Manual exploration screen recordings — large binaries, not test artifacts
+vault/Playwright/recordings/

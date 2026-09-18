@@ -1,6 +1,6 @@
 import { db, withTenantDb } from '@/lib/db'
-import { OrderStatus } from '@prisma/client'
-import { verifyCallbackSignature, toMinorUnits } from '@/lib/payments/flitt'
+import { recordOrderEvent } from '@/lib/orderEvents'
+import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
@@ -34,12 +34,6 @@ export type SettleResult =
 /** Flitt's terminal success value. Anything else is not a paid order. */
 const APPROVED = 'approved'
 
-/**
- * Gateway outcomes that mean this attempt is definitively over and unpaid.
- * `processing` is not here on purpose — it may still become `approved`.
- */
-const TERMINAL_FAILURES = new Set(['declined', 'expired'])
-
 export async function settlePayment(body: Record<string, unknown>): Promise<SettleResult> {
   const providerPaymentId = body.payment_id != null ? String(body.payment_id) : ''
   if (!providerPaymentId) return { ok: false, reason: 'callback carried no payment_id' }
@@ -71,10 +65,11 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // ── Gate 2: the amount is the one we asked for ─────────────────────────────
   // Without this, a customer who tampers with the checkout could settle a 400
   // GEL booking for one tetri and the order would read as fully paid. Flitt
-  // reports minor units, so the stored major-unit amount is converted rather
-  // than the other way around (no float division).
+  // reports minor units and `payment.amount` is now stored in tetri, so this is
+  // an integer-to-integer comparison with no conversion and no float division
+  // on either side (chunk 3, 2026-09-18).
   const reportedMinor = Number(body.amount)
-  const expectedMinor = toMinorUnits(payment.amount)
+  const expectedMinor = payment.amount
   if (!Number.isFinite(reportedMinor) || reportedMinor !== expectedMinor) {
     return { ok: false, reason: `amount mismatch: expected ${expectedMinor}, got ${body.amount}` }
   }
@@ -98,44 +93,74 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // something goes wrong. Only an approval advances the order.
   const approved = orderStatus === APPROVED
 
+  // One instant shared by the Payment row and the order's own paidAt, so the
+  // gateway record and the order can never disagree about when money arrived.
+  const settledAt = new Date()
+
   await withTenantDb(tenantId, async tx => {
     await tx.payment.update({
       where: { id: payment.id },
       data: {
         status: orderStatus || 'unknown',
         rawResponse: body as object,
-        settledAt: approved ? new Date() : null,
+        settledAt: approved ? settledAt : null,
       },
     })
 
     if (!approved) {
-      // A terminal decline is worth writing onto the order, not just the
-      // payment: otherwise a wine order sits in "Awaiting Payment" forever when
-      // we already know the card was refused. `processing` is deliberately
-      // excluded — that one is still in flight and may yet approve.
-      if (TERMINAL_FAILURES.has(orderStatus) && payment.wineOrderId) {
-        await tx.wineOrder.updateMany({
-          where: { id: payment.wineOrderId, status: 'pending_payment' },
-          data: { status: 'payment_failed' },
-        })
-      }
+      // A refusal is real history. The Payment row keeps the gateway's verbatim
+      // status; this puts the same fact on the order's own timeline, where
+      // anyone looking at the order will actually see it.
+      await recordOrderEvent(tx, {
+        tenantId,
+        orderId: payment.orderId,
+        wineOrderId: payment.wineOrderId,
+        type: 'PAYMENT_DECLINED',
+        actorType: 'GATEWAY',
+        payload: { provider: payment.provider, status: orderStatus || 'unknown', amount: payment.amount },
+      })
+
+      // A declined card needs nothing written onto the order any more. It was
+      // already marked incomplete when the guest was sent to the gateway, and
+      // since Feature 191 a refusal and a closed tab are the same fact to the
+      // winery: an order that never happened. What distinguishes them lives on
+      // the Payment row, which keeps the gateway's own verbatim status.
+      //
+      // `processing` was the reason this used to branch — it is still in flight
+      // and may yet approve — and that distinction now costs nothing, because
+      // neither case writes to the order.
       return
     }
 
+    // Money arriving is what turns an incomplete checkout into a real order, so
+    // the same write clears `abandonedAt`. The database enforces the pairing
+    // (`*_abandoned_is_unpaid`), so a paid write that forgot it would fail
+    // loudly rather than leave a paid order filed under abandoned.
+    const paidColumns = { paidAt: settledAt, abandonedAt: null }
+
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId: payment.orderId,
+      wineOrderId: payment.wineOrderId,
+      type: 'PAID',
+      actorType: 'GATEWAY',
+      payload: { provider: payment.provider, providerPaymentId, amount: payment.amount },
+    })
+
+    // Guarded on stage rather than blindly set: an order a human already moved
+    // on — completed it, or cancelled it — must not have its fulfilment dragged
+    // backwards by a late callback. `stage: 'NEW'` says exactly that, which is
+    // what the old `status IN (NEW, PENDING_PAYMENT)` guard was reaching for
+    // through a column that mixed the two ideas together.
     if (payment.orderId) {
-      // Guarded on status rather than blindly set: an order a human already
-      // moved on (to COMPLETED, or CANCELLED) must not be dragged back to PAID
-      // by a late callback.
       await tx.order.updateMany({
-        where: { id: payment.orderId, status: { in: [OrderStatus.NEW, OrderStatus.PENDING_PAYMENT] } },
-        data: { status: OrderStatus.PAID },
+        where: { id: payment.orderId, stage: 'NEW' },
+        data: paidColumns,
       })
     } else if (payment.wineOrderId) {
-      // WineOrder.status is a bare String, not the OrderStatus enum — a
-      // different convention from Order, and one to keep in mind here.
       await tx.wineOrder.updateMany({
-        where: { id: payment.wineOrderId, status: { in: ['pending', 'pending_payment'] } },
-        data: { status: 'paid' },
+        where: { id: payment.wineOrderId, stage: 'NEW' },
+        data: paidColumns,
       })
     }
   })

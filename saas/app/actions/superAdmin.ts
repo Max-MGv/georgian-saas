@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { Prisma, type WineDetailLevel } from '@prisma/client'
 import { parseTenantTheme, resolveTenantTheme, type PresetId } from '@/lib/themePresets'
+import { NOT_ABANDONED, paymentStateOf } from '@/lib/orderFilters'
 import { LEGAL_CONTENT_EN, LEGAL_CONTENT_KA, LEGAL_LABELS } from '@/lib/legalContent'
 
 function friendlyUniqueConstraintError(e: unknown): Error {
@@ -72,6 +73,7 @@ export async function getTenant(id: string) {
     modulesLegalPages: t.modulesLegalPages,
     modulesOnlinePayment: t.modulesOnlinePayment,
     wineDetailLevel: t.wineDetailLevel,
+    enableCompanyNationalityBreakdown: t.enableCompanyNationalityBreakdown,
   }
 }
 
@@ -91,6 +93,7 @@ export async function createTenant(data: {
   modulesLegalPages: boolean
   modulesOnlinePayment?: boolean
   wineDetailLevel: WineDetailLevel
+  enableCompanyNationalityBreakdown: boolean
 }) {
   await requireSuperAdmin()
   let tenant
@@ -111,6 +114,7 @@ export async function createTenant(data: {
         modulesLegalPages: data.modulesLegalPages,
         modulesOnlinePayment: data.modulesOnlinePayment ?? false,
         wineDetailLevel: data.wineDetailLevel,
+        enableCompanyNationalityBreakdown: data.enableCompanyNationalityBreakdown,
       },
     })
   } catch (e) {
@@ -144,6 +148,7 @@ export async function updateTenant(id: string, data: {
   modulesLegalPages: boolean
   modulesOnlinePayment?: boolean
   wineDetailLevel: WineDetailLevel
+  enableCompanyNationalityBreakdown: boolean
 }) {
   await requireSuperAdmin()
   try {
@@ -166,6 +171,7 @@ export async function updateTenant(id: string, data: {
         // older client that doesn't send the field must not switch payment off.
         modulesOnlinePayment: data.modulesOnlinePayment,
         wineDetailLevel: data.wineDetailLevel,
+        enableCompanyNationalityBreakdown: data.enableCompanyNationalityBreakdown,
       },
     })
   } catch (e) {
@@ -348,6 +354,11 @@ export async function getAllBookings() {
   await requireSuperAdmin()
   const [orders, tenants] = await Promise.all([
     db.order.findMany({
+      // Abandoned checkouts are not orders and never appear on an order
+      // screen — including this one, which had been left reading the retired
+      // `status` column entirely (Feature 191: chunk 4 re-pointed both tenant
+      // order screens and missed this cross-tenant one).
+      where: { ...NOT_ABANDONED },
       include: { company: { select: { name: true } } },
       orderBy: { date: 'desc' },
       take: 500,
@@ -360,7 +371,8 @@ export async function getAllBookings() {
     const tenant = o.tenantId ? tenantMap.get(o.tenantId) : undefined
     return {
       id: o.id,
-      status: o.status,
+      stage: o.stage,
+      payment: paymentStateOf(o),
       date: o.date.toISOString(),
       timeSlot: o.timeSlot,
       bookingType: o.bookingType,
@@ -380,6 +392,7 @@ export async function getAllWineOrders() {
   await requireSuperAdmin()
   const [orders, tenants] = await Promise.all([
     db.wineOrder.findMany({
+      where: { ...NOT_ABANDONED },
       include: { wineItems: true },
       orderBy: { createdAt: 'desc' },
       take: 500,
@@ -396,7 +409,8 @@ export async function getAllWineOrders() {
       id: o.id,
       businessName: o.businessName,
       contactName: o.contactName,
-      status: o.status,
+      stage: o.stage,
+      payment: paymentStateOf(o),
       createdAt: o.createdAt.toISOString(),
       displayTotal: Math.round(displayTotal),
       bottleCount,

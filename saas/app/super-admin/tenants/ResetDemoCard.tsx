@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import { resetDemoNow } from '@/app/actions/demoReset'
 
 /**
@@ -47,7 +48,7 @@ export default function ResetDemoCard({ tenantName }: { tenantName: string }) {
     }
     setResult(
       `Rebuilt ${res.tenant}: ${res.created.bookings} bookings and ${res.created.wineOrders} wine orders `
-      + `(${res.totals.bookings} bookings total, ${res.totals.revenue.toLocaleString('en-US')}₾) in `
+      + `(${res.totals.bookings} bookings total, ${formatTetri(asTetri(res.totals.revenue), { grouping: true })}) in `
       + `${(res.elapsedMs / 1000).toFixed(1)}s. The setup wizard is back to a fresh account.`
     )
   }

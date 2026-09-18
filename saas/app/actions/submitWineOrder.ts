@@ -1,11 +1,13 @@
 'use server'
 
 import { cookies } from 'next/headers'
+import { asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_WINE_ORDER_LIMIT } from '@/lib/demoRateLimit'
+import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
 
 export type WineSelection = {
   vintageId: string
@@ -120,6 +122,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           discountPercent: discountPercent || null,
           tenantId,
           companyId: companyId || null,
+          ...NEW_ORDER_COLUMNS,
         },
       })
       await tx.wineOrderItem.createMany({
@@ -146,7 +149,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
         merchantId: gate.merchantId,
         secretKey: gate.secretKey,
         wineOrderId: createdOrder.id,
-        amount: totalAmount,
+        // Already tetri — see the equivalent note in createBooking.ts.
+        amount: asTetri(totalAmount),
         // Built from the real order, not a hardcoded site name like the old site.
         orderDesc: `Wine order — ${bottles} bottle${bottles === 1 ? '' : 's'}, ${businessName}`,
         locale,
@@ -154,11 +158,12 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
 
       if (checkoutUrl) {
         // Only once a checkout really exists, so a failed one leaves a plain
-        // "pending" order. settle.ts advances this to 'paid' on approval.
-        // WineOrder.status is a bare String, not the OrderStatus enum.
+        // NEW order rather than one filed under abandoned. settle.ts clears
+        // this on approval; until then the row is not an order and shows only
+        // on /admin/abandoned.
         await withTenantDb(tenantId, tx => tx.wineOrder.update({
           where: { id: createdOrder.id },
-          data: { status: 'pending_payment' },
+          data: { abandonedAt: new Date() },
         }))
         return { success: true, checkoutUrl }
       }

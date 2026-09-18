@@ -175,8 +175,31 @@ test.describe('Booking form — simple/individual variant', () => {
     // server-side, not just that the client-side redirect fired. Uses a
     // fresh page (see describe-level comment) rather than continuing on the
     // page that's now sitting on the external Flitt gateway.
+    //
+    // Since Feature 191 a booking that was sent to the card gateway and has
+    // not paid is NOT on /admin/orders at all — it is an incomplete order, and
+    // those live on their own screen. So this first asserts the invariant that
+    // replaced the old "Awaiting Payment" status: the booking exists, and it
+    // exists *there* and not among the real orders.
     const admin = await context.newPage();
     await ensureAdminLoggedIn(admin);
+    await admin.goto('/admin/abandoned');
+    const incomplete = admin.locator('div').filter({ hasText: TEST_EMAIL }).last();
+    await expect(incomplete).toBeVisible({ timeout: 15_000 });
+
+    // expect: it is absent from the real order list, which is the whole point
+    // of holding incomplete orders apart — an abandoned checkout must never
+    // look like a fresh booking the winery has work to do on.
+    await admin.goto('/admin/orders');
+    await expect(admin.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+
+    // 8b. Restore it, so the rest of this test can check the persisted booking
+    // on the order screens as before — and so the way back out of the
+    // incomplete list is itself covered.
+    await admin.goto('/admin/abandoned');
+    await admin.locator('div').filter({ hasText: TEST_EMAIL }).last()
+      .getByRole('button', { name: 'Restore without payment' }).click();
+    await admin.goto('/admin/orders');
     const row = admin.locator('tr', { hasText: TEST_EMAIL });
     // Real finding: the dev server's first compile of a freshly-visited route
     // can take longer than the 5s default assertion timeout (confirmed via a
@@ -186,8 +209,10 @@ test.describe('Booking form — simple/individual variant', () => {
     // expect: date matches what was submitted (admin table renders "11 Aug 2026" style)
     const adminDateText = tomorrow.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     await expect(row).toContainText(adminDateText);
-    // expect: status is "Awaiting Payment" — order exists before payment completes
-    await expect(row.getByRole('button', { name: /Awaiting Payment/ })).toBeVisible();
+    // expect: a restored booking rejoins the flow at the start, unpaid. There
+    // is no "Awaiting Payment" status any more — that was a payment fact
+    // wedged into the fulfilment column, which is what Feature 191 removed.
+    await expect(row.getByRole('button', { name: /^New ▾$/ })).toBeVisible();
 
     // Guest count isn't a column on the Orders table for individual bookings
     // (Tasting/Lunch/Visit/Masterclass/Food are all "—" — those columns are

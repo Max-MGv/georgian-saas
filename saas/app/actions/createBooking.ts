@@ -1,7 +1,9 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
-import { BookingType, OrderStatus, VisitType } from '@prisma/client'
+import { recordOrderEvent } from '@/lib/orderEvents'
+import { asTetri } from '@/lib/money'
+import { BookingType, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
@@ -9,6 +11,7 @@ import { resolveTenantTheme } from '@/lib/themePresets'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
+import { t } from '@/lib/t'
 import {
   DEFAULT_BOOKING_INTRO_UNPAID, DEFAULT_BOOKING_INTRO_UNPAID_KA,
   DEFAULT_BOOKING_INTRO_PENDING_COMPANY, DEFAULT_BOOKING_INTRO_PENDING_COMPANY_KA,
@@ -19,10 +22,19 @@ import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
+import { COUNTRIES } from '@/lib/countries'
+import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
+
+const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   companyId?: string
+  // Which of the company's guides matched the code entered on the form (Plan-CompanyGuidesAndReps
+  // Chunk 5/7) — lets the admin panel know exactly who was contacted, even if the guest then
+  // edits the autofilled phone/name away from the guide's own. Ignored unless companyId is set
+  // and the guide actually belongs to that company (re-checked server-side below).
+  guideId?: string
   visitType: 'TASTING' | 'TASTING_LUNCH'
   date: string
   timeSlot: string
@@ -38,6 +50,13 @@ export type BookingFormData = {
   hotDishMeat?: string | null
   foodNotes?: string | null
   masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
+  /**
+   * ISO 3166-1 alpha-2 codes for the nationalities present on a COMPANY booking
+   * (Plan-CompanyNationality) — a small tag set, no per-country headcount.
+   * Ignored for INDIVIDUAL bookings and re-validated against the real country
+   * list server-side below before it's ever written.
+   */
+  nationalities?: string[]
   /**
    * Company name typed into the "New Company?" popup when a COMPANY booking
    * is submitted with no companyId (Feature 180) — display-only, stored on
@@ -79,8 +98,28 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
   try {
     const tenantId = await getTenantId()
 
+    // The guest's actual chosen language for this request (same cookie read
+    // again, unchanged, further down for the email-send branch). Resolved
+    // this early so every error guard below — not just the happy path —
+    // can return admin-edited, correctly-localized copy instead of a
+    // hardcoded English string. No Order.locale column exists, so this only
+    // works for requests made directly by a browser; see the later comment
+    // on settle.ts's webhook path for why it can't do the same.
+    const guestLocale = (await cookies()).get('site_locale')?.value === 'ka' ? 'ka' : 'en'
+    // Chunk 4 (On-Site Messages plan) — mirrors the mc() helper every public
+    // page/component already has, just server-side: SiteContent section
+    // 'messages' with a code-fallback, same {token} substitution as t().
+    // Several guards below share a key with BookingForm.tsx's client-side
+    // check of the same rule — one editable field controls both surfaces.
+    async function mc(key: string, tKey: string, vars?: Record<string, string | number>) {
+      let str = await getContent(key, t(guestLocale, tKey), guestLocale)
+      if (vars) for (const [k, v] of Object.entries(vars)) str = str.replaceAll(`{${k}}`, String(v))
+      return str
+    }
+
     // Guard: abuse on the public demo sandbox. A no-op for real tenants —
-    // see lib/demoRateLimit.ts for why this is deliberately demo-only.
+    // see lib/demoRateLimit.ts for why this is deliberately demo-only. Not
+    // localized/editable, deliberately — demo-only, never a real customer.
     const rate = await checkDemoRateLimit(tenantId, 'booking', DEMO_BOOKING_LIMIT)
     if (rate.limited) {
       return {
@@ -93,7 +132,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const dateStr = new Date(data.date).toISOString().split('T')[0]
     const todayStr = new Date().toISOString().split('T')[0]
     if (dateStr < todayStr) {
-      return { success: false, error: 'Bookings cannot be made for past dates.' }
+      return { success: false, error: await mc('onsite_err_future_date', 'form.err_future_date') }
     }
 
     // Guard: blocked dates (scoped to this tenant)
@@ -101,7 +140,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       tx.blockedDate.findFirst({ where: { date: new Date(dateStr), tenantId } })
     )
     if (blocked) {
-      return { success: false, error: 'The winery is closed on this date. Please choose another date.' }
+      return { success: false, error: await mc('onsite_err_blocked', 'form.err_blocked') }
     }
 
     // Guard: working hours/days + minimum lead time (#178). Mirrors the client-side
@@ -123,13 +162,13 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const weeklyHours = parseWeeklyHours(workingHoursDaysJson, workingHoursOpen, workingHoursClose)
     const dayHours = getDayHours(dateStr, workingHoursCustomStr === 'true', weeklyHours, workingHoursOpen, workingHoursClose)
     if (dayHours.closed) {
-      return { success: false, error: 'The winery is closed on this day of the week. Please choose another date.' }
+      return { success: false, error: await mc('onsite_err_day_closed', 'form.err_day_closed') }
     }
     const requestedHour = parseInt(data.timeSlot.split(':')[0]) || 0
     const openHour = Math.ceil(parseInt(dayHours.open.split(':')[0]) || 0)
     const closeHour = Math.floor(parseInt(dayHours.close.split(':')[0]) || 0)
     if (requestedHour < openHour || requestedHour > closeHour) {
-      return { success: false, error: 'That time is outside the winery\'s working hours on this date. Please choose another time.' }
+      return { success: false, error: await mc('onsite_err_working_hours', 'form.err_working_hours') }
     }
     const leadHours = getLeadHours(
       data.visitType, bookingLeadSplitStr === 'true',
@@ -137,7 +176,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     )
     const minInstant = minBookableInstant(new Date(), leadHours)
     if (!slotMeetsLeadTime(dateStr, data.timeSlot, minInstant)) {
-      return { success: false, error: `Bookings must be made at least ${leadHours} hours in advance. Please choose a later time.` }
+      return { success: false, error: await mc('onsite_err_lead_time', 'form.err_lead_time', { hours: leadHours }) }
     }
 
     // Guard: min guests from settings (tenant-scoped via getSetting)
@@ -157,7 +196,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
       : guestCount
     if (effectiveGuestCount < minGuests) {
-      return { success: false, error: `Minimum ${minGuests} guests required for this visit type.` }
+      return { success: false, error: await mc('onsite_err_min_guests', 'form.err_min_guests', { min: minGuests }) }
     }
 
     // Guard: max guests from settings (optional — blank/unset means no cap).
@@ -218,6 +257,23 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }
     }
     const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
+
+    // What this order is actually sold at, frozen onto the row (chunk 4).
+    //
+    // Seeded from the individuals tier ONLY for an individual booking. A company
+    // booking that no tier prices keeps a null snapshot deliberately: its total
+    // stays 0 ("confirmed after submission"), and seeding it with the
+    // individuals rate would let a later recalc invent a price the winery never
+    // quoted.
+    //
+    // Registration is 0 rather than the tier's fee because the individual path
+    // never applies that fee — the snapshot records what was *used*, not what
+    // the tier happened to hold.
+    const isIndividual = data.bookingType === 'INDIVIDUAL'
+    let tastingRateSnapshot: number | null = isIndividual ? pricePerPersonTasting : null
+    let lunchRateSnapshot: number | null = isIndividual ? pricePerPersonLunch : null
+    let registrationFeeSnapshot: number | null =
+      isIndividual && pricePerPersonTasting != null ? 0 : null
     // A COMPANY booking with no companyId is a new-company request (Feature 180) —
     // there's no company row to price against yet, so it must not fall through to
     // the individuals table below. It stays 0 ("confirmed after submission") until
@@ -229,10 +285,18 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         ? (pricePerPerson ?? 0) * guestCount
         : 0
 
+    let verifiedGuideId: string | null = null
     if (data.bookingType === 'COMPANY' && data.companyId) {
       const company = await withTenantDb(tenantId, tx =>
         tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
       )
+
+      if (data.guideId) {
+        const guide = await withTenantDb(tenantId, tx =>
+          tx.companyGuide.findFirst({ where: { id: data.guideId, companyId: data.companyId } })
+        )
+        if (guide) verifiedGuideId = guide.id
+      }
 
       if (company?.prices.length) {
         const payingGuests = isEnhanced
@@ -240,6 +304,9 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           : guestCount
         const tier = findTier(company.prices, payingGuests)
         if (tier) {
+          tastingRateSnapshot = tier.pricePerPerson
+          lunchRateSnapshot = comboRatePerPerson(tier)
+          registrationFeeSnapshot = tier.registrationPrice
           if (isEnhanced) {
             totalPrice =
               (data.tastingGuestCount ?? 0) * tier.pricePerPerson +
@@ -253,14 +320,15 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
             totalPrice = ratePerPerson * guestCount + tier.registrationPrice
           }
         } else if (!isEnhanced) {
-          return { success: false, error: `No pricing tier covers ${guestCount} guests for this company. Please contact us directly.` }
+          return { success: false, error: await mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount }) }
         }
       }
     } else if (isEnhanced) {
       totalPrice = masterclassAmt
     }
 
-    const createdOrder = await withTenantDb(tenantId, tx => tx.order.create({
+    const createdOrder = await withTenantDb(tenantId, async tx => {
+      const created = await tx.order.create({
       data: {
         bookingType: data.bookingType as BookingType,
         visitType: data.visitType as VisitType,
@@ -279,8 +347,18 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         phone: data.phone || null,
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
+        tastingRateSnapshot,
+        lunchRateSnapshot,
+        registrationFeeSnapshot,
         tenantId,
+        ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
+        guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
+        // Never trust a client-sent array outright — filter to real ISO codes and
+        // dedupe, same defense-in-depth discipline as verifiedGuideId above.
+        nationalities: data.bookingType === 'COMPANY'
+          ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
+          : [],
         masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
           create: (data.masterclassLines ?? []).map(l => ({
             masterclassItemId: l.masterclassItemId,
@@ -289,7 +367,19 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           })),
         } : undefined,
       },
-    }))
+    })
+      // The first row of the order's timeline. GUEST, because a booking form
+      // submission has no admin behind it (chunk 5).
+      await recordOrderEvent(tx, {
+        tenantId,
+        orderId: created.id,
+        type: 'CREATED',
+        actorType: 'GUEST',
+        toStage: created.stage,
+        payload: { totalPrice: created.totalPrice, bookingType: created.bookingType, guestCount },
+      })
+      return created
+    })
 
     // ── Online payment branch ──────────────────────────────────────────────
     // Only after the order safely exists. Every failure inside this block
@@ -317,17 +407,23 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         merchantId: gate.merchantId,
         secretKey: gate.secretKey,
         orderId: createdOrder.id,
-        amount: totalPrice,
+        // Already tetri: every input to the total (tier rates, registration fee,
+        // masterclass lines, extras) is stored in tetri, and integer arithmetic
+        // keeps it there. asTetri asserts that rather than converting.
+        amount: asTetri(totalPrice),
         orderDesc: `${typeLabel}, ${effectiveGuestCount} guests, ${dateStr} ${data.timeSlot}`,
         locale,
       })
 
       if (checkoutUrl) {
-        // Status moves to PENDING_PAYMENT only once a checkout really exists —
-        // done in this order so a failed checkout leaves a plain NEW order.
+        // Marked incomplete only once a checkout really exists — done in this
+        // order so a failed checkout leaves a plain NEW booking rather than one
+        // filed under abandoned. Cleared by settle.ts the moment money arrives,
+        // or by an admin restoring it by hand. Until then the booking is not an
+        // order: it appears on /admin/abandoned and on no order screen.
         await withTenantDb(tenantId, tx => tx.order.update({
           where: { id: createdOrder.id },
-          data: { status: OrderStatus.PENDING_PAYMENT },
+          data: { abandonedAt: new Date() },
         }))
         // No confirmation email here: "your booking is confirmed" must not
         // reach someone who hasn't paid and may abandon checkout. It is sent
@@ -340,12 +436,11 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       // fall through: checkout unavailable → reservation-only, email as today
     }
 
-    // The guest's actual chosen language for this request — same cookie the
-    // checkout-language branch above already reads. No Order.locale column
-    // exists (nothing persists it), so this only works for requests made
-    // directly by a browser; settle.ts's webhook path can't do the same (see
-    // its own comment) and falls back to the tenant's site-wide default.
-    const guestLocale = (await cookies()).get('site_locale')?.value === 'ka' ? 'ka' : 'en'
+    // guestLocale resolved at the top of the function now (Chunk 4) — reused
+    // here unchanged. No Order.locale column exists (nothing persists it),
+    // so this only works for requests made directly by a browser; settle.ts's
+    // webhook path can't do the same (see its own comment) and falls back to
+    // the tenant's site-wide default.
 
     // Fetched unconditionally (not just under `if (data.email)`) because the
     // winery notification below must fire even for phone-only bookings.
@@ -405,6 +500,17 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       guestCountAdjustedTo, guestCountOverMax, guestCountMax: maxGuests,
     }
   } catch {
-    return { success: false, error: 'Something went wrong. Please try again.' }
+    // mc()/guestLocale above are scoped to the try block, and whatever threw
+    // could in principle be the cookies()/DB call either depends on — so this
+    // re-resolves both defensively rather than assuming they're available.
+    // Reuses Chunk 1's onsite_new_company_error field: same generic
+    // catch-all wording as the New Company popup's own error state.
+    try {
+      const locale = (await cookies()).get('site_locale')?.value === 'ka' ? 'ka' : 'en'
+      const message = await getContent('onsite_new_company_error', t(locale, 'form.new_company_error'), locale)
+      return { success: false, error: message }
+    } catch {
+      return { success: false, error: t('en', 'form.new_company_error') }
+    }
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { asTetri, fromMajor, formatTetri } from '@/lib/money'
 import { createOnboardingCompany, addIndividualsPriceTier, setWorksWithCompanies, type OnboardingStatus, type OnboardingTier } from '@/app/actions/onboarding'
 import { createPrice } from '@/app/actions/prices'
 import { adminT } from '@/lib/adminT'
@@ -26,7 +27,7 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   if (mode === 'simple') {
     const priceNum = Number(fields.price)
     if (fields.price.trim() === '' || !Number.isFinite(priceNum) || priceNum <= 0) return null
-    return { minGuests: 1, maxGuests: 999, pricePerPerson: priceNum, tastingLunchPricePerPerson: 0, registrationPrice: 0 }
+    return { minGuests: 1, maxGuests: 999, pricePerPerson: fromMajor(priceNum), tastingLunchPricePerPerson: fromMajor(0), registrationPrice: fromMajor(0) }
   }
   const min = Number(fields.minGuests)
   const max = Number(fields.maxGuests)
@@ -36,9 +37,9 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   return {
     minGuests: min,
     maxGuests: max,
-    pricePerPerson: tasting,
-    tastingLunchPricePerPerson: fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP),
-    registrationPrice: fields.flatFee.trim() === '' ? 0 : Number(fields.flatFee),
+    pricePerPerson: fromMajor(tasting),
+    tastingLunchPricePerPerson: fromMajor(fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP)),
+    registrationPrice: fromMajor(fields.flatFee.trim() === '' ? 0 : Number(fields.flatFee)),
   }
 }
 
@@ -509,9 +510,10 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
       companyId,
       minGuests: min,
       maxGuests: max,
-      pricePerPerson: tasting,
-      tastingLunchPricePerPerson: tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP),
-      registrationPrice: flatFee.trim() === '' ? 0 : Number(flatFee),
+      // The wizard's inputs hold GEL; the action takes tetri (chunk 3).
+      pricePerPerson: fromMajor(tasting),
+      tastingLunchPricePerPerson: fromMajor(tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP)),
+      registrationPrice: fromMajor(flatFee.trim() === '' ? 0 : Number(flatFee)),
     })
     if ('error' in result) {
       setError(result.error ?? '')

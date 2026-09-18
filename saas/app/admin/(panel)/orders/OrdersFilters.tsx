@@ -8,6 +8,9 @@ import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import { countryName } from '@/lib/countries'
+import { BOOKING_STAGES } from '@/lib/statusFlow'
+import { PAYMENT_FILTERS } from '@/lib/orderFilters'
 
 const C = {
   border: 'var(--site-border)',
@@ -19,32 +22,43 @@ const C = {
   bg: 'var(--site-surface)',
 }
 
-const STATUSES = [
-  { value: 'NEW',          labelKey: 'orders.status.new' },
-  { value: 'CONFIRMED',    labelKey: 'orders.status.confirmed' },
-  { value: 'INVOICE_SENT', labelKey: 'orders.status.invoiceSent' },
-  { value: 'PENDING_PAYMENT', labelKey: 'orders.status.pendingPayment' },
-  { value: 'PAID',         labelKey: 'orders.status.paid' },
-  { value: 'COMPLETED',    labelKey: 'orders.status.completed' },
-  { value: 'CANCELLED',    labelKey: 'orders.status.cancelled' },
-]
+/**
+ * Labels for the two filter vocabularies. Both are now fixed code-level
+ * concepts - the stages are a Prisma enum and the payment states are derived
+ * from dates - so the options are constants again rather than rows fetched per
+ * request. The raw value is the fallback, which should never show.
+ */
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  NEW: 'orders.status.new',
+  CONFIRMED: 'orders.status.confirmed',
+  COMPLETED: 'orders.status.completed',
+  CANCELLED: 'orders.status.cancelled',
+  unpaid: 'orders.status.unpaid',
+  invoiced: 'orders.status.invoiceSent',
+  paid: 'orders.status.paid',
+}
 
 type Props = {
   companies: Company[]
-  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string }
+  params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; payment?: string; nationality?: string; view?: string }
+  /** Per `BookingStage`. Partitions the total - abandoned orders are not here. */
   statusCounts: Record<string, number>
+  /** Per payment state. `invoiced` means invoiced and still unpaid. */
+  paymentCounts: Record<string, number>
   locale?: string
   /** Only to pick the first-visit column defaults — see defaultVisibleFor. */
   tenantId?: string | null
+  /** ISO codes actually present on this tenant's orders (Plan-CompanyNationality) — not the full country list. */
+  nationalityOptions?: string[]
 }
 
-export default function OrdersFilters({ companies, params, statusCounts, locale = 'en', tenantId = null }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, paymentCounts, locale = 'en', tenantId = null, nationalityOptions = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const at = (key: string) => adminT(locale, key)
   const [isExporting, startExport] = useTransition()
   const [isNavigating, setIsNavigating] = useState(false)
-  const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}`
+  const navKey = `${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.payment}-${params.nationality}`
   const prevNavKey = useRef(navKey)
 
   // Local state so date inputs don't visually reset while navigation is in-flight
@@ -96,12 +110,18 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
   }
 
   // ── Filters ──────────────────────────────────────────────────────────────────
+  // `view` is carried through here too (not just the filter fields) — otherwise
+  // every filter change silently bounces List/Calendar back to Table, since
+  // Next's router.push replaces the whole query string, not just what changed.
   function buildQuery(overrides: Record<string, string | undefined>) {
     const merged: Record<string, string> = {}
-    if (params.dateFrom)  merged.dateFrom  = params.dateFrom
-    if (params.dateTo)    merged.dateTo    = params.dateTo
-    if (params.companyId) merged.companyId = params.companyId
-    if (params.status)    merged.status    = params.status
+    if (params.dateFrom)    merged.dateFrom    = params.dateFrom
+    if (params.dateTo)      merged.dateTo      = params.dateTo
+    if (params.companyId)   merged.companyId   = params.companyId
+    if (params.status)      merged.status      = params.status
+    if (params.payment)     merged.payment     = params.payment
+    if (params.nationality) merged.nationality = params.nationality
+    if (params.view)        merged.view        = params.view
     for (const [k, v] of Object.entries(overrides)) {
       if (v) merged[k] = v
       else   delete merged[k]
@@ -127,12 +147,12 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     setIsNavigating(true)
     setLocalDateFrom('')
     setLocalDateTo('')
-    router.push(pathname)
+    router.push(buildQuery({ dateFrom: undefined, dateTo: undefined, companyId: undefined, status: undefined, payment: undefined, nationality: undefined }))
   }
 
   function handleExport() {
     startExport(async () => {
-      const csv = await exportOrdersCsv({ dateFrom: params.dateFrom, dateTo: params.dateTo, companyId: params.companyId, status: params.status })
+      const csv = await exportOrdersCsv({ dateFrom: params.dateFrom, dateTo: params.dateTo, companyId: params.companyId, status: params.status, payment: params.payment, nationality: params.nationality })
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -143,9 +163,14 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     })
   }
 
-  const hasFilters = params.dateFrom || params.dateTo || params.companyId || params.status
+  const hasFilters = params.dateFrom || params.dateTo || params.companyId || params.status || params.payment || params.nationality
   const today = new Date().toISOString().split('T')[0]
   const isUpcoming = params.dateFrom === today && !params.dateTo
+
+  const statusLabel = (code: string) => {
+    const key = STATUS_LABEL_KEYS[code]
+    return key ? at(key) : code
+  }
 
   const inputStyle = {
     backgroundColor: C.inputBg,
@@ -157,7 +182,7 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
     outline: 'none',
   }
 
-  const activeFilterCount = [params.dateFrom, params.dateTo, params.companyId, params.status].filter(Boolean).length
+  const activeFilterCount = [params.dateFrom, params.dateTo, params.companyId, params.status, params.payment, params.nationality].filter(Boolean).length
 
   return (
     <>
@@ -234,12 +259,39 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
             style={{ ...inputStyle, width: '100%', minHeight: 40 }}
           >
             <option value="">{at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})</option>
-            {STATUSES.map(s => {
-              const count = statusCounts[s.value] ?? 0
-              return <option key={s.value} value={s.value} disabled={count === 0}>{at(s.labelKey)} ({count})</option>
+            {BOOKING_STAGES.map(stage => {
+              const count = statusCounts[stage] ?? 0
+              return <option key={stage} value={stage} disabled={count === 0}>{statusLabel(stage)} ({count})</option>
             })}
           </select>
         </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.payment')}</label>
+          <select
+            value={params.payment ?? ''}
+            onChange={e => update('payment', e.target.value)}
+            style={{ ...inputStyle, width: '100%', minHeight: 40 }}
+          >
+            <option value="">{at('orders.filters.allPayments')}</option>
+            {PAYMENT_FILTERS.map(code => {
+              const count = paymentCounts[code] ?? 0
+              return <option key={code} value={code} disabled={count === 0}>{statusLabel(code)} ({count})</option>
+            })}
+          </select>
+        </div>
+        {nationalityOptions.length > 0 && (
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.nationality')}</label>
+            <select
+              value={params.nationality ?? ''}
+              onChange={e => update('nationality', e.target.value)}
+              style={{ ...inputStyle, width: '100%', minHeight: 40 }}
+            >
+              <option value="">{at('orders.filters.allNationalities')}</option>
+              {nationalityOptions.map(code => <option key={code} value={code}>{countryName(code)}</option>)}
+            </select>
+          </div>
+        )}
       </div>
     )}
 
@@ -301,16 +353,54 @@ export default function OrdersFilters({ companies, params, statusCounts, locale 
           <option value="">
             {at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})
           </option>
-          {STATUSES.map(s => {
-            const count = statusCounts[s.value] ?? 0
+          {BOOKING_STAGES.map(stage => {
+            const count = statusCounts[stage] ?? 0
             return (
-              <option key={s.value} value={s.value} disabled={count === 0}>
-                {at(s.labelKey)} ({count})
+              <option key={stage} value={stage} disabled={count === 0}>
+                {statusLabel(stage)} ({count})
               </option>
             )
           })}
         </select>
       </div>
+
+      {/* Payment — the second axis. Separate from Status rather than more
+          entries in it, so the two AND together: "Completed" + "Unpaid" is the
+          list of visits still owing, which the old single column could not
+          express at all. */}
+      <div>
+        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.payment')}</label>
+        <select
+          value={params.payment ?? ''}
+          onChange={e => update('payment', e.target.value)}
+          style={{ ...inputStyle, minWidth: 140 }}
+        >
+          <option value="">{at('orders.filters.allPayments')}</option>
+          {PAYMENT_FILTERS.map(code => {
+            const count = paymentCounts[code] ?? 0
+            return (
+              <option key={code} value={code} disabled={count === 0}>
+                {statusLabel(code)} ({count})
+              </option>
+            )
+          })}
+        </select>
+      </div>
+
+      {/* Nationality (Plan-CompanyNationality) — only shown once at least one order has one */}
+      {nationalityOptions.length > 0 && (
+        <div>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.nationality')}</label>
+          <select
+            value={params.nationality ?? ''}
+            onChange={e => update('nationality', e.target.value)}
+            style={{ ...inputStyle, minWidth: 160 }}
+          >
+            <option value="">{at('orders.filters.allNationalities')}</option>
+            {nationalityOptions.map(code => <option key={code} value={code}>{countryName(code)}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Clear filters — same presence as Upcoming */}
       {hasFilters && (

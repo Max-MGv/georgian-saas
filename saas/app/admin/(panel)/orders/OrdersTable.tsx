@@ -1,41 +1,58 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { deleteOrder, updateOrder, sendOrderInvoice, updateOrderStatus } from '@/app/actions/orders'
+import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
+import { countryName } from '@/lib/countries'
+import {
+  bookingStagePatch,
+  invoiceSentPatch,
+  paidPatch,
+  type BookingStatusChange,
+} from '@/lib/statusWrite'
+import { BOOKING_STAGES, unreachedStages, CANCELLED, type FlowState } from '@/lib/statusFlow'
+import { paymentStateOf } from '@/lib/orderFilters'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
   border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
-
-type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
-
-const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
-  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
-  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
-  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
-}
+type StatusStyle = { labelKey: string; bg: string; color: string }
 
 /**
- * Statuses an admin may set by hand. PENDING_PAYMENT is deliberately excluded:
- * it means "sent to the card gateway, not settled yet" and is only ever written
- * by the checkout/settle path — a human setting it would claim a payment attempt
- * that never happened. These orders are never auto-expired (Plan-OnlinePayment
- * §7.2), so they accumulate for the winery to chase, and are moved on from here
- * by picking any of the statuses below.
+ * Keyed by `BookingStage`, plus the two payment states that appear as dropdown
+ * entries and marks. There is no PENDING_PAYMENT entry any more: an abandoned
+ * checkout is not a status a booking can be in, it is a booking that never
+ * became one, and it lives on /admin/abandoned instead of on this screen.
  */
-type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+const STATUS_CONFIG: Record<string, StatusStyle> = {
+  NEW:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
+  COMPLETED: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
+  // Payment. Not stages - these appear in the dropdown and as row marks.
+  unpaid:   { labelKey: 'orders.status.unpaid',      bg: '#f5f5f4', color: '#44403c' },
+  invoiced: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  paid:     { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
+}
 
-const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+const UNKNOWN_STATUS_STYLE: StatusStyle = { labelKey: '', bg: '#f3f4f6', color: '#374151' }
+
+function styleFor(code: string | null): StatusStyle {
+  return (code && STATUS_CONFIG[code]) || UNKNOWN_STATUS_STYLE
+}
+
+/** Falls back to the raw code, so an unlabelled status is legible, not blank. */
+function labelFor(locale: string, code: string | null): string {
+  if (!code) return '—'
+  const cfg = STATUS_CONFIG[code]
+  return cfg ? adminT(locale, cfg.labelKey) : code
+}
 
 import { COLUMN_DEFS, defaultVisibleFor, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
 
@@ -55,7 +72,12 @@ const inputStyle = {
 
 type Order = {
   id: string
-  status: OrderStatus
+  stage: string
+  createdAt: Date | string
+  confirmedAt: Date | string | null
+  completedAt: Date | string | null
+  invoiceSentAt: Date | string | null
+  paidAt: Date | string | null
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -73,10 +95,123 @@ type Order = {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  company: { name: string; identificationCode: string | null } | null
+  nationalities: string[]
+  company: { name: string; identificationCode: string | null; representatives: { id: string; name: string; email: string | null }[] } | null
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+}
+
+/** The subset the flow-line needs - every order row already satisfies it. */
+function flowStateOf(o: Order): FlowState {
+  return {
+    stage: o.stage,
+    createdAt: o.createdAt,
+    confirmedAt: o.confirmedAt,
+    finishedAt: o.completedAt,
+    invoiceSentAt: o.invoiceSentAt,
+    paidAt: o.paidAt,
+  }
+}
+
+const isPaid = (o: { paidAt: Date | string | null }) => o.paidAt != null
+
+/**
+ * The changes this order can still be made, for its dropdown.
+ *
+ * Stages come from `unreachedStages`, so an already-completed booking has no
+ * "Completed" entry to click and the menu can never contradict the flow-line on
+ * its detail page. The two payment entries are appended rather than being part
+ * of that sequence, because they are not stages: a booking can be invoiced at
+ * any stage, and paid at any stage, which is the whole point of the split.
+ *
+ * Cancel stays last - it is an exit from the flow, not a position in it.
+ */
+type MenuStep = { code: string; change: BookingStatusChange }
+
+function menuSteps(order: Order): MenuStep[] {
+  const stages = unreachedStages(BOOKING_STAGES, flowStateOf(order))
+  const steps: MenuStep[] = stages
+    .filter(code => code !== CANCELLED)
+    .map(code => ({ code, change: { kind: 'stage', stage: code } as const }))
+
+  // "We have asked for money" only makes sense while the money has not arrived.
+  if (order.invoiceSentAt == null && order.paidAt == null) {
+    steps.push({ code: 'invoiced', change: { kind: 'invoiceSent', value: true } })
+  }
+  if (order.paidAt == null) {
+    steps.push({ code: 'paid', change: { kind: 'paid', value: true } })
+  }
+  if (order.stage !== CANCELLED) {
+    steps.push({ code: CANCELLED, change: { kind: 'stage', stage: CANCELLED } })
+  }
+  return steps
+}
+
+/**
+ * The optimistic client-side mirror of one status change.
+ *
+ * Calls the same pure patch functions the server action calls, rather than
+ * restating the rules — two copies of "which columns does this change move" is
+ * exactly the drift that an optimistic update hides until someone reloads.
+ */
+function optimisticPatch(o: Order, change: BookingStatusChange) {
+  const now = new Date()
+  const dates = {
+    confirmedAt: o.confirmedAt ? new Date(o.confirmedAt) : null,
+    finishedAt: o.completedAt ? new Date(o.completedAt) : null,
+    invoiceSentAt: o.invoiceSentAt ? new Date(o.invoiceSentAt) : null,
+    paidAt: o.paidAt ? new Date(o.paidAt) : null,
+  }
+  switch (change.kind) {
+    case 'stage':       return bookingStagePatch(change.stage as never, dates, now)
+    case 'paid':        return paidPatch(change.value, dates, now)
+    case 'invoiceSent': return invoiceSentPatch(change.value, dates, now)
+    case 'restore':     return {}
+  }
+}
+
+function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: string; color: string }) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center rounded-full font-bold flex-shrink-0"
+      style={{ backgroundColor: bg, color, fontSize: '0.65rem', padding: '0.05rem 0.3rem', lineHeight: 1.5 }}
+    >
+      {glyph}
+    </span>
+  )
+}
+
+/**
+ * Where the money is, for surfaces laid out along the process axis — the table
+ * rows, the list, the card list, the board and the hover card, none of which
+ * have room for a second status pill. The two axes are merged into one line on
+ * the order's own page; here the financial axis is a mark on the row rather
+ * than a position in it.
+ *
+ * Bookings have three payment states, not two, so a single paid/not-paid mark
+ * was not enough: it left `invoiced` — which the winery sets by sending the
+ * invoice, and which used to be the pill itself — with nowhere to show at all.
+ * Deliberately one component with the precedence inside it rather than a
+ * conditional at five call sites, since the rule ("paid beats invoiced") has to
+ * be the same everywhere.
+ *
+ * Paid wins, and cannot collide in practice anyway: once money arrives the
+ * financial axis has already moved off `invoiced`.
+ */
+function PaymentMark({ order, locale }: {
+  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null }
+  locale: string
+}) {
+  if (paymentStateOf(order) === 'paid') {
+    return <Mark label={adminT(locale, 'orders.status.paid')} glyph="₾✓" bg="#dcfce7" color="#14532d" />
+  }
+  if (paymentStateOf(order) === 'invoiced') {
+    return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
+  }
+  return null
 }
 
 type Payment = {
@@ -137,7 +272,274 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null }) {
+const LIST_GRID_COLS = '108px minmax(0,1.7fr) 70px 90px 130px 150px'
+
+/**
+ * Compact-density desktop rows — one line per booking, a color stripe for
+ * status instead of a pinned pill column, everything else the table's Contact/
+ * Type/Company/Guests/Total/Status/Actions reduced to what's needed to scan a
+ * list quickly. Same click-to-open, same status dropdown portal (rendered once
+ * in the parent, keyed off statusMenuId) and the same print/email/edit/delete
+ * handlers as the table — this only changes row density, not what a row does.
+ *
+ * No hover-preview card here (unlike the table): a row is already a one-line
+ * summary, so the card would duplicate what's already visible — and it used to
+ * sit on top of the status dropdown and delete confirm, since those need their
+ * own click target inside a row that's otherwise one big click-to-open link.
+ */
+function OrdersListRows({
+  orders, locale, deletingId, loading, detailed,
+  onRowClick, onToggleStatusMenu, onPrint, onEmail, onEdit,
+  onRequestDelete, onConfirmDelete, onCancelDelete,
+}: {
+  orders: Order[]
+  locale: string
+  deletingId: string | null
+  loading: boolean
+  detailed: boolean
+  onRowClick: (id: string) => void
+  onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
+  onPrint: (order: Order) => void
+  onEmail: (order: Order) => void
+  onEdit: (order: Order) => void
+  onRequestDelete: (id: string | null) => void
+  onConfirmDelete: (id: string) => void
+  onCancelDelete: () => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  return (
+    <div className="mt-4 overflow-x-auto">
+      {/* Capped, not full-bleed — a name/company column that's already narrow
+          gets unreadably wide (and unrelated to the date/total columns beside
+          it) on a wide monitor otherwise. Min-width is the horizontal-scroll
+          floor for narrow desktop widths; max-width is the readability ceiling. */}
+      <div style={{ minWidth: 640, maxWidth: 900 }}>
+      <div className="grid px-4 pb-2" style={{ gridTemplateColumns: LIST_GRID_COLS, gap: 12 }}>
+        {['orders.col.date', 'orders.col.contact', 'orders.col.guests', 'orders.col.total', 'orders.col.status'].map((k, i) => (
+          <span key={k} className={i === 2 ? 'text-center' : ''} style={{ color: C.faint, fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{at(k)}</span>
+        ))}
+        <span />
+      </div>
+      <div className="flex flex-col gap-2">
+        {orders.map(order => {
+          const cfg = styleFor(order.stage)
+          const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
+          const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
+          return (
+            <div
+              key={order.id}
+              onClick={() => onRowClick(order.id)}
+              className="grid items-center rounded-xl border cursor-pointer hover:bg-amber-50 transition-colors relative overflow-hidden"
+              style={{ gridTemplateColumns: LIST_GRID_COLS, borderColor: C.border, backgroundColor: '#ffffff', padding: '10px 14px 10px 16px', gap: 12 }}
+            >
+              <span className="absolute left-0 top-0 bottom-0" style={{ width: 4, backgroundColor: cfg.color }} />
+
+              <div style={{ color: C.text, fontSize: '0.8125rem' }}>
+                {formatDate(order.date)}
+                <div style={{ color: C.faint, fontSize: '0.75rem' }}>{order.timeSlot}</div>
+              </div>
+
+              <div className="min-w-0">
+                <div className="font-medium truncate" style={{ color: C.text, fontSize: '0.875rem' }} title={heading}>{heading}</div>
+                <div className="truncate" style={{ color: C.faint, fontSize: '0.75rem' }} title={subheading}>{subheading}</div>
+              </div>
+
+              <div className="text-center" style={{ color: C.text, fontSize: '0.8125rem' }}>{order.guestCount}</div>
+
+              <div className="font-semibold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.875rem' }}>
+                {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
+              </div>
+
+              <div onClick={e => e.stopPropagation()} className="flex items-center gap-1.5">
+                <button
+                  onClick={e => onToggleStatusMenu(order.id, e)}
+                  className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
+                  style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
+                >
+                  {labelFor(locale, order.stage)} ▾
+                </button>
+                <PaymentMark order={order} locale={locale} />
+              </div>
+
+              <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
+                {deletingId === order.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => onConfirmDelete(order.id)} disabled={loading}
+                      className="text-xs px-2 py-1 rounded font-medium text-white"
+                      style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+                    <button onClick={onCancelDelete}
+                      className="text-xs px-2 py-1 rounded border"
+                      style={{ borderColor: C.border, color: C.muted }}>{at('orders.no')}</button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => onPrint(order)} title={detailed ? at('orders.printDetailedInvoice') : at('orders.printInvoice')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: C.muted }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 6 2 18 2 18 9"/>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                        <rect x="6" y="14" width="12" height="8"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onEmail(order)} title={at('orders.sendInvoiceEmail')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: order.email ? C.muted : C.faint }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onEdit(order)} title={at('orders.editOrder')}
+                      className="p-1 rounded border transition-colors hover:bg-amber-100" style={{ borderColor: C.border, color: C.muted }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => onRequestDelete(order.id)} title={at('orders.deleteOrder')}
+                      className="p-1 rounded border transition-colors hover:bg-red-50" style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      </div>
+    </div>
+  )
+}
+
+// Columns are the **process axis only** since chunk 4 (Max's call,
+// 2026-09-17). A grid has one shared left-to-right layout, so it can only
+// group by one axis; giving Paid a column of its own meant an unpaid booking
+// skipping over it to Completed and then moving back leftward into it once
+// paid, at which point the column would be asserting that a completed visit's
+// stage is "Paid" — the exact conflation the split exists to remove. Payment
+// shows as a marker on the card instead, and cards only ever move forward.
+//
+// Every process column is always shown, unlike the wine-orders board (whose
+// payment-limbo columns hide when empty, matching that page's existing
+// FilterBar convention): a booking board that hides "no orders confirmed
+// today" is a worse tool for exactly the winery that most needs to see it.
+// The limbo column is the one exception, since it is not a stage at all.
+const BOARD_COL_WIDTH = 232
+
+/**
+ * Status Board — orders grouped into columns by pipeline stage, horizontally
+ * scrollable. Same click-to-open as every other view; status changes go
+ * through the same portal-rendered dropdown Table and List already share
+ * (`onToggleStatusMenu` → `statusMenuId`/`statusMenuRect` in the parent), not
+ * drag-and-drop — see Plan-StatusBoard.md for why.
+ *
+ * Deliberately no print/email/edit/delete icons on the card (unlike List,
+ * which got full action-icon parity): a 232px column has no room for four
+ * icons without cramming, and the order detail page (one click away) already
+ * has all of them.
+ */
+function OrdersBoardColumns({
+  orders, locale, onRowClick, onToggleStatusMenu,
+}: {
+  orders: Order[]
+  locale: string
+  onRowClick: (id: string) => void
+  onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const columns: string[] = [
+    ...BOOKING_STAGES,
+  ]
+  return (
+    <div className="mt-4 overflow-x-auto pb-2">
+      <div className="flex gap-3 items-start" style={{ width: 'max-content' }}>
+        {columns.map(status => {
+          const items = orders.filter(o => o.stage === status)
+          const cfg = styleFor(status)
+          return (
+            <div
+              key={status}
+              className="flex flex-col rounded-xl border flex-shrink-0"
+              style={{ width: BOARD_COL_WIDTH, backgroundColor: 'rgba(0,0,0,0.015)', borderColor: C.border }}
+            >
+              <div className="flex items-center justify-between px-3 py-2.5 border-b" style={{ borderColor: C.border }}>
+                <span className="text-xs font-bold whitespace-nowrap" style={{ color: cfg.color }}>{labelFor(locale, status)}</span>
+                <span
+                  className="text-xs font-bold rounded-full px-2 py-0.5 flex-shrink-0"
+                  style={{ backgroundColor: '#fff', border: `1px solid ${C.border}`, color: C.muted }}
+                >
+                  {items.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 p-2 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+                {items.length === 0 ? (
+                  <p className="text-center text-xs py-5" style={{ color: C.faint }}>{at('orders.board.empty')}</p>
+                ) : items.map(order => {
+                  const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
+                  const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
+                  return (
+                    <div
+                      key={order.id}
+                      onClick={() => onRowClick(order.id)}
+                      className="rounded-lg border p-2.5 cursor-pointer hover:shadow-md transition-shadow"
+                      style={{ borderColor: C.border, backgroundColor: '#ffffff', boxShadow: '0 1px 2px rgba(28,16,8,0.04)' }}
+                    >
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
+                            <PaymentMark order={order} locale={locale} />
+                          </div>
+                          <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
+                        </div>
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0"
+                          style={{
+                            backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
+                            color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
+                          }}
+                        >
+                          {order.bookingType === 'COMPANY' ? at('orders.type.company') : at('orders.type.individual')}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2" style={{ fontSize: '0.7rem', color: C.muted }}>
+                        <span>{formatDate(order.date)} · {order.timeSlot}</span>
+                        <span>{order.guestCount} {order.guestCount === 1 ? at('orders.guest.singular') : at('orders.guest.plural')}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: C.border }}>
+                        <div onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={e => onToggleStatusMenu(order.id, e)}
+                            className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
+                            style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
+                          >
+                            {labelFor(locale, order.stage)} ▾
+                          </button>
+                        </div>
+                        <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.8125rem' }}>
+                          {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -191,6 +593,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [sendLocale, setSendLocale] = useState<'en' | 'ka'>('ka')
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
+  // Which address to actually send to (Plan-CompanyGuidesAndReps Chunk 9) — defaults to the
+  // order's own email, but a company booking can pick one of its Representatives instead.
+  const [recipientEmail, setRecipientEmail] = useState('')
 
   // Edit form state
   const [editDate, setEditDate] = useState('')
@@ -235,11 +640,21 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   }
 
+  function invoiceRecipientOptions(order: Order): { label: string; email: string }[] {
+    const options: { label: string; email: string }[] = []
+    if (order.email) options.push({ label: at('orders.emailModal.guestEmail'), email: order.email })
+    for (const rep of order.company?.representatives ?? []) {
+      if (rep.email) options.push({ label: rep.name, email: rep.email })
+    }
+    return options
+  }
+
   function openEmail(order: Order) {
     setEmailOrder(order)
     setSendLocale('ka')
     setEmailMessage(defaultEmailMessageKa)
     setEmailStatus(null)
+    setRecipientEmail(invoiceRecipientOptions(order)[0]?.email ?? '')
   }
 
   function changeSendLocale(next: 'en' | 'ka') {
@@ -255,17 +670,20 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     if (!emailOrder) return
     setEmailSending(true)
     setEmailStatus(null)
-    const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale)
+    const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale, recipientEmail || undefined)
     setEmailSending(false)
     if ('error' in result) {
       setEmailStatus('error')
     } else {
       setEmailStatus('sent')
-      // Reflect auto-advance in local state
-      const advanceStatuses: OrderStatus[] = ['NEW', 'CONFIRMED']
-      if (advanceStatuses.includes(emailOrder.status)) {
-        setOrders(prev => prev.map(o => o.id === emailOrder.id ? { ...o, status: 'INVOICE_SENT' } : o))
-        setEmailOrder(prev => prev ? { ...prev, status: 'INVOICE_SENT' } : prev)
+      // Reflect the invoice date in local state. It is recorded whatever stage
+      // the booking is at — sending an invoice says nothing about whether the
+      // visit happened — so unlike the old INVOICE_SENT status there is no
+      // "only advance from NEW or CONFIRMED" guard to mirror.
+      const sentAt = new Date()
+      if (emailOrder.invoiceSentAt == null) {
+        setOrders(prev => prev.map(o => o.id === emailOrder.id ? { ...o, invoiceSentAt: sentAt } : o))
+        setEmailOrder(prev => prev ? { ...prev, invoiceSentAt: sentAt } : prev)
       }
     }
   }
@@ -297,11 +715,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     handleRowMouseLeave()
   }
 
-  async function handleStatusChange(orderId: string, newStatus: SettableStatus) {
+  async function handleStatusChange(orderId: string, change: BookingStatusChange) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
-    await updateOrderStatus(orderId, newStatus)
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o
+      // Literally the same patch functions the server is about to call, so the
+      // pill and the payment mark move on click instead of waiting for the
+      // round trip — and the optimistic view cannot drift from the real write,
+      // which is where that kind of drift would be invisible.
+      return { ...o, ...optimisticPatch(o, change) }
+    }))
+    await changeBookingStatus(orderId, change)
   }
 
   function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
@@ -385,7 +810,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         )}
         {orders.map(order => {
-          const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+          const cfg = styleFor(order.stage)
           return (
             <div
               key={order.id}
@@ -398,8 +823,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               >
                 {/* Name + status badge */}
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="font-semibold" style={{ color: C.text, fontSize: '0.9375rem' }}>
+                  <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
+                    <PaymentMark order={order} locale={locale} />
                   </span>
                   {/* The click handler is on this wrapper, not the pill, so
                       padding here buys hit area for free: the badge still reads
@@ -415,7 +841,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
                       style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
                     >
-                      {at(cfg.labelKey)} ▾
+                      {labelFor(locale, order.stage)} ▾
                     </button>
                     {statusMenuId === order.id && (
                       <div
@@ -423,15 +849,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                         style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                         onClick={e => e.stopPropagation()}
                       >
-                        {ALL_STATUSES.map(s => (
+                        {menuSteps(order).map(step => (
                           <button
-                            key={s}
-                            onClick={() => handleStatusChange(order.id, s)}
+                            key={step.code}
+                            onClick={() => handleStatusChange(order.id, step.change)}
                             className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors active:bg-amber-100"
-                            style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                            style={{ color: C.text }}
                           >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                            {at(STATUS_CONFIG[s].labelKey)}
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                            {labelFor(locale, step.code)}
                           </button>
                         ))}
                       </div>
@@ -455,7 +881,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {/* Footer row: total + arrow */}
                 <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
                   <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1rem' }}>
-                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                    {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
                   </span>
                   <span className="text-xs flex items-center gap-1" style={{ color: C.faint }}>
                     {at('orders.viewDetails')}
@@ -472,6 +898,30 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
       {/* ── Desktop table (hidden on mobile) ──────────────────── */}
       <div className="hidden md:block">
+      {view === 'board' ? (
+        <OrdersBoardColumns
+          orders={orders}
+          locale={locale}
+          onRowClick={id => router.push(`/admin/orders/${id}`)}
+          onToggleStatusMenu={toggleStatusMenu}
+        />
+      ) : view === 'list' ? (
+        <OrdersListRows
+          orders={orders}
+          locale={locale}
+          deletingId={deletingId}
+          loading={loading}
+          onRowClick={id => router.push(`/admin/orders/${id}`)}
+          onToggleStatusMenu={toggleStatusMenu}
+          onPrint={handlePrint}
+          onEmail={openEmail}
+          onEdit={openEdit}
+          onRequestDelete={setDeletingId}
+          onConfirmDelete={handleDelete}
+          onCancelDelete={() => setDeletingId(null)}
+          detailed={detailed}
+        />
+      ) : (
       <div className="rounded-xl border overflow-auto max-h-[70vh] mt-4" style={{ borderColor: C.border }}>
         <table className="w-full text-sm border-collapse min-w-[600px]">
           <thead>
@@ -554,6 +1004,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   </td>
                 )}
 
+                {/* Nationality (Plan-CompanyNationality) — company bookings only, may be empty */}
+                {col('nationality') && (
+                  <td className="px-4 py-3" style={{ color: order.nationalities.length > 0 ? C.muted : C.faint }}>
+                    {order.nationalities.length > 0 ? order.nationalities.map(countryName).join(', ') : '—'}
+                  </td>
+                )}
+
                 {/* Tasting guests */}
                 {col('tasting') && (
                   <td className="px-4 py-3 text-center" style={{ color: order.tastingGuestCount > 0 ? C.text : C.faint }}>
@@ -616,7 +1073,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {/* Total */}
                 {col('total') && (
                   <td className="px-4 py-3 font-semibold whitespace-nowrap" style={{ color: C.wine }}>
-                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                    {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
                   </td>
                 )}
 
@@ -625,13 +1082,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>
                     {(order.extras.length > 0 || order.notes)
                       ? <OneLine title={[
-                          ...order.extras.map(e => `${e.label}: ${e.amount}₾`),
+                          ...order.extras.map(e => `${e.label}: ${formatTetri(asTetri(e.amount))}`),
                           order.notes,
                         ].filter(Boolean).join(' · ')}>
                           {order.extras.map((e, idx) => (
                             <span key={idx} style={{ color: C.muted }}>
                               {idx > 0 && <span style={{ color: C.faint }}> · </span>}
-                              {e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span>
+                              {e.label}: <span style={{ color: C.wine }}>{formatTetri(asTetri(e.amount))}</span>
                             </span>
                           ))}
                           {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.extras.length > 0 && ' · '}{order.notes}</span>}
@@ -645,9 +1102,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {col('status') && (
                   <td className="px-4 py-3 sticky-status" onClick={e => e.stopPropagation()} onMouseEnter={suppressRowHover} onMouseMove={e => e.stopPropagation()}
                     style={{ position: 'sticky', right: ACTIONS_COL_WIDTH, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
-                    <div className="relative">
+                    <div className="relative flex items-center gap-1.5">
                       {(() => {
-                        const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.NEW
+                        const cfg = styleFor(order.stage)
                         return (
                           <button
                             onClick={e => toggleStatusMenu(order.id, e)}
@@ -658,10 +1115,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                               border: `1px solid ${cfg.color}22`,
                             }}
                           >
-                            {at(cfg.labelKey)} ▾
+                            {labelFor(locale, order.stage)} ▾
                           </button>
                         )
                       })()}
+                      <PaymentMark order={order} locale={locale} />
                     </div>
                   </td>
                 )}
@@ -729,6 +1187,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           </tbody>
         </table>
       </div>
+      )}
       </div>{/* end hidden md:block */}
 
       {/* Status dropdown portal — renders into <body> as a fixed-position overlay so it
@@ -737,7 +1196,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const order = orders.find(o => o.id === statusMenuId)
         if (!order) return null
         const menuW = 140
-        const menuH = ALL_STATUSES.length * 33 + 8
+        const steps = menuSteps(order)
+        const menuH = steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
         const left = Math.min(statusMenuRect.left, vw - menuW - 8)
@@ -750,15 +1210,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
-            {ALL_STATUSES.map(s => (
+            {steps.map(step => (
               <button
-                key={s}
-                onClick={() => handleStatusChange(order.id, s)}
+                key={step.code}
+                onClick={() => handleStatusChange(order.id, step.change)}
                 className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
-                style={{ color: s === order.status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === order.status ? 600 : 400 }}
+                style={{ color: C.text }}
               >
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                {at(STATUS_CONFIG[s].labelKey)}
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                {labelFor(locale, step.code)}
               </button>
             ))}
           </div>,
@@ -833,12 +1293,27 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {emailOrder.name} {emailOrder.surname} · {formatDate(emailOrder.date)} {emailOrder.timeSlot}
               </p>
 
-              {emailOrder.email ? (
+              {invoiceRecipientOptions(emailOrder).length > 0 ? (
                 <>
-                  {/* To field + validation */}
+                  {/* To field + validation. A company order with Representatives configured
+                      can send to one of them instead of the guest's own email
+                      (Plan-CompanyGuidesAndReps Chunk 9). */}
                   <p className="text-xs mb-0.5" style={{ color: C.faint }}>{at('orders.emailModal.to')}</p>
-                  <p className="text-sm mb-1 font-mono" style={{ color: C.text }}>{emailOrder.email}</p>
-                  {!isValidEmail(emailOrder.email) ? (
+                  {invoiceRecipientOptions(emailOrder).length > 1 ? (
+                    <select
+                      value={recipientEmail}
+                      onChange={e => setRecipientEmail(e.target.value)}
+                      className="text-sm mb-1 font-mono w-full rounded-lg border px-2 py-1.5"
+                      style={{ borderColor: C.border, color: C.text, backgroundColor: 'var(--site-surface)' }}
+                    >
+                      {invoiceRecipientOptions(emailOrder).map(opt => (
+                        <option key={opt.email} value={opt.email}>{opt.label} — {opt.email}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm mb-1 font-mono" style={{ color: C.text }}>{recipientEmail}</p>
+                  )}
+                  {!isValidEmail(recipientEmail) ? (
                     <div className="flex items-center gap-1.5 rounded-lg px-3 py-2 mb-3 text-xs" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
                       {at('orders.emailModal.invalidEmail')}
                     </div>
@@ -895,7 +1370,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <div className="flex gap-3">
                     <button
                       onClick={handleSendEmail}
-                      disabled={emailSending || emailStatus === 'sent' || !isValidEmail(emailOrder.email)}
+                      disabled={emailSending || emailStatus === 'sent' || !isValidEmail(recipientEmail)}
                       className="btn-wine flex-1 py-2 rounded-lg text-sm font-medium"
                     >
                       {emailSending ? at('orders.emailModal.sending') : emailStatus === 'sent' ? at('orders.emailModal.sent') : at('orders.emailModal.sendInvoice')}
@@ -1035,7 +1510,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
         const left = hoverPos.x + 20 + cardW > vw - pad ? hoverPos.x - cardW - 12 : hoverPos.x + 20
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
-        const cfg = STATUS_CONFIG[o.status] ?? STATUS_CONFIG.NEW
+        const cfg = styleFor(o.stage)
         const hasSplit = o.tastingGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
         const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
         const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
@@ -1064,7 +1539,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Date / time / visit */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: C.muted }}>{formatDate(o.date)} · {o.timeSlot}</span>
-                <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{at(cfg.labelKey)}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, o.stage)}</span>
+                  <PaymentMark order={o} locale={locale} />
+                </span>
               </div>
               <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(locale, o.visitType)}</div>
 
@@ -1090,14 +1568,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Amounts */}
               <div>
                 <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>{at('orders.preview.amount')}</div>
-                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={`${bookingAmt}₾`} />
+                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={formatTetri(asTetri(bookingAmt))} />
                 {o.masterclassLines.map((l, i) => (
-                  <PRow key={i} label={`${l.name} ×${l.quantity}`} value={`${l.quantity * l.pricePerUnit}₾`} />
+                  <PRow key={i} label={`${l.name} ×${l.quantity}`} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity))} />
                 ))}
                 {o.extras.map((e, i) => (
-                  <PRow key={i} label={e.label} value={`${e.amount}₾`} />
+                  <PRow key={i} label={e.label} value={formatTetri(asTetri(e.amount))} />
                 ))}
-                <PRow label={at('orders.col.total')} value={`${o.totalPrice ?? '—'}₾`} bold wine />
+                <PRow label={at('orders.col.total')} value={formatTetriOrDash(asTetriOrNull(o.totalPrice))} bold wine />
               </div>
 
               {/* Contact */}

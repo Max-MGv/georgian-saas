@@ -120,6 +120,8 @@ withTenantDb(tenantId, tx => ...)
 | SiteContent | ✅ direct | simple | same |
 | Setting | ✅ direct | simple | same |
 | Price | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) |
+| CompanyGuide | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) — Plan-CompanyGuidesAndReps |
+| CompanyRepresentative | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) — Plan-CompanyGuidesAndReps |
 | OrderMasterclass | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | OrderExtra | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | WineOrderItem | ❌ via WineOrder | JOIN | EXISTS (WineOrder where tenantId = ...) |

@@ -43,6 +43,35 @@ tags: [bugs]
 | 35 | Booking Confirmation message edits in the admin Messages tab appeared not to persist reliably — text reverted to the default after a reload | Admin / Site Content | 🟢 Resolved (unconfirmed root cause) |
 | 36 | Booking Confirmation email's summary block (labels + the date value itself) stayed in English even with the Georgian toggle selected — `bookingConfirmationTemplate.ts` had no `locale` param at all | Admin / Site Content, Public / Booking form | 🟢 Resolved |
 | 37 | Invoice email date rendered as an invalid `MM.DD.YYYY` in Georgian (e.g. `09.14.2026` for 14 September) instead of the day-first format used everywhere else — `toLocaleDateString('ka-GE', ...)` silently falls back to an en-US field order on this Vercel deployment's ICU data | Admin / Site Content, Public / Invoice | 🟢 Resolved |
+| 38 | Booking form's Time Slot dropdown said "No slots available today" before any date was even picked — `slotsForDate('')` returns `[]`, and the empty-slots fallback text didn't distinguish "no date chosen yet" from "this date is genuinely full" | Public / Booking form | 🟢 Resolved |
+| 39 | On mobile, tapping the booking form's Date field (or its calendar icon) did nothing — no native picker opened, only manual DD/MM/YYYY typing worked. The real `<input type="date">` behind the styled field was hidden with a 0×0 box and relied on a JS `.showPicker()` call, which is unreliable on some mobile engines | Public / Booking form | 🟢 Resolved |
+| 40 | Settings → Booking Rules has no validation that a visit type's maximum guest count is ≥ its minimum. Found live on Staging Winery: Wine Tasting minimum is 4, maximum is 3 — any Wine Tasting booking for 4 or 5 guests is silently clamped down to 3 server-side before pricing (confirmed: a 5-guest submission settled at 150GEL/3 guests, not 250GEL/5), with no warning to the admin who set it or the guest who booked it | Admin / Settings, Public / Booking form | 🟢 Resolved |
+| 41 | `scripts/test-rls.ts` depends on ambient seeded data: three of its checks assert `rows.length > 0` on `Order`, so they fail whenever the orders table is empty. Chunk 3's authorised wipe emptied it, and the suite went 21/21 → 18/3 with **no RLS regression at all** — proven by inserting two throwaway orders, re-running to 21/21, and removing them again. It is a false alarm that looks exactly like a security failure, which is the worst kind. Fix is to have the test create its own fixture rather than rely on whatever happens to be in the database. | Testing / RLS | 🔴 Open |
+
+---
+
+## Bugs #38–#39 — booking form Date/Time Slot fixes, 2026-09-15
+
+Found by Max on `staging.vineworks.ge` (#38 from a screenshot, #39 by testing on a real phone).
+Both live in `saas/components/BookingForm.tsx` / `saas/components/DateInput.tsx`.
+
+> 🟢 **#38 RESOLVED.** Added a new `form.select_date_first` string (`lib/t.ts`, both locales) and
+> made the Time Slot `<option>` pick between it and `form.no_slots` based on whether
+> `selectedDate` is set (`BookingForm.tsx:840`). No change to slot-availability logic itself —
+> purely which message explains an empty list.
+
+> 🟢 **#39 RESOLVED.** `DateInput.tsx` used to keep the real `<input type="date">` at
+> `width:0; height:0` and open it only via `.showPicker()` triggered from `onFocus`/`onClick` on
+> the styled text field — confirmed via `getBoundingClientRect()` on a mobile-emulated session
+> that the hidden input really was 0×0, a known trigger for `showPicker()` misbehaving on mobile
+> engines (notably iOS Safari, which is stricter about the user-gesture requirement than desktop
+> Chrome). Rebuilt so the real date input is sized to exactly cover the calendar-icon hit zone
+> (40px, confirmed by measuring both elements' rects after the fix) and positioned on top of it —
+> tapping that zone now hits the native input directly, so the browser opens its own picker via
+> normal default behavior, no JS trigger needed at all. The rest of the field (the typing area)
+> is left uncovered, verified by typing a full date there after the fix and confirming it still
+> populates Time Slot correctly, both on a mobile viewport and on desktop. `showPicker()` calls
+> removed entirely — nothing left that can throw or no-op.
 
 ---
 

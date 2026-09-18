@@ -14,9 +14,9 @@ import {
   buildSignature,
   verifyCallbackSignature,
   createCheckout,
-  toMinorUnits,
   type CreateCheckoutInput,
 } from '../lib/payments/flitt'
+import { asTetri, fromMajor } from '../lib/money'
 
 const PASSWORD = 'test_merchant_password'
 
@@ -123,13 +123,13 @@ async function main() {
 
   for (const [major, minor] of roundingCases) {
     await test(`${major} GEL → ${minor} tetri`, () => {
-      assertEqual(toMinorUnits(major), minor, 'minor units')
+      assertEqual(fromMajor(major), minor, 'minor units')
     })
   }
 
   await test('Every rounding case yields an integer', () => {
     for (const [major] of roundingCases) {
-      assert(Number.isInteger(toMinorUnits(major)), `${major} did not produce an integer`)
+      assert(Number.isInteger(fromMajor(major)), `${major} did not produce an integer`)
     }
   })
 
@@ -209,7 +209,7 @@ async function main() {
     merchantId: 4056054,
     password: PASSWORD,
     orderId: 'ord_test_001',
-    amount: 49.99,
+    amount: fromMajor(49.99), // 4999 tetri
     orderDesc: 'Wine tasting for 2',
     responseUrl: 'https://example.ge/payment/result',
     serverCallbackUrl: 'https://example.ge/api/payments/flitt/callback',
@@ -229,19 +229,25 @@ async function main() {
   })
 
   await test('Zero amount returns an error', async () => {
-    await expectError({ ...validInput, amount: 0 }, 'Invalid payment amount', 'zero amount')
+    await expectError({ ...validInput, amount: asTetri(0) }, 'Invalid payment amount', 'zero amount')
   })
 
   await test('Negative amount returns an error', async () => {
-    await expectError({ ...validInput, amount: -10 }, 'Invalid payment amount', 'negative amount')
+    await expectError({ ...validInput, amount: asTetri(-10) }, 'Invalid payment amount', 'negative amount')
   })
 
   await test('NaN amount returns an error', async () => {
-    await expectError({ ...validInput, amount: Number.NaN }, 'Invalid payment amount', 'NaN amount')
+    await expectError({ ...validInput, amount: Number.NaN as ReturnType<typeof asTetri> }, 'Invalid payment amount', 'NaN amount')
   })
 
-  await test('Sub-tetri amount returns an error rather than a 0 checkout', async () => {
-    await expectError({ ...validInput, amount: 0.001 }, 'rounds to zero', 'sub-tetri amount')
+  await test('A fractional tetri returns an error rather than a silent round', async () => {
+    // Unreachable through the type system now — amount is branded Tetri — but
+    // still guarded at runtime, because a value crossing from JSON or an older
+    // caller carries no brand.
+    await expectError(
+      { ...validInput, amount: 0.001 as ReturnType<typeof asTetri> },
+      'whole tetri', 'fractional tetri',
+    )
   })
 
   await test('Empty orderId is caught by the required-param check', async () => {
@@ -262,9 +268,9 @@ async function main() {
 
   await test('No error message leaks the merchant password', async () => {
     const inputs = [
-      { ...validInput, amount: 0 },
+      { ...validInput, amount: asTetri(0) },
       { ...validInput, orderId: '' },
-      { ...validInput, amount: 0.001 },
+      { ...validInput, amount: 0.001 as ReturnType<typeof asTetri> },
     ]
     for (const input of inputs) {
       const result = await createCheckout(input)

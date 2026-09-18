@@ -14,7 +14,7 @@ Rules for how Claude should behave on this project. Read at the start of every s
 
 **The rule, no exceptions:**
 1. Every code change is committed and pushed to the **`staging`** branch first — never push a change directly to `master`.
-2. `staging` auto-deploys to a preview URL (`georgian-saas-git-staging-...vercel.app`) that reads from the **dev** Supabase database, not the real one. Verify the change there.
+2. `staging` auto-deploys to a preview URL (`staging.vineworks.ge` — a custom domain added 2026-09-15, pointed at the `staging` git branch; the old auto-generated `georgian-saas-git-staging-...vercel.app` alias now 308-redirects there) that reads from the **dev** Supabase database, not the real one. Verify the change there.
 3. Only merge `staging` → `master` (and push) once Max has confirmed the staging check is good. This merge is the one action that actually ships to real customers — treat it with the same care as any other risky/hard-to-reverse action per the standing safety rules.
 
 **Database schema changes follow the same shape:** run `prisma migrate dev` against the **dev** database first (never `prisma db push` — see Rule 10), verify on staging, and only then run `prisma migrate deploy` against **production** as its own deliberate, separate step.

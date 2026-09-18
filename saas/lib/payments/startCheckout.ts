@@ -1,6 +1,7 @@
 import { headers } from 'next/headers'
 import { db } from '@/lib/db'
 import { createCheckout } from '@/lib/payments/flitt'
+import type { Tetri } from '@/lib/money'
 
 /**
  * Create the Flitt checkout for a just-created order and record the attempt.
@@ -22,7 +23,11 @@ export async function startCheckout(input: {
   /** Exactly one of these, matching the Payment row shape. */
   orderId?: string
   wineOrderId?: string
-  amount: number
+  /**
+   * TETRI. The order's stored amount, passed straight through to Flitt and
+   * onto the Payment row without conversion (chunk 3, 2026-09-18).
+   */
+  amount: Tetri
   orderDesc: string
   locale?: string
 }): Promise<string | null> {

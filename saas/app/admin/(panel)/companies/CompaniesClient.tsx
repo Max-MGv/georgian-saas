@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
+import { asTetri, fromMajor, toMajor, formatTetri, type Tetri } from '@/lib/money'
+import {
+  createGuide, updateGuide, deleteGuide, regenerateGuideCode, setGuideCode,
+  createRepresentative, updateRepresentative, deleteRepresentative, regenerateRepresentativeCode, setRepresentativeCode,
+} from '@/app/actions/companyGuides'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
@@ -16,11 +21,15 @@ type Price = {
   id: string
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  // TETRI. These come straight off the DB row; the tier form converts to and
+  // from GEL at its inputs (chunk 3).
+  pricePerPerson: Tetri
+  tastingLunchPricePerPerson: Tetri
+  registrationPrice: Tetri
   isDisplayPrice: boolean
 }
+type Guide = { id: string; name: string; phone: string | null; code: string }
+type Representative = { id: string; name: string; email: string | null; phone: string | null; code: string }
 type Company = {
   id: string
   name: string
@@ -39,6 +48,8 @@ type Company = {
   accessCode: string | null
   orderCount: number
   prices: Price[]
+  guides: Guide[]
+  representatives: Representative[]
 }
 
 type Module = 'BOOKING' | 'WINE_ORDER'
@@ -86,9 +97,11 @@ function PriceForm({
   const at = (key: string) => adminT(locale, key)
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
-  const [pricePerPerson, setPricePerPerson] = useState(String(initial?.pricePerPerson ?? ''))
-  const [tastingLunchPrice, setTastingLunchPrice] = useState(String(initial?.tastingLunchPricePerPerson ?? ''))
-  const [registrationPrice, setRegistrationPrice] = useState(String(initial?.registrationPrice ?? 0))
+  // The inputs hold GEL, because that is what an admin types. Everything
+  // below this component is tetri; fromMajor/toMajor are the boundary.
+  const [pricePerPerson, setPricePerPerson] = useState(initial ? String(toMajor(asTetri(initial.pricePerPerson))) : '')
+  const [tastingLunchPrice, setTastingLunchPrice] = useState(initial ? String(toMajor(asTetri(initial.tastingLunchPricePerPerson))) : '')
+  const [registrationPrice, setRegistrationPrice] = useState(initial ? String(toMajor(asTetri(initial.registrationPrice))) : '0')
 
   return (
     <div className="flex flex-wrap items-end gap-3 mt-3">
@@ -101,15 +114,240 @@ function PriceForm({
         <button
           onClick={() => onSave({
             minGuests: Number(minGuests), maxGuests: Number(maxGuests),
-            pricePerPerson: Number(pricePerPerson),
-            tastingLunchPricePerPerson: tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice),
-            registrationPrice: registrationPrice === '' ? 0 : Number(registrationPrice),
+            pricePerPerson: fromMajor(Number(pricePerPerson)),
+            tastingLunchPricePerPerson: fromMajor(tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice)),
+            registrationPrice: fromMajor(registrationPrice === '' ? 0 : Number(registrationPrice)),
           })}
           disabled={loading}
           className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
         >{at('settings.common.save')}</button>
         <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
       </div>
+    </div>
+  )
+}
+
+// ── Guides & Representatives (Plan-CompanyGuidesAndReps) ───────────────────
+// Compact per-row code control — show/hide, copy, regenerate — same interaction
+// pattern as the company-level access code field in EditPanel below, just sized
+// for a list row instead of the panel's full-width field.
+function PersonCodeField({ code, onRegenerate, loading, locale }: {
+  code: string; onRegenerate: () => void; loading: boolean; locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [showCode, setShowCode] = useState(false)
+  const [copied, setCopied] = useState(false)
+  function handleCopy() {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="text-xs px-2 py-1 rounded"
+        style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, fontFamily: 'monospace', color: C.text, letterSpacing: showCode ? '0.05em' : undefined }}
+      >
+        {showCode ? code : '••••••••'}
+      </span>
+      <button type="button" onClick={() => setShowCode(s => !s)} className="text-xs px-1.5 py-1 rounded border" style={{ borderColor: C.border, color: C.faint }}>
+        {showCode ? at('companies.editPanel.hide') : at('companies.editPanel.show')}
+      </button>
+      <button type="button" onClick={handleCopy} className="text-xs px-1.5 py-1 rounded border" style={{ borderColor: C.border, color: copied ? '#15803d' : C.faint }}>
+        {copied ? at('companies.editPanel.copied') : at('companies.editPanel.copy')}
+      </button>
+      <button type="button" onClick={onRegenerate} disabled={loading} className="text-xs px-1.5 py-1 rounded border" style={{ borderColor: C.border, color: C.faint }}>
+        {at('companies.editPanel.generateNewCode')}
+      </button>
+    </div>
+  )
+}
+
+function GuideForm({ initial, onSave, onCancel, loading, locale }: {
+  initial?: Guide; onSave: (data: { name: string; phone: string }) => void; onCancel: () => void; loading: boolean; locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [name, setName] = useState(initial?.name ?? '')
+  const [phone, setPhone] = useState(initial?.phone ?? '')
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <SmallInput label={at('companies.people.name')} value={name} onChange={setName} width={160} />
+      <SmallInput label={at('companies.people.phone')} value={phone} onChange={setPhone} width={150} />
+      <div className="flex gap-2 pb-0.5">
+        <button onClick={() => onSave({ name, phone })} disabled={loading || !name.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+      </div>
+    </div>
+  )
+}
+
+function RepresentativeForm({ initial, onSave, onCancel, loading, locale }: {
+  initial?: Representative; onSave: (data: { name: string; email: string; phone: string }) => void; onCancel: () => void; loading: boolean; locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [name, setName] = useState(initial?.name ?? '')
+  const [email, setEmail] = useState(initial?.email ?? '')
+  const [phone, setPhone] = useState(initial?.phone ?? '')
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <SmallInput label={at('companies.people.name')} value={name} onChange={setName} width={160} />
+      <SmallInput label={at('companies.people.email')} value={email} onChange={setEmail} width={180} />
+      <SmallInput label={at('companies.people.phone')} value={phone} onChange={setPhone} width={150} />
+      <div className="flex gap-2 pb-0.5">
+        <button onClick={() => onSave({ name, email, phone })} disabled={loading || !name.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+      </div>
+    </div>
+  )
+}
+
+function GuidesSection({ companyId, guides, setGuides, locale }: {
+  companyId: string; guides: Guide[]; setGuides: (g: Guide[]) => void; locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleAdd(data: { name: string; phone: string }) {
+    setLoading(true); setError('')
+    const result = await createGuide(companyId, data)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    setGuides([...guides, result.guide])
+    setAdding(false); setLoading(false)
+  }
+  async function handleUpdate(id: string, data: { name: string; phone: string }) {
+    setLoading(true); setError('')
+    const result = await updateGuide(id, companyId, data)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    setGuides(guides.map(g => g.id === id ? { ...g, name: data.name, phone: data.phone || null } : g))
+    setEditingId(null); setLoading(false)
+  }
+  async function handleDelete(id: string) {
+    setLoading(true)
+    await deleteGuide(id, companyId)
+    setGuides(guides.filter(g => g.id !== id))
+    setDeletingId(null); setLoading(false)
+  }
+  async function handleRegenerate(id: string) {
+    setLoading(true)
+    const result = await regenerateGuideCode(id, companyId)
+    if (!('error' in result)) setGuides(guides.map(g => g.id === id ? { ...g, code: result.code } : g))
+    setLoading(false)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.people.guidesTitle')}</p>
+        <HelpHint text={at('companies.people.guidesHint')} />
+      </div>
+      {guides.length === 0 && !adding && <p className="text-xs" style={{ color: C.faint }}>{at('companies.people.noGuides')}</p>}
+      {guides.map(guide => (
+        <div key={guide.id}>
+          {editingId === guide.id ? (
+            <GuideForm initial={guide} onSave={data => handleUpdate(guide.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
+          ) : deletingId === guide.id ? (
+            <div className="flex items-center gap-3 text-sm">
+              <span style={{ color: C.muted }}>{at('companies.people.deleteConfirm')}</span>
+              <button onClick={() => handleDelete(guide.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+              <button onClick={() => setDeletingId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap text-sm">
+              <span style={{ color: C.text }}>{guide.name}</span>
+              {guide.phone && <span className="text-xs" style={{ color: C.faint }}>{guide.phone}</span>}
+              <PersonCodeField code={guide.code} onRegenerate={() => handleRegenerate(guide.id)} loading={loading} locale={locale} />
+              <button onClick={() => setEditingId(guide.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+              <button onClick={() => setDeletingId(guide.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+      {adding ? (
+        <GuideForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>{at('companies.people.addGuide')}</button>
+      )}
+    </div>
+  )
+}
+
+function RepresentativesSection({ companyId, representatives, setRepresentatives, locale }: {
+  companyId: string; representatives: Representative[]; setRepresentatives: (r: Representative[]) => void; locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleAdd(data: { name: string; email: string; phone: string }) {
+    setLoading(true); setError('')
+    const result = await createRepresentative(companyId, data)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    setRepresentatives([...representatives, result.representative])
+    setAdding(false); setLoading(false)
+  }
+  async function handleUpdate(id: string, data: { name: string; email: string; phone: string }) {
+    setLoading(true); setError('')
+    const result = await updateRepresentative(id, companyId, data)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    setRepresentatives(representatives.map(r => r.id === id ? { ...r, name: data.name, email: data.email || null, phone: data.phone || null } : r))
+    setEditingId(null); setLoading(false)
+  }
+  async function handleDelete(id: string) {
+    setLoading(true)
+    await deleteRepresentative(id, companyId)
+    setRepresentatives(representatives.filter(r => r.id !== id))
+    setDeletingId(null); setLoading(false)
+  }
+  async function handleRegenerate(id: string) {
+    setLoading(true)
+    const result = await regenerateRepresentativeCode(id, companyId)
+    if (!('error' in result)) setRepresentatives(representatives.map(r => r.id === id ? { ...r, code: result.code } : r))
+    setLoading(false)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.people.repsTitle')}</p>
+        <HelpHint text={at('companies.people.repsHint')} />
+      </div>
+      {representatives.length === 0 && !adding && <p className="text-xs" style={{ color: C.faint }}>{at('companies.people.noReps')}</p>}
+      {representatives.map(rep => (
+        <div key={rep.id}>
+          {editingId === rep.id ? (
+            <RepresentativeForm initial={rep} onSave={data => handleUpdate(rep.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
+          ) : deletingId === rep.id ? (
+            <div className="flex items-center gap-3 text-sm">
+              <span style={{ color: C.muted }}>{at('companies.people.deleteConfirm')}</span>
+              <button onClick={() => handleDelete(rep.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+              <button onClick={() => setDeletingId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap text-sm">
+              <span style={{ color: C.text }}>{rep.name}</span>
+              {rep.email && <span className="text-xs" style={{ color: C.faint }}>{rep.email}</span>}
+              {rep.phone && <span className="text-xs" style={{ color: C.faint }}>{rep.phone}</span>}
+              <PersonCodeField code={rep.code} onRegenerate={() => handleRegenerate(rep.id)} loading={loading} locale={locale} />
+              <button onClick={() => setEditingId(rep.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+              <button onClick={() => setDeletingId(rep.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+      {adding ? (
+        <RepresentativeForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>{at('companies.people.addRepresentative')}</button>
+      )}
     </div>
   )
 }
@@ -142,6 +380,13 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [guides, setGuidesState] = useState(company.guides)
+  const [representatives, setRepresentativesState] = useState(company.representatives)
+  // Guides/reps are edited live in this panel (unlike the other fields, which only save on the
+  // main Save button) — propagate to the parent's list immediately so reopening the panel later
+  // in the same session doesn't show a stale list.
+  function setGuides(next: Guide[]) { setGuidesState(next); onSaved({ guides: next }) }
+  function setRepresentatives(next: Representative[]) { setRepresentativesState(next); onSaved({ representatives: next }) }
 
   async function handleSave() {
     if (!isBooking && !isWineOrder) {
@@ -374,6 +619,10 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
               {at('companies.editPanel.generateNewCode')}
             </button>
           </div>
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+          <GuidesSection companyId={company.id} guides={guides} setGuides={setGuides} locale={locale} />
+          <div className="h-px" style={{ backgroundColor: C.border }} />
+          <RepresentativesSection companyId={company.id} representatives={representatives} setRepresentatives={setRepresentatives} locale={locale} />
         </div>
         <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: C.border }}>
           <button onClick={handleSave} disabled={loading} className="btn-wine flex-1 py-2.5 rounded-lg text-sm font-medium">
@@ -460,9 +709,9 @@ function PriceTiersSection({
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{comboRatePerPerson(price)}₾/pp</span></span>
-              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ {at('companies.priceTiers.flatFeeSuffix')}</span>}
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(price.pricePerPerson))}/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(comboRatePerPerson(price)))}/pp</span></span>
+              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{formatTetri(asTetri(price.registrationPrice))} {at('companies.priceTiers.flatFeeSuffix')}</span>}
 
               {isIndividual && (
                 <button
@@ -694,7 +943,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {displayTier.pricePerPerson}₾ / {comboRatePerPerson(displayTier)}₾ {at('companies.individuals.shownOnSite')}
+                    {formatTetri(asTetri(displayTier.pricePerPerson))} / {formatTetri(asTetri(comboRatePerPerson(displayTier)))} {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>

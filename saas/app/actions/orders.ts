@@ -1,6 +1,9 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
+import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
+import type { Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -9,7 +12,18 @@ import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { OrderStatus } from '@prisma/client'
+import type { BookingStage } from '@prisma/client'
+import { countryName } from '@/lib/countries'
+import {
+  bookingStagePatch,
+  invoiceSentPatch,
+  paidPatch,
+  isBookingStage,
+  NEW_ORDER_COLUMNS,
+} from '@/lib/statusWrite'
+// Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
+import type { BookingStatusChange } from '@/lib/statusWrite'
+import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
@@ -65,8 +79,9 @@ export async function updateOrderEnhanced(
     hotDishVegetable: string | null
     hotDishMeat: string | null
     foodNotes: string | null
-    manualTastingRate?: number
-    manualLunchRate?: number
+    /** TETRI — the detail screen converts what the admin typed (chunk 3). */
+    manualTastingRate?: Tetri
+    manualLunchRate?: Tetri
   }
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
@@ -91,9 +106,20 @@ export async function updateOrderEnhanced(
     const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
     const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
 
+    // An admin editing guest counts or rates is deliberately re-pricing the
+    // order, so the snapshot moves with it and records what the order is sold
+    // at *now*. That is the opposite of `recalcOrderTotal`, where a line change
+    // must never disturb the agreed rates (chunk 4).
+    let tastingRateSnapshot: number | null = null
+    let lunchRateSnapshot: number | null = null
+    let registrationFeeSnapshot: number | null = null
+
     if (totalPayingGuests > 0 && order.company?.prices?.length) {
       const tier = findTier(order.company.prices, totalPayingGuests)
       if (tier) {
+        tastingRateSnapshot = tier.pricePerPerson
+        lunchRateSnapshot = comboRatePerPerson(tier)
+        registrationFeeSnapshot = tier.registrationPrice
         totalPrice =
           tastingGuests * tier.pricePerPerson +
           lunchGuests * comboRatePerPerson(tier) +
@@ -104,6 +130,9 @@ export async function updateOrderEnhanced(
     } else if (totalPayingGuests > 0 && (data.manualTastingRate != null || data.manualLunchRate != null)) {
       const tr = data.manualTastingRate ?? 0
       const lr = data.manualLunchRate ?? 0
+      tastingRateSnapshot = tr
+      lunchRateSnapshot = lr
+      registrationFeeSnapshot = 0
       totalPrice = tastingGuests * tr + lunchGuests * lr + masterclassAmt + extrasAmt
     }
 
@@ -117,6 +146,11 @@ export async function updateOrderEnhanced(
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
         totalPrice,
+        // Only when this edit actually re-priced the order; a null here would
+        // erase a snapshot the order still needs.
+        ...(tastingRateSnapshot != null
+          ? { tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot }
+          : {}),
       },
     })
     return { success: true as const }
@@ -145,12 +179,13 @@ export async function createOrderAdmin(data: {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  manualTastingRate: number
-  manualLunchRate: number
+  /** TETRI — the new-order form converts what the admin typed (chunk 3). */
+  manualTastingRate: Tetri
+  manualLunchRate: Tetri
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (!data.date) return { error: 'Date is required.' }
@@ -159,6 +194,10 @@ export async function createOrderAdmin(data: {
   const tenantId = await getTenantId()
 
   const masterclassAmt = data.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+  // Rate snapshots — see schema.prisma on Order (chunk 4).
+  let tastingRateSnapshot: number | null = null
+  let lunchRateSnapshot: number | null = null
+  let registrationFeeSnapshot: number | null = null
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
 
   let totalPrice: number | null = null
@@ -173,6 +212,11 @@ export async function createOrderAdmin(data: {
       if (company?.prices.length) {
         const tier = findTier(company.prices, payingGuests)
         if (tier) {
+          // Freeze the rates this order is sold at, so a later edit cannot
+          // reprice it from tiers that have since changed (chunk 4).
+          tastingRateSnapshot = tier.pricePerPerson
+          lunchRateSnapshot = comboRatePerPerson(tier)
+          registrationFeeSnapshot = tier.registrationPrice
           totalPrice =
             data.tastingGuestCount * tier.pricePerPerson +
             data.lunchGuestCount * comboRatePerPerson(tier) +
@@ -185,6 +229,12 @@ export async function createOrderAdmin(data: {
 
     if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
       const tastingCount = data.companyId ? data.tastingGuestCount : data.guestCount
+      // Hand-typed rates are just as much "what this was sold at" as a tier is,
+      // and until now they were used once and thrown away — which is why an
+      // order priced this way could never be recalculated at all.
+      tastingRateSnapshot = data.manualTastingRate
+      lunchRateSnapshot = data.manualLunchRate
+      registrationFeeSnapshot = 0
       totalPrice =
         tastingCount * data.manualTastingRate +
         data.lunchGuestCount * data.manualLunchRate +
@@ -214,7 +264,11 @@ export async function createOrderAdmin(data: {
         email: data.email?.trim() || null,
         notes: data.notes?.trim() || null,
         totalPrice,
+        tastingRateSnapshot,
+        lunchRateSnapshot,
+        registrationFeeSnapshot,
         tenantId,
+        ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
         masterclassLines: data.masterclassLines.length
           ? { create: data.masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
@@ -223,6 +277,18 @@ export async function createOrderAdmin(data: {
           ? { create: data.extras.map(e => ({ label: e.label, amount: e.amount })) }
           : undefined,
       },
+    })
+    // First row of the timeline. ADMIN here, unlike the public form's GUEST —
+    // a walk-in entered by staff and a guest's own submission are different
+    // facts and the history should not blur them (chunk 5).
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId: order.id,
+      type: 'CREATED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      toStage: order.stage,
+      payload: { totalPrice: order.totalPrice, bookingType: order.bookingType, guestCount: data.guestCount },
     })
     return order.id
   })
@@ -235,7 +301,11 @@ export async function createOrderAdmin(data: {
 export async function sendOrderInvoice(
   orderId: string,
   customMessage: string,
-  locale: 'en' | 'ka' = 'ka'
+  locale: 'en' | 'ka' = 'ka',
+  // Lets the admin pick a company Representative's email as the recipient instead of the
+  // order's own (Plan-CompanyGuidesAndReps Chunk 9) — falls back to order.email when omitted.
+  // Re-checked against the order's own company's representatives below, not trusted as-is.
+  recipientEmail?: string
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -244,7 +314,7 @@ export async function sendOrderInvoice(
       tx.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
-          company: true,
+          company: { include: { representatives: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
         },
@@ -252,7 +322,13 @@ export async function sendOrderInvoice(
     )
 
     if (!order) return { error: 'Order not found.' }
-    if (!order.email) return { error: 'This order has no email address.' }
+    let recipient = order.email
+    if (recipientEmail && recipientEmail !== order.email) {
+      const validRep = order.company?.representatives.some(r => r.email === recipientEmail)
+      if (!validRep) return { error: 'That recipient is not valid for this order.' }
+      recipient = recipientEmail
+    }
+    if (!recipient) return { error: 'This order has no email address.' }
 
     const [recipientName, personalNumber, bankName, bankCode, iban, wineryAddress, wineryEmail, tenant] = await Promise.all([
       getSetting('payment_recipient_name'),
@@ -269,7 +345,7 @@ export async function sendOrderInvoice(
       tenantId,
       name: order.name,
       surname: order.surname,
-      email: order.email,
+      email: recipient,
       date: order.date,
       timeSlot: order.timeSlot,
       visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',
@@ -295,10 +371,18 @@ export async function sendOrderInvoice(
       locale,
     })
 
-    const advanceStatuses = ['NEW', 'CONFIRMED']
-    if (advanceStatuses.includes(order.status)) {
+    // Sending an invoice stamps a date and nothing else. It records that we
+    // have asked for money, which says nothing about whether the visit has
+    // happened — so it does not touch `stage`, and it is recorded whatever
+    // stage the booking is at, including a completed one being billed after
+    // the fact. Under the previous design this was a rung on a payment ladder,
+    // which is why marking such an order paid used to erase it.
+    if (order.invoiceSentAt == null) {
       await withTenantDb(tenantId, tx =>
-        tx.order.update({ where: { id: orderId }, data: { status: 'INVOICE_SENT' } })
+        tx.order.update({
+          where: { id: orderId },
+          data: invoiceSentPatch(true, toCurrentDates(order), new Date()),
+        })
       )
     }
 
@@ -314,11 +398,29 @@ function csvCell(val: string | number | null | undefined): string {
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+/**
+ * Distinct ISO codes actually present across this tenant's orders (Plan-CompanyNationality) —
+ * drives the Orders filter dropdown's options, not the full ~195-country list. Prisma's
+ * `distinct` doesn't unnest array columns, so this is a raw query; `unnest` + `DISTINCT` is the
+ * standard Postgres way to flatten `nationalities` across every row into one deduped list.
+ */
+export async function getDistinctOrderNationalities(tenantId: string): Promise<string[]> {
+  const rows = await withTenantDb(tenantId, tx =>
+    tx.$queryRaw<{ code: string }[]>`SELECT DISTINCT unnest("nationalities") as code FROM "Order" WHERE "tenantId" = ${tenantId} ORDER BY code ASC`
+  )
+  return rows.map(r => r.code)
+}
+
 export async function exportOrdersCsv(filters: {
   dateFrom?: string
   dateTo?: string
   companyId?: string
+  /** A `BookingStage` value. An unknown one is ignored rather than cast. */
   status?: string
+  /** `paid` | `unpaid` | `invoiced`, derived from the dates. AND'd with `status`. */
+  payment?: string
+  /** ISO 3166-1 code (Plan-CompanyNationality) — matches orders whose `nationalities` array includes it. */
+  nationality?: string
 }): Promise<string> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -336,13 +438,23 @@ export async function exportOrdersCsv(filters: {
         : filters.companyId
           ? { companyId: filters.companyId }
           : {}),
-      ...(filters.status ? { status: filters.status as OrderStatus } : {}),
+      // An abandoned order is not an order, so it is never exported — the same
+      // exclusion the screen this was exported from applies. It was missing
+      // here, so a CSV silently carried rows the list on screen did not show.
+      ...NOT_ABANDONED,
+      ...(filters.status && isBookingStage(filters.status) ? { stage: filters.status } : {}),
+      ...paymentFilterWhere(filters.payment),
+      ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
     include: { company: true },
     orderBy: { date: 'desc' },
   }))
 
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Total (GEL)', 'Status', 'Email', 'Phone', 'Notes']
+  // Stage and payment are separate columns, or a completed-but-unpaid booking
+  // exports as indistinguishable from a paid one. Invoice Sent gets its own
+  // date rather than collapsing into Payment, since an order can be both
+  // invoiced and paid — which the old payment ladder could not represent.
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
@@ -352,8 +464,12 @@ export async function exportOrdersCsv(filters: {
     o.bookingType,
     o.visitType,
     o.guestCount,
+    o.nationalities.map(countryName).join('; '),
     o.totalPrice ?? '',
-    o.status,
+    o.stage,
+    o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
+    o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
+    o.invoiceSentAt ? o.invoiceSentAt.toLocaleDateString('en-GB') : '',
     o.email ?? '',
     o.phone ?? '',
     o.notes ?? '',
@@ -433,18 +549,89 @@ export async function assignOrderCompany(
   return result
 }
 
-export async function updateOrderStatus(
+/** The date fields a patch needs, in the shape `statusWrite` expects. */
+function toCurrentDates(o: {
+  confirmedAt: Date | null
+  completedAt: Date | null
+  invoiceSentAt: Date | null
+  paidAt: Date | null
+}) {
+  return {
+    confirmedAt: o.confirmedAt,
+    finishedAt: o.completedAt,
+    invoiceSentAt: o.invoiceSentAt,
+    paidAt: o.paidAt,
+  }
+}
+
+export async function changeBookingStatus(
   orderId: string,
-  status: 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+  change: BookingStatusChange
 ): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   const tenantId = await getTenantId()
+
+  // Validated before anything is read or written. The root cause this whole
+  // redesign was opened for was an unvalidated `status: string` that neither
+  // the app nor the database rejected; a stage arriving from a dropdown is
+  // still a string at runtime however well-typed the call site looks.
+  if (change.kind === 'stage' && !isBookingStage(change.stage)) {
+    return { error: 'Unknown status.' }
+  }
+
   try {
-    const result = await withTenantDb(tenantId, tx =>
-      tx.order.updateMany({ where: { id: orderId, tenantId }, data: { status } })
-    )
+    // Read first so a patch can preserve a date that already exists rather than
+    // re-stamping it — the moment an order was really confirmed must not drift
+    // forward every time someone touches the row.
+    const result = await withTenantDb(tenantId, async tx => {
+      const current = await tx.order.findFirst({
+        where: { id: orderId, tenantId },
+        // `stage` is selected for the history row's fromStage, not for the patch.
+        // `totalPrice` is read for the ledger row a manual payment writes (chunk 6).
+        select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
+      })
+      if (!current) return { count: 0 }
+      const now = new Date()
+      const dates = toCurrentDates(current)
+      const data =
+        change.kind === 'stage'
+          ? bookingStagePatch(change.stage as BookingStage, dates, now)
+          : change.kind === 'paid'
+            ? paidPatch(change.value, dates, now)
+            : change.kind === 'invoiceSent'
+              ? invoiceSentPatch(change.value, dates, now)
+              : { abandonedAt: null }
+      const updated = await tx.order.updateMany({ where: { id: orderId, tenantId }, data })
+      if (updated.count > 0) {
+        // Every payment is a ledger row now, whatever channel it arrived
+        // through — not just the ones Flitt settled (chunk 6).
+        if (change.kind === 'paid') {
+          if (change.value) {
+            await recordManualPayment(tx, {
+              tenantId, orderId, amount: current.totalPrice ?? 0, at: now,
+            })
+          } else {
+            await reverseManualPayments(tx, { orderId, at: now })
+          }
+        }
+        // Same transaction as the change, so history can never claim something
+        // that was rolled back (chunk 5).
+        await recordOrderEvent(tx, {
+          tenantId,
+          orderId,
+          type: eventTypeForChange(change),
+          actorType: 'ADMIN',
+          actorId: actor?.id ?? null,
+          fromStage: change.kind === 'stage' ? current.stage : null,
+          toStage: change.kind === 'stage' ? change.stage : null,
+        })
+      }
+      return updated
+    })
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
+    revalidatePath(`/admin/orders/${orderId}`)
+    revalidatePath('/admin/abandoned')
     return { success: true }
   } catch {
     return { error: 'Failed to update status.' }

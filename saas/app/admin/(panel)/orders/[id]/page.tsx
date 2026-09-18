@@ -57,7 +57,7 @@ export default async function OrderDetailPage({
 
   if (!order) notFound()
   const locale = adminLanguage || 'en'
-
+  // The fulfilment vocabulary for the flow-line and the status dropdown.
   return (
     <div className="max-w-2xl">
       {/* Back link */}
@@ -77,7 +77,12 @@ export default async function OrderDetailPage({
         companies={companies}
         order={{
           id: order.id,
-          status: (order.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
+          stage: order.stage,
+          createdAt: order.createdAt,
+          confirmedAt: order.confirmedAt,
+          completedAt: order.completedAt,
+          invoiceSentAt: order.invoiceSentAt,
+          paidAt: order.paidAt,
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,

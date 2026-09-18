@@ -55,6 +55,9 @@ const en: Translations = {
   'form.company_type': 'Tour Company',
   'form.company': 'Company',
   'form.company_placeholder': 'Select your company…',
+  'form.nationality': 'Nationality (optional)',
+  'form.nationality_placeholder': 'Type or browse to add a country…',
+  'form.nationality_empty': 'No matches',
   'form.visit_type': 'Visit Type',
   'form.tasting': 'Wine Tasting',
   'form.tasting_lunch': 'Tasting + Lunch',
@@ -62,6 +65,7 @@ const en: Translations = {
   'form.date': 'Date',
   'form.time_slot': 'Time Slot',
   'form.no_slots': 'No slots available today',
+  'form.select_date_first': 'Select a date first',
   'form.blocked_date': 'The winery is closed on this date. Please choose another date.',
   'form.guest_counts': 'Guest Counts',
   'form.guests_tasting': 'Tasting',
@@ -106,6 +110,18 @@ const en: Translations = {
   'form.flat': 'flat',
   'form.pc': 'pc',
 
+  // Confirm-your-visit step (Feature 184) — shown after validation passes,
+  // before the booking is actually sent.
+  'form.confirm_heading': 'Review your visit',
+  'form.confirm_subheading': 'Take a second look — nothing is booked yet.',
+  'form.confirm_section_visit': 'Visit',
+  'form.confirm_section_guests': 'Guests & contact',
+  'form.confirm_arrive': 'Arrive',
+  'form.confirm_duration_note': '~{hours} hrs · plan to finish around {end}',
+  'form.confirm_edit': 'Edit details',
+  'form.confirm_button': 'Confirm & Request Booking',
+  'form.confirm_button_pay': 'Confirm & Book',
+
   // Success state
   'form.submit_pay': 'Book & Pay',
   'form.success_heading': 'Booking received!',
@@ -113,6 +129,53 @@ const en: Translations = {
   'form.est_total_label': 'Total',
   'form.guest_count_adjusted': 'We can accommodate up to {max} guests for this visit — your booking has been adjusted to {max} guests.',
   'form.guest_count_over_max_notice': 'Groups over {max} guests will be confirmed with you directly.',
+  'form.onsite_pending_company_note': "Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.",
+
+  // New Company popup (Feature: On-Site Messages, Chunk 1). Body/success/error
+  // text is admin-editable via SiteContent; these are the code fallbacks.
+  // Field placeholders and buttons are fixed chrome (translated, not editable).
+  'form.new_company_title': 'New Company?',
+  'form.new_company_body_with_booking': "Fill in your company details — we'll submit your booking along with a request to set up your account. Your booking won't be confirmed until we do.",
+  'form.new_company_body_no_booking': "Fill in your details and we'll get in touch to set up your account.",
+  'form.new_company_success_title': 'Request received!',
+  'form.new_company_success_body': "We'll be in touch to set up your account.",
+  'form.new_company_error': 'Something went wrong. Please try again.',
+  'form.new_company_name_placeholder': 'Company Name *',
+  'form.new_company_contact_placeholder': 'Your Name *',
+  'form.new_company_phone_placeholder': 'Phone Number *',
+  'form.new_company_email_placeholder': 'Email (optional)',
+  'form.new_company_send_with_booking': 'Send Booking & Request',
+  'form.new_company_send_request': 'Send Request',
+  'form.new_company_sending': 'Sending…',
+  'form.new_company_close': 'Close',
+  'form.new_company_cancel': 'Cancel',
+  'form.new_company_chip': 'New Company?',
+  'form.new_company_dropdown_option': '+ New Company',
+
+  // Company access-code popup (Chunk 3). Title/intro/error are admin-editable
+  // via SiteContent (mc()); placeholder + buttons are fixed chrome (t() only).
+  'form.access_code_title': 'Enter your company code',
+  'form.access_code_intro': '{company} — enter the access code provided by the winery.',
+  'form.access_code_error': 'Incorrect code — please try again or contact the winery.',
+  'form.access_code_placeholder': 'e.g. MARANI42',
+  'form.access_code_checking': 'Checking…',
+  'form.access_code_confirm': 'Confirm',
+  'form.access_code_enter_manually': 'Enter Manually',
+  // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
+  // not a popup, but shares the same "wrong code" concept.
+  'form.access_code_direct_placeholder': 'Enter your company code',
+  'form.access_code_direct_not_recognised': 'Code not recognised.',
+
+  // Chunk 4 — validation & server errors. All admin-editable (mc()), per
+  // Max's call: full consistency with the rest of this plan over the
+  // "translate only" option, even though these read more like system
+  // errors than brand copy. Several are shared between the client-side
+  // check and createBooking.ts's authoritative server-side re-check of the
+  // same rule — one editable field controls both surfaces rather than two
+  // near-duplicate fields that could drift out of sync.
+  'form.err_select_date': 'Please select a date.',
+  'form.err_future_date': 'Please choose a future date.',
+  'form.err_working_hours': "That time is outside the winery's working hours on this date. Please choose another time.",
 
   // Online payment result page
   'payment.success_heading': 'Payment received',
@@ -202,6 +265,10 @@ const ka: Translations = {
   'form.company_type': 'ტური კომპანია',
   'form.company': 'კომპანია',
   'form.company_placeholder': 'აირჩიეთ კომპანია…',
+  // Drafted, not native-reviewed (Plan-CompanyNationality) — flag for Max.
+  'form.nationality': 'ეროვნება (არასავალდებულო)',
+  'form.nationality_placeholder': 'ჩაწერეთ ან დაათვალიერეთ ქვეყნების დასამატებლად…',
+  'form.nationality_empty': 'შედეგები არ მოიძებნა',
   'form.visit_type': 'ვიზიტის ტიპი',
   'form.tasting': 'ღვინის დეგუსტაცია',
   'form.tasting_lunch': 'დეგუსტაცია + სადილი',
@@ -209,6 +276,7 @@ const ka: Translations = {
   'form.date': 'თარიღი',
   'form.time_slot': 'დრო',
   'form.no_slots': 'დღეს ვაკანტური დრო არ არის',
+  'form.select_date_first': 'ჯერ აირჩიეთ თარიღი',
   'form.blocked_date': 'მარანი დახურულია ამ თარიღს. გთხოვთ, აირჩიოთ სხვა თარიღი.',
   'form.guest_counts': 'სტუმრების რაოდენობა',
   'form.guests_tasting': 'დეგუსტაცია',
@@ -253,6 +321,16 @@ const ka: Translations = {
   'form.flat': 'ფიქს.',
   'form.pc': 'ცალი',
 
+  'form.confirm_heading': 'გადაამოწმეთ ვიზიტი',
+  'form.confirm_subheading': 'გადახედეთ დეტალებს — ჯავშანი ჯერ არ არის გაგზავნილი.',
+  'form.confirm_section_visit': 'ვიზიტი',
+  'form.confirm_section_guests': 'სტუმრები და კონტაქტი',
+  'form.confirm_arrive': 'ჩამოსვლა',
+  'form.confirm_duration_note': '~{hours} სთ · დასრულება დაახლოებით {end}-ზე',
+  'form.confirm_edit': 'დეტალების რედაქტირება',
+  'form.confirm_button': 'დადასტურება და ჯავშნის მოთხოვნა',
+  'form.confirm_button_pay': 'დადასტურება და ჯავშანი',
+
   // Success state
   'form.submit_pay': 'დაჯავშნა და გადახდა',
   'form.success_heading': 'ჯავშანი მიღებულია!',
@@ -260,6 +338,39 @@ const ka: Translations = {
   'form.est_total_label': 'ჯამი',
   'form.guest_count_adjusted': 'ჩვენ შეგვიძლია მივიღოთ მაქსიმუმ {max} სტუმარი ამ ვიზიტისთვის — თქვენი ჯავშანი შესწორდა {max} სტუმარზე.',
   'form.guest_count_over_max_notice': '{max}-ზე მეტი სტუმრის ჯგუფები დადასტურდება პირდაპირ თქვენთან.',
+  'form.onsite_pending_company_note': 'რადგან თქვენი კომპანია ჯერ არ არის რეგისტრირებული ჩვენს სისტემაში, ეს ჯავშანი ჯერ არ არის დადასტურებული — ჩვენ შევქმნით თქვენს ანგარიშს და დაგიკავშირდებით ჯავშნისა და ფასის დასადასტურებლად.',
+
+  'form.new_company_title': 'ახალი კომპანია?',
+  'form.new_company_body_with_booking': 'შეავსეთ კომპანიის დეტალები — ჩვენ გავაგზავნით თქვენს ჯავშანს ანგარიშის შექმნის მოთხოვნასთან ერთად. თქვენი ჯავშანი დადასტურებული არ იქნება მანამ, სანამ ამას არ გავაკეთებთ.',
+  'form.new_company_body_no_booking': 'შეავსეთ თქვენი მონაცემები და ჩვენ დაგიკავშირდებით ანგარიშის შესაქმნელად.',
+  'form.new_company_success_title': 'მოთხოვნა მიღებულია!',
+  'form.new_company_success_body': 'ჩვენ დაგიკავშირდებით თქვენი ანგარიშის შესაქმნელად.',
+  'form.new_company_error': 'დაფიქსირდა შეცდომა. გთხოვთ სცადოთ ხელახლა.',
+  'form.new_company_name_placeholder': 'კომპანიის დასახელება *',
+  'form.new_company_contact_placeholder': 'თქვენი სახელი *',
+  'form.new_company_phone_placeholder': 'ტელეფონის ნომერი *',
+  'form.new_company_email_placeholder': 'ელ-ფოსტა (არასავალდებულო)',
+  'form.new_company_send_with_booking': 'ჯავშნისა და მოთხოვნის გაგზავნა',
+  'form.new_company_send_request': 'მოთხოვნის გაგზავნა',
+  'form.new_company_sending': 'იგზავნება…',
+  'form.new_company_close': 'დახურვა',
+  'form.new_company_cancel': 'გაუქმება',
+  'form.new_company_chip': 'ახალი კომპანია?',
+  'form.new_company_dropdown_option': '+ ახალი კომპანია',
+
+  'form.access_code_title': 'შეიყვანეთ კომპანიის კოდი',
+  'form.access_code_intro': '{company} — შეიყვანეთ მარნის მიერ მოწოდებული წვდომის კოდი.',
+  'form.access_code_error': 'არასწორი კოდი — გთხოვთ სცადოთ ხელახლა ან დაუკავშირდით მარანს.',
+  'form.access_code_placeholder': 'მაგ.: MARANI42',
+  'form.access_code_checking': 'მოწმდება…',
+  'form.access_code_confirm': 'დადასტურება',
+  'form.access_code_enter_manually': 'ხელით შეყვანა',
+  'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
+  'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
+
+  'form.err_select_date': 'გთხოვთ, აირჩიოთ თარიღი.',
+  'form.err_future_date': 'გთხოვთ, აირჩიოთ მომავალი თარიღი.',
+  'form.err_working_hours': 'ეს დრო მარნის სამუშაო საათების მიღმაა ამ თარიღისთვის. გთხოვთ, აირჩიოთ სხვა დრო.',
 
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',

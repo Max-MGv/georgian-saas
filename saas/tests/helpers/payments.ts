@@ -1,27 +1,30 @@
 import { Page, Locator, expect } from '@playwright/test';
 
-// ── Online-payment section toggles (/admin/settings, #148) ──────────────────
+// ── Generic on/off pill toggles (/admin/settings) ────────────────────────────
 // Plain <button type="button"> pills with no accessible name (same shape as
 // enable_enhanced_company_booking — see notes/05-booking-enhanced.md). State
 // is read from the inner <span>'s translateX() inline style: 22px=on, 2px=off.
-function sectionToggle(page: Page, section: 'Individual bookings' | 'Company bookings'): Locator {
+// Shared by the three online-payment section toggles (#148) and any other
+// plain Setting toggle on this page (e.g. show_company_price_after_booking) —
+// they all render through the same Toggle component and DOM shape.
+function toggleByLabel(page: Page, label: string): Locator {
   return page
-    .getByText(section, { exact: true })
+    .getByText(label, { exact: true })
     .locator('xpath=ancestor::div[contains(@class,"justify-between")][1]')
     .locator('button[type="button"]');
 }
 
 async function readToggleOn(toggle: Locator): Promise<boolean> {
-  const style = await toggle.locator('span').getAttribute('style');
+  // .last() — the Toggle component (SettingsClient.tsx) also renders a leading
+  // aria-hidden hit-area <span> (mobile tap-target pass); the thumb with the
+  // translateX() style is always the second/last span.
+  const style = await toggle.locator('span').last().getAttribute('style');
   return !!style && style.includes('translateX(22px)');
 }
 
-export async function readPaymentSectionToggle(
-  page: Page,
-  section: 'Individual bookings' | 'Company bookings'
-): Promise<boolean> {
+async function readSettingsToggle(page: Page, label: string): Promise<boolean> {
   await page.goto('/admin/settings');
-  const toggle = sectionToggle(page, section);
+  const toggle = toggleByLabel(page, label);
   await toggle.waitFor();
   return readToggleOn(toggle);
 }
@@ -31,13 +34,9 @@ export async function readPaymentSectionToggle(
 // race documented in helpers/locale.ts's setAdminPanelLanguage (a cleanup
 // click that fires right before a test ends can otherwise get cancelled
 // mid-flight, leaving the real tenant stuck in the wrong state).
-export async function setPaymentSectionToggle(
-  page: Page,
-  section: 'Individual bookings' | 'Company bookings',
-  desired: boolean
-): Promise<void> {
+async function setSettingsToggle(page: Page, label: string, desired: boolean): Promise<void> {
   await page.goto('/admin/settings');
-  const toggle = sectionToggle(page, section);
+  const toggle = toggleByLabel(page, label);
   await toggle.waitFor();
   if ((await readToggleOn(toggle)) === desired) return;
   await Promise.all([
@@ -47,13 +46,64 @@ export async function setPaymentSectionToggle(
   await expect(async () => expect(await readToggleOn(toggle)).toBe(desired)).toPass({ timeout: 10_000 });
 }
 
+export type PaymentSectionLabel = 'Individual bookings' | 'Company bookings' | 'Wine orders';
+
+export async function readPaymentSectionToggle(page: Page, section: PaymentSectionLabel): Promise<boolean> {
+  return readSettingsToggle(page, section);
+}
+
+export async function setPaymentSectionToggle(page: Page, section: PaymentSectionLabel, desired: boolean): Promise<void> {
+  return setSettingsToggle(page, section, desired);
+}
+
+// The price-visibility hard-block (shouldTakePayment.ts's `priceShown` gate)
+// for COMPANY bookings — Plan-OnlinePayment §7.4. When off, a company booking
+// is never charged, regardless of the section toggle or any per-company
+// override (payment-amount-integrity.spec.ts's hidden-price test).
+export async function readShowCompanyPriceToggle(page: Page): Promise<boolean> {
+  return readSettingsToggle(page, 'Show price after company booking');
+}
+
+export async function setShowCompanyPriceToggle(page: Page, desired: boolean): Promise<void> {
+  return setSettingsToggle(page, 'Show price after company booking', desired);
+}
+
+// ── Flitt merchant ID (/admin/settings) ──────────────────────────────────────
+// Ordinary text, saved on blur (SettingsClient.tsx's handleFlittMerchantIdBlur)
+// — unlike the secret key, this is not write-only, so a test can safely read
+// the real value, blank it, and restore the exact same value afterward. Used
+// by the "missing credentials" edge case: shouldTakePayment()/isPaymentConfigured()
+// must fall back to reservation-only when either credential is absent, even
+// with the module and section toggle both on.
+const merchantIdInput = (page: Page) => page.getByPlaceholder(/e\.g\.\s*4056054/i);
+
+export async function readFlittMerchantId(page: Page): Promise<string> {
+  await page.goto('/admin/settings');
+  const input = merchantIdInput(page);
+  await input.waitFor();
+  return input.inputValue();
+}
+
+export async function setFlittMerchantId(page: Page, value: string): Promise<void> {
+  await page.goto('/admin/settings');
+  const input = merchantIdInput(page);
+  await input.waitFor();
+  if ((await input.inputValue()) === value) return;
+  await input.fill(value);
+  await Promise.all([
+    page.waitForResponse((res) => res.url().includes('/admin/settings') && res.request().method() === 'POST'),
+    input.blur(),
+  ]);
+  await expect(async () => expect(await input.inputValue()).toBe(value)).toPass({ timeout: 10_000 });
+}
+
 // ── Per-company payment override (/admin/companies, #148) ───────────────────
 // CompaniesClient.tsx's Edit panel sits behind a known, reproducible lost-
 // click bug (nested-button hydration mismatch — see notes/09-companies-crud.md):
 // a click resolves without throwing but its handler doesn't always run. Every
 // click here retries until its expected effect is observed, same pattern as
 // companies-crud.spec.ts's clickUntil.
-async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeout = 20_000) {
+export async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeout = 20_000) {
   await expect(async () => {
     try { await verify(); return; } catch { /* not yet satisfied — click again */ }
     await clickable.click({ timeout: 5_000 });
@@ -64,16 +114,40 @@ async function clickUntil(clickable: Locator, verify: () => Promise<void>, timeo
 const OVERRIDE_LABELS = ['Default', 'Always skip', 'Always require'] as const;
 export type PaymentOverride = (typeof OVERRIDE_LABELS)[number];
 
-const editPanelHeading = (page: Page) => page.getByRole('heading', { name: 'Edit Company', exact: true });
+export const editPanelHeading = (page: Page) => page.getByRole('heading', { name: 'Edit Company', exact: true });
 
-async function openCompanyEditPanel(page: Page, companyName: string) {
+export async function openCompanyEditPanel(page: Page, companyName: string) {
   await page.goto('/admin/companies');
   await expect(page).toHaveURL(/\/admin\/companies/, { timeout: 10_000 });
   const escaped = companyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const nameButton = page.getByRole('button', { name: new RegExp(`^${escaped}`) });
+  // /admin/companies splits its list across two tabs — "Bookings" (the
+  // default) and "Wine Orders" — and a company can exist under either one.
+  // A name not visible under the default tab within a short grace period
+  // (not an instant count() check — the page may simply still be rendering)
+  // is checked under "Wine Orders" before giving up, rather than assuming
+  // every caller's company is a booking company.
+  const foundOnDefaultTab = await nameButton.waitFor({ state: 'visible', timeout: 3_000 }).then(() => true).catch(() => false);
+  if (!foundOnDefaultTab) {
+    const wineTab = page.getByRole('button', { name: 'Wine Orders', exact: true });
+    if (await wineTab.count() > 0) await wineTab.click();
+  }
   await expect(nameButton).toBeVisible({ timeout: 10_000 });
+  // Real bug fixed here (2026-09-15): `xpath=..` (immediate parent) resolves
+  // the Edit button to a 0-count locator on the CompaniesClient.tsx DOM as it
+  // exists today — the name button and its own label/badges live in one
+  // wrapper div, and the Edit/Delete pair lives in a SIBLING wrapper div one
+  // level up, not inside the name button's own parent. A 0-count locator's
+  // .click() just times out silently, which reads exactly like the
+  // documented "lost click" hydration bug below but isn't it — confirmed
+  // live via page.evaluate that `xpath=..` finds nothing while `xpath=../..`
+  // finds exactly one Edit button. This was breaking every test that calls
+  // openCompanyEditPanel, not just this one — see also companies-crud.spec.ts's
+  // own `companyRow()`, which has the identical `xpath=..` pattern and is
+  // very likely broken the same way (out of scope to fix here — different
+  // file, different test, not touched by this change).
   await clickUntil(
-    nameButton.locator('xpath=..').getByRole('button', { name: 'Edit', exact: true }),
+    nameButton.locator('xpath=../..').getByRole('button', { name: 'Edit', exact: true }),
     () => expect(editPanelHeading(page)).toBeVisible({ timeout: 2_000 })
   );
 }

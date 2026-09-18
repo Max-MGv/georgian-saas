@@ -33,6 +33,17 @@ The admin panel lets the winery edit the labels (e.g. "First Name", "Request Boo
 - `saas/app/admin/(panel)/content/BookingFormVisualPanel.tsx` — visual replica of the form used in the admin editor, takes a `variant` prop; layout must stay in sync with `BookingForm.tsx`
 - `saas/scripts/seed-ka.ts` — Georgian locale seed data; run with `npx tsx scripts/seed-ka.ts` from `saas/` after adding new `form_*` keys
 
+**Since Feature 184 (2026-09-14):** `handleSubmit`'s validation no longer ends in a `createBooking()`
+call — once every check (including the company-code one below) passes, it opens a confirm sheet
+(`components/BookingConfirmPopupView.tsx`) instead; the actual submit moved to a new
+`handleConfirmedSubmit()`. That sheet's own copy (heading, subheading, duration line, both button
+variants) is **not** in `FIELDS.form` here — it lives under the Content page's **Messages** tab
+(`onsite_confirm_*` keys, `MessagesPanel.tsx`), matching the pattern of the two popups it's modeled
+on (`AccessCodePopupView.tsx`/`NewCompanyPopupView.tsx`), not the pattern of the rest of this file.
+`BookingFormVisualPanel.tsx` has a static block pointing there rather than a live-editable field —
+see `Features/Feature 184 - Booking Confirm Sheet.md` before changing either file's confirm-sheet
+section, so the two don't drift into duplicate or conflicting sources of truth for the same copy.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the
@@ -653,3 +664,111 @@ outputFileTracingIncludes: {
 **What this means for any future native dependency:** if you add another native-binary package (anything with per-platform npm packages, prebuilt `.node`/`.so` files), assume it needs an entry in `outputFileTracingIncludes` too, and verify by checking the relevant route's `.next/server/app/.../page.js.nft.json` after a real `next build` — don't trust that "it works in `next dev`" means the production trace is complete, since dev doesn't go through the same tracing step at all.
 
 **Files involved:** `saas/next.config.ts`, `saas/app/actions/uploadImage.ts`.
+
+---
+
+## 26. Guide/rep codes share one per-tenant pool with `Company.accessCode`, and the resolution logic exists in two places
+
+**What the dependency is:** since Plan-CompanyGuidesAndReps, a person's code (`CompanyGuide.code` / `CompanyRepresentative.code`) and a company's own `accessCode` all have to be unique across the same tenant — a guide's code and another company's `accessCode` must never collide, because both the wine-order flow's `findCompanyByCode` and the booking flow's `findBookingCodeByCode` do a **code-alone, tenant-wide** lookup with no company chosen first. Uniqueness is enforced only at the application level: `generateUniqueTenantCode()`/`codeExistsInTenant()` (`app/actions/companies.ts`) check all three sources (`Company`, `CompanyGuide`, `CompanyRepresentative`) before accepting a code, in every action that generates or manually sets one (`createCompany`, `regenerateAccessCode`, `setAccessCode`, and their guide/rep equivalents in `companyGuides.ts`). There is no DB-level constraint spanning the three tables — a direct `prisma.companyGuide.create()` or raw SQL insert that skips these helpers can silently create a colliding code.
+
+**The second half of the coupling:** the booking form has *two* code-resolution entry points that must stay in sync — `verifyBookingCode()` (dropdown flow: company already chosen, code just confirms the person) and `findBookingCodeByCode()` (direct-code-entry / `hideCompanyDropdown` flow: no company chosen, code alone is searched tenant-wide). Both independently implement "check this company's guides first, fall back to `Company.accessCode` when it has none" — a change to that fallback rule (e.g., changing what counts as "no guides", or extending it to reps) needs updating in both functions, the same shape as §22's three pricing call sites.
+
+**What this means in practice:** if you add a third way to look up a code (e.g., extending this to wine orders per Chunk 6, still unbuilt as of this note), route the code-uniqueness check through `generateUniqueTenantCode()`/`codeExistsInTenant()` rather than inventing a new check, and mirror whatever fallback order the other two resolvers use rather than picking a different one.
+
+**Files involved:** `saas/app/actions/companies.ts` (`generateUniqueTenantCode`, `codeExistsInTenant`, `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`), `saas/app/actions/companyGuides.ts`, `saas/components/BookingForm.tsx`. Full design: `Plan-CompanyGuidesAndReps.md`, `Features/Feature 185 - Company Guides and Representatives.md`.
+
+---
+
+## 27. `Tenant` has RLS *enabled* at the DB level but zero policies — reading it through `withTenantDb` silently returns `null`, not an error
+
+**What the dependency is:** Supabase enables row-level security on every table by default when a project is created, including `"Tenant"` itself — confirmed live via `SELECT relrowsecurity FROM pg_class WHERE relname = 'Tenant'` (`true`). `scripts/setup-rls.ts` grants `app_user` plain `SELECT` on `"Tenant"` (needed for `proxy.ts`'s tenant lookup) but deliberately never runs `CREATE POLICY` for it — `Tenant` isn't tenant-scoped data, there's no `tenantId` column to write a policy against, and the comment in that script even says so ("proxy uses superuser anyway"). The result: Postgres RLS with zero policies defaults to **denying every row** to any non-owner role. `app_user`'s `GRANT SELECT` lets the query execute, but it comes back empty — `tx.tenant.findUnique(...)` inside `withTenantDb` (which does `SET LOCAL ROLE app_user`) returns `null` for a row that demonstrably exists.
+
+**Why it bites, and why it's dangerous specifically:** it fails *silently*, not loudly. No thrown error, no RLS violation message — just `null`, which every caller's `?? false` / `?? null` fallback swallows without complaint. `isPaymentConfigured()` (`lib/payments/shouldTakePayment.ts`) and `proxy.ts`'s `resolveTenant()` both already avoid this by querying `Tenant` through the plain unrestricted `db` client, never `withTenantDb` — but neither file says why, so it reads as an arbitrary inconsistency until you hit the bug yourself. Confirmed live 2026-09-16 while wiring `Order.enableCompanyNationalityBreakdown` into `app/(site)/page.tsx`: the flag was `true` in the DB (verified by direct query) but rendered as `false` on the public site until the fetch was switched from `withTenantDb` to plain `db.tenant.findUnique()`.
+
+**What this means in practice:** any new code that reads a field off the `Tenant` row itself (not a tenant-scoped child table) must use the plain `db` client, never `withTenantDb`. If you ever need per-request tenant-role RLS enforcement, `Tenant` would need real policies added first — don't assume `withTenantDb` "just works" for it because it works for everything else.
+
+**Files involved:** `saas/lib/payments/shouldTakePayment.ts` (`isPaymentConfigured`), `saas/proxy.ts` (`resolveTenant`), `saas/app/(site)/page.tsx` (the `enableCompanyNationalityBreakdown` fetch), `saas/scripts/setup-rls.ts`. See `Plan-CompanyNationality.md` Chunk 5.
+
+---
+
+## 28. Every order query must exclude abandoned orders — and nothing enforces it
+
+**What the dependency is:** since Feature 191 an order that was sent to the card
+gateway and never paid carries a non-null `abandonedAt`. It is **not an order**:
+the winery must never see it in a list, a board column, a filter, a count, a
+calendar day or a CSV export. It lives on `/admin/abandoned` and nowhere else.
+
+The exclusion is a `where` fragment, `NOT_ABANDONED` in
+`saas/lib/orderFilters.ts`, and **every** `Order` / `WineOrder` query that feeds
+an admin surface has to spread it in.
+
+**Why it bites:** forgetting it does not error and does not look wrong. An
+abandoned order sits at `stage: 'NEW'` — legitimately, it never progressed — so
+it renders as a perfectly ordinary new booking that the winery thinks it has work
+to do on. They accumulate forever and are never auto-expired (a late gateway
+callback must still be able to land, Plan-OnlinePayment §7.2), so the pile grows.
+
+**This has already happened once**, in the shape it will happen again:
+`exportOrdersCsv` was missing the equivalent exclusion that
+`/admin/orders/page.tsx` had, so a CSV silently carried rows the screen it was
+exported from did not show. Both queries were individually valid. Nothing caught
+it for a release.
+
+**The rule:** a new query against `Order` or `WineOrder` for an admin screen
+spreads `...NOT_ABANDONED`. The inverse, `ONLY_ABANDONED`, exists for the one
+screen that wants them. Neither is enforced by a type — they are plain object
+spreads — so this note is the enforcement.
+
+**Related, same file:** `paymentFilterWhere()` is the only place the three
+payment filters are expressed, shared by the screen and the export so they cannot
+disagree about what a word means. The three **partition** the orders exactly
+(nothing in two buckets, nothing in none), because they drive a picker that shows
+a count beside each option — and the previous release reported
+`All statuses (31)` against 21 bookings because two entries overlapped. If you
+add a fourth, keep the partition. `scripts/test-order-status.ts` section I
+asserts it.
+
+**Files involved:** `saas/lib/orderFilters.ts`,
+`saas/app/admin/(panel)/orders/page.tsx`,
+`saas/app/admin/(panel)/wine-orders/page.tsx`,
+`saas/app/actions/orders.ts` (`exportOrdersCsv`),
+`saas/app/actions/superAdmin.ts`, `saas/app/admin/(panel)/statistics/page.tsx`,
+`saas/app/admin/(panel)/abandoned/page.tsx`.
+
+---
+
+## 29. `stage` is denormalised against the milestone timestamps, and three CHECKs hold them together
+
+**What the dependency is:** Feature 191 stores an order's position twice — once
+as `stage` (a `BookingStage` / `WineOrderStage` enum) and once as the timestamp
+for that stage (`confirmedAt`, `completedAt` / `deliveredAt`). That is deliberate:
+the board groups by `stage` and every filter and count reads it, which a derived
+value could not serve efficiently.
+
+Three database constraints keep the two honest, and **you will meet them as a
+failed write, not as a type error**:
+
+| Constraint | What it refuses |
+|---|---|
+| `Order_stage_has_timestamp` | `stage = 'CONFIRMED'` with `confirmedAt` NULL, or `'COMPLETED'` with `completedAt` NULL |
+| `WineOrder_stage_has_timestamp` | the same for `'CONFIRMED'` / `'DELIVERED'` |
+| `*_abandoned_is_unpaid` | `abandonedAt` and `paidAt` both set |
+
+Only the **current** stage's own timestamp is required, on purpose: an admin
+entering a walk-in order as already complete never passed through Confirmed, and
+inventing a date there would be a lie.
+
+**What this means in practice:** never write `stage` directly. Go through
+`bookingStagePatch` / `wineOrderStagePatch` in `saas/lib/statusWrite.ts`, which
+own the three rules that keep the constraints satisfied — an existing date is
+never re-stamped, moving backwards clears what you moved back past, and
+cancelling touches no dates at all. Seed scripts and optimistic client updates
+call the *same* functions rather than restating the rules; two copies of "which
+columns does this change move" is exactly the drift an optimistic update hides
+until someone reloads.
+
+**Files involved:** `saas/lib/statusWrite.ts`, `saas/lib/statusFlow.ts`,
+`saas/prisma/migrations/20260917120000_status_stages_and_dates/migration.sql`,
+`saas/app/actions/orders.ts`, `saas/app/actions/wineOrders.ts`,
+`saas/lib/payments/settle.ts`, `saas/lib/demoSeed.ts`. Design:
+`Features/Feature 191 - Order Status Two Axis Split.md`.

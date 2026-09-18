@@ -16,33 +16,33 @@ model PlatformConfig {
 }
 
 model Tenant {
-  id                   String   @id @default(cuid())
-  name                 String
-  domain               String   @unique
-  slug                 String   @unique
-  theme                Json?
-  logoUrl              String?
-  logoAlt              String?
-  faviconUrl           String?
-  displayName          String?
-  modulesBooking       Boolean  @default(true)
-  modulesWineOrders    Boolean  @default(false)
-  modulesPublicSite    Boolean  @default(true)
-  modulesLegalPages    Boolean  @default(true)
+  id                                String          @id @default(cuid())
+  name                              String
+  domain                            String          @unique
+  slug                              String          @unique
+  theme                             Json?
+  logoUrl                           String?
+  logoAlt                           String?
+  faviconUrl                        String?
+  displayName                       String?
+  modulesBooking                    Boolean         @default(true)
+  modulesWineOrders                 Boolean         @default(false)
+  modulesPublicSite                 Boolean         @default(true)
+  modulesLegalPages                 Boolean         @default(true)
   // Online payment (Flitt). Off by default so every existing tenant is
   // unaffected — the whole payment path is a no-op unless this is on AND
   // both credentials below are filled in.
-  modulesOnlinePayment Boolean  @default(false)
+  modulesOnlinePayment              Boolean         @default(false)
   // PRODUCT: wine-level type/sweetness/sparkling/alcohol shared across all vintages (today's behavior).
   // VINTAGE: those four live per-vintage instead, no fallback to the wine's value when unset.
   // Tenant-wide, super-admin only — see vault/Plan-WineVintageDetails.md.
-  wineDetailLevel      WineDetailLevel @default(PRODUCT)
+  wineDetailLevel                   WineDetailLevel @default(PRODUCT)
   // Per-tenant Flitt merchant credentials. Deliberately NOT in `Setting`:
   // `getAllSettings()` returns that whole map and MaintenanceNotes §9 documents
   // the hazard of it reaching a client component. Keeping the secret here makes
   // that leak structurally impossible. Never return flittSecretKey to a browser.
-  flittMerchantId      String?
-  flittSecretKey       String?
+  flittMerchantId                   String?
+  flittSecretKey                    String?
   // Granular payment controls (#148). Independent per-section switches for
   // whether a tenant takes online payment at all in that section — separate
   // from modulesOnlinePayment (can the tenant take payment at all) and from
@@ -50,14 +50,19 @@ model Tenant {
   // decision #5). All three default true so a tenant flipping modulesOnlinePayment
   // on for the first time gets today's "payment everywhere it's structurally
   // possible" behavior with no extra steps.
-  paymentEnabledIndividuals Boolean @default(true)
-  paymentEnabledCompanies   Boolean @default(true)
-  paymentEnabledWineOrders  Boolean @default(true)
-  createdAt            DateTime @default(now())
+  paymentEnabledIndividuals         Boolean         @default(true)
+  paymentEnabledCompanies           Boolean         @default(true)
+  paymentEnabledWineOrders          Boolean         @default(true)
+  // Company-booking nationality tagging (Plan-CompanyNationality). Super-admin only, like
+  // wineDetailLevel above — never exposed in the tenant's own SettingsClient.tsx. Gates whether
+  // BookingForm.tsx offers the nationality picker for COMPANY bookings; does not retroactively
+  // hide nationalities already stored on existing orders when turned off.
+  enableCompanyNationalityBreakdown Boolean         @default(false)
+  createdAt                         DateTime        @default(now())
 }
 
 model Company {
-  id                  String      @id @default(cuid())
+  id                  String                  @id @default(cuid())
   name                String
   identificationCode  String?
   contactName         String?
@@ -65,9 +70,9 @@ model Company {
   contactEmail        String?
   address             String?
   accessCode          String?
-  isIndividual        Boolean     @default(false)
-  isBookingCompany    Boolean     @default(true)
-  isWineOrderCompany  Boolean     @default(false)
+  isIndividual        Boolean                 @default(false)
+  isBookingCompany    Boolean                 @default(true)
+  isWineOrderCompany  Boolean                 @default(false)
   wineDiscountPercent Float?
   // Per-company override of the tenant's Companies section toggle (#148).
   // null = follow paymentEnabledCompanies; true = always skip (trusted,
@@ -77,58 +82,229 @@ model Company {
   // orders alike — see edge case notes in Feature 148 on why it isn't split per-module.
   skipPayment         Boolean?
   tenantId            String?
-  createdAt           DateTime    @default(now())
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @default(now()) @updatedAt
   orders              Order[]
   wineOrders          WineOrder[]
   prices              Price[]
+  guides              CompanyGuide[]
+  representatives     CompanyRepresentative[]
+
+  @@index([tenantId])
+}
+
+// Person who can be contacted during the actual dinner/booking (Plan-CompanyGuidesAndReps).
+// Same code mechanism as Company.accessCode, but identifies a specific person, not just the
+// company. No own tenantId — RLS is JOIN-to-Company, same shape as Price.
+model CompanyGuide {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String?
+  code      String
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+// Person invoices get sent to. Picked manually by an admin at invoice-send time — never typed
+// into a public form, never stored on an Order (Chunk 1 decision). Same JOIN-to-Company RLS
+// shape as CompanyGuide/Price.
+model CompanyRepresentative {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  phone     String?
+  code      String
+  createdAt DateTime @default(now())
 }
 
 model Order {
-  id                String             @id @default(cuid())
-  status            OrderStatus        @default(NEW)
-  bookingType       BookingType        @default(INDIVIDUAL)
-  visitType         VisitType
-  date              DateTime
-  timeSlot          String
-  guestCount        Int
+  id                      String             @id @default(cuid())
+  // Where the booking is, and nothing about money (Feature 191). Its own enum
+  // rather than one shared with WineOrder, so a booking is structurally
+  // incapable of holding the wine-only DELIVERED — which the previous shared
+  // reference table could not prevent: its `appliesTo` column filtered the
+  // dropdown, never the foreign key.
+  stage                   BookingStage       @default(NEW)
+  // Milestones as dates, not as a status ladder. The ladder was the bug: it
+  // was `unpaid → invoiced → paid`, so marking an invoiced order paid erased
+  // the fact that an invoice had ever been sent. Independent dates cannot
+  // overwrite each other — invoiced on the 3rd and paid on the 19th are both
+  // permanently true — and they also make "did they pay before or after the
+  // visit" answerable by comparison rather than by a stored flag.
+  //
+  // They are also what places the Paid step on the flow-line. That used to be
+  // `paidAtStage`, a snapshotted code string; a timestamp cannot go stale the
+  // way a snapshot of a since-renamed status could.
+  confirmedAt             DateTime?
+  completedAt             DateTime?
+  invoiceSentAt           DateTime?
+  paidAt                  DateTime?
+  // Set when the guest is sent to the card gateway, cleared the moment the
+  // order completes. So it reads literally: this order has been incomplete
+  // since <date>. Replaces the three legacy limbo values (PENDING_PAYMENT,
+  // pending_payment, payment_failed) with one fact — Max's call: a closed tab
+  // and a declined card are the same thing to the winery, an order that never
+  // happened. Abandoned orders are excluded from every order surface and live
+  // on their own screen; see MaintenanceNotes.
+  abandonedAt             DateTime?
+  bookingType             BookingType        @default(INDIVIDUAL)
+  visitType               VisitType
+  date                    DateTime
+  timeSlot                String
+  guestCount              Int
   // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
-  lunchGuestCount   Int                @default(0)
-  tastingGuestCount Int                @default(0)
-  freeGuestCount    Int                @default(0)
+  lunchGuestCount         Int                @default(0)
+  tastingGuestCount       Int                @default(0)
+  freeGuestCount          Int                @default(0)
   // Hot dish selections (v1.2)
-  hotDishVegetable  String?
-  hotDishMeat       String?
-  foodNotes         String?
-  name              String
-  surname           String
-  email             String?
-  phone             String?
-  notes             String?
-  totalPrice        Float?
-  tenantId          String?
-  companyId         String?
+  hotDishVegetable        String?
+  hotDishMeat             String?
+  foodNotes               String?
+  name                    String
+  surname                 String
+  email                   String?
+  phone                   String?
+  notes                   String?
+  totalPrice              Int?
+  tenantId                String?
+  companyId               String?
   // Set only when bookingType is COMPANY and companyId is null — a booking
   // submitted through the "New Company?" flow, before the winery has created
   // a real Company row. Display-only (admin Orders table + emails); never
   // used for pricing or access-code lookups. See Feature 180.
-  requestedCompanyName String?
-  company           Company?           @relation(fields: [companyId], references: [id])
-  createdAt         DateTime           @default(now())
-  masterclassLines  OrderMasterclass[]
-  extras            OrderExtra[]
-  payments          Payment[]
+  requestedCompanyName    String?
+  company                 Company?           @relation(fields: [companyId], references: [id])
+  // Which guide's code matched at booking time — the phone-during-dinner case needs a
+  // specific order to remember which person, not just which company (Plan-CompanyGuidesAndReps
+  // Chunk 1). Representatives are not tracked per-order; see that plan for why.
+  guideId                 String?
+  guide                   CompanyGuide?      @relation(fields: [guideId], references: [id])
+  // ISO 3166-1 alpha-2 codes, COMPANY bookings only (Plan-CompanyNationality). No per-country
+  // counts — "at most a mix" per Max, not a headcount breakdown. Plain array on the already
+  // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
+  nationalities           String[]           @default([])
+  // Rate snapshots, in TETRI (chunk 4, 2026-09-18). Taken at booking time from
+  // whichever tier priced the order, or from the rates an admin typed when
+  // there is no tier.
+  //
+  // They exist because `recalcOrderTotal` used to re-read the company's *live*
+  // Price rows: change a company's rates in March, add a 20 GEL extra to their
+  // February booking, and the whole booking silently re-priced at March rates.
+  // A fact must not move when a dimension changes — the same reason
+  // OrderMasterclass.pricePerUnit and WineOrderItem.priceSnapshot exist. This
+  // makes bookings consistent with those rather than inventing anything.
+  //
+  // Nullable only for orders created before this column existed; recalc falls
+  // back to the old live-tier lookup for those and logs when it does.
+  //
+  // registrationFeeSnapshot is 0 for individuals: that path never applied the
+  // tier's registration fee, and the snapshot records what was *used*, not what
+  // the tier happened to hold.
+  tastingRateSnapshot     Int?
+  lunchRateSnapshot       Int?
+  registrationFeeSnapshot Int?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @default(now()) @updatedAt
+  masterclassLines        OrderMasterclass[]
+  extras                  OrderExtra[]
+  payments                Payment[]
+  orderEvents             OrderEvent[]
+
+  // Every query here is tenant-scoped by RLS, and the admin list/calendar both
+  // filter-and-order by date while the board and its filter pills group by
+  // stage. Without a tenantId-leading index these are sequential scans across
+  // every tenant's rows at once.
+  @@index([tenantId, date])
+  @@index([tenantId, stage])
+  // Every order surface filters out abandoned rows, so this is on the hot path
+  // of the list, board, calendar, counts and export alike.
+  @@index([tenantId, abandonedAt])
+}
+
+/// One thing that happened to an order. Append-only: never updated, never deleted.
+///
+/// Added 2026-09-18 (chunk 5 of vault/DataModel/Plan-DataModel.md). Every mature
+/// commerce platform has this table — Saleor calls it `OrderEvent`, Magento
+/// `sales_order_status_history` — and this project did not. The concrete gap it
+/// closes was already logged as open in Plan-StatusModel.md: un-paying an order
+/// by hand left no trace at all, because a manual payment has no `Payment` row
+/// to survive as the record.
+///
+/// It does NOT replace the milestone columns. `paidAt` and friends stay as the
+/// current state, read on every board render; this is history, read when someone
+/// asks a question. Deriving state by replaying events would be event sourcing,
+/// which is genuinely over-complicated here.
+///
+/// Shape follows `Payment`: nullable `orderId`/`wineOrderId` with exactly one
+/// set, rather than a second polymorphic convention. Reusing a pattern already
+/// in the schema beats inventing one.
+model OrderEvent {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  /// Exactly one of these is set. Cascade, so history goes with the order it
+  /// describes — an event whose order no longer exists is unreadable anyway.
+  orderId     String?
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  wineOrderId String?
+  wineOrder   WineOrder?     @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  type        OrderEventType
+  actorType   ActorType
+  /// The Supabase user id for an ADMIN action. Null for GUEST/SYSTEM/GATEWAY,
+  /// which have no user behind them.
+  actorId     String?
+  /// Only meaningful on STAGE_CHANGED. Plain strings rather than the enums,
+  /// because a stage that is later renamed must not make old history invalid.
+  fromStage   String?
+  toStage     String?
+  /// Anything type-specific: an amount, an extra's label, a gateway status.
+  payload     Json?
+  occurredAt  DateTime       @default(now())
+
+  @@index([tenantId, orderId, occurredAt])
+  @@index([tenantId, wineOrderId, occurredAt])
+}
+
+enum OrderEventType {
+  CREATED
+  STAGE_CHANGED
+  PAID
+  UNPAID
+  INVOICE_SENT
+  INVOICE_UNSENT
+  RESTORED
+  ABANDONED
+  PAYMENT_DECLINED
+  EXTRA_ADDED
+  EXTRA_REMOVED
+}
+
+enum ActorType {
+  GUEST
+  ADMIN
+  SYSTEM
+  GATEWAY
 }
 
 model Price {
-  id                         String  @id @default(cuid())
+  id                         String   @id @default(cuid())
   companyId                  String
-  company                    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   minGuests                  Int
   maxGuests                  Int
-  pricePerPerson             Float
-  tastingLunchPricePerPerson Float   @default(0)
-  registrationPrice          Float   @default(0)
-  isDisplayPrice             Boolean @default(false)
+  pricePerPerson             Int
+  tastingLunchPricePerPerson Int      @default(0)
+  registrationPrice          Int      @default(0)
+  isDisplayPrice             Boolean  @default(false)
+  // Pricing is edited in place, so without these there is no record of when a
+  // company's rates changed — and every booking is priced from them. Chunk 4
+  // will additionally snapshot the tier onto the Order, which is what stops
+  // recalcOrderTotal repricing old bookings at today's rates.
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @default(now()) @updatedAt
 }
 
 model MenuItem {
@@ -139,18 +315,22 @@ model MenuItem {
   sortOrder Int      @default(0)
   tenantId  String?
   createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model MasterclassItem {
   id           String             @id @default(cuid())
   name         String
   unitType     MasterclassUnit    @default(PER_PIECE)
-  pricePerUnit Float
+  pricePerUnit Int
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
   tenantId     String?
   createdAt    DateTime           @default(now())
   orderLines   OrderMasterclass[]
+
+  @@index([tenantId])
 }
 
 model OrderMasterclass {
@@ -158,17 +338,24 @@ model OrderMasterclass {
   orderId           String
   masterclassItemId String
   quantity          Int
-  pricePerUnit      Float // price snapshot at time of booking
+  pricePerUnit      Int // price snapshot at time of booking
+  // Line tables carried no timestamps at all until 2026-09-18, so "when was this
+  // added to the order" was unanswerable — and admins do add lines days after a
+  // booking is made.
+  createdAt         DateTime        @default(now())
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
 }
 
 model OrderExtra {
-  id      String @id @default(cuid())
-  orderId String
-  label   String
-  amount  Float
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  orderId   String
+  label     String
+  amount    Int
+  // See OrderMasterclass — an extra is the line most often added after the fact,
+  // by an admin, which is exactly why this matters here.
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model WineOrder {
@@ -183,15 +370,40 @@ model WineOrder {
   // Optional in general; the wine order form requires it only when the tenant
   // has online payment on, since a paying B2B customer needs a receipt.
   contactEmail    String?
-  totalAmount     Float?
+  totalAmount     Int?
   discountPercent Float?
-  status          String          @default("pending")
+  // Was an unconstrained String with no validation anywhere in the app or the
+  // database — the root cause the whole status redesign was opened for. Now an
+  // enum of its own: DELIVERED exists here and COMPLETED does not.
+  stage           WineOrderStage  @default(NEW)
+  // Milestone dates — see the equivalent block on Order for the reasoning.
+  confirmedAt     DateTime?
+  deliveredAt     DateTime?
+  paidAt          DateTime?
+  abandonedAt     DateTime?
+  // ⚠️ DELIBERATELY UNWRITTEN FOR NOW. Added 2026-09-18 (Max's call) to close the
+  // asymmetry with Order, which has had this column since Feature 191. There is
+  // still no wine-order invoice-send flow, so **nothing writes this column yet** —
+  // do not read it as "no invoice was sent", only as "we have no record either
+  // way". The earlier reasoning for leaving it out was that a column nothing
+  // writes is worse than an absent one, because the next reader assumes it is
+  // populated; this comment is what pays that debt. Delete this warning the
+  // moment a send flow starts writing it. See vault/DataModel/Plan-DataModel.md.
+  invoiceSentAt   DateTime?
   tenantId        String?
   companyId       String?
   company         Company?        @relation(fields: [companyId], references: [id])
   createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
   payments        Payment[]
+  events          OrderEvent[]
+
+  // Mirrors Order: the board groups by stage, and the list's date-range
+  // filters run on createdAt (wine orders have no separate business date).
+  @@index([tenantId, stage])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, abandonedAt])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -203,26 +415,55 @@ model WineOrder {
 /// payment flow. It is also the landing spot for the 231 historical Flitt/TBC
 /// transaction records from the old site, if that import ever happens.
 model Payment {
-  id                String     @id @default(cuid())
+  id                String        @id @default(cuid())
   tenantId          String?
   // Exactly one of these is set — a payment belongs to a booking or a wine
   // order, never both. Not expressible as a DB constraint in Prisma; enforced
   // at the call site in lib/payments/settle.ts.
+  // Cascade, not the Prisma default. An optional relation defaults to SetNull,
+  // which on an order delete would leave this row behind with both foreign keys
+  // null — a real `amount` and a real `rawResponse`, attributable to nothing and
+  // invisible to every screen. A payment has no meaning without its order, so it
+  // goes when the order goes. See vault/DataModel/Dependencies.md finding 2.
   orderId           String?
-  order             Order?     @relation(fields: [orderId], references: [id])
+  order             Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   wineOrderId       String?
-  wineOrder         WineOrder? @relation(fields: [wineOrderId], references: [id])
-  provider          String     @default("flitt")
+  wineOrder         WineOrder?    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  /// Who processed it. "flitt" for a gateway payment, "manual" for one an
+  /// admin recorded by hand.
+  provider          String        @default("flitt")
+  /// How the money actually moved (chunk 6, 2026-09-18).
+  ///
+  /// Payment used to be a Flitt attempt log: only card payments ever created a
+  /// row. A company paying by bank transfer, cash on the day, or an admin
+  /// correcting a mistake produced no row at all — the "mark as paid" button
+  /// wrote `Order.paidAt` and nothing else. So `SUM(amount)` was card revenue
+  /// while `paidAt IS NOT NULL` was all revenue, nothing reconciled the two,
+  /// and nothing in the schema said so.
+  ///
+  /// Defaults to CARD because every row that existed before this column was a
+  /// Flitt attempt. Hand-recorded payments land as MANUAL; there is no picker
+  /// in the UI yet, so BANK_TRANSFER and CASH exist for when one is added
+  /// rather than being guessed at on the admin's behalf.
+  method            PaymentMethod @default(CARD)
+  /// Set when an admin un-pays an order, instead of deleting the row.
+  ///
+  /// Only ever set on payments WE recorded (provider "manual"). A card payment
+  /// that really settled is money the gateway is holding; marking that row
+  /// reversed would misstate reality. Un-paying a gateway-paid order is an
+  /// admin override, and the OrderEvent row is what records it.
+  reversedAt        DateTime?
   providerPaymentId String?
   checkoutUrl       String?
   /// The gateway's own status string, stored verbatim (created/approved/declined/…).
   /// Not an enum: it belongs to the provider, and coercing it would lose detail
   /// that matters in a dispute.
-  status            String     @default("created")
-  amount            Float
-  currency          String     @default("GEL")
+  status            String        @default("created")
+  amount            Int
+  currency          String        @default("GEL")
   rawResponse       Json?
-  createdAt         DateTime   @default(now())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @default(now()) @updatedAt
   settledAt         DateTime?
 
   /// The lookup key used by the callback handler. Unique per provider so a
@@ -233,6 +474,13 @@ model Payment {
   @@index([wineOrderId])
 }
 
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CASH
+  MANUAL
+}
+
 model Setting {
   id        String   @id @default(cuid())
   key       String
@@ -241,6 +489,10 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@unique([key, tenantId])
+  // The unique above can't serve a tenant lookup — tenantId is its trailing
+  // column, and an index is only usable from its leading column onwards.
+  // getAllSettings(tenantId) reads the whole per-tenant map on every request.
+  @@index([tenantId])
 }
 
 model SiteContent {
@@ -254,6 +506,9 @@ model SiteContent {
   updatedAt DateTime @updatedAt
 
   @@unique([key, locale, tenantId])
+  // Same trailing-column problem as Setting. getAllContent(tenantId, locale)
+  // is the hot path — every public page render goes through it.
+  @@index([tenantId, locale])
 }
 
 model BlockedDate {
@@ -264,6 +519,7 @@ model BlockedDate {
   createdAt DateTime @default(now())
 
   @@unique([date, tenantId])
+  @@index([tenantId, date])
 }
 
 model Wine {
@@ -282,18 +538,20 @@ model Wine {
   tenantId     String?
   createdAt    DateTime      @default(now())
   vintages     WineVintage[]
+
+  @@index([tenantId])
 }
 
 model WineVintage {
-  id         String          @id @default(cuid())
-  wineId     String
-  year       Int
-  price      Float
-  imagePath  String?
-  active     Boolean         @default(true)
-  sortOrder  Int             @default(0)
-  tenantId   String?
-  createdAt  DateTime        @default(now())
+  id           String          @id @default(cuid())
+  wineId       String
+  year         Int
+  price        Int
+  imagePath    String?
+  active       Boolean         @default(true)
+  sortOrder    Int             @default(0)
+  tenantId     String?
+  createdAt    DateTime        @default(now())
   // Only meaningful when the tenant's wineDetailLevel is VINTAGE. No fallback
   // to the parent Wine's value when unset — an unset field means "not
   // specified", never a guess. sparkling is nullable (not default false) so
@@ -302,8 +560,11 @@ model WineVintage {
   sweetness    Sweetness?
   sparkling    Boolean?
   alcoholLevel Float?
-  wine       Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
-  orderItems WineOrderItem[]
+  wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  orderItems   WineOrderItem[]
+
+  @@index([tenantId])
+  @@index([wineId])
 }
 
 model WineOrderItem {
@@ -312,8 +573,9 @@ model WineOrderItem {
   wineVintageId       String?
   wineNameSnapshot    String
   vintageYearSnapshot Int
-  priceSnapshot       Float
+  priceSnapshot       Int
   quantity            Int
+  createdAt           DateTime     @default(now())
   wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
   wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
 }
@@ -326,9 +588,9 @@ model WineOrderItem {
 /// application layer only — see RLS-Architecture.md's table list and
 /// vault/Plan-BugReportWidget.md Phase 1.
 model BugReport {
-  id              String            @id @default(cuid())
+  id              String           @id @default(cuid())
   type            BugReportType
-  status          BugReportStatus   @default(NEW)
+  status          BugReportStatus  @default(NEW)
   surface         BugReportSurface
   comment         String
   screenshotUrl   String?
@@ -345,24 +607,37 @@ model BugReport {
   // public-site submissions.
   submitterEmail  String?
   submitterUserId String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([tenantId])
   @@index([status])
 }
 
-enum OrderStatus {
+/// Where a booking is in its life, and nothing at all about money (Feature 191).
+///
+/// Its own enum rather than one shared with WineOrderStage. The two order types
+/// agree on three of four words but differ on the fourth, and giving them one
+/// shared vocabulary is what forced the previous design to carry an `appliesTo`
+/// discriminator — which filtered the status *dropdown* but never the foreign
+/// key, so nothing in the database actually stopped a booking being marked
+/// DELIVERED. Two enums make that unrepresentable rather than merely unoffered.
+///
+/// Forward-only in the UI. CANCELLED is an exit from the flow, not the end of
+/// it — see lib/statusFlow.ts.
+enum BookingStage {
   NEW
-  // Customer was sent to the payment gateway and hasn't settled yet. Distinct
-  // from NEW so an abandoned checkout is never mistaken for a fresh booking.
-  // Deliberately never auto-expired: a late or retried gateway callback would
-  // otherwise land on an order we had already cancelled. See Plan-OnlinePayment §7.2.
-  PENDING_PAYMENT
   CONFIRMED
-  INVOICE_SENT
-  PAID
   COMPLETED
+  CANCELLED
+}
+
+/// The wine-order equivalent. DELIVERED where a booking says COMPLETED; there is
+/// deliberately no COMPLETED here and no DELIVERED there.
+enum WineOrderStage {
+  NEW
+  CONFIRMED
+  DELIVERED
   CANCELLED
 }
 

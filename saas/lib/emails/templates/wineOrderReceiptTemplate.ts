@@ -1,4 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { asTetri, formatTetri, multiplyTetri } from '@/lib/money'
 import { renderTokenizedText } from '@/lib/emails/templates/tokens'
 
 /**
@@ -65,7 +66,7 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
   const itemRows = data.lines.map(l => `
     <tr>
       <td style="color: ${th.text}; padding: 5px 0;">${l.name} ${l.year} × ${l.quantity}</td>
-      <td style="color: ${th.text}; text-align: right;">${(l.quantity * l.price).toFixed(2)}₾</td>
+      <td style="color: ${th.text}; text-align: right;">${formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}</td>
     </tr>
   `).join('')
 
@@ -96,7 +97,7 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
             ${discountRow}
             <tr style="border-top: 1px solid ${th.border};">
               <td style="color: ${th.muted}; padding: 10px 0 5px;">Paid</td>
-              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${data.totalAmount.toFixed(2)}₾</td>
+              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${formatTetri(asTetri(data.totalAmount), { decimals: true })}</td>
             </tr>
           </table>
           <p style="font-size: 12px; color: ${th.secondary}; margin: 12px 0 0;">${bottles} bottle${bottles === 1 ? '' : 's'} · ${data.businessName}</p>

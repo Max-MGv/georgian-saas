@@ -1,15 +1,23 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, updateOrderStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
+import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
+import {
+  bookingStagePatch,
+  invoiceSentPatch,
+  paidPatch,
+  type BookingStatusChange,
+} from '@/lib/statusWrite'
+import { BOOKING_STAGES, buildFlowLine, unreachedStages, isCancelled, CANCELLED, type FlowState } from '@/lib/statusFlow'
 import InvoicePrint from '../InvoicePrint'
 
 const C = {
@@ -30,22 +38,103 @@ const inputStyle: React.CSSProperties = {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+type StatusStyle = { labelKey: string; bg: string; color: string }
 
-const STATUS_CONFIG: Record<OrderStatus, { labelKey: string; bg: string; color: string }> = {
-  NEW:             { labelKey: 'orders.status.new',            bg: '#fef9c3', color: '#a16207' },
-  CONFIRMED:       { labelKey: 'orders.status.confirmed',      bg: '#dbeafe', color: '#1d4ed8' },
-  INVOICE_SENT:    { labelKey: 'orders.status.invoiceSent',    bg: '#fef3c7', color: '#92400e' },
-  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
-  PAID:            { labelKey: 'orders.status.paid',           bg: '#dcfce7', color: '#166534' },
-  COMPLETED:       { labelKey: 'orders.status.completed',      bg: '#bbf7d0', color: '#065f46' },
-  CANCELLED:       { labelKey: 'orders.status.cancelled',      bg: '#fee2e2', color: '#b91c1c' },
+/**
+ * Mirrors OrdersTable's own map - the same statuses have to look the same on
+ * the list and on the order's own page. Keyed by `BookingStage`, plus the two
+ * payment milestones, which appear as flow-line steps and dropdown entries.
+ */
+const STATUS_CONFIG: Record<string, StatusStyle> = {
+  NEW:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
+  COMPLETED: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
+  unpaid:       { labelKey: 'orders.status.unpaid',      bg: '#f5f5f4', color: '#44403c' },
+  // Both spellings: the flow-line names its event steps INVOICE_SENT / PAID,
+  // the dropdown and filters use the lowercase payment-state words.
+  INVOICE_SENT: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  PAID:         { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
+  invoiced:     { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
+  paid:         { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
 }
 
-/** Set by hand from the dropdown. PENDING_PAYMENT is machine-set only — see OrdersTable. */
-type SettableStatus = Exclude<OrderStatus, 'PENDING_PAYMENT'>
+const UNKNOWN_STATUS_STYLE: StatusStyle = { labelKey: '', bg: '#f3f4f6', color: '#374151' }
 
-const ALL_STATUSES: SettableStatus[] = ['NEW', 'CONFIRMED', 'INVOICE_SENT', 'PAID', 'COMPLETED', 'CANCELLED']
+function styleFor(code: string | null): StatusStyle {
+  return (code && STATUS_CONFIG[code]) || UNKNOWN_STATUS_STYLE
+}
+
+function labelFor(locale: string, code: string | null): string {
+  if (!code) return '—'
+  const cfg = STATUS_CONFIG[code]
+  return cfg ? adminT(locale, cfg.labelKey) : code
+}
+
+/**
+ * "We have asked for money but it hasn't arrived" — the one financial state the
+ * flow-line below cannot show, because the line's payment step is Paid and
+ * `invoiced` sits before it. Without this the winery could set Invoice Sent and
+ * then see no trace of it anywhere, which is what it used to say on the pill.
+ *
+ * Paid needs no marker here: the flow-line already ticks it, in the position it
+ * actually happened.
+ */
+function InvoiceSentMark({ locale }: { locale: string }) {
+  const label = adminT(locale, 'orders.status.invoiceSent')
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className="inline-flex items-center rounded-full font-bold flex-shrink-0"
+      style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', padding: '0.1rem 0.4rem', lineHeight: 1.5 }}
+    >
+      ✉
+    </span>
+  )
+}
+
+/**
+ * The merged one-line flow (Plan-StatusModel chunk 4) — horizontal here,
+ * because the detail page's action bar runs across the top rather than down a
+ * card's edge like the wine-orders list.
+ *
+ * One line, with Paid where payment actually happened: an individual who paid
+ * at checkout reads new → paid → confirmed → completed, a company on invoice
+ * terms reads new → confirmed → completed → paid, both off the same two
+ * columns. Read-only — the dropdown beside it is what changes the status, and
+ * duplicating that as click targets would give the same action two places to
+ * disagree.
+ */
+function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; locale: string }) {
+  return (
+    <div className="flex items-center flex-wrap gap-x-1 gap-y-1.5 mb-4">
+      {steps.map((step, i) => (
+        <div key={step.code} className="flex items-center gap-1">
+          <span
+            className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
+            style={{
+              backgroundColor: step.done ? styleFor(step.code).bg : 'transparent',
+              color: step.done ? styleFor(step.code).color : C.faint,
+              border: `1px solid ${step.done ? styleFor(step.code).color + '44' : C.border}`,
+              fontWeight: step.active ? 700 : 400,
+            }}
+          >
+            {step.done && (
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
+                <path d="M1.5 5l2.5 2.5 4.5-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            {labelFor(locale, step.code)}
+          </span>
+          {i < steps.length - 1 && (
+            <span style={{ color: step.done && steps[i + 1].done ? C.wine : C.border, fontSize: '0.75rem' }}>→</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 type Payment = { recipientName: string; personalNumber: string; bankName: string; bankCode: string; iban: string }
 
@@ -79,7 +168,12 @@ type MenuItemRow = { id: string; name: string; type: string }
 
 type OrderProp = {
   id: string
-  status: OrderStatus
+  stage: string
+  createdAt: Date | string
+  confirmedAt: Date | string | null
+  completedAt: Date | string | null
+  invoiceSentAt: Date | string | null
+  paidAt: Date | string | null
   date: Date
   timeSlot: string
   bookingType: string
@@ -220,7 +314,16 @@ export default function OrderDetail({
   const [saveMsg, setSaveMsg] = useState('')
 
   // ── Top action bar state ───────────────────────────────────────────────────
-  const [status, setStatus] = useState<OrderStatus>(order.status)
+  // Both axes are local state now, so the flow-line and the pill move on click
+  // rather than waiting for the server round trip.
+  const [flow, setFlow] = useState<FlowState>({
+    stage: order.stage,
+    createdAt: order.createdAt,
+    confirmedAt: order.confirmedAt,
+    finishedAt: order.completedAt,
+    invoiceSentAt: order.invoiceSentAt,
+    paidAt: order.paidAt,
+  })
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
@@ -241,10 +344,44 @@ export default function OrderDetail({
     }
   }, [printReady])
 
-  async function handleStatusChange(s: SettableStatus) {
+  /**
+   * The optimistic mirror of one status change, using the same pure patch
+   * functions the server action calls rather than restating the rules - two
+   * copies of "which columns does this move" is where drift hides.
+   */
+  function applyLocally(change: BookingStatusChange) {
+    setFlow(prev => {
+      const now = new Date()
+      const dates = {
+        confirmedAt: prev.confirmedAt ? new Date(prev.confirmedAt) : null,
+        finishedAt: prev.finishedAt ? new Date(prev.finishedAt) : null,
+        invoiceSentAt: prev.invoiceSentAt ? new Date(prev.invoiceSentAt) : null,
+        paidAt: prev.paidAt ? new Date(prev.paidAt) : null,
+      }
+      switch (change.kind) {
+        case 'stage': {
+          const patch = bookingStagePatch(change.stage as never, dates, now)
+          return {
+            ...prev,
+            stage: patch.stage,
+            confirmedAt: patch.confirmedAt !== undefined ? patch.confirmedAt : prev.confirmedAt,
+            finishedAt: patch.completedAt !== undefined ? patch.completedAt : prev.finishedAt,
+          }
+        }
+        case 'paid':
+          return { ...prev, ...paidPatch(change.value, dates, now) }
+        case 'invoiceSent':
+          return { ...prev, ...invoiceSentPatch(change.value, dates, now) }
+        case 'restore':
+          return prev
+      }
+    })
+  }
+
+  async function handleStatusChange(change: BookingStatusChange) {
     setStatusMenuOpen(false)
-    setStatus(s)
-    await updateOrderStatus(order.id, s)
+    applyLocally(change)
+    await changeBookingStatus(order.id, change)
   }
 
   async function handleSendInvoice() {
@@ -256,7 +393,10 @@ export default function OrderDetail({
       setSendMsg(at('orderDetail.sendFailed'))
     } else {
       setSendMsg(at('orders.emailModal.sent'))
-      if (status === 'NEW' || status === 'CONFIRMED') setStatus('INVOICE_SENT')
+      // Sending an invoice stamps a date and nothing else: it records that we
+      // asked for money, not that the visit happened, so it applies at any
+      // stage rather than only from NEW or CONFIRMED as the old status did.
+      if (flow.invoiceSentAt == null) applyLocally({ kind: 'invoiceSent', value: true })
       setTimeout(() => setSendMsg(''), 3000)
     }
   }
@@ -305,8 +445,9 @@ export default function OrderDetail({
   const regFee = tier ? tier.registrationPrice : null
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
-  const manualTastingRate = Math.max(0, parseFloat(manualTastingRateStr) || 0)
-  const manualLunchRate = Math.max(0, parseFloat(manualLunchRateStr) || 0)
+  // The inputs hold GEL; everything they feed into is tetri (chunk 3).
+  const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
+  const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
 
   const computedTotal: number | null =
     tier != null
@@ -419,6 +560,25 @@ export default function OrderDetail({
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
   const meatItems = menuItems.filter(i => i.type === 'MEAT')
 
+  // ── Derived status view ────────────────────────────────────────────────────
+  const displayCode = flow.stage
+  const flowSteps = buildFlowLine(BOOKING_STAGES, flow)
+  // Only what this order has not reached, so the menu can never offer a step
+  // the flow-line above it already shows as done. Invoice Sent and Paid are
+  // appended rather than being part of the stage sequence: a booking can be
+  // invoiced or paid at any stage, which is the whole point of the split.
+  const menuSteps: { code: string; change: BookingStatusChange }[] = [
+    ...unreachedStages(BOOKING_STAGES, flow)
+      .filter(code => code !== CANCELLED)
+      .map(code => ({ code, change: { kind: 'stage' as const, stage: code } })),
+    ...(flow.invoiceSentAt == null && flow.paidAt == null
+      ? [{ code: 'invoiced', change: { kind: 'invoiceSent' as const, value: true } }] : []),
+    ...(flow.paidAt == null
+      ? [{ code: 'paid', change: { kind: 'paid' as const, value: true } }] : []),
+    ...(flow.stage !== CANCELLED
+      ? [{ code: CANCELLED, change: { kind: 'stage' as const, stage: CANCELLED } }] : []),
+  ]
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div>
@@ -437,34 +597,35 @@ export default function OrderDetail({
         {/* Action bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Status dropdown */}
-          <div className="relative" onClick={e => e.stopPropagation()}>
+          <div className="relative flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
             {(() => {
-              const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.NEW
+              const cfg = styleFor(displayCode)
               return (
                 <button
                   onClick={() => setStatusMenuOpen(o => !o)}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
                 >
-                  {at(cfg.labelKey)} ▾
+                  {labelFor(locale, displayCode)} ▾
                 </button>
               )
             })()}
+            {flow.invoiceSentAt != null && flow.paidAt == null && <InvoiceSentMark locale={locale} />}
             {statusMenuOpen && (
               <div
                 className="absolute left-0 z-30 rounded-lg shadow-lg border py-1 mt-1"
                 style={{ minWidth: 150, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                 onClick={e => e.stopPropagation()}
               >
-                {ALL_STATUSES.map(s => (
+                {menuSteps.map(step => (
                   <button
-                    key={s}
-                    onClick={() => handleStatusChange(s)}
+                    key={step.code}
+                    onClick={() => handleStatusChange(step.change)}
                     className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
-                    style={{ color: s === status ? STATUS_CONFIG[s].color : C.text, fontWeight: s === status ? 600 : 400 }}
+                    style={{ color: C.text }}
                   >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_CONFIG[s].color }} />
-                    {at(STATUS_CONFIG[s].labelKey)}
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
+                    {labelFor(locale, step.code)}
                   </button>
                 ))}
               </div>
@@ -508,6 +669,13 @@ export default function OrderDetail({
           )}
         </div>
       </div>
+
+      {/* The merged one-line flow. Sits under the header rather than beside the
+          pill because it is the whole story of the order, and the pill is only
+          its current position. */}
+      {!isCancelled(flow) && (
+        <FlowLine steps={flowSteps} locale={locale} />
+      )}
 
       {/* Print portal */}
       {printReady && typeof document !== 'undefined' && createPortal(
@@ -678,7 +846,7 @@ export default function OrderDetail({
                   className="text-xs px-2.5 py-1 rounded-full font-medium"
                   style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
                 >
-                  {at('orderDetail.guestBreakdown.rateBadge', { t: manualTastingRate, l: manualLunchRate })}
+                  {at('orderDetail.guestBreakdown.rateBadge', { t: formatTetri(manualTastingRate, { symbol: false }), l: formatTetri(manualLunchRate, { symbol: false }) })}
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
@@ -865,10 +1033,10 @@ export default function OrderDetail({
                       {l.quantity}
                     </td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>
-                      {l.pricePerUnit}₾
+                      {formatTetri(asTetri(l.pricePerUnit))}
                     </td>
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {(l.quantity * l.pricePerUnit).toFixed(2)}₾
+                      {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -931,7 +1099,7 @@ export default function OrderDetail({
 
             {selectedMcItem && (
               <div className="text-sm pb-2" style={{ color: C.muted }}>
-                = {lineTotal.toFixed(2)}₾
+                = {formatTetri(asTetri(lineTotal), { decimals: true })}
               </div>
             )}
 
@@ -984,7 +1152,7 @@ export default function OrderDetail({
                   {e.label}
                 </span>
                 <span className="text-sm font-medium" style={{ color: C.wine }}>
-                  {e.amount.toFixed(2)}₾
+                  {formatTetri(asTetri(e.amount), { decimals: true })}
                 </span>
                 <button
                   onClick={() => handleRemoveExtra(e.id)}
@@ -1075,11 +1243,11 @@ export default function OrderDetail({
           >
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
+            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tier.pricePerPerson))}/pp</strong>
             {' · '}
-            {at('orders.col.lunch')} <strong>{comboRatePerPerson(tier)}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
             {' · '}
-            {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
+            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(tier.registrationPrice))}</strong>
           </div>
         )}
         {/* Lunch rate = 0 warning */}
@@ -1100,43 +1268,43 @@ export default function OrderDetail({
           {tier && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({tastingGuests} × {tier.pricePerPerson}₾)
+                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(asTetri(tier.pricePerPerson))})
               </span>
-              <span style={{ color: C.text }}>{tastingAmt!.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt!), { decimals: true })}</span>
             </div>
           )}
           {tier && lunchGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {comboRatePerPerson(tier)}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(asTetri(comboRatePerPerson(tier)))})
               </span>
-              <span style={{ color: C.text }}>{lunchAmt!.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt!), { decimals: true })}</span>
             </div>
           )}
           {tier && tier.registrationPrice > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{tier.registrationPrice.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(tier.registrationPrice), { decimals: true })}</span>
             </div>
           )}
           {/* Manual rate lines for individual / no-tier orders */}
           {!tier && payingGuests > 0 && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({tastingGuests} × {manualTastingRate}₾)
+                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(manualTastingRate)})
               </span>
               <span style={{ color: C.text }}>
-                {(tastingGuests * manualTastingRate).toFixed(2)}₾
+                {formatTetri(multiplyTetri(manualTastingRate, tastingGuests), { decimals: true })}
               </span>
             </div>
           )}
           {!tier && payingGuests > 0 && lunchGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {manualLunchRate}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(manualLunchRate)})
               </span>
               <span style={{ color: C.text }}>
-                {(lunchGuests * manualLunchRate).toFixed(2)}₾
+                {formatTetri(multiplyTetri(manualLunchRate, lunchGuests), { decimals: true })}
               </span>
             </div>
           )}
@@ -1148,7 +1316,7 @@ export default function OrderDetail({
                   ? `${order.visitType === 'TASTING_LUNCH' ? at('orderDetail.total.tastingLunch') : at('orders.col.tasting')} (${order.guestCount} ${at('orderDetail.total.guests')})`
                   : at('orderDetail.total.basePriceOriginal')}
               </span>
-              <span style={{ color: C.text }}>{legacyBase.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(legacyBase), { decimals: true })}</span>
             </div>
           )}
           {lines.map(l => (
@@ -1157,14 +1325,14 @@ export default function OrderDetail({
                 {l.masterclassItem.name} × {l.quantity}
               </span>
               <span style={{ color: C.text }}>
-                {(l.quantity * l.pricePerUnit).toFixed(2)}₾
+                {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}
               </span>
             </div>
           ))}
           {extras.map(e => (
             <div key={e.id} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{e.label}</span>
-              <span style={{ color: C.text }}>{e.amount.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(e.amount), { decimals: true })}</span>
             </div>
           ))}
         </div>
@@ -1178,9 +1346,9 @@ export default function OrderDetail({
           </span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
             {computedTotal != null
-              ? `${computedTotal.toFixed(2)}₾`
+              ? formatTetri(asTetri(computedTotal), { decimals: true })
               : order.totalPrice != null
-                ? `${order.totalPrice.toFixed(2)}₾`
+                ? formatTetri(asTetri(order.totalPrice), { decimals: true })
                 : '—'}
           </span>
         </div>

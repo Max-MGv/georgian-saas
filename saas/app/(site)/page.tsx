@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { asTetri, formatTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
 import { getAllSettings } from '@/app/actions/settings'
 import { settingValue } from '@/lib/settings'
@@ -47,7 +48,7 @@ export default async function Home({ searchParams }: PageProps) {
   // boolean per booking type would make it impossible to tell "module off" apart
   // from "COMPANY section merely off by default" client-side — the former must
   // never be overridable, the latter must be (see Feature 148's build-time notes).
-  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady] = await Promise.all([
+  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
@@ -57,10 +58,20 @@ export default async function Home({ searchParams }: PageProps) {
     isPaymentConfigured(tenantId),
     isPaymentConfigured(tenantId, { section: 'INDIVIDUAL' }),
     isPaymentConfigured(tenantId, { section: 'COMPANY' }),
+    // Super-admin-only flag (Plan-CompanyNationality) — plain `db`, NOT withTenantDb.
+    // Verified live: Tenant has RLS *enabled* at the DB level (Supabase's own default)
+    // but zero policies defined for it, so a read through withTenantDb's app_user role
+    // silently returns null (RLS default-denies with no matching policy) even though
+    // GRANT SELECT succeeds — exactly why isPaymentConfigured() below also reads Tenant
+    // via the plain unrestricted client, never withTenantDb. This isn't a routing
+    // concern either, so it doesn't belong in proxy.ts's edge-cached x-tenant-modules-*
+    // headers — those exist for whole-module gates, not a single booking-form field.
+    db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
   ])
 
-  const c           = content['home'] ?? {}
-  const formContent = content['form'] ?? {}
+  const c               = content['home'] ?? {}
+  const formContent     = content['form'] ?? {}
+  const messagesContent = content['messages'] ?? {}
 
   const showCompanyPrice        = settingValue(settings, 'show_company_price_after_booking')
   const enhancedBookingStr      = settingValue(settings, 'enable_enhanced_company_booking')
@@ -71,6 +82,8 @@ export default async function Home({ searchParams }: PageProps) {
   const bookingLeadHours        = settingValue(settings, 'booking_lead_hours')
   const bookingLeadHoursTasting = settingValue(settings, 'booking_lead_hours_tasting')
   const bookingLeadHoursLunch   = settingValue(settings, 'booking_lead_hours_tasting_lunch')
+  const visitDurationTasting    = settingValue(settings, 'visit_duration_tasting')
+  const visitDurationLunch      = settingValue(settings, 'visit_duration_tasting_lunch')
   const workingHoursCustom      = settingValue(settings, 'working_hours_custom')
   const workingHoursOpen        = settingValue(settings, 'working_hours_open')
   const workingHoursClose       = settingValue(settings, 'working_hours_close')
@@ -350,7 +363,7 @@ export default async function Home({ searchParams }: PageProps) {
               as="p" className="text-sm mb-4" style={{ color: 'var(--site-muted)' }} />
             {pkg.price != null && (
               <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
-                {pkg.price}₾ <span className="font-normal text-sm" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'form.per_pp')}</span>
+                {formatTetri(asTetri(pkg.price))} <span className="font-normal text-sm" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'form.per_pp')}</span>
               </p>
             )}
             <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--site-secondary)' }}>
@@ -380,6 +393,7 @@ export default async function Home({ searchParams }: PageProps) {
             companies={companies}
             showCompanyPrice={showCompanyPrice === 'true'}
             enhancedEnabled={enhancedBookingStr === 'true'}
+            nationalityBreakdownEnabled={tenantFlags?.enableCompanyNationalityBreakdown ?? false}
             hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
             masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
@@ -389,12 +403,15 @@ export default async function Home({ searchParams }: PageProps) {
             bookingLeadHours={parseInt(bookingLeadHours) || 3}
             bookingLeadHoursTasting={parseInt(bookingLeadHoursTasting) || 3}
             bookingLeadHoursTastingLunch={parseInt(bookingLeadHoursLunch) || 6}
+            visitDurationTasting={parseInt(visitDurationTasting) || 90}
+            visitDurationTastingLunch={parseInt(visitDurationLunch) || 180}
             workingHoursCustom={workingHoursCustom === 'true'}
             workingHoursOpen={workingHoursOpen || '12:00'}
             workingHoursClose={workingHoursClose || '18:00'}
             workingHoursDaysJson={workingHoursDaysJson}
             blockedDates={blockedDates.map(d => d.date)}
             formContent={formContent}
+            messagesContent={messagesContent}
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceTastingLunch}
             individualPrices={individualsRow?.prices ?? []}

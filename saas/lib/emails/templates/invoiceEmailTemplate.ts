@@ -1,4 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { asTetri, formatTetri, multiplyTetri } from '@/lib/money'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 /**
@@ -132,15 +133,15 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   }
 
   // Amount rows
-  let amountContent = tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${bookingAmt} ₾`)
+  let amountContent = tableRow(th, isLunch ? L.lunchTasting : L.tasting, formatTetri(asTetri(bookingAmt), { space: true, decimals: true }))
   for (const l of data.masterclassLines) {
-    amountContent += tableRow(th, l.name, `${l.quantity * l.pricePerUnit} ₾`)
+    amountContent += tableRow(th, l.name, formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
   }
   for (const e of data.extras) {
-    amountContent += tableRow(th, e.label, `${e.amount} ₾`)
+    amountContent += tableRow(th, e.label, formatTetri(asTetri(e.amount), { space: true, decimals: true }))
   }
   amountContent += `<tr><td colspan="2" style="padding:4px 0;border-top:1px solid ${th.border};"></td></tr>`
-  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">${L.totalAmount}: ${data.totalPrice} ₾</td></tr>`
+  amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">${L.totalAmount}: ${formatTetri(asTetri(data.totalPrice), { space: true, decimals: true })}</td></tr>`
 
   const customMessageHtml = data.customMessage.trim()
     ? `<p style="font-size:15px;color:${th.text} !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`
@@ -148,7 +149,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
 
   const masterclassSection = data.masterclassLines.length > 0
     ? section(th, L.masterclass, data.masterclassLines.map(l =>
-        tableRow(th, `${l.name} × ${l.quantity}`, `${l.quantity * l.pricePerUnit} ₾`)
+        tableRow(th, `${l.name} × ${l.quantity}`, formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
       ).join(''))
     : ''
 

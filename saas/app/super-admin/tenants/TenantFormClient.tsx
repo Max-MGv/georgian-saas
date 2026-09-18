@@ -27,6 +27,7 @@ type Props = {
     modulesLegalPages?: boolean
     modulesOnlinePayment?: boolean
     wineDetailLevel?: WineDetailLevel
+    enableCompanyNationalityBreakdown?: boolean
   }
 }
 
@@ -92,6 +93,9 @@ export default function TenantFormClient({ mode, tenant }: Props) {
   // migration backfill). See vault/Plan-WineVintageDetails.md.
   const [wineDetailLevel, setWineDetailLevel] = useState<WineDetailLevel>(
     tenant?.wineDetailLevel ?? (mode === 'new' ? 'VINTAGE' : 'PRODUCT')
+  )
+  const [enableCompanyNationalityBreakdown, setEnableCompanyNationalityBreakdown] = useState(
+    tenant?.enableCompanyNationalityBreakdown ?? false
   )
   const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [error, setError] = useState<string | null>(null)
@@ -194,6 +198,7 @@ export default function TenantFormClient({ mode, tenant }: Props) {
           displayName: displayName || undefined,
           modulesBooking, modulesWineOrders, modulesPublicSite, modulesLegalPages, modulesOnlinePayment,
           wineDetailLevel,
+          enableCompanyNationalityBreakdown,
         }
         if (mode === 'new') {
           await createTenant(payload)
@@ -492,6 +497,27 @@ export default function TenantFormClient({ mode, tenant }: Props) {
                 )
               })}
             </div>
+          </div>
+
+          {/* Company booking nationality tagging (Plan-CompanyNationality) */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: C.muted, marginBottom: 6 }}>
+              Company booking nationality tagging
+            </label>
+            <p style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>
+              Lets a company booking be tagged with the nationalities present (a small set of
+              countries, no per-country headcount). Super-admin only — not editable from the
+              tenant&apos;s own admin panel. Turning this off later never hides nationalities
+              already saved on existing bookings; it only stops offering the picker on new ones.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={enableCompanyNationalityBreakdown}
+                onChange={e => setEnableCompanyNationalityBreakdown(e.target.checked)}
+              />
+              <span style={{ fontSize: 14, color: C.text }}>Enable nationality tagging for company bookings</span>
+            </label>
           </div>
 
           {/* Theme preset picker */}

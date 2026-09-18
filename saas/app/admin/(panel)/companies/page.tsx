@@ -1,4 +1,5 @@
 import { withTenantDb } from '@/lib/db'
+import { asTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
 import { headers } from 'next/headers'
 import { ensureIndividualsCompany } from '@/app/actions/companies'
@@ -23,6 +24,8 @@ export default async function CompaniesPage() {
       include: {
         _count: { select: { orders: true } },
         prices: { orderBy: { minGuests: 'asc' } },
+        guides: { orderBy: { createdAt: 'asc' } },
+        representatives: { orderBy: { createdAt: 'asc' } },
       },
     })
   )
@@ -59,7 +62,16 @@ export default async function CompaniesPage() {
           address: c.address,
           accessCode: c.accessCode,
           orderCount: c._count.orders,
-          prices: c.prices,
+          // Prisma hands these back as plain numbers; re-brand at the boundary
+          // so the client's Price type keeps its Tetri guarantee (chunk 3).
+          prices: c.prices.map(pr => ({
+            ...pr,
+            pricePerPerson: asTetri(pr.pricePerPerson),
+            tastingLunchPricePerPerson: asTetri(pr.tastingLunchPricePerPerson),
+            registrationPrice: asTetri(pr.registrationPrice),
+          })),
+          guides: c.guides,
+          representatives: c.representatives,
         }))}
       />
     </div>

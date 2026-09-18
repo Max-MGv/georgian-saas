@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, LabelList,
@@ -158,9 +159,9 @@ export default function StatisticsClient({
           {/* Summary cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card label={at('statistics.card.totalOrders')} value={String(totalOrders)} sub={at('statistics.card.allTime')} />
-            <Card label={at('statistics.card.totalRevenue')} value={`${totalRevenue.toLocaleString()}₾`} sub={at('statistics.card.allTime')} />
-            <Card label={at('statistics.card.thisMonth')} value={String(monthOrders)} sub={`${monthRevenue.toLocaleString()}₾ ${at('statistics.card.revenueSuffix')}`} />
-            <Card label={at('statistics.card.avgOrderValue')} value={`${avgRevenue}₾`} sub={at('statistics.card.perBooking')} />
+            <Card label={at('statistics.card.totalRevenue')} value={formatTetri(asTetri(totalRevenue), { grouping: true })} sub={at('statistics.card.allTime')} />
+            <Card label={at('statistics.card.thisMonth')} value={String(monthOrders)} sub={`${formatTetri(asTetri(monthRevenue), { grouping: true })} ${at('statistics.card.revenueSuffix')}`} />
+            <Card label={at('statistics.card.avgOrderValue')} value={formatTetri(asTetri(avgRevenue), { grouping: true })} sub={at('statistics.card.perBooking')} />
           </div>
 
           {/* Charts */}
@@ -187,9 +188,9 @@ export default function StatisticsClient({
                   <CartesianGrid vertical={false} stroke={C.border} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={48} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v ?? 0).toLocaleString()}₾`, at('statistics.tooltip.revenue')]} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [formatTetri(asTetri(Number(v ?? 0)), { grouping: true }), at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? `${Number(v).toLocaleString()}₾` : ''} />
+                    <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? formatTetri(asTetri(Number(v)), { grouping: true }) : ''} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -211,8 +212,8 @@ export default function StatisticsClient({
                 label={at('statistics.breakdown.byVisitTypeRevenue')}
                 a={byVisitType.tastingRevenue}
                 b={byVisitType.tastingLunchRevenue}
-                aLabel={`${at('statistics.tasting')} ${byVisitType.tastingRevenue.toLocaleString()}₾`}
-                bLabel={`+${at('orders.col.lunch')} ${byVisitType.tastingLunchRevenue.toLocaleString()}₾`}
+                aLabel={`${at('statistics.tasting')} ${formatTetri(asTetri(byVisitType.tastingRevenue), { grouping: true })}`}
+                bLabel={`+${at('orders.col.lunch')} ${formatTetri(asTetri(byVisitType.tastingLunchRevenue), { grouping: true })}`}
               />
               <SplitRow
                 label={at('statistics.breakdown.byBookingTypeOrders')}
@@ -225,8 +226,8 @@ export default function StatisticsClient({
                 label={at('statistics.breakdown.byBookingTypeRevenue')}
                 a={byBookingType.individualRevenue}
                 b={byBookingType.companyRevenue}
-                aLabel={`${at('orders.type.individual')} ${byBookingType.individualRevenue.toLocaleString()}₾`}
-                bLabel={`${at('orders.type.company')} ${byBookingType.companyRevenue.toLocaleString()}₾`}
+                aLabel={`${at('orders.type.individual')} ${formatTetri(asTetri(byBookingType.individualRevenue), { grouping: true })}`}
+                bLabel={`${at('orders.type.company')} ${formatTetri(asTetri(byBookingType.companyRevenue), { grouping: true })}`}
               />
             </div>
 
@@ -242,7 +243,7 @@ export default function StatisticsClient({
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-baseline">
                           <span className="text-sm font-medium truncate" style={{ color: C.text }}>{c.name}</span>
-                          <span className="text-sm font-semibold ml-2 shrink-0" style={{ color: C.wine }}>{c.revenue.toLocaleString()}₾</span>
+                          <span className="text-sm font-semibold ml-2 shrink-0" style={{ color: C.wine }}>{formatTetri(asTetri(c.revenue), { grouping: true })}</span>
                         </div>
                         <div className="mt-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: C.border }}>
                           <div

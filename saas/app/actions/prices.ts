@@ -4,6 +4,7 @@ import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import type { Tetri } from '@/lib/money'
 
 async function validateTier(
   tx: TxClient,
@@ -31,9 +32,10 @@ export async function createPrice(data: {
   companyId: string
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  /** TETRI, all three. The form converts what the admin typed (chunk 3). */
+  pricePerPerson: Tetri
+  tastingLunchPricePerPerson: Tetri
+  registrationPrice: Tetri
 }) {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -57,9 +59,10 @@ export async function createPrice(data: {
 export async function updatePrice(id: string, data: {
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  /** TETRI, all three. The form converts what the admin typed (chunk 3). */
+  pricePerPerson: Tetri
+  tastingLunchPricePerPerson: Tetri
+  registrationPrice: Tetri
 }, companyId: string) {
   await requireAdmin()
   const tenantId = await getTenantId()

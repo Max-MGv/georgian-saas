@@ -26,7 +26,7 @@ function displayToIso(display: string) {
 
 export default function DateInput({ value, onChange, min, style, className }: Props) {
   const [text, setText] = useState(() => isoToDisplay(value))
-  const hiddenRef = useRef<HTMLInputElement>(null)
+  const nativeRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setText(isoToDisplay(value))
@@ -63,36 +63,40 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
         value={text}
         onChange={handleChange}
         onBlur={handleBlur}
-        onFocus={() => (hiddenRef.current as any)?.showPicker?.()}
         placeholder="DD/MM/YYYY"
         maxLength={10}
         className={className}
         style={{ ...style, paddingRight: '2.25rem' }}
       />
-      {/* Hidden native picker — used only when calendar icon is clicked */}
+      {/*
+        Real native date input, sized to actually cover the icon's hit area
+        (not the old 0x0 box) and positioned on top of it. Tapping/clicking
+        that zone hits this element directly, so the browser opens its own
+        picker via normal default behavior — no JS showPicker() trigger
+        needed, which is what made this unreliable on mobile (showPicker()
+        on a 0x0 element is a no-op on some mobile engines). The rest of the
+        field (the text portion) is left uncovered so it still opens the
+        typing path. Its own onChange drives the value either way.
+      */}
       <input
-        ref={hiddenRef}
+        ref={nativeRef}
         type="date"
         min={min}
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={handleNative}
-        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden' }}
-      />
-      <button
-        type="button"
-        tabIndex={-1}
+        value={value}
         aria-label="Open calendar"
-        onClick={() => (hiddenRef.current as any)?.showPicker?.()}
-        // Hit area, not icon size: the glyph stays 15px, but the button fills
-        // the field's full height and ~40px of its width so a thumb can find it.
-        // The icon still lands at the same optical position (right: 0 + the
-        // 0.625rem it used to be offset by, now expressed as padding).
+        onChange={handleNative}
+        style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
+          opacity: 0, cursor: 'pointer', border: 0, padding: 0, margin: 0,
+        }}
+      />
+      <div
+        aria-hidden="true"
         style={{
           position: 'absolute', right: 0, top: 0, bottom: 0,
-          background: 'none', border: 'none', cursor: 'pointer',
-          padding: '0 0.625rem', minWidth: 40,
-          color: 'var(--site-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0 0.625rem', minWidth: 40, pointerEvents: 'none',
+          color: 'var(--site-secondary)',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -101,7 +105,7 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
           <line x1="8" y1="2" x2="8" y2="6"/>
           <line x1="3" y1="10" x2="21" y2="10"/>
         </svg>
-      </button>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { useRouter, usePathname } from 'next/navigation'
 import { adminT } from '@/lib/adminT'
 
@@ -9,20 +10,25 @@ const C = {
   wine: 'var(--color-brand)', text: 'var(--site-text)', bg: 'var(--site-surface)', inputBg: 'var(--site-surface)',
 }
 
+// Keyed by BookingStage. Payment is not here on purpose - it is a separate
+// fact and shows as its own mark beside the label, so a completed-but-unpaid
+// booking says both things instead of one word having to pick.
 const STATUS_COLORS: Record<string, string> = {
-  NEW: '#ca8a04', CONFIRMED: '#2563eb', INVOICE_SENT: '#7c3aed', PENDING_PAYMENT: '#ea580c',
-  PAID: '#16a34a', COMPLETED: '#16a34a', CANCELLED: '#dc2626',
+  NEW: '#ca8a04', CONFIRMED: '#2563eb', COMPLETED: '#16a34a', CANCELLED: '#dc2626',
 }
 
 const STATUS_LABEL_KEYS: Record<string, string> = {
-  NEW: 'orders.status.new', CONFIRMED: 'orders.status.confirmed', INVOICE_SENT: 'orders.status.invoiceSent',
-  PENDING_PAYMENT: 'orders.status.pendingPayment',
-  PAID: 'orders.status.paid', COMPLETED: 'orders.status.completed', CANCELLED: 'orders.status.cancelled',
+  NEW: 'orders.status.new', CONFIRMED: 'orders.status.confirmed',
+  COMPLETED: 'orders.status.completed', CANCELLED: 'orders.status.cancelled',
 }
 
 type CalendarOrder = {
   id: string; name: string; surname: string; timeSlot: string
-  guestCount: number; visitType: string; status: string; totalPrice: number | null
+  guestCount: number; visitType: string; totalPrice: number | null
+  stage: string
+  paid: boolean
+  /** Invoice sent, money not yet in. Bookings only - wine has no invoice flow. */
+  invoiced: boolean
   companyName: string | null
 }
 
@@ -199,9 +205,17 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                     <p className="text-xs font-medium truncate" style={{ color: C.text }}>
                       {o.name} {o.surname}
                     </p>
-                    <span className="text-xs font-semibold flex-shrink-0"
-                      style={{ color: STATUS_COLORS[o.status] ?? C.muted }}>
-                      {at(STATUS_LABEL_KEYS[o.status] ?? 'orders.status.new')}
+                    <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1"
+                      style={{ color: STATUS_COLORS[o.stage] ?? C.muted }}>
+                      {(() => {
+                        const key = STATUS_LABEL_KEYS[o.stage]
+                        return key ? at(key) : o.stage
+                      })()}
+                      {o.paid ? (
+                        <span title={at('orders.status.paid')} style={{ color: '#14532d' }}>₾✓</span>
+                      ) : o.invoiced ? (
+                        <span title={at('orders.status.invoiceSent')} style={{ color: '#92400e' }}>✉</span>
+                      ) : null}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -217,7 +231,7 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                     <p className="text-xs mt-0.5 truncate" style={{ color: C.muted }}>{o.companyName}</p>
                   )}
                   {o.totalPrice != null && (
-                    <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{o.totalPrice}₾</p>
+                    <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{formatTetriOrDash(asTetriOrNull(o.totalPrice))}</p>
                   )}
                 </div>
               ))}

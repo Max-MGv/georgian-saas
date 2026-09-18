@@ -4,15 +4,23 @@
 // FIELDS.form inside saas/app/admin/content/ContentClient.tsx so the admin panel stays in sync.
 // See vault/MaintenanceNotes.md §1 for full details.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
-import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
+import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
+import NationalityPicker from '@/components/NationalityPicker'
+import { countryName } from '@/lib/countries'
+import NewCompanyPopupView from '@/components/NewCompanyPopupView'
+import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
+import AccessCodePopupView from '@/components/AccessCodePopupView'
+import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
+import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
-import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
+import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime, getVisitDurationMinutes, addMinutesToSlot } from '@/lib/bookingHours'
 
 type Price = {
   id: string; minGuests: number; maxGuests: number
@@ -55,6 +63,9 @@ type Props = {
   companies: Company[]
   showCompanyPrice: boolean
   enhancedEnabled?: boolean
+  /** Company-booking nationality tagging (Plan-CompanyNationality), super-admin only —
+   * independent of `enhancedEnabled`/`isEnhanced` below, not nested inside it. */
+  nationalityBreakdownEnabled?: boolean
   hideCompanyDropdown?: boolean
   menuItems?: MenuItem[]
   masterclassItems?: MasterclassItem[]
@@ -70,7 +81,12 @@ type Props = {
   workingHoursOpen?: string
   workingHoursClose?: string
   workingHoursDaysJson?: string
+  /** Expected visit length, minutes, by visit type (#184) — shown on the confirm sheet as "~{hours} hrs · finish around {end}". Settings `visit_duration_tasting` / `visit_duration_tasting_lunch`. */
+  visitDurationTasting?: number
+  visitDurationTastingLunch?: number
   formContent?: Record<string, string>
+  /** On-site UI copy (SiteContent section 'messages', 'onsite_*' keys) — see MaintenanceNotes §23. */
+  messagesContent?: Record<string, string>
   displayPriceTasting?: number | null
   displayPriceLunch?: number | null
   individualPrices?: Price[]
@@ -91,17 +107,42 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '' }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
+  const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
+    let str = messagesContent[key] || t(locale, tKey)
+    if (vars) for (const [k, v] of Object.entries(vars)) str = str.replaceAll(`{${k}}`, String(v))
+    return str
+  }
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
   const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
+  // Which guide's code matched, if any (Plan-CompanyGuidesAndReps Chunk 5/7) — flows through
+  // buildBookingPayload() into createBooking() so the order remembers who was contacted.
+  const [matchedGuideId, setMatchedGuideId] = useState<string | null>(null)
+  // Company-booking nationality tags (Plan-CompanyNationality) — ISO codes, no per-country
+  // count. Reset whenever the visitor switches to an INDIVIDUAL booking (see the toggle below).
+  const [nationalities, setNationalities] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  // Review-your-visit sheet (#184) — shown once client-side validation (and the
+  // "New Company?" check, which still runs first) both pass, before the real
+  // createBooking() call in handleConfirmedSubmit.
+  const [showConfirm, setShowConfirm] = useState(false)
+  // Gates client-side field validation messages/highlighting — false until the
+  // first submit attempt, so a first-time visitor never sees red borders
+  // before they've done anything. Once true, every gated error is a plain
+  // derived boolean (recomputed each render), so it clears itself the moment
+  // the underlying field becomes valid — no per-field "touched" bookkeeping.
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+  const dateWrapRef = useRef<HTMLDivElement>(null)
+  const contactWrapRef = useRef<HTMLDivElement>(null)
+  const timeSlotRef = useRef<HTMLSelectElement>(null)
+  const guestsWrapRef = useRef<HTMLDivElement>(null)
   const [confirmedPrice, setConfirmedPrice] = useState<number | null>(null)
   const [confirmedType, setConfirmedType] = useState<'INDIVIDUAL' | 'COMPANY' | null>(null)
   // Per-tenant optional "max guests" cap (server-enforced, never shown pre-submit —
@@ -124,7 +165,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
   const [codeInput, setCodeInput] = useState('')
-  const [showCodeText, setShowCodeText] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
 
@@ -177,6 +217,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const isDayClosed = (date: string) => getDayHours(date, workingHoursCustom, weeklyHours, workingHoursOpen, workingHoursClose).closed
   const isPastDate = selectedDate !== '' && selectedDate < today
 
+  // Derived validation-highlight flags — gated on attemptedSubmit except the
+  // date ones, which were already live before this change and stay that way.
+  const dateHasError = isPastDate || (selectedDate !== '' && isDateBlocked(selectedDate)) ||
+    (selectedDate !== '' && !isPastDate && !isDateBlocked(selectedDate) && isDayClosed(selectedDate)) ||
+    (attemptedSubmit && !selectedDate)
+  const contactHasError = attemptedSubmit && !phone && !email
+  const timeSlotHasError = attemptedSubmit && (!timeSlot || !availableSlots.includes(timeSlot))
+
   function handleDateChange(date: string) {
     setSelectedDate(date)
     const slots = slotsForDate(date)
@@ -184,6 +232,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   }
 
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
+  // Independent of isEnhanced by design (Plan-CompanyNationality Chunk 1) — shows for any
+  // COMPANY booking once the tenant flag is on, enhanced mode or not.
+  const showNationalityPicker = !!nationalityBreakdownEnabled && bookingType === 'COMPANY'
   const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (configured) first — nothing beats it — then, for COMPANY bookings, the
@@ -206,13 +257,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!companyId || bookingType !== 'COMPANY' || hideCompanyDropdown) return
     const company = companies.find(c => c.id === companyId)
     if (!company) return
+    setMatchedGuideId(null)
     if (!company.accessCode) {
       applyProfile({ contactName: company.contactName, contactPhone: company.contactPhone, contactEmail: company.contactEmail })
       return
     }
     setCodeInput('')
     setCodeError('')
-    setShowCodeText(false)
     setShowCodePopup(true)
   }, [companyId, bookingType, hideCompanyDropdown])
 
@@ -231,10 +282,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!codeInput.trim()) return
     setCodeLoading(true)
     setCodeError('')
-    const result = await verifyCompanyCode(companyId, codeInput)
+    const result = await verifyBookingCode(companyId, codeInput)
     setCodeLoading(false)
     if ('error' in result) {
-      setCodeError('Incorrect code — please try again or contact the winery.')
+      setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
@@ -246,6 +297,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         await navigator.credentials.store(cred)
       } catch {}
     }
+    setMatchedGuideId(result.guideId)
     applyProfile(result.profile)
     setShowCodePopup(false)
   }
@@ -253,6 +305,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
+    setMatchedGuideId(null)
     setBookingType('INDIVIDUAL')
   }
 
@@ -260,14 +313,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!directCode.trim()) return
     setDirectCodeLoading(true)
     setDirectCodeError('')
-    const result = await findCompanyByCode(directCode, 'BOOKING')
+    const result = await findBookingCodeByCode(directCode)
     setDirectCodeLoading(false)
     if ('error' in result) {
-      setDirectCodeError('Code not recognised.')
+      setDirectCodeError(mc('onsite_access_code_direct_not_recognised', 'form.access_code_direct_not_recognised'))
       return
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
+    setMatchedGuideId(result.guideId)
     applyProfile({ contactName: result.company.contactName, contactPhone: result.company.contactPhone, contactEmail: result.company.contactEmail })
   }
 
@@ -276,6 +330,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCompanyName('')
     setDirectCode('')
     setDirectCodeError('')
+    setMatchedGuideId(null)
     setFirstName(''); setLastName(''); setPhone(''); setEmail('')
   }
 
@@ -332,6 +387,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
+      guideId: bookingType === 'COMPANY' && matchedGuideId ? matchedGuideId : undefined,
+      nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,
@@ -357,6 +414,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const freeGuests = Math.max(parseInt(freeGuestsStr) || 0, 0)
   const totalGuests = isEnhanced ? tastingGuests + lunchGuests + freeGuests : guestCount
   const payingGuests = tastingGuests + lunchGuests
+  const enhancedGuestsHaveError = attemptedSubmit && isEnhanced && totalGuests < minGuests
 
   // Masterclass selections
   const activeMcLines = masterclassItems
@@ -399,6 +457,56 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
   const meatItems = menuItems.filter(m => m.type === 'MEAT')
 
+  // ---- Confirm-your-visit sheet (#184): rows + duration note + total ----
+  const visitDurationMinutes = getVisitDurationMinutes(visitType, visitDurationTasting, visitDurationTastingLunch)
+  const estimatedEndTime = timeSlot ? addMinutesToSlot(timeSlot, visitDurationMinutes) : ''
+  const durationHoursLabel = (visitDurationMinutes % 60 === 0 ? visitDurationMinutes / 60 : Math.round((visitDurationMinutes / 60) * 10) / 10).toString()
+  const confirmDurationNote = timeSlot
+    ? mc('onsite_confirm_duration_note', 'form.confirm_duration_note', { hours: durationHoursLabel, end: estimatedEndTime })
+    : null
+  const [dateY, dateM, dateD] = selectedDate ? selectedDate.split('-') : ['', '', '']
+  const confirmDateLabel = selectedDate ? `${dateD}/${dateM}/${dateY}` : ''
+
+  const confirmVisitRows: ReviewRow[] = [
+    { label: fc('form_visit_type', 'form.visit_type'), value: fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
+    { label: fc('form_date', 'form.date'), value: confirmDateLabel },
+    { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
+  ]
+
+  // Shown on the review sheet for either branch below — nationality tagging is independent
+  // of isEnhanced, so it isn't specific to one guest-count layout or the other.
+  const nationalityReviewRows: ReviewRow[] = showNationalityPicker && nationalities.length > 0
+    ? [{ label: t(locale, 'form.nationality'), value: nationalities.map(countryName).join(', ') }]
+    : []
+
+  const confirmGuestRows: ReviewRow[] = isEnhanced
+    ? [
+        ...(tastingGuests > 0 ? [{ label: t(locale, 'form.guests_tasting'), value: String(tastingGuests) }] : []),
+        ...(lunchGuests > 0 ? [{ label: t(locale, 'form.guests_lunch'), value: String(lunchGuests) }] : []),
+        ...(freeGuests > 0 ? [{ label: t(locale, 'form.guests_free'), value: String(freeGuests) }] : []),
+        { label: t(locale, 'form.total'), value: String(totalGuests) },
+        { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
+        ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
+        ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...nationalityReviewRows,
+      ]
+    : [
+        { label: fc('form_num_guests', 'form.num_guests'), value: String(guestCount) },
+        { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
+        ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
+        ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...nationalityReviewRows,
+      ]
+
+  // Same "don't invent a number" rule as the live price preview below: only a
+  // known, tier-matched total is shown; an unresolved company rate or unset
+  // display price hides the row entirely rather than showing a guess.
+  const confirmTotalValue = isEnhanced
+    ? (payingGuests > 0 && enhancedTier ? formatTetri(asTetri(enhancedTotal)) : null)
+    : bookingType === 'INDIVIDUAL'
+      ? (estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
+      : (showCompanyPrice && matchedTier && estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
+
   function toggleMc(id: string, checked: boolean) {
     setMcSelections(prev => ({ ...prev, [id]: { checked, qtyStr: prev[id]?.qtyStr ?? '1' } }))
   }
@@ -409,13 +517,31 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!selectedDate) { setStatus('error'); setErrorMsg('Please select a date.'); return }
-    if (!phone && !email) { setStatus('error'); setErrorMsg(t(locale, 'form.err_contact')); return }
-    if (selectedDate < today) { setStatus('error'); setErrorMsg('Please choose a future date.'); return }
-    if (isDateBlocked(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_blocked')); return }
-    if (isDayClosed(selectedDate)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_day_closed')); return }
-    if (!timeSlot || !availableSlots.includes(timeSlot)) { setStatus('error'); setErrorMsg(t(locale, 'form.err_lead_time', { hours: leadHours })); return }
-    if (isEnhanced && totalGuests < minGuests) { setStatus('error'); setErrorMsg(t(locale, 'form.err_min_guests', { min: minGuests })); return }
+    setAttemptedSubmit(true)
+    if (status === 'error') { setStatus('idle'); setErrorMsg('') }
+
+    // Each check scrolls/focuses its own field and highlights it inline
+    // (see dateHasError/contactHasError/timeSlotHasError/enhancedGuestsHaveError
+    // and the matching JSX below) instead of a single generic banner — same
+    // priority order as before.
+    if (!selectedDate || selectedDate < today || isDateBlocked(selectedDate) || isDayClosed(selectedDate)) {
+      dateWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    if (!phone && !email) {
+      contactWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      contactWrapRef.current?.querySelector('input')?.focus()
+      return
+    }
+    if (!timeSlot || !availableSlots.includes(timeSlot)) {
+      timeSlotRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      timeSlotRef.current?.focus()
+      return
+    }
+    if (isEnhanced && totalGuests < minGuests) {
+      guestsWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
     // Checked last, deliberately: everything else about the booking is
     // already valid at this point, so rather than blocking submission
     // outright, open the "New Company?" popup to collect the missing piece —
@@ -436,6 +562,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setShowNewCompanyPopup(true)
       return
     }
+    // Everything validates — show the "review your visit" sheet instead of
+    // submitting straight away (Feature 184). The actual createBooking() call
+    // happens in handleConfirmedSubmit, once the guest confirms there.
+    setShowConfirm(true)
+  }
+
+  /** Fired by the confirm sheet's "Confirm & Request Booking" button — the
+   * submit logic handleSubmit used to run directly once validation passed. */
+  async function handleConfirmedSubmit() {
     setStatus('loading')
     setErrorMsg('')
     const result = await createBooking(buildBookingPayload())
@@ -447,6 +582,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         window.location.assign(result.checkoutUrl)
         return
       }
+      setShowConfirm(false)
       setConfirmedPrice(result.totalPrice)
       setConfirmedType(result.bookingType)
       setConfirmedGuestAdjustedTo(result.guestCountAdjustedTo ?? null)
@@ -456,6 +592,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // Name is carried so the live mirror can highlight this exact row.
       dispatchDemoBooked({ name: firstName, surname: lastName }) // no-op outside the demo tenant — see lib/demoEvents.ts
     } else {
+      setShowConfirm(false)
       setStatus('error')
       setErrorMsg(result.error)
     }
@@ -472,7 +609,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <p style={{ color: C.muted }}>{fc('form_success_body', 'form.success_body')}</p>
         {confirmedPendingNewCompany && (
           <p className="text-sm mt-3" style={{ color: C.muted }}>
-            Since your company isn't set up in our system yet, this isn't confirmed — we'll set up your account and follow up to confirm your booking and pricing.
+            {mc('onsite_pending_company_note', 'form.onsite_pending_company_note')}
           </p>
         )}
         {confirmedGuestAdjustedTo != null && (
@@ -488,7 +625,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
-            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}₾</p>
+            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}</p>
           </div>
         )}
       </div>
@@ -512,139 +649,65 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     <>
       {/* Access code popup */}
       {showCodePopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <form
-            onSubmit={handleCodeSubmit}
-            className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4"
-            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}
-          >
-            <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
-              <p className="text-sm" style={{ color: C.muted }}>
-                {companies.find(c => c.id === companyId)?.name} — enter the access code provided by the winery.
-              </p>
-            </div>
-
-            {/* Hidden username field — tells the browser what account this password belongs to */}
-            <input
-              type="text"
-              name="username"
-              autoComplete="username"
-              value={companies.find(c => c.id === companyId)?.name ?? ''}
-              readOnly
-              style={{ display: 'none' }}
-            />
-
-            <div className="relative">
-              <input
-                autoFocus
-                name="password"
-                type={showCodeText ? 'text' : 'password'}
-                autoComplete="current-password"
-                value={codeInput}
-                onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
-                placeholder="e.g. MARANI42"
-                className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
-                style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCodeText(s => !s)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
-              >
-                {showCodeText ? (
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            {codeError && <p className="text-sm" style={{ color: STATUS.errorText }}>{codeError}</p>}
-
-            <button
-              type="submit"
-              disabled={codeLoading || !codeInput.trim()}
-              className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
-              style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
-            >
-              {codeLoading ? 'Checking…' : 'Confirm'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNotARep}
-              className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50"
-              style={{ color: C.muted, borderColor: C.border }}
-            >
-              Enter Manually
-            </button>
-          </form>
-        </div>
+        <AccessCodePopupView
+          status={codeLoading ? 'checking' : codeError ? 'error' : 'idle'}
+          title={mc('onsite_access_code_title', 'form.access_code_title')}
+          intro={mc('onsite_access_code_intro', 'form.access_code_intro', { company: companies.find(c => c.id === companyId)?.name ?? '' })}
+          errorMessage={codeError}
+          companyName={companies.find(c => c.id === companyId)?.name ?? ''}
+          code={codeInput}
+          onCodeChange={value => { setCodeInput(value); setCodeError('') }}
+          onSubmit={handleCodeSubmit}
+          onEnterManually={handleNotARep}
+          labels={buildAccessCodeLabels(locale)}
+        />
       )}
 
       {/* New Company popup */}
       {showNewCompanyPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
-            style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
-            <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
-              <p className="text-sm" style={{ color: C.muted }}>
-                {newCompanyIncludesBooking
-                  ? "Fill in your company details — we'll submit your booking along with a request to set up your account. Your booking won't be confirmed until we do."
-                  : "Fill in your details and we'll get in touch to set up your account."}
-              </p>
-            </div>
-            {newCoStatus === 'sent' ? (
-              <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: STATUS.successText }}>Request received!</p>
-                <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
-                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
-                  className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
-                  style={{ borderColor: C.border, color: C.text }}>
-                  Close
-                </button>
-              </div>
-            ) : (
-              <>
-                <input type="text" placeholder="Company Name *" value={newCoName}
-                  onChange={e => setNewCoName(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="text" placeholder="Your Name *" value={newCoContact}
-                  onChange={e => setNewCoContact(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="tel" placeholder="Phone Number *" value={newCoPhone}
-                  onChange={e => setNewCoPhone(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                <input type="email" placeholder="Email (optional)" value={newCoEmail}
-                  onChange={e => setNewCoEmail(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text, outline: 'none' }} />
-                {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: STATUS.errorText }}>Something went wrong. Please try again.</p>
-                )}
-                <button type="button" onClick={handleNewCompanySubmit}
-                  disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
-                  className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
-                  style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
-                  {newCoStatus === 'submitting'
-                    ? 'Sending…'
-                    : newCompanyIncludesBooking ? 'Send Booking & Request' : 'Send Request'}
-                </button>
-                <button type="button" onClick={() => setShowNewCompanyPopup(false)}
-                  className="w-full py-2 rounded-lg text-xs font-medium border text-center"
-                  style={{ color: C.muted, borderColor: C.border }}>
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <NewCompanyPopupView
+          includesBooking={newCompanyIncludesBooking}
+          status={newCoStatus}
+          title={mc('onsite_new_company_title', 'form.new_company_title')}
+          bodyWithBooking={mc('onsite_new_company_body_with_booking', 'form.new_company_body_with_booking')}
+          bodyNoBooking={mc('onsite_new_company_body_no_booking', 'form.new_company_body_no_booking')}
+          successTitle={mc('onsite_new_company_success_title', 'form.new_company_success_title')}
+          successBody={mc('onsite_new_company_success_body', 'form.new_company_success_body')}
+          errorMessage={mc('onsite_new_company_error', 'form.new_company_error')}
+          name={newCoName}
+          contact={newCoContact}
+          phone={newCoPhone}
+          email={newCoEmail}
+          onNameChange={setNewCoName}
+          onContactChange={setNewCoContact}
+          onPhoneChange={setNewCoPhone}
+          onEmailChange={setNewCoEmail}
+          onSubmit={handleNewCompanySubmit}
+          onClose={() => setShowNewCompanyPopup(false)}
+          labels={buildNewCompanyLabels(locale)}
+        />
+      )}
+
+      {/* Review-your-visit sheet (#184) */}
+      {showConfirm && (
+        <BookingConfirmPopupView
+          labels={{
+            heading: mc('onsite_confirm_heading', 'form.confirm_heading'),
+            subheading: mc('onsite_confirm_subheading', 'form.confirm_subheading'),
+            sectionVisit: t(locale, 'form.confirm_section_visit'),
+            sectionGuests: t(locale, 'form.confirm_section_guests'),
+            edit: mc('onsite_confirm_edit', 'form.confirm_edit'),
+            confirm: paymentLabelActive ? mc('onsite_confirm_button_pay', 'form.confirm_button_pay') : mc('onsite_confirm_button', 'form.confirm_button'),
+          }}
+          visitRows={confirmVisitRows}
+          guestRows={confirmGuestRows}
+          durationNote={confirmDurationNote}
+          totalLabel={t(locale, 'form.est_total')}
+          totalValue={confirmTotalValue}
+          submitting={status === 'loading'}
+          onEdit={() => setShowConfirm(false)}
+          onConfirm={handleConfirmedSubmit}
+        />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -653,7 +716,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <div>
           <label style={labelStyle}>{fc('form_booking_type', 'form.booking_type')}</label>
           <div className="grid grid-cols-2 gap-3">
-            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId('') }}>
+            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId(''); setNationalities([]) }}>
               {fc('form_individual', 'form.individual')}
             </ToggleButton>
             <ToggleButton active={bookingType === 'COMPANY'} onClick={() => setBookingType('COMPANY')}>
@@ -672,7 +735,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
                 style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
               >
-                New Company?
+                {t(locale, 'form.new_company_chip')}
               </button>
               {directCompanyName ? (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
@@ -689,7 +752,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Enter your company code"
+                    placeholder={t(locale, 'form.access_code_direct_placeholder')}
                     value={directCode}
                     onChange={e => { setDirectCode(e.target.value.toUpperCase()); setDirectCodeError('') }}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleDirectCodeSubmit() } }}
@@ -703,7 +766,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white flex-shrink-0 transition-opacity"
                     style={{ backgroundColor: 'var(--color-brand)', opacity: (directCodeLoading || !directCode.trim()) ? 0.6 : 1 }}
                   >
-                    {directCodeLoading ? '…' : 'Confirm'}
+                    {directCodeLoading ? '…' : t(locale, 'form.access_code_confirm')}
                   </button>
                 </div>
               )}
@@ -721,7 +784,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
                   style={{ color: 'var(--color-brand)' }}
                 >
-                  New Company?
+                  {t(locale, 'form.new_company_chip')}
                 </button>
               </div>
               <select value={companyId} onChange={e => setCompanyId(e.target.value)} required
@@ -734,11 +797,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     the "New Company?" popup for it instead of forwarding it to the
                     server. Never sent to createBooking() as a companyId — stripped in
                     buildBookingPayload(). */}
-                <option value="__new__">+ New Company</option>
+                <option value="__new__">{t(locale, 'form.new_company_dropdown_option')}</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )
+        )}
+
+        {/* Nationality tagging (Plan-CompanyNationality) — independent of isEnhanced */}
+        {showNationalityPicker && (
+          <div>
+            <label style={labelStyle}>{t(locale, 'form.nationality')}</label>
+            <NationalityPicker
+              value={nationalities}
+              onChange={setNationalities}
+              placeholder={t(locale, 'form.nationality_placeholder')}
+              emptyText={t(locale, 'form.nationality_empty')}
+            />
+          </div>
         )}
 
         {/* Visit type */}
@@ -755,7 +831,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
                 {(bookingType === 'COMPANY' || opt.price != null) && (
                   <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price}₾ ${t(locale, 'form.per_pp')}`}
+                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price != null ? formatTetri(asTetri(opt.price)) : ''} ${t(locale, 'form.per_pp')}`}
                   </div>
                 )}
               </button>
@@ -765,7 +841,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
         {/* Date & time */}
         <div className="grid sm:grid-cols-2 gap-4">
-          <div>
+          <div ref={dateWrapRef}>
             <label style={labelStyle}>{fc('form_date', 'form.date')}</label>
             <input type="hidden" name="date" value={selectedDate} />
             <DateInput
@@ -773,32 +849,39 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               onChange={handleDateChange}
               min={today}
               className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              style={inputStyle}
+              style={{ ...inputStyle, borderColor: dateHasError ? STATUS.errorBorder : inputStyle.borderColor }}
             />
+            {attemptedSubmit && !selectedDate && (
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_select_date', 'form.err_select_date')}</p>
+            )}
             {isPastDate && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>Please choose a future date.</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_future_date', 'form.err_future_date')}</p>
             )}
             {selectedDate && !isPastDate && isDateBlocked(selectedDate) && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.blocked_date')}</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_blocked', 'form.err_blocked')}</p>
             )}
             {selectedDate && !isPastDate && !isDateBlocked(selectedDate) && isDayClosed(selectedDate) && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{t(locale, 'form.err_day_closed')}</p>
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_day_closed', 'form.err_day_closed')}</p>
             )}
           </div>
           <div>
             <label style={labelStyle}>{fc('form_time_slot', 'form.time_slot')}</label>
-            <select value={timeSlot} onChange={e => setTimeSlot(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle}>
+            <select ref={timeSlotRef} value={timeSlot} onChange={e => setTimeSlot(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm"
+              style={{ ...inputStyle, borderColor: timeSlotHasError ? STATUS.errorBorder : inputStyle.borderColor }}>
               {availableSlots.length > 0
                 ? availableSlots.map(s => <option key={s} value={s}>{s}</option>)
-                : <option value="">{t(locale, 'form.no_slots')}</option>}
+                : <option value="">{t(locale, selectedDate ? 'form.no_slots' : 'form.select_date_first')}</option>}
             </select>
+            {timeSlotHasError && (
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_lead_time', 'form.err_lead_time', { hours: leadHours })}</p>
+            )}
           </div>
         </div>
 
         {/* Guest count — enhanced vs simple */}
         {isEnhanced ? (
-          <div>
+          <div ref={guestsWrapRef}>
             <label style={labelStyle}>{fc('form_guest_counts_header', 'form.guest_counts')}</label>
             <div className="grid grid-cols-3 gap-3">
               {([
@@ -811,7 +894,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   <input type="number" min={0} max={200} value={value}
                     onChange={e => set(e.target.value)}
                     onBlur={e => { const v = parseInt(e.target.value) || 0; set(String(Math.max(v, 0))) }}
-                    className="w-full rounded-lg border px-3 py-2 text-sm" style={inputStyle} />
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ ...inputStyle, borderColor: enhancedGuestsHaveError ? STATUS.errorBorder : inputStyle.borderColor }} />
                 </div>
               ))}
             </div>
@@ -819,6 +903,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               <p className="text-xs mt-1.5" style={{ color: C.faint }}>
                 {t(locale, 'form.total')}: {totalGuests} {totalGuests !== 1 ? t(locale, 'form.guest_plural') : t(locale, 'form.guest_singular')}{payingGuests > 0 ? ` (${payingGuests} ${t(locale, 'form.paying')})` : ''}
               </p>
+            )}
+            {enhancedGuestsHaveError && (
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_min_guests', 'form.err_min_guests', { min: minGuests })}</p>
             )}
           </div>
         ) : (
@@ -884,7 +971,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     <label htmlFor={`mc-${m.id}`} className="flex-1 text-sm cursor-pointer" style={{ color: C.text }}>
                       {m.name}
                       <span className="ml-1 text-xs" style={{ color: C.faint }}>
-                        {m.pricePerUnit}₾/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
+                        {formatTetri(asTetri(m.pricePerUnit))}/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
                       </span>
                     </label>
                     {sel?.checked && (
@@ -928,17 +1015,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         </div>
 
         {/* Contact */}
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="phone" style={labelStyle}>{fc('form_phone', 'form.phone')}</label>
-            <input id="phone" name="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+        <div ref={contactWrapRef}>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="phone" style={labelStyle}>{fc('form_phone', 'form.phone')}</label>
+              <input id="phone" name="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
+            </div>
+            <div>
+              <label htmlFor="email" style={labelStyle}>{fc('form_email', 'form.email')}</label>
+              <input id="email" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
+            </div>
           </div>
-          <div>
-            <label htmlFor="email" style={labelStyle}>{fc('form_email', 'form.email')}</label>
-            <input id="email" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
-          </div>
+          {contactHasError && (
+            <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_contact', 'form.err_contact')}</p>
+          )}
         </div>
 
         {/* Price preview */}
@@ -947,20 +1041,20 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="font-bold text-2xl" style={{ color: C.wine }}>{enhancedTotal}₾</p>
+                <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(enhancedTotal))}</p>
               </div>
               <div className="space-y-0.5">
                 {tastingGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {enhancedTier.pricePerPerson}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {formatTetri(asTetri(enhancedTier.pricePerPerson))}</p>
                 )}
                 {lunchGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {comboRatePerPerson(enhancedTier)}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {formatTetri(asTetri(comboRatePerPerson(enhancedTier)))}</p>
                 )}
                 {enhancedTier.registrationPrice > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {enhancedTier.registrationPrice}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(enhancedTier.registrationPrice))}</p>
                 )}
                 {masterclassAmt > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {masterclassAmt}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {formatTetri(asTetri(masterclassAmt))}</p>
                 )}
               </div>
             </div>
@@ -974,9 +1068,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{matchedTierRate ?? basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri((matchedTierRate ?? basePrice) ?? 0))} × {guestCount} {t(locale, 'form.guest_plural')}</p>
               </div>
-              <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
+              <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>
           ) : (
             <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
@@ -987,7 +1081,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           <div className="rounded-lg border p-4" style={{ backgroundColor: STATUS.errorBg, borderColor: STATUS.errorBorder }}>
             <p className="text-sm font-medium" style={{ color: STATUS.errorText }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
             <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-              {t(locale, 'form.no_rate_detail', { n: guestCount })}
+              {mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount })}
             </p>
           </div>
         ) : (

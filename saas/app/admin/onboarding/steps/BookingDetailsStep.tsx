@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { asTetri, fromMajor, formatTetri } from '@/lib/money'
 import { createMenuItem } from '@/app/actions/menuItems'
 import { createMasterclassItem } from '@/app/actions/masterclassItems'
 import { setOffersFoodAddons, setOffersMasterclasses } from '@/app/actions/onboarding'
@@ -232,7 +233,7 @@ function MasterclassesSection({ at, answer, onAnswer, items, onItemAdded }: {
     }
     setLoading(true)
     setError('')
-    const created = await createMasterclassItem({ name, unitType, pricePerUnit: priceNum })
+    const created = await createMasterclassItem({ name, unitType, pricePerUnit: fromMajor(priceNum) })
     onItemAdded({ id: created.id, name: created.name, unitType: created.unitType as MasterclassUnit, pricePerUnit: created.pricePerUnit })
     setName('')
     setPrice('')
@@ -330,7 +331,7 @@ function MasterclassesSection({ at, answer, onAnswer, items, onItemAdded }: {
                 {items.map(i => (
                   <li key={i.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border }}>
                     <span className="flex-1" style={{ color: C.text }}>{i.name}</span>
-                    <span style={{ color: C.muted }}>{UNIT_LABELS[i.unitType]} · {i.pricePerUnit}₾</span>
+                    <span style={{ color: C.muted }}>{UNIT_LABELS[i.unitType]} · {formatTetri(asTetri(i.pricePerUnit))}</span>
                   </li>
                 ))}
               </ul>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { asTetri, fromMajor, toMajor, formatTetri } from '@/lib/money'
 import { createMasterclassItem, updateMasterclassItem, deleteMasterclassItem } from '@/app/actions/masterclassItems'
 import { UNIT_LABELS, UNIT_DESCRIPTIONS, MASTERCLASS_UNITS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
@@ -51,7 +52,7 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
     setEditingId(item.id)
     setEditName(item.name)
     setEditUnit(item.unitType as MasterclassUnit)
-    setEditPrice(String(item.pricePerUnit))
+    setEditPrice(String(toMajor(asTetri(item.pricePerUnit))))
     setEditSort(String(item.sortOrder))
   }
 
@@ -61,12 +62,12 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
     await updateMasterclassItem(id, {
       name: editName,
       unitType: editUnit,
-      pricePerUnit: parseFloat(editPrice) || 0,
+      pricePerUnit: fromMajor(parseFloat(editPrice) || 0),
       sortOrder: parseInt(editSort) || 0,
     })
     setItems(prev => prev.map(i => i.id === id ? {
       ...i, name: editName, unitType: editUnit,
-      pricePerUnit: parseFloat(editPrice) || 0,
+      pricePerUnit: fromMajor(parseFloat(editPrice) || 0),
       sortOrder: parseInt(editSort) || 0,
     } : i))
     setEditingId(null)
@@ -89,7 +90,7 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
   async function handleAdd() {
     if (!newName.trim()) return
     setLoading(true)
-    await createMasterclassItem({ name: newName, unitType: newUnit, pricePerUnit: parseFloat(newPrice) || 0 })
+    await createMasterclassItem({ name: newName, unitType: newUnit, pricePerUnit: fromMajor(parseFloat(newPrice) || 0) })
     setNewName('')
     setNewUnit('PER_PIECE')
     setNewPrice('')
@@ -172,7 +173,7 @@ export default function MasterclassClient({ items: initial, locale = 'en' }: { i
                 <span className="text-xs px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
                   {UNIT_LABELS[item.unitType as MasterclassUnit] ?? item.unitType}
                 </span>
-                <span className="text-sm font-medium" style={{ color: C.wine }}>{item.pricePerUnit}₾</span>
+                <span className="text-sm font-medium" style={{ color: C.wine }}>{formatTetri(asTetri(item.pricePerUnit))}</span>
                 <span className="text-xs" style={{ color: C.faint }}>#{item.sortOrder}</span>
                 {deletingId === item.id ? (
                   <div className="flex gap-1">

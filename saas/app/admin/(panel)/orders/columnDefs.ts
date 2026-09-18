@@ -5,6 +5,7 @@ export const COLUMN_DEFS = [
   { id: 'contact',     labelKey: 'orders.col.contact',     defaultVisible: true  },
   { id: 'type',        labelKey: 'orders.col.type',        defaultVisible: true  },
   { id: 'company',     labelKey: 'orders.col.company',     defaultVisible: true  },
+  { id: 'nationality', labelKey: 'orders.col.nationality', defaultVisible: false },
   { id: 'tasting',     labelKey: 'orders.col.tasting',     defaultVisible: true  },
   { id: 'lunch',       labelKey: 'orders.col.lunch',       defaultVisible: true  },
   { id: 'guests',      labelKey: 'orders.col.guests',      defaultVisible: false },

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { asTetri, fromMajor, formatTetri } from '@/lib/money'
 import { createOnboardingWine } from '@/app/actions/onboarding'
 import { adminT } from '@/lib/adminT'
 import { C } from './shared'
@@ -53,7 +54,7 @@ export default function WineStep({ locale, wineDetailLevel, initialWines, onDone
     setError('')
     const result = await createOnboardingWine(
       isProductMode ? { name, wineType, sweetness } : { name },
-      { year: yearNum, price: priceNum }
+      { year: yearNum, price: fromMajor(priceNum) }
     )
     if ('error' in result) {
       setError(result.error ?? '')
@@ -152,7 +153,7 @@ export default function WineStep({ locale, wineDetailLevel, initialWines, onDone
               <li key={w.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border }}>
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: w.color }} />
                 <span className="flex-1" style={{ color: C.text }}>{w.name}</span>
-                <span style={{ color: C.muted }}>{w.year} · {w.price}₾</span>
+                <span style={{ color: C.muted }}>{w.year} · {formatTetri(asTetri(w.price))}</span>
               </li>
             ))}
           </ul>

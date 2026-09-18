@@ -1,4 +1,5 @@
 import { adminT } from '@/lib/adminT'
+import { countryName } from '@/lib/countries'
 
 type Order = {
   id: string
@@ -15,6 +16,10 @@ type Order = {
   hotDishMeat: string | null
   foodNotes: string | null
   company: { name: string } | null
+  // Company bookings only (Plan-CompanyNationality) — shown here, not gated on the tenant's
+  // enableCompanyNationalityBreakdown flag, since this just renders whatever the order already
+  // has (per that plan's "toggle-off never hides existing data" decision).
+  nationalities: string[]
 }
 
 type Props = { orders: Order[]; displayName?: string; locale?: string }
@@ -52,6 +57,7 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
     at('orders.sheet.foodNotes'),
     at('orders.sheet.notes'),
     at('orders.col.company'),
+    at('orders.sheet.nationality'),
     at('orders.sheet.contactName'),
     at('orders.sheet.contactPhone'),
   ]
@@ -94,6 +100,7 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
                 <Cell>{o.foodNotes}</Cell>
                 <Cell>{o.notes}</Cell>
                 <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
+                <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
                 <Cell>{o.name} {o.surname}</Cell>
                 <Cell>{o.phone}</Cell>
               </tr>
