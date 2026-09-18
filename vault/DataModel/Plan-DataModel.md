@@ -12,6 +12,19 @@ ledger row whatever channel it arrived through.
 **Chunk 7 is deferred by Max's decision** — no status tables for now; labels stay in
 constants. Every chunk in this plan is now either complete or deliberately parked.
 
+✅ **SHIPPED TO PRODUCTION 2026-09-18.** `master` @ `217c519`, deploy READY. Max ran
+`prisma migrate deploy` against prod himself (the sandbox blocks production access, even
+read-only). Verified live: `nikalasmarani.vineworks.ge` quotes **50₾ / 110₾ per person**
+and **50₾ × 4 = 200₾**; `demo.vineworks.ge` quotes **70₾ × 4 = 280₾**. Correct GEL — not
+₾0.50 (the undercharge failure) and not ₾5000 (the overcharge one).
+
+> ⚠️ **The release had to be atomic, and this is why.** Either half alone mis-charges by
+> 100×: new code against the old schema reads `Float` prices as tetri and **under**charges;
+> old code against the new schema runs them through `toMinorUnits` and **over**charges.
+> The merge was staged locally and held unpushed until the production migration was
+> confirmed, so the window was seconds rather than minutes. **Any future money-unit change
+> needs the same discipline.**
+
 Everything is on `staging`. **Production is untouched** and internally consistent on the
 pre-chunk-5 schema; nothing in this plan has gone near `master`.
 **Prerequisite reading:** [[Dependencies]] — do not start Chunk 3 without it.

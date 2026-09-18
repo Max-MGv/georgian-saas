@@ -230,12 +230,42 @@ impossible before.
 Wine orders said "Pending" where bookings said "New" for the same `NEW` enum. Fixed, plus
 two dead keys Feature 191 orphaned. i18n parity 1077/1077.
 
-### 🛑 Next — chunk 7 is blocked on a decision from Max
+### ✅ Shipped to production, 2026-09-18
 
-The display **table** trades a hot-path lookup for runtime-editable labels, and without an
-admin UI it is a table nothing writes — which this project has explicitly called out as
-worse than an absent one. Three options and a recommendation are written up in
-`DataModel/Plan-DataModel.md` under Chunk 7. **Nothing else in the plan is blocked.**
+`staging` → `master` merged (64 commits, no conflicts) and pushed; `master` @ `217c519`,
+Vercel production deploy READY.
+
+**Max ran `prisma migrate deploy` against production himself** — the sandbox blocks
+production access entirely, including read-only, so that step cannot be automated from
+here. The PowerShell form with a `finally` block that restores the dev `.env` is the one
+to reuse; local `.env` was verified back on dev afterwards (0 prod refs, no leftover
+backup).
+
+**Verified live:** `nikalasmarani.vineworks.ge` quotes **50₾ / 110₾ per person** and
+**50₾ × 4 = 200₾**. `demo.vineworks.ge` quotes **70₾ × 4 = 280₾**. Correct GEL.
+
+> ⚠️ **Why the release had to be atomic — worth remembering.** Either half alone
+> mis-charges customers by 100×: new code against the old schema reads `Float` prices as
+> tetri and **under**charges (₾0.70 for a ₾70 booking); old code against the new schema
+> runs tetri through `toMinorUnits` and **over**charges (₾7000). The merge was staged on
+> local `master` and held unpushed until the migration was confirmed, so the window was
+> seconds. This was not in the original plan and only surfaced when the intermediate
+> states were actually thought through.
+
+### 🔴 Two things to check on production
+
+1. **The demo's seeded orders were wiped** along with everything else. The public pages are
+   fine (prices verified above), but `demo.vineworks.ge`'s admin Orders and Statistics may
+   be empty — that is a **sales-facing** surface. Reseed via the super-admin Reset Demo
+   card.
+2. **Nikalas Marani's own admin screens are empty** of orders by design. Expected, but
+   worth knowing before opening them.
+
+### Chunk 7 — deferred by Max
+
+Max's call: *"lets hold off on status tables for now."* Labels stay in constants. When it
+is picked up, build the table **with** its admin UI rather than shipping one nothing
+writes — reasoning in `DataModel/Plan-DataModel.md` under Chunk 7.
 - Production is still untouched and internally consistent on the pre-chunk-5 schema.
   Nothing here has gone near `master`.
 
