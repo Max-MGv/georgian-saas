@@ -3,7 +3,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
-import type { Tetri } from '@/lib/money'
+import { asTetri, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -465,7 +465,11 @@ export async function exportOrdersCsv(filters: {
     o.visitType,
     o.guestCount,
     o.nationalities.map(countryName).join('; '),
-    o.totalPrice ?? '',
+    // The header says "Total (GEL)" and this shipped as raw tetri, so every
+    // exported row read 100x high in a file an accountant opens in Excel
+    // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
+    // it text and break the column's arithmetic.
+    o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
@@ -515,6 +519,17 @@ export async function assignOrderCompany(
     const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
     const payingGuests = order.tastingGuestCount + order.lunchGuestCount
 
+    // The three snapshots record the tier rates this order was actually sold
+    // at, exactly as createBooking.ts does. They were NOT written here until
+    // 2026-09-18 (bug #47): this path produced a brand-new order with null
+    // snapshots, and the nullable columns are supposed to mean "created before
+    // the columns existed". recalcOrderTotal then fell into its legacy branch
+    // and re-priced the whole booking off whatever the company's tiers said
+    // that day — the precise repricing bug chunk 4 was written to close.
+    let tastingRateSnapshot: number | null = null
+    let lunchRateSnapshot: number | null = null
+    let registrationFeeSnapshot: number | null = null
+
     let totalPrice = 0
     if (payingGuests > 0) {
       // Enhanced/split booking — same shape as updateOrderEnhanced's calc.
@@ -524,6 +539,9 @@ export async function assignOrderCompany(
           order.tastingGuestCount * tier.pricePerPerson +
           order.lunchGuestCount * comboRatePerPerson(tier) +
           tier.registrationPrice + masterclassAmt + extrasAmt
+        tastingRateSnapshot = tier.pricePerPerson
+        lunchRateSnapshot = comboRatePerPerson(tier)
+        registrationFeeSnapshot = tier.registrationPrice
       }
     } else {
       // Simple booking — priced off guestCount + visitType, same shape as
@@ -532,13 +550,19 @@ export async function assignOrderCompany(
       if (tier) {
         const ratePerPerson = order.visitType === 'TASTING' ? tier.pricePerPerson : comboRatePerPerson(tier)
         totalPrice = ratePerPerson * order.guestCount + tier.registrationPrice + masterclassAmt + extrasAmt
+        tastingRateSnapshot = tier.pricePerPerson
+        lunchRateSnapshot = comboRatePerPerson(tier)
+        registrationFeeSnapshot = tier.registrationPrice
       }
     }
     if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
 
     await tx.order.update({
       where: { id: orderId },
-      data: { companyId, bookingType: 'COMPANY', totalPrice },
+      data: {
+        companyId, bookingType: 'COMPANY', totalPrice,
+        tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot,
+      },
     })
     return { success: true as const, totalPrice }
   })
@@ -608,7 +632,7 @@ export async function changeBookingStatus(
         if (change.kind === 'paid') {
           if (change.value) {
             await recordManualPayment(tx, {
-              tenantId, orderId, amount: current.totalPrice ?? 0, at: now,
+              tenantId, orderId, amount: asTetri(current.totalPrice ?? 0), at: now,
             })
           } else {
             await reverseManualPayments(tx, { orderId, at: now })

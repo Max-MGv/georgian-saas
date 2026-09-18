@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { asTetri } from '@/lib/money'
+import { applyPercent, asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
@@ -84,9 +84,15 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     : null
 
   const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * priceMap[w.vintageId], 0)
+  // `Math.round(x * (1 - p/100) * 100) / 100` lived here until 2026-09-18. It
+  // meant "round to two decimals of lari" and was correct while subtotal was a
+  // Float of lari. Against tetri it rounds at the wrong scale and leaves a
+  // fraction — 4550 at 15% gave 3867.5, which an Int column rejects, so every
+  // discounted company's wine order failed to save (bug #44). applyPercent
+  // rounds at tetri scale and always returns a whole number.
   const totalAmount = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+    ? applyPercent(asTetri(subtotal), discountPercent)
+    : asTetri(subtotal)
 
   // Wine orders always show the customer their total, so unlike company
   // bookings there's no hidden-price case to exclude here (§7.4).
@@ -171,7 +177,12 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     }
 
     return { success: true }
-  } catch {
+  } catch (err) {
+    // This catch swallowed bug #44 in silence for as long as it shipped: every
+    // discounted company's order failed on the Int write and the customer saw
+    // only "Something went wrong", with nothing anywhere saying why. The
+    // message to the customer stays vague on purpose; the log does not.
+    console.error('[submitWineOrder] failed to place wine order', err)
     return { error: 'Something went wrong. Please try again.' }
   }
 }

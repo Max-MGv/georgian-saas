@@ -48,6 +48,78 @@ tags: [bugs]
 | 40 | Settings → Booking Rules has no validation that a visit type's maximum guest count is ≥ its minimum. Found live on Staging Winery: Wine Tasting minimum is 4, maximum is 3 — any Wine Tasting booking for 4 or 5 guests is silently clamped down to 3 server-side before pricing (confirmed: a 5-guest submission settled at 150GEL/3 guests, not 250GEL/5), with no warning to the admin who set it or the guest who booked it | Admin / Settings, Public / Booking form | 🟢 Resolved |
 | 41 | `scripts/test-rls.ts` depends on ambient seeded data: three of its checks assert `rows.length > 0` on `Order`, so they fail whenever the orders table is empty. Chunk 3's authorised wipe emptied it, and the suite went 21/21 → 18/3 with **no RLS regression at all** — proven by inserting two throwaway orders, re-running to 21/21, and removing them again. It is a false alarm that looks exactly like a security failure, which is the worst kind. Fix is to have the test create its own fixture rather than rely on whatever happens to be in the database. | Testing / RLS | 🔴 Open |
 | 42 | Demo seed mixed units after the tetri conversion: `demoSeed.ts`'s tier literals are written in GEL, and chunk 3 converted them with `fromMajor` where they are written to `Price` — but `computeTotal` reads the **same literals a second time** for seeded order totals and adds `masterclassAmt`, which comes back from the database already in tetri. Seeded bookings came out at ~1/100 of their intended total with a full-size masterclass line on top. **Sales-facing** — it is the data behind `demo.vineworks.ge`'s admin screens, and Max hit it the first time he pressed Reset Demo after the release. **Third instance of one pattern** (after `OrderDetail.tsx` and `NewOrderForm.tsx`): a Float→integer unit change is invisible to the compiler, so every site doing arithmetic on money must be found by reading, not tooling. Fixed and verified by running the real `seedDemoTenant` against dev: 393 bookings ₾180–₾2,875 (avg ₾580), 45 wine orders ₾163–₾7,079. | Demo / Seeding | 🟢 Resolved |
+| 43 | Booking form's success screen rendered `Order.totalPrice` raw — `{confirmedPrice}` with no `formatTetri` (`BookingForm.tsx:628`). A ₾280 booking told the guest **"28000"** under "Estimated total". **Customer-facing.** Reachable on the reservation-only path (an order with a `checkoutUrl` redirects before this screen paints). The same file formats correctly 120 lines earlier when building `confirmTotalValue`, so it was one missed site out of two, not a misunderstanding. Regression introduced by the 2026-09-18 tetri conversion. | Public / Booking form | 🟢 Resolved |
+| 44 | Both wine-order paths kept `Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100` (`submitWineOrder.ts:87`, `wineOrders.ts:149`). That expression meant "round to two decimals of lari" and was **correct** while subtotal was a Float of lari; against tetri it rounds at the wrong scale and leaves a fraction, which the `Int` column rejects. Measured: 4550 at 15% → 3867.5, 8999 at 12% → 7919.12, 1999 at 5% → 1899.05, 9900 at 12.5% → 8662.5 — 4 of 5 realistic cases fail the write. **So every discounted B2B company was silently unable to place a wine order**, and `submitWineOrder.ts`'s bare `catch {}` swallowed the throw with no logging, leaving only "Something went wrong. Please try again." Dormant only while all wine prices are whole lari *and* all discounts whole percents. Fixed with `applyPercent`, which rounds at tetri scale; the bare catch now logs. Regression guard added to `scripts/test-money.ts`. | Public / Wine orders, Admin / Wine orders | 🟢 Resolved |
+| 45 | Order detail's "add extra" wrote lari into a tetri column — `parseFloat(newExtraAmount) \|\| 0` with no `fromMajor` (`OrderDetail.tsx:542`), against a field labelled "Amount (₾)". Typing `20` stored 20 tetri (**₾0.20**) and dragged the order total down with it; typing `20.50` failed the `Int` write outright. **This one corrupts data — rows written before the fix stay wrong.** The sibling screen (`NewOrderForm.tsx:212`) always did it correctly. Root cause of the escape: `orderExtras.ts:12` declared `data: { label: string; amount: number }` rather than `Tetri`, so the brand had nothing to catch. Both retyped; the same untyped parameter in `manualPayment.ts:61` was closed at the same time (no live bug behind that one, but it was the last unbranded money parameter in the codebase). | Admin / Orders | 🟢 Resolved |
+| 46 | Orders CSV export shipped raw tetri under a header reading **"Total (GEL)"** (`orders.ts:468`, `o.totalPrice ?? ''`) — every exported row 100× high in a file an accountant opens in Excel. Fixed with `toMajor`, deliberately not `formatTetri`: a `₾` in the cell makes it text and breaks the column's arithmetic. Regression introduced by the 2026-09-18 tetri conversion. | Admin / Orders | 🟢 Resolved |
+| 47 | `assignOrderCompany()` (`orders.ts`) wrote `totalPrice` but **not** `tastingRateSnapshot` / `lunchRateSnapshot` / `registrationFeeSnapshot`, so linking a no-company order to a company produced a brand-new order with null snapshots. Those columns are nullable only to mean "created before the columns existed" — `recalcOrderTotal` therefore fell into its legacy branch on the next extra or masterclass line and re-priced the whole booking off whatever the company's tiers said that day. **This is precisely the repricing bug chunk 4 was written to close, reintroduced through a path chunk 4 did not touch.** Not a money-units bug — it would have existed without the tetri conversion. Both branches now write the three snapshots, matching `createBooking.ts:307-309`. Verified equivalent: `VisitType` has only `TASTING`/`TASTING_LUNCH`, so the branch's rate selection and `recalcOrderTotal`'s reproduce the same total. | Admin / Orders | 🟢 Resolved |
+| 48 | Booking form's company price preview dropped the lunch add-on: `estimatedTotal` used `matchedTier.pricePerPerson * guestCount` for the COMPANY branch while `matchedTierRate` — computed two lines above, and what `createBooking.ts:317-320` actually charges — selects `comboRatePerPerson(tier)` for `TASTING_LUNCH`. So a company `TASTING_LUNCH` quote **under-stated** the total the server then stored, visible whenever `showCompanyPrice` is on. Not a money-units bug; drift between two of the five copies of the tier-pricing formula (see [[MaintenanceNotes]] §22). The INDIVIDUAL branch was already correct. | Public / Booking form | 🟢 Resolved |
+
+---
+
+## Bugs #43–#48 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
+
+Found by a deliberately **uninformed** review. Max asked for a second opinion on the money
+design and specified the reviewer be given no context — no decisions, no thought process,
+just "examine how this codebase handles money." It went looking for live defects rather
+than design quality and found five; a sixth (#48) surfaced while verifying its claims.
+Every one was confirmed against the source before being written down here.
+
+### They are not all the same kind of thing
+
+Max's question on reading them — *"is the point that some actions don't treat our values as
+tetri? we simply forgot to update the code?"* — is right for three of the six, and the
+exceptions are the interesting part.
+
+| Kind | Bugs | Where the wrong value lands | What prevents it |
+|---|---|---|---|
+| Missed a **display** conversion | #43, #46 | On a screen or in a file. DB is fine. | The lint rule below |
+| Missed an **input** conversion | #45 | **Written to the database, permanently** | Typing the parameter `Tetri` |
+| **Stale logic** that was correct before | #44 | Throws — the app fails rather than lies | Nothing mechanical. Only reading. |
+| Not a money-units bug at all | #47, #48 | Repricing / a wrong quote | A shared pricing helper (§22) |
+
+**#44 is the one worth understanding.** Nobody forgot to convert anything. The line
+`Math.round(x * (1 - p/100) * 100) / 100` was *correct, deliberate* code meaning "round to
+two decimals of lari". Under tetri it is not a missing conversion — it is an operation whose
+**purpose evaporated** while it kept running and kept returning a number. No conversion
+audit finds this: grep every money site for a missing `fromMajor` and this line passes,
+because nothing is missing. Finding these requires asking "why does this line exist?",
+not "is this converted?".
+
+### Why the original sweep missed them
+
+`Plan-DataModel.md` records the conversion's own biggest finding: **`tsc` catches nothing.**
+Prisma maps both `Float` and `Int` to `number`, so changing every money column produced
+**zero** type errors across the codebase. The remediation was a grep anchored on the `₾`
+character — 198 occurrences.
+
+Its blind spot is exactly *a money site with no `₾` next to it*. All four
+display/IO defects sat in it. That is not bad luck; it is the shape of residue that method
+leaves, and it was predictable from the method.
+
+### What now holds the line
+
+`saas/eslint.config.mjs` gained a `no-restricted-syntax` rule rejecting money identifiers
+rendered directly as JSX children — `<p>{confirmedPrice}</p>`, `<p>{order.totalPrice}</p>`,
+`` <p>{`${total} GEL`}</p> ``. It exists because the compiler provably cannot help here.
+
+Two design notes, both learned by testing rather than assumed:
+
+- **The identifier list is explicit**, not a `/price|amount|total/` pattern, so it does not
+  fire on `totalOrders` or `priceLabel`.
+- **Every selector is rooted at `JSXElement >`** — only money *rendered as a child*. An
+  attribute (`value={price}` on an admin input, `total={x}` passed to a component) is not
+  flagged: passing tetri to a prop is correct, and those inputs hold an editable lari
+  *string*. Without that root the rule reported **9 false positives and zero real defects**.
+
+Verified against a probe covering all three bad forms plus four good ones, then run across
+the codebase: **0 violations** once #43 was fixed.
+
+### Still open
+
+The tier-pricing formula is copy-pasted in **five** places, not the three
+[[MaintenanceNotes]] §22 documents. #48 is that drift already having happened. Extracting a
+single helper is the outstanding item — see §22, updated 2026-09-19.
 
 ---
 

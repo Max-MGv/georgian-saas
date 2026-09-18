@@ -8,6 +8,97 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-19 — Money-safety stress test, blind review, six bugs fixed
+
+Started as Max asking *what actually causes* the unit-mixing bug class (#42) and what risk it
+carries. Ended with six confirmed defects fixed and a lint rule that makes the display half
+of the class impossible to reintroduce.
+
+### The measurement that redirected the work
+
+Built a throwaway lab (35 adversarial files, 4 candidate designs, compiled with `tsc --strict`
+and executed) to answer "how much does each defence actually catch?" Ground rule: no `as`
+casts to force a failure — only code someone would naturally write.
+
+| Design | Compiler caught | Runtime caught | **Silent wrong values** |
+|---|---|---|---|
+| Current `number & {__tetri}` brand | 4 | 1 | **12 of 18** |
+| Opaque Tetri (not a `number` subtype) | 7 | 1 | **10** |
+| Opaque `Gel` **and** `Tetri` + typed DB boundary | 15 | 1 | **2** |
+| Boxed `Money` class, `valueOf()` throws | 12 | 6 | **3** |
+
+Two findings worth keeping:
+
+- **The brand is a one-way door.** `Tetri` is assignable to `number`, so declaring a
+  parameter `number` silently strips the brand on the way in. That is exactly how #42 and
+  #45 got through — not a failure of the brand, it was never in the room.
+- **Branding alone would not have caught #42.** TypeScript does not type-check arithmetic
+  between branded numbers: `gel + tetri` compiles and returns a bare `number`. What catches
+  it is the *helpers* (`sumTetri`/`multiplyTetri` reject a bare `number`), not the brand.
+
+I then proposed migrating to a boxed `Money` class. **That was over-engineering**, and the
+blind review below is what proved it — see "Where I was wrong".
+
+### Industry check
+
+Asked how Shopify and others do it. No consensus on representation — Stripe/Square/Adyen use
+integer minor units (our tetri, and what Flitt expects); Shopify's GraphQL uses a Decimal
+serialised as a **string**, with its own Ruby gem BigDecimal-backed and stored
+`decimal(21,3)` + a separate currency column. Near-unanimous on **shape**: money is a value
+object carrying amount + currency, arithmetic as methods (Fowler's Money pattern, 2002).
+
+Our representation is right and matches our gateway. Shopify avoids this bug class not by
+better numbers but by **never having a bare number** — which is the gap we kept.
+
+### The blind review — the highest-value step of the session
+
+Max asked for a second opinion from a subagent given **no context**: no decisions, no
+reasoning, just "examine how this codebase handles money." It hunted live defects instead of
+design quality and found five; a sixth surfaced while verifying it. All six confirmed against
+source before being recorded: **#43–#48** in [[KnownBugs]], with the full classification and
+the "why the ₾-anchored sweep missed them" analysis there.
+
+Worst two: **#45** wrote ₾0.20 for a typed `20` and corrupts rows permanently; **#44** made
+every discounted B2B company silently unable to place a wine order, swallowed by a bare
+`catch {}`.
+
+### Where I was wrong
+
+The review's "leave alone" list opened with *don't add a `Money` class* — a direct
+contradiction of my recommendation, and it was right. My attack suite optimised hard for
+display bugs, and the measured display surface is 154 `formatTetri` sites with **zero**
+bypasses; the review found exactly one (#43). Meanwhile the real mechanism behind #45 was a
+single server action typed `amount: number`, and there were only **two** such parameters left
+in the codebase. Two lines closed what a half-week migration would have.
+
+Retained from my analysis: the compute path is where coverage is thin. `pricing.ts` and
+`pricingUtils.ts` import the money module **not at all**; `orders.ts` imports only the type.
+Every `multiplyTetri` call in the codebase is inside a `formatTetri` for display. The module
+is deployed on the read side and absent from the write side — which is where all six bugs
+were.
+
+### Verification
+
+- `tsc --noEmit`: **0 errors.** The two retypings surfaced 5 call sites, all passing genuine
+  tetri; re-branded with `asTetri`, no further bugs behind them.
+- `scripts/test-money.ts`: **61 passed, 0 failed** (was 47 — added 14 cases guarding #44).
+- ESLint: money rule **0 violations** codebase-wide; the 12 pre-existing problems in touched
+  files are byte-identical before and after (verified via `git stash`).
+- #44 fix measured against the five failing cases: all now integral.
+
+### Next
+
+1. **Not done, needs a decision:** extract the tier-pricing formula — it is copy-pasted in
+   **five** places, not the three [[MaintenanceNotes]] §22 documented. §22 updated with the
+   two extra sites and why a shared helper must take rates as arguments.
+2. **Data repair for #45** — rows written since 2026-09-18 with implausibly small
+   `OrderExtra.amount` are still wrong; the code fix does not repair them. Not yet queried.
+3. **No VAT anywhere** in schema, invoice or receipt. Georgia's is 18% with a registration
+   threshold. May be deliberate scope — but nothing in code or vault says so.
+4. Staging verification of all six fixes before the `master` merge.
+
+---
+
 ## 2026-09-18 (later) — Status settled as C; data-model plan written, nothing built
 
 **The contested shape is now decided.** Max interrogated the transactional schema from

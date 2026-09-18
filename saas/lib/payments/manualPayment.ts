@@ -20,6 +20,7 @@
  * Making `paidAt` a derived query would put a join on the hot path for no gain.
  */
 import type { TxClient } from '@/lib/db'
+import type { Tetri } from '@/lib/money'
 
 /** Rows this module writes, as opposed to the gateway's own. */
 const MANUAL_PROVIDER = 'manual'
@@ -58,7 +59,10 @@ async function hasLivePayment(tx: TxClient, ref: OrderRef): Promise<boolean> {
  */
 export async function recordManualPayment(
   tx: TxClient,
-  input: OrderRef & { tenantId: string | null; amount: number; at: Date }
+  // `amount` is TETRI. Typed `number` until 2026-09-18 — no live bug behind it,
+  // but it was the last unbranded money parameter in the codebase, and bug #45
+  // is what an unbranded one costs when someone wires a lari field to it.
+  input: OrderRef & { tenantId: string | null; amount: Tetri; at: Date }
 ): Promise<void> {
   if (await hasLivePayment(tx, input)) return
 

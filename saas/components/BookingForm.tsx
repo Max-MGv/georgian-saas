@@ -450,8 +450,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const matchedTierRate = matchedTier
     ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : comboRatePerPerson(matchedTier))
     : null
+  // Both branches price off matchedTierRate, which already picks
+  // comboRatePerPerson for TASTING_LUNCH. The COMPANY branch used
+  // matchedTier.pricePerPerson directly until 2026-09-18, so a company
+  // TASTING_LUNCH quote dropped the lunch add-on and under-stated the total
+  // the server then stored (bug #48). createBooking.ts is the authority here.
   const estimatedTotal = matchedTier
-    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice)
+    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTierRate! * guestCount + matchedTier.registrationPrice)
     : basePrice != null ? basePrice * guestCount : null
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
@@ -625,7 +630,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
-            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}</p>
+            {/* confirmedPrice is the server's Order.totalPrice — tetri. Rendered
+                raw until 2026-09-18, so a ₾280 booking told the guest "28000"
+                (bug #43). Never interpolate a money value; see lib/money.ts. */}
+            <p className="text-2xl font-bold" style={{ color: C.wine }}>{formatTetri(asTetri(confirmedPrice))}</p>
           </div>
         )}
       </div>

@@ -539,7 +539,10 @@ export default function OrderDetail({
   async function handleAddExtra() {
     if (!newExtraLabel.trim() || !newExtraAmount) return
     setExtraLoading(true)
-    const amount = parseFloat(newExtraAmount) || 0
+    // The field is labelled "Amount (₾)", so what the admin typed is lari.
+    // Everything downstream — ExtraRow, extrasAmt, the formatTetri renders —
+    // is tetri, so convert here (bug #45; NewOrderForm.tsx has always done it).
+    const amount = fromMajor(parseFloat(newExtraAmount) || 0)
     const result = await addOrderExtra(order.id, { label: newExtraLabel, amount })
     if ('extraId' in result) {
       setExtras(prev => [...prev, { id: result.extraId, label: newExtraLabel, amount }])

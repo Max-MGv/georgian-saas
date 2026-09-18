@@ -596,7 +596,7 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. Three separate places compute a company-tier price from `(tastingGuestCount, lunchGuestCount, guestCount)` — keep them in sync
+## 22. FIVE separate places compute a company-tier price from `(tastingGuestCount, lunchGuestCount, guestCount)` — keep them in sync
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -614,6 +614,33 @@ differently depending on which code path last touched it.
 **Files involved:** `saas/app/actions/createBooking.ts`, `saas/app/actions/orders.ts`
 (`updateOrderEnhanced`, `assignOrderCompany`), `saas/lib/pricingUtils.ts` (`findTier`,
 `comboRatePerPerson`, the two functions that are already shared).
+
+---
+
+### Update 2026-09-19 — it is five sites, not three, and they have already drifted
+
+Counted while fixing bugs #47/#48. Two more copies exist that this note did not name:
+
+4. **`saas/lib/pricing.ts`** — `recalcOrderTotal`'s fallback branch, for orders with no
+   rate snapshot. It re-derives the same formula from live `Price` rows.
+5. **`saas/components/BookingForm.tsx`** — the client-side price *preview* (`estimatedTotal`
+   / `enhancedTotal`). It runs in the browser off the same tier data and must agree with
+   what `createBooking.ts` will store, or the guest is quoted one number and charged another.
+
+**The drift this note warned about has now happened, twice:**
+
+- **#48** — `BookingForm.tsx`'s COMPANY branch priced `TASTING_LUNCH` at
+  `matchedTier.pricePerPerson` while `createBooking.ts` charged `comboRatePerPerson(tier)`.
+  The quote silently under-stated the stored total by the lunch add-on × guests.
+- **#47** — `assignOrderCompany` computed its total correctly but wrote no rate snapshots,
+  so site 4's fallback branch took over on the next recalc and re-priced the booking at
+  current tiers. Exactly the failure mode chunk 4 was built to eliminate.
+
+Both are fixed, but **by hand, in the copies** — the structural problem is untouched. The
+outstanding work is to extract one helper into `pricingUtils.ts` and call it from all five.
+Note that doing so requires a decision, not just a refactor: sites 1–4 are server-side and
+authoritative, site 5 is a browser preview that cannot see snapshots, so the shared helper
+has to take rates as arguments rather than read them.
 
 ---
 

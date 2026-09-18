@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { applyPercent, asTetri } from '@/lib/money'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
@@ -67,7 +68,7 @@ export async function changeWineOrderStatus(
         if (change.kind === 'paid') {
           if (change.value) {
             await recordManualPayment(tx, {
-              tenantId, wineOrderId: id, amount: current.totalAmount ?? 0, at: now,
+              tenantId, wineOrderId: id, amount: asTetri(current.totalAmount ?? 0), at: now,
             })
           } else {
             await reverseManualPayments(tx, { wineOrderId: id, at: now })
@@ -146,9 +147,11 @@ export async function createWineOrderAdmin(data: {
     : null
 
   const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * vintageMap[w.vintageId].price, 0)
+  // Same stale major-unit rounding as submitWineOrder.ts carried — see the
+  // comment there. Rounding at tetri scale is what keeps this an integer (#44).
   const totalAmount = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+    ? applyPercent(asTetri(subtotal), discountPercent)
+    : asTetri(subtotal)
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
     const order = await tx.wineOrder.create({
