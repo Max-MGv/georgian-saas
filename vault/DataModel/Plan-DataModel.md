@@ -4,9 +4,12 @@ tags: [plan, schema, data-model, orders, money]
 
 # Plan: Transactional data model fixes
 
-**Status:** 🚧 **Chunk 0 complete 2026-09-18.** Next: Chunk 1 (timestamps). No schema or
-application code has changed yet — Chunk 0 was verification plus a push of work that
-already existed.
+**Status:** 🚧 **Chunks 0–3 complete 2026-09-18** (Features 192, 193, 194). Money is
+integer tetri, proven end to end against the real Flitt gateway. **Next: Chunk 4** — the
+price snapshot, which fixes the live `recalcOrderTotal` repricing bug.
+
+Everything is on `staging`. **Production is untouched** and internally consistent on the
+pre-chunk-5 schema; nothing in this plan has gone near `master`.
 **Prerequisite reading:** [[Dependencies]] — do not start Chunk 3 without it.
 **Depends on:** `vault/Plan-StatusModel.md` chunk 5 (the `stage` enums + milestone dates).
 
@@ -30,13 +33,19 @@ Four things underneath it did not.
 
 ## The window, and why sequencing matters
 
-Max confirmed on 2026-09-18 that a **complete wipe of orders, wine orders, line items,
-payments and companies is acceptable on both dev and production** — all of it is fake.
+Max confirmed on 2026-09-18 that wiping the transactional data is acceptable on both dev
+and production — all of it is fake.
 
-That is what makes Chunk 3 (money) affordable. With a wipe there is no backfill, no
-dual-write, no migration of historical amounts. **Do the destructive schema work while
-that is true.** Once a real customer booking exists, the same change costs an order of
-magnitude more.
+**Scope as actually executed:** `Payment`, `OrderExtra`, `OrderMasterclass`,
+`WineOrderItem`, `Order`, `WineOrder`. **`Company` was deliberately spared**, because
+deleting it cascades to `Price`, `CompanyGuide` and `CompanyRepresentative`, and price
+tiers are tenant configuration rather than disposable test data ([[Dependencies]]
+finding 1).
+
+⚠️ **"With a wipe there is no backfill" was wrong**, and the correction matters: because
+`Company` survives, so do 30 `Price` rows, 17 `WineVintage` and 9 `MasterclassItem` — real
+money that had to be **converted**, not dropped. That is why Chunk 3's migration is
+hand-written.
 
 Chunks are **strictly sequential.** Each has a resume point so a fresh session can pick
 up mid-flight.
