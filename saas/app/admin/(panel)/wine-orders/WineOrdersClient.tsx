@@ -42,7 +42,10 @@ type StatusStyle = { border: string; pill: string; pillText: string; labelKey: s
  * an order yet, and it lives on /admin/abandoned instead.
  */
 const STATUS_COLOR: Record<string, StatusStyle> = {
-  NEW:       { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', labelKey: 'wineOrders.status.pending' },
+  // Same key as bookings: one enum value, one label. These read 'Pending' and
+  // 'New' for the same NEW stage until 2026-09-18 — a leftover from the
+  // pre-Feature-191 wine vocabulary, where 'pending' really was the value.
+  NEW:       { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', labelKey: 'orders.status.new' },
   CONFIRMED: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', labelKey: 'orders.status.confirmed' },
   DELIVERED: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', labelKey: 'wineOrders.status.delivered' },
   CANCELLED: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', labelKey: 'orders.status.cancelled' },

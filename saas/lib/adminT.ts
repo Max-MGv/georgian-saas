@@ -326,7 +326,6 @@ const en: Translations = {
   'orders.status.new': 'New',
   'orders.status.confirmed': 'Confirmed',
   'orders.status.invoiceSent': 'Invoice Sent',
-  'orders.status.pendingPayment': 'Awaiting Payment',
 
   // Incomplete orders (Feature 191). Someone who was sent to the card page and
   // never came back, or whose card was refused - the two are the same thing to
@@ -652,7 +651,6 @@ const en: Translations = {
   'companies.wineOrdersTab.noContact': 'No contact info set. Click Edit to add.',
 
   // Wine Orders — list/table/cards
-  'wineOrders.status.pending': 'Pending',
   'wineOrders.status.delivered': 'Delivered',
   'wineOrders.status.unpaid': 'Unpaid',
   'wineOrders.payment.markPaid': 'Mark as paid',
@@ -1534,7 +1532,6 @@ const ka: Translations = {
   'orders.status.new': 'ახალი',
   'orders.status.confirmed': 'დადასტურებული',
   'orders.status.invoiceSent': 'ინვოისი გაგზავნილია',
-  'orders.status.pendingPayment': 'გადახდის მოლოდინში',
 
   // Incomplete orders (Feature 191).
   'abandoned.pageTitle': 'დაუსრულებელი შეკვეთები',
@@ -1860,7 +1857,6 @@ const ka: Translations = {
   'companies.wineOrdersTab.noContact': 'საკონტაქტო ინფორმაცია არ არის მითითებული. დააჭირეთ რედაქტირებას დასამატებლად.',
 
   // Wine Orders — list/table/cards
-  'wineOrders.status.pending': 'მოლოდინში',
   'wineOrders.status.delivered': 'მიწოდებული',
   'wineOrders.status.unpaid': 'გადაუხდელი',
   'wineOrders.payment.markPaid': 'გადახდილად მონიშვნა',
