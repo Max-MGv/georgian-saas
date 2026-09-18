@@ -176,6 +176,17 @@ function findTier(tiers: TierSpec[], guestCount: number): TierSpec | undefined {
     ?? tiers.reduce((best, t) => (t.pricePerPerson > best.pricePerPerson ? t : best))
 }
 
+/**
+ * The order total, in TETRI.
+ *
+ * The tier literals at the top of this file are written in GEL, because that is
+ * what a human reading them expects. `masterclassAmt` arrives in tetri, read
+ * back from the database. **Mixing the two is a bug that shipped once already**
+ * (2026-09-18): tier rates went in as GEL while masterclass amounts were tetri,
+ * so a seeded booking came out as roughly 1/100 of its intended total with a
+ * masterclass line added on at full size. Every tier value is converted here,
+ * at the one place they are read for arithmetic.
+ */
 function computeTotal(opts: {
   tiers: TierSpec[]; visitType: VisitType; guestCount: number
   tastingGuests: number; lunchGuests: number; masterclassAmt: number
@@ -185,16 +196,16 @@ function computeTotal(opts: {
   if (paying > 0) {
     const tier = findTier(tiers, paying)
     if (!tier) return null
-    return tastingGuests * tier.pricePerPerson
-      + lunchGuests * (tier.pricePerPerson + tier.tastingLunchPricePerPerson)
-      + (tier.registrationPrice ?? 0) + masterclassAmt
+    return tastingGuests * fromMajor(tier.pricePerPerson)
+      + lunchGuests * fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson)
+      + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
   }
   const tier = findTier(tiers, guestCount)
   if (!tier) return null
-  const rate = visitType === 'TASTING_LUNCH'
+  const rateMajor = visitType === 'TASTING_LUNCH'
     ? tier.pricePerPerson + tier.tastingLunchPricePerPerson
     : tier.pricePerPerson
-  return guestCount * rate + (tier.registrationPrice ?? 0) + masterclassAmt
+  return guestCount * fromMajor(rateMajor) + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
 }
 
 // ---------------------------------------------------------------------------

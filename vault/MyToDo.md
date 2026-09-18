@@ -8,30 +8,83 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## ⚠️ 2026-09-18 — DECIDE FIRST: how should statuses be stored?
+## ✅ 2026-09-18 (later) — DECIDED, BUILT AND **LIVE ON PRODUCTION**
 
-Before you look at anything below, there is a decision I took for you that I
-should not have. You asked why each order type doesn't get its own pair of status
-tables. I gave you reasons against it and then just built the other thing. You
-were still weighing it.
+The decision below is closed and the whole data-model overhaul shipped. Read this
+instead of the section that follows — that one was written before any of it was
+pushed and still says "nothing is pushed".
 
-Nothing is pushed, so switching is cheap. Three options:
+**You chose C** (one stage enum + dates) after we checked how the rest of the
+industry does it: no major platform lets code branch on a status *table*. Shopify,
+Medusa and Saleor all ship fixed enums. Magento is the only one with a status
+table, and its *states* stay fixed in code.
 
-- **A — four tables** (process + financial, per order type). What you described.
-  Catch: the financial half is what made "marking an invoiced order paid" erase
-  the invoice record, so that bug comes back unless invoicing stays a date anyway.
-- **B — two process tables** (one per order type) **+ money as dates.** Your
-  "stop making them share" instinct kept; the payment bug stays fixed. A winery
-  can add its own step (e.g. "Packed") without me shipping code.
-- **C — two enums + dates.** What is built. Simplest, but a new status means a
-  migration and a deploy.
-
-**The only real difference:** can a winery invent its own fulfilment step without
-a developer? Tables yes, enums no. Everything else is identical in all three.
+**You also decided we are not doing status/display tables for now.** Not
+"deferred pending a decision" — not planned. If it ever comes back, build the
+table together with its editing screen, never a table nothing writes.
 
 ---
 
-## 🍷 2026-09-18 — the status model got simpler; please look at it on staging (pending the decision above)
+### What shipped — seven things
+
+| | |
+|---|---|
+| **Money is now whole tetri, not decimals** | A price can no longer drift by a tetri when things are added up. Everything reads the same on screen as before. |
+| **Cancelled bookings stopped counting as revenue** | Statistics was counting them; your Orders page never did. On the test data that was **₾15,017 inside a reported ₾208,202 — a 7.2% overstatement.** |
+| **A booking's prices are frozen when it's made** | Change a company's rates today and last month's booking keeps what you agreed. Before, adding a ₾20 extra to an old booking silently re-priced the whole thing at today's rates. |
+| **Orders remember what happened to them** | Who cancelled it, who marked it paid, who took that back. Un-paying an order used to leave no trace at all. |
+| **Every payment is recorded, not just card ones** | Cash, transfer, or you marking it paid by hand — all get a row now. Only Flitt payments did before. |
+| **Timestamps everywhere** | "When was this ₾40 extra added?" is answerable now. Four tables had no dates at all. |
+| **"New" means New on both order types** | Wine orders said "Pending" where bookings said "New" for the same thing. |
+
+---
+
+### 🔴 Two things to do on production
+
+1. **Reseed the demo.** The migration wiped all orders, including
+   `demo.vineworks.ge`'s seeded ones. The public pages are fine — I checked the
+   prices — but its **admin Orders and Statistics are probably empty**, and that
+   is what you show prospects. Super-admin → **Reset Demo** card.
+2. **Your own Orders screen is empty.** Expected — the wipe you approved. Not a
+   fault.
+
+---
+
+### What I'd like you to check
+
+**Prices, everywhere.** This is the one that would cost real money if wrong, so
+it deserves a proper look rather than a glance:
+
+- Public site → the booking form total. I verified **₾50 / ₾110 per person** and
+  **₾50 × 4 = ₾200** on `nikalasmarani.vineworks.ge`, but look at the pages I
+  didn't: **wine catalogue**, **a printed invoice**, and a **confirmation email**.
+- If any price ever shows up **100× too big or 100× too small**, stop and tell me
+  immediately — that is the exact failure this change could have had, and it
+  would mean something was missed.
+
+**Add an extra to a booking.** The total should go up by exactly that amount and
+nothing else should move.
+
+**Mark something paid, then un-mark it.** Both should now be recorded rather than
+silently forgotten.
+
+---
+
+### Still open, so you know
+
+- **The demo's seeded orders** — see above.
+- **Two of the four payment regression tests can't run.** They need companies
+  called `Test Company # 1` and `Wine Test Company` with access codes, and a demo
+  reset replaced those fixtures at some point. **This predates today's work** and
+  is a hole in your test coverage regardless.
+- **`test-rls` reports 3 failures when there are no orders.** It is a false alarm
+  — the checks assert "at least one order exists". Proven by adding two orders
+  (21/21) and removing them. Logged as KnownBug #41. Worth fixing, because it
+  looks exactly like a security failure.
+
+---
+
+## 🍷 2026-09-18 — the status model got simpler (SUPERSEDED — now live on production; kept for the testing steps, which still apply)
 
 You were right that we were over-complicating it. The two status *tables* are
 gone. An order now has **one stage** (New / Confirmed / Completed or Delivered /
