@@ -35,17 +35,12 @@ chunk 5. Display/label tables ("so it's comfy for us") are wanted **later**, as 
 presentation layer only — never something code branches on. See [[Research-OrderStatusPatterns]]
 for why that split is the industry norm.
 
-**Nothing from this plan has been built yet.** The two chunk-5 commits still sit
-unpushed on local `staging`:
+**Chunk 0 is complete; no schema or application code has changed yet.** The chunk-5
+commits are now pushed and live on staging — which also fixed a broken staging site
+nobody had noticed (it had been reading a dropped column since 2026-09-17).
 
-```
-staging...origin/staging [ahead 2]
-  3b6c77e  Mark the chunk 5 shape as contested, not decided
-  2db5277  Replace the two status axes with stage enums and milestone dates
-```
-
-`master` (production) is **37 commits behind** and still runs the old single-`status`
-design.
+`master` (production) is **38 commits behind** and still runs the old single-`status`
+design. It is internally consistent and stays that way until Max deliberately merges.
 
 **The window that makes this work cheap:** Max has confirmed a complete wipe of
 transactional data — orders, wine orders, line items, payments and companies — is

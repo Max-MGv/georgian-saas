@@ -121,17 +121,19 @@ real cross-tenant read.
 
 ---
 
-## Environment risk, before anything starts
+## ✅ Environment risk — resolved 2026-09-18 (Chunk 0)
 
-`Plan-StatusModel.md` records the **dev database** as already migrated to the chunk-5
-schema, while the **staging site** still runs pre-chunk-5 code (the two commits are
-unpushed — `staging...origin/staging [ahead 2]`).
+**The suspicion was correct.** The dev DB had been migrated to chunk 5 on 2026-09-17
+while the staging site still ran pre-chunk-5 code, so `staging.vineworks.ge` had been
+broken for a day — reading `Order.status`, a column that no longer existed. Nobody had
+looked.
 
-If both are true, **`staging.vineworks.ge` is broken right now** — its code reads a column
-that no longer exists. Nobody has reported it, which suggests nobody has looked.
+Fixed by pushing the two commits (`5b68eec..70abd94`). Orders, Wine Orders and
+`/admin/abandoned` all verified rendering in a browser afterwards. Full detail and the
+environment map in [[Plan-DataModel]] Chunk 0.
 
-This is Chunk 0 and it must be resolved before any new migration lands on dev, or the
-next session will be debugging two schema mismatches at once instead of one.
+**Production is untouched and internally consistent** — pre-chunk-5 schema, pre-chunk-5
+code. It stays that way until Max deliberately merges `staging` → `master`.
 
 ---
 

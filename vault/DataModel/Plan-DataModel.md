@@ -4,7 +4,9 @@ tags: [plan, schema, data-model, orders, money]
 
 # Plan: Transactional data model fixes
 
-**Status:** 📋 Written 2026-09-18, **nothing built.** Awaiting Max's go on Chunk 0.
+**Status:** 🚧 **Chunk 0 complete 2026-09-18.** Next: Chunk 1 (timestamps). No schema or
+application code has changed yet — Chunk 0 was verification plus a push of work that
+already existed.
 **Prerequisite reading:** [[Dependencies]] — do not start Chunk 3 without it.
 **Depends on:** `vault/Plan-StatusModel.md` chunk 5 (the `stage` enums + milestone dates).
 
@@ -41,29 +43,62 @@ up mid-flight.
 
 ---
 
-## Chunk 0 — Baseline and unblock ⬜ not started
+## Chunk 0 — Baseline and unblock ✅ complete 2026-09-18
 
-**Purpose:** find out what state the environments are actually in before changing
-anything. There is a suspected inconsistency.
+**The suspicion was correct.** Dev was migrated; staging was running pre-chunk-5 code
+against it. Pushing the commits was the fix.
 
-**The suspicion:** `Plan-StatusModel.md` records the **dev database** as already migrated
-to the chunk-5 schema (old `status` column dropped), while the **staging site** is still
-running the pre-chunk-5 code that reads that column — because the two commits were never
-pushed. If both are true, `staging.vineworks.ge` is broken right now and nobody has
-noticed.
+### What was found
 
-**Steps:**
-1. Load `staging.vineworks.ge` and open the Orders screen. Does it render or error?
-2. Confirm against the dev DB which columns actually exist on `Order` / `WineOrder`.
-3. If staging is broken: push the two commits to `staging` — that is the fix, not a
-   new change.
-4. Record the true state of dev / staging / prod schemas in this file before moving on.
-5. Re-confirm with Max that the wipe is still authorised **on the day it runs** (the
-   original confirmation was 2026-09-17).
+**Dev database** — `npx prisma migrate status`: all 16 migrations applied, through
+`20260917120000_status_stages_and_dates`. Column-level check against
+`information_schema`:
 
-**Do not start Chunk 1 until the environment map here is written down.**
+| Confirmed | Detail |
+|---|---|
+| `Order.status`, `WineOrder.status` | **Dropped.** Only `stage` remains. |
+| `ProcessStatus` / `FinancialStatus` / `StatusScope` | **All dropped.** |
+| `Payment.status` | Still present — correct, that is the provider's verbatim string. |
+| `Order` / `WineOrder` / `Payment` | **No `updatedAt`.** |
+| `Price`, `OrderExtra` | **Zero timestamp columns of any kind.** Chunk 1's gap, confirmed empirically rather than inferred. |
+| `OrderEvent` | Does not exist. |
 
-**Resume point:** _(none — not started)_
+**So before the push, staging was reading a column that no longer existed.** It had been
+broken since the dev migration ran on 2026-09-17 and nobody had looked.
+
+### What was done
+
+Pushed `staging` → `origin/staging` (`5b68eec..70abd94`) — the two chunk-5 commits plus
+one new vault commit. **No code changed**, and nothing went near `master`.
+
+### Verification after deploy
+
+Driven in a browser, logged in as the dev-project tenant admin:
+
+- **`/admin/orders`** — renders. Stage badges (`New`, `Confirmed`) correct, revenue strip
+  intact, 42 upcoming bookings, all four view toggles present.
+- **`/admin/wine-orders`** — renders. Flow-line, stage filter pills, prices.
+- **`/admin/abandoned`** — renders. 39 bookings / 2 wine orders, with "They paid" and
+  "Restore without payment" actions.
+
+### Environment map, true as of 2026-09-18
+
+| | Schema | Code |
+|---|---|---|
+| Dev DB | chunk 5 | — |
+| `staging.vineworks.ge` | (reads dev DB) | chunk 5 ✅ **fixed by this chunk** |
+| Production | **pre-chunk-5** | **pre-chunk-5** — `master` is 38 commits behind |
+
+Production is internally consistent and untouched. It stays that way until Max
+deliberately merges `staging` → `master` per Rule 0.
+
+### Minor find, not blocking
+
+The wine-order filter pill reads **"Pending"** while the booking stage badge reads
+**"New"** — same underlying `NEW` enum value, two different display labels. Cosmetic, and
+exactly the kind of inconsistency Chunk 7's display table would centralise.
+
+**Resume point:** complete. Chunk 1 may start.
 
 ---
 
@@ -83,13 +118,24 @@ the risky chunk rides on it.
 - `OrderExtra`
 - `OrderMasterclass`
 - `WineOrderItem`
-- `Price`
+- `Price` — **and `updatedAt` too.** Max, 2026-09-18: *"yes, both, because why not."*
+  Pricing is edited in place by `app/actions/prices.ts`, so without `updatedAt` there is
+  no record of when rates changed.
 
-**Why now and not later:** these cannot be obtained retroactively. Every day without
+**Add `invoiceSentAt DateTime?` to `WineOrder`** — Max's call, 2026-09-18. Closes the
+asymmetry with `Order`, which already has it. Note the original reasoning in
+`schema.prisma` for leaving it out ("a column nothing writes is worse than an absent one")
+— so either the wine-order invoice-send flow gets built, or this column is knowingly
+inert until it does. **Flag it in the schema comment as intentionally unwritten for now.**
+
+**Add `onDelete: Cascade` to `Payment.order` and `Payment.wineOrder`** — Max, 2026-09-18,
+accepting finding 2 in [[Dependencies]]. Today both default to `SetNull`, so deleting an
+order leaves an orphaned payment row with null foreign keys, carrying a real amount and
+invisible to every screen. Doing it here means Chunk 3's wipe is safe by construction
+rather than by remembering to delete payments first.
+
+**Why now and not later:** timestamps cannot be obtained retroactively. Every day without
 them is history that does not exist. They are one line each.
-
-**Watch for:** `Price` is edited in place by `app/actions/prices.ts`; adding `updatedAt`
-there too is worth considering, but `createdAt` is the one that unblocks Chunk 4.
 
 **Verification:** `prisma migrate dev` against dev (Rule 10 — stop the dev server first),
 confirm `✔ Generated Prisma Client`, then create a booking and an extra through the UI
@@ -289,16 +335,22 @@ table would touch.
 
 ---
 
-## Open questions for Max
+## Questions — all answered 2026-09-18
 
-1. **`OrderExtra.label` — ad-hoc or recurring?** The original plan was to check this
-   against real data. **That check is impossible:** all current data is fake, and the
-   wipe removes it anyway. So this has to be answered by asking Nikalas Marani what they
-   actually type in there. If it is five recurring strings it wants a dimension table; if
-   it is genuinely free-text, leave it alone.
-2. **Does `Price` want `updatedAt` as well as `createdAt`?** (Chunk 1.) Pricing is edited
-   in place, so without it there is no record of when rates changed — but Chunk 4's
-   snapshot makes that less load-bearing than it sounds.
-3. **`WineOrder` has no `invoiceSentAt`** while `Order` does. Deliberate today (no wine
-   invoice flow exists). Confirm that is still right, or fold it into Chunk 1 as one
-   additive column.
+1. ~~**`OrderExtra.label` — ad-hoc or recurring?**~~ **Accepted as unanswerable from
+   data.** All current data is fake and the wipe removes it. Carried forward as a
+   question for Nikalas Marani: what do they actually type in there? Five recurring
+   strings → it wants a dimension table. Genuinely free-text → leave it alone. **Not a
+   blocker for any chunk.**
+2. ~~**Does `Price` want `updatedAt` as well as `createdAt`?**~~ **Both.** → Chunk 1.
+3. ~~**Should `WineOrder` get `invoiceSentAt`?**~~ **Yes, add it.** → Chunk 1.
+
+### Wipe scope — settled, but re-confirm on the day
+
+Max accepted finding 1 in [[Dependencies]]. **The wipe covers `Payment`, `OrderExtra`,
+`OrderMasterclass`, `WineOrderItem`, `Order` and `WineOrder`. `Company` is left alone**,
+because deleting it cascades to `Price`, `CompanyGuide` and `CompanyRepresentative` — and
+price tiers are tenant configuration, not fake transactional data.
+
+**Still re-confirm with Max on the day Chunk 3's migration actually runs.** It is
+destructive and the authorisation is now over a day old.
