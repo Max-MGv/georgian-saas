@@ -41,10 +41,13 @@ table together with its editing screen, never a table nothing writes.
 
 ### 🔴 Two things to do on production
 
-1. **Reseed the demo.** The migration wiped all orders, including
-   `demo.vineworks.ge`'s seeded ones. The public pages are fine — I checked the
-   prices — but its **admin Orders and Statistics are probably empty**, and that
-   is what you show prospects. Super-admin → **Reset Demo** card.
+1. **Reseed the demo — again, now that the fix is live.** The migration wiped all
+   orders including `demo.vineworks.ge`'s. Your first Reset Demo press rebuilt
+   them **at 1/100 of their real totals** — a bug I introduced in the tetri
+   conversion and missed (KnownBugs #42). Fixed and deployed to production
+   (`7c905e6`). **Press Reset Demo once more** and the figures will be right:
+   expect roughly 390 bookings averaging ₾580, and 45 wine orders. If the
+   numbers still look tiny, tell me.
 2. **Your own Orders screen is empty.** Expected — the wipe you approved. Not a
    fault.
 
