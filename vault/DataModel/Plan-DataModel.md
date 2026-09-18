@@ -4,10 +4,12 @@ tags: [plan, schema, data-model, orders, money]
 
 # Plan: Transactional data model fixes
 
-**Status:** 🚧 **Chunks 0–5 complete 2026-09-18** (Features 192–196). Money is integer
+**Status:** 🚧 **Chunks 0–6 complete 2026-09-18** (Features 192–197). Money is integer
 tetri, proven end to end against the real Flitt gateway; an order's rates are frozen so a
-later edit cannot reprice it; and orders now carry an append-only history.
-**Next: Chunk 6** — `Payment` as a ledger.
+later edit cannot reprice it; orders carry an append-only history; and every payment is a
+ledger row whatever channel it arrived through.
+
+**Chunk 7 needs a decision from Max before it starts — see its section.**
 
 Everything is on `staging`. **Production is untouched** and internally consistent on the
 pre-chunk-5 schema; nothing in this plan has gone near `master`.
@@ -630,7 +632,7 @@ Alongside: `test-money` 47/47, `test-order-repricing` 6/6, `test-order-status` g
 
 ---
 
-## Chunk 6 — `Payment` becomes a ledger ⬜ not started
+## Chunk 6 — `Payment` becomes a ledger ✅ built on dev 2026-09-18
 
 **Purpose:** close the two-sources-of-truth split. Today `Payment` is a **Flitt attempt
 log** — only card payments ever create a row. A manual "mark as paid" writes
@@ -644,13 +646,48 @@ says so.
 manual ones — writes a row; `paidAt` becomes a cached convenience derived from the ledger.
 
 **Also closes** the un-pay audit hole listed as "Still open, deliberately" in
-`Plan-StatusModel.md`, if Chunk 5 lands first.
+`Plan-StatusModel.md` — chunk 5 landed first, so both halves of that trail now exist.
 
-**Resume point:** _(none — not started)_
+### What was built
+
+`method` (`CARD | BANK_TRANSFER | CASH | MANUAL`) and `reversedAt` on `Payment`, plus
+`lib/payments/manualPayment.ts`. Wired into both status actions, so marking an order paid
+by hand writes a real row.
+
+`method` defaults to **CARD** because every row that existed before was a Flitt attempt.
+Hand-recorded payments land as **MANUAL** rather than being guessed at — the admin is not
+asked how the money arrived, so `BANK_TRANSFER` and `CASH` exist for when a picker is
+added rather than putting a fact in the ledger nobody asserted.
+
+### Two rules carry it, both easy to get subtly wrong
+
+1. **No double counting.** An order the gateway already settled gains no second, manual
+   row when an admin toggles paid off and on. Guarded by checking for an existing settled,
+   unreversed payment first.
+2. **A real card payment is never marked reversed.** That money is with the gateway;
+   saying otherwise would misstate reality. Un-paying a gateway-paid order is an admin
+   override, and chunk 5's `OrderEvent` is what records it.
+
+**Reversal, not deletion** — a ledger that can lose rows is not a ledger.
+
+**`paidAt` stays** as the cached current state: read on every board render, every filter,
+and enforced by a DB constraint against `abandonedAt`. The ledger sits beside it in
+agreement. Making `paidAt` a derived query would put a join on the hot path for no gain.
+
+### Verification
+
+`scripts/test-payment-ledger.ts` — **16/16**, covering both rules above plus a
+**reconciliation check**: collected revenue from the ledger agreeing with the orders' own
+totals, which was impossible before.
+
+`test-money` 47/47 · `test-order-repricing` 6/6 · `test-order-events` 12/12 · `test-rls`
+21/21 · `next build` passes · `tsc --noEmit` 0 errors.
+
+**Resume point:** complete on dev, pushed to `staging`.
 
 ---
 
-## Chunk 7 — Display/label tables ⬜ not started, low priority
+## Chunk 7 — Display/label tables 🛑 NEEDS A DECISION FROM MAX
 
 **Purpose:** what Max asked for on 2026-09-18 — *"we can add tables just for display, so
 it's comfy for us."*
@@ -670,7 +707,35 @@ gone.
 **Touches roughly one file** (the display layer) versus the ten that a dynamic status
 table would touch.
 
-**Resume point:** _(none — not started)_
+### 🛑 The decision, 2026-09-18
+
+The cheap part of this chunk was done separately and is already shipped: wine orders
+rendered `NEW` as **"Pending"** while bookings rendered the same enum value as **"New"**,
+and two keys Feature 191 orphaned were still in the dictionaries. Fixed in constants;
+i18n parity 1077/1077.
+
+What remains is the table itself, and it carries a real trade-off:
+
+| | |
+|---|---|
+| **Gains** | A winery can rename "Completed" to "Visit finished", translate it, recolour it and reorder the board **without a deploy**. Labels leave frontend constants. |
+| **Costs** | A per-request lookup on the hot path — the orders list, board and calendar all render labels. `Perf-Baseline-2026-07-29.md` is the record of what hot-path latency costs here. |
+| **Risk** | Without an admin UI it is **a table nothing writes**, which this project has explicitly called out as worse than an absent one (see `WineOrder.invoiceSentAt`). The whole status debate ended by deleting machinery nobody used. |
+
+**Three live options:**
+
+- **A — build it now**, seeded with platform defaults so it is read on every render and
+  is not dead. Accepts the hot-path query; the editing UI follows later.
+- **B — build it with the admin UI in one go.** No dead machinery, larger piece of work.
+- **C — defer.** The visible inconsistency is already fixed. Build it when a winery
+  actually asks to rename something.
+
+**Recommendation: C**, then B when a real request appears. The argument that settled the
+status question — nobody has ever asked for this, and nothing wrote the tables that
+existed — applies here too, and the thing that was actually bothering anyone is fixed.
+But Max asked for display tables explicitly, so this is his call, not an inference.
+
+**Resume point:** blocked on that decision.
 
 ---
 
