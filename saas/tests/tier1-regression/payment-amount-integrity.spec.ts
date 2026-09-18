@@ -79,6 +79,37 @@ async function deleteTestOrderOnAdminPage(page: Page, marker: string) {
   }
 }
 
+/**
+ * The Incomplete screen's row for a given marker.
+ *
+ * Since Feature 191 (2026-09-18) an order that reaches the card gateway is
+ * stamped `abandonedAt` and leaves `/admin/orders` entirely — it lives here
+ * until someone brings it back. This spec predates that change and was still
+ * looking for the order in the main table, which is why it broke; the money
+ * assertion it exists for is unaffected and simply moved screens.
+ *
+ * Rows are divs, not table rows, so the row is found as the innermost div that
+ * holds both the marker and its own restore button.
+ */
+function abandonedRow(page: Page, marker: string) {
+  return page
+    .locator('div')
+    .filter({ hasText: marker })
+    .filter({ has: page.getByRole('button', { name: 'Restore without payment' }) })
+    .last()
+}
+
+/** Bring an incomplete order back, then delete it from the main table. */
+async function restoreAndDeleteAbandoned(page: Page, marker: string) {
+  await page.goto('/admin/abandoned')
+  const row = abandonedRow(page, marker)
+  if (await row.count() > 0) {
+    await row.getByRole('button', { name: 'Restore without payment' }).click()
+    await expect(abandonedRow(page, marker)).toHaveCount(0, { timeout: 15_000 })
+  }
+  await deleteTestOrderOnAdminPage(page, marker)
+}
+
 async function cancelWineOrderOnAdminPage(page: Page, businessName: string) {
   await page.goto('/admin/wine-orders');
   await page.locator('table, [class*="grid"]').first().waitFor({ timeout: 15_000 }).catch(() => {});
@@ -165,14 +196,26 @@ test.describe('Individual booking — payment on/off carries the correct amount 
       ]);
       // formPageOn is now abandoned on the real gateway — never touched again.
 
-      await page.goto('/admin/orders');
-      const rowOn = page.locator('tr', { hasText: emailOn });
+      // Being sent to the gateway marks the order incomplete, so it is on the
+      // Incomplete screen rather than in the orders table (Feature 191).
+      await page.goto('/admin/abandoned');
+      const rowOn = abandonedRow(page, emailOn);
       await expect(rowOn).toBeVisible({ timeout: 15_000 });
       // expect: the order the server actually priced and sent to Flitt shows
-      // the exact same amount that was quoted to the guest.
-      await expect(rowOn).toContainText(`${expectedTotalOn}₾`);
-      await expect(rowOn.getByRole('button', { name: /Awaiting Payment/ })).toBeVisible();
-      await deleteTestOrderOnAdminPage(page, emailOn);
+      // the exact same amount that was quoted to the guest. This is the whole
+      // point of the spec and it survives the screen move unchanged.
+      //
+      // Whitespace is stripped before comparing because this screen renders
+      // money with a space before the symbol ("480 ₾") while the orders table
+      // does not ("480₾") — both come from formatTetri, which takes the
+      // separator as an option. The assertion is about the amount, not the
+      // spacing, so it should not care which screen it is reading.
+      const rowOnText = (await rowOn.textContent()) ?? '';
+      expect(rowOnText.replace(/\s+/g, '')).toContain(`${expectedTotalOn}₾`);
+      // expect: and it is NOT sitting in the orders table pretending to be live.
+      await page.goto('/admin/orders');
+      await expect(page.locator('tr', { hasText: emailOn })).toHaveCount(0);
+      await restoreAndDeleteAbandoned(page, emailOn);
       await formPageOn.close();
 
       // ── OFF ───────────────────────────────────────────────────────────────
@@ -195,7 +238,12 @@ test.describe('Individual booking — payment on/off carries the correct amount 
       // payment is collected, never what the order is priced at) — it just
       // never reaches a Payment/checkout row.
       await expect(rowOff).toContainText(`${expectedTotalOff}₾`);
-      await expect(rowOff.getByRole('button', { name: /Awaiting Payment/ })).toHaveCount(0);
+      // expect: a reservation-only booking never went to the gateway, so it is
+      // a live order and nothing about it is incomplete. (The old assertion
+      // here looked for an "Awaiting Payment" control, which Feature 191
+      // removed entirely — it passed vacuously rather than checking anything.)
+      await page.goto('/admin/abandoned');
+      await expect(page.getByText(emailOff)).toHaveCount(0);
       await deleteTestOrderOnAdminPage(page, emailOff);
     } finally {
       await setPaymentSectionToggle(page, 'Individual bookings', original);
