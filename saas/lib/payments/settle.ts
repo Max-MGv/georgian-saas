@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
@@ -107,6 +108,18 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     })
 
     if (!approved) {
+      // A refusal is real history. The Payment row keeps the gateway's verbatim
+      // status; this puts the same fact on the order's own timeline, where
+      // anyone looking at the order will actually see it.
+      await recordOrderEvent(tx, {
+        tenantId,
+        orderId: payment.orderId,
+        wineOrderId: payment.wineOrderId,
+        type: 'PAYMENT_DECLINED',
+        actorType: 'GATEWAY',
+        payload: { provider: payment.provider, status: orderStatus || 'unknown', amount: payment.amount },
+      })
+
       // A declined card needs nothing written onto the order any more. It was
       // already marked incomplete when the guest was sent to the gateway, and
       // since Feature 191 a refusal and a closed tab are the same fact to the
@@ -124,6 +137,15 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // (`*_abandoned_is_unpaid`), so a paid write that forgot it would fail
     // loudly rather than leave a paid order filed under abandoned.
     const paidColumns = { paidAt: settledAt, abandonedAt: null }
+
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId: payment.orderId,
+      wineOrderId: payment.wineOrderId,
+      type: 'PAID',
+      actorType: 'GATEWAY',
+      payload: { provider: payment.provider, providerPaymentId, amount: payment.amount },
+    })
 
     // Guarded on stage rather than blindly set: an order a human already moved
     // on — completed it, or cancelled it — must not have its fulfilment dragged

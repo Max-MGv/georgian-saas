@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { recordOrderEvent } from '@/lib/orderEvents'
 import { asTetri } from '@/lib/money'
 import { BookingType, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
@@ -326,7 +327,8 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       totalPrice = masterclassAmt
     }
 
-    const createdOrder = await withTenantDb(tenantId, tx => tx.order.create({
+    const createdOrder = await withTenantDb(tenantId, async tx => {
+      const created = await tx.order.create({
       data: {
         bookingType: data.bookingType as BookingType,
         visitType: data.visitType as VisitType,
@@ -365,7 +367,19 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           })),
         } : undefined,
       },
-    }))
+    })
+      // The first row of the order's timeline. GUEST, because a booking form
+      // submission has no admin behind it (chunk 5).
+      await recordOrderEvent(tx, {
+        tenantId,
+        orderId: created.id,
+        type: 'CREATED',
+        actorType: 'GUEST',
+        toStage: created.stage,
+        payload: { totalPrice: created.totalPrice, bookingType: created.bookingType, guestCount },
+      })
+      return created
+    })
 
     // ── Online payment branch ──────────────────────────────────────────────
     // Only after the order safely exists. Every failure inside this block

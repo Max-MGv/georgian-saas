@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import type { Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
@@ -183,7 +184,7 @@ export async function createOrderAdmin(data: {
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (!data.date) return { error: 'Date is required.' }
@@ -275,6 +276,18 @@ export async function createOrderAdmin(data: {
           ? { create: data.extras.map(e => ({ label: e.label, amount: e.amount })) }
           : undefined,
       },
+    })
+    // First row of the timeline. ADMIN here, unlike the public form's GUEST —
+    // a walk-in entered by staff and a guest's own submission are different
+    // facts and the history should not blur them (chunk 5).
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId: order.id,
+      type: 'CREATED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      toStage: order.stage,
+      payload: { totalPrice: order.totalPrice, bookingType: order.bookingType, guestCount: data.guestCount },
     })
     return order.id
   })
@@ -554,7 +567,7 @@ export async function changeBookingStatus(
   orderId: string,
   change: BookingStatusChange
 ): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
   // Validated before anything is read or written. The root cause this whole
@@ -572,7 +585,8 @@ export async function changeBookingStatus(
     const result = await withTenantDb(tenantId, async tx => {
       const current = await tx.order.findFirst({
         where: { id: orderId, tenantId },
-        select: { confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
+        // `stage` is selected for the history row's fromStage, not for the patch.
+        select: { stage: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
       const now = new Date()
@@ -585,7 +599,21 @@ export async function changeBookingStatus(
             : change.kind === 'invoiceSent'
               ? invoiceSentPatch(change.value, dates, now)
               : { abandonedAt: null }
-      return tx.order.updateMany({ where: { id: orderId, tenantId }, data })
+      const updated = await tx.order.updateMany({ where: { id: orderId, tenantId }, data })
+      if (updated.count > 0) {
+        // Same transaction as the change, so history can never claim something
+        // that was rolled back (chunk 5).
+        await recordOrderEvent(tx, {
+          tenantId,
+          orderId,
+          type: eventTypeForChange(change),
+          actorType: 'ADMIN',
+          actorId: actor?.id ?? null,
+          fromStage: change.kind === 'stage' ? current.stage : null,
+          toStage: change.kind === 'stage' ? change.stage : null,
+        })
+      }
+      return updated
     })
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')

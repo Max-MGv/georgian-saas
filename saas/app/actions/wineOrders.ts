@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -26,7 +27,7 @@ export async function changeWineOrderStatus(
   id: string,
   change: WineOrderStatusChange
 ): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
   // A stage arrives from a dropdown and is a string at runtime however
@@ -43,7 +44,8 @@ export async function changeWineOrderStatus(
     const result = await withTenantDb(tenantId, async tx => {
       const current = await tx.wineOrder.findFirst({
         where: { id, tenantId },
-        select: { confirmedAt: true, deliveredAt: true, paidAt: true },
+        // `stage` is selected for the history row's fromStage, not for the patch.
+        select: { stage: true, confirmedAt: true, deliveredAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
       const now = new Date()
@@ -58,7 +60,19 @@ export async function changeWineOrderStatus(
           : change.kind === 'paid'
             ? paidPatch(change.value, dates, now)
             : { abandonedAt: null }
-      return tx.wineOrder.updateMany({ where: { id, tenantId }, data })
+      const updated = await tx.wineOrder.updateMany({ where: { id, tenantId }, data })
+      if (updated.count > 0) {
+        await recordOrderEvent(tx, {
+          tenantId,
+          wineOrderId: id,
+          type: eventTypeForChange(change),
+          actorType: 'ADMIN',
+          actorId: actor?.id ?? null,
+          fromStage: change.kind === 'stage' ? current.stage : null,
+          toStage: change.kind === 'stage' ? change.stage : null,
+        })
+      }
+      return updated
     })
     if (result.count === 0) return { error: 'Wine order not found.' }
     revalidatePath('/admin/wine-orders')

@@ -42,6 +42,11 @@ async function main() {
     // goes through the same GRANT + policy as everything else, because a table
     // that opts out of RLS is a table someone has to remember is special.
     'DemoEvent',
+    // Order history (chunk 5, 2026-09-18). Append-only by convention in the
+    // application, not by grant: UPDATE/DELETE are granted like every other
+    // table so that deleting an order can cascade its events away. Nothing in
+    // the app ever updates a row here.
+    'OrderEvent',
   ]
   for (const t of writableTables) {
     console.log(`  GRANT SELECT/INSERT/UPDATE/DELETE on "${t}"`)
@@ -65,6 +70,9 @@ async function main() {
     'Order', 'Company', 'Wine', 'WineVintage', 'WineOrder',
     'MenuItem', 'MasterclassItem', 'BlockedDate', 'SiteContent', 'Setting', 'Payment',
     'DemoEvent',
+    // Carries its own tenantId, so it takes the simplest of the three policy
+    // shapes rather than the JOIN-to-parent one Price and the line tables need.
+    'OrderEvent',
   ]
 
   for (const t of tenantedTables) {

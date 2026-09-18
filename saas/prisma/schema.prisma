@@ -212,6 +212,7 @@ model Order {
   masterclassLines        OrderMasterclass[]
   extras                  OrderExtra[]
   payments                Payment[]
+  orderEvents             OrderEvent[]
 
   // Every query here is tenant-scoped by RLS, and the admin list/calendar both
   // filter-and-order by date while the board and its filter pills group by
@@ -222,6 +223,70 @@ model Order {
   // Every order surface filters out abandoned rows, so this is on the hot path
   // of the list, board, calendar, counts and export alike.
   @@index([tenantId, abandonedAt])
+}
+
+/// One thing that happened to an order. Append-only: never updated, never deleted.
+///
+/// Added 2026-09-18 (chunk 5 of vault/DataModel/Plan-DataModel.md). Every mature
+/// commerce platform has this table — Saleor calls it `OrderEvent`, Magento
+/// `sales_order_status_history` — and this project did not. The concrete gap it
+/// closes was already logged as open in Plan-StatusModel.md: un-paying an order
+/// by hand left no trace at all, because a manual payment has no `Payment` row
+/// to survive as the record.
+///
+/// It does NOT replace the milestone columns. `paidAt` and friends stay as the
+/// current state, read on every board render; this is history, read when someone
+/// asks a question. Deriving state by replaying events would be event sourcing,
+/// which is genuinely over-complicated here.
+///
+/// Shape follows `Payment`: nullable `orderId`/`wineOrderId` with exactly one
+/// set, rather than a second polymorphic convention. Reusing a pattern already
+/// in the schema beats inventing one.
+model OrderEvent {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  /// Exactly one of these is set. Cascade, so history goes with the order it
+  /// describes — an event whose order no longer exists is unreadable anyway.
+  orderId     String?
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  wineOrderId String?
+  wineOrder   WineOrder?     @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  type        OrderEventType
+  actorType   ActorType
+  /// The Supabase user id for an ADMIN action. Null for GUEST/SYSTEM/GATEWAY,
+  /// which have no user behind them.
+  actorId     String?
+  /// Only meaningful on STAGE_CHANGED. Plain strings rather than the enums,
+  /// because a stage that is later renamed must not make old history invalid.
+  fromStage   String?
+  toStage     String?
+  /// Anything type-specific: an amount, an extra's label, a gateway status.
+  payload     Json?
+  occurredAt  DateTime       @default(now())
+
+  @@index([tenantId, orderId, occurredAt])
+  @@index([tenantId, wineOrderId, occurredAt])
+}
+
+enum OrderEventType {
+  CREATED
+  STAGE_CHANGED
+  PAID
+  UNPAID
+  INVOICE_SENT
+  INVOICE_UNSENT
+  RESTORED
+  ABANDONED
+  PAYMENT_DECLINED
+  EXTRA_ADDED
+  EXTRA_REMOVED
+}
+
+enum ActorType {
+  GUEST
+  ADMIN
+  SYSTEM
+  GATEWAY
 }
 
 model Price {
@@ -332,6 +397,7 @@ model WineOrder {
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
   payments        Payment[]
+  events          OrderEvent[]
 
   // Mirrors Order: the board groups by stage, and the list's date-range
   // filters run on createdAt (wine orders have no separate business date).
