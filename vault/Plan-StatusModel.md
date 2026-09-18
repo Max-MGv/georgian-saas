@@ -4,7 +4,30 @@ tags: [plan, orders, wine-orders, schema, data-model]
 
 # Plan: Status data model — process vs financial split
 
-**Status:** ✅ **Complete (2026-09-18).** Chunks 1–4 shipped the two-axis design; **chunk 5 replaced it** with two enums and milestone dates, on Max's call. Verified on the dev DB and driven in a browser. Not on prod — the prod migration is its own deliberate step (Rule 0).
+**Status:** 🚧 **Chunk 5 built, but its shape is contested — see the box below.** Chunks 1–4 shipped the two-axis design; chunk 5 replaced it with two enums and milestone dates. Built, verified on the dev DB, driven in a browser and committed to `staging` locally. **Not pushed. Not on prod.**
+
+> **⚠️ OPEN, NOT SETTLED (2026-09-18).** This document describes chunk 5 as decided.
+> It is not. Max picked "enums + dates" from a menu of options, then asked — as a
+> follow-up, with *"i want feedback on this too"* — why the two order types did not
+> each get their own pair of status tables (four in total). Claude **argued against
+> that and then built enums without checking whether the argument was accepted.**
+> Max's position on reading the result: *"that isn't what we discussed earlier in
+> the session, we said 2 status table per transactional table."*
+>
+> So the shape below is built, verified and committed, but the choice between it
+> and the four-table version is still Max's to make. Nothing is pushed. The three
+> live options:
+>
+> - **A** — four tables: process + financial, per order type (what Max described).
+> - **B** — two process tables, one per order type; money stays as dates.
+> - **C** — two enums, money as dates (what is built and described below).
+>
+> A and B both keep the per-type split Max asked for and both drop `appliesTo`.
+> The real difference from C is whether a winery can add its own fulfilment step
+> without a deploy. The difference between A and B is whether the payment ladder
+> comes back — and with it the bug where marking an invoiced order paid erases
+> the invoice record.
+
 
 > **Read the chunk 5 section before anything else in this document.** Chunks 1–4 describe a design that no longer exists: two status *reference tables* with an `appliesTo` discriminator, and a financial axis of `unpaid → invoiced → paid`. Both were deliberately retired. The reasoning below is kept because the arguments still hold — including the ones that turned out to point somewhere else.
 

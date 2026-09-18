@@ -4,7 +4,30 @@ tags: [feature, orders, wine-orders, schema, data-model]
 
 # Feature 191 — Order status: stage + milestone dates
 
-**Status: complete on dev and staging (2026-09-18). Not on prod.**
+**Status: built on dev and committed locally (2026-09-18). Not pushed, not on prod — and the chosen shape is contested.**
+
+> **⚠️ OPEN, NOT SETTLED (2026-09-18).** This document describes chunk 5 as decided.
+> It is not. Max picked "enums + dates" from a menu of options, then asked — as a
+> follow-up, with *"i want feedback on this too"* — why the two order types did not
+> each get their own pair of status tables (four in total). Claude **argued against
+> that and then built enums without checking whether the argument was accepted.**
+> Max's position on reading the result: *"that isn't what we discussed earlier in
+> the session, we said 2 status table per transactional table."*
+>
+> So the shape below is built, verified and committed, but the choice between it
+> and the four-table version is still Max's to make. Nothing is pushed. The three
+> live options:
+>
+> - **A** — four tables: process + financial, per order type (what Max described).
+> - **B** — two process tables, one per order type; money stays as dates.
+> - **C** — two enums, money as dates (what is built and described below).
+>
+> A and B both keep the per-type split Max asked for and both drop `appliesTo`.
+> The real difference from C is whether a winery can add its own fulfilment step
+> without a deploy. The difference between A and B is whether the payment ladder
+> comes back — and with it the bug where marking an invoiced order paid erases
+> the invoice record.
+
 
 > **The name is now half wrong, and kept for continuity.** This began as a
 > two-axis split (process status / financial status, as two reference tables)

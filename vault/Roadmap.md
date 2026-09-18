@@ -341,7 +341,7 @@ deep-linking into live proof.
 
 ---
 
-## v1.12 — Order Status: stage + milestone dates ✅
+## v1.12 — Order Status: stage + milestone dates 🚧
 
 Full tracking: `Plan-StatusModel.md` (the design, the arguments, and where the
 plan turned out to be wrong) · `Features/Feature 191 - Order Status Two Axis Split.md`.
@@ -356,9 +356,9 @@ a single linear status column cannot express "delivered but not yet paid".
 - [x] Chunk 3 — `lib/statusBridge.ts` dual-wrote old and new columns; `updateWineOrderStatus`'s unvalidated `status: string` (the audit's root cause) became a union, which immediately surfaced one bare-`string` caller as a compile error *(superseded by chunk 5)*
 - [x] Chunk 3.5 — `add_status_scope`: `appliesTo` scoped the vocabulary per order type *(superseded by chunk 5)*
 - [x] Chunk 4 — UI: the merged one-line flow, per-order dropdowns, a second AND-combined payment filter axis, boards regrouped onto the fulfilment axis with a paid marker
-- [x] **Chunk 5 — replaced the design rather than contracting it (2026-09-18).** Max: *"I feel like we are over-complicating this."* The two reference tables became two Postgres enums (`BookingStage`, `WineOrderStage`) and the financial axis became milestone dates (`invoiceSentAt`, `paidAt`). Payment limbo became one `abandonedAt` timestamp and its own screen. **Deleted: 3 columns, 2 tables, 2 enums, 4 modules. Added: 1 column, 2 enums, 2 modules.**
+- [~] **Chunk 5 — replaced the design rather than contracting it (2026-09-18). BUILT BUT CONTESTED — see `Plan-StatusModel.md`.** Max: *"I feel like we are over-complicating this."* He then asked why each order type did not get its own pair of status tables; Claude argued against it and built enums without confirming the argument landed. Max's reply on seeing the result: *"that isn't what we discussed earlier in the session, we said 2 status table per transactional table."* **The choice between four tables, two process tables, and two enums is still open.** The two reference tables became two Postgres enums (`BookingStage`, `WineOrderStage`) and the financial axis became milestone dates (`invoiceSentAt`, `paidAt`). Payment limbo became one `abandonedAt` timestamp and its own screen. **Deleted: 3 columns, 2 tables, 2 enums, 4 modules. Added: 1 column, 2 enums, 2 modules.**
 - [x] Verified on dev and driven in a browser; `test-rls.ts` 21/21; new `test-order-status.ts` 43/43; local production build clean (never run before this chunk)
-- [ ] **Not on prod.** The migration deletes all order data — disposable on both DBs per Max, but re-confirm before running it. Rule 0: its own deliberate step.
+- [ ] **Not pushed and not on prod**, pending the shape decision above. The migration also deletes all order data — disposable on both DBs per Max, but re-confirm before running it. Rule 0: its own deliberate step.
 
 **What chunk 5 changed about the plan's own reasoning** (full detail in `Plan-StatusModel.md`):
 

@@ -8,7 +8,30 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 🍷 2026-09-18 — the status model got simpler; please look at it on staging
+## ⚠️ 2026-09-18 — DECIDE FIRST: how should statuses be stored?
+
+Before you look at anything below, there is a decision I took for you that I
+should not have. You asked why each order type doesn't get its own pair of status
+tables. I gave you reasons against it and then just built the other thing. You
+were still weighing it.
+
+Nothing is pushed, so switching is cheap. Three options:
+
+- **A — four tables** (process + financial, per order type). What you described.
+  Catch: the financial half is what made "marking an invoiced order paid" erase
+  the invoice record, so that bug comes back unless invoicing stays a date anyway.
+- **B — two process tables** (one per order type) **+ money as dates.** Your
+  "stop making them share" instinct kept; the payment bug stays fixed. A winery
+  can add its own step (e.g. "Packed") without me shipping code.
+- **C — two enums + dates.** What is built. Simplest, but a new status means a
+  migration and a deploy.
+
+**The only real difference:** can a winery invent its own fulfilment step without
+a developer? Tables yes, enums no. Everything else is identical in all three.
+
+---
+
+## 🍷 2026-09-18 — the status model got simpler; please look at it on staging (pending the decision above)
 
 You were right that we were over-complicating it. The two status *tables* are
 gone. An order now has **one stage** (New / Confirmed / Completed or Delivered /
