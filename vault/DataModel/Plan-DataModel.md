@@ -4,9 +4,10 @@ tags: [plan, schema, data-model, orders, money]
 
 # Plan: Transactional data model fixes
 
-**Status:** 🚧 **Chunks 0–4 complete 2026-09-18** (Features 192–195). Money is integer
-tetri, proven end to end against the real Flitt gateway, and an order's rates are now
-frozen so a later edit cannot reprice it. **Next: Chunk 5** — `OrderEvent`.
+**Status:** 🚧 **Chunks 0–5 complete 2026-09-18** (Features 192–196). Money is integer
+tetri, proven end to end against the real Flitt gateway; an order's rates are frozen so a
+later edit cannot reprice it; and orders now carry an append-only history.
+**Next: Chunk 6** — `Payment` as a ledger.
 
 Everything is on `staging`. **Production is untouched** and internally consistent on the
 pre-chunk-5 schema; nothing in this plan has gone near `master`.
@@ -538,7 +539,7 @@ New `scripts/test-order-repricing.ts` builds the exact scenario — an order sol
 
 ---
 
-## Chunk 5 — `OrderEvent` table ⬜ not started
+## Chunk 5 — `OrderEvent` table ✅ built on dev 2026-09-18
 
 **Purpose:** the history layer. Every mature platform has one — Saleor has a model
 literally called `OrderEvent`, Magento has `sales_order_status_history`. See
@@ -577,7 +578,55 @@ outcomes and `orderExtras.ts` for line changes.
 
 **Must satisfy:** the new-table checklist in `vault/RLS-Architecture.md`.
 
-**Resume point:** _(none — not started)_
+### 🔴 Where this plan was wrong
+
+It said to hook the events into `lib/statusWrite.ts`, "the single chokepoint for status
+writes". **That module is pure and DB-free on purpose** — its own header says so — so the
+client can apply the same patch optimistically and see the flow-line move before the round
+trip. Writing to a database from it would have broken that.
+
+The real write sites are the **server actions**, and that is where the events went.
+`statusWrite.ts` is untouched.
+
+### Where events are written
+
+All inside the caller's transaction, so an event can never claim a change that was rolled
+back, and a change can never happen unrecorded.
+
+| Site | Actor | Records |
+|---|---|---|
+| `changeBookingStatus` / `changeWineOrderStatus` | ADMIN | from/to stage, paid, unpaid, invoice sent, restored |
+| `settle.ts` | GATEWAY | paid, and **declined** |
+| `orderExtras` add/remove | ADMIN | label + amount (read **before** the delete) |
+| `createBooking` | **GUEST** | the timeline's first row |
+| `createOrderAdmin` | **ADMIN** | ‹‹ same, different actor |
+
+The GUEST/ADMIN split on creation is deliberate: a walk-in entered by staff and a guest's
+own submission are different facts, and the history should not blur them.
+
+`requireAdmin` now **returns the Supabase user** so an event can record *who* acted. Every
+pre-existing caller ignores the return value, so it is additive.
+
+**Never load-bearing:** screens read the columns, not this table. A failed write here is a
+lost record, not a broken order.
+
+### Verification
+
+New `scripts/test-order-events.ts` — **12/12**.
+
+It checks **RLS isolation first**, and from a real tenant context rather than as
+superuser, because a wrong policy on a new table does not error: it silently hides every
+row from every tenant. `Plan-StatusModel.md` records that failing silently once already.
+The script asserts both directions — a tenant sees its own events, cannot see another's,
+**and** the table is not simply empty for everyone (the inverse failure).
+
+Also covers: the timeline reads back in order, the actor is recorded, and events cascade
+away with their order while a different order's are untouched.
+
+Alongside: `test-money` 47/47, `test-order-repricing` 6/6, `test-order-status` green,
+`test-rls` 21/21, `next build` passes, `tsc --noEmit` 0 errors. RLS now covers 16 tables.
+
+**Resume point:** complete on dev, pushed to `staging`. Chunk 6 may start.
 
 ---
 
