@@ -251,11 +251,68 @@ one pass.
 `OrderMasterclass.pricePerUnit` · `OrderExtra.amount` · `WineOrderItem.priceSnapshot` ·
 `WineVintage.price` · `MasterclassItem.pricePerUnit`
 
+### ✅ Assumptions verified 2026-09-18, before starting
+
+Six checks run against the schema, the database and the test runner. **Two of them
+changed the plan.**
+
+| # | Assumption | Verdict |
+|---|---|---|
+| 1 | "The wipe means no backfill" | 🔴 **WRONG — see below** |
+| 2 | Surviving price data is clean to 2dp | ✅ **0 rows** with >2 decimals in `Price`, `WineVintage`, `MasterclassItem`. Conversion is exact and lossless. |
+| 3 | The money-column list is complete | ✅ Confirmed from the schema: **11 money Floats**. Four Floats correctly stay: `Company.wineDiscountPercent`, `WineOrder.discountPercent` (percentages) and `Wine.alcoholLevel`, `WineVintage.alcoholLevel` (not money at all). |
+| 4 | Chunk 1's `Payment` cascade works | ✅ **Proven functionally**, not assumed — created an order + payment, deleted the order, payment was gone. Probe rows cleaned up. |
+| 5 | `payment-amount-integrity.spec.ts` is a usable safety net | ✅ **4 tests**, listable, and `playwright.config.ts` auto-starts its own dev server (`reuseExistingServer: true`). |
+| 6 | Display goes through some formatter | 🔴 **WRONG — see below** |
+
+### 🔴 Correction 1 — the wipe does *not* remove all money data
+
+Three **catalog** tables survive the wipe (`Company` is excluded, and `Price` hangs off it)
+and carry **real prices that must be converted, not dropped**:
+
+| Table | Rows on dev | Columns |
+|---|---|---|
+| `Price` | 30 | `pricePerPerson`, `tastingLunchPricePerPerson`, `registrationPrice` |
+| `WineVintage` | 17 | `price` |
+| `MasterclassItem` | 9 | `pricePerUnit` |
+
+**Consequence for 3b:** Prisma will not generate a correct `Float → Int` migration on its
+own — a plain type change casts and loses the ×100. The migration SQL must be hand-edited
+to `ALTER TABLE ... TYPE INTEGER USING ROUND(column * 100)`. Check 2 is what makes that
+safe: no value has sub-tetri precision to lose.
+
+`Payment` is **empty (0 rows)** on dev, so its column converts with nothing to migrate.
+
+### 🔴 Correction 2 — there is no formatter to switch over; every site interpolates raw
+
+Confirmed across the admin table, the booking form, the invoice print and the email
+templates: money is rendered as bare interpolation — `${order.totalPrice}₾`,
+`${totalPrice} ₾`, `${data.totalPrice}₾`.
+
+**So after conversion `4500` renders as "4500₾"** — no type error, no crash, just a
+plausible wrong number on a customer's invoice. This is the single biggest silent-failure
+surface in the chunk and it is why 3a builds `formatTetri` *first*.
+
+Real scope is **49 application files** under `app/`, `lib/` and `components/` (the earlier
+"58" counted tests, scripts and the schema).
+
 ### Sub-steps
 
-- **3a — Build the seam.** New `lib/money.ts`: a `Tetri` branded type, `formatTetri()`
-  for display, `parseMajorToTetri()` for form input. Nothing else changes yet. Ship and
-  verify in isolation.
+- **3a — Build the seam.** ✅ **Complete 2026-09-18.** New `lib/money.ts` — `Tetri` branded
+  type, `asTetri` / `fromMajor` / `toMajor`, `formatTetri`, `parseMajor`, `sumTetri`,
+  `multiplyTetri`, `applyPercent`. Nothing else changed; purely additive.
+  - **The brand is the point.** `Tetri` is a plain integer at runtime (round-trips through
+    Prisma, JSON and React props untouched) but is not assignable from a bare `number`, so
+    the 100× error becomes a compile error rather than a wrong invoice.
+  - **`formatTetri`'s default output is byte-identical to today's** for whole-GEL amounts
+    (`4500` → `"45₾"`), which is what keeps 3d invisible on screens that were already
+    right. Options cover the three formats actually in use: grouping (`"24,301₾"`,
+    Statistics), leading space (`"45 ₾"`, the Georgian invoice print), and forced decimals
+    (invoices).
+  - **Verified:** `scripts/test-money.ts`, **47/47 passing**, no database needed. Includes
+    the property the whole change exists for — a hundred ₾0.10 amounts sum to exactly
+    ₾10.00, where the float equivalent does not — plus the `49.985` truncation case that
+    `toMinorUnits` was already guarding against. `tsc --noEmit` and `eslint` clean.
 - **3b — Schema + destructive migration.** Convert the columns. Wipe transactional data
   per the authorisation above. Dev first, always.
 - **3c — Write paths.** `createBooking.ts`, `submitWineOrder.ts`, `pricing.ts`,
