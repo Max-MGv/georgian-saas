@@ -211,10 +211,31 @@ policy on a new table fails *silently* — it hides every row rather than errori
 `Plan-StatusModel.md` records happening once already. It asserts both directions plus the
 inverse failure (the table is not simply empty for everyone).
 
-### Next
+### Chunk 6 — `Payment` as a ledger (**Feature 197**)
 
-- **Chunk 6** (`Payment` as a ledger — closes the two-sources-of-truth split, and with
-  chunk 5 in place also completes the un-pay audit trail), **Chunk 7** (display tables).
+Only card payments ever made a row, so `SUM(Payment.amount)` was card revenue while
+`paidAt IS NOT NULL` was all revenue, with nothing reconciling them. Every payment is a
+row now, whatever channel it arrived through.
+
+Two rules carry it: **no double counting** (a gateway-settled order gains no second manual
+row), and **a real card payment is never marked reversed** (that money is with the gateway;
+un-paying it is an admin override, which Feature 196's event records). Reversal rather than
+deletion, because a ledger that can lose rows is not a ledger.
+
+`scripts/test-payment-ledger.ts` 16/16, including a reconciliation check that was
+impossible before.
+
+### Label fix (**Feature 198**) — the cheap half of chunk 7
+
+Wine orders said "Pending" where bookings said "New" for the same `NEW` enum. Fixed, plus
+two dead keys Feature 191 orphaned. i18n parity 1077/1077.
+
+### 🛑 Next — chunk 7 is blocked on a decision from Max
+
+The display **table** trades a hot-path lookup for runtime-editable labels, and without an
+admin UI it is a table nothing writes — which this project has explicitly called out as
+worse than an absent one. Three options and a recommendation are written up in
+`DataModel/Plan-DataModel.md` under Chunk 7. **Nothing else in the plan is blocked.**
 - Production is still untouched and internally consistent on the pre-chunk-5 schema.
   Nothing here has gone near `master`.
 
