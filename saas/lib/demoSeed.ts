@@ -18,8 +18,7 @@
  * Deterministic: a fixed-seed PRNG, so every run produces identical data.
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
-import type { PrismaClient, OrderStatus, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
-import { seedStatusColumns } from '@/lib/statusBridge'
+import type { PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
 
 export const DEMO_SLUG = 'vineworks-demo'
 
@@ -239,7 +238,13 @@ export type SeedReport = {
  */
 export async function seedDemoTenant(
   db: PrismaClient,
-  opts: { dryRun?: boolean; now?: Date } = {},
+  /**
+   * `slug` targets a tenant other than the demo one — used to refill a
+   * throwaway tenant (Staging Winery) after the Feature 191 wipe. It has to be
+   * passed explicitly: the guard below exists to stop an accidental seed of a
+   * real winery, and defaulting it would be exactly that accident.
+   */
+  opts: { dryRun?: boolean; now?: Date; slug?: string } = {},
 ): Promise<SeedReport> {
   const dryRun = opts.dryRun ?? false
   const rng = makeRng(20260910)
@@ -252,9 +257,70 @@ export async function seedDemoTenant(
     return entries[entries.length - 1][0]
   }
 
-  const tenant = await db.tenant.findFirst({ where: { slug: DEMO_SLUG } })
-  if (!tenant) throw new Error(`No tenant with slug '${DEMO_SLUG}' in this database`)
-  if (tenant.slug !== DEMO_SLUG) throw new Error('Refusing to seed a non-demo tenant')
+  const between = (a: Date, b: Date) => new Date(a.getTime() + rng() * (b.getTime() - a.getTime()))
+
+  /**
+   * The milestone dates for a seeded booking.
+   *
+   * Payment is rolled independently of stage, and the two pay-timings are
+   * modelled separately because they are genuinely different customers:
+   * individuals pay at checkout (so `paidAt` lands near `createdAt`, and the
+   * flow-line draws Paid second), companies settle an invoice weeks after the
+   * visit (so `paidAt` lands after `completedAt`, and Paid draws last). Both
+   * come out of the same function, which is the property worth demonstrating.
+   *
+   * A small share are left abandoned — sent to the card gateway and never
+   * returned — so `/admin/abandoned` has something on it. Those are never paid:
+   * the database refuses that pairing outright.
+   */
+  function bookingDates(stage: BookingStage, createdAt: Date, visitDate: Date) {
+    const confirmedAt = stage === 'CONFIRMED' || stage === 'COMPLETED'
+      ? between(createdAt, visitDate) : null
+    const completedAt = stage === 'COMPLETED' ? visitDate : null
+
+    const prepaid = rng() < 0.3
+    const invoiceSentAt = !prepaid && rng() < 0.45
+      ? between(createdAt, completedAt ?? visitDate) : null
+    const paidAt = prepaid
+      ? between(createdAt, new Date(createdAt.getTime() + 3600000))
+      // Invoice terms: settled some weeks after the visit, and often not yet —
+      // which is the "delivered and still owed for" row the old column had
+      // nowhere to put.
+      : completedAt && rng() < 0.6
+        ? new Date(completedAt.getTime() + rand(3, 40) * 86400000)
+        : null
+    // Never past the constraint: paid orders are not abandoned, and a future
+    // payment date would be a lie.
+    return {
+      confirmedAt, completedAt, invoiceSentAt,
+      paidAt: paidAt && paidAt > new Date() ? null : paidAt,
+      abandonedAt: null,
+    }
+  }
+
+  /** The wine equivalent. No invoice-send flow exists for wine orders. */
+  function wineOrderDates(stage: WineOrderStage, createdAt: Date) {
+    const confirmedAt = stage === 'CONFIRMED' || stage === 'DELIVERED'
+      ? new Date(createdAt.getTime() + rand(1, 5) * 86400000) : null
+    const deliveredAt = stage === 'DELIVERED'
+      ? new Date((confirmedAt ?? createdAt).getTime() + rand(2, 14) * 86400000) : null
+
+    const prepaid = rng() < 0.25
+    const paidAt = prepaid
+      ? new Date(createdAt.getTime() + rand(0, 2) * 3600000)
+      : deliveredAt && rng() < 0.55
+        ? new Date(deliveredAt.getTime() + rand(5, 60) * 86400000)
+        : null
+    return {
+      confirmedAt, deliveredAt,
+      paidAt: paidAt && paidAt > new Date() ? null : paidAt,
+      abandonedAt: null,
+    }
+  }
+
+  const slug = opts.slug ?? DEMO_SLUG
+  const tenant = await db.tenant.findFirst({ where: { slug } })
+  if (!tenant) throw new Error(`No tenant with slug '${slug}' in this database`)
   const tid = tenant.id
 
   const before = {
@@ -416,17 +482,34 @@ export async function seedDemoTenant(
 
       const totalPrice = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
 
-      const status: OrderStatus = isFuture
-        ? weighted([['CONFIRMED', 40], ['NEW', 25], ['PAID', 20], ['INVOICE_SENT', 15]] as const)
-        : weighted([['COMPLETED', 85], ['CANCELLED', 8], ['PAID', 7]] as const)
+      // Rolled BEFORE the stage, because an abandoned checkout is a slice of
+      // every booking attempt, not a fraction of the ones that happened to stay
+      // NEW. It forces the stage: an order that never completed payment never
+      // progressed either, and the winery never saw it to act on.
+      const isAbandoned = rng() < 0.07
+      const stage: BookingStage = isAbandoned
+        ? 'NEW'
+        : isFuture
+          ? weighted([['CONFIRMED', 55], ['NEW', 45]] as const)
+          : weighted([['COMPLETED', 90], ['CANCELLED', 10]] as const)
 
       const first = pick(GUEST_FIRST), last = pick(GUEST_LAST)
       // Booked between a few days and six weeks before the visit — makes
       // "arrived at 23:40 on a Saturday" style copy true, not decorative.
       const createdAt = new Date(date.getTime() - rand(3, 42) * 86400000 - rand(0, 23) * 3600000)
 
+      // Stage and payment are rolled INDEPENDENTLY, which is the whole point of
+      // Feature 191 and the reason the demo data is worth looking at: it
+      // produces the two shapes the old single column could not represent — a
+      // completed visit still waiting to be paid for, and an individual who
+      // paid weeks before anyone confirmed anything. Rolling one from the other
+      // would quietly reproduce the old model in new columns.
+      const dates = isAbandoned
+        ? { confirmedAt: null, completedAt: null, invoiceSentAt: null, paidAt: null, abandonedAt: createdAt }
+        : bookingDates(stage, createdAt, date)
+
       const orderData = {
-          tenantId: tid, status, bookingType, visitType, date,
+          tenantId: tid, stage, bookingType, visitType, date,
           timeSlot: pick(TIME_SLOTS), guestCount,
           tastingGuestCount: tastingGuests, lunchGuestCount: lunchGuests, freeGuestCount: freeGuests,
           hotDishVegetable: visitType === 'TASTING_LUNCH' ? pick(vegItems) : null,
@@ -437,10 +520,7 @@ export async function seedDemoTenant(
           phone: company ? company.contactPhone : `+995 5${rand(50, 99)} ${rand(10, 99)} ${rand(10, 99)} ${rand(10, 99)}`,
           companyId: company ? company.id : individuals.id,
           totalPrice, createdAt,
-          // Derived from the legacy status rather than hardcoded, so demo data
-          // exercises the two shapes the old column couldn't express: a
-          // COMPLETED visit still unpaid, and a PAID order not yet confirmed.
-          ...seedStatusColumns('order', status, createdAt),
+          ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
       }
       orderWrites.push(() => db.order.create({ data: orderData }))
@@ -478,17 +558,23 @@ export async function seedDemoTenant(
       }))
       const gross = items.reduce((s, it) => s + it.quantity * it.priceSnapshot, 0)
       const totalAmount = Math.round(gross * (1 - buyer.discount / 100))
-      const status = daysAgo > 60
-        ? weighted([['delivered', 80], ['cancelled', 10], ['paid', 10]] as const)
-        : weighted([['delivered', 20], ['paid', 30], ['confirmed', 25], ['pending', 25]] as const)
+      const isAbandoned = rng() < 0.08
+      const stage: WineOrderStage = isAbandoned
+        ? 'NEW'
+        : daysAgo > 60
+          ? weighted([['DELIVERED', 88], ['CANCELLED', 12]] as const)
+          : weighted([['DELIVERED', 25], ['CONFIRMED', 40], ['NEW', 35]] as const)
+      const dates = isAbandoned
+        ? { confirmedAt: null, deliveredAt: null, paidAt: null, abandonedAt: createdAt }
+        : wineOrderDates(stage, createdAt)
 
       const wineData = {
           tenantId: tid, companyId: buyer.id, businessName: buyer.name,
           llcName: buyer.name, llcId: buyer.identificationCode, address: buyer.address,
           workingHours: pick(['10:00–20:00', '11:00–23:00', '09:00–18:00', 'Mon–Sat 10:00–19:00']),
           contactName: buyer.contactName, contactPhone: buyer.contactPhone, contactEmail: buyer.contactEmail,
-          discountPercent: buyer.discount, totalAmount, status, createdAt,
-          ...seedStatusColumns('wineOrder', status, createdAt),
+          discountPercent: buyer.discount, totalAmount, stage, createdAt,
+          ...dates,
           wineItems: { create: items },
       }
       wineWrites.push(() => db.wineOrder.create({ data: wineData }))

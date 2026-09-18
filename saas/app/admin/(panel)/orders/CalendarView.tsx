@@ -9,35 +9,27 @@ const C = {
   wine: 'var(--color-brand)', text: 'var(--site-text)', bg: 'var(--site-surface)', inputBg: 'var(--site-surface)',
 }
 
-// Keyed by process status **code** since chunk 4, plus the legacy
-// PENDING_PAYMENT — payment limbo is the one thing the two axes deliberately
-// cannot express, so the old column is still what picks it out.
+// Keyed by BookingStage. Payment is not here on purpose - it is a separate
+// fact and shows as its own mark beside the label, so a completed-but-unpaid
+// booking says both things instead of one word having to pick.
 const STATUS_COLORS: Record<string, string> = {
-  new: '#ca8a04', confirmed: '#2563eb', completed: '#16a34a', cancelled: '#dc2626',
-  PENDING_PAYMENT: '#ea580c',
+  NEW: '#ca8a04', CONFIRMED: '#2563eb', COMPLETED: '#16a34a', CANCELLED: '#dc2626',
 }
 
 const STATUS_LABEL_KEYS: Record<string, string> = {
-  new: 'orders.status.new', confirmed: 'orders.status.confirmed',
-  completed: 'orders.status.completed', cancelled: 'orders.status.cancelled',
-  PENDING_PAYMENT: 'orders.status.pendingPayment',
+  NEW: 'orders.status.new', CONFIRMED: 'orders.status.confirmed',
+  COMPLETED: 'orders.status.completed', CANCELLED: 'orders.status.cancelled',
 }
 
 type CalendarOrder = {
   id: string; name: string; surname: string; timeSlot: string
   guestCount: number; visitType: string; totalPrice: number | null
-  /** Legacy column — read only to tell payment limbo apart. */
-  status: string
-  processCode: string | null
+  stage: string
   paid: boolean
-  /** Invoice sent, money not yet in. Bookings only — wine has no invoice flow. */
+  /** Invoice sent, money not yet in. Bookings only - wine has no invoice flow. */
   invoiced: boolean
   companyName: string | null
 }
-
-/** Which of the two vocabularies this order's pill comes from. */
-const displayCodeOf = (o: CalendarOrder) =>
-  o.status === 'PENDING_PAYMENT' ? 'PENDING_PAYMENT' : o.processCode
 
 type DaySummary = { date: string; count: number }
 
@@ -213,12 +205,10 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                       {o.name} {o.surname}
                     </p>
                     <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1"
-                      style={{ color: STATUS_COLORS[displayCodeOf(o) ?? ''] ?? C.muted }}>
+                      style={{ color: STATUS_COLORS[o.stage] ?? C.muted }}>
                       {(() => {
-                        const code = displayCodeOf(o)
-                        if (!code) return '—'
-                        const key = STATUS_LABEL_KEYS[code]
-                        return key ? at(key) : code
+                        const key = STATUS_LABEL_KEYS[o.stage]
+                        return key ? at(key) : o.stage
                       })()}
                       {o.paid ? (
                         <span title={at('orders.status.paid')} style={{ color: '#14532d' }}>₾✓</span>

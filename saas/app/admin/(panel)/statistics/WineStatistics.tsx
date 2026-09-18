@@ -43,7 +43,7 @@ export type WineOrderStat = {
   businessName: string
   wines: { id: string; name: string; quantity: number; price?: number }[]
   displayTotal: number
-  status: string
+  stage: string
   createdAt: string
 }
 
@@ -156,7 +156,7 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
   // Summary stats
   const totalOrders = filtered.length
   const totalRevenue = Math.round(filtered.reduce((s, o) => s + o.displayTotal, 0))
-  const activeOrders = filtered.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length
+  const activeOrders = filtered.filter(o => o.stage !== 'DELIVERED' && o.stage !== 'CANCELLED').length
   const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
 
   // Revenue by period

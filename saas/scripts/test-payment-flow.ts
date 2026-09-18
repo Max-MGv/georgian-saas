@@ -13,7 +13,7 @@
  *
  * Run: npx tsx scripts/test-payment-flow.ts
  */
-import { PrismaClient, OrderStatus } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { buildSignature } from '../lib/payments/flitt'
 
 const db = new PrismaClient()
@@ -62,7 +62,7 @@ async function main() {
 
   const order = await db.order.create({
     data: {
-      status: OrderStatus.PENDING_PAYMENT,
+      abandonedAt: new Date(),
       visitType: 'TASTING',
       date: new Date('2030-01-01'),
       timeSlot: '11:00',
@@ -90,20 +90,25 @@ async function main() {
     const r1 = await postCallback({ payment_id: pid, order_status: 'approved', amount: 20000, currency: 'GEL', signature: 'a'.repeat(40) })
     check('forged signature is rejected', r1.json?.status === 'rejected')
     let o = await db.order.findUnique({ where: { id: order.id } })
-    check('order untouched after forged callback', o?.status === OrderStatus.PENDING_PAYMENT, `status=${o?.status}`)
+    check('order untouched after forged callback', o?.paidAt === null && o?.abandonedAt !== null, `paidAt=${o?.paidAt} abandonedAt=${o?.abandonedAt}`)
 
     // 3. Valid signature, tampered amount (1 tetri instead of 20000).
     const r2 = await postCallback(signedBody({ payment_id: pid, order_status: 'approved', amount: 1, currency: 'GEL' }, SECRET))
     check('amount mismatch is rejected', r2.json?.status === 'rejected')
     o = await db.order.findUnique({ where: { id: order.id } })
-    check('order untouched after tampered amount', o?.status === OrderStatus.PENDING_PAYMENT)
+    check('order untouched after tampered amount', o?.paidAt === null && o?.abandonedAt !== null)
 
     // 4. Genuine approval.
     const good = signedBody({ payment_id: pid, order_status: 'approved', amount: 20000, currency: 'GEL' }, SECRET)
     const r3 = await postCallback(good)
     check('genuine callback settles', r3.json?.status === 'ok' && r3.json?.outcome === 'settled', JSON.stringify(r3.json))
     o = await db.order.findUnique({ where: { id: order.id } })
-    check('order is PAID', o?.status === OrderStatus.PAID, `status=${o?.status}`)
+    // The two facts settlement is responsible for: the money is recorded, and
+    // the order stops being an abandoned checkout. Asserting on `paidAt` rather
+    // than a status is the point of Feature 191 — there is no status to move.
+    check('order records the payment', o?.paidAt != null, `paidAt=${o?.paidAt}`)
+    check('paying un-abandons the order', o?.abandonedAt === null, `abandonedAt=${o?.abandonedAt}`)
+    check('paying does not touch fulfilment', o?.stage === 'NEW', `stage=${o?.stage}`)
     const p = await db.payment.findUnique({ where: { id: payment.id } })
     check('payment settledAt set + raw body stored', p?.settledAt != null && p?.rawResponse != null)
 
@@ -113,7 +118,7 @@ async function main() {
 
     // 6. Form-encoded delivery of the same shape (the return_url content type).
     const pid2 = pid + '-form'
-    const order2 = await db.order.create({ data: { status: OrderStatus.PENDING_PAYMENT, visitType: 'TASTING', date: new Date('2030-01-02'), timeSlot: '11:00', guestCount: 4, name: 'ZZ', surname: 'Test2', totalPrice: 50, tenantId } })
+    const order2 = await db.order.create({ data: { abandonedAt: new Date(), visitType: 'TASTING', date: new Date('2030-01-02'), timeSlot: '11:00', guestCount: 4, name: 'ZZ', surname: 'Test2', totalPrice: 50, tenantId } })
     await db.payment.create({ data: { tenantId, orderId: order2.id, provider: 'flitt', providerPaymentId: pid2, amount: 50, status: 'created' } })
     const fields = signedBody({ payment_id: pid2, order_status: 'approved', amount: 5000, currency: 'GEL' }, SECRET)
     const form = new URLSearchParams(Object.entries(fields).map(([k, v]) => [k, String(v)]))
@@ -121,7 +126,7 @@ async function main() {
     const j = await res.json().catch(() => null) as { outcome?: string } | null
     check('form-encoded callback settles too', j?.outcome === 'settled', JSON.stringify(j))
     const o2 = await db.order.findUnique({ where: { id: order2.id } })
-    check('form-encoded order is PAID', o2?.status === OrderStatus.PAID)
+    check('form-encoded order records the payment', o2?.paidAt != null && o2?.abandonedAt === null)
 
     // 7. Wine orders (phase 5). A different table with a different status
     //    convention — WineOrder.status is a bare String, not the enum — so it
@@ -135,7 +140,7 @@ async function main() {
       data: {
         businessName: 'ZZ Test Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000',
         contactEmail: sendEmails ? 'zz@example.invalid' : null,
-        totalAmount: 120, status: 'pending_payment', tenantId,
+        totalAmount: 120, abandonedAt: new Date(), tenantId,
       },
     })
     const pid3 = pid + '-wine'
@@ -143,22 +148,27 @@ async function main() {
     const r5 = await postCallback(signedBody({ payment_id: pid3, order_status: 'approved', amount: 12000, currency: 'GEL' }, SECRET))
     check('wine order callback settles', r5.json?.outcome === 'settled', JSON.stringify(r5.json))
     const woAfter = await db.wineOrder.findUnique({ where: { id: wo.id } })
-    check('wine order status is paid', woAfter?.status === 'paid', `status=${woAfter?.status}`)
+    check('wine order records the payment', woAfter?.paidAt != null, `paidAt=${woAfter?.paidAt}`)
+    check('paying un-abandons the wine order', woAfter?.abandonedAt === null)
 
-    // 7b. A declined card must land the wine order in payment_failed, not leave
-    //     it sitting in "Awaiting Payment" forever. `processing` must NOT — it
-    //     can still turn into an approval.
+    // 7b. Since Feature 191 a decline writes NOTHING to the order: it was
+    //     already marked incomplete when the guest was sent to the gateway, and
+    //     a refused card and a closed tab are the same fact to the winery. What
+    //     tells them apart lives on the Payment row's verbatim gateway status.
+    //     So the assertion is that the order is left alone and unpaid.
     const woDeclined = await db.wineOrder.create({
-      data: { businessName: 'ZZ Declined Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 60, status: 'pending_payment', tenantId },
+      data: { businessName: 'ZZ Declined Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 60, abandonedAt: new Date(), tenantId },
     })
     const pidD = pid + '-declined'
     await db.payment.create({ data: { tenantId, wineOrderId: woDeclined.id, provider: 'flitt', providerPaymentId: pidD, amount: 60, status: 'created' } })
     await postCallback(signedBody({ payment_id: pidD, order_status: 'processing', amount: 6000, currency: 'GEL' }, SECRET))
     let wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
-    check("'processing' leaves the order awaiting payment", wd?.status === 'pending_payment', `status=${wd?.status}`)
+    check("'processing' leaves the order unpaid and incomplete", wd?.paidAt === null && wd?.abandonedAt !== null, `paidAt=${wd?.paidAt}`)
     await postCallback(signedBody({ payment_id: pidD, order_status: 'declined', amount: 6000, currency: 'GEL' }, SECRET))
     wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
-    check("'declined' moves the order to payment_failed", wd?.status === 'payment_failed', `status=${wd?.status}`)
+    check("'declined' leaves the order unpaid and incomplete", wd?.paidAt === null && wd?.abandonedAt !== null, `paidAt=${wd?.paidAt}`)
+    const declinedPayment = await db.payment.findFirst({ where: { providerPaymentId: pidD } })
+    check("'declined' is recorded on the Payment row, verbatim", declinedPayment?.status === 'declined', `status=${declinedPayment?.status}`)
 
     // 8. Cross-tenant. A payment belonging to another tenant must not settle
     //    just because the caller signed with a secret we happen to hold — the
@@ -167,7 +177,7 @@ async function main() {
       data: { id: OTHER, name: 'ZZ Other', domain: 'zz-other.invalid', slug: OTHER, flittSecretKey: 'zz-other-secret' },
     })
     const woOther = await db.wineOrder.create({
-      data: { businessName: 'ZZ Other Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 90, status: 'pending_payment', tenantId: OTHER },
+      data: { businessName: 'ZZ Other Bar', address: 'ZZ', contactName: 'ZZ', contactPhone: '000', totalAmount: 90, abandonedAt: new Date(), tenantId: OTHER },
     })
     const pid4 = pid + '-cross'
     await db.payment.create({ data: { tenantId: OTHER, wineOrderId: woOther.id, provider: 'flitt', providerPaymentId: pid4, amount: 90, status: 'created' } })
@@ -175,7 +185,7 @@ async function main() {
     const r6 = await postCallback(signedBody({ payment_id: pid4, order_status: 'approved', amount: 9000, currency: 'GEL' }, SECRET))
     check('cross-tenant callback is rejected', r6.json?.status === 'rejected', JSON.stringify(r6.json))
     const woOtherAfter = await db.wineOrder.findUnique({ where: { id: woOther.id } })
-    check("other tenant's wine order untouched", woOtherAfter?.status === 'pending_payment', `status=${woOtherAfter?.status}`)
+    check("other tenant's wine order untouched", woOtherAfter?.paidAt === null && woOtherAfter?.abandonedAt !== null, `paidAt=${woOtherAfter?.paidAt}`)
   } finally {
     await db.payment.deleteMany({ where: { providerPaymentId: { startsWith: 'zz-flow-' } } })
     await db.order.deleteMany({ where: { name: 'ZZ', surname: { in: ['Test', 'Test2'] } } })

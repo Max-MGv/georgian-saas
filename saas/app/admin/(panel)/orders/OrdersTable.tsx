@@ -3,63 +3,44 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { deleteOrder, updateOrder, sendOrderInvoice, updateOrderStatus } from '@/app/actions/orders'
+import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 import { countryName } from '@/lib/countries'
 import {
-  legacyOrderStatusForCode,
-  statusPatchCodes,
-  orderStatusPatch,
-  type SettableOrderStatus,
-} from '@/lib/statusBridge'
-import { unreachedSteps, unreachedFinancialSteps, type FlowState } from '@/lib/statusFlow'
-import type { StatusOption } from '@/lib/statusVocabulary'
+  bookingStagePatch,
+  invoiceSentPatch,
+  paidPatch,
+  type BookingStatusChange,
+} from '@/lib/statusWrite'
+import { BOOKING_STAGES, unreachedStages, CANCELLED, type FlowState } from '@/lib/statusFlow'
+import { paymentStateOf } from '@/lib/orderFilters'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
   border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
-type OrderStatus = 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
-
 type StatusStyle = { labelKey: string; bg: string; color: string }
 
 /**
- * Keyed by **vocabulary code** since chunk 4, not by the legacy `OrderStatus`
- * value. `NEW` → `new`, `COMPLETED` → `completed`, and `INVOICE_SENT` moves to
- * the financial axis as `invoiced` — it records that we asked for money, not
- * that the visit happened.
- *
- * Display metadata stays in frontend code rather than moving into the
- * dimension rows (Max's call, 2026-09-17), which is why `UNKNOWN_STATUS_STYLE`
- * exists: a status a tenant inserts later renders in neutral grey under its
- * own code until someone ships a label.
+ * Keyed by `BookingStage`, plus the two payment states that appear as dropdown
+ * entries and marks. There is no PENDING_PAYMENT entry any more: an abandoned
+ * checkout is not a status a booking can be in, it is a booking that never
+ * became one, and it lives on /admin/abandoned instead of on this screen.
  */
 const STATUS_CONFIG: Record<string, StatusStyle> = {
-  new:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
-  confirmed: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
-  completed: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
-  cancelled: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
-  // Financial axis.
+  NEW:       { labelKey: 'orders.status.new',       bg: '#fef9c3', color: '#a16207' },
+  CONFIRMED: { labelKey: 'orders.status.confirmed', bg: '#dbeafe', color: '#1d4ed8' },
+  COMPLETED: { labelKey: 'orders.status.completed', bg: '#bbf7d0', color: '#065f46' },
+  CANCELLED: { labelKey: 'orders.status.cancelled', bg: '#fee2e2', color: '#b91c1c' },
+  // Payment. Not stages - these appear in the dropdown and as row marks.
   unpaid:   { labelKey: 'orders.status.unpaid',      bg: '#f5f5f4', color: '#44403c' },
   invoiced: { labelKey: 'orders.status.invoiceSent', bg: '#fef3c7', color: '#92400e' },
   paid:     { labelKey: 'orders.status.paid',        bg: '#dcfce7', color: '#166534' },
-  /**
-   * Still keyed by the legacy value. Payment limbo means "sent to the card
-   * gateway, not settled yet" and is only ever written by the checkout/settle
-   * path — the two axes deliberately cannot express it (both put it at process
-   * `new`), so the old column is the only thing that can still pick it out.
-   * These orders are never auto-expired (Plan-OnlinePayment §7.2), so they
-   * accumulate for the winery to chase, and are moved on from here by picking
-   * any step from the dropdown.
-   */
-  PENDING_PAYMENT: { labelKey: 'orders.status.pendingPayment', bg: '#ffedd5', color: '#c2410c' },
 }
 
 const UNKNOWN_STATUS_STYLE: StatusStyle = { labelKey: '', bg: '#f3f4f6', color: '#374151' }
-
-const LIMBO_STATUS = 'PENDING_PAYMENT'
 
 function styleFor(code: string | null): StatusStyle {
   return (code && STATUS_CONFIG[code]) || UNKNOWN_STATUS_STYLE
@@ -90,12 +71,12 @@ const inputStyle = {
 
 type Order = {
   id: string
-  /** Legacy column — still read for payment limbo, which the axes cannot say. */
-  status: OrderStatus
-  processCode: string | null
-  financialCode: string | null
+  stage: string
+  createdAt: Date | string
+  confirmedAt: Date | string | null
+  completedAt: Date | string | null
+  invoiceSentAt: Date | string | null
   paidAt: Date | string | null
-  paidAtStage: string | null
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -120,43 +101,73 @@ type Order = {
   extras: { label: string; amount: number }[]
 }
 
-/** The subset the flow-line needs — every order row already satisfies it. */
-function flowStateOf(o: { processCode: string | null; paidAt: Date | string | null; paidAtStage: string | null }): FlowState {
-  return { processCode: o.processCode, paidAt: o.paidAt, paidAtStage: o.paidAtStage }
+/** The subset the flow-line needs - every order row already satisfies it. */
+function flowStateOf(o: Order): FlowState {
+  return {
+    stage: o.stage,
+    createdAt: o.createdAt,
+    confirmedAt: o.confirmedAt,
+    finishedAt: o.completedAt,
+    invoiceSentAt: o.invoiceSentAt,
+    paidAt: o.paidAt,
+  }
 }
 
 const isPaid = (o: { paidAt: Date | string | null }) => o.paidAt != null
-const isInvoiced = (o: { financialCode: string | null }) => o.financialCode === 'invoiced'
-const isLimbo = (o: { status: string }) => o.status === LIMBO_STATUS
-
-/** Which pill an order shows, and which board column it lands in. */
-const displayCodeOf = (o: { status: string; processCode: string | null }) =>
-  isLimbo(o) ? LIMBO_STATUS : o.processCode
 
 /**
- * The statuses this order can still be moved to, for a dropdown.
+ * The changes this order can still be made, for its dropdown.
  *
- * `unreachedSteps` decides *what* is offered — only steps ahead of where this
- * order actually is, so an already-paid booking simply has no "Paid" entry to
- * click and the menu can never contradict the flow-line on its detail page.
- * A step with no legacy equivalent is dropped rather than shown, because there
- * would be nothing to write while the old column is still dual-written.
+ * Stages come from `unreachedStages`, so an already-completed booking has no
+ * "Completed" entry to click and the menu can never contradict the flow-line on
+ * its detail page. The two payment entries are appended rather than being part
+ * of that sequence, because they are not stages: a booking can be invoiced at
+ * any stage, and paid at any stage, which is the whole point of the split.
+ *
+ * Cancel stays last - it is an exit from the flow, not a position in it.
  */
-type MenuStep = { code: string; legacy: SettableOrderStatus }
+type MenuStep = { code: string; change: BookingStatusChange }
 
-function menuSteps(processSteps: StatusOption[], financialSteps: StatusOption[], order: Order): MenuStep[] {
-  const flow = unreachedSteps(processSteps, flowStateOf(order))
-  // Financial states that sit *before* Paid (bookings' "Invoice Sent") have no
-  // place in the flow-line, but are still things an admin sets by hand. They go
-  // just ahead of Cancelled, which is always last.
-  const financial = unreachedFinancialSteps(financialSteps, order.financialCode, order.paidAt)
-  const cancelAt = flow.findIndex(s => s.code === 'cancelled')
-  const ordered = cancelAt >= 0
-    ? [...flow.slice(0, cancelAt), ...financial, ...flow.slice(cancelAt)]
-    : [...flow, ...financial]
-  return ordered
-    .map(s => ({ code: s.code, legacy: legacyOrderStatusForCode(s.code) }))
-    .filter((s): s is MenuStep => s.legacy != null)
+function menuSteps(order: Order): MenuStep[] {
+  const stages = unreachedStages(BOOKING_STAGES, flowStateOf(order))
+  const steps: MenuStep[] = stages
+    .filter(code => code !== CANCELLED)
+    .map(code => ({ code, change: { kind: 'stage', stage: code } as const }))
+
+  // "We have asked for money" only makes sense while the money has not arrived.
+  if (order.invoiceSentAt == null && order.paidAt == null) {
+    steps.push({ code: 'invoiced', change: { kind: 'invoiceSent', value: true } })
+  }
+  if (order.paidAt == null) {
+    steps.push({ code: 'paid', change: { kind: 'paid', value: true } })
+  }
+  if (order.stage !== CANCELLED) {
+    steps.push({ code: CANCELLED, change: { kind: 'stage', stage: CANCELLED } })
+  }
+  return steps
+}
+
+/**
+ * The optimistic client-side mirror of one status change.
+ *
+ * Calls the same pure patch functions the server action calls, rather than
+ * restating the rules — two copies of "which columns does this change move" is
+ * exactly the drift that an optimistic update hides until someone reloads.
+ */
+function optimisticPatch(o: Order, change: BookingStatusChange) {
+  const now = new Date()
+  const dates = {
+    confirmedAt: o.confirmedAt ? new Date(o.confirmedAt) : null,
+    finishedAt: o.completedAt ? new Date(o.completedAt) : null,
+    invoiceSentAt: o.invoiceSentAt ? new Date(o.invoiceSentAt) : null,
+    paidAt: o.paidAt ? new Date(o.paidAt) : null,
+  }
+  switch (change.kind) {
+    case 'stage':       return bookingStagePatch(change.stage as never, dates, now)
+    case 'paid':        return paidPatch(change.value, dates, now)
+    case 'invoiceSent': return invoiceSentPatch(change.value, dates, now)
+    case 'restore':     return {}
+  }
 }
 
 function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: string; color: string }) {
@@ -190,13 +201,13 @@ function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: s
  * financial axis has already moved off `invoiced`.
  */
 function PaymentMark({ order, locale }: {
-  order: { paidAt: Date | string | null; financialCode: string | null }
+  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null }
   locale: string
 }) {
-  if (isPaid(order)) {
+  if (paymentStateOf(order) === 'paid') {
     return <Mark label={adminT(locale, 'orders.status.paid')} glyph="₾✓" bg="#dcfce7" color="#14532d" />
   }
-  if (isInvoiced(order)) {
+  if (paymentStateOf(order) === 'invoiced') {
     return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
   }
   return null
@@ -310,7 +321,7 @@ function OrdersListRows({
       </div>
       <div className="flex flex-col gap-2">
         {orders.map(order => {
-          const cfg = styleFor(displayCodeOf(order))
+          const cfg = styleFor(order.stage)
           const heading = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : `${order.name} ${order.surname}`)
           const subheading = order.company || order.requestedCompanyName ? `${order.name} ${order.surname}` : visitLabel(locale, order.visitType)
           return (
@@ -344,7 +355,7 @@ function OrdersListRows({
                   className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
                 >
-                  {labelFor(locale, displayCodeOf(order))} ▾
+                  {labelFor(locale, order.stage)} ▾
                 </button>
                 <PaymentMark order={order} locale={locale} />
               </div>
@@ -432,24 +443,22 @@ const BOARD_COL_WIDTH = 232
  * has all of them.
  */
 function OrdersBoardColumns({
-  orders, processSteps, locale, onRowClick, onToggleStatusMenu,
+  orders, locale, onRowClick, onToggleStatusMenu,
 }: {
   orders: Order[]
-  processSteps: StatusOption[]
   locale: string
   onRowClick: (id: string) => void
   onToggleStatusMenu: (orderId: string, e: React.MouseEvent<HTMLButtonElement>) => void
 }) {
   const at = (key: string) => adminT(locale, key)
   const columns: string[] = [
-    ...processSteps.map(s => s.code),
-    ...(orders.some(isLimbo) ? [LIMBO_STATUS] : []),
+    ...BOOKING_STAGES,
   ]
   return (
     <div className="mt-4 overflow-x-auto pb-2">
       <div className="flex gap-3 items-start" style={{ width: 'max-content' }}>
         {columns.map(status => {
-          const items = orders.filter(o => displayCodeOf(o) === status)
+          const items = orders.filter(o => o.stage === status)
           const cfg = styleFor(status)
           return (
             <div
@@ -510,7 +519,7 @@ function OrdersBoardColumns({
                             className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap transition-opacity hover:opacity-75"
                             style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}
                           >
-                            {labelFor(locale, displayCodeOf(order))} ▾
+                            {labelFor(locale, order.stage)} ▾
                           </button>
                         </div>
                         <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.8125rem' }}>
@@ -529,7 +538,7 @@ function OrdersBoardColumns({
   )
 }
 
-export default function OrdersTable({ orders: initial, processSteps, financialSteps, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; /** The fulfilment vocabulary for bookings, resolved once on the server. */ processSteps: StatusOption[]; /** The payment vocabulary — its pre-Paid states are settable by hand. */ financialSteps: StatusOption[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -666,11 +675,14 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
       setEmailStatus('error')
     } else {
       setEmailStatus('sent')
-      // Reflect auto-advance in local state
-      const advanceStatuses: OrderStatus[] = ['NEW', 'CONFIRMED']
-      if (advanceStatuses.includes(emailOrder.status)) {
-        setOrders(prev => prev.map(o => o.id === emailOrder.id ? { ...o, status: 'INVOICE_SENT' } : o))
-        setEmailOrder(prev => prev ? { ...prev, status: 'INVOICE_SENT' } : prev)
+      // Reflect the invoice date in local state. It is recorded whatever stage
+      // the booking is at — sending an invoice says nothing about whether the
+      // visit happened — so unlike the old INVOICE_SENT status there is no
+      // "only advance from NEW or CONFIRMED" guard to mirror.
+      const sentAt = new Date()
+      if (emailOrder.invoiceSentAt == null) {
+        setOrders(prev => prev.map(o => o.id === emailOrder.id ? { ...o, invoiceSentAt: sentAt } : o))
+        setEmailOrder(prev => prev ? { ...prev, invoiceSentAt: sentAt } : prev)
       }
     }
   }
@@ -702,22 +714,18 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
     handleRowMouseLeave()
   }
 
-  async function handleStatusChange(orderId: string, newStatus: SettableOrderStatus) {
+  async function handleStatusChange(orderId: string, change: BookingStatusChange) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
-      // The same patch the server is about to write, restated in codes, so the
-      // pill and the paid marker move on click instead of waiting for the
-      // round trip. Derived from `statusBridge` rather than re-implemented, so
-      // the two cannot drift.
-      const patch = statusPatchCodes(orderStatusPatch(newStatus, {
-        processCode: o.processCode,
-        paidAt: o.paidAt ? new Date(o.paidAt) : null,
-      }))
-      return { ...o, status: newStatus, ...patch }
+      // Literally the same patch functions the server is about to call, so the
+      // pill and the payment mark move on click instead of waiting for the
+      // round trip — and the optimistic view cannot drift from the real write,
+      // which is where that kind of drift would be invisible.
+      return { ...o, ...optimisticPatch(o, change) }
     }))
-    await updateOrderStatus(orderId, newStatus)
+    await changeBookingStatus(orderId, change)
   }
 
   function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
@@ -801,7 +809,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
           <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         )}
         {orders.map(order => {
-          const cfg = styleFor(displayCodeOf(order))
+          const cfg = styleFor(order.stage)
           return (
             <div
               key={order.id}
@@ -832,7 +840,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
                       style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
                     >
-                      {labelFor(locale, displayCodeOf(order))} ▾
+                      {labelFor(locale, order.stage)} ▾
                     </button>
                     {statusMenuId === order.id && (
                       <div
@@ -840,10 +848,10 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                         style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                         onClick={e => e.stopPropagation()}
                       >
-                        {menuSteps(processSteps, financialSteps, order).map(step => (
+                        {menuSteps(order).map(step => (
                           <button
                             key={step.code}
-                            onClick={() => handleStatusChange(order.id, step.legacy)}
+                            onClick={() => handleStatusChange(order.id, step.change)}
                             className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors active:bg-amber-100"
                             style={{ color: C.text }}
                           >
@@ -891,7 +899,6 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
       <div className="hidden md:block">
       {view === 'board' ? (
         <OrdersBoardColumns
-          processSteps={processSteps}
           orders={orders}
           locale={locale}
           onRowClick={id => router.push(`/admin/orders/${id}`)}
@@ -1096,7 +1103,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                     style={{ position: 'sticky', right: ACTIONS_COL_WIDTH, backgroundColor: '#ffffff', boxShadow: '-1px 0 0 ' + C.border }}>
                     <div className="relative flex items-center gap-1.5">
                       {(() => {
-                        const cfg = styleFor(displayCodeOf(order))
+                        const cfg = styleFor(order.stage)
                         return (
                           <button
                             onClick={e => toggleStatusMenu(order.id, e)}
@@ -1107,7 +1114,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
                               border: `1px solid ${cfg.color}22`,
                             }}
                           >
-                            {labelFor(locale, displayCodeOf(order))} ▾
+                            {labelFor(locale, order.stage)} ▾
                           </button>
                         )
                       })()}
@@ -1188,7 +1195,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
         const order = orders.find(o => o.id === statusMenuId)
         if (!order) return null
         const menuW = 140
-        const steps = menuSteps(processSteps, financialSteps, order)
+        const steps = menuSteps(order)
         const menuH = steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
@@ -1205,7 +1212,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
             {steps.map(step => (
               <button
                 key={step.code}
-                onClick={() => handleStatusChange(order.id, step.legacy)}
+                onClick={() => handleStatusChange(order.id, step.change)}
                 className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
                 style={{ color: C.text }}
               >
@@ -1502,7 +1509,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
         const left = hoverPos.x + 20 + cardW > vw - pad ? hoverPos.x - cardW - 12 : hoverPos.x + 20
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
-        const cfg = styleFor(displayCodeOf(o))
+        const cfg = styleFor(o.stage)
         const hasSplit = o.tastingGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
         const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
         const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
@@ -1532,7 +1539,7 @@ export default function OrdersTable({ orders: initial, processSteps, financialSt
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: C.muted }}>{formatDate(o.date)} · {o.timeSlot}</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, displayCodeOf(o))}</span>
+                  <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, o.stage)}</span>
                   <PaymentMark order={o} locale={locale} />
                 </span>
               </div>

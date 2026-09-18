@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import StatisticsClient from './StatisticsClient'
+import { NOT_ABANDONED } from '@/lib/orderFilters'
 
 export default async function StatisticsPage() {
   const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
@@ -14,7 +15,10 @@ export default async function StatisticsPage() {
   const [rawOrders, companies, rawWineOrders] = await Promise.all([
     bookingOn
       ? withTenantDb(tenantId, tx => tx.order.findMany({
-          where: { tenantId },
+          // Abandoned checkouts never reached the winery, so they are not
+          // revenue and not activity — they are excluded here as on every
+          // other order surface.
+          where: { tenantId, ...NOT_ABANDONED },
           include: { company: { select: { name: true } } },
           orderBy: { date: 'asc' },
         }))
@@ -22,7 +26,7 @@ export default async function StatisticsPage() {
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     wineOrdersOn
       ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
-          where: { tenantId },
+          where: { tenantId, ...NOT_ABANDONED },
           include: { wineItems: true },
           orderBy: { createdAt: 'desc' },
         }))
@@ -103,7 +107,7 @@ export default async function StatisticsPage() {
       businessName: o.businessName,
       wines: items,
       displayTotal: Math.round(displayTotal),
-      status: o.status,
+      stage: o.stage,
       createdAt: o.createdAt.toISOString(),
     }
   })

@@ -3,21 +3,20 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { updateWineOrderStatus } from '@/app/actions/wineOrders'
+import { changeWineOrderStatus } from '@/app/actions/wineOrders'
 import {
-  legacyWineStatusForCode,
-  statusPatchCodes,
-  wineOrderStatusPatch,
-  type LegacyWineOrderStatus,
-  type SettableWineOrderStatus,
-} from '@/lib/statusBridge'
+  wineOrderStagePatch,
+  paidPatch,
+  type WineOrderStatusChange,
+} from '@/lib/statusWrite'
 import {
+  WINE_ORDER_STAGES,
   buildFlowLine,
-  unreachedSteps,
+  unreachedStages,
   isCancelled,
+  CANCELLED,
   type FlowState,
 } from '@/lib/statusFlow'
-import type { StatusOption } from '@/lib/statusVocabulary'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
@@ -30,30 +29,27 @@ const C = {
 type StatusStyle = { border: string; pill: string; pillText: string; labelKey: string }
 
 /**
- * Keyed by **vocabulary code** since chunk 4, not by the legacy status value.
- * The only rename is `pending` → `new` (the process axis's first state is
- * coded `new`); the wine UI keeps displaying "Pending" as its label, which is
- * why the label key did not move with it.
+ * Keyed by `WineOrderStage`, plus the two payment words that appear as
+ * flow-line steps, filter pills and marks.
  *
- * Display metadata stays in frontend code rather than moving into the
- * dimension rows — Max's call, 2026-09-17. The consequence is
- * `UNKNOWN_STATUS_STYLE` below: a status a tenant inserts later renders in
- * neutral grey under its own code until someone ships a label for it.
+ * The wine UI keeps displaying "Pending" for the first stage even though the
+ * stage is named NEW - that is the winery's own word for a wine order nobody
+ * has picked up yet, and it never moved.
+ *
+ * There is no pending_payment / payment_failed entry any more. An order that
+ * went to the card gateway and never came back is not in a status - it is not
+ * an order yet, and it lives on /admin/abandoned instead.
  */
 const STATUS_COLOR: Record<string, StatusStyle> = {
-  new:       { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', labelKey: 'wineOrders.status.pending' },
-  confirmed: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', labelKey: 'orders.status.confirmed' },
-  delivered: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', labelKey: 'wineOrders.status.delivered' },
-  cancelled: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', labelKey: 'orders.status.cancelled' },
-  // Financial axis. `paid` keeps the green it had as a legacy status value.
+  NEW:       { border: '#ca8a04', pill: '#fef9c3', pillText: '#713f12', labelKey: 'wineOrders.status.pending' },
+  CONFIRMED: { border: '#2563eb', pill: '#dbeafe', pillText: '#1e3a8a', labelKey: 'orders.status.confirmed' },
+  DELIVERED: { border: '#7c3aed', pill: '#ede9fe', pillText: '#4c1d95', labelKey: 'wineOrders.status.delivered' },
+  CANCELLED: { border: '#dc2626', pill: '#fee2e2', pillText: '#7f1d1d', labelKey: 'orders.status.cancelled' },
+  // Payment. PAID is the flow-line's own step code; `paid`/`unpaid` are the
+  // filter words.
+  PAID:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   unpaid:    { border: '#78716c', pill: '#f5f5f4', pillText: '#44403c', labelKey: 'wineOrders.status.unpaid' },
-  // Online payment states. Still keyed by the legacy `status` value, because
-  // the two axes deliberately cannot tell them apart — both map to process
-  // `new` + financial `unpaid` (Plan-StatusModel decision 11). They are not
-  // fulfilment stages; they are "went to the gateway and never came back".
-  pending_payment: { border: '#ea580c', pill: '#ffedd5', pillText: '#c2410c', labelKey: 'wineOrders.status.pendingPayment' },
-  payment_failed:  { border: '#9f1239', pill: '#ffe4e6', pillText: '#881337', labelKey: 'wineOrders.status.paymentFailed' },
 }
 
 const UNKNOWN_STATUS_STYLE: StatusStyle = { border: '#9ca3af', pill: '#f3f4f6', pillText: '#374151', labelKey: '' }
@@ -69,32 +65,8 @@ function labelFor(locale: string, code: string | null): string {
   return sc ? adminT(locale, sc.labelKey) : code
 }
 
-/**
- * For the pending-confirmation line, which still holds a **legacy** value —
- * that is what gets written, and what the confirm button will send. The two
- * vocabularies differ in exactly one place: legacy `pending` is coded `new`.
- */
-function labelForLegacy(locale: string, legacy: string): string {
-  return labelFor(locale, legacy === 'pending' ? 'new' : legacy)
-}
-
-/** The payment pills, and the only two financial codes wine orders can hold. */
+/** The payment pills. Derived from `paidAt`, not stored as a status. */
 const PAYMENT_FILTER_CODES = ['paid', 'unpaid'] as const
-
-/**
- * Orders that went to the payment gateway and never came back paid.
- *
- * Held apart from the fulfilment lifecycle on purpose. They are not orders the
- * winery is working on, and — since payments are deliberately never auto-expired
- * (a late gateway callback would otherwise cancel something that did get paid) —
- * they accumulate forever. Left in the default view they would slowly bury the
- * real orders, so "All" excludes them and each gets its own tab with a count.
- *
- * "Awaiting" is not "failed": the common case is someone closing the tab, and
- * plenty of those people pay later by transfer. Labelling them all as failures
- * would invite the winery to write off live business.
- */
-const PAYMENT_LIMBO_STATUSES = ['pending_payment', 'payment_failed'] as const
 
 type WineOrder = {
   id: string
@@ -110,62 +82,82 @@ type WineOrder = {
   discountPercent: number | null
   displayTotal: number | null
   totalEstimated: boolean
-  /**
-   * The legacy column. Still read for **one** thing: payment limbo, which the
-   * two axes deliberately do not encode. Everything else on this screen now
-   * renders from the four fields below.
-   */
-  status: string
-  processCode: string | null
-  financialCode: string | null
+  stage: string
+  confirmedAt: Date | string | null
+  deliveredAt: Date | string | null
   paidAt: Date | string | null
-  paidAtStage: string | null
   createdAt: Date | string
 }
 
-/** The subset the flow-line needs — every order row already satisfies it. */
+/** The subset the flow-line needs - every order row already satisfies it. */
 function flowStateOf(o: WineOrder): FlowState {
-  return { processCode: o.processCode, paidAt: o.paidAt, paidAtStage: o.paidAtStage }
+  return {
+    stage: o.stage,
+    createdAt: o.createdAt,
+    confirmedAt: o.confirmedAt,
+    finishedAt: o.deliveredAt,
+    paidAt: o.paidAt,
+  }
 }
 
 const isPaid = (o: WineOrder) => o.paidAt != null
-const isLimbo = (o: WineOrder) => (PAYMENT_LIMBO_STATUSES as readonly string[]).includes(o.status)
 
 /**
- * Off the working list: delivered or cancelled. Reads the process axis now, so
- * a delivered order that has not been paid for still dims — being owed money
- * is not a reason to keep it in the winery's packing queue, it is a reason for
- * it to show up under the Unpaid filter.
+ * Off the working list: delivered or cancelled. Reads the stage, so a delivered
+ * order that has not been paid for still dims - being owed money is not a
+ * reason to keep it in the winery's packing queue, it is a reason for it to
+ * show up under the Unpaid filter.
  */
 const isInactiveOrder = (o: WineOrder) =>
-  o.processCode === 'delivered' || o.processCode === 'cancelled' || o.status === 'payment_failed'
+  o.stage === 'DELIVERED' || o.stage === CANCELLED
 
 function itemLabel(i: WineOrderItem) {
   return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot} × ${i.quantity} bottle${i.quantity !== 1 ? 's' : ''}`
 }
 
 type Mode = 'cards' | 'table' | 'pack' | 'board'
-// Typed rather than `string` since chunk 3: updateWineOrderStatus now takes the
-// legacy union, so a retired or mistyped status fails to compile here instead
-// of being written straight through to the database.
-type PendingChange = { orderId: string; toStatus: LegacyWineOrderStatus }
+type PendingChange = { orderId: string; change: WineOrderStatusChange; label: string }
 
 /**
- * The statuses this order can still be moved to, for a dropdown.
+ * The changes this order can still be made, for a dropdown.
  *
- * `unreachedSteps` decides *what* is offered — only steps ahead of where this
- * order actually is, so an already-paid order simply has no "Paid" entry to
- * click and the menu can never contradict the flow-line beside it. This adds
- * the one practical constraint on top: a step with no legacy equivalent is
- * dropped rather than shown, because there would be nothing to write while the
- * old column is still dual-written.
+ * `unreachedStages` decides what is offered - only stages ahead of where this
+ * order actually is, so the menu can never contradict the flow-line beside it.
+ * Paid is appended rather than being part of that sequence: a wine order can be
+ * paid at any stage, which is the whole point of the split.
  */
-type MenuStep = { code: string; legacy: SettableWineOrderStatus }
+type MenuStep = { code: string; change: WineOrderStatusChange }
 
-function menuSteps(processSteps: StatusOption[], order: WineOrder): MenuStep[] {
-  return unreachedSteps(processSteps, flowStateOf(order))
-    .map(s => ({ code: s.code, legacy: legacyWineStatusForCode(s.code) }))
-    .filter((s): s is MenuStep => s.legacy != null)
+function menuSteps(order: WineOrder): MenuStep[] {
+  const steps: MenuStep[] = unreachedStages(WINE_ORDER_STAGES, flowStateOf(order))
+    .filter(code => code !== CANCELLED)
+    .map(code => ({ code, change: { kind: 'stage' as const, stage: code } }))
+  if (order.paidAt == null) {
+    steps.push({ code: 'PAID', change: { kind: 'paid', value: true } })
+  }
+  if (order.stage !== CANCELLED) {
+    steps.push({ code: CANCELLED, change: { kind: 'stage', stage: CANCELLED } })
+  }
+  return steps
+}
+
+/**
+ * The optimistic client mirror of one change, through the same pure patch
+ * functions the server action calls - two copies of the rules is where drift
+ * hides, and an optimistic view is where it stays invisible.
+ */
+function optimisticPatch(o: WineOrder, change: WineOrderStatusChange) {
+  const now = new Date()
+  const dates = {
+    confirmedAt: o.confirmedAt ? new Date(o.confirmedAt) : null,
+    finishedAt: o.deliveredAt ? new Date(o.deliveredAt) : null,
+    paidAt: o.paidAt ? new Date(o.paidAt) : null,
+  }
+  switch (change.kind) {
+    case 'stage':   return wineOrderStagePatch(change.stage as never, dates, now)
+    case 'paid':    return paidPatch(change.value, dates, now)
+    case 'restore': return {}
+  }
 }
 
 /**
@@ -264,11 +256,10 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
  * restaurant that will settle its invoice in a month. One line either way —
  * not a fulfilment stepper with a payment badge beside it.
  */
-function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onConfirm, onCancel, locale }: {
+function FlowLine({ order, onRequestChange, pendingLabel, onConfirm, onCancel, locale }: {
   order: WineOrder
-  processSteps: StatusOption[]
-  onRequestChange: (toStatus: LegacyWineOrderStatus) => void
-  pendingToStatus?: string
+  onRequestChange: (change: WineOrderStatusChange, label: string) => void
+  pendingLabel?: string
   onConfirm: () => void
   onCancel: () => void
   locale: string
@@ -276,53 +267,8 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
   const [panelHovered, setPanelHovered] = useState(false)
   const state = flowStateOf(order)
   const cancelled = isCancelled(state)
-  const limbo = isLimbo(order)
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
-  const steps = buildFlowLine(processSteps, state)
-
-  // Payment limbo replaces the flow-line rather than adding a step to it. The
-  // steps are a fulfilment sequence; "the customer never paid" is not a stage
-  // of fulfilling an order, and rendering it as one would imply the winery has
-  // work to do on it.
-  //
-  // "Mark as paid" is the important control here. Without it an order whose
-  // customer abandoned card payment and then paid by bank transfer — which will
-  // be common given how these wineries already work — would be stuck in limbo
-  // permanently with no way back into the normal flow.
-  if (limbo) {
-    const sc = styleFor(order.status)
-    return (
-      <div className="flex flex-col gap-2" style={{ minWidth: 115 }}>
-        <div className="rounded-lg px-3 py-2" style={{ backgroundColor: sc.pill, border: `1px solid ${sc.border}` }}>
-          <p className="text-xs font-bold" style={{ color: sc.pillText }}>{labelFor(locale, order.status)}</p>
-          <p className="text-xs mt-1 leading-snug" style={{ color: sc.pillText }}>
-            {at(order.status === 'payment_failed' ? 'wineOrders.payment.failedHint' : 'wineOrders.payment.awaitingHint')}
-          </p>
-        </div>
-        <button
-          onClick={() => onRequestChange('paid')}
-          className="text-xs px-3 py-2 rounded-lg font-medium"
-          style={{ backgroundColor: '#dcfce7', color: '#14532d', border: '1px solid #86efac' }}
-        >
-          {at('wineOrders.payment.markPaid')}
-        </button>
-        <button
-          onClick={() => onRequestChange('cancelled')}
-          className="text-xs px-3 py-1.5 rounded-lg"
-          style={{ color: C.faint, border: `1px solid ${C.border}`, backgroundColor: '#fff' }}
-        >
-          {at('orders.status.cancelled')}
-        </button>
-        {pendingToStatus && (
-          <div className="pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
-            <span style={{ color: C.muted, flex: 1 }}>→ {labelForLegacy(locale, pendingToStatus)}?</span>
-            <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
-            <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
-          </div>
-        )}
-      </div>
-    )
-  }
+  const steps = buildFlowLine(WINE_ORDER_STAGES, state)
 
   return (
     <div
@@ -350,7 +296,7 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
             ))}
           </div>
           <button
-            onClick={() => onRequestChange('pending')}
+            onClick={() => onRequestChange({ kind: 'stage', stage: 'NEW' }, labelFor(locale, 'NEW'))}
             className="mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
@@ -360,16 +306,13 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
       ) : (
         <div className="flex flex-col items-start">
           {steps.map((step, i) => {
-            const legacy = legacyWineStatusForCode(step.code)
-            // A step with no legacy equivalent — a status this tenant inserted
-            // — has nothing to write while the old column is still dual-written,
-            // so it renders as a position on the line but cannot be clicked.
-            // Chunk 5 removes the restriction along with the old column.
-            const unwritable = legacy == null
             // Paid is never un-done from the line. Reversing a payment is a
             // deliberate correction, not a click away from a step label.
-            const isClickable = !unwritable && !step.active && !(step.kind === 'paid' && step.done)
+            const isClickable = !step.active && !(step.kind === 'event' && step.done)
             const label = labelFor(locale, step.code)
+            const change: WineOrderStatusChange = step.kind === 'event'
+              ? { kind: 'paid', value: true }
+              : { kind: 'stage', stage: step.code }
             return (
               <div key={step.code} className="flex flex-col items-start">
                 <StepButton
@@ -379,10 +322,9 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
                   isActive={step.active}
                   isClickable={isClickable}
                   panelHovered={panelHovered}
-                  onClick={() => { if (isClickable && legacy) onRequestChange(legacy) }}
+                  onClick={() => { if (isClickable) onRequestChange(change, label) }}
                   tooltip={
-                    unwritable ? at('wineOrders.stepNotSettable')
-                      : !isClickable ? undefined
+                    !isClickable ? undefined
                       : step.done ? at('wineOrders.revertTo', { label })
                       : at('wineOrders.advanceTo', { label })
                   }
@@ -398,9 +340,9 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
           })}
         </div>
       )}
-      {pendingToStatus && (
+      {pendingLabel && (
         <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
-          <span style={{ color: C.muted, flex: 1 }}>→ {labelForLegacy(locale, pendingToStatus)}?</span>
+          <span style={{ color: C.muted, flex: 1 }}>→ {pendingLabel}?</span>
           <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
           <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
         </div>
@@ -420,12 +362,9 @@ function FlowLine({ order, processSteps, onRequestChange, pendingToStatus, onCon
  * winery is still chasing, which the old single column could not express at
  * all — an order was either delivered or paid, never both facts at once.
  */
-function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo, locale, statusCounts, processSteps }: {
+function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, dateFrom, onDateFrom, dateTo, onDateTo, locale }: {
   filters: Set<string>; onToggleFilter: (f: string) => void; onClearFilters: () => void
   search: string; onSearch: (s: string) => void
-  /** Per-code totals, used to badge the limbo tabs. */
-  statusCounts: Record<string, number>
-  processSteps: StatusOption[]
   dateFrom: string; onDateFrom: (d: string) => void
   dateTo: string; onDateTo: (d: string) => void
   locale: string
@@ -482,7 +421,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         >
           {at('wineOrders.filter.all')}
         </button>
-        {processSteps.map(s => pill(s.code))}
+        {WINE_ORDER_STAGES.map(stage => pill(stage))}
 
         {/* Payment axis. Separated so it reads as a second question rather than
             five more stages — and so it is visually obvious that picking one
@@ -490,12 +429,6 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         <span className="w-px self-stretch mx-1" style={{ backgroundColor: C.border }} />
         {PAYMENT_FILTER_CODES.map(code => pill(code))}
 
-        {/* Limbo tabs come last — an exception list, not part of the normal
-            flow. A tab with nothing in it is noise (the common case for any
-            winery not taking card payments at all), so it hides until it
-            matters. */}
-        {PAYMENT_LIMBO_STATUSES.filter(code => (statusCounts[code] ?? 0) > 0)
-          .map(code => pill(code, { count: statusCounts[code] ?? 0 }))}
       </div>
       <div className="flex gap-2 flex-wrap items-center">
         <input
@@ -529,11 +462,10 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
 
 // ── TableView (Orders-page style) ──────────────────────────────────────
 
-function TableView({ orders, processSteps, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
+function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
   orders: WineOrder[]
-  processSteps: StatusOption[]
   pendingChange: PendingChange | null
-  onRequestChange: (orderId: string, toStatus: LegacyWineOrderStatus) => void
+  onRequestChange: (orderId: string, change: WineOrderStatusChange, label: string) => void
   onConfirm: () => void
   onCancel: () => void
   locale: string
@@ -567,7 +499,7 @@ function TableView({ orders, processSteps, pendingChange, onRequestChange, onCon
           {orders.map((order, i) => {
             // The row now reads from the process axis; the paid marker beside
             // the pill carries the financial one.
-            const sc = styleFor(isLimbo(order) ? order.status : order.processCode)
+            const sc = styleFor(order.stage)
             const isInactive = isInactiveOrder(order)
             const isPending = pendingChange?.orderId === order.id
             const isLast = i === orders.length - 1
@@ -624,7 +556,7 @@ function TableView({ orders, processSteps, pendingChange, onRequestChange, onCon
                         className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
                         style={{ backgroundColor: sc.pill, color: sc.pillText, border: `1px solid ${sc.border}44` }}
                       >
-                        {labelFor(locale, isLimbo(order) ? order.status : order.processCode)} ▾
+                        {labelFor(locale, order.stage)} ▾
                       </button>
                       {isPaid(order) && <PaidMark locale={locale} />}
                     </div>
@@ -634,10 +566,10 @@ function TableView({ orders, processSteps, pendingChange, onRequestChange, onCon
                         style={{ minWidth: 150, backgroundColor: C.bg, borderColor: C.border }}
                         onClick={e => e.stopPropagation()}
                       >
-                        {menuSteps(processSteps, order).map(step => (
+                        {menuSteps(order).map(step => (
                           <button
                             key={step.code}
-                            onClick={() => { setStatusMenuId(null); onRequestChange(order.id, step.legacy) }}
+                            onClick={() => { setStatusMenuId(null); onRequestChange(order.id, step.change, labelFor(locale, step.code)) }}
                             className="w-full text-left px-3 py-2 text-sm flex items-center gap-2"
                             style={{ color: C.text }}
                           >
@@ -651,7 +583,7 @@ function TableView({ orders, processSteps, pendingChange, onRequestChange, onCon
                     {isPending && (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                         <span style={{ color: C.muted }}>
-                          → {labelForLegacy(locale, pendingChange.toStatus)}?
+                          → {pendingChange.label}?
                         </span>
                         <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white"
                           style={{ backgroundColor: '#16a34a' }}>✓</button>
@@ -694,11 +626,10 @@ const BOARD_COL_WIDTH = 232
  * permanently-empty columns). This is the one deliberate difference from the
  * Booking Orders board, which always shows every column.
  */
-function BoardView({ orders, processSteps, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
+function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel, locale }: {
   orders: WineOrder[]
-  processSteps: StatusOption[]
   pendingChange: PendingChange | null
-  onRequestChange: (orderId: string, toStatus: LegacyWineOrderStatus) => void
+  onRequestChange: (orderId: string, change: WineOrderStatusChange, label: string) => void
   onConfirm: () => void
   onCancel: () => void
   locale: string
@@ -739,14 +670,13 @@ function BoardView({ orders, processSteps, pendingChange, onRequestChange, onCon
   }
 
   const columns: string[] = [
-    ...processSteps.map(s => s.code),
-    ...PAYMENT_LIMBO_STATUSES.filter(s => orders.some(o => o.status === s)),
+    ...WINE_ORDER_STAGES,
   ]
 
   // A limbo order sits in its own column, not under `new`. Both map to process
   // `new` on the axes — deliberately, since an abandoned checkout leaves the
   // order where it started — so the legacy value is what tells them apart.
-  const columnOf = (o: WineOrder) => (isLimbo(o) ? o.status : o.processCode)
+  const columnOf = (o: WineOrder) => o.stage
 
   if (orders.length === 0) {
     return <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('wineOrders.noOrdersMatch')}</p>
@@ -817,7 +747,7 @@ function BoardView({ orders, processSteps, pendingChange, onRequestChange, onCon
                         {isPending && (
                           <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                             <span style={{ color: C.muted }}>
-                              → {labelForLegacy(locale, pendingChange.toStatus)}?
+                              → {pendingChange.label}?
                             </span>
                             <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
                             <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
@@ -839,7 +769,7 @@ function BoardView({ orders, processSteps, pendingChange, onRequestChange, onCon
         const order = orders.find(o => o.id === statusMenuId)
         if (!order) return null
         const menuW = 150
-        const steps = menuSteps(processSteps, order)
+        const steps = menuSteps(order)
         const menuH = steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
@@ -856,7 +786,7 @@ function BoardView({ orders, processSteps, pendingChange, onRequestChange, onCon
             {steps.map(step => (
               <button
                 key={step.code}
-                onClick={() => { setStatusMenuId(null); setStatusMenuRect(null); onRequestChange(order.id, step.legacy) }}
+                onClick={() => { setStatusMenuId(null); setStatusMenuRect(null); onRequestChange(order.id, step.change, labelFor(locale, step.code)) }}
                 className="w-full text-left px-3 py-2 text-sm flex items-center gap-2"
                 style={{ color: C.text }}
               >
@@ -912,7 +842,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
         <tbody style={{ backgroundColor: '#ffffff' }}>
           {orders.map((order, i) => {
             const bottles = order.wineItems.reduce((s, item) => s + item.quantity, 0)
-            const sc = styleFor(isLimbo(order) ? order.status : order.processCode)
+            const sc = styleFor(order.stage)
             const isSelected = selected.has(order.id)
             const isLast = i === orders.length - 1
             return (
@@ -946,7 +876,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
                       style={{ backgroundColor: sc.pill, color: sc.pillText }}>
-                      {labelFor(locale, isLimbo(order) ? order.status : order.processCode)}
+                      {labelFor(locale, order.stage)}
                     </span>
                     {isPaid(order) && <PaidMark locale={locale} />}
                   </div>
@@ -965,10 +895,9 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
 
 // ── Main component ─────────────────────────────────────────────────────
 
-export default function WineOrdersClient({ orders: initial, processSteps, locale = 'en' }: {
+export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   orders: WineOrder[]
   /** The fulfilment vocabulary for wine orders, resolved once on the server. */
-  processSteps: StatusOption[]
   locale?: string
 }) {
   const at = (key: string) => adminT(locale, key)
@@ -986,20 +915,6 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
   const [listRef] = useAutoAnimate({ duration: 400 })
   const [, startTransition] = useTransition()
 
-  // Counted across every order, not the filtered set — a tab badge has to keep
-  // showing its total while a different tab is selected. Keyed by vocabulary
-  // code, plus the legacy limbo values, which are the only thing the badges
-  // are actually used for.
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const o of orders) {
-      const key = isLimbo(o) ? o.status : o.processCode
-      if (key) counts[key] = (counts[key] ?? 0) + 1
-      counts[isPaid(o) ? 'paid' : 'unpaid'] = (counts[isPaid(o) ? 'paid' : 'unpaid'] ?? 0) + 1
-    }
-    return counts
-  }, [orders])
-
   /**
    * One pill set, two axes.
    *
@@ -1009,14 +924,12 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
    * the toggle state for one row of buttons; the partition happens here.
    */
   const activeFilters = useMemo(() => {
-    const processCodes = new Set(processSteps.map(s => s.code))
     const picked = [...filters]
     return {
-      process: new Set(picked.filter(f => processCodes.has(f))),
+      stage: new Set(picked.filter(f => (WINE_ORDER_STAGES as readonly string[]).includes(f))),
       payment: new Set(picked.filter(f => (PAYMENT_FILTER_CODES as readonly string[]).includes(f))),
-      limbo: new Set(picked.filter(f => (PAYMENT_LIMBO_STATUSES as readonly string[]).includes(f))),
     }
-  }, [filters, processSteps])
+  }, [filters])
 
   const matchesSearchAndDates = useCallback((o: WineOrder) => {
     if (search && !o.businessName.toLowerCase().includes(search.toLowerCase())) return false
@@ -1029,40 +942,20 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
     activeFilters.payment.size === 0 || activeFilters.payment.has(isPaid(o) ? 'paid' : 'unpaid'),
   [activeFilters])
 
+  // Every order reaching this component is already a real one - abandoned
+  // checkouts are excluded by the server query, not filtered out here, so
+  // there is no "hide limbo unless a tab is picked" rule left to get wrong.
   const filteredOrders = useMemo(() => orders.filter(o => {
     if (!matchesSearchAndDates(o)) return false
-    // "All" means all *real* orders. Unpaid gateway leftovers are reachable only
-    // through their own tabs, whose counts keep them from being forgotten — and
-    // never through a process pill, since on the axes they sit at `new` like
-    // any freshly placed order.
-    if (isLimbo(o)) return activeFilters.limbo.has(o.status) && matchesPayment(o)
-    if (activeFilters.process.size > 0 && !(o.processCode && activeFilters.process.has(o.processCode))) return false
+    if (activeFilters.stage.size > 0 && !activeFilters.stage.has(o.stage)) return false
     return matchesPayment(o)
   }), [orders, activeFilters, matchesPayment, matchesSearchAndDates])
 
-  // Same filters as `filteredOrders`, minus the "hide limbo unless a tab is
-  // picked" rule — the board already isolates every status into its own
-  // column, so a limbo order isn't clutter there the way it would be in an
-  // undifferentiated Cards/Table list. Using `filteredOrders` here silently
-  // left the Awaiting Payment / Payment Failed columns permanently empty
-  // (caught live while verifying: 3 real pending_payment orders, board showed
-  // "None").
-  const boardOrders = useMemo(() => orders.filter(o => {
-    if (!matchesSearchAndDates(o)) return false
-    if (!matchesPayment(o)) return false
-    // Limbo shows unfiltered (that is the board's whole reason for having its
-    // own order list), but a *process* pill still hides it: asking for
-    // Delivered and being shown abandoned checkouts is noise. It cannot come
-    // back through the Pending pill either, because on the axes a limbo order
-    // does sit at `new` — which would read as 'the winery has work to do on
-    // this', the thing holding limbo apart is meant to prevent.
-    if (isLimbo(o)) {
-      if (activeFilters.limbo.has(o.status)) return true
-      return activeFilters.process.size === 0 && activeFilters.limbo.size === 0
-    }
-    if (activeFilters.process.size > 0 && !(o.processCode && activeFilters.process.has(o.processCode))) return false
-    return true
-  }), [orders, activeFilters, matchesPayment, matchesSearchAndDates])
+  // The board groups every stage into its own column, so it needs the same set
+  // the list gets. It used to need its own list because limbo orders were
+  // filtered out of `filteredOrders` and their columns came back permanently
+  // empty; with abandoned orders off this screen entirely, the two are the same.
+  const boardOrders = filteredOrders
 
   const cardsVisible = useMemo(() => [...filteredOrders].sort((a, b) => {
     const aI = isInactiveOrder(a) && !recentlyInactive.has(a.id)
@@ -1086,7 +979,7 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
    * cases: left as it was, paid wine would have dropped off the packing list.
    */
   const packableOrders = useCallback(
-    () => orders.filter(o => o.processCode === 'confirmed'),
+    () => orders.filter(o => o.stage === 'CONFIRMED'),
     [orders]
   )
 
@@ -1099,37 +992,33 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
     setMode(m)
   }
 
-  function handleUpdate(id: string, status: LegacyWineOrderStatus) {
+  function handleUpdate(id: string, change: WineOrderStatusChange) {
     const prev = orders.find(o => o.id === id)
     if (!prev) return
     const wasActive = !isInactiveOrder(prev)
-    // The same patch the server is about to write, restated in codes, so the
-    // flow-line moves on click instead of waiting for the round trip. Derived
-    // from `statusBridge` rather than re-implemented, so the two cannot drift.
-    const patch = statusPatchCodes(wineOrderStatusPatch(status, {
-      processCode: prev.processCode,
-      paidAt: prev.paidAt ? new Date(prev.paidAt) : null,
-    }))
-    const next: WineOrder = { ...prev, status, ...patch }
+    // Literally the same pure patch function the server action calls, so the
+    // flow-line moves on click instead of waiting for the round trip and the
+    // optimistic view cannot drift from the real write.
+    const next: WineOrder = { ...prev, ...optimisticPatch(prev, change) }
     const isNowInactive = isInactiveOrder(next)
     setOrders(p => p.map(o => o.id === id ? next : o))
     if (wasActive && isNowInactive) {
       setRecentlyInactive(s => new Set([...s, id]))
       setTimeout(() => setRecentlyInactive(s => { const n = new Set(s); n.delete(id); return n }), 520)
     }
-    startTransition(async () => { await updateWineOrderStatus(id, status) })
+    startTransition(async () => { await changeWineOrderStatus(id, change) })
   }
 
-  function requestChange(orderId: string, toStatus: LegacyWineOrderStatus) {
+  function requestChange(orderId: string, change: WineOrderStatusChange, label: string) {
     if (timerRef.current) clearTimeout(timerRef.current)
-    setPendingChange({ orderId, toStatus })
+    setPendingChange({ orderId, change, label })
     timerRef.current = setTimeout(() => setPendingChange(null), 5000)
   }
 
   function confirmChange() {
     if (!pendingChange) return
     if (timerRef.current) clearTimeout(timerRef.current)
-    handleUpdate(pendingChange.orderId, pendingChange.toStatus)
+    handleUpdate(pendingChange.orderId, pendingChange.change)
     setPendingChange(null)
   }
 
@@ -1190,8 +1079,6 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
       dateFrom={dateFrom} onDateFrom={setDateFrom}
       dateTo={dateTo} onDateTo={setDateTo}
       locale={locale}
-      statusCounts={statusCounts}
-      processSteps={processSteps}
     />
   )
 
@@ -1208,7 +1095,7 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
         <div className="flex flex-col gap-4" ref={listRef}>
           {cardsVisible.map(order => {
             const isInactive = isInactiveOrder(order)
-            const sc = styleFor(isLimbo(order) ? order.status : order.processCode)
+            const sc = styleFor(order.stage)
             const isPending = pendingChange?.orderId === order.id
             const isSelected = selected.has(order.id)
             return (
@@ -1278,9 +1165,8 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
                 >
                   <FlowLine
                     order={order}
-                    processSteps={processSteps}
-                    onRequestChange={(toStatus: LegacyWineOrderStatus) => requestChange(order.id, toStatus)}
-                    pendingToStatus={isPending ? pendingChange.toStatus : undefined}
+                    onRequestChange={(change: WineOrderStatusChange, label: string) => requestChange(order.id, change, label)}
+                    pendingLabel={isPending ? pendingChange.label : undefined}
                     onConfirm={confirmChange}
                     onCancel={cancelChange}
                     locale={locale}
@@ -1303,7 +1189,6 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
         {filterBar}
         <TableView
           orders={filteredOrders}
-          processSteps={processSteps}
           pendingChange={pendingChange}
           onRequestChange={requestChange}
           onConfirm={confirmChange}
@@ -1323,7 +1208,6 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
         {filterBar}
         <BoardView
           orders={boardOrders}
-          processSteps={processSteps}
           pendingChange={pendingChange}
           onRequestChange={requestChange}
           onConfirm={confirmChange}
@@ -1347,7 +1231,7 @@ export default function WineOrdersClient({ orders: initial, processSteps, locale
         locale={locale}
       >
         <PackingTable
-          orders={filteredOrders.filter(o => o.processCode !== 'cancelled' && o.processCode !== 'delivered')}
+          orders={filteredOrders.filter(o => o.stage !== 'CANCELLED' && o.stage !== 'DELIVERED')}
           selected={selected}
           onToggle={toggleOrder}
           onToggleAll={toggleAll}

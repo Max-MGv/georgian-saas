@@ -205,11 +205,11 @@ async function main() {
   // ── 6. groupBy (used in orders/page.tsx statusCounts) ──────────────────────
   console.log('\n── 6. groupBy (statusCounts pattern) ──')
 
-  await test('Order.groupBy by status works via withTenantDb', async () => {
+  await test('Order.groupBy by stage works via withTenantDb', async () => {
     const rows = await withTenantDb(t1.id, tx => tx.order.groupBy({
-      by: ['status'],
+      by: ['stage'],
       where: { tenantId: t1.id },
-      _count: { status: true },
+      _count: { stage: true },
     }))
     assert(Array.isArray(rows), 'Expected array from groupBy')
   })

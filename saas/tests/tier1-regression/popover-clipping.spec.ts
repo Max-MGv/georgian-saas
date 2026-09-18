@@ -33,12 +33,25 @@ test.describe('Popover / dropdown clipping', () => {
     await page.goto('/admin/orders');
 
     // 1. Click the first row's status pill to open its dropdown
-    await page.getByRole('button', { name: /^(New|Confirmed|Invoice Sent|Awaiting Payment|Paid|Completed|Cancelled) ▾$/ }).first().click();
+    await page.getByRole('button', { name: /^(New|Confirmed|Completed|Cancelled) ▾$/ }).first().click();
 
-    // expect: each status option renders fully inside the viewport
+    // expect: every option the menu offers renders fully inside the viewport.
+    //
+    // Asserted over whatever the menu actually contains, not a fixed list of
+    // status names. Since Feature 191 the dropdown is per-order — it offers
+    // only the stages this booking has not reached, plus Invoice Sent and Paid
+    // while those are still outstanding — so no single row is guaranteed to
+    // show any particular option. This spec is about clipping, not vocabulary,
+    // and hard-coding the words made it fail for a reason it does not test.
     const viewport = page.viewportSize()!;
-    for (const status of ['New', 'Confirmed', 'Invoice Sent', 'Paid', 'Completed']) {
-      const option = page.getByRole('button', { name: status, exact: true });
+    const menu = page.locator('div').filter({ hasText: /^$/ }).locator('button:visible');
+    const options = page.getByRole('button', {
+      name: /^(New|Confirmed|Completed|Cancelled|Invoice Sent|Paid)$/, exact: true,
+    });
+    const count = await options.count();
+    expect(count, 'the status menu should offer at least one option').toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const option = options.nth(i);
       await expect(option).toBeVisible();
       const box = await option.boundingBox();
       expect(box).not.toBeNull();
@@ -48,5 +61,6 @@ test.describe('Popover / dropdown clipping', () => {
       expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
       expect(box!.height).toBeGreaterThan(10);
     }
+    void menu;
   });
 });

@@ -15,7 +15,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
-import { seedStatusColumns, type LegacyWineOrderStatus } from '../lib/statusBridge'
+import { seedStageColumns } from '../lib/statusWrite'
+import type { WineOrderStage } from '@prisma/client'
 
 const NM_TENANT_ID = 'cmqou94er0000vl1sl9v0yv54'
 const CONFIRMED = process.argv.includes('--confirm')
@@ -50,7 +51,7 @@ const BUSINESSES = [
     contactName: 'Giorgi Beridze',
     contactPhone: '+995 598 100 200',
     contactEmail: 'giorgi.beridze@rustaviwinedine.ge',
-    status: 'pending',
+    stage: 'NEW' as const,
   },
   {
     businessName: 'Batumi Seaside Restaurant',
@@ -61,7 +62,7 @@ const BUSINESSES = [
     contactName: 'Nino Tsiklauri',
     contactPhone: '+995 577 300 400',
     contactEmail: 'nino.tsiklauri@batumiseaside.ge',
-    status: 'confirmed',
+    stage: 'CONFIRMED' as const,
   },
   {
     businessName: 'Tbilisi Old Town Hotel',
@@ -72,7 +73,7 @@ const BUSINESSES = [
     contactName: 'Luka Jikia',
     contactPhone: '+995 591 500 600',
     contactEmail: 'luka.jikia@tbilisioldtown.ge',
-    status: 'pending',
+    stage: 'NEW' as const,
   },
   {
     businessName: 'Kutaisi Grand Cafe',
@@ -83,7 +84,7 @@ const BUSINESSES = [
     contactName: 'Mariam Kvaratskhelia',
     contactPhone: '+995 555 700 800',
     contactEmail: 'mariam.k@kutaisigrandcafe.ge',
-    status: 'pending',
+    stage: 'NEW' as const,
   },
   {
     businessName: 'Signagi Wine House',
@@ -94,7 +95,7 @@ const BUSINESSES = [
     contactName: 'Davit Alavidze',
     contactPhone: '+995 599 900 100',
     contactEmail: 'davit.alavidze@signagiwinehouse.ge',
-    status: 'confirmed',
+    stage: 'CONFIRMED' as const,
   },
 ]
 
@@ -128,7 +129,7 @@ async function main() {
 
   if (!CONFIRMED) {
     console.log(`Would create ${BUSINESSES.length} wine orders:`)
-    for (const biz of BUSINESSES) console.log(`  - ${biz.businessName} (${biz.status})`)
+    for (const biz of BUSINESSES) console.log(`  - ${biz.businessName} (${biz.stage})`)
     console.log('\nNothing was written. Re-run with --confirm to apply.')
     return
   }
@@ -140,7 +141,7 @@ async function main() {
       data: {
         ...biz,
         tenantId: nm.id,
-        ...seedStatusColumns('wineOrder', biz.status as LegacyWineOrderStatus, new Date()),
+        ...seedStageColumns('wineOrder', biz.stage as WineOrderStage, new Date()),
         totalAmount: items.reduce((sum, i) => sum + i.quantity * i.price, 0),
         wineItems: {
           create: items.map(i => ({
@@ -154,7 +155,7 @@ async function main() {
       },
     })
     created++
-    console.log(`  + ${biz.businessName} (${biz.status})`)
+    console.log(`  + ${biz.businessName} (${biz.stage})`)
   }
 
   console.log(`\n-> ${created} wine order(s) created for Nikalas Marani.`)

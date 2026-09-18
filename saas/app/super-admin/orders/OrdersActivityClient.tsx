@@ -14,7 +14,8 @@ const C = {
 
 type Booking = {
   id: string
-  status: string
+  stage: string
+  payment: 'paid' | 'invoiced' | 'unpaid'
   date: string
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -32,7 +33,8 @@ type WineOrder = {
   id: string
   businessName: string
   contactName: string
-  status: string
+  stage: string
+  payment: 'paid' | 'invoiced' | 'unpaid'
   createdAt: string
   displayTotal: number
   bottleCount: number
@@ -42,14 +44,21 @@ type WineOrder = {
 
 type Mode = 'bookings' | 'wine'
 
+// Stage only. Payment is a separate fact and shows as its own mark, which is
+// the whole point of Feature 191 — a completed-but-unpaid booking is one row
+// saying both things, not a single word that has to pick one.
 const BOOKING_STATUS_LABEL: Record<string, string> = {
-  NEW: 'New', CONFIRMED: 'Confirmed', INVOICE_SENT: 'Invoice Sent',
-  PENDING_PAYMENT: 'Awaiting Payment',
-  PAID: 'Paid', COMPLETED: 'Completed', CANCELLED: 'Cancelled',
+  NEW: 'New', CONFIRMED: 'Confirmed', COMPLETED: 'Completed', CANCELLED: 'Cancelled',
 }
 const WINE_STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending', confirmed: 'Confirmed', paid: 'Paid',
-  delivered: 'Delivered', cancelled: 'Cancelled',
+  NEW: 'New', CONFIRMED: 'Confirmed', DELIVERED: 'Delivered', CANCELLED: 'Cancelled',
+}
+
+/** Paid beats invoiced — an order that was invoiced and then paid reads as paid. */
+function PaymentMark({ payment }: { payment: 'paid' | 'invoiced' | 'unpaid' }) {
+  if (payment === 'paid') return <span title="Paid" style={{ color: '#4ade80' }}> ₾✓</span>
+  if (payment === 'invoiced') return <span title="Invoice sent" style={{ color: '#fbbf24' }}> ✉</span>
+  return null
 }
 
 const selectStyle: React.CSSProperties = {
@@ -88,7 +97,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return bookings.filter(b => {
       if (tenantFilter && b.tenantName !== tenantFilter) return false
-      if (statusFilter && b.status !== statusFilter) return false
+      if (statusFilter && b.stage !== statusFilter) return false
       if (upcomingOnly && new Date(b.date) < today) return false
       return true
     })
@@ -97,7 +106,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
   const filteredWineOrders = useMemo(() => {
     return wineOrders.filter(w => {
       if (tenantFilter && w.tenantName !== tenantFilter) return false
-      if (statusFilter && w.status !== statusFilter) return false
+      if (statusFilter && w.stage !== statusFilter) return false
       return true
     })
   }, [wineOrders, tenantFilter, statusFilter])
@@ -174,7 +183,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
                   <td className="px-4 py-3" style={{ color: C.muted }}>{b.visitType === 'TASTING' ? 'Tasting' : 'Tasting + Lunch'}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{b.guestCount}</td>
                   <td className="px-4 py-3" style={{ color: C.text }}>{b.totalPrice != null ? `${Math.round(b.totalPrice)}₾` : '—'}</td>
-                  <td className="px-4 py-3" style={{ color: C.muted }}>{BOOKING_STATUS_LABEL[b.status] ?? b.status}</td>
+                  <td className="px-4 py-3" style={{ color: C.muted }}>{BOOKING_STATUS_LABEL[b.stage] ?? b.stage}<PaymentMark payment={b.payment} /></td>
                   <td className="px-4 py-3 text-right">
                     {b.tenantDomain && (
                       <a href={`https://${b.tenantDomain}/admin/orders/${b.id}`} target="_blank" rel="noopener noreferrer"
@@ -212,7 +221,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
                   </td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{w.bottleCount}</td>
                   <td className="px-4 py-3" style={{ color: C.text }}>{w.displayTotal}₾</td>
-                  <td className="px-4 py-3" style={{ color: C.muted }}>{WINE_STATUS_LABEL[w.status] ?? w.status}</td>
+                  <td className="px-4 py-3" style={{ color: C.muted }}>{WINE_STATUS_LABEL[w.stage] ?? w.stage}<PaymentMark payment={w.payment} /></td>
                   <td className="px-4 py-3 text-right">
                     {w.tenantDomain && (
                       <a href={`https://${w.tenantDomain}/admin/wine-orders`} target="_blank" rel="noopener noreferrer"

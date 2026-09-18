@@ -5,42 +5,68 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import {
-  wineOrderStatusPatch,
-  NEW_ORDER_STATUS_COLUMNS,
-  type LegacyWineOrderStatus,
-} from '@/lib/statusBridge'
+  wineOrderStagePatch,
+  paidPatch,
+  isWineOrderStage,
+  NEW_ORDER_COLUMNS,
+} from '@/lib/statusWrite'
+// Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
+import type { WineOrderStatusChange } from '@/lib/statusWrite'
+import type { WineOrderStage } from '@prisma/client'
 
 /**
- * `status` was a bare `string` until chunk 3 — nothing in the app or the
- * database rejected a typo or a retired value, which is why the status split
- * would otherwise have failed silently here (Plan-StatusModel's silent-failure
- * table). It is now the legacy union.
+ * Every hand-made change to a wine order's status.
  *
- * Writes both the old column and the two new axes. Reads the row first so the
- * patch can preserve whichever axis this status says nothing about, and so a
- * paid write can snapshot the stage it landed at.
+ * Replaces `updateWineOrderStatus(id, status: string)` — the unvalidated bare
+ * string that was the root cause this whole redesign was opened for. Stage and
+ * payment are two separate things now, so a single value that moves whichever
+ * one it feels like has nowhere left to hide.
  */
-export async function updateWineOrderStatus(id: string, status: LegacyWineOrderStatus) {
+export async function changeWineOrderStatus(
+  id: string,
+  change: WineOrderStatusChange
+): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, async tx => {
-    const current = await tx.wineOrder.findFirst({
-      where: { id, tenantId },
-      select: { paidAt: true, processStatus: { select: { code: true } } },
+
+  // A stage arrives from a dropdown and is a string at runtime however
+  // well-typed the call site looks. Postgres would refuse an invalid enum value
+  // too; this turns that into a friendly error rather than a 500.
+  if (change.kind === 'stage' && !isWineOrderStage(change.stage)) {
+    return { error: 'Unknown status.' }
+  }
+
+  try {
+    // Read first so a patch preserves a date that already exists rather than
+    // re-stamping it — when an order was really confirmed must not drift
+    // forward every time someone touches the row.
+    const result = await withTenantDb(tenantId, async tx => {
+      const current = await tx.wineOrder.findFirst({
+        where: { id, tenantId },
+        select: { confirmedAt: true, deliveredAt: true, paidAt: true },
+      })
+      if (!current) return { count: 0 }
+      const now = new Date()
+      const dates = {
+        confirmedAt: current.confirmedAt,
+        finishedAt: current.deliveredAt,
+        paidAt: current.paidAt,
+      }
+      const data =
+        change.kind === 'stage'
+          ? wineOrderStagePatch(change.stage as WineOrderStage, dates, now)
+          : change.kind === 'paid'
+            ? paidPatch(change.value, dates, now)
+            : { abandonedAt: null }
+      return tx.wineOrder.updateMany({ where: { id, tenantId }, data })
     })
-    if (!current) return
-    await tx.wineOrder.updateMany({
-      where: { id, tenantId },
-      data: {
-        status,
-        ...wineOrderStatusPatch(status, {
-          processCode: current.processStatus?.code ?? null,
-          paidAt: current.paidAt,
-        }),
-      },
-    })
-  })
-  revalidatePath('/admin/wine-orders')
+    if (result.count === 0) return { error: 'Wine order not found.' }
+    revalidatePath('/admin/wine-orders')
+    revalidatePath('/admin/abandoned')
+    return { success: true }
+  } catch {
+    return { error: 'Failed to update status.' }
+  }
 }
 
 /**
@@ -114,7 +140,7 @@ export async function createWineOrderAdmin(data: {
         discountPercent: discountPercent || null,
         tenantId,
         companyId: data.companyId || null,
-        ...NEW_ORDER_STATUS_COLUMNS,
+        ...NEW_ORDER_COLUMNS,
       },
     })
     await tx.wineOrderItem.createMany({

@@ -8,6 +8,75 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🍷 2026-09-18 — the status model got simpler; please look at it on staging
+
+You were right that we were over-complicating it. The two status *tables* are
+gone. An order now has **one stage** (New / Confirmed / Completed or Delivered /
+Cancelled) and a few **dates** — when the invoice went out, when they paid.
+"Paid before or after" isn't stored anywhere; the dates answer it.
+
+**Net: three columns, two tables and two enums deleted, one column added.**
+
+### What to look at (staging, once it deploys)
+
+**`/admin/orders`**
+1. Status and Payment are two separate dropdowns. Their counts should each add
+   up to the total shown at the top — that was wrong before (it said 31 for 21
+   bookings).
+2. Pick **Completed** + **Unpaid** together. That's your list of visits you're
+   still owed for. The old column couldn't express it at all.
+3. Open any booking someone paid upfront. The line should read
+   `New → Paid → Confirmed → Completed` — **Paid second**, because that's when it
+   happened — while the pill beside the name still says **Completed**.
+
+**`/admin/wine-orders`**
+4. Filter **Delivered** + **Unpaid**, pick one, click **Paid** on its line, confirm.
+   The pill must stay **Delivered** and gain a ₾✓. *This one behaviour is the
+   whole reason we did this* — if it says "Paid" instead, something's wrong.
+5. Board view: four columns, no Paid column.
+
+**`/admin/abandoned`** — new screen, called **Incomplete** in the menu
+6. Everyone who went to the card page and never paid. They're off every other
+   screen now — they used to sit in your order list looking like real bookings.
+7. Two buttons per row: **They paid** (someone abandoned the card then paid by
+   transfer — the common case) and **Restore without payment** (they'll pay on
+   arrival). Both put the order back with the others.
+
+**Regression — should behave exactly as before:** sending an invoice, printing,
+editing and deleting orders.
+
+### One thing I'd like you to check that I couldn't
+
+The **super-admin → Orders** screen. It had never been updated in the earlier
+rounds — it was still reading the old column, so it was showing wrong statuses
+before I touched it. I fixed it and it compiles, but I can't log in as
+super-admin to look at it. Worth a glance with that account.
+
+### Machine-checkable version
+
+```
+npx tsx scripts/test-order-status.ts
+```
+
+Expect 43/43 and "Stage and payment move independently, and the database
+enforces it." That last part matters: it doesn't just check the app behaves, it
+tries to write nonsense straight into the database and confirms Postgres refuses
+— a booking marked "Delivered" (a wine-only word), an order that's both abandoned
+and paid, a Confirmed order with no confirmation date.
+
+### Two things worth knowing
+
+**All order data on dev was deleted and regenerated**, as you approved — and the
+new demo data now deliberately includes the shapes the old column couldn't hold:
+96 completed-but-unpaid bookings, 81 paid-before-confirmed, 48 that were invoiced
+*and* paid (that combination used to erase itself).
+
+**Prod hasn't been touched.** The migration deletes all orders there too. You
+said that's fine since it's all fake — but I'd like you to say so once more
+before I run it, because it's not undoable.
+
+---
+
 ## 🍷 2026-09-17 (2) — the flow-line is built: please look at it on staging
 
 The thing you actually asked for is now on screen. Chunk 4 is done and **pushed to `staging`** — so
@@ -111,9 +180,9 @@ test, not a new-feature one — everything should behave exactly as before:
 
 - Change a wine order's status via the stepper and via the dropdown. Change a booking's status. Send an
   invoice. All should work identically to yesterday.
-- If you want the machine-checkable version: `npx tsx scripts/check-status-backfill.ts` (expect all green,
-  and wine's flow to read `new → confirmed → delivered → cancelled` while bookings read
-  `new → confirmed → completed → cancelled`) and `npx tsx scripts/test-status-bridge.ts` (expect 21/21).
+- If you want the machine-checkable version: ~~`check-status-backfill.ts` / `test-status-bridge.ts`~~ —
+  **both retired 2026-09-18** along with the design they tested. Use
+  `npx tsx scripts/test-order-status.ts` (expect 43/43) instead.
 
 **Two things I found that are worth you knowing**, both in `Plan-StatusModel.md`: only 2 of your 12
 tenant-scoped tables had an index on `tenantId`, so every query was scanning every winery's rows at once —

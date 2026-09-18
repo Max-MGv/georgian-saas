@@ -1,6 +1,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
-import { getProcessStatuses, getFinancialStatuses } from '@/lib/statusVocabulary'
+import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
+import { BOOKING_STAGES } from '@/lib/statusFlow'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { getDistinctOrderNationalities } from '@/app/actions/orders'
@@ -22,13 +23,9 @@ type SearchParams = {
   dateFrom?: string
   dateTo?: string
   companyId?: string   // a real company ID, or '__individual__' for individual-only
-  /**
-   * Process status **code** (new | confirmed | completed | cancelled), or the
-   * legacy `PENDING_PAYMENT` — payment limbo is the one thing the two axes
-   * deliberately cannot express, so it is still matched on the old column.
-   */
+  /** A `BookingStage` value: NEW | CONFIRMED | COMPLETED | CANCELLED. */
   status?: string
-  /** Financial status code: unpaid | invoiced | paid. AND'd with `status`. */
+  /** paid | invoiced | unpaid, derived from the dates. AND'd with `status`. */
   payment?: string
   nationality?: string // ISO 3166-1 code (Plan-CompanyNationality)
   view?: 'table' | 'list' | 'calendar' | 'board'
@@ -66,7 +63,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // For calendar view: fetch all orders with enough detail for day hover preview
   const calendarOrders = view === 'calendar'
     ? await withTenantDb(tenantId, tx => tx.order.findMany({
-        where: { tenantId },
+        where: { tenantId, ...NOT_ABANDONED },
         select: {
           id: true,
           date: true,
@@ -75,10 +72,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           timeSlot: true,
           guestCount: true,
           visitType: true,
-          status: true,
-          processStatus: { select: { code: true } },
-          financialStatus: { select: { code: true } },
+          stage: true,
           paidAt: true,
+          invoiceSentAt: true,
           totalPrice: true,
           requestedCompanyName: true,
           company: { select: { name: true } },
@@ -90,9 +86,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   type CalendarOrder = {
     id: string; name: string; surname: string; timeSlot: string
     guestCount: number; visitType: string; totalPrice: number | null
-    /** The legacy value, kept only so payment limbo stays distinguishable. */
-    status: string
-    processCode: string | null
+    stage: string
     paid: boolean
     /** Invoice sent, money not yet in. Bookings only — wine has no invoice flow. */
     invoiced: boolean
@@ -104,10 +98,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     if (!ordersByDate[d]) ordersByDate[d] = []
     ordersByDate[d].push({
       id: o.id, name: o.name, surname: o.surname, timeSlot: o.timeSlot,
-      guestCount: o.guestCount, visitType: o.visitType, status: o.status,
-      processCode: o.processStatus?.code ?? null,
+      guestCount: o.guestCount, visitType: o.visitType, stage: o.stage,
       paid: o.paidAt != null,
-      invoiced: o.financialStatus?.code === 'invoiced' && o.paidAt == null,
+      invoiced: paymentStateOf(o) === 'invoiced',
       totalPrice: o.totalPrice,
       companyName: o.company?.name ?? (o.requestedCompanyName ? `${o.requestedCompanyName} (new)` : null),
     })
@@ -120,6 +113,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // Count orders per status within current date+company context (ignores status filter so counts are always visible)
   const baseWhere = {
     tenantId,
+    // Every count, filter and list on this screen excludes abandoned
+    // checkouts - they are not orders. See lib/orderFilters.
+    ...NOT_ABANDONED,
     ...(params.dateFrom || params.dateTo ? {
       date: {
         ...(params.dateFrom ? { gte: new Date(params.dateFrom) } : {}),
@@ -134,49 +130,31 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ...(params.nationality ? { nationalities: { has: params.nationality } } : {}),
   }
 
-  // The vocabulary, resolved once and threaded down. `getProcessStatuses` /
-  // `getFinancialStatuses` own both required filters (per-order-type scope,
-  // global-or-own tenant rows), so no view below filters for itself.
-  const [processSteps, financialSteps] = await Promise.all([
-    getProcessStatuses(tenantId, 'BOOKING'),
-    getFinancialStatuses(tenantId, 'BOOKING'),
-  ])
-  const processCodeById = Object.fromEntries(processSteps.map(s => [s.id, s.code]))
-  const financialCodeById = Object.fromEntries(financialSteps.map(s => [s.id, s.code]))
-
-  // Counts per status within the current date+company context, ignoring the
-  // status filters themselves so the numbers stay visible while one is active.
-  // Two groupBys now rather than one, because there are two axes to count.
+  // Counts per stage and per payment state, within the current date+company
+  // context and ignoring the two status filters themselves, so the numbers stay
+  // visible while one is active.
   //
-  // The process count excludes payment limbo. On the axes a limbo order sits at
-  // `new` like any freshly placed one — deliberately, since an abandoned
-  // checkout leaves the order where it started — so counting it under both
-  // would double it, and the two entries in the picker would overlap rather
-  // than partition. Its own count comes from the legacy column below.
-  const processWhere = { ...baseWhere, status: { not: 'PENDING_PAYMENT' as const } }
-  const [processCountRows, financialCountRows] = isTableLike
+  // The stage counts partition the total exactly, which they did not before:
+  // payment limbo used to sit at process `new` AND have its own entry, so the
+  // two overlapped and the header double-counted (21 bookings reported as 31).
+  // Abandoned checkouts are now excluded from the screen rather than being a
+  // status on it, so there is nothing left to double-count.
+  const [stageCountRows, paidCount, invoicedCount, unpaidCount] = isTableLike
     ? await withTenantDb(tenantId, async tx => [
-        await tx.order.groupBy({ by: ['processStatusId'], where: processWhere, _count: { processStatusId: true } }),
-        await tx.order.groupBy({ by: ['financialStatusId'], where: baseWhere, _count: { financialStatusId: true } }),
+        await tx.order.groupBy({ by: ['stage'], where: baseWhere, _count: { stage: true } }),
+        await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('paid') } }),
+        await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('invoiced') } }),
+        await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('unpaid') } }),
       ] as const)
-    : [[], []]
+    : [[], 0, 0, 0]
   const statusCounts: Record<string, number> = {}
-  for (const r of processCountRows) {
-    const code = r.processStatusId ? processCodeById[r.processStatusId] : null
-    if (code) statusCounts[code] = (statusCounts[code] ?? 0) + r._count.processStatusId
-  }
-  // Payment limbo is not a position on either axis (it maps to process `new`),
-  // so its count comes from the legacy column, which is still the only place
-  // that distinguishes it.
-  const limboCount = isTableLike
-    ? await withTenantDb(tenantId, tx => tx.order.count({ where: { ...baseWhere, status: 'PENDING_PAYMENT' } }))
-    : 0
-  if (limboCount > 0) statusCounts.PENDING_PAYMENT = limboCount
+  for (const r of stageCountRows) statusCounts[r.stage] = r._count.stage
 
-  const paymentCounts: Record<string, number> = {}
-  for (const r of financialCountRows) {
-    const code = r.financialStatusId ? financialCodeById[r.financialStatusId] : null
-    if (code) paymentCounts[code] = (paymentCounts[code] ?? 0) + r._count.financialStatusId
+  // Counted through the same `where` fragments the filter itself uses, so a
+  // pill's number and the list it produces cannot disagree. `invoiced` means
+  // invoiced and still unpaid, so the three partition the total.
+  const paymentCounts: Record<string, number> = {
+    paid: paidCount, invoiced: invoicedCount, unpaid: unpaidCount,
   }
 
   const orders = isTableLike ? await withTenantDb(tenantId, tx => tx.order.findMany({
@@ -185,22 +163,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       // Uppercase means the legacy limbo value; anything else is a process
       // code. The two vocabularies are disjoint, so one param carries both
       // without needing a prefix.
-      ...(params.status === 'PENDING_PAYMENT'
-        ? { status: 'PENDING_PAYMENT' as const }
-        : params.status
-          // Limbo excluded for the same reason it is excluded from the counts:
-          // picking "New" must not hand back ten abandoned checkouts as if the
-          // winery had work waiting on them.
-          ? { processStatus: { code: params.status }, status: { not: 'PENDING_PAYMENT' as const } }
-          : {}),
-      ...(params.payment ? { financialStatus: { code: params.payment } } : {}),
+      ...(params.status && (BOOKING_STAGES as readonly string[]).includes(params.status)
+        ? { stage: params.status as (typeof BOOKING_STAGES)[number] }
+        : {}),
+      ...paymentFilterWhere(params.payment),
     },
     include: {
       company: { include: { representatives: true } },
       masterclassLines: { include: { masterclassItem: true } },
       extras: true,
-      processStatus: { select: { code: true } },
-      financialStatus: { select: { code: true } },
     },
     orderBy: { date: 'desc' },
   })) : []
@@ -230,12 +201,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           const today = new Date()
           today.setHours(0, 0, 0, 0)
           return withTenantDb(tenantId, tx => tx.order.findMany({
-            where: { tenantId, date: { gte: today }, status: { not: 'CANCELLED' } },
+            where: { tenantId, ...NOT_ABANDONED, date: { gte: today }, stage: { not: 'CANCELLED' } },
             select: { date: true, totalPrice: true },
             orderBy: { date: 'asc' },
           }))
         })(),
-        withTenantDb(tenantId, tx => tx.order.count({ where: { tenantId } })).then(c => c > 0),
+        withTenantDb(tenantId, tx => tx.order.count({ where: { tenantId, ...NOT_ABANDONED } })).then(c => c > 0),
       ])
     : [[], false]
 
@@ -279,7 +250,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {revenueStrip && <RevenueStrip {...revenueStrip} locale={locale} />}
 
       <div data-tour="orders-filters">
-        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} paymentCounts={paymentCounts} processSteps={processSteps} financialSteps={financialSteps} locale={locale} tenantId={tenantId} nationalityOptions={nationalityOptions} />
+        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} paymentCounts={paymentCounts} locale={locale} tenantId={tenantId} nationalityOptions={nationalityOptions} />
       </div>
 
       {orders.length === 0 ? (
@@ -288,13 +259,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.payment}-${params.nationality}`} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} processSteps={processSteps} financialSteps={financialSteps} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.payment}-${params.nationality}`} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
             id: o.id,
-            status: (o.status ?? 'NEW') as 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PENDING_PAYMENT' | 'PAID' | 'COMPLETED' | 'CANCELLED',
-            processCode: o.processStatus?.code ?? null,
-            financialCode: o.financialStatus?.code ?? null,
+            stage: o.stage,
+            createdAt: o.createdAt,
+            confirmedAt: o.confirmedAt,
+            completedAt: o.completedAt,
+            invoiceSentAt: o.invoiceSentAt,
             paidAt: o.paidAt,
-            paidAtStage: o.paidAtStage,
             date: o.date,
             timeSlot: o.timeSlot,
             bookingType: o.bookingType,

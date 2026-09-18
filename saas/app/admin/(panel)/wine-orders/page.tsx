@@ -2,7 +2,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { requireWineOrdersModule } from '@/lib/requireModule'
 import { getSetting } from '@/app/actions/settings'
-import { getProcessStatuses } from '@/lib/statusVocabulary'
+import { NOT_ABANDONED } from '@/lib/orderFilters'
 import { adminT } from '@/lib/adminT'
 import Link from 'next/link'
 import WineOrdersClient from './WineOrdersClient'
@@ -13,38 +13,21 @@ export default async function WineOrdersPage() {
   await requireWineOrdersModule()
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
-  // The vocabulary is fetched once here and threaded down, rather than each
-  // view asking for it: `getProcessStatuses` owns both required filters
-  // (per-order-type scope, global-or-own tenant rows) and the flow-line is
-  // pure, so the server is the right place to resolve it.
-  const [orders, processSteps] = await Promise.all([
-    withTenantDb(tenantId, tx =>
-      tx.wineOrder.findMany({
-        where: { tenantId },
-        include: {
-          wineItems: true,
-          processStatus: { select: { code: true } },
-          financialStatus: { select: { code: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-    ),
-    getProcessStatuses(tenantId, 'WINE_ORDER'),
-  ])
+  const orders = await withTenantDb(tenantId, tx =>
+    tx.wineOrder.findMany({
+      // Abandoned checkouts are not orders and never appear here - they live
+      // on /admin/abandoned. See lib/orderFilters.
+      where: { tenantId, ...NOT_ABANDONED },
+      include: { wineItems: true },
+      orderBy: { createdAt: 'desc' },
+    })
+  )
 
   // Compute displayTotal: stored value if present, otherwise estimate from item price snapshots
   const ordersWithTotal = orders.map(o => {
-    // Flattened to plain codes at the boundary: the client renders from codes,
-    // and passing the relation objects through would ship two nested objects
-    // per order for two strings.
-    const base = {
-      ...o,
-      processCode: o.processStatus?.code ?? null,
-      financialCode: o.financialStatus?.code ?? null,
-    }
-    if (o.totalAmount != null) return { ...base, displayTotal: o.totalAmount, totalEstimated: false }
+    if (o.totalAmount != null) return { ...o, displayTotal: o.totalAmount, totalEstimated: false }
     const estimated = o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
-    return { ...base, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
+    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
   })
 
   return (
@@ -64,7 +47,7 @@ export default async function WineOrdersPage() {
           </Link>
         </div>
       </div>
-      <WineOrdersClient orders={ordersWithTotal} processSteps={processSteps} locale={locale} />
+      <WineOrdersClient orders={ordersWithTotal} locale={locale} />
     </div>
   )
 }

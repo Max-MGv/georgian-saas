@@ -25,6 +25,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const tenantName = h.get('x-tenant-name') ?? ''
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
+  // No card gateway means no abandoned checkouts can ever exist, so the link
+  // would be permanently dead for the wineries that take payment on arrival.
+  const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
   const at = (key: string) => adminT(adminLanguage, key)
 
   return (
@@ -82,6 +85,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: '/admin/content', label: at('nav.content'), show: true },
             { href: '/admin/settings', label: at('nav.settings'), show: true },
             { href: '/admin/my-reports', label: at('nav.myReports'), show: true },
+            // Last, and off the end of the normal run of screens on purpose:
+            // incomplete orders are not orders (Feature 191), so they sit
+            // beside the admin's own housekeeping rather than among the work.
+            { href: '/admin/abandoned', label: at('nav.abandoned'), show: onlinePaymentOn },
           ].filter(link => link.show).map(link => (
             <a
               key={link.href}

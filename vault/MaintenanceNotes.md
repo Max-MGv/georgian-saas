@@ -688,3 +688,87 @@ outputFileTracingIncludes: {
 **What this means in practice:** any new code that reads a field off the `Tenant` row itself (not a tenant-scoped child table) must use the plain `db` client, never `withTenantDb`. If you ever need per-request tenant-role RLS enforcement, `Tenant` would need real policies added first — don't assume `withTenantDb` "just works" for it because it works for everything else.
 
 **Files involved:** `saas/lib/payments/shouldTakePayment.ts` (`isPaymentConfigured`), `saas/proxy.ts` (`resolveTenant`), `saas/app/(site)/page.tsx` (the `enableCompanyNationalityBreakdown` fetch), `saas/scripts/setup-rls.ts`. See `Plan-CompanyNationality.md` Chunk 5.
+
+---
+
+## 28. Every order query must exclude abandoned orders — and nothing enforces it
+
+**What the dependency is:** since Feature 191 an order that was sent to the card
+gateway and never paid carries a non-null `abandonedAt`. It is **not an order**:
+the winery must never see it in a list, a board column, a filter, a count, a
+calendar day or a CSV export. It lives on `/admin/abandoned` and nowhere else.
+
+The exclusion is a `where` fragment, `NOT_ABANDONED` in
+`saas/lib/orderFilters.ts`, and **every** `Order` / `WineOrder` query that feeds
+an admin surface has to spread it in.
+
+**Why it bites:** forgetting it does not error and does not look wrong. An
+abandoned order sits at `stage: 'NEW'` — legitimately, it never progressed — so
+it renders as a perfectly ordinary new booking that the winery thinks it has work
+to do on. They accumulate forever and are never auto-expired (a late gateway
+callback must still be able to land, Plan-OnlinePayment §7.2), so the pile grows.
+
+**This has already happened once**, in the shape it will happen again:
+`exportOrdersCsv` was missing the equivalent exclusion that
+`/admin/orders/page.tsx` had, so a CSV silently carried rows the screen it was
+exported from did not show. Both queries were individually valid. Nothing caught
+it for a release.
+
+**The rule:** a new query against `Order` or `WineOrder` for an admin screen
+spreads `...NOT_ABANDONED`. The inverse, `ONLY_ABANDONED`, exists for the one
+screen that wants them. Neither is enforced by a type — they are plain object
+spreads — so this note is the enforcement.
+
+**Related, same file:** `paymentFilterWhere()` is the only place the three
+payment filters are expressed, shared by the screen and the export so they cannot
+disagree about what a word means. The three **partition** the orders exactly
+(nothing in two buckets, nothing in none), because they drive a picker that shows
+a count beside each option — and the previous release reported
+`All statuses (31)` against 21 bookings because two entries overlapped. If you
+add a fourth, keep the partition. `scripts/test-order-status.ts` section I
+asserts it.
+
+**Files involved:** `saas/lib/orderFilters.ts`,
+`saas/app/admin/(panel)/orders/page.tsx`,
+`saas/app/admin/(panel)/wine-orders/page.tsx`,
+`saas/app/actions/orders.ts` (`exportOrdersCsv`),
+`saas/app/actions/superAdmin.ts`, `saas/app/admin/(panel)/statistics/page.tsx`,
+`saas/app/admin/(panel)/abandoned/page.tsx`.
+
+---
+
+## 29. `stage` is denormalised against the milestone timestamps, and three CHECKs hold them together
+
+**What the dependency is:** Feature 191 stores an order's position twice — once
+as `stage` (a `BookingStage` / `WineOrderStage` enum) and once as the timestamp
+for that stage (`confirmedAt`, `completedAt` / `deliveredAt`). That is deliberate:
+the board groups by `stage` and every filter and count reads it, which a derived
+value could not serve efficiently.
+
+Three database constraints keep the two honest, and **you will meet them as a
+failed write, not as a type error**:
+
+| Constraint | What it refuses |
+|---|---|
+| `Order_stage_has_timestamp` | `stage = 'CONFIRMED'` with `confirmedAt` NULL, or `'COMPLETED'` with `completedAt` NULL |
+| `WineOrder_stage_has_timestamp` | the same for `'CONFIRMED'` / `'DELIVERED'` |
+| `*_abandoned_is_unpaid` | `abandonedAt` and `paidAt` both set |
+
+Only the **current** stage's own timestamp is required, on purpose: an admin
+entering a walk-in order as already complete never passed through Confirmed, and
+inventing a date there would be a lie.
+
+**What this means in practice:** never write `stage` directly. Go through
+`bookingStagePatch` / `wineOrderStagePatch` in `saas/lib/statusWrite.ts`, which
+own the three rules that keep the constraints satisfied — an existing date is
+never re-stamped, moving backwards clears what you moved back past, and
+cancelling touches no dates at all. Seed scripts and optimistic client updates
+call the *same* functions rather than restating the rules; two copies of "which
+columns does this change move" is exactly the drift an optimistic update hides
+until someone reloads.
+
+**Files involved:** `saas/lib/statusWrite.ts`, `saas/lib/statusFlow.ts`,
+`saas/prisma/migrations/20260917120000_status_stages_and_dates/migration.sql`,
+`saas/app/actions/orders.ts`, `saas/app/actions/wineOrders.ts`,
+`saas/lib/payments/settle.ts`, `saas/lib/demoSeed.ts`. Design:
+`Features/Feature 191 - Order Status Two Axis Split.md`.

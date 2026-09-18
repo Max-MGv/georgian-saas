@@ -53,16 +53,19 @@ test.describe('Wine catalogue → order', () => {
     if (testInfo.status === 'passed') return;
     const page = await context.newPage();
     await ensureAdminLoggedIn(page);
-    await page.goto('/admin/wine-orders');
-    // Real finding: the default "All" filter view on /admin/wine-orders does
-    // NOT surface pending_payment ("Awaiting Payment") orders — only the
-    // "Awaiting Payment" quick filter does (confirmed live: a freshly
-    // submitted order was invisible under "All" until this filter was
-    // clicked). Must filter here to find the order at all.
-    await page.getByRole('button', { name: /Awaiting Payment/ }).click();
+    // Since Feature 191 an order that went to the card gateway and never paid
+    // is not on /admin/wine-orders at all — it is an incomplete order and
+    // lives on its own screen. A failed body may have left it in either place,
+    // so clean up from both.
+    await page.goto('/admin/abandoned');
     // Real finding: a cold Next.js dev-server compile on a route's first
     // visit can outlast the 5s default assertion timeout (see booking-simple.spec.ts).
-    await page.locator('table, [class*="grid"]').first().waitFor({ timeout: 15_000 }).catch(() => {});
+    await page.locator('table, [class*="grid"], div').first().waitFor({ timeout: 15_000 }).catch(() => {});
+    const incomplete = page.locator('div').filter({ hasText: TEST_BUSINESS_NAME }).last();
+    if (await incomplete.count() > 0) {
+      await incomplete.getByRole('button', { name: 'Restore without payment' }).click();
+    }
+    await page.goto('/admin/wine-orders');
     const card = page.getByText(TEST_BUSINESS_NAME, { exact: true }).locator('xpath=../../..');
     if (await card.count() > 0) {
       // Real finding: Wine Orders has no delete action at all (unlike
@@ -156,10 +159,19 @@ test.describe('Wine catalogue → order', () => {
     // 6. Verify via admin order detail (not just the confirmation toast).
     const admin = await context.newPage();
     await ensureAdminLoggedIn(admin);
+    // The order was sent to the card gateway and never paid, so it is an
+    // incomplete order, not a wine order — it is on /admin/abandoned and
+    // deliberately nowhere on /admin/wine-orders (Feature 191).
+    await admin.goto('/admin/abandoned');
+    const incomplete = admin.locator('div').filter({ hasText: TEST_BUSINESS_NAME }).last();
+    await expect(incomplete).toBeVisible({ timeout: 20_000 });
+
+    // Restore it to check the frozen wine-name snapshot below, which renders
+    // on the order card rather than on the incomplete list. This also covers
+    // the way back out — the path that exists because a customer who abandons
+    // card checkout and then pays by transfer must not have to be re-entered.
+    await incomplete.getByRole('button', { name: 'Restore without payment' }).click();
     await admin.goto('/admin/wine-orders');
-    // Real finding: default "All" filter hides pending_payment orders — see
-    // the afterEach comment above.
-    await admin.getByRole('button', { name: /Awaiting Payment/ }).click();
     const card = admin.getByText(TEST_BUSINESS_NAME, { exact: true }).locator('xpath=../../..');
     await expect(card).toBeVisible({ timeout: 20_000 });
     // expect: wineNameSnapshot matches the name displayed at order time — the

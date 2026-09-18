@@ -1,7 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
-import { BookingType, OrderStatus, VisitType } from '@prisma/client'
+import { BookingType, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
@@ -21,7 +21,7 @@ import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
-import { NEW_ORDER_STATUS_COLUMNS } from '@/lib/statusBridge'
+import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
@@ -325,7 +325,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
         tenantId,
-        ...NEW_ORDER_STATUS_COLUMNS,
+        ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
         // Never trust a client-sent array outright — filter to real ISO codes and
@@ -375,11 +375,14 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       })
 
       if (checkoutUrl) {
-        // Status moves to PENDING_PAYMENT only once a checkout really exists —
-        // done in this order so a failed checkout leaves a plain NEW order.
+        // Marked incomplete only once a checkout really exists — done in this
+        // order so a failed checkout leaves a plain NEW booking rather than one
+        // filed under abandoned. Cleared by settle.ts the moment money arrives,
+        // or by an admin restoring it by hand. Until then the booking is not an
+        // order: it appears on /admin/abandoned and on no order screen.
         await withTenantDb(tenantId, tx => tx.order.update({
           where: { id: createdOrder.id },
-          data: { status: OrderStatus.PENDING_PAYMENT },
+          data: { abandonedAt: new Date() },
         }))
         // No confirmation email here: "your booking is confirmed" must not
         // reach someone who hasn't paid and may abandon checkout. It is sent

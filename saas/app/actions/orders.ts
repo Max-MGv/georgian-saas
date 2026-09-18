@@ -9,9 +9,18 @@ import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { OrderStatus } from '@prisma/client'
+import type { BookingStage } from '@prisma/client'
 import { countryName } from '@/lib/countries'
-import { orderStatusPatch, FINANCIAL_STATUS, NEW_ORDER_STATUS_COLUMNS } from '@/lib/statusBridge'
+import {
+  bookingStagePatch,
+  invoiceSentPatch,
+  paidPatch,
+  isBookingStage,
+  NEW_ORDER_COLUMNS,
+} from '@/lib/statusWrite'
+// Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
+import type { BookingStatusChange } from '@/lib/statusWrite'
+import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
@@ -217,7 +226,7 @@ export async function createOrderAdmin(data: {
         notes: data.notes?.trim() || null,
         totalPrice,
         tenantId,
-        ...NEW_ORDER_STATUS_COLUMNS,
+        ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
         masterclassLines: data.masterclassLines.length
           ? { create: data.masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
@@ -308,16 +317,17 @@ export async function sendOrderInvoice(
       locale,
     })
 
-    const advanceStatuses = ['NEW', 'CONFIRMED']
-    if (advanceStatuses.includes(order.status)) {
-      // Sending an invoice moves the financial axis only: it records that we
-      // have asked for money, and says nothing about whether the visit has
-      // happened. The legacy column still gets INVOICE_SENT until chunk 5
-      // retires it from the process vocabulary.
+    // Sending an invoice stamps a date and nothing else. It records that we
+    // have asked for money, which says nothing about whether the visit has
+    // happened — so it does not touch `stage`, and it is recorded whatever
+    // stage the booking is at, including a completed one being billed after
+    // the fact. Under the previous design this was a rung on a payment ladder,
+    // which is why marking such an order paid used to erase it.
+    if (order.invoiceSentAt == null) {
       await withTenantDb(tenantId, tx =>
         tx.order.update({
           where: { id: orderId },
-          data: { status: 'INVOICE_SENT', financialStatusId: FINANCIAL_STATUS.invoiced },
+          data: invoiceSentPatch(true, toCurrentDates(order), new Date()),
         })
       )
     }
@@ -351,15 +361,9 @@ export async function exportOrdersCsv(filters: {
   dateFrom?: string
   dateTo?: string
   companyId?: string
-  /**
-   * Process status **code**, or the legacy `PENDING_PAYMENT`. Was the legacy
-   * enum value cast straight through (`filters.status as OrderStatus`) — which
-   * is why a stale `?status=PAID` bookmark used to cast cleanly and silently
-   * return zero rows. An unknown code now simply matches nothing in the
-   * relation filter, with no cast to hide it.
-   */
+  /** A `BookingStage` value. An unknown one is ignored rather than cast. */
   status?: string
-  /** Financial status code: unpaid | invoiced | paid. AND'd with `status`. */
+  /** `paid` | `unpaid` | `invoiced`, derived from the dates. AND'd with `status`. */
   payment?: string
   /** ISO 3166-1 code (Plan-CompanyNationality) — matches orders whose `nationalities` array includes it. */
   nationality?: string
@@ -380,25 +384,23 @@ export async function exportOrdersCsv(filters: {
         : filters.companyId
           ? { companyId: filters.companyId }
           : {}),
-      ...(filters.status === 'PENDING_PAYMENT'
-        ? { status: 'PENDING_PAYMENT' as const }
-        : filters.status
-          ? { processStatus: { code: filters.status } }
-          : {}),
-      ...(filters.payment ? { financialStatus: { code: filters.payment } } : {}),
+      // An abandoned order is not an order, so it is never exported — the same
+      // exclusion the screen this was exported from applies. It was missing
+      // here, so a CSV silently carried rows the list on screen did not show.
+      ...NOT_ABANDONED,
+      ...(filters.status && isBookingStage(filters.status) ? { stage: filters.status } : {}),
+      ...paymentFilterWhere(filters.payment),
       ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
-    include: {
-      company: true,
-      processStatus: { select: { code: true } },
-      financialStatus: { select: { code: true } },
-    },
+    include: { company: true },
     orderBy: { date: 'desc' },
   }))
 
-  // Two status columns since chunk 4 — the export has to carry both axes, or a
-  // completed-but-unpaid booking exports as indistinguishable from a paid one.
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Email', 'Phone', 'Notes']
+  // Stage and payment are separate columns, or a completed-but-unpaid booking
+  // exports as indistinguishable from a paid one. Invoice Sent gets its own
+  // date rather than collapsing into Payment, since an order can be both
+  // invoiced and paid — which the old payment ladder could not represent.
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
@@ -410,9 +412,10 @@ export async function exportOrdersCsv(filters: {
     o.guestCount,
     o.nationalities.map(countryName).join('; '),
     o.totalPrice ?? '',
-    o.processStatus?.code ?? '',
-    o.financialStatus?.code ?? '',
+    o.stage,
+    o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
+    o.invoiceSentAt ? o.invoiceSentAt.toLocaleDateString('en-GB') : '',
     o.email ?? '',
     o.phone ?? '',
     o.notes ?? '',
@@ -492,34 +495,62 @@ export async function assignOrderCompany(
   return result
 }
 
-export async function updateOrderStatus(
+/** The date fields a patch needs, in the shape `statusWrite` expects. */
+function toCurrentDates(o: {
+  confirmedAt: Date | null
+  completedAt: Date | null
+  invoiceSentAt: Date | null
+  paidAt: Date | null
+}) {
+  return {
+    confirmedAt: o.confirmedAt,
+    finishedAt: o.completedAt,
+    invoiceSentAt: o.invoiceSentAt,
+    paidAt: o.paidAt,
+  }
+}
+
+export async function changeBookingStatus(
   orderId: string,
-  status: 'NEW' | 'CONFIRMED' | 'INVOICE_SENT' | 'PAID' | 'COMPLETED' | 'CANCELLED'
+  change: BookingStatusChange
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
   const tenantId = await getTenantId()
+
+  // Validated before anything is read or written. The root cause this whole
+  // redesign was opened for was an unvalidated `status: string` that neither
+  // the app nor the database rejected; a stage arriving from a dropdown is
+  // still a string at runtime however well-typed the call site looks.
+  if (change.kind === 'stage' && !isBookingStage(change.stage)) {
+    return { error: 'Unknown status.' }
+  }
+
   try {
-    // Reads first so the patch can leave alone whichever axis this status says
-    // nothing about, and so a PAID write snapshots the stage it landed at.
+    // Read first so a patch can preserve a date that already exists rather than
+    // re-stamping it — the moment an order was really confirmed must not drift
+    // forward every time someone touches the row.
     const result = await withTenantDb(tenantId, async tx => {
       const current = await tx.order.findFirst({
         where: { id: orderId, tenantId },
-        select: { paidAt: true, processStatus: { select: { code: true } } },
+        select: { confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
-      return tx.order.updateMany({
-        where: { id: orderId, tenantId },
-        data: {
-          status,
-          ...orderStatusPatch(status, {
-            processCode: current.processStatus?.code ?? null,
-            paidAt: current.paidAt,
-          }),
-        },
-      })
+      const now = new Date()
+      const dates = toCurrentDates(current)
+      const data =
+        change.kind === 'stage'
+          ? bookingStagePatch(change.stage as BookingStage, dates, now)
+          : change.kind === 'paid'
+            ? paidPatch(change.value, dates, now)
+            : change.kind === 'invoiceSent'
+              ? invoiceSentPatch(change.value, dates, now)
+              : { abandonedAt: null }
+      return tx.order.updateMany({ where: { id: orderId, tenantId }, data })
     })
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
+    revalidatePath(`/admin/orders/${orderId}`)
+    revalidatePath('/admin/abandoned')
     return { success: true }
   } catch {
     return { error: 'Failed to update status.' }

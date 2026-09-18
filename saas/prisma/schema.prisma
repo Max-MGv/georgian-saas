@@ -122,28 +122,34 @@ model CompanyRepresentative {
 
 model Order {
   id                   String             @id @default(cuid())
-  // Still the live column that everything reads and writes. The four fields
-  // below are the replacement, added and backfilled ahead of the application
-  // code that will use them (Plan-StatusModel chunks 3–5). Nothing drops
-  // PAID/INVOICE_SENT from this enum until those chunks land — doing so now
-  // would break every surface that still writes them.
-  status               OrderStatus        @default(NEW)
-  // Restrict, not the default SET NULL: deleting a status that orders still
-  // point at must be refused outright, not silently blank the reference on
-  // every one of them.
-  processStatusId      String?
-  processStatus        ProcessStatus?     @relation(fields: [processStatusId], references: [id], onDelete: Restrict)
-  financialStatusId    String?
-  financialStatus      FinancialStatus?   @relation(fields: [financialStatusId], references: [id], onDelete: Restrict)
-  // The hot-path payment fact, deliberately on the row rather than behind a
-  // join — "is this paid" is read on every board render, filter and email.
+  // Where the booking is, and nothing about money (Feature 191). Its own enum
+  // rather than one shared with WineOrder, so a booking is structurally
+  // incapable of holding the wine-only DELIVERED — which the previous shared
+  // reference table could not prevent: its `appliesTo` column filtered the
+  // dropdown, never the foreign key.
+  stage                BookingStage       @default(NEW)
+  // Milestones as dates, not as a status ladder. The ladder was the bug: it
+  // was `unpaid → invoiced → paid`, so marking an invoiced order paid erased
+  // the fact that an invoice had ever been sent. Independent dates cannot
+  // overwrite each other — invoiced on the 3rd and paid on the 19th are both
+  // permanently true — and they also make "did they pay before or after the
+  // visit" answerable by comparison rather than by a stored flag.
+  //
+  // They are also what places the Paid step on the flow-line. That used to be
+  // `paidAtStage`, a snapshotted code string; a timestamp cannot go stale the
+  // way a snapshot of a since-renamed status could.
+  confirmedAt          DateTime?
+  completedAt          DateTime?
+  invoiceSentAt        DateTime?
   paidAt               DateTime?
-  // Which process stage was current the instant payment landed. A frozen code
-  // string, not a foreign key, following this schema's existing snapshot
-  // convention (wineNameSnapshot, priceSnapshot): history must not change when
-  // the referenced row does. This is what lets the flow-line place the Paid
-  // step where it actually happened instead of a fixed slot.
-  paidAtStage          String?
+  // Set when the guest is sent to the card gateway, cleared the moment the
+  // order completes. So it reads literally: this order has been incomplete
+  // since <date>. Replaces the three legacy limbo values (PENDING_PAYMENT,
+  // pending_payment, payment_failed) with one fact — Max's call: a closed tab
+  // and a declined card are the same thing to the winery, an order that never
+  // happened. Abandoned orders are excluded from every order surface and live
+  // on their own screen; see MaintenanceNotes.
+  abandonedAt          DateTime?
   bookingType          BookingType        @default(INDIVIDUAL)
   visitType            VisitType
   date                 DateTime
@@ -187,10 +193,13 @@ model Order {
 
   // Every query here is tenant-scoped by RLS, and the admin list/calendar both
   // filter-and-order by date while the board and its filter pills group by
-  // status. Without a tenantId-leading index these are sequential scans across
+  // stage. Without a tenantId-leading index these are sequential scans across
   // every tenant's rows at once.
   @@index([tenantId, date])
-  @@index([tenantId, status])
+  @@index([tenantId, stage])
+  // Every order surface filters out abandoned rows, so this is on the hot path
+  // of the list, board, calendar, counts and export alike.
+  @@index([tenantId, abandonedAt])
 }
 
 model Price {
@@ -250,41 +259,43 @@ model OrderExtra {
 }
 
 model WineOrder {
-  id                String           @id @default(cuid())
-  businessName      String
-  llcName           String?
-  llcId             String?
-  address           String
-  workingHours      String?
-  contactName       String
-  contactPhone      String
+  id              String          @id @default(cuid())
+  businessName    String
+  llcName         String?
+  llcId           String?
+  address         String
+  workingHours    String?
+  contactName     String
+  contactPhone    String
   // Optional in general; the wine order form requires it only when the tenant
   // has online payment on, since a paying B2B customer needs a receipt.
-  contactEmail      String?
-  totalAmount       Float?
-  discountPercent   Float?
-  // Unconstrained String, unlike Order's enum — so unlike Order this gets no
-  // migration-time safety net when 'paid' is eventually retired from it. See
-  // Plan-StatusModel's silent-failure table. Still the live column; the fields
-  // below are its replacement, backfilled ahead of the code that uses them.
-  status            String           @default("pending")
-  processStatusId   String?
-  processStatus     ProcessStatus?   @relation(fields: [processStatusId], references: [id], onDelete: Restrict)
-  financialStatusId String?
-  financialStatus   FinancialStatus? @relation(fields: [financialStatusId], references: [id], onDelete: Restrict)
-  paidAt            DateTime?
-  paidAtStage       String?
-  tenantId          String?
-  companyId         String?
-  company           Company?         @relation(fields: [companyId], references: [id])
-  createdAt         DateTime         @default(now())
-  wineItems         WineOrderItem[]
-  payments          Payment[]
+  contactEmail    String?
+  totalAmount     Float?
+  discountPercent Float?
+  // Was an unconstrained String with no validation anywhere in the app or the
+  // database — the root cause the whole status redesign was opened for. Now an
+  // enum of its own: DELIVERED exists here and COMPLETED does not.
+  stage           WineOrderStage  @default(NEW)
+  // Milestone dates — see the equivalent block on Order for the reasoning.
+  // No invoiceSentAt: wine orders have no invoice-send flow, and a column
+  // nothing writes is worse than an absent one, since the next reader assumes
+  // it is populated. Purely additive whenever that flow appears.
+  confirmedAt     DateTime?
+  deliveredAt     DateTime?
+  paidAt          DateTime?
+  abandonedAt     DateTime?
+  tenantId        String?
+  companyId       String?
+  company         Company?        @relation(fields: [companyId], references: [id])
+  createdAt       DateTime        @default(now())
+  wineItems       WineOrderItem[]
+  payments        Payment[]
 
-  // Mirrors Order: the board groups by status, and the list's date-range
+  // Mirrors Order: the board groups by stage, and the list's date-range
   // filters run on createdAt (wine orders have no separate business date).
-  @@index([tenantId, status])
+  @@index([tenantId, stage])
   @@index([tenantId, createdAt])
+  @@index([tenantId, abandonedAt])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -458,102 +469,30 @@ model BugReport {
   @@index([status])
 }
 
-/// Reference data for the two status axes an order moves along, split apart
-/// because a single column cannot express "delivered but not yet paid" — the
-/// normal case for a B2B customer on invoice terms. Full reasoning and the
-/// rejected alternatives: vault/Plan-StatusModel.md.
+/// Where a booking is in its life, and nothing at all about money (Feature 191).
 ///
-/// Two separate tables rather than one shared table with a `category` column:
-/// a foreign key can then only ever resolve to a value valid for its own axis,
-/// with no discriminator to drift and no schema shape that would let a combined
-/// process+financial row reappear.
+/// Its own enum rather than one shared with WineOrderStage. The two order types
+/// agree on three of four words but differ on the fourth, and giving them one
+/// shared vocabulary is what forced the previous design to carry an `appliesTo`
+/// discriminator — which filtered the status *dropdown* but never the foreign
+/// key, so nothing in the database actually stopped a booking being marked
+/// DELIVERED. Two enums make that unrepresentable rather than merely unoffered.
 ///
-/// Chosen over two Postgres enums because adding an enum value is a schema
-/// migration and *removing* one has no native support at all (new type, rewrite
-/// every row). Here a new status is an INSERT — which matters as this goes from
-/// one tenant to many.
-///
-/// `tenantId` is null for the shared rows every tenant sees; a real id marks a
-/// row belonging to that tenant alone. Nothing writes tenant-specific rows yet —
-/// the column exists so enabling that later needs no schema change. Same shape
-/// as BugReport's nullable tenantId.
-///
-/// `sortOrder` is gap-seeded (100/200/300/400) so a status can later be inserted
-/// *between* two existing ones without renumbering everything after it.
-/// Which order type a status row belongs to.
-///
-/// Not a discriminator for the orders themselves — an order's type is already
-/// unambiguous from which table it lives in. This scopes the *vocabulary*: both
-/// order types share `new`/`confirmed`/`cancelled`, but `delivered` is wine-only
-/// and `completed` is bookings-only, and nothing else in the schema could say so.
-///
-/// It is what makes the dimension tables deliver the thing they were chosen for
-/// over Postgres enums — a new status appearing on insert rather than needing a
-/// deploy. Without it the frontend would hardcode which codes each order type
-/// shows, and a tenant's custom step would stay invisible until someone shipped
-/// code. Read through lib/statusVocabulary.ts, never filtered at call sites.
-///
-/// Deliberately an enum rather than another table: unlike the statuses
-/// themselves this is a fixed, code-level concept — a third order type would
-/// mean a new table and new code regardless, so there is nothing to gain from
-/// making it insertable.
-enum StatusScope {
-  BOOKING
-  WINE_ORDER
-  BOTH
-}
-
-model ProcessStatus {
-  id        String      @id @default(cuid())
-  tenantId  String?
-  code      String
-  sortOrder Int
-  appliesTo StatusScope
-  createdAt DateTime    @default(now())
-
-  orders     Order[]
-  wineOrders WineOrder[]
-
-  // Covers tenant-specific rows only: Postgres treats NULLs as distinct in a
-  // unique constraint, so this does NOT stop duplicate global rows. A partial
-  // unique index on (code) WHERE "tenantId" IS NULL handles those — added as
-  // raw SQL in the migration, since Prisma cannot express a partial index.
-  @@unique([tenantId, code])
-  @@index([tenantId])
-}
-
-/// The payment axis. `invoiced` exists for bookings, where sending an invoice is
-/// a real tracked step today (OrderStatus.INVOICE_SENT); wine orders have no
-/// invoice-send flow and will only ever use unpaid/paid for now.
-model FinancialStatus {
-  id        String      @id @default(cuid())
-  tenantId  String?
-  code      String
-  sortOrder Int
-  // `invoiced` is BOOKING-only: bookings have a real invoice-send step
-  // (sendOrderInvoice), wine orders have no such flow. One row UPDATE if that
-  // changes — see open question 2 in Plan-StatusModel.
-  appliesTo StatusScope
-  createdAt DateTime    @default(now())
-
-  orders     Order[]
-  wineOrders WineOrder[]
-
-  @@unique([tenantId, code])
-  @@index([tenantId])
-}
-
-enum OrderStatus {
+/// Forward-only in the UI. CANCELLED is an exit from the flow, not the end of
+/// it — see lib/statusFlow.ts.
+enum BookingStage {
   NEW
-  // Customer was sent to the payment gateway and hasn't settled yet. Distinct
-  // from NEW so an abandoned checkout is never mistaken for a fresh booking.
-  // Deliberately never auto-expired: a late or retried gateway callback would
-  // otherwise land on an order we had already cancelled. See Plan-OnlinePayment §7.2.
-  PENDING_PAYMENT
   CONFIRMED
-  INVOICE_SENT
-  PAID
   COMPLETED
+  CANCELLED
+}
+
+/// The wine-order equivalent. DELIVERED where a booking says COMPLETED; there is
+/// deliberately no COMPLETED here and no DELIVERED there.
+enum WineOrderStage {
+  NEW
+  CONFIRMED
+  DELIVERED
   CANCELLED
 }
 

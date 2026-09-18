@@ -8,6 +8,128 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-18 — Status chunk 5: the two-axis design replaced with enums + dates
+
+Chunk 5 of `Plan-StatusModel.md`, which was scoped as the *contract* step — retire the legacy
+values, add a CHECK constraint, keep the reference tables — and ended up replacing the design
+instead. Max, partway through the review: *"I feel like we are over-complicating this... what
+would the database look like for a business like this?"* He was right, and the comparison was
+one-sided enough to act on.
+
+**The shape that shipped.** Two Postgres enums, one per order type, plus milestone dates:
+
+```
+Order      stage BookingStage   (NEW|CONFIRMED|COMPLETED|CANCELLED)
+           confirmedAt · completedAt · invoiceSentAt · paidAt · abandonedAt
+WineOrder  stage WineOrderStage (NEW|CONFIRMED|DELIVERED|CANCELLED)
+           confirmedAt · deliveredAt · paidAt · abandonedAt
+```
+
+Deleted: `Order.status`, `WineOrder.status`, `OrderStatus`, `ProcessStatus`, `FinancialStatus`,
+`StatusScope`, `paidAtStage`, `statusBridge.ts`, `statusVocabulary.ts`, two verification scripts,
+and the bespoke RLS block the reference tables needed. Added: two enums, five columns,
+`statusWrite.ts`, `orderFilters.ts`, `test-order-status.ts`, and `/admin/abandoned`.
+
+**Max's framing is what made the call obvious.** The business sells two things and has two payment
+timings. Against that, the built design carried two tables, a discriminator enum, an accessor module
+with two silent-failure filters, a third RLS policy shape and hand-written partial indexes — all to
+buy one thing, a per-tenant custom status, that nobody has ever asked for and nothing ever wrote.
+
+### Where the plan was wrong, not merely superseded
+
+Recorded at length in `Plan-StatusModel.md`; the short version, because this is the part that is
+load-bearing later:
+
+1. **`appliesTo` never did its job.** Max asked why the two order types didn't get separate status
+   tables — the right question — and the answer exposed a hole: it filtered the status *dropdown*,
+   never the *foreign key*. Nothing in the database stopped a booking being assigned the wine-only
+   `ps_delivered`. Chunk 2's decision 4 claimed otherwise. Two enums make it unrepresentable.
+2. **The financial axis was the wrong shape independently of tables-vs-enums.** `unpaid -> invoiced
+   -> paid` is a ladder, so climbing it overwrote the rung below: marking an invoiced order paid
+   **erased that an invoice was ever sent**. That shipped in chunk 4, disappeared from every screen,
+   and was patched with a marker. Dates cannot overwrite each other, so Invoice Sent went back onto
+   the flow-line — a reversal of a Max decision whose premise had gone, flagged rather than done
+   quietly.
+3. **Keeping the old column for payment limbo was the trap.** Limbo is cleared as a *side effect* of
+   a legacy write ("Mark as paid" writes `status='paid'` over `'pending_payment'`), and chunk 5 was
+   going to delete that write path. A demoted column mirroring the process axis would not have
+   helped, because limbo is cleared by a *financial* move. An order marked paid would have stayed in
+   the limbo panel permanently, with no error. This is the finding that settled the whole question.
+4. **The approved CHECK constraint dissolved.** It existed only because paid-ness was stored twice.
+   Three constraints shipped instead, none hardcoding a seeded row id.
+
+### Payment limbo became "incomplete orders"
+
+Max's reframing, and better than mine: an abandoned checkout and a declined card are the same thing,
+and it is not a payment state — it is an order that never happened. One `abandonedAt` timestamp
+replaces three legacy values, and they live on their own screen (`/admin/abandoned`, "Incomplete" in
+the nav, hidden for tenants with no card gateway), absent from every list, board, filter, count,
+calendar and export.
+
+Rejected, with reasons: **a separate table** (we are never told someone closed the tab, so there is
+no event at which to move anything, and a late Flitt callback needs the original row — plus a copied
+row orphans its `Payment` and breaks the recovery Max asked for) and **deriving it from `Payment`**
+(measured: 83 `created` Payment rows against 13 limbo orders, so it would have marked live orders
+abandoned).
+
+### Things found that were wrong before this chunk, not after
+
+- **The super-admin cross-tenant orders screen had never been re-pointed.** It was still rendering
+  labels and filter pills off the retired column. The breakage inventory had only cleared super-admin
+  for *revenue*, so its status reads were never inventoried.
+- **`exportOrdersCsv` was missing the limbo exclusion** that `/admin/orders` had, so a CSV silently
+  carried rows the screen it was exported from did not show. Both queries were individually valid.
+  Now one shared `where` fragment (MaintenanceNotes §28).
+- **38 dev rows were marked paid with no payment date**, and `check-status-backfill.ts` called them
+  clean because its gap check only looked for NULL foreign keys.
+- **`test-status-bridge.ts` was 20 checks, not 21.** Counted and run. The number appeared in five
+  vault files and looks borrowed from `test-rls.ts`'s genuine 21/21. Corrected everywhere.
+
+### Verification
+
+New `scripts/test-order-status.ts` — 43 checks on a throwaway tenant. What it tests is deliberately
+different from what it replaced: that the axes move independently, that milestone dates do not
+overwrite each other, that abandoned orders are held out of every order query, and that **the
+database refuses what the model forbids** — each of the three constraints and both enums exercised by
+trying to violate them. A constraint nobody has seen reject anything is a constraint nobody knows
+works.
+
+**It found a real bug on its first run:** `paymentFilterWhere('unpaid')` also matched
+invoiced-but-unpaid orders, so the three payment filters overlapped instead of partitioning — the
+same defect as chunk 4's `All statuses (31)` against 21 bookings.
+
+Also: `tsc --noEmit` clean, i18n parity 1079/1079, `test-rls.ts` 21/21, `check-rls.ts` unchanged, and
+**a local production build compiles clean** — never run before this chunk, and the previous session
+had flagged that the staging deploy building clean was weaker evidence than it sounded.
+
+**Driven in a browser** on the dev DB, which is where the last real bug turned up: a paid booking was
+drawing a trailing "Invoice Sent" step, reading as unfinished. An invoice that *was* sent always
+shows; one that never was is only a pending step while money is outstanding. Otherwise: counts
+partition exactly (18+24+282+30 = 354 = header total; 199+58+97 = 354), "Delivered" + "Unpaid" gave
+the 9 outstanding wine invoices, marking one paid left `stage = DELIVERED`, a prepaid booking read
+`New -> Paid -> Confirmed -> Completed` with the pill still on Completed, the board showed four stage
+columns, and `/admin/abandoned` listed 39 + 2 with both recovery buttons working.
+
+### Data
+
+All order data on both dev tenants was deleted by the migration and regenerated. `demoSeed` now rolls
+payment **independently of stage** — which is the point, and produces 96 completed-but-unpaid, 81
+paid-before-confirmed and 48 invoiced-and-paid rows rather than reproducing the old model in new
+columns — and rolls abandonment before the stage, since it is a slice of every attempt rather than a
+fraction of the orders that stayed NEW. `seed-demo-data.ts` gained `--tenant=<slug>`, used to refill
+Staging Winery (which the wipe had emptied, and which is what `staging.vineworks.ge` serves).
+
+### Not done
+
+- **Prod.** The migration deletes all order data there too. Max confirmed on 2026-09-17 that this is
+  disposable, but it is not undoable and Rule 0 makes it its own deliberate step — re-confirm first.
+- **The super-admin orders screen has not been driven**; it needs that account. It typechecks and
+  builds.
+- **No reversal audit trail for a manually-marked payment** — a gateway payment leaves its `Payment`
+  row, a manual one leaves nothing. An `OrderEvent` table if it ever matters; a separate feature.
+
+---
+
 ## 2026-09-17 (2) — Status split chunk 4: reads moved onto the new columns, the flow-line built
 
 Chunk 4 of `Plan-StatusModel.md`. Every read on both order screens now comes off `processStatusId` /
@@ -184,7 +306,7 @@ fake — which dissolved the ~330-row backfill decision entirely.
 
 **Verification scripts added:** `check-status-backfill.ts` (RLS read path, cross-tenant isolation with two
 throwaway tenants per MaintenanceNotes §10, app_user write refusal, remaining gaps) and
-`test-status-bridge.ts` (21 checks proving the two axes move independently — delivered stays unpaid, paying
+`test-status-bridge.ts` (20 checks — logged as 21 at the time, corrected 2026-09-18 — proving the two axes move independently — delivered stays unpaid, paying
 later doesn't reset fulfilment, paying first isn't cleared by progressing, cancelling doesn't erase payment).
 
 **The flow-line is now buildable straight off the schema:** take `getProcessStatuses(tenantId, kind)` as the

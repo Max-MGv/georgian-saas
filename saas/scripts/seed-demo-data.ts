@@ -25,6 +25,9 @@ import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { seedDemoTenant } from '../lib/demoSeed'
 
+// --tenant=<slug> seeds a different throwaway tenant (e.g. staging-winery)
+// instead of the demo one. Named explicitly on purpose — see seedDemoTenant.
+const SLUG = process.argv.find(a => a.startsWith('--tenant='))?.split('=')[1]
 const PROD = process.argv.includes('--prod')
 const CONFIRMED = process.argv.includes('--confirm')
 // --prod without --confirm is always a preview. Getting a production wipe
@@ -65,7 +68,7 @@ async function main() {
     ? (PROD ? 'MODE: preview — nothing will be written. Re-run with --confirm to write.\n' : 'MODE: dry run — nothing will be written\n')
     : 'MODE: WRITING\n')
 
-  const r = await seedDemoTenant(db, { dryRun: DRY_RUN })
+  const r = await seedDemoTenant(db, { dryRun: DRY_RUN, slug: SLUG })
 
   console.log(`Tenant: ${r.tenantName} (${r.tenantId})\n`)
   console.log(`Existing: ${r.before.orders} orders, ${r.before.wineOrders} wine orders, ${r.before.companies} companies`)

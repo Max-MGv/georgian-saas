@@ -9,6 +9,8 @@ import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import { countryName } from '@/lib/countries'
+import { BOOKING_STAGES } from '@/lib/statusFlow'
+import { PAYMENT_FILTERS } from '@/lib/orderFilters'
 
 const C = {
   border: 'var(--site-border)',
@@ -21,42 +23,28 @@ const C = {
 }
 
 /**
- * Labels for the vocabulary codes. The options themselves are no longer a
- * constant — they come from `getProcessStatuses` / `getFinancialStatuses` via
- * the server, so a status inserted for a tenant appears in the filter without
- * a deploy. Only the wording lives here (Max's call, 2026-09-17: display
- * metadata stays in frontend code for now), with the raw code as the fallback.
+ * Labels for the two filter vocabularies. Both are now fixed code-level
+ * concepts - the stages are a Prisma enum and the payment states are derived
+ * from dates - so the options are constants again rather than rows fetched per
+ * request. The raw value is the fallback, which should never show.
  */
 const STATUS_LABEL_KEYS: Record<string, string> = {
-  new: 'orders.status.new',
-  confirmed: 'orders.status.confirmed',
-  completed: 'orders.status.completed',
-  cancelled: 'orders.status.cancelled',
+  NEW: 'orders.status.new',
+  CONFIRMED: 'orders.status.confirmed',
+  COMPLETED: 'orders.status.completed',
+  CANCELLED: 'orders.status.cancelled',
   unpaid: 'orders.status.unpaid',
   invoiced: 'orders.status.invoiceSent',
   paid: 'orders.status.paid',
 }
 
-/**
- * Payment limbo, still matched on the legacy column. Both axes put it at
- * process `new` + financial `unpaid` on purpose — an abandoned checkout leaves
- * the order where it started — so the old value is the only thing that can
- * still pick it out. Uppercase, which is also how the server tells the two
- * apart in one query param.
- */
-const LIMBO_STATUS = 'PENDING_PAYMENT'
-
-type StatusOption = { id: string; code: string; sortOrder: number }
-
 type Props = {
   companies: Company[]
   params: { dateFrom?: string; dateTo?: string; companyId?: string; status?: string; payment?: string; nationality?: string; view?: string }
-  /** Per process code, plus PENDING_PAYMENT when any order is in limbo. */
+  /** Per `BookingStage`. Partitions the total - abandoned orders are not here. */
   statusCounts: Record<string, number>
-  /** Per financial code. */
+  /** Per payment state. `invoiced` means invoiced and still unpaid. */
   paymentCounts: Record<string, number>
-  processSteps: StatusOption[]
-  financialSteps: StatusOption[]
   locale?: string
   /** Only to pick the first-visit column defaults — see defaultVisibleFor. */
   tenantId?: string | null
@@ -64,7 +52,7 @@ type Props = {
   nationalityOptions?: string[]
 }
 
-export default function OrdersFilters({ companies, params, statusCounts, paymentCounts, processSteps, financialSteps, locale = 'en', tenantId = null, nationalityOptions = [] }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, paymentCounts, locale = 'en', tenantId = null, nationalityOptions = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const at = (key: string) => adminT(locale, key)
@@ -271,13 +259,10 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
             style={{ ...inputStyle, width: '100%', minHeight: 40 }}
           >
             <option value="">{at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})</option>
-            {processSteps.map(step => {
-              const count = statusCounts[step.code] ?? 0
-              return <option key={step.code} value={step.code} disabled={count === 0}>{statusLabel(step.code)} ({count})</option>
+            {BOOKING_STAGES.map(stage => {
+              const count = statusCounts[stage] ?? 0
+              return <option key={stage} value={stage} disabled={count === 0}>{statusLabel(stage)} ({count})</option>
             })}
-            {(statusCounts[LIMBO_STATUS] ?? 0) > 0 && (
-              <option value={LIMBO_STATUS}>{at('orders.status.pendingPayment')} ({statusCounts[LIMBO_STATUS]})</option>
-            )}
           </select>
         </div>
         <div>
@@ -288,9 +273,9 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
             style={{ ...inputStyle, width: '100%', minHeight: 40 }}
           >
             <option value="">{at('orders.filters.allPayments')}</option>
-            {financialSteps.map(step => {
-              const count = paymentCounts[step.code] ?? 0
-              return <option key={step.code} value={step.code} disabled={count === 0}>{statusLabel(step.code)} ({count})</option>
+            {PAYMENT_FILTERS.map(code => {
+              const count = paymentCounts[code] ?? 0
+              return <option key={code} value={code} disabled={count === 0}>{statusLabel(code)} ({count})</option>
             })}
           </select>
         </div>
@@ -368,19 +353,14 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
           <option value="">
             {at('orders.filters.allStatuses')} ({Object.values(statusCounts).reduce((a, b) => a + b, 0)})
           </option>
-          {processSteps.map(step => {
-            const count = statusCounts[step.code] ?? 0
+          {BOOKING_STAGES.map(stage => {
+            const count = statusCounts[stage] ?? 0
             return (
-              <option key={step.code} value={step.code} disabled={count === 0}>
-                {statusLabel(step.code)} ({count})
+              <option key={stage} value={stage} disabled={count === 0}>
+                {statusLabel(stage)} ({count})
               </option>
             )
           })}
-          {(statusCounts[LIMBO_STATUS] ?? 0) > 0 && (
-            <option value={LIMBO_STATUS}>
-              {at('orders.status.pendingPayment')} ({statusCounts[LIMBO_STATUS]})
-            </option>
-          )}
         </select>
       </div>
 
@@ -396,11 +376,11 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
           style={{ ...inputStyle, minWidth: 140 }}
         >
           <option value="">{at('orders.filters.allPayments')}</option>
-          {financialSteps.map(step => {
-            const count = paymentCounts[step.code] ?? 0
+          {PAYMENT_FILTERS.map(code => {
+            const count = paymentCounts[code] ?? 0
             return (
-              <option key={step.code} value={step.code} disabled={count === 0}>
-                {statusLabel(step.code)} ({count})
+              <option key={code} value={code} disabled={count === 0}>
+                {statusLabel(code)} ({count})
               </option>
             )
           })}

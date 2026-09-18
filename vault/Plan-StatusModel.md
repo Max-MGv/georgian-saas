@@ -4,7 +4,9 @@ tags: [plan, orders, wine-orders, schema, data-model]
 
 # Plan: Status data model — process vs financial split
 
-**Status:** 🚧 **Chunks 1–4 built and verified on the dev DB (2026-09-17), pushed to `staging`. Not on prod.** Chunk 5 (contract) not started.
+**Status:** ✅ **Complete (2026-09-18).** Chunks 1–4 shipped the two-axis design; **chunk 5 replaced it** with two enums and milestone dates, on Max's call. Verified on the dev DB and driven in a browser. Not on prod — the prod migration is its own deliberate step (Rule 0).
+
+> **Read the chunk 5 section before anything else in this document.** Chunks 1–4 describe a design that no longer exists: two status *reference tables* with an `appliesTo` discriminator, and a financial axis of `unpaid → invoiced → paid`. Both were deliberately retired. The reasoning below is kept because the arguments still hold — including the ones that turned out to point somewhere else.
 
 **The flow-line is now buildable straight off the schema.** Render algorithm, for the record: take `getProcessStatuses(tenantId, kind)` as the spine; if `paidAt` is null append the Paid step last (the pay-later default), otherwise insert it immediately after the step whose `code` equals `paidAtStage`; mark process steps done at or below the current `processStatusId`'s `sortOrder`, and Paid done iff `paidAt` is set. Every input that needs resolves from a column that now exists.
 **Trigger:** Max, 2026-09-17: "for many orders first we give the wine or provide the service — and then people pay." B2B customers get wine delivered (or a visit completed) and settle the invoice weeks or months later. A single linear status column cannot represent that.
@@ -162,7 +164,7 @@ Re-pointed:
 
 ### Verification
 
-`scripts/test-status-bridge.ts` (new) — 21 checks against a real database on a throwaway tenant, proving the property a typecheck cannot:
+`scripts/test-status-bridge.ts` (new) — **20** checks against a real database on a throwaway tenant, proving the property a typecheck cannot. *(Recorded as "21" here and in four other vault files until 2026-09-18, when it was counted and run; the number looks borrowed from `test-rls.ts`'s genuine 21/21. Script retired in chunk 5.)*:
 
 - **Pay-later**: confirmed → delivered leaves it `unpaid` with no invented payment date; paying afterwards keeps `process=delivered` and snapshots `paidAtStage=delivered`.
 - **Pay-first**: paid before anything else snapshots `paidAtStage=new`; confirming and delivering afterwards neither clears the payment, moves `paidAt`, nor rewrites the snapshot.
@@ -248,12 +250,194 @@ become unsettable by hand. `unreachedFinancialSteps` closes that, driven by the 
 than by naming the code — so wine orders, whose financial vocabulary is only `unpaid → paid`,
 correctly get nothing back and no call site has to know which order type has an invoice flow.
 
-## Chunk 5 — contract (not started)
+## Chunk 5 — contract ✅ built on dev 2026-09-18
 
-**Tests, docs**, then the contract step: retire `paid`/`PAID`/`INVOICE_SENT` from the old columns,
-re-point `OrdersTable.tsx` / `OrderDetail.tsx`'s hand-written unions at Prisma's generated type,
-and add the `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` constraint Max
-approved. With zero real orders, the cleanest path is wipe-and-regenerate rather than a backfill.
+**This chunk did not do what it was scoped to do.** It was meant to retire
+`paid`/`PAID`/`INVOICE_SENT` from the old columns and add a CHECK constraint,
+leaving the dimension tables in place. Instead, after Max pushed back — *"I feel
+like we are over-complicating this... what would the database look like for a
+business like this?"* — the reference tables were replaced by two Postgres enums
+and a set of milestone timestamps. Net effect: **three columns, two tables and
+two enums deleted; one column and two enums added.**
+
+### The argument that changed it
+
+Max's framing, and it is the better one: the business sells two things (wine,
+dinner bookings) and has two payment timings (before, after). Against that, the
+built design was carrying machinery nobody had asked for. The comparison that
+settled it:
+
+| | Reference tables (chunks 1–4) | Enum + dates (chunk 5) |
+|---|---|---|
+| Tables | 2 extra, plus `StatusScope` to discriminate them | 0 |
+| Reading the vocabulary | `statusVocabulary.ts`, two filters that silently return a wrong answer if either is forgotten | it is an enum |
+| RLS | a third bespoke policy shape; getting it wrong hides every status from every tenant with no error | nothing to configure |
+| Type safety | codes are strings; the hand-written unions this chunk was going to fix | Prisma generates the union |
+| Placing Paid on the line | `paidAtStage`, a snapshot that can go stale | compare two timestamps |
+| Adding a status | an INSERT | a migration |
+
+The last row was the entire case for the tables, and it was being paid for in
+every row above it. **Nobody has ever asked for a per-tenant status**, and
+nothing wrote a tenant row in the whole time the tables existed.
+
+### Where this plan was wrong, not merely superseded
+
+1. **The `appliesTo` discriminator never did the job it was built for.** Max
+   asked the right question — *why not separate status tables per order type?* —
+   and the answer exposed a real hole: `appliesTo` filtered the **dropdown**,
+   never the **foreign key**. Nothing in the database stopped a booking being
+   assigned `ps_delivered`. Decision 4 claimed two tables meant "a foreign key
+   can only ever resolve to values valid for its own axis" — true for the
+   process/financial split, false for the booking/wine split, which is the one
+   that mattered here. Two enums make it unrepresentable rather than merely
+   unoffered.
+
+2. **The financial axis was the wrong shape, independently of tables vs enums.**
+   `unpaid → invoiced → paid` is a ladder, so climbing it overwrites the rung
+   below: marking an invoiced order paid **erased that an invoice was ever
+   sent**. That is not hypothetical — it shipped in chunk 4, vanished from every
+   screen, and was patched with a `✉` marker. Two independent dates cannot
+   overwrite each other, and the marker's justification disappears with it.
+
+3. **Decision 11 ("the payment-limbo values survive untouched") was the trap,
+   not the safe option.** Limbo is cleared today as a *side effect* of writing
+   the legacy column — "Mark as paid" writes `status = 'paid'` over
+   `'pending_payment'`, and that is the only way out. Chunk 5 was going to delete
+   that write path. Keeping a demoted column and mirroring the process axis would
+   not have helped: limbo is cleared by a *financial* move, which the mirror
+   never sees. **An order marked paid would have stayed in the limbo panel
+   permanently, silently.** Nobody had noticed, because the column's clearing
+   mechanism was never written down as a mechanism.
+
+4. **Open question 4's CHECK constraint dissolved rather than being answered.**
+   `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))` existed only
+   because paid-ness was stored twice and the two could disagree. With `paidAt`
+   as the single place it lives, there is nothing to hold in agreement — and the
+   accepted cost, a seeded row id hardcoded into a constraint, is not paid at
+   all. (The permissiveness flagged at handover was real: Postgres three-valued
+   logic made it pass for a NULL `financialStatusId`. Also real, and missed by
+   the gaps report: **38 dev rows were `fs_paid` with no `paidAt`**, because
+   `check-status-backfill.ts` only ever looked for NULL foreign keys.)
+
+### What "abandoned" became, and why it is not on either axis
+
+Max's reframing, better than the one it replaced: an abandoned checkout and a
+declined card are **the same thing**, and that thing is not a payment state — it
+is *an order that never happened*. So it is neither a stage nor a payment word.
+It is one nullable `abandonedAt` timestamp, stamped when the guest is sent to the
+gateway and cleared the moment the order completes, so it reads literally as
+*this order has been incomplete since &lt;date&gt;*.
+
+Three values (`pending_payment`, `payment_failed`, `PENDING_PAYMENT`) collapse to
+one. A latent asymmetry disappears for free: only wine orders ever recorded a
+declined card, so a refused booking sat in `PENDING_PAYMENT` indefinitely.
+
+**Rejected: a separate table.** It is the obvious reading of "a whole complete
+separate thing", and it does not work. We are never told that a customer closed
+the tab — there is no event at which anything could be moved — and the row has to
+stay where a late Flitt callback can find it (Plan-OnlinePayment §7.2, which is
+also why these are never auto-expired). Moving rows would also break recovery,
+which Max asked for: a copied row gets a new id and orphans its `Payment`.
+
+**Rejected: deriving it from `Payment`.** Measured rather than assumed — dev had
+**83 `created` Payment rows against 13 limbo orders**. Payment rows outlive the
+state, so deriving it would have marked live orders abandoned.
+
+So: separate everywhere the winery looks (its own `/admin/abandoned` screen, and
+absent from every list, board, filter, count, calendar and export), same table
+underneath.
+
+### The target shape that shipped
+
+```
+Order                                  WineOrder
+  stage          BookingStage            stage        WineOrderStage
+    NEW|CONFIRMED|COMPLETED|CANCELLED      NEW|CONFIRMED|DELIVERED|CANCELLED
+  confirmedAt    DateTime?               confirmedAt  DateTime?
+  completedAt    DateTime?               deliveredAt  DateTime?
+  invoiceSentAt  DateTime?               paidAt       DateTime?
+  paidAt         DateTime?               abandonedAt  DateTime?
+  abandonedAt    DateTime?
+```
+
+`stage` is deliberately denormalised — derivable from the timestamps, kept as a
+column because the board groups by it and every filter and count reads it. Three
+CHECK constraints hold the two in agreement, none of which hardcodes a row id:
+
+- `*_stage_has_timestamp` — the **current** stage must carry its own date. Only
+  the current one: a walk-in order entered as already complete never passed
+  through Confirmed, and inventing a date for it would be a lie.
+- `*_abandoned_is_unpaid` — an order cannot be both abandoned and paid. This is
+  what lets every surface test abandonment with a single `abandonedAt IS NULL`
+  instead of a compound condition a filter could get half right.
+
+### Decisions taken while building
+
+1. **Two enums, not one shared.** They differ only on the final word, but sharing
+   is what forced `appliesTo` last time. A booking is now structurally incapable
+   of being DELIVERED.
+2. **No `cancelledAt`.** The timestamps exist to order the flow-line, and
+   cancelled is not on it. Purely additive if it is ever wanted.
+3. **No `invoiceSentAt` on `WineOrder`.** There is no wine invoice flow. A column
+   nothing writes is worse than an absent one — the next reader assumes it is
+   populated. Same call the plan already made against `invoicedAtStage`, which is
+   why that open question is now moot.
+4. **Un-paying clears `paidAt` and nothing else.** Under the ladder this was a
+   dilemma (whichever rung you fell back to lost information); with dates the
+   invoice record simply survives. The audit trail for a reversal is the
+   `Payment` row, which already keeps `settledAt` and `rawResponse`. **Gap, not
+   built:** a manually-marked-paid order has no `Payment` row, so reversing it
+   leaves no trace. That is an `OrderEvent` table and a separate feature.
+5. **One tagged action per order type**, not three. `changeBookingStatus(id,
+   {kind: 'stage'|'paid'|'invoiceSent'|'restore', ...})` — one place for the
+   admin check, tenant scoping, read-before-write and revalidation. The stage
+   arrives as a bare `string` and is narrowed by `isBookingStage` **before**
+   anything is read or written; Postgres would refuse a bad enum value anyway, so
+   this is the second of two nets rather than the only one. Typing the parameter
+   as the enum would hide the exact assumption that caused the original bug.
+6. **`invoiceSentAt` is stamped at any stage.** The old `INVOICE_SENT` only
+   advanced from NEW or CONFIRMED, because it was competing for the fulfilment
+   column. Billing a completed visit after the fact is normal and now records
+   properly.
+7. **Invoice Sent went back on the flow-line.** It was demoted to a marker
+   because there was no snapshot to place it with; `invoiceSentAt` places it
+   honestly. The marker is kept on the pill-only surfaces (table, board, card
+   list, calendar), which have no line. A reversal of a Max decision whose
+   premise no longer holds — flagged rather than done quietly.
+8. **An unsent invoice disappears from the line once an order is paid.** Found by
+   driving the screen: a settled booking was drawing a trailing "Invoice Sent"
+   step, which read as unfinished. An invoice that *was* sent always shows; one
+   that never was is only a pending step while the money is outstanding.
+
+### Verification
+
+`scripts/test-order-status.ts` (new, replaces both retired scripts) — 43 checks
+on a throwaway tenant. It tests what is worth testing now: that the axes move
+independently, that **the database refuses what the model forbids** (each of the
+three constraints and both enums exercised by trying to violate them), that
+milestone dates do not overwrite each other, and that abandoned orders are held
+out of every order query.
+
+**It found a real bug on first run.** `paymentFilterWhere('unpaid')` was
+`{ paidAt: null }`, which also matched invoiced-but-unpaid orders, so the three
+payment filters overlapped instead of partitioning — the same defect as chunk 4's
+`All statuses (31)` against 21 bookings. `unpaid` now means "we have not even
+asked yet"; the chasing list is `invoiced`.
+
+Also: `npx tsc --noEmit` clean, i18n parity 1079/1079 both dictionaries,
+`test-rls.ts` 21/21, `check-rls.ts` unchanged, **and a local production build
+(`npm run build`) compiles clean** — which had never been run before this chunk.
+
+Driven in a browser on the dev DB, not inferred from a typecheck: status counts
+partition exactly (18+24+282+30 = 354 = the header total, against 199+58+97 = 354
+on the payment axis); "Delivered" + "Unpaid" together narrow to the 9 outstanding
+wine invoices; marking one of them paid left `stage = DELIVERED` and stamped
+`paidAt`; a prepaid booking's line reads New → Paid → Confirmed → Completed with
+the pill still reading Completed; the board shows four stage columns and no Paid
+column; `/admin/abandoned` lists 39 bookings and 2 wine orders, and "They paid"
+stamped the payment and cleared `abandonedAt` in one write.
+
+---
 
 ---
 
@@ -285,7 +469,22 @@ The asymmetry that matters: **`Order`'s Postgres enum refuses to drop `PAID` whi
 ### 🟡 Will break loudly (safe — caught at build/migration time)
 `settle.ts:131` (`OrderStatus.PAID`), `demoSeed.ts:418-420`, `orders.ts:466-472`, `orders/page.tsx:221`, `orders/[id]/page.tsx:80`. Plus the enum migration itself failing while rows hold `PAID` — the safety net.
 
-**Tests to update:** `tier1-regression/popover-clipping.spec.ts:36,40` (asserts Paid/Invoice Sent options visible), `scripts/test-payment-flow.ts:106,124,146` (asserts `status === PAID` / `'paid'` — must assert on `paidAt` instead; this is the script that proves the whole Flitt path). `payment-amount-integrity.spec.ts:284-293,386` asserts on limbo statuses which survive, but its cleanup helper (`:82`) touches the stepper and needs re-verifying.
+**Tests — all updated 2026-09-18:**
+- `tier1-regression/popover-clipping.spec.ts` now asserts over **whatever options
+  the menu offers**, rather than a fixed list of status names. The menu is
+  per-order, so no row is guaranteed to show any particular option; the spec is
+  about clipping, not vocabulary, and hard-coding the words made it fail for a
+  reason it does not test.
+- `scripts/test-payment-flow.ts` asserts on `paidAt` and `abandonedAt` instead of
+  a status. The declined-card branch changed shape entirely: settlement now
+  writes **nothing** to the order on a decline, so the assertion is that the
+  order is left alone and the gateway's verbatim status lands on the `Payment`
+  row.
+- `tier2-core-flows/booking-simple.spec.ts` and `wine-catalogue-order.spec.ts`
+  both asserted that a redirected-to-gateway order appears on the order screens.
+  It no longer does — that is the whole point — so they now assert it appears on
+  `/admin/abandoned` **and is absent from `/admin/orders`**, then restore it to
+  carry on. That also gets the recovery path under test.
 
 ### ⚪ Orphaned
 Translation keys, **EN and KA in pairs** or `check-i18n-parity.ts` fails: `orders.status.paid` (`adminT.ts:329` / `:1521`, used by both tables), `orders.status.invoiceSent` (`:327` / `:1519`). `wineOrders.payment.markPaid` (`:642`) survives if the button is re-pointed rather than removed. Note `check-i18n-parity.ts` will *not* catch a key orphaned in both dictionaries.
@@ -313,18 +512,40 @@ Translation keys, **EN and KA in pairs** or `check-i18n-parity.ts` fails: `order
 
 ## Open questions
 
-1. ~~Does the board's "skip the Paid column, move back into it later" behaviour feel right?~~
-   **Resolved 2026-09-17 — no.** Board columns are the process axis only; payment is a ₾✓ card
-   marker. See decision 8 above for the reasoning that changed.
-2. Does `WineOrder` need an `invoiced` financial sub-state like bookings have, or is
-   `unpaid → paid` enough for wine? (No invoice-sending flow exists for wine orders today.) **Still
-   open** — and now costless to leave open, since `unreachedFinancialSteps` reads the vocabulary
-   and would pick up the row the moment it existed.
-3. ~~Do dimension rows need a `colorHex` / `labelKey` column?~~ **Resolved 2026-09-17 — not yet.**
-   Display metadata stays in the frontend constants, re-keyed from legacy values to vocabulary
-   codes. A status a tenant inserts later renders in neutral grey under its raw code until someone
-   ships a label; adding the columns later is purely additive.
-4. ~~Should a CHECK constraint hold `paidAt` and `financialStatusId` in agreement?~~ **Resolved
-   2026-09-17 — yes, in chunk 5.** `CHECK ((paidAt IS NOT NULL) = (financialStatusId = 'fs_paid'))`,
-   riding with the contract migration rather than adding one mid-UI-work. Cost accepted: the seeded
-   id gets hardcoded into a constraint.
+All closed as of 2026-09-18. Kept with their answers, since two of them were
+closed by the design changing underneath them rather than by being decided.
+
+1. ~~Does the board's "skip the Paid column, move back into it later" behaviour
+   feel right?~~ **No** (2026-09-17). Board columns are the stage axis only;
+   payment is a ₾✓ card marker. Survived chunk 5 unchanged.
+2. ~~Does `WineOrder` need an `invoiced` sub-state?~~ **Moot** (2026-09-18).
+   There is no financial vocabulary to add a row to any more. If a wine invoice
+   flow ever appears it is one additive `invoiceSentAt` column, and the flow-line
+   picks it up with no other change — which is cheaper than the row would have
+   been.
+3. ~~Do dimension rows need a `colorHex` / `labelKey` column?~~ **Moot**
+   (2026-09-18). There are no dimension rows. Display metadata was always in
+   frontend constants and stays there, now keyed by enum value. The "a tenant's
+   inserted status renders in neutral grey" fallback is gone with the feature
+   that needed it.
+4. ~~Should a CHECK constraint hold `paidAt` and `financialStatusId` in
+   agreement?~~ **Dissolved** (2026-09-18) — see chunk 5. Paid-ness is stored
+   once, so there is nothing to reconcile. Three different constraints shipped
+   instead, none of which hardcodes a seeded id.
+
+---
+
+## Still open, deliberately
+
+- **No reversal audit trail for a manual payment.** Un-paying clears `paidAt`;
+  for a gateway payment the `Payment` row survives as the record, but an order
+  marked paid by hand has no `Payment` row and reversing it leaves no trace. An
+  `OrderEvent` table is the answer if this ever matters — a separate feature, not
+  a gap in this one.
+- **Prod has not been migrated.** Rule 0: `prisma migrate deploy` against
+  production is its own deliberate step. The migration deletes all order data,
+  which Max confirmed is disposable on both databases — but that confirmation was
+  given on 2026-09-17 and should be re-confirmed before it runs.
+- **The super-admin cross-tenant orders screen has not been driven in a
+  browser.** It was re-pointed (it had been left on the retired column entirely)
+  and it typechecks and builds, but verifying it needs the super-admin account.
