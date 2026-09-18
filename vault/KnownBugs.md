@@ -54,10 +54,11 @@ tags: [bugs]
 | 46 | Orders CSV export shipped raw tetri under a header reading **"Total (GEL)"** (`orders.ts:468`, `o.totalPrice ?? ''`) — every exported row 100× high in a file an accountant opens in Excel. Fixed with `toMajor`, deliberately not `formatTetri`: a `₾` in the cell makes it text and breaks the column's arithmetic. Regression introduced by the 2026-09-18 tetri conversion. | Admin / Orders | 🟢 Resolved |
 | 47 | `assignOrderCompany()` (`orders.ts`) wrote `totalPrice` but **not** `tastingRateSnapshot` / `lunchRateSnapshot` / `registrationFeeSnapshot`, so linking a no-company order to a company produced a brand-new order with null snapshots. Those columns are nullable only to mean "created before the columns existed" — `recalcOrderTotal` therefore fell into its legacy branch on the next extra or masterclass line and re-priced the whole booking off whatever the company's tiers said that day. **This is precisely the repricing bug chunk 4 was written to close, reintroduced through a path chunk 4 did not touch.** Not a money-units bug — it would have existed without the tetri conversion. Both branches now write the three snapshots, matching `createBooking.ts:307-309`. Verified equivalent: `VisitType` has only `TASTING`/`TASTING_LUNCH`, so the branch's rate selection and `recalcOrderTotal`'s reproduce the same total. | Admin / Orders | 🟢 Resolved |
 | 48 | Booking form's company price preview dropped the lunch add-on: `estimatedTotal` used `matchedTier.pricePerPerson * guestCount` for the COMPANY branch while `matchedTierRate` — computed two lines above, and what `createBooking.ts:317-320` actually charges — selects `comboRatePerPerson(tier)` for `TASTING_LUNCH`. So a company `TASTING_LUNCH` quote **under-stated** the total the server then stored, visible whenever `showCompanyPrice` is on. Not a money-units bug; drift between two of the five copies of the tier-pricing formula (see [[MaintenanceNotes]] §22). The INDIVIDUAL branch was already correct. | Public / Booking form | 🟢 Resolved |
+| 49 | `demoSeed.ts` never wrote `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`, so **all 393 seeded demo orders were snapshot-less** — the #47 shape at 100% of the demo data. Those columns are nullable only to mean "created before the columns existed", so `recalcOrderTotal` took its legacy branch for every demo booking and would reprice the whole thing off live tiers the moment a visitor added an extra. Found by auditing the dev database rather than by reading code. `computeTotal` now returns the three rates alongside the total instead of discarding them. Verified: re-seeded dev, snapshot coverage 0/393 → **393/393**, and the refactor proven arithmetically identical to its predecessor across **1,944 input combinations, 0 differences**. | Demo / Seeding | 🟢 Resolved |
 
 ---
 
-## Bugs #43–#48 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
+## Bugs #43–#49 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
 
 Found by a deliberately **uninformed** review. Max asked for a second opinion on the money
 design and specified the reviewer be given no context — no decisions, no thought process,
@@ -114,6 +115,37 @@ Two design notes, both learned by testing rather than assumed:
 
 Verified against a probe covering all three bad forms plus four good ones, then run across
 the codebase: **0 violations** once #43 was fixed.
+
+### The database audit — what was actually damaged
+
+Max authorised inspecting and repairing dev data directly ("all data is fake anyway; we
+aren't taking real orders yet"). Built `saas/scripts/audit-money.ts` — a read-only
+plausibility sweep over every money column looking for the two shapes a unit error leaves:
+a value ~100x too small, and a non-integer (what #44's stale rounding produced).
+
+**Result: no damaged rows anywhere.**
+
+| Column | n | min | max | under floor | fractional |
+|---|---|---|---|---|---|
+| `Order.totalPrice` | 393 | ₾180 | ₾2,875 | 0 | 0 |
+| `OrderMasterclass.pricePerUnit` | 73 | ₾25 | ₾60 | 0 | 0 |
+| `WineOrder.totalAmount` | 45 | ₾163.20 | ₾7,078.80 | 0 | 0 |
+| `Price.pricePerPerson` | 30 | ₾25 | ₾90 | 0 | 0 |
+| `WineVintage.price` | 17 | ₾15 | ₾40 | 0 | 0 |
+| `WineOrderItem.priceSnapshot` | 109 | ₾15 | ₾40 | 0 | 0 |
+| `OrderExtra.amount` | **0 rows** | — | — | — | — |
+
+**#45 never wrote a bad row** — `OrderExtra` is empty, because nobody has used the admin
+"add extra" button since the migration. The bug was real and would have corrupted the first
+row it touched; it simply never got the chance.
+
+The non-round wine totals (₾163.20, ₾7,078.80) are the useful signal in that table:
+discounts *are* being applied and *are* landing on exact tetri, which is #44's fix working
+on real data rather than in a test.
+
+The audit's one genuine finding was #49, which no amount of code-reading had surfaced:
+393 of 393 orders missing their rate snapshots. Keep `audit-money.ts` — it is read-only and
+is the cheapest way to answer "did anything get written wrong" after future money work.
 
 ### Still open
 

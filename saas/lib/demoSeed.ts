@@ -187,25 +187,41 @@ function findTier(tiers: TierSpec[], guestCount: number): TierSpec | undefined {
  * masterclass line added on at full size. Every tier value is converted here,
  * at the one place they are read for arithmetic.
  */
+/**
+ * Returns the total AND the three tier rates it was derived from.
+ *
+ * The rates are returned, not discarded, because every seeded order has to
+ * carry `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`.
+ * Until 2026-09-19 the seed wrote none of them, so all 393 demo orders were
+ * snapshot-less — and those columns are nullable only to mean "created before
+ * the columns existed". `recalcOrderTotal` therefore took its legacy branch for
+ * every demo order, re-pricing the whole booking off live tiers the moment a
+ * visitor added an extra. Same shape as bug #47, at 100% of the demo data.
+ *
+ * The rates match what `recalcOrderTotal`'s snapshot branch expects:
+ * tasting = the per-person TASTING rate, lunch = the per-person COMBO rate.
+ * Both branches below then reproduce exactly what recalc would compute.
+ */
+type SeedPrice = { total: number; tastingRate: number; lunchRate: number; registrationFee: number }
+
 function computeTotal(opts: {
   tiers: TierSpec[]; visitType: VisitType; guestCount: number
   tastingGuests: number; lunchGuests: number; masterclassAmt: number
-}): number | null {
+}): SeedPrice | null {
   const { tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt } = opts
   const paying = tastingGuests + lunchGuests
-  if (paying > 0) {
-    const tier = findTier(tiers, paying)
-    if (!tier) return null
-    return tastingGuests * fromMajor(tier.pricePerPerson)
-      + lunchGuests * fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson)
-      + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
-  }
-  const tier = findTier(tiers, guestCount)
+  const tier = findTier(tiers, paying > 0 ? paying : guestCount)
   if (!tier) return null
-  const rateMajor = visitType === 'TASTING_LUNCH'
-    ? tier.pricePerPerson + tier.tastingLunchPricePerPerson
-    : tier.pricePerPerson
-  return guestCount * fromMajor(rateMajor) + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
+
+  const tastingRate = fromMajor(tier.pricePerPerson)
+  const lunchRate = fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson)
+  const registrationFee = fromMajor(tier.registrationPrice ?? 0)
+
+  const total = paying > 0
+    ? tastingGuests * tastingRate + lunchGuests * lunchRate + registrationFee + masterclassAmt
+    : guestCount * (visitType === 'TASTING_LUNCH' ? lunchRate : tastingRate) + registrationFee + masterclassAmt
+
+  return { total, tastingRate, lunchRate, registrationFee }
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +527,8 @@ export async function seedDemoTenant(
         masterclassAmt = qty * item.pricePerUnit
       }
 
-      const totalPrice = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
+      const priced = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
+      const totalPrice = priced?.total ?? null
 
       // Rolled BEFORE the stage, because an abandoned checkout is a slice of
       // every booking attempt, not a fraction of the ones that happened to stay
@@ -551,6 +568,11 @@ export async function seedDemoTenant(
           phone: company ? company.contactPhone : `+995 5${rand(50, 99)} ${rand(10, 99)} ${rand(10, 99)} ${rand(10, 99)}`,
           companyId: company ? company.id : individuals.id,
           totalPrice, createdAt,
+          // Carry the rates this order was sold at, so recalc uses its snapshot
+          // branch rather than repricing off live tiers (#49).
+          tastingRateSnapshot: priced?.tastingRate ?? null,
+          lunchRateSnapshot: priced?.lunchRate ?? null,
+          registrationFeeSnapshot: priced?.registrationFee ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
       }

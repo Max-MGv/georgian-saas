@@ -86,16 +86,38 @@ were.
   files are byte-identical before and after (verified via `git stash`).
 - #44 fix measured against the five failing cases: all now integral.
 
+### Then: the database audit, and a seventh bug
+
+Max authorised direct inspection and repair of dev data ("all data is fake anyway; we aren't
+taking real orders yet"). Built `saas/scripts/audit-money.ts`, a read-only plausibility sweep
+over every money column. **Kept** — it is the cheapest way to answer "did anything get
+written wrong" after future money work.
+
+**No damaged rows anywhere.** #45 never actually wrote one: `OrderExtra` is empty, because
+nobody has used the admin "add extra" button since the migration. The bug was real and would
+have corrupted the first row it touched; it never got the chance. Full table in [[KnownBugs]].
+
+The audit surfaced **#49**, which code-reading had not: `demoSeed.ts` never wrote rate
+snapshots, so **393 of 393** demo orders were snapshot-less — #47's shape at 100% of the demo
+data, meaning `recalcOrderTotal` took its legacy repricing branch for every demo booking.
+`computeTotal` now returns the three rates instead of discarding them.
+
+**A false alarm worth recording.** Re-seeding after the fix moved the total order sum by ₾270,
+which looked like the refactor changing a number. It was not: the seed's date window is
+relative to `now`, and the date rolled from the 18th to the 19th mid-session. Proven two ways
+— three back-to-back seeds on the same day produced byte-identical totals, and the old and new
+`computeTotal` were compared directly across **1,944 input combinations with 0 differences**.
+Snapshot coverage went 0/393 → 393/393 with every total otherwise untouched.
+
 ### Next
 
 1. **Not done, needs a decision:** extract the tier-pricing formula — it is copy-pasted in
    **five** places, not the three [[MaintenanceNotes]] §22 documented. §22 updated with the
    two extra sites and why a shared helper must take rates as arguments.
-2. **Data repair for #45** — rows written since 2026-09-18 with implausibly small
-   `OrderExtra.amount` are still wrong; the code fix does not repair them. Not yet queried.
-3. **No VAT anywhere** in schema, invoice or receipt. Georgia's is 18% with a registration
-   threshold. May be deliberate scope — but nothing in code or vault says so.
-4. Staging verification of all six fixes before the `master` merge.
+2. **VAT dropped on Max's call** — not being added separately for now (2026-09-19).
+3. Staging verification of the seven fixes before the `master` merge.
+4. Production has not been inspected. The audit ran against **dev only**; if prod carries any
+   `OrderExtra` rows written since 2026-09-18 they would still need the #45 repair.
 
 ---
 
