@@ -4,9 +4,9 @@ tags: [plan, schema, data-model, orders, money]
 
 # Plan: Transactional data model fixes
 
-**Status:** 🚧 **Chunks 0–3 complete 2026-09-18** (Features 192, 193, 194). Money is
-integer tetri, proven end to end against the real Flitt gateway. **Next: Chunk 4** — the
-price snapshot, which fixes the live `recalcOrderTotal` repricing bug.
+**Status:** 🚧 **Chunks 0–4 complete 2026-09-18** (Features 192–195). Money is integer
+tetri, proven end to end against the real Flitt gateway, and an order's rates are now
+frozen so a later edit cannot reprice it. **Next: Chunk 5** — `OrderEvent`.
 
 Everything is on `staging`. **Production is untouched** and internally consistent on the
 pre-chunk-5 schema; nothing in this plan has gone near `master`.
@@ -473,7 +473,7 @@ deliberate cases listed above.
 
 ---
 
-## Chunk 4 — Stop `recalcOrderTotal` repricing old bookings ⬜ not started
+## Chunk 4 — Stop `recalcOrderTotal` repricing old bookings ✅ built on dev 2026-09-18
 
 **Purpose:** fix a live bug. `lib/pricing.ts:4` recalculates from the company's **current**
 `Price` rows. Change a company's pricing in March, add a ₾20 extra to their February
@@ -491,7 +491,50 @@ means "no matching price tier → total quietly unchanged, no error, no log."
 **Ordering:** must come **after** Chunk 3, so the new snapshot columns are created as
 integer tetri rather than being converted twice.
 
-**Resume point:** _(none — not started)_
+### What was built
+
+Migration `20260918142545_order_rate_snapshots` — three nullable tetri columns on `Order`:
+`tastingRateSnapshot`, `lunchRateSnapshot`, `registrationFeeSnapshot`. Written wherever an
+order is priced: the public booking form, the admin new-order form, and an admin edit.
+
+**The distinction that matters.** An admin editing guest counts or rates **is**
+deliberately re-pricing, so the snapshot moves with it. A *line* change — adding an extra
+— must never disturb the agreed rates. Opposite intents, and now opposite behaviour.
+
+### Two further bugs fixed in passing
+
+1. **An order priced from hand-typed rates could never be recalculated at all.** Those
+   rates were used once and thrown away, so `recalcOrderTotal` bailed out with no company
+   tier to read. They are now snapshotted like any other rate.
+2. **`if (!tier) return` was a silent no-op** that left the total untouched and gave the
+   caller no reason to think anything had gone wrong. It still cannot invent a price, but
+   it logs rather than hiding.
+
+### A hole an earlier draft of this chunk introduced, caught by writing the test
+
+Seeding the snapshot from the individuals tier for **every** booking meant a company
+booking that no tier prices — total deliberately 0, "confirmed after submission" — would
+carry individuals' rates, and a later recalc would **invent a price the winery never
+quoted**. Company bookings now keep a `NULL` snapshot unless a company tier actually
+prices them. Worth recording: the bug was invisible until the scenario was written down
+as a test.
+
+### Verification
+
+New `scripts/test-order-repricing.ts` builds the exact scenario — an order sold at
+₾70/head, the winery then raises rates to ₾90, an admin adds a ₾20 extra:
+
+| Assertion | |
+|---|---|
+| Extra added at the **original** rates | ₾325 ✅ |
+| Explicitly **not** repriced | ≠ ₾430 ✅ |
+| Snapshot-less order falls back to live tiers (and logs) | ₾410 ✅ |
+| Split counts price off the snapshot | ₾295 ✅ |
+| Probe data cleaned up | ✅ |
+
+**6/6 passing.** `next build` passes; `tsc --noEmit` 0 errors.
+
+**Resume point:** complete on dev, pushed to `staging`. Chunk 5 may start.
 
 ---
 
