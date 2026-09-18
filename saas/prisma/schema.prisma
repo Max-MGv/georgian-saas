@@ -83,6 +83,7 @@ model Company {
   skipPayment         Boolean?
   tenantId            String?
   createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @default(now()) @updatedAt
   orders              Order[]
   wineOrders          WineOrder[]
   prices              Price[]
@@ -187,6 +188,7 @@ model Order {
   // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
   nationalities        String[]           @default([])
   createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @default(now()) @updatedAt
   masterclassLines     OrderMasterclass[]
   extras               OrderExtra[]
   payments             Payment[]
@@ -203,15 +205,21 @@ model Order {
 }
 
 model Price {
-  id                         String  @id @default(cuid())
+  id                         String   @id @default(cuid())
   companyId                  String
-  company                    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company                    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   minGuests                  Int
   maxGuests                  Int
   pricePerPerson             Float
-  tastingLunchPricePerPerson Float   @default(0)
-  registrationPrice          Float   @default(0)
-  isDisplayPrice             Boolean @default(false)
+  tastingLunchPricePerPerson Float    @default(0)
+  registrationPrice          Float    @default(0)
+  isDisplayPrice             Boolean  @default(false)
+  // Pricing is edited in place, so without these there is no record of when a
+  // company's rates changed — and every booking is priced from them. Chunk 4
+  // will additionally snapshot the tier onto the Order, which is what stops
+  // recalcOrderTotal repricing old bookings at today's rates.
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @default(now()) @updatedAt
 }
 
 model MenuItem {
@@ -246,16 +254,23 @@ model OrderMasterclass {
   masterclassItemId String
   quantity          Int
   pricePerUnit      Float // price snapshot at time of booking
+  // Line tables carried no timestamps at all until 2026-09-18, so "when was this
+  // added to the order" was unanswerable — and admins do add lines days after a
+  // booking is made.
+  createdAt         DateTime        @default(now())
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
 }
 
 model OrderExtra {
-  id      String @id @default(cuid())
-  orderId String
-  label   String
-  amount  Float
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  orderId   String
+  label     String
+  amount    Float
+  // See OrderMasterclass — an extra is the line most often added after the fact,
+  // by an admin, which is exactly why this matters here.
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model WineOrder {
@@ -277,17 +292,24 @@ model WineOrder {
   // enum of its own: DELIVERED exists here and COMPLETED does not.
   stage           WineOrderStage  @default(NEW)
   // Milestone dates — see the equivalent block on Order for the reasoning.
-  // No invoiceSentAt: wine orders have no invoice-send flow, and a column
-  // nothing writes is worse than an absent one, since the next reader assumes
-  // it is populated. Purely additive whenever that flow appears.
   confirmedAt     DateTime?
   deliveredAt     DateTime?
   paidAt          DateTime?
   abandonedAt     DateTime?
+  // ⚠️ DELIBERATELY UNWRITTEN FOR NOW. Added 2026-09-18 (Max's call) to close the
+  // asymmetry with Order, which has had this column since Feature 191. There is
+  // still no wine-order invoice-send flow, so **nothing writes this column yet** —
+  // do not read it as "no invoice was sent", only as "we have no record either
+  // way". The earlier reasoning for leaving it out was that a column nothing
+  // writes is worse than an absent one, because the next reader assumes it is
+  // populated; this comment is what pays that debt. Delete this warning the
+  // moment a send flow starts writing it. See vault/DataModel/Plan-DataModel.md.
+  invoiceSentAt   DateTime?
   tenantId        String?
   companyId       String?
   company         Company?        @relation(fields: [companyId], references: [id])
   createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
   payments        Payment[]
 
@@ -312,10 +334,15 @@ model Payment {
   // Exactly one of these is set — a payment belongs to a booking or a wine
   // order, never both. Not expressible as a DB constraint in Prisma; enforced
   // at the call site in lib/payments/settle.ts.
+  // Cascade, not the Prisma default. An optional relation defaults to SetNull,
+  // which on an order delete would leave this row behind with both foreign keys
+  // null — a real `amount` and a real `rawResponse`, attributable to nothing and
+  // invisible to every screen. A payment has no meaning without its order, so it
+  // goes when the order goes. See vault/DataModel/Dependencies.md finding 2.
   orderId           String?
-  order             Order?     @relation(fields: [orderId], references: [id])
+  order             Order?     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   wineOrderId       String?
-  wineOrder         WineOrder? @relation(fields: [wineOrderId], references: [id])
+  wineOrder         WineOrder? @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
   provider          String     @default("flitt")
   providerPaymentId String?
   checkoutUrl       String?
@@ -327,6 +354,7 @@ model Payment {
   currency          String     @default("GEL")
   rawResponse       Json?
   createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now()) @updatedAt
   settledAt         DateTime?
 
   /// The lookup key used by the callback handler. Unique per provider so a
@@ -431,6 +459,7 @@ model WineOrderItem {
   vintageYearSnapshot Int
   priceSnapshot       Float
   quantity            Int
+  createdAt           DateTime     @default(now())
   wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
   wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
 }

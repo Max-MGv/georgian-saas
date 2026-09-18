@@ -102,7 +102,7 @@ exactly the kind of inconsistency Chunk 7's display table would centralise.
 
 ---
 
-## Chunk 1 — Timestamps ⬜ not started
+## Chunk 1 — Timestamps ✅ built on dev 2026-09-18
 
 **Purpose:** the zero-risk additive change. Pure schema, no application code changes
 required, no behaviour change. Ship it first to prove the migration path works before
@@ -137,11 +137,47 @@ rather than by remembering to delete payments first.
 **Why now and not later:** timestamps cannot be obtained retroactively. Every day without
 them is history that does not exist. They are one line each.
 
-**Verification:** `prisma migrate dev` against dev (Rule 10 — stop the dev server first),
-confirm `✔ Generated Prisma Client`, then create a booking and an extra through the UI
-and check both rows carry timestamps.
+### What was built
 
-**Resume point:** _(none — not started)_
+Migration `20260918120357_add_timestamps_and_payment_cascade`, applied to dev.
+
+| Table | Added |
+|---|---|
+| `Order`, `WineOrder`, `Payment`, `Company` | `updatedAt` |
+| `Price` | `createdAt` **and** `updatedAt` |
+| `OrderExtra`, `OrderMasterclass`, `WineOrderItem` | `createdAt` |
+| `WineOrder` | `invoiceSentAt` (nullable, **nothing writes it yet** — warned in-schema) |
+| `Payment` | `onDelete: Cascade` on both `orderId` and `wineOrderId` |
+
+**No application code changed.** Purely additive schema.
+
+### The detail that made it safe
+
+`@default(now())` alongside `@updatedAt` is what let a `NOT NULL` column be added to
+populated tables — Prisma emitted `DEFAULT CURRENT_TIMESTAMP`, so existing rows got a
+value instead of the migration failing. Without the default this would have errored on
+every table that already had rows. **Repeat this pattern for any future `updatedAt`.**
+
+### Verification
+
+- `npx prisma format` + `validate` — schema valid.
+- `npx prisma migrate dev` — applied, and output ended with `✔ Generated Prisma Client`
+  (Rule 10 satisfied; dev server confirmed not running beforehand via `Get-Process node`
+  and a port-3000 check).
+- `npx tsc --noEmit` — **zero errors.**
+- Direct `information_schema` query — all 11 columns present on dev.
+- `pg_constraint.confdeltype` for both `Payment` foreign keys now reports **`c`**
+  (CASCADE), previously `n` (SET NULL).
+
+### RLS — nothing to do, and why that is worth knowing
+
+`scripts/setup-rls.ts:49` grants at **table** level
+(`GRANT SELECT, INSERT, UPDATE, DELETE ON "<table>" TO app_user`), not column level.
+Postgres table grants automatically cover columns added later, so **adding a column never
+needs an RLS change.** Only adding a *table* does. Recorded here so no future chunk
+re-investigates it.
+
+**Resume point:** complete on dev. Pushed to `staging`. Chunk 2 may start.
 
 ---
 
