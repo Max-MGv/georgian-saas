@@ -9,7 +9,8 @@ tetri, proven end to end against the real Flitt gateway; an order's rates are fr
 later edit cannot reprice it; orders carry an append-only history; and every payment is a
 ledger row whatever channel it arrived through.
 
-**Chunk 7 needs a decision from Max before it starts — see its section.**
+**Chunk 7 is deferred by Max's decision** — no status tables for now; labels stay in
+constants. Every chunk in this plan is now either complete or deliberately parked.
 
 Everything is on `staging`. **Production is untouched** and internally consistent on the
 pre-chunk-5 schema; nothing in this plan has gone near `master`.
@@ -687,7 +688,7 @@ totals, which was impossible before.
 
 ---
 
-## Chunk 7 — Display/label tables 🛑 NEEDS A DECISION FROM MAX
+## Chunk 7 — Display/label tables ⏸️ DEFERRED — Max's call, 2026-09-18
 
 **Purpose:** what Max asked for on 2026-09-18 — *"we can add tables just for display, so
 it's comfy for us."*
@@ -707,12 +708,20 @@ gone.
 **Touches roughly one file** (the display layer) versus the ten that a dynamic status
 table would touch.
 
-### 🛑 The decision, 2026-09-18
+### ✅ What shipped instead (Feature 198)
 
-The cheap part of this chunk was done separately and is already shipped: wine orders
-rendered `NEW` as **"Pending"** while bookings rendered the same enum value as **"New"**,
-and two keys Feature 191 orphaned were still in the dictionaries. Fixed in constants;
-i18n parity 1077/1077.
+The cheap part of this chunk, done in constants rather than a table:
+
+- Wine orders rendered `NEW` as **"Pending"** while bookings rendered the same enum value
+  as **"New"**. Both now read **New**, in English and Georgian.
+- The rename was applied to **every place the stage is named**, not just the status badge:
+  the filter pills (same map), the Pack-mode help text, and the wine Statistics "Active
+  orders" sub-label, which read *"pending · confirmed · paid"*.
+- Two keys Feature 191 orphaned and nothing referenced were removed from both locales:
+  `wineOrders.status.pending` and `orders.status.pendingPayment` ("Awaiting Payment").
+
+i18n parity **1077/1077**. A sweep for user-facing "Pending" naming this stage now returns
+nothing.
 
 What remains is the table itself, and it carries a real trade-off:
 
@@ -722,20 +731,17 @@ What remains is the table itself, and it carries a real trade-off:
 | **Costs** | A per-request lookup on the hot path — the orders list, board and calendar all render labels. `Perf-Baseline-2026-07-29.md` is the record of what hot-path latency costs here. |
 | **Risk** | Without an admin UI it is **a table nothing writes**, which this project has explicitly called out as worse than an absent one (see `WineOrder.invoiceSentAt`). The whole status debate ended by deleting machinery nobody used. |
 
-**Three live options:**
+**Max chose C on 2026-09-18:** *"lets hold off on status tables for now."* No table is
+built. Labels stay in `lib/adminT.ts`.
 
-- **A — build it now**, seeded with platform defaults so it is read on every render and
-  is not dead. Accepts the hot-path query; the editing UI follows later.
-- **B — build it with the admin UI in one go.** No dead machinery, larger piece of work.
-- **C — defer.** The visible inconsistency is already fixed. Build it when a winery
-  actually asks to rename something.
+He also settled the vocabulary itself: **the first stage is called "New" on bookings and
+wine orders alike.** Applied everywhere it is named, not just on the badge — see below.
 
-**Recommendation: C**, then B when a real request appears. The argument that settled the
-status question — nobody has ever asked for this, and nothing wrote the tables that
-existed — applies here too, and the thing that was actually bothering anyone is fixed.
-But Max asked for display tables explicitly, so this is his call, not an inference.
+**When this is picked up again, build option B** (table *and* admin UI together) rather
+than A. A table with no writer is the thing this project has repeatedly found to be worse
+than an absent one, and the whole status debate ended by deleting machinery nobody used.
 
-**Resume point:** blocked on that decision.
+**Resume point:** deferred by decision, not blocked. Nothing depends on it.
 
 ---
 
