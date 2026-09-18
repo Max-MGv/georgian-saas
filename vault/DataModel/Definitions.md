@@ -179,12 +179,33 @@ reported `All statuses (31)` against 21 bookings because two buckets overlapped.
 
 ---
 
-## Open question for Max
+## ✅ Resolved 2026-09-18 — cancelled orders no longer count as revenue
 
-**Should cancelled bookings count toward Statistics revenue?** Today they do (₾15,017 of
-₾208,202 on the dev tenant — 7.2%), while the Orders page excludes them. The two screens
-disagree.
+Max confirmed the change on the day it was raised. Statistics now excludes cancelled
+orders as well as abandoned ones, on **both** the bookings and wine tabs, via the new
+`NOT_CANCELLED` fragment in `lib/orderFilters.ts`.
 
-My read: a cancelled booking is not revenue, and Statistics should exclude it — which
-would also make the two screens agree. But that changes a number Max may have been reading
-for months, so it is not being changed unilaterally. **Not blocking any chunk.**
+**Excluded at the query, not at each sum.** Every figure on that page derives from one
+query, so counts and revenue move together — an average order value built from a revenue
+that skips cancellations and a count that does not would simply be wrong.
+
+Verified live on staging against the database, to the exact tetri:
+
+| | Before | After | DB says |
+|---|---|---|---|
+| Bookings 2026 — monthly chart | ₾112,783 | **₾104,462** | ₾104,462 ✅ |
+| Bookings 2026 — company chart | ₾112,783 | **₾104,462** | ₾104,462 ✅ |
+| Wine orders 2026 | 39 / ₾111,541 | **38 / ₾106,339** | 38 / ₾106,339 ✅ |
+
+"Future Revenue" on the Orders page was **unchanged**, which is correct — that strip
+already excluded cancelled. That is the inconsistency this closed.
+
+**Cancelled orders remain fully visible** in the list, board, calendar and export. They
+are real and a winery needs to see them. They are simply not money and not volume.
+
+> ⚠️ **Verification gotcha, cost ~10 minutes.** Re-checking a deployed change in the same
+> browser tab showed the **old numbers for several minutes** after the Vercel deployment
+> reported READY — Next.js router cache and browser HTTP cache both serve the stale RSC
+> payload for a URL already visited. It looked exactly like "the fix does not work."
+> **Append a throwaway query param** (`?cb=<something>`) when verifying, or the result is
+> untrustworthy.

@@ -215,9 +215,13 @@ Not a doc problem — a real inconsistency, measured on the dev tenant:
 Statistics reports **₾208,202**, of which **₾15,017 across 30 cancelled bookings** —
 a **7.2% overstatement**, if a cancelled booking is agreed not to be revenue.
 
-**Deliberately not fixed.** It changes a number Max may have been reading for months, so
-it is an open question for him rather than a unilateral edit. Logged at the bottom of
-[[Definitions]]. Not blocking any chunk.
+**✅ Fixed same day** — Max confirmed ("definitely change it, good catch"). New
+`NOT_CANCELLED` fragment in `lib/orderFilters.ts`, applied to both queries in
+`statistics/page.tsx`. Verified live against the DB to the exact tetri: bookings 2026
+₾112,783 → **₾104,462** (both the monthly and the company chart, independently), wine
+orders 2026 39/₾111,541 → **38/₾106,339**. `WineStatistics.tsx` had been contradicting
+itself on one screen — revenue summed cancelled orders while the "active orders" count
+beside it already excluded them. Full detail in [[Definitions]].
 
 **Resume point:** complete. Chunk 3 may start — but see the wipe re-confirmation note.
 

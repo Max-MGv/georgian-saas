@@ -102,11 +102,32 @@ Three things worth carrying forward:
   would have left orphaned `Payment` rows with null foreign keys, real amounts, and no
   screen showing them.
 
+### Chunk 2 done — and it found a real bug by writing prose
+
+`vault/DataModel/Definitions.md` written. Documentation only. But writing down what
+"revenue" means forced a comparison of the two screens that compute it, and **they
+disagreed**: the Orders page excluded cancelled bookings, Statistics did not. On the dev
+tenant that was ₾15,017 of cancelled bookings inside a reported ₾208,202 (7.2%), plus
+₾6,498 inside ₾116,797 on the wine side. `WineStatistics.tsx` contradicted itself on one
+screen — revenue counted cancelled orders, the "active orders" number beside it did not.
+
+Max confirmed the fix (**Feature 193**). New `NOT_CANCELLED` fragment in
+`lib/orderFilters.ts`, applied at the query in `statistics/page.tsx` for both order types.
+Verified live to the exact tetri: bookings 2026 ₾112,783 → **₾104,462**, wine orders
+39/₾111,541 → **38/₾106,339**.
+
+> ⚠️ **Verification gotcha that cost ~10 minutes and nearly caused a misdiagnosis.** After
+> Vercel reported the deployment READY, the staging page kept serving the **pre-fix
+> numbers** in an already-visited browser tab — Next.js router cache plus browser HTTP
+> cache on the RSC payload. It looked exactly like "the fix does not work", and the next
+> step would have been to go rewrite working code. A throwaway `?cb=` query param revealed
+> the real numbers immediately. **Always cache-bust when verifying a deploy on a URL you
+> have already loaded.**
+
 ### Next
 
-**Chunk 2** — write `vault/DataModel/Definitions.md` (orders are attempts not sales;
-revenue is booked not collected; grain rules). No code. Then **Chunk 3**, the money
-conversion off `Float`, which is the large one and carries the destructive migration.
+**Chunk 3** — the money conversion off `Float`. The large one, six sub-steps, and it
+carries the destructive migration.
 
 **Before Chunk 3 runs, re-confirm the wipe with Max on the day.** Scope settled as
 `Payment` + line tables + `Order` + `WineOrder`; **`Company` is deliberately excluded**,
