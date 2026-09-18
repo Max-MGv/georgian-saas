@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
+import type { Tetri } from '@/lib/money'
 
 /**
  * Flitt (formerly Fondy) payment gateway.
@@ -40,8 +41,16 @@ export type CreateCheckoutInput = {
   merchantId: string | number
   password: string
   orderId: string
-  /** MAJOR units (e.g. 49.99 GEL). Converted to tetri here — do not pre-multiply. */
-  amount: number
+  /**
+   * TETRI — minor units, e.g. 4999 for ₾49.99.
+   *
+   * Changed 2026-09-18 (chunk 3). This used to take major units and multiply by
+   * 100 here; money is now stored as tetri throughout, so the value arrives in
+   * the unit Flitt already wants and no conversion happens at this boundary.
+   * The `Tetri` brand is what stops a major-unit number being passed by mistake
+   * — which would undercharge by 100×.
+   */
+  amount: Tetri
   currency?: string
   orderDesc: string
   responseUrl: string
@@ -67,15 +76,19 @@ type FlittCheckoutResponse = {
 }
 
 /**
- * GEL → tetri. Flitt bills in minor units.
+ * `toMinorUnits` lived here until 2026-09-18 (chunk 3).
  *
- * The rounding is not cosmetic: 49.99 * 100 is 4998.9999999999995 in IEEE-754,
- * which truncates to 4998 and undercharges by a tetri. Every amount that
- * reaches Flitt must go through here.
+ * It did `Math.round(major * 100)`, and its rounding was not cosmetic: 49.99 *
+ * 100 is 4998.9999999999995 in IEEE-754, which truncates to 4998 and
+ * undercharges by a tetri. That hazard is now gone at the source — money is
+ * stored as integer tetri, so nothing multiplies at this boundary any more.
+ *
+ * Deleted rather than left as a no-op on purpose: a surviving
+ * `toMinorUnits(amount)` call against an amount that is *already* tetri would
+ * charge the customer 100× and neither the compiler nor Flitt would object.
+ * `lib/money.ts` owns the major↔minor conversion now, and it only happens where
+ * a human types a price in.
  */
-export function toMinorUnits(amountMajor: number): number {
-  return Math.round(amountMajor * 100)
-}
 
 /**
  * Flitt's signature: drop empty values, sort by key, keep the values only,
@@ -157,8 +170,11 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<Create
     return { error: `Invalid payment amount: ${input.amount}` }
   }
 
-  const amountMinor = toMinorUnits(input.amount)
-  if (amountMinor < 1) return { error: `Payment amount rounds to zero: ${input.amount}` }
+  // Already tetri — see CreateCheckoutInput.amount. No multiplication here.
+  const amountMinor = input.amount
+  if (!Number.isInteger(amountMinor)) {
+    return { error: `Payment amount must be whole tetri, got ${input.amount}` }
+  }
 
   const params: Record<string, string> = {
     merchant_id: String(input.merchantId ?? '').trim(),

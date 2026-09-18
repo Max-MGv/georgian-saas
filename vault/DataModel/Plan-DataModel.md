@@ -313,21 +313,80 @@ Real scope is **49 application files** under `app/`, `lib/` and `components/` (t
     the property the whole change exists for — a hundred ₾0.10 amounts sum to exactly
     ₾10.00, where the float equivalent does not — plus the `49.985` truncation case that
     `toMinorUnits` was already guarding against. `tsc --noEmit` and `eslint` clean.
-- **3b — Schema + destructive migration.** Convert the columns. Wipe transactional data
-  per the authorisation above. Dev first, always.
-- **3c — Write paths.** `createBooking.ts`, `submitWineOrder.ts`, `pricing.ts`,
-  `pricingUtils.ts`, `orders.ts`, `wineOrders.ts`, admin new-order/new-wine-order forms,
-  onboarding, seeds.
-- **3d — Read/display paths.** Admin tables, calendar, order detail, statistics,
-  `InvoicePrint.tsx`, the four email templates, public site, wine catalogue.
-- **3e — The Flitt boundary.** `toMinorUnits` becomes a no-op or is deleted; amounts
-  arrive already in tetri. **This is the single highest-risk edit in the chunk** — get
-  it wrong by a factor of 100 and guests are charged 100× or 1/100×.
-- **3f — Green the suite.** Especially `tier1-regression/payment-amount-integrity.spec.ts`,
-  which already drives quoted-amount → Flitt → admin across every toggle combination.
-  That test is the safety net; if it passes, the conversion is sound.
+- **3b — Schema + destructive migration.** ✅ **Complete 2026-09-18.** See below.
+- **3c — Write / compute paths + the Flitt boundary.** ✅ **Complete 2026-09-18.** (3e was
+  folded in here — the boundary and the writes are the same money path and splitting them
+  would have left an incoherent intermediate state.)
+- **3d — Read/display paths.** ⬜ **NOT STARTED. This is the current resume point.**
+- **3f — Green the Playwright suite.** ⬜ Not started. Blocked on 3d.
 
-**Resume point:** _(none — not started)_
+### 🔴 The biggest finding of the chunk: `tsc` catches nothing
+
+[[Dependencies]] claimed most of the affected files would "break loudly… verified by
+`tsc`". **That was wrong.** Prisma maps both `Float` and `Int` to TypeScript `number`, so
+changing the column type produced **zero type errors** across the entire project.
+
+There is no compiler safety net for this change. Every call site is a silent breakage.
+
+What *did* work is the `Tetri` brand from 3a: typing `CreateCheckoutInput.amount` as
+`Tetri` immediately surfaced three real call sites (`startCheckout.ts`,
+`createBooking.ts`, `submitWineOrder.ts`) that the plain type change had left invisible.
+**That is the entire justification for the branded type, demonstrated.** Extend the brand
+outward to get coverage; grep is the only alternative.
+
+### 3b — what happened
+
+Migration `20260918124045_money_to_tetri`, **hand-written**. `prisma migrate dev` refused
+to run non-interactively, and its warning confirmed why the file had to be written by
+hand anyway: it generates a plain `ALTER TABLE ... TYPE INTEGER` cast, which turns `45.0`
+into `45`, not `4500` — **silently dividing every catalog price by 100.**
+
+Applied with `prisma migrate deploy`, then `prisma generate` (`✔ Generated Prisma Client`
+confirmed, Rule 10).
+
+**Verified:**
+- **116 catalog values compared against a pre-migration dump, 0 mismatches.** Every
+  surviving price is exactly ×100 (e.g. `25` → `2500`).
+- Transactional tables all empty: `Order`, `WineOrder`, `Payment`, `OrderExtra`,
+  `OrderMasterclass`, `WineOrderItem` = 0.
+- `Company` (22) and `Price` (30) survived, as designed.
+
+### 3c — what happened
+
+- **`toMinorUnits` deleted** from `payments/flitt.ts`. `CreateCheckoutInput.amount` is now
+  `Tetri` and passes through unconverted. Deleted rather than left as a no-op on purpose:
+  a surviving call against an already-tetri amount would charge **100×** and neither the
+  compiler nor Flitt would object.
+- `settle.ts`'s amount gate is now an integer-to-integer comparison, no conversion.
+- `startCheckout.ts`'s `amount` typed `Tetri`; both callers assert with `asTetri()`.
+- **`pricing.ts` and `pricingUtils.ts` needed no logic change at all** — every input is
+  now tetri and integer arithmetic keeps it there (`4 × 7000 = 28000`). Worth knowing
+  before anyone "fixes" them.
+- `scripts/test-flitt-signature.ts` re-pointed at `fromMajor`, keeping its IEEE-754 trap
+  cases verbatim.
+
+**Verified:** `tsc --noEmit` **0 errors** project-wide; `test-money.ts` **47/47**;
+`test-flitt-signature.ts` **37/37**.
+
+### ⚠️ Resume point — READ BEFORE CONTINUING
+
+**3d has not started, so every screen currently renders raw tetri** — a ₾45 booking shows
+as `4500₾`. Staging is mid-migration and *looks* broken. It is not data loss; it is
+formatting.
+
+**The sweep:** 198 occurrences of `₾` across 33 files. Replace raw interpolation
+(`${order.totalPrice}₾`) with `formatTetri(asTetri(...))`. `formatTetri`'s default output
+is byte-identical to the old rendering for whole-GEL amounts, so correct screens should
+not visibly change.
+
+Largest first: `lib/adminT.ts` (46 — mostly translation strings, check before touching),
+`OrderDetail.tsx` (21), `NewOrderForm.tsx` (15), `BookingForm.tsx` (13),
+`OrdersTable.tsx` (11), `StatisticsClient.tsx` (10), `InvoicePrint.tsx` (10).
+
+**Also still to do in 3d:** admin forms where a human *types* a price
+(`prices.ts`, `masterclassItems.ts`, wines/vintages, onboarding) must convert input with
+`fromMajor()`, and `lib/demoSeed.ts` + `scripts/seed*.ts` hold hardcoded major-unit
+literals that now mean 1/100 of what they say.
 
 ---
 

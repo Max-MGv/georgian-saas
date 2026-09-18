@@ -169,7 +169,7 @@ model Order {
   email                String?
   phone                String?
   notes                String?
-  totalPrice           Float?
+  totalPrice           Int?
   tenantId             String?
   companyId            String?
   // Set only when bookingType is COMPANY and companyId is null — a booking
@@ -210,9 +210,9 @@ model Price {
   company                    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   minGuests                  Int
   maxGuests                  Int
-  pricePerPerson             Float
-  tastingLunchPricePerPerson Float    @default(0)
-  registrationPrice          Float    @default(0)
+  pricePerPerson             Int
+  tastingLunchPricePerPerson Int    @default(0)
+  registrationPrice          Int    @default(0)
   isDisplayPrice             Boolean  @default(false)
   // Pricing is edited in place, so without these there is no record of when a
   // company's rates changed — and every booking is priced from them. Chunk 4
@@ -238,7 +238,7 @@ model MasterclassItem {
   id           String             @id @default(cuid())
   name         String
   unitType     MasterclassUnit    @default(PER_PIECE)
-  pricePerUnit Float
+  pricePerUnit Int
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
   tenantId     String?
@@ -253,7 +253,7 @@ model OrderMasterclass {
   orderId           String
   masterclassItemId String
   quantity          Int
-  pricePerUnit      Float // price snapshot at time of booking
+  pricePerUnit      Int // price snapshot at time of booking
   // Line tables carried no timestamps at all until 2026-09-18, so "when was this
   // added to the order" was unanswerable — and admins do add lines days after a
   // booking is made.
@@ -266,7 +266,7 @@ model OrderExtra {
   id        String   @id @default(cuid())
   orderId   String
   label     String
-  amount    Float
+  amount    Int
   // See OrderMasterclass — an extra is the line most often added after the fact,
   // by an admin, which is exactly why this matters here.
   createdAt DateTime @default(now())
@@ -285,7 +285,7 @@ model WineOrder {
   // Optional in general; the wine order form requires it only when the tenant
   // has online payment on, since a paying B2B customer needs a receipt.
   contactEmail    String?
-  totalAmount     Float?
+  totalAmount     Int?
   discountPercent Float?
   // Was an unconstrained String with no validation anywhere in the app or the
   // database — the root cause the whole status redesign was opened for. Now an
@@ -350,7 +350,7 @@ model Payment {
   /// Not an enum: it belongs to the provider, and coercing it would lose detail
   /// that matters in a dispute.
   status            String     @default("created")
-  amount            Float
+  amount            Int
   currency          String     @default("GEL")
   rawResponse       Json?
   createdAt         DateTime   @default(now())
@@ -430,7 +430,7 @@ model WineVintage {
   id           String          @id @default(cuid())
   wineId       String
   year         Int
-  price        Float
+  price        Int
   imagePath    String?
   active       Boolean         @default(true)
   sortOrder    Int             @default(0)
@@ -457,7 +457,7 @@ model WineOrderItem {
   wineVintageId       String?
   wineNameSnapshot    String
   vintageYearSnapshot Int
-  priceSnapshot       Float
+  priceSnapshot       Int
   quantity            Int
   createdAt           DateTime     @default(now())
   wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)

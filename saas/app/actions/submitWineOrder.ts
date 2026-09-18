@@ -1,6 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
+import { asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
@@ -148,7 +149,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
         merchantId: gate.merchantId,
         secretKey: gate.secretKey,
         wineOrderId: createdOrder.id,
-        amount: totalAmount,
+        // Already tetri — see the equivalent note in createBooking.ts.
+        amount: asTetri(totalAmount),
         // Built from the real order, not a hardcoded site name like the old site.
         orderDesc: `Wine order — ${bottles} bottle${bottles === 1 ? '' : 's'}, ${businessName}`,
         locale,

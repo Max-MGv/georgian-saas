@@ -1,5 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
-import { verifyCallbackSignature, toMinorUnits } from '@/lib/payments/flitt'
+import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
@@ -64,10 +64,11 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // ── Gate 2: the amount is the one we asked for ─────────────────────────────
   // Without this, a customer who tampers with the checkout could settle a 400
   // GEL booking for one tetri and the order would read as fully paid. Flitt
-  // reports minor units, so the stored major-unit amount is converted rather
-  // than the other way around (no float division).
+  // reports minor units and `payment.amount` is now stored in tetri, so this is
+  // an integer-to-integer comparison with no conversion and no float division
+  // on either side (chunk 3, 2026-09-18).
   const reportedMinor = Number(body.amount)
-  const expectedMinor = toMinorUnits(payment.amount)
+  const expectedMinor = payment.amount
   if (!Number.isFinite(reportedMinor) || reportedMinor !== expectedMinor) {
     return { ok: false, reason: `amount mismatch: expected ${expectedMinor}, got ${body.amount}` }
   }

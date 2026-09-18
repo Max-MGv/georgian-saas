@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { asTetri } from '@/lib/money'
 import { BookingType, VisitType } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
@@ -369,7 +370,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         merchantId: gate.merchantId,
         secretKey: gate.secretKey,
         orderId: createdOrder.id,
-        amount: totalPrice,
+        // Already tetri: every input to the total (tier rates, registration fee,
+        // masterclass lines, extras) is stored in tetri, and integer arithmetic
+        // keeps it there. asTetri asserts that rather than converting.
+        amount: asTetri(totalPrice),
         orderDesc: `${typeLabel}, ${effectiveGuestCount} guests, ${dateStr} ${data.timeSlot}`,
         locale,
       })
