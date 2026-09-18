@@ -157,12 +157,40 @@ Verified on staging after confirming the deploy READY: the public booking form r
 > **Confirm Vercel reports READY, then cache-bust with `?cb=`.** Without both, a staging
 > check is not evidence.
 
+### Chunk 3f and Chunk 4 — both done
+
+**3f.** The money regression passes, and its output is the end-to-end proof: ₾480 quoted
+on the public form → sent to the **real Flitt gateway** → stored as 48000 tetri → rendered
+back as ₾480. The spec itself had been **stale since Feature 191 landed the same day** —
+it followed the Flitt redirect and then looked for the order in `/admin/orders` with an
+"Awaiting Payment" control that Feature 191 had removed. Re-pointed at `/admin/abandoned`.
+One of its assertions had also become **vacuous** (checking a control that exists nowhere
+had count 0); replaced with the real invariant.
+
+> 🔴 **Tests 2–3 of that spec still cannot run, and it is not from this work.** They need
+> fixture companies `Test Company # 1` and `Wine Test Company` with access codes; the dev
+> DB holds demoSeed's companies instead, all with `accessCode: null`. A demo reset
+> replaced the fixtures at some point. Chunk 3's migration deletes six tables and
+> `Company` is not one of them. **Your tier-1 regression coverage has a hole here
+> independent of the data-model work.**
+
+**Chunk 4 — Feature 195.** Orders now carry the rates they were sold at, so a later change
+to a company's tiers cannot reprice an old booking. The distinction that carries it: an
+admin editing guest counts **is** re-pricing and the snapshot moves with them; adding a
+line is not, and must not disturb the agreed rates.
+
+Two more bugs fixed in passing: an order priced from hand-typed rates could never be
+recalculated **at all**, and `if (!tier) return` was a silent no-op. And one hole this
+change itself introduced, caught only by writing the test — seeding the snapshot from the
+individuals tier for every booking would have let a recalc **invent a price for a company
+booking the winery had deliberately left unpriced**.
+
+`scripts/test-order-repricing.ts` builds the exact bug scenario and asserts both the right
+answer (₾325) and the wrong one it must never give again (₾430). 6/6.
+
 ### Next
 
-- **Chunk 3f** — `payment-amount-integrity.spec.ts` was still running at session end.
-  **Check its result before treating chunk 3 as closed.**
-- Then **Chunk 4** (price snapshot on `Order`, which fixes the live repricing bug),
-  **Chunk 5** (`OrderEvent`), **Chunk 6** (`Payment` as a ledger), **Chunk 7** (display
+- **Chunk 5** (`OrderEvent`), **Chunk 6** (`Payment` as a ledger), **Chunk 7** (display
   tables).
 - Production is still untouched and internally consistent on the pre-chunk-5 schema.
   Nothing here has gone near `master`.
