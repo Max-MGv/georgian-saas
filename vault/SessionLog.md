@@ -188,10 +188,33 @@ booking the winery had deliberately left unpriced**.
 `scripts/test-order-repricing.ts` builds the exact bug scenario and asserts both the right
 answer (₾325) and the wrong one it must never give again (₾430). 6/6.
 
+### Chunk 5 — `OrderEvent` (**Feature 196**)
+
+Orders now carry an append-only history. The gap it closes was already logged as open in
+`Plan-StatusModel.md`: un-paying an order by hand left **no trace at all**, because a
+manual payment has no `Payment` row to survive as the record.
+
+**The plan was wrong about where to put the writes**, and the reason is worth keeping: it
+said to hook into `lib/statusWrite.ts` as "the single chokepoint for status writes", but
+that module is **pure and DB-free on purpose** so the client can mirror the same patch
+optimistically. The server actions are the real write sites; `statusWrite.ts` was left
+alone.
+
+Events are written inside the caller's transaction at every site — status changes, gateway
+paid **and declined**, extras added/removed, and order creation. Creation records **GUEST**
+for a public booking and **ADMIN** for a walk-in entered by staff, because those are
+different facts. `requireAdmin` now returns the Supabase user so an event can record who
+acted (additive — every existing caller ignores the return).
+
+`scripts/test-order-events.ts` 12/12, and it checks **RLS isolation first** because a wrong
+policy on a new table fails *silently* — it hides every row rather than erroring, which
+`Plan-StatusModel.md` records happening once already. It asserts both directions plus the
+inverse failure (the table is not simply empty for everyone).
+
 ### Next
 
-- **Chunk 5** (`OrderEvent`), **Chunk 6** (`Payment` as a ledger), **Chunk 7** (display
-  tables).
+- **Chunk 6** (`Payment` as a ledger — closes the two-sources-of-truth split, and with
+  chunk 5 in place also completes the un-pay audit trail), **Chunk 7** (display tables).
 - Production is still untouched and internally consistent on the pre-chunk-5 schema.
   Nothing here has gone near `master`.
 
