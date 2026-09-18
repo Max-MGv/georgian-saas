@@ -55,10 +55,13 @@ tags: [bugs]
 | 47 | `assignOrderCompany()` (`orders.ts`) wrote `totalPrice` but **not** `tastingRateSnapshot` / `lunchRateSnapshot` / `registrationFeeSnapshot`, so linking a no-company order to a company produced a brand-new order with null snapshots. Those columns are nullable only to mean "created before the columns existed" — `recalcOrderTotal` therefore fell into its legacy branch on the next extra or masterclass line and re-priced the whole booking off whatever the company's tiers said that day. **This is precisely the repricing bug chunk 4 was written to close, reintroduced through a path chunk 4 did not touch.** Not a money-units bug — it would have existed without the tetri conversion. Both branches now write the three snapshots, matching `createBooking.ts:307-309`. Verified equivalent: `VisitType` has only `TASTING`/`TASTING_LUNCH`, so the branch's rate selection and `recalcOrderTotal`'s reproduce the same total. | Admin / Orders | 🟢 Resolved |
 | 48 | Booking form's company price preview dropped the lunch add-on: `estimatedTotal` used `matchedTier.pricePerPerson * guestCount` for the COMPANY branch while `matchedTierRate` — computed two lines above, and what `createBooking.ts:317-320` actually charges — selects `comboRatePerPerson(tier)` for `TASTING_LUNCH`. So a company `TASTING_LUNCH` quote **under-stated** the total the server then stored, visible whenever `showCompanyPrice` is on. Not a money-units bug; drift between two of the five copies of the tier-pricing formula (see [[MaintenanceNotes]] §22). The INDIVIDUAL branch was already correct. | Public / Booking form | 🟢 Resolved |
 | 49 | `demoSeed.ts` never wrote `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`, so **all 393 seeded demo orders were snapshot-less** — the #47 shape at 100% of the demo data. Those columns are nullable only to mean "created before the columns existed", so `recalcOrderTotal` took its legacy branch for every demo booking and would reprice the whole thing off live tiers the moment a visitor added an extra. Found by auditing the dev database rather than by reading code. `computeTotal` now returns the three rates alongside the total instead of discarding them. Verified: re-seeded dev, snapshot coverage 0/393 → **393/393**, and the refactor proven arithmetically identical to its predecessor across **1,944 input combinations, 0 differences**. | Demo / Seeding | 🟢 Resolved |
+| 50 | `/admin/orders/<id>` invents a ₾50 per-person rate and can silently destroy the real one. `OrderDetail.tsx:303-304` initialises both manual rate boxes to `useState('50')` — not seeded from the order's `tastingRateSnapshot` — and the `customRates` flag only toggles the UI (lines 845/868); it does **not** gate the send. `handleSave` ships the rates whenever `prices.length === 0 && payingGuests > 0`, so an admin who types a guest count into an individual order and presses Save re-prices it at ₾50: a booking sold at ₾70/pp goes **₾280 → ₾200 and its 7000 snapshot is overwritten with 5000 — the original rate is gone**. The screen also *displays* "Rate: 50/50" for every individual order as if that were what it was sold at. Directly contradicts the "No invented 50/100 defaults" rule `createBooking.ts:242` states for itself. `NewOrderForm.tsx:114-115` correctly defaults to `'0'`. | Admin / Orders | 🟢 Resolved |
+| 51 | `createOrderAdmin` (`orders.ts:231,239`) never consults `visitType`, unlike `createBooking.ts:259`. An admin-entered walk-in for an individual is always charged the **tasting** rate even when the visit is TASTING_LUNCH. Individual, TASTING_LUNCH, 4 guests, rates 50/80: the public site stores **₾280**, the identical admin walk-in stores **₾200**. Worse second-order effect: the snapshots written at `orders.ts:235-237` *are* visit-type aware even though the creation formula that produced the total was not, so the row describes two different orders — adding a ₾10 extra makes `recalcOrderTotal` recompute from the snapshots and the order **jumps ₾200 → ₾330**. | Admin / Orders | 🟢 Resolved |
+| 52 | Order detail double-counts line items on every individual order. `OrderDetail.tsx:441` falls back to `legacyBase = order.totalPrice ?? 0` — which already contains extras and masterclass lines — and line 458 adds `masterclassAmt + extrasAmt` on top. Hits every individual order, since `prices` comes from `order.company?.prices` and individuals carry no company. Individuals tier ₾50/pp, 4 guests, one ₾40 extra: the database, the orders table and the invoice all say **₾240**; the detail screen says **₾280**. The "Live preview — click Save to persist" caveat (line 1359) is gated on `payingGuests > 0` so it is **not shown** on this path, and the number reads as fact. Related: `computedTotal` is typed `number | null` but every branch returns a number, making the `order.totalPrice` fallback at line 1353 unreachable — the detail screen never displayed the stored total at all. | Admin / Orders | 🟢 Resolved |
 
 ---
 
-## Bugs #43–#49 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
+## Bugs #43–#52 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
 
 Found by a deliberately **uninformed** review. Max asked for a second opinion on the money
 design and specified the reviewer be given no context — no decisions, no thought process,
@@ -147,11 +150,52 @@ The audit's one genuine finding was #49, which no amount of code-reading had sur
 393 of 393 orders missing their rate snapshots. Keep `audit-money.ts` — it is read-only and
 is the cheapest way to answer "did anything get written wrong" after future money work.
 
+### The second blind review — pricing, 2026-09-19
+
+Max asked for an independent read of *pricing* specifically, again with no context, and this
+time with the `vault/` directory explicitly fenced off — by then it held the whole prior
+analysis, which would have anchored the reviewer instead of testing it.
+
+It counted **nine** places that decide what a booking costs, not the five §22-plus-my-own-count
+had reached: five server sites that write `Order.totalPrice` (`createBooking`,
+`updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`, `recalcOrderTotal`), three
+client sites that display a total (`BookingForm`, `NewOrderForm`, `OrderDetail`), and the seed.
+Six of the nine agree. Three disagreements were real and are #50–#52 above.
+
+**It also corrected the previous conclusion about consolidation.** The stated obstacle had been
+that a shared helper must take rates as arguments because the browser preview cannot see
+snapshots — framed as a design decision needing Max's sign-off. Checking the import graph
+settles it: `lib/pricingUtils.ts` has no `'use server'` and no server-only imports, and is
+already imported by eight files spanning both sides (`BookingForm.tsx`, `OrderDetail.tsx`,
+`NewOrderForm.tsx`, `CompaniesClient.tsx`, `createBooking.ts`, `orders.ts`, `pricing.ts`,
+`app/(site)/page.tsx`). There is no boundary to cross. Taking rates as arguments is the
+obvious shape, not a hard call.
+
+The better framing, which replaces §22's: **the sites do not disagree about pricing, they
+disagree about where rates come from.** Three ask "what is this worth at the agreed rates"
+(`createBooking`, `recalcOrderTotal`, `assignOrderCompany`); two ask "what should this be
+re-priced to now" (`updateOrderEnhanced`, `createOrderAdmin`). That entire distinction
+collapses into which rate resolver you call — one arithmetic function plus three or four
+resolvers, with the one genuine policy asymmetry (individuals do not pay the tier's
+registration fee) living in a resolver rather than in the arithmetic.
+
+**Sequencing, which is the part that matters.** Extraction will change behaviour at exactly
+these three sites, because they have drifted — so extracting first buries three fixes in a
+mechanical diff where a fix and a fresh bug look identical. Tests first, then fix, then
+extract.
+
 ### Still open
 
-The tier-pricing formula is copy-pasted in **five** places, not the three
-[[MaintenanceNotes]] §22 documents. #48 is that drift already having happened. Extracting a
-single helper is the outstanding item — see §22, updated 2026-09-19.
+The tier-pricing formula is copy-pasted in **nine** places (see the second blind review above).
+#48 and #50–#52 are that drift already having happened, four times. Extracting a single
+`priceBooking()` plus rate resolvers into `lib/pricingUtils.ts` is the outstanding item — see
+§22, updated 2026-09-19. There is no technical obstacle; the only caveat is sequencing.
+
+Also outstanding: `findTier` silently falls back to the highest tier for an out-of-range guest
+count. That is deliberate, documented and covered by
+`tests/tier2-core-flows/booking-enhanced.spec.ts:186-204` — but the name hides it. Renaming it
+`findTierOrHighest` (behaviour unchanged) would make the fallback visible at all eight call
+sites.
 
 ---
 

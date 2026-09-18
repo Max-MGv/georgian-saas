@@ -109,13 +109,61 @@ relative to `now`, and the date rolled from the 18th to the 19th mid-session. Pr
 `computeTotal` were compared directly across **1,944 input combinations with 0 differences**.
 Snapshot coverage went 0/393 → 393/393 with every total otherwise untouched.
 
+### Second blind review — pricing — and three more bugs
+
+Max asked for another context-free second opinion, this time on pricing, with `vault/`
+explicitly fenced off (it by then held this entire analysis, which would have anchored the
+reviewer instead of testing it).
+
+It counted **nine** pricing sites, not five, found **#50–#52**, and **corrected the previous
+conclusion**: the claim that consolidation needs a design decision was wrong. `pricingUtils.ts`
+has no `'use server'` and no server-only imports and is already imported by eight files on both
+sides of the boundary. There is nothing to cross. Its better framing, now in [[KnownBugs]]:
+*the sites do not disagree about pricing, they disagree about where rates come from.*
+
+Worst of the three: **#50** silently destroys the record — a Save on an individual order sent a
+hardcoded ₾50 and overwrote the real rate snapshot, taking a ₾280 booking to ₾200 with the
+original rate gone.
+
+### Fixed, tests first
+
+Followed the reviewer's sequencing, which was the sharpest thing it said: extraction will change
+behaviour at these exact sites, so extracting first buries three fixes in a mechanical diff
+where a fix and a fresh bug look identical.
+
+Wrote `scripts/test-pricing-agreement.ts` **before touching any code**. It failed 6 of 8 with
+exactly the predicted numbers — admin walk-in ₾200 vs the public site's ₾280; a ₾10 extra moving
+a total by ₾130; the detail screen at ₾280 against the invoice's ₾240; a Save sending
+`{5000, 5000}` and overwriting a 7000 snapshot. Then fixed, and it went **9/9**.
+
+Be honest about what that suite is: the formulas live inside a server action and a React
+component and cannot be imported, so each is **replicated** in the test file. A replica can drift
+from the site it mirrors. It is written that way deliberately and temporarily — when
+`priceBooking()` lands, every replica is deleted and the assertions point at the real function.
+The file says so at the top.
+
+**Two judgement calls made without asking**, both the conservative option:
+- A snapshot-less legacy order now simply does not reprice when guest counts change, until an
+  admin types a rate. Same stance `recalcOrderTotal`'s legacy branch takes — say nothing rather
+  than guess.
+- Took the arithmetic fix on the detail screen rather than the two-number redesign
+  ("Total" + "If you save"), since that screen is used daily. The live-preview caveat is now
+  gated on `computedTotal !== order.totalPrice`, so it appears exactly when the figure is not
+  what is stored, instead of on a guess about which code path produced it. The redesign is
+  still the better end state.
+
+The compiler caught one wrong assumption of mine mid-fix: I had said the snapshots were already
+reaching `OrderDetail` because the page query uses `include`. The query does load them, but the
+page builds its prop literal field by field and never passed these three down. Two errors, both
+real, both fixed.
+
 ### Next
 
-1. **Not done, needs a decision:** extract the tier-pricing formula — it is copy-pasted in
-   **five** places, not the three [[MaintenanceNotes]] §22 documented. §22 updated with the
-   two extra sites and why a shared helper must take rates as arguments.
+1. **Now unblocked:** extract `priceBooking()` + rate resolvers into `pricingUtils.ts` and call
+   it from all nine sites. No technical obstacle — see [[KnownBugs]] for the proposed shape.
+   §22 updated.
 2. **VAT dropped on Max's call** — not being added separately for now (2026-09-19).
-3. Staging verification of the seven fixes before the `master` merge.
+3. Staging verification of the ten fixes before the `master` merge.
 4. Production has not been inspected. The audit ran against **dev only**; if prod carries any
    `OrderExtra` rows written since 2026-09-18 they would still need the #45 repair.
 

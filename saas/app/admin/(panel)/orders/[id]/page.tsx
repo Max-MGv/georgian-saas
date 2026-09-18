@@ -100,6 +100,12 @@ export default async function OrderDetailPage({
           phone: order.phone,
           notes: order.notes,
           totalPrice: order.totalPrice,
+          // The rates this order was sold at. Fetched all along (the query uses
+          // `include`) but never passed down, which is why OrderDetail could not
+          // tell what the order cost and invented ₾50 instead (#50/#52).
+          tastingRateSnapshot: order.tastingRateSnapshot,
+          lunchRateSnapshot: order.lunchRateSnapshot,
+          registrationFeeSnapshot: order.registrationFeeSnapshot,
           requestedCompanyName: order.requestedCompanyName,
           company: order.company
             ? {

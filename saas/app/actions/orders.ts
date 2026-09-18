@@ -228,16 +228,29 @@ export async function createOrderAdmin(data: {
     }
 
     if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
-      const tastingCount = data.companyId ? data.tastingGuestCount : data.guestCount
       // Hand-typed rates are just as much "what this was sold at" as a tier is,
       // and until now they were used once and thrown away — which is why an
       // order priced this way could never be recalculated at all.
       tastingRateSnapshot = data.manualTastingRate
       lunchRateSnapshot = data.manualLunchRate
       registrationFeeSnapshot = 0
+      // Deliberately the same shape as recalcOrderTotal's snapshot branch
+      // (pricing.ts:47-54), so the total written here and the total these
+      // snapshots recompute to are the same number.
+      //
+      // They were not until 2026-09-19 (#51). This used `data.companyId ?
+      // tastingGuestCount : guestCount` and never consulted `visitType`, so an
+      // individual TASTING_LUNCH walk-in was charged the TASTING rate — ₾200
+      // where the public site charged ₾280 for the identical visit. And because
+      // the snapshots above *were* visit-type aware, the row described two
+      // different orders: adding a ₾10 extra made recalc reprice from the
+      // snapshots and the total jumped ₾200 → ₾330.
       totalPrice =
-        tastingCount * data.manualTastingRate +
-        data.lunchGuestCount * data.manualLunchRate +
+        (payingGuests > 0
+          ? data.tastingGuestCount * data.manualTastingRate +
+            data.lunchGuestCount * data.manualLunchRate
+          : data.guestCount *
+            (data.visitType === 'TASTING_LUNCH' ? data.manualLunchRate : data.manualTastingRate)) +
         masterclassAmt +
         extrasAmt
     }

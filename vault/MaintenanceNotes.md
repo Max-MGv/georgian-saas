@@ -596,7 +596,7 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. FIVE separate places compute a company-tier price from `(tastingGuestCount, lunchGuestCount, guestCount)` — keep them in sync
+## 22. NINE separate places compute a booking price — keep them in sync
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -641,6 +641,45 @@ outstanding work is to extract one helper into `pricingUtils.ts` and call it fro
 Note that doing so requires a decision, not just a refactor: sites 1–4 are server-side and
 authoritative, site 5 is a browser preview that cannot see snapshots, so the shared helper
 has to take rates as arguments rather than read them.
+
+---
+
+---
+
+### Update 2026-09-19 (second pass) — nine sites, and the obstacle was imaginary
+
+An independent review counted the real number. **Five server sites** write `Order.totalPrice`
+(`createBooking`, `updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`,
+`recalcOrderTotal`), **three client sites** display a total (`BookingForm`, `NewOrderForm`,
+`OrderDetail`), and `demoSeed` makes nine. Six agree; the three that did not were #50–#52.
+
+**The stated obstacle above — that a shared helper needs a design decision because the browser
+preview cannot see snapshots — is wrong.** `lib/pricingUtils.ts` has no `'use server'` and no
+server-only imports, and is already imported by eight files spanning both sides. There is no
+boundary to cross, and taking rates as arguments is the obvious shape rather than a hard call.
+
+**The framing that replaces this whole section:** the sites do not disagree about pricing, they
+disagree about *where rates come from*. Three ask "what is this worth at the agreed rates"
+(`createBooking`, `recalcOrderTotal`, `assignOrderCompany`); two ask "what should this be
+re-priced to now" (`updateOrderEnhanced`, `createOrderAdmin`). That collapses into which
+resolver you call:
+
+```ts
+priceBooking(rates: RateSet, guests: Headcount, visitType, lines: LineTotals): number
+ratesFromTier(t) / ratesForIndividual(t) / ratesFromSnapshot(order) / ratesFromManual(t, l)
+```
+
+The body is `recalcOrderTotal`'s snapshot branch verbatim — that path is already correct, so it
+becomes the definition. The one genuine policy asymmetry (individuals do not pay the tier's
+registration fee) lives in `ratesForIndividual`, not in the arithmetic.
+
+**Sequencing is the only real constraint.** Extraction changes behaviour at the drifted sites,
+so extracting first hides fixes inside a mechanical diff. Write the disagreements as tests,
+fix them, then extract. That order was followed for #50–#52:
+`saas/scripts/test-pricing-agreement.ts` was written first and failed 6 of 8.
+
+**Do not** replace the client preview with a server round trip. A form has to show a number
+before it submits; the problem was drift, not the existence of a second copy.
 
 ---
 
