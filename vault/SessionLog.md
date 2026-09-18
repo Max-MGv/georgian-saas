@@ -8,6 +8,79 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-18 (later) — Status settled as C; data-model plan written, nothing built
+
+**The contested shape is now decided.** Max interrogated the transactional schema from
+scratch — what the tables mean, what the grain is — then asked for industry practice to be
+consulted rather than argued. It was ([[DataModel/Research-OrderStatusPatterns]]), and the
+result was one-sided: **no major platform makes the state machine dynamic.** Shopify,
+Medusa and Saleor all ship fixed enums; Magento is the only one with a status table, and
+its *states* stay fixed in code. Options A and B have no precedent.
+
+**Max's call: C** — the enums + milestone dates already built in chunk 5 — with display/
+label tables wanted **later**, as presentation only. That is Chunk 7 of the new plan, and
+it is the Magento pattern.
+
+### What the session produced
+
+A new vault folder, `vault/DataModel/`, with four files. **No code was changed and nothing
+was built.** Entry point: [[DataModel/DataModel-README]].
+
+- **[[DataModel/Plan-DataModel]]** — the live tracker. Chunks 0–7, strictly sequential,
+  per-chunk resume points. Covers: timestamps, money off `Float`, the `recalcOrderTotal`
+  repricing bug, `OrderEvent`, `Payment`-as-ledger, display tables.
+- **[[DataModel/Dependencies]]** — blast radius, checked against code rather than assumed.
+- **[[DataModel/Research-OrderStatusPatterns]]** — the platform comparison and sources.
+
+### Four problems found under the (now-correct) status layer
+
+1. **Every money column is `Float`.** Cannot represent 0.10 exactly. 58 files touch money
+   fields, 38 touch currency formatting.
+2. **`recalcOrderTotal` reprices old bookings.** `lib/pricing.ts:4` reads *live* `Price`
+   rows — change a company's rates, add an extra to an old booking, and the whole booking
+   silently reprices at today's prices. Live bug.
+3. **Four tables have no timestamps at all** — `OrderExtra`, `OrderMasterclass`,
+   `WineOrderItem`, `Price`. Four more have no `updatedAt` — `Order`, `WineOrder`,
+   `Payment`, `Company`.
+4. **No event/history table**, which every mature platform has.
+
+### 🔴 Two hazards in the authorised wipe — read before deleting anything
+
+Max authorised a full transactions/orders/companies wipe on both DBs. Two consequences are
+not obvious from that sentence:
+
+- **Wiping `Company` cascades to `Price`, `CompanyGuide` and `CompanyRepresentative`**
+  (`schema.prisma:208`, `:101`, `:115`). **Price tiers are configuration, not fake
+  transactional data** — they are what the onboarding wizard exists to create. Recommended:
+  leave `Company` alone, or export `Price` rows first.
+- **Wiping orders orphans `Payment` rows rather than deleting them.** `Payment.order` and
+  `Payment.wineOrder` have no `onDelete`, so Prisma defaults to `SetNull` for the optional
+  relation. Result: payment rows with null FKs, invisible and unattributable. Delete
+  `Payment` explicitly first.
+
+### 🔴 Suspected broken environment, unverified
+
+`Plan-StatusModel.md` records the **dev DB** as migrated to chunk 5, while the **staging
+site** still runs pre-chunk-5 code — the two commits are unpushed (`staging...origin/staging
+[ahead 2]`). If both hold, `staging.vineworks.ge` is broken right now and nobody has looked.
+**This is Chunk 0** and blocks everything else.
+
+### Also worth carrying forward
+
+- `toMinorUnits()` already exists at `lib/payments/flitt.ts:76`. After the money change it
+  becomes a 100× overcharge if left in place — the highest-risk single line in the plan.
+- `tier1-regression/payment-amount-integrity.spec.ts` already drives quoted amount → Flitt
+  → admin across every toggle combination. That is the safety net for the money chunk.
+- **`OrderExtra.label` cannot be investigated from data** — all of it is fake and the wipe
+  removes it. Has to be answered by asking Nikalas Marani what they type there.
+
+### Next
+
+Chunk 0 — verify staging, map the true schema state of dev/staging/prod, re-confirm the
+wipe on the day it runs. Nothing else starts until that is written down.
+
+---
+
 ## 2026-09-18 — Status chunk 5: built as enums + dates, and the shape is contested
 
 > **Process failure worth recording, because it is the reusable lesson here.** Max
