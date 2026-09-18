@@ -16,7 +16,7 @@ this order.**
 |---|---|---|
 | 0 | **[[Plan-DataModel]]** | 🚧 **The live task tracker.** Chunks 0–7, strictly sequential, with a resume point on each. **Check this before starting any data-model work.** |
 | 1 | **[[Dependencies]]** | 🔴 **Read before touching money columns.** The blast radius: which files break, which break loudly, which break silently. Written before any code changed. |
-| 2 | [[Definitions]] | ⬜ **Not written yet — produced by Chunk 2.** The vocabulary that stops the errors we found on 2026-09-18 recurring: what a row in `Order` actually means, what "revenue" counts, and the grain rules. |
+| 2 | [[Definitions]] | ✅ The vocabulary that stops the errors we found on 2026-09-18 recurring: what a row in `Order` actually means, what "revenue" counts, and the grain rules. |
 | 3 | [[Research-OrderStatusPatterns]] | How Shopify / Magento / Saleor / Medusa / WooCommerce model order status. The grounding for keeping enums instead of status tables. |
 
 **Related, outside this folder:**

@@ -181,7 +181,7 @@ re-investigates it.
 
 ---
 
-## Chunk 2 — Write down the definitions ⬜ not started
+## Chunk 2 — Write down the definitions ✅ complete 2026-09-18
 
 **Purpose:** free, no code, and it is the cheapest defence against the class of error
 this whole session uncovered. Produces [[Definitions]].
@@ -198,7 +198,28 @@ this whole session uncovered. Produces [[Definitions]].
 - Which tables are dimensions (`Wine`, `WineVintage`, `MasterclassItem`, `MenuItem`,
   `Price`, `Company`, `CompanyGuide`, `Tenant`) and which are facts.
 
-**Resume point:** _(none — not started)_
+### Delivered
+
+[[Definitions]] — six sections plus a column-level trap table. Everything in it was
+checked against code or the dev DB rather than written from memory.
+
+### 🔴 Found while writing it: two screens disagree about revenue
+
+Not a doc problem — a real inconsistency, measured on the dev tenant:
+
+| Surface | Excludes cancelled? | |
+|---|---|---|
+| Orders page, "Future Revenue" (`orders/page.tsx:204`) | ✅ yes | `stage != CANCELLED` |
+| Statistics, "Total Revenue" (`statistics/page.tsx:41`) | ❌ **no** | `NOT_ABANDONED` only |
+
+Statistics reports **₾208,202**, of which **₾15,017 across 30 cancelled bookings** —
+a **7.2% overstatement**, if a cancelled booking is agreed not to be revenue.
+
+**Deliberately not fixed.** It changes a number Max may have been reading for months, so
+it is an open question for him rather than a unilateral edit. Logged at the bottom of
+[[Definitions]]. Not blocking any chunk.
+
+**Resume point:** complete. Chunk 3 may start — but see the wipe re-confirmation note.
 
 ---
 
