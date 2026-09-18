@@ -9,8 +9,8 @@ tetri, proven end to end against the real Flitt gateway; an order's rates are fr
 later edit cannot reprice it; orders carry an append-only history; and every payment is a
 ledger row whatever channel it arrived through.
 
-**Chunk 7 is deferred by Max's decision** — no status tables for now; labels stay in
-constants. Every chunk in this plan is now either complete or deliberately parked.
+**Chunk 7 is off the roadmap by Max's decision** — no status or display tables; labels
+stay in constants. **Every chunk in this plan is now complete or closed.**
 
 ✅ **SHIPPED TO PRODUCTION 2026-09-18.** `master` @ `217c519`, deploy READY. Max ran
 `prisma migrate deploy` against prod himself (the sandbox blocks production access, even
@@ -701,7 +701,7 @@ totals, which was impossible before.
 
 ---
 
-## Chunk 7 — Display/label tables ⏸️ DEFERRED — Max's call, 2026-09-18
+## Chunk 7 — Display/label tables ❌ NOT PLANNED — Max's call, 2026-09-18
 
 **Purpose:** what Max asked for on 2026-09-18 — *"we can add tables just for display, so
 it's comfy for us."*
@@ -744,17 +744,18 @@ What remains is the table itself, and it carries a real trade-off:
 | **Costs** | A per-request lookup on the hot path — the orders list, board and calendar all render labels. `Perf-Baseline-2026-07-29.md` is the record of what hot-path latency costs here. |
 | **Risk** | Without an admin UI it is **a table nothing writes**, which this project has explicitly called out as worse than an absent one (see `WineOrder.invoiceSentAt`). The whole status debate ended by deleting machinery nobody used. |
 
-**Max chose C on 2026-09-18:** *"lets hold off on status tables for now."* No table is
-built. Labels stay in `lib/adminT.ts`.
+**Max, 2026-09-18:** *"lets hold off on status tables for now"* and, on review,
+*"we are not planning on implementing them for now."* **This is not a deferral with a
+date on it — it is off the roadmap.** No table is built; labels live in `lib/adminT.ts`.
 
 He also settled the vocabulary itself: **the first stage is called "New" on bookings and
 wine orders alike.** Applied everywhere it is named, not just on the badge — see below.
 
-**When this is picked up again, build option B** (table *and* admin UI together) rather
-than A. A table with no writer is the thing this project has repeatedly found to be worse
-than an absent one, and the whole status debate ended by deleting machinery nobody used.
+**If it is ever revived**, build option B — the table *and* its admin UI together, never a
+table with no writer. That is the thing this project has repeatedly found worse than an
+absent one, and the whole status debate ended by deleting machinery nobody used.
 
-**Resume point:** deferred by decision, not blocked. Nothing depends on it.
+**Resume point:** none. Closed by decision, not blocked, and nothing depends on it.
 
 ---
 

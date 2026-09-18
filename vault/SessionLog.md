@@ -261,11 +261,14 @@ backup).
 2. **Nikalas Marani's own admin screens are empty** of orders by design. Expected, but
    worth knowing before opening them.
 
-### Chunk 7 — deferred by Max
+### Chunk 7 — not planned (Max's call)
 
-Max's call: *"lets hold off on status tables for now."* Labels stay in constants. When it
-is picked up, build the table **with** its admin UI rather than shipping one nothing
-writes — reasoning in `DataModel/Plan-DataModel.md` under Chunk 7.
+Max, on review: *"we are not planning on implementing them for now."* **Off the roadmap,
+not parked with a date.** Labels stay in constants. If it is ever revived, build the table
+**with** its admin UI rather than shipping one nothing writes — reasoning in
+`DataModel/Plan-DataModel.md` under Chunk 7.
+
+**The data-model plan is now closed: every chunk complete or decided.**
 - Production is still untouched and internally consistent on the pre-chunk-5 schema.
   Nothing here has gone near `master`.
 
