@@ -415,7 +415,7 @@ model WineOrder {
 /// payment flow. It is also the landing spot for the 231 historical Flitt/TBC
 /// transaction records from the old site, if that import ever happens.
 model Payment {
-  id                String     @id @default(cuid())
+  id                String        @id @default(cuid())
   tenantId          String?
   // Exactly one of these is set — a payment belongs to a booking or a wine
   // order, never both. Not expressible as a DB constraint in Prisma; enforced
@@ -426,21 +426,44 @@ model Payment {
   // invisible to every screen. A payment has no meaning without its order, so it
   // goes when the order goes. See vault/DataModel/Dependencies.md finding 2.
   orderId           String?
-  order             Order?     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order             Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   wineOrderId       String?
-  wineOrder         WineOrder? @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
-  provider          String     @default("flitt")
+  wineOrder         WineOrder?    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  /// Who processed it. "flitt" for a gateway payment, "manual" for one an
+  /// admin recorded by hand.
+  provider          String        @default("flitt")
+  /// How the money actually moved (chunk 6, 2026-09-18).
+  ///
+  /// Payment used to be a Flitt attempt log: only card payments ever created a
+  /// row. A company paying by bank transfer, cash on the day, or an admin
+  /// correcting a mistake produced no row at all — the "mark as paid" button
+  /// wrote `Order.paidAt` and nothing else. So `SUM(amount)` was card revenue
+  /// while `paidAt IS NOT NULL` was all revenue, nothing reconciled the two,
+  /// and nothing in the schema said so.
+  ///
+  /// Defaults to CARD because every row that existed before this column was a
+  /// Flitt attempt. Hand-recorded payments land as MANUAL; there is no picker
+  /// in the UI yet, so BANK_TRANSFER and CASH exist for when one is added
+  /// rather than being guessed at on the admin's behalf.
+  method            PaymentMethod @default(CARD)
+  /// Set when an admin un-pays an order, instead of deleting the row.
+  ///
+  /// Only ever set on payments WE recorded (provider "manual"). A card payment
+  /// that really settled is money the gateway is holding; marking that row
+  /// reversed would misstate reality. Un-paying a gateway-paid order is an
+  /// admin override, and the OrderEvent row is what records it.
+  reversedAt        DateTime?
   providerPaymentId String?
   checkoutUrl       String?
   /// The gateway's own status string, stored verbatim (created/approved/declined/…).
   /// Not an enum: it belongs to the provider, and coercing it would lose detail
   /// that matters in a dispute.
-  status            String     @default("created")
+  status            String        @default("created")
   amount            Int
-  currency          String     @default("GEL")
+  currency          String        @default("GEL")
   rawResponse       Json?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @default(now()) @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @default(now()) @updatedAt
   settledAt         DateTime?
 
   /// The lookup key used by the callback handler. Unique per provider so a
@@ -449,6 +472,13 @@ model Payment {
   @@index([tenantId])
   @@index([orderId])
   @@index([wineOrderId])
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CASH
+  MANUAL
 }
 
 model Setting {

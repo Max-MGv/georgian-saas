@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -45,7 +46,8 @@ export async function changeWineOrderStatus(
       const current = await tx.wineOrder.findFirst({
         where: { id, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
-        select: { stage: true, confirmedAt: true, deliveredAt: true, paidAt: true },
+        // `totalAmount` is read for the ledger row a manual payment writes (chunk 6).
+        select: { stage: true, totalAmount: true, confirmedAt: true, deliveredAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
       const now = new Date()
@@ -62,6 +64,15 @@ export async function changeWineOrderStatus(
             : { abandonedAt: null }
       const updated = await tx.wineOrder.updateMany({ where: { id, tenantId }, data })
       if (updated.count > 0) {
+        if (change.kind === 'paid') {
+          if (change.value) {
+            await recordManualPayment(tx, {
+              tenantId, wineOrderId: id, amount: current.totalAmount ?? 0, at: now,
+            })
+          } else {
+            await reverseManualPayments(tx, { wineOrderId: id, at: now })
+          }
+        }
         await recordOrderEvent(tx, {
           tenantId,
           wineOrderId: id,
