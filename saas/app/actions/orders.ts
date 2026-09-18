@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import type { Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -76,8 +77,9 @@ export async function updateOrderEnhanced(
     hotDishVegetable: string | null
     hotDishMeat: string | null
     foodNotes: string | null
-    manualTastingRate?: number
-    manualLunchRate?: number
+    /** TETRI — the detail screen converts what the admin typed (chunk 3). */
+    manualTastingRate?: Tetri
+    manualLunchRate?: Tetri
   }
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
@@ -156,8 +158,9 @@ export async function createOrderAdmin(data: {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  manualTastingRate: number
-  manualLunchRate: number
+  /** TETRI — the new-order form converts what the admin typed (chunk 3). */
+  manualTastingRate: Tetri
+  manualLunchRate: Tetri
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
 }): Promise<{ orderId: string } | { error: string }> {

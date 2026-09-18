@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { changeWineOrderStatus } from '@/app/actions/wineOrders'
@@ -532,7 +533,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <span className="font-medium" style={{ color: order.displayTotal != null ? C.wine : C.faint }}>
                     {order.displayTotal != null
-                      ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾`
+                      ? `${order.totalEstimated ? '~' : ''}${formatTetri(asTetri(order.displayTotal))}`
                       : '—'}
                   </span>
                   {order.discountPercent && order.discountPercent > 0 && (
@@ -727,7 +728,7 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
 
                       <div className="flex items-center justify-between mt-2">
                         <span className="font-bold" style={{ fontSize: '0.8125rem', color: order.displayTotal != null ? C.wine : C.faint }}>
-                          {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾` : '—'}
+                          {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${formatTetri(asTetri(order.displayTotal))}` : '—'}
                         </span>
                         {order.discountPercent && order.discountPercent > 0 && (
                           <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
@@ -1136,7 +1137,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                   style={{ color: C.muted, borderColor: C.border, minWidth: 160 }}
                 >
                   <p className="font-bold leading-none" style={{ fontSize: '1.35rem', color: order.displayTotal != null ? C.wine : C.faint }}>
-                    {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${order.displayTotal}₾` : '—'}
+                    {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${formatTetri(asTetri(order.displayTotal))}` : '—'}
                   </p>
                   {order.discountPercent && order.discountPercent > 0 && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>

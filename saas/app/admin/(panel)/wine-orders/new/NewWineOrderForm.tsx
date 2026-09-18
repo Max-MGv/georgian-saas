@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createWineOrderAdmin } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
@@ -256,9 +257,9 @@ export default function NewWineOrderForm({
                     <td className="px-3 py-2 text-sm" style={{ color: C.text }}>{l.wineName}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.year}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.price}₾</td>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(l.price))}</td>
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {(l.quantity * l.price).toFixed(2)}₾
+                      {formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -296,7 +297,7 @@ export default function NewWineOrderForm({
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('newWineOrder.wines.colYear')}</label>
                 <select value={newLineVintageId} onChange={e => setNewLineVintageId(e.target.value)} style={inputStyle}>
                   {selectedWine.vintages.map(v => (
-                    <option key={v.id} value={v.id}>{v.year} — {v.price}₾</option>
+                    <option key={v.id} value={v.id}>{v.year} — {formatTetri(asTetri(v.price))}</option>
                   ))}
                 </select>
               </div>
@@ -306,7 +307,7 @@ export default function NewWineOrderForm({
               <input type="number" min={1} value={newLineQty} onChange={e => setNewLineQty(e.target.value)} style={inputStyle} />
             </div>
             {selectedVintage && (
-              <div className="text-sm pb-2" style={{ color: C.muted }}>= {lineTotal.toFixed(2)}₾</div>
+              <div className="text-sm pb-2" style={{ color: C.muted }}>= {formatTetri(asTetri(lineTotal), { decimals: true })}</div>
             )}
             <button
               onClick={handleAddLine}
@@ -342,13 +343,13 @@ export default function NewWineOrderForm({
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{l.wineName} {l.year} × {l.quantity}</span>
-              <span style={{ color: C.text }}>{(l.quantity * l.price).toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}</span>
             </div>
           ))}
           {discountPercent != null && lines.length > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{at('newWineOrder.total.discount', { percent: discountPercent })}</span>
-              <span style={{ color: C.text }}>−{(subtotal - computedTotal).toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>−{formatTetri(asTetri(subtotal - computedTotal), { decimals: true })}</span>
             </div>
           )}
         </div>
@@ -356,7 +357,7 @@ export default function NewWineOrderForm({
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
-            {computedTotal.toFixed(2)}₾
+            {formatTetri(asTetri(computedTotal), { decimals: true })}
           </span>
         </div>
 

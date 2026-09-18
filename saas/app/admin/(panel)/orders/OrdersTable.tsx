@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
@@ -346,7 +347,7 @@ function OrdersListRows({
               <div className="text-center" style={{ color: C.text, fontSize: '0.8125rem' }}>{order.guestCount}</div>
 
               <div className="font-semibold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.875rem' }}>
-                {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
               </div>
 
               <div onClick={e => e.stopPropagation()} className="flex items-center gap-1.5">
@@ -523,7 +524,7 @@ function OrdersBoardColumns({
                           </button>
                         </div>
                         <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '0.8125rem' }}>
-                          {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                          {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
                         </span>
                       </div>
                     </div>
@@ -880,7 +881,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {/* Footer row: total + arrow */}
                 <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
                   <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1rem' }}>
-                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                    {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
                   </span>
                   <span className="text-xs flex items-center gap-1" style={{ color: C.faint }}>
                     {at('orders.viewDetails')}
@@ -1072,7 +1073,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {/* Total */}
                 {col('total') && (
                   <td className="px-4 py-3 font-semibold whitespace-nowrap" style={{ color: C.wine }}>
-                    {order.totalPrice != null ? `${order.totalPrice}₾` : '—'}
+                    {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
                   </td>
                 )}
 
@@ -1081,13 +1082,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>
                     {(order.extras.length > 0 || order.notes)
                       ? <OneLine title={[
-                          ...order.extras.map(e => `${e.label}: ${e.amount}₾`),
+                          ...order.extras.map(e => `${e.label}: ${formatTetri(asTetri(e.amount))}`),
                           order.notes,
                         ].filter(Boolean).join(' · ')}>
                           {order.extras.map((e, idx) => (
                             <span key={idx} style={{ color: C.muted }}>
                               {idx > 0 && <span style={{ color: C.faint }}> · </span>}
-                              {e.label}: <span style={{ color: C.wine }}>{e.amount}₾</span>
+                              {e.label}: <span style={{ color: C.wine }}>{formatTetri(asTetri(e.amount))}</span>
                             </span>
                           ))}
                           {order.notes && <span style={{ color: C.faint, fontStyle: 'italic' }}>{order.extras.length > 0 && ' · '}{order.notes}</span>}
@@ -1567,14 +1568,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Amounts */}
               <div>
                 <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>{at('orders.preview.amount')}</div>
-                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={`${bookingAmt}₾`} />
+                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={formatTetri(asTetri(bookingAmt))} />
                 {o.masterclassLines.map((l, i) => (
-                  <PRow key={i} label={`${l.name} ×${l.quantity}`} value={`${l.quantity * l.pricePerUnit}₾`} />
+                  <PRow key={i} label={`${l.name} ×${l.quantity}`} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity))} />
                 ))}
                 {o.extras.map((e, i) => (
-                  <PRow key={i} label={e.label} value={`${e.amount}₾`} />
+                  <PRow key={i} label={e.label} value={formatTetri(asTetri(e.amount))} />
                 ))}
-                <PRow label={at('orders.col.total')} value={`${o.totalPrice ?? '—'}₾`} bold wine />
+                <PRow label={at('orders.col.total')} value={formatTetriOrDash(asTetriOrNull(o.totalPrice))} bold wine />
               </div>
 
               {/* Contact */}

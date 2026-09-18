@@ -11,6 +11,7 @@
  */
 
 import { headers } from 'next/headers'
+import type { Tetri } from '@/lib/money'
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -155,7 +156,8 @@ const TYPE_DEFAULT_COLOR: Record<WineType, string> = {
  */
 export async function createOnboardingWine(
   wine: { name: string; wineType?: WineType; sweetness?: Sweetness },
-  vintage: { year: number; price: number }
+  /** price is TETRI — the wizard converts what the admin typed (chunk 3). */
+  vintage: { year: number; price: Tetri }
 ) {
   await requireAdmin()
   const wineType = wine.wineType ?? 'RED'
@@ -358,9 +360,10 @@ export async function setWorksWithCompanies(value: 'yes' | 'no') {
 export type OnboardingTier = {
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  /** TETRI, all three — the wizard converts what the admin typed (chunk 3). */
+  pricePerPerson: Tetri
+  tastingLunchPricePerPerson: Tetri
+  registrationPrice: Tetri
 }
 
 /**

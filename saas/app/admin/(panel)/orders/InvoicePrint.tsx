@@ -1,3 +1,5 @@
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+
 type Order = {
   id: string
   date: Date
@@ -124,11 +126,11 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         </Section>
 
         <Section title="თანხა">
-          <Row label="სადილი" value={`${lunchAmount} ₾`} />
-          <Row label="დეგუსტაცია" value={`${tastingAmount} ₾`} />
-          <Row label="დამ. სტუმრების კვება" value="0 ₾" />
+          <Row label="სადილი" value={formatTetri(asTetri(lunchAmount), { space: true, decimals: true })} />
+          <Row label="დეგუსტაცია" value={formatTetri(asTetri(tastingAmount), { space: true, decimals: true })} />
+          <Row label="დამ. სტუმრების კვება" value={formatTetri(asTetri(0), { space: true, decimals: true })} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-            <strong style={{ fontSize: 15 }}>ჯამური თანხა: {totalPrice} ₾</strong>
+            <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
           </div>
         </Section>
 
@@ -200,7 +202,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
             <Row
               key={i}
               label={`${l.name} × ${l.quantity}`}
-              value={`${l.quantity * l.pricePerUnit} ₾`}
+              value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })}
             />
           ))}
         </Section>
@@ -210,7 +212,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
       {order.extras.length > 0 && (
         <Section title="დამატებები">
           {order.extras.map((e, i) => (
-            <Row key={i} label={e.label} value={`${e.amount} ₾`} />
+            <Row key={i} label={e.label} value={formatTetri(asTetri(e.amount), { space: true, decimals: true })} />
           ))}
         </Section>
       )}
@@ -219,17 +221,17 @@ export default function InvoicePrint({ order, payment, detailed = false, display
       <Section title="თანხა">
         <Row
           label={isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია'}
-          value={`${bookingAmt} ₾`}
+          value={formatTetri(asTetri(bookingAmt), { space: true, decimals: true })}
         />
         {order.masterclassLines.map((l, i) => (
-          <Row key={i} label={l.name} value={`${l.quantity * l.pricePerUnit} ₾`} />
+          <Row key={i} label={l.name} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
         ))}
         {order.extras.map((e, i) => (
-          <Row key={i} label={e.label} value={`${e.amount} ₾`} />
+          <Row key={i} label={e.label} value={formatTetri(asTetri(e.amount), { space: true, decimals: true })} />
         ))}
         <div style={{ height: 1, backgroundColor: '#c8b89a', margin: '8px 0' }} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <strong style={{ fontSize: 15 }}>ჯამური თანხა: {totalPrice} ₾</strong>
+          <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
         </div>
       </Section>
 

@@ -19,6 +19,7 @@
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
 import type { PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
+import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
 
@@ -236,6 +237,25 @@ export type SeedReport = {
  * Wipes and rebuilds the demo tenant's trading data. Pass `dryRun` to report
  * what would happen without writing anything.
  */
+
+/**
+ * The tier literals above are written in GEL because that is what a human
+ * reading this file expects to see. Money is stored in tetri, so the conversion
+ * happens once, here, at the write (chunk 3, 2026-09-18).
+ */
+function tierToTetri(t: {
+  minGuests: number; maxGuests: number
+  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice?: number
+}) {
+  return {
+    minGuests: t.minGuests,
+    maxGuests: t.maxGuests,
+    pricePerPerson: fromMajor(t.pricePerPerson),
+    tastingLunchPricePerPerson: fromMajor(t.tastingLunchPricePerPerson),
+    registrationPrice: fromMajor(t.registrationPrice ?? 0),
+  }
+}
+
 export async function seedDemoTenant(
   db: PrismaClient,
   /**
@@ -384,7 +404,7 @@ export async function seedDemoTenant(
   const individuals = await db.company.create({
     data: {
       name: 'Individuals', tenantId: tid, isIndividual: true, isBookingCompany: true,
-      prices: { create: INDIVIDUALS_TIERS.map(t => ({ ...t, registrationPrice: t.registrationPrice ?? 0 })) },
+      prices: { create: INDIVIDUALS_TIERS.map(t => tierToTetri(t)) },
     },
   })
 
@@ -395,7 +415,7 @@ export async function seedDemoTenant(
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
         contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: true, isWineOrderCompany: false,
-        prices: { create: c.tiers.map(t => ({ ...t, registrationPrice: t.registrationPrice ?? 0 })) },
+        prices: { create: c.tiers.map(t => tierToTetri(t)) },
       },
     })
     bookingCompanies.push({ ...c, id: row.id })
@@ -418,7 +438,7 @@ export async function seedDemoTenant(
     data: MENU_ITEMS.map((m, i) => ({ ...m, tenantId: tid, active: true, sortOrder: i })),
   })
   await db.masterclassItem.createMany({
-    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, tenantId: tid, active: true, sortOrder: i })),
+    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, pricePerUnit: fromMajor(m.pricePerUnit), tenantId: tid, active: true, sortOrder: i })),
   })
   const mcItems = await db.masterclassItem.findMany({ where: { tenantId: tid } })
   const vegItems = MENU_ITEMS.filter(m => m.type === 'VEGETABLE').map(m => m.name)

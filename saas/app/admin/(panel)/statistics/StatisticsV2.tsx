@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, LabelList,
@@ -166,7 +167,7 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
         <div data-tour="stats-future-revenue">
           <Card
             label={at('statistics.card.futureRevenue')}
-            value={`${futureRevenue.toLocaleString('en-US')}₾`}
+            value={formatTetri(asTetri(futureRevenue), { grouping: true })}
             sub={at('statistics.inPeriod', { period: periodLabel })}
           />
         </div>
@@ -229,14 +230,14 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
               <ResponsiveContainer width="100%" height={Math.max(200, revenueByPeriod.length * 36)}>
                 <BarChart data={revenueByPeriod} layout="vertical" barSize={18} margin={{ right: 72 }}>
                   <CartesianGrid horizontal={false} stroke={C.border} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => formatTetri(asTetri(Number(v)), { grouping: true })} />
                   <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={36} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString('en-US')}₾`, at('statistics.tooltip.revenue')]} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [formatTetri(asTetri(Number(v)), { grouping: true }), at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill={C.wine} radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props
                       if (!value || value === 0) return <g />
-                      return <text x={revenueChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString('en-US')}₾`}</text>
+                      return <text x={revenueChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{formatTetri(asTetri(Number(value)), { grouping: true })}</text>
                     }} />
                   </Bar>
                 </BarChart>
@@ -255,14 +256,14 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
               <ResponsiveContainer width="100%" height={Math.max(200, revenueByCompany.length * 48)}>
                 <BarChart data={revenueByCompany} layout="vertical" barSize={22} margin={{ right: 72 }}>
                   <CartesianGrid horizontal={false} stroke={C.border} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => `${v}₾`} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={v => formatTetri(asTetri(Number(v)), { grouping: true })} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={90} />
-                  <Tooltip {...tooltipStyle} formatter={(v) => [`${Number(v).toLocaleString('en-US')}₾`, at('statistics.tooltip.revenue')]} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [formatTetri(asTetri(Number(v)), { grouping: true }), at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[0, 4, 4, 0]}>
                     <LabelList content={(props: any) => {
                       const { y, height: bh, value } = props
                       if (!value || value === 0) return <g />
-                      return <text x={companyChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{`${Number(value).toLocaleString('en-US')}₾`}</text>
+                      return <text x={companyChartWidth - 4} y={(y ?? 0) + (bh ?? 0) / 2} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize={11} fontWeight={500}>{formatTetri(asTetri(Number(value)), { grouping: true })}</text>
                     }} />
                   </Bar>
                 </BarChart>

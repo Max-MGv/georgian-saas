@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
@@ -141,8 +142,9 @@ export default function NewOrderForm({
   const freeGuests = Math.max(0, parseInt(freeGuestsStr) || 0)
   const payingGuests = tastingGuests + lunchGuests
 
-  const manualTastingRate = Math.max(0, parseFloat(manualTastingRateStr) || 0)
-  const manualLunchRate = Math.max(0, parseFloat(manualLunchRateStr) || 0)
+  // The rate inputs hold GEL; everything they feed is tetri (chunk 3).
+  const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
+  const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
 
   const totalGuestCount = isCompany ? tastingGuests + lunchGuests + freeGuests : guestCount
 
@@ -207,7 +209,7 @@ export default function NewOrderForm({
     setExtras(prev => [...prev, {
       tempId: nextTempId,
       label: newExtraLabel,
-      amount: parseFloat(newExtraAmount) || 0,
+      amount: fromMajor(parseFloat(newExtraAmount) || 0),
     }])
     setNextTempId(n => n + 1)
     setNewExtraLabel('')
@@ -433,9 +435,9 @@ export default function NewOrderForm({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.pricePerUnit}₾</td>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(l.pricePerUnit))}</td>
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {(l.quantity * l.pricePerUnit).toFixed(2)}₾
+                      {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -477,7 +479,7 @@ export default function NewOrderForm({
               </div>
             )}
             {selectedMcItem && (
-              <div className="text-sm pb-2" style={{ color: C.muted }}>= {lineTotal.toFixed(2)}₾</div>
+              <div className="text-sm pb-2" style={{ color: C.muted }}>= {formatTetri(asTetri(lineTotal), { decimals: true })}</div>
             )}
             <button
               onClick={handleAddLine}
@@ -514,7 +516,7 @@ export default function NewOrderForm({
             {extras.map(e => (
               <div key={e.tempId} className="flex items-center gap-2">
                 <span className="flex-1 text-sm" style={{ color: C.text }}>{e.label}</span>
-                <span className="text-sm font-medium" style={{ color: C.wine }}>{e.amount.toFixed(2)}₾</span>
+                <span className="text-sm font-medium" style={{ color: C.wine }}>{formatTetri(asTetri(e.amount), { decimals: true })}</span>
                 <button
                   onClick={() => setExtras(prev => prev.filter(x => x.tempId !== e.tempId))}
                   className="text-xs px-2 py-1 rounded border"
@@ -581,11 +583,11 @@ export default function NewOrderForm({
           <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{tier.pricePerPerson}₾/pp</strong>
+            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tier.pricePerPerson))}/pp</strong>
             {' · '}
-            {at('orders.col.lunch')} <strong>{comboRatePerPerson(tier)}₾/pp</strong>
+            {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
             {' · '}
-            {at('orderDetail.total.regFee')} <strong>{tier.registrationPrice}₾</strong>
+            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(tier.registrationPrice))}</strong>
           </div>
         )}
         {/* Manual rate inputs */}
@@ -624,35 +626,35 @@ export default function NewOrderForm({
           {(tier || (!isCompany && manualTastingRate > 0) || (isCompany && tastingGuests > 0 && manualTastingRate > 0)) && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {tier ? tier.pricePerPerson : manualTastingRate}₾)
+                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {formatTetri(tier ? asTetri(tier.pricePerPerson) : manualTastingRate)})
               </span>
-              <span style={{ color: C.text }}>{tastingAmt.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt), { decimals: true })}</span>
             </div>
           )}
           {(lunchGuests > 0 || (!isCompany && manualLunchRate > 0)) && (lunchAmt > 0) && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {tier ? comboRatePerPerson(tier) : manualLunchRate}₾)
+                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(tier ? asTetri(comboRatePerPerson(tier)) : manualLunchRate)})
               </span>
-              <span style={{ color: C.text }}>{lunchAmt.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt), { decimals: true })}</span>
             </div>
           )}
           {tier && tier.registrationPrice > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{tier.registrationPrice.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(tier.registrationPrice), { decimals: true })}</span>
             </div>
           )}
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{l.name} × {l.quantity}</span>
-              <span style={{ color: C.text }}>{(l.quantity * l.pricePerUnit).toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}</span>
             </div>
           ))}
           {extras.map(e => (
             <div key={e.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{e.label}</span>
-              <span style={{ color: C.text }}>{e.amount.toFixed(2)}₾</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(e.amount), { decimals: true })}</span>
             </div>
           ))}
         </div>
@@ -660,7 +662,7 @@ export default function NewOrderForm({
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
-            {computedTotal.toFixed(2)}₾
+            {formatTetri(asTetri(computedTotal), { decimals: true })}
           </span>
         </div>
 

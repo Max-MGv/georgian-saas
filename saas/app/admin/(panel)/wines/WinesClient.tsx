@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { asTetri, fromMajor, toMajor, formatTetri } from '@/lib/money'
 import {
   createWine, updateWine, deleteWine, assignWineImage,
   createVintage, updateVintage, deleteVintage, assignVintageImage, toggleVintageActive,
@@ -422,7 +423,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
   function startEditVintage(v: Vintage) {
     setEditingVintageId(v.id)
     setVintageDraft({
-      year: String(v.year), price: String(v.price), active: v.active,
+      year: String(v.year), price: String(toMajor(asTetri(v.price))), active: v.active,
       wineType: v.wineType ?? '', sweetness: v.sweetness ?? '',
       sparkling: v.sparkling === null ? '' : v.sparkling ? 'true' : 'false',
       alcoholLevel: v.alcoholLevel != null ? String(v.alcoholLevel) : '',
@@ -443,8 +444,10 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   function handleSaveVintage(wineId: string, vintageId: string) {
     const year = parseInt(vintageDraft.year)
-    const price = parseFloat(vintageDraft.price)
-    if (!Number.isFinite(year) || !Number.isFinite(price)) return
+    // The draft holds GEL (what the admin typed); everything below is tetri.
+    const priceMajor = parseFloat(vintageDraft.price)
+    if (!Number.isFinite(year) || !Number.isFinite(priceMajor)) return
+    const price = fromMajor(priceMajor)
     const extra = isVintageMode ? vintageCharacteristics(vintageDraft) : {}
     setSaving(vintageId)
     startTransition(async () => {
@@ -460,8 +463,9 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   function handleAddVintage(wineId: string) {
     const year = parseInt(newVintageDraft.year)
-    const price = parseFloat(newVintageDraft.price)
-    if (!Number.isFinite(year) || !Number.isFinite(price)) return
+    const priceMajor = parseFloat(newVintageDraft.price)
+    if (!Number.isFinite(year) || !Number.isFinite(priceMajor)) return
+    const price = fromMajor(priceMajor)
     // createVintage's fields are optional-undefined (no explicit-null clearing
     // needed on a brand-new row), unlike updateVintage's nullable fields — so
     // "not specified" here means omitted, not null.
@@ -911,7 +915,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                           ) : (
                             <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
                               <p className="text-sm font-bold" style={{ color: C.text }}>{v.year}</p>
-                              <p className="text-sm" style={{ color: C.muted }}>{v.price}₾ / {at('wines.bottle')}</p>
+                              <p className="text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(v.price))} / {at('wines.bottle')}</p>
                               {isVintageMode && vintageMetaBadges(v)}
                               {v.imagePath && (
                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.overrideImageBadge')}</span>

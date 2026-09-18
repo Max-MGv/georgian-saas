@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { asTetri, formatTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
 import { getAllSettings } from '@/app/actions/settings'
 import { settingValue } from '@/lib/settings'
@@ -362,7 +363,7 @@ export default async function Home({ searchParams }: PageProps) {
               as="p" className="text-sm mb-4" style={{ color: 'var(--site-muted)' }} />
             {pkg.price != null && (
               <p className="font-bold text-2xl" style={{ color: 'var(--color-brand)' }}>
-                {pkg.price}₾ <span className="font-normal text-sm" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'form.per_pp')}</span>
+                {formatTetri(asTetri(pkg.price))} <span className="font-normal text-sm" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'form.per_pp')}</span>
               </p>
             )}
             <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--site-secondary)' }}>

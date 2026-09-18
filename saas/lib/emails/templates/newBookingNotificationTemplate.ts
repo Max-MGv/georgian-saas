@@ -1,3 +1,4 @@
+import { asTetri, formatTetri } from '@/lib/money'
 /**
  * Pure HTML-building half of newBookingNotification.ts — see
  * bookingConfirmationTemplate.ts for why this split exists (Feature 181).
@@ -42,7 +43,7 @@ export function renderNewBookingNotificationEmail(data: NewBookingNotificationDa
           <tr><td style="padding: 8px 0; color: #6b5a47;">Date</td><td style="padding: 8px 0;">${data.date}</td></tr>
           <tr><td style="padding: 8px 0; color: #6b5a47;">Time</td><td style="padding: 8px 0;">${data.timeSlot}</td></tr>
           <tr><td style="padding: 8px 0; color: #6b5a47;">Guests</td><td style="padding: 8px 0;">${data.guestCount}</td></tr>
-          <tr><td style="padding: 8px 0; color: #6b5a47;">${data.paid ? 'Paid' : 'Estimated total'}</td><td style="padding: 8px 0; font-weight: 600;">${data.totalPrice}₾</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b5a47;">${data.paid ? 'Paid' : 'Estimated total'}</td><td style="padding: 8px 0; font-weight: 600;">${formatTetri(asTetri(data.totalPrice))}</td></tr>
         </table>
         <p style="margin: 24px 0 0; font-size: 13px; color: #6b5a47;">${data.requestedCompanyName
           ? `You should also have a separate "new company registration" email for ${data.requestedCompanyName}. Create the company and set its pricing in the admin panel, then follow up with them directly to confirm this booking and its price — it won't move under the company automatically.`

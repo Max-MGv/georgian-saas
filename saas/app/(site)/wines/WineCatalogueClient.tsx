@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useTransition } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
@@ -607,7 +608,7 @@ export default function WineCatalogueClient({
                 {selectedWines.map(w => `${w.name} ${w.year} ×${quantities[w.vintageId]}`).join(' · ')}
               </p>
             </div>
-            <span className="text-base font-bold flex-shrink-0" style={{ color: C.wine }}>{totalPrice}₾</span>
+            <span className="text-base font-bold flex-shrink-0" style={{ color: C.wine }}>{formatTetri(asTetri(totalPrice))}</span>
             <button
               type="button"
               onClick={() => setShowDrawer(true)}
@@ -671,7 +672,7 @@ export default function WineCatalogueClient({
                         <span style={{ color: C.text }}>
                           {w.name} <span style={{ color: C.faint }}>{w.year}</span> <span style={{ color: C.muted }}>×{quantities[w.vintageId]}</span>
                         </span>
-                        <span style={{ color: C.muted }}>{(quantities[w.vintageId]! * w.price)}₾</span>
+                        <span style={{ color: C.muted }}>{formatTetri(multiplyTetri(asTetri(w.price), quantities[w.vintageId]!))}</span>
                       </div>
                     ))}
                   </div>
@@ -679,16 +680,16 @@ export default function WineCatalogueClient({
                     <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
                     {discountPercent && discountPercent > 0 ? (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs line-through" style={{ color: C.faint }}>{totalPrice}₾</span>
+                        <span className="text-xs line-through" style={{ color: C.faint }}>{formatTetri(asTetri(totalPrice))}</span>
                         <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: STATUS.successBg, color: STATUS.successText }}>
                           −{discountPercent}%
                         </span>
                         <span className="text-base font-bold" style={{ color: C.wine }}>
-                          {Math.round(totalPrice * (1 - discountPercent / 100) * 100) / 100}₾
+                          {formatTetri(applyPercent(asTetri(totalPrice), discountPercent))}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-base font-bold" style={{ color: C.wine }}>{totalPrice}₾</span>
+                      <span className="text-base font-bold" style={{ color: C.wine }}>{formatTetri(asTetri(totalPrice))}</span>
                     )}
                   </div>
                   {!discountPercent && (
@@ -895,7 +896,7 @@ export default function WineCatalogueClient({
                       <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-auto">
-                      <span className="text-sm font-semibold" style={{ color: 'var(--site-text)' }}>{wine.price}₾ {t(locale, 'wine.perBottle')}</span>
+                      <span className="text-sm font-semibold" style={{ color: 'var(--site-text)' }}>{formatTetri(asTetri(wine.price))} {t(locale, 'wine.perBottle')}</span>
                       {qty === 0 ? (
                         <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                           className="w-10 h-10 md:w-8 md:h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
@@ -963,7 +964,7 @@ export default function WineCatalogueClient({
                       <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                   </div>
-                  <p className="text-sm font-medium text-center" style={{ color: 'var(--site-muted)' }}>{wine.price}₾</p>
+                  <p className="text-sm font-medium text-center" style={{ color: 'var(--site-muted)' }}>{formatTetri(asTetri(wine.price))}</p>
                   <div className="flex items-center justify-center gap-1">
                     {qty === 0 ? (
                       <button type="button" onClick={() => setQty(wine.vintageId, 1)}
@@ -989,7 +990,7 @@ export default function WineCatalogueClient({
                     )}
                   </div>
                   <p className="text-sm font-semibold text-right" style={{ color: lineTotal > 0 ? 'var(--color-brand)' : 'var(--site-border)' }}>
-                    {lineTotal > 0 ? `${lineTotal}₾` : '—'}
+                    {lineTotal > 0 ? formatTetri(asTetri(lineTotal)) : '—'}
                   </p>
                 </div>
               )
@@ -999,7 +1000,7 @@ export default function WineCatalogueClient({
               <div className="flex items-center justify-between px-4 py-3 border-t"
                 style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-bg)' }}>
                 <span className="text-sm font-medium" style={{ color: 'var(--site-muted)' }}>{totalBottles} bottle{totalBottles !== 1 ? 's' : ''}</span>
-                <span className="text-sm font-bold" style={{ color: 'var(--color-brand)' }}>Total: {totalPrice}₾</span>
+                <span className="text-sm font-bold" style={{ color: 'var(--color-brand)' }}>Total: {formatTetri(asTetri(totalPrice))}</span>
               </div>
             )}
           </div>

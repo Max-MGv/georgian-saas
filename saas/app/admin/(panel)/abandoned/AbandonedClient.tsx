@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { changeBookingStatus } from '@/app/actions/orders'
 import { changeWineOrderStatus } from '@/app/actions/wineOrders'
@@ -74,7 +75,7 @@ function Row({ row, locale, onRestore, busy }: {
         {row.contact && <p className="text-xs mt-0.5" style={{ color: C.faint }}>{row.contact}</p>}
         <p className="text-xs mt-1.5" style={{ color: C.faint }}>
           {at('abandoned.since', { date: when })}
-          {row.total != null && <> · {Math.round(row.total)} ₾</>}
+          {row.total != null && <> · {formatTetri(asTetri(row.total), { space: true })}</>}
         </p>
       </div>
       <div className="flex flex-col gap-1.5 flex-shrink-0">

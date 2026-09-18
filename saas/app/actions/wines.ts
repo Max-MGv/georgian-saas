@@ -1,6 +1,7 @@
 'use server'
 
 import { withTenantDb } from '@/lib/db'
+import type { Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -82,7 +83,8 @@ export async function assignWineImage(wineId: string, imagePath: string | null) 
 // ── WineVintage actions ─────────────────────────────────────────────────
 
 export async function createVintage(wineId: string, data: {
-  year: number; price: number; imagePath?: string
+  /** price is TETRI — the form converts what the admin typed (chunk 3). */
+  year: number; price: Tetri; imagePath?: string
   wineType?: WineType; sweetness?: Sweetness; sparkling?: boolean; alcoholLevel?: number
 }) {
   await requireAdmin()
@@ -101,7 +103,8 @@ export async function createVintage(wineId: string, data: {
 }
 
 export async function updateVintage(id: string, data: Partial<{
-  year: number; price: number; imagePath: string | null; active: boolean; sortOrder: number
+  /** price is TETRI — see createVintage. */
+  year: number; price: Tetri; imagePath: string | null; active: boolean; sortOrder: number
   wineType: WineType | null; sweetness: Sweetness | null; sparkling: boolean | null; alcoholLevel: number | null
 }>) {
   await requireAdmin()

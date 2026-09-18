@@ -1,4 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
+import { asTetri, formatTetri } from '@/lib/money'
 import { renderTokenizedText } from '@/lib/emails/templates/tokens'
 
 /**
@@ -162,7 +163,7 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
             </tr>
             <tr style="border-top: 1px solid ${th.border};">
               <td style="color: ${th.muted}; padding: 10px 0 5px;">${data.paid ? L.paid : L.estimatedTotal}</td>
-              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${data.totalPrice}₾</td>
+              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${formatTetri(asTetri(data.totalPrice), { decimals: true })}</td>
             </tr>
           </table>
         </div>

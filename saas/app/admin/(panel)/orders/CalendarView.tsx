@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { useRouter, usePathname } from 'next/navigation'
 import { adminT } from '@/lib/adminT'
 
@@ -230,7 +231,7 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
                     <p className="text-xs mt-0.5 truncate" style={{ color: C.muted }}>{o.companyName}</p>
                   )}
                   {o.totalPrice != null && (
-                    <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{o.totalPrice}₾</p>
+                    <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{formatTetriOrDash(asTetriOrNull(o.totalPrice))}</p>
                   )}
                 </div>
               ))}

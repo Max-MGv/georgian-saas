@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 
 const C = {
   card: '#111827',
@@ -182,7 +183,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
                   </td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{b.visitType === 'TASTING' ? 'Tasting' : 'Tasting + Lunch'}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{b.guestCount}</td>
-                  <td className="px-4 py-3" style={{ color: C.text }}>{b.totalPrice != null ? `${Math.round(b.totalPrice)}₾` : '—'}</td>
+                  <td className="px-4 py-3" style={{ color: C.text }}>{formatTetriOrDash(asTetriOrNull(b.totalPrice))}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{BOOKING_STATUS_LABEL[b.stage] ?? b.stage}<PaymentMark payment={b.payment} /></td>
                   <td className="px-4 py-3 text-right">
                     {b.tenantDomain && (
@@ -220,7 +221,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
                     <span style={{ color: C.faint }}> · {w.contactName}</span>
                   </td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{w.bottleCount}</td>
-                  <td className="px-4 py-3" style={{ color: C.text }}>{w.displayTotal}₾</td>
+                  <td className="px-4 py-3" style={{ color: C.text }}>{formatTetri(asTetri(w.displayTotal))}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{WINE_STATUS_LABEL[w.stage] ?? w.stage}<PaymentMark payment={w.payment} /></td>
                   <td className="px-4 py-3 text-right">
                     {w.tenantDomain && (

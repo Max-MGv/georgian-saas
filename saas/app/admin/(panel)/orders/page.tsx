@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { asTetri, formatTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
 import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 import { BOOKING_STAGES } from '@/lib/statusFlow'
@@ -300,7 +301,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <span className="text-sm" style={{ color: C.muted }}>
                 {at('orders.totalRevenue')} {params.dateFrom || params.dateTo || params.companyId ? at('orders.filtered') : ''}
               </span>
-              <span className="font-bold text-lg" style={{ color: C.wine }}>{totalRevenue}₾</span>
+              <span className="font-bold text-lg" style={{ color: C.wine }}>{formatTetri(asTetri(totalRevenue), { grouping: true })}</span>
             </div>
           </div>
         </div>

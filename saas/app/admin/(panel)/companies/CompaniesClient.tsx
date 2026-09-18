@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
+import { asTetri, fromMajor, toMajor, formatTetri, type Tetri } from '@/lib/money'
 import {
   createGuide, updateGuide, deleteGuide, regenerateGuideCode, setGuideCode,
   createRepresentative, updateRepresentative, deleteRepresentative, regenerateRepresentativeCode, setRepresentativeCode,
@@ -20,9 +21,11 @@ type Price = {
   id: string
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  // TETRI. These come straight off the DB row; the tier form converts to and
+  // from GEL at its inputs (chunk 3).
+  pricePerPerson: Tetri
+  tastingLunchPricePerPerson: Tetri
+  registrationPrice: Tetri
   isDisplayPrice: boolean
 }
 type Guide = { id: string; name: string; phone: string | null; code: string }
@@ -94,9 +97,11 @@ function PriceForm({
   const at = (key: string) => adminT(locale, key)
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
-  const [pricePerPerson, setPricePerPerson] = useState(String(initial?.pricePerPerson ?? ''))
-  const [tastingLunchPrice, setTastingLunchPrice] = useState(String(initial?.tastingLunchPricePerPerson ?? ''))
-  const [registrationPrice, setRegistrationPrice] = useState(String(initial?.registrationPrice ?? 0))
+  // The inputs hold GEL, because that is what an admin types. Everything
+  // below this component is tetri; fromMajor/toMajor are the boundary.
+  const [pricePerPerson, setPricePerPerson] = useState(initial ? String(toMajor(asTetri(initial.pricePerPerson))) : '')
+  const [tastingLunchPrice, setTastingLunchPrice] = useState(initial ? String(toMajor(asTetri(initial.tastingLunchPricePerPerson))) : '')
+  const [registrationPrice, setRegistrationPrice] = useState(initial ? String(toMajor(asTetri(initial.registrationPrice))) : '0')
 
   return (
     <div className="flex flex-wrap items-end gap-3 mt-3">
@@ -109,9 +114,9 @@ function PriceForm({
         <button
           onClick={() => onSave({
             minGuests: Number(minGuests), maxGuests: Number(maxGuests),
-            pricePerPerson: Number(pricePerPerson),
-            tastingLunchPricePerPerson: tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice),
-            registrationPrice: registrationPrice === '' ? 0 : Number(registrationPrice),
+            pricePerPerson: fromMajor(Number(pricePerPerson)),
+            tastingLunchPricePerPerson: fromMajor(tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice)),
+            registrationPrice: fromMajor(registrationPrice === '' ? 0 : Number(registrationPrice)),
           })}
           disabled={loading}
           className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
@@ -704,9 +709,9 @@ function PriceTiersSection({
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{price.pricePerPerson}₾/pp</span></span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{comboRatePerPerson(price)}₾/pp</span></span>
-              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{price.registrationPrice}₾ {at('companies.priceTiers.flatFeeSuffix')}</span>}
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(price.pricePerPerson))}/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(comboRatePerPerson(price)))}/pp</span></span>
+              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{formatTetri(asTetri(price.registrationPrice))} {at('companies.priceTiers.flatFeeSuffix')}</span>}
 
               {isIndividual && (
                 <button
@@ -938,7 +943,7 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {displayTier.pricePerPerson}₾ / {comboRatePerPerson(displayTier)}₾ {at('companies.individuals.shownOnSite')}
+                    {formatTetri(asTetri(displayTier.pricePerPerson))} / {formatTetri(asTetri(comboRatePerPerson(displayTier)))} {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>

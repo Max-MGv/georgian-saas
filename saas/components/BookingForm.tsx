@@ -5,6 +5,7 @@
 // See vault/MaintenanceNotes.md §1 for full details.
 
 import { useState, useEffect, useRef } from 'react'
+import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
@@ -501,10 +502,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // known, tier-matched total is shown; an unresolved company rate or unset
   // display price hides the row entirely rather than showing a guess.
   const confirmTotalValue = isEnhanced
-    ? (payingGuests > 0 && enhancedTier ? `${enhancedTotal}₾` : null)
+    ? (payingGuests > 0 && enhancedTier ? formatTetri(asTetri(enhancedTotal)) : null)
     : bookingType === 'INDIVIDUAL'
-      ? (estimatedTotal != null ? `${estimatedTotal}₾` : null)
-      : (showCompanyPrice && matchedTier ? `${estimatedTotal}₾` : null)
+      ? (estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
+      : (showCompanyPrice && matchedTier && estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
 
   function toggleMc(id: string, checked: boolean) {
     setMcSelections(prev => ({ ...prev, [id]: { checked, qtyStr: prev[id]?.qtyStr ?? '1' } }))
@@ -624,7 +625,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
-            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}₾</p>
+            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}</p>
           </div>
         )}
       </div>
@@ -830,7 +831,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
                 {(bookingType === 'COMPANY' || opt.price != null) && (
                   <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price}₾ ${t(locale, 'form.per_pp')}`}
+                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price != null ? formatTetri(asTetri(opt.price)) : ''} ${t(locale, 'form.per_pp')}`}
                   </div>
                 )}
               </button>
@@ -970,7 +971,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                     <label htmlFor={`mc-${m.id}`} className="flex-1 text-sm cursor-pointer" style={{ color: C.text }}>
                       {m.name}
                       <span className="ml-1 text-xs" style={{ color: C.faint }}>
-                        {m.pricePerUnit}₾/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
+                        {formatTetri(asTetri(m.pricePerUnit))}/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
                       </span>
                     </label>
                     {sel?.checked && (
@@ -1040,20 +1041,20 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="font-bold text-2xl" style={{ color: C.wine }}>{enhancedTotal}₾</p>
+                <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(enhancedTotal))}</p>
               </div>
               <div className="space-y-0.5">
                 {tastingGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {enhancedTier.pricePerPerson}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {formatTetri(asTetri(enhancedTier.pricePerPerson))}</p>
                 )}
                 {lunchGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {comboRatePerPerson(enhancedTier)}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {formatTetri(asTetri(comboRatePerPerson(enhancedTier)))}</p>
                 )}
                 {enhancedTier.registrationPrice > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {enhancedTier.registrationPrice}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(enhancedTier.registrationPrice))}</p>
                 )}
                 {masterclassAmt > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {masterclassAmt}₾</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {formatTetri(asTetri(masterclassAmt))}</p>
                 )}
               </div>
             </div>
@@ -1067,9 +1068,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{matchedTierRate ?? basePrice}₾ × {guestCount} {t(locale, 'form.guest_plural')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri((matchedTierRate ?? basePrice) ?? 0))} × {guestCount} {t(locale, 'form.guest_plural')}</p>
               </div>
-              <p className="font-bold text-2xl" style={{ color: C.wine }}>{estimatedTotal}₾</p>
+              <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>
           ) : (
             <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
