@@ -84,9 +84,20 @@ are paying. That is now how it works, everywhere.
 - **The split can no longer exceed the party.** If you put 4 + 4 into an order of 6, both
   screens say so and refuse to save.
 
-**Worth a look on staging:** open an order, change "Total guests in the party", and check the
-price moves to the right band. Then try making the split bigger than the party — it should
-stop you.
+**I checked all of this live on staging.** Using Kakheti Wine Routes, whose rates step down
+at 11 guests:
+
+- A party of **11** (9 paying + 2 free) priced at **₾405** — the 11-20 rate. Under the old
+  rule those 9 payers would have been charged the 1-10 rate, **₾495**. The guide and driver
+  are what earned the better band.
+- Changing the party to **9** on the order page moved it straight back to **₾495**, and the
+  page said "live preview" until I saved.
+- Putting a split of 14 into a party of 11 **blocked the Create button**, and saving a bad
+  split on an existing order was **refused by the server too** — both layers, separately.
+- After saving, the database held exactly what the screen showed: party 9, total ₾495, rate
+  ₾55.
+
+Nothing left for you to verify on this one unless you want to see it yourself.
 
 **One thing for your eye specifically:** I wrote the Georgian for three new labels and
 re-worded five existing ones (the rate fields now read "Tasting only" and "Tasting+Lunch").
