@@ -156,27 +156,33 @@ export default function NewOrderForm({
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
 
-  const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : tastingGuests * manualTastingRate
-  const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : lunchGuests * manualLunchRate
+  // An individual books ONE visit type for the whole party, so its charge lands
+  // entirely on whichever of the two rows matches `visitType`. A company splits
+  // its party across both. Getting this wrong is what made the breakdown read
+  // "Tasting (4 × 50₾) — 0.00₾" under a ₾320 total: the label used guestCount,
+  // the amount used tastingGuests (always 0 for an individual), and the total
+  // was computed somewhere else entirely.
+  const tastingAmt = tier
+    ? tastingGuests * tier.pricePerPerson
+    : isCompany
+      ? tastingGuests * manualTastingRate
+      : visitType === 'TASTING' ? guestCount * manualTastingRate : 0
+  const lunchAmt = tier
+    ? lunchGuests * comboRatePerPerson(tier)
+    : isCompany
+      ? lunchGuests * manualLunchRate
+      : visitType === 'TASTING_LUNCH' ? guestCount * manualLunchRate : 0
   const regFee = tier ? tier.registrationPrice : 0
 
   const showManualRates = !tier && (isCompany ? payingGuests > 0 : true)
 
-  // Must agree with createOrderAdmin, which this previews. The individual
-  // branch used `guestCount * manualTastingRate` regardless of visit type —
-  // the same defect as #51 on the server side, in its mirror. Fixing only the
-  // server would have been worse than leaving both: the admin would read ₾200
-  // on this form and the order would save as ₾320.
-  const computedTotal =
-    tier
-      ? tastingAmt + lunchAmt + regFee + masterclassAmt + extrasAmt
-      : isCompany && payingGuests === 0
-        ? masterclassAmt + extrasAmt
-        : isCompany
-          ? tastingGuests * manualTastingRate + lunchGuests * manualLunchRate + masterclassAmt + extrasAmt
-          : guestCount * (visitType === 'TASTING_LUNCH' ? manualLunchRate : manualTastingRate) +
-            masterclassAmt +
-            extrasAmt
+  // One expression for every case, so the breakdown rows above and this total
+  // cannot disagree — they are now the same two numbers. Previously the total
+  // was derived separately, and its individual branch used manualTastingRate
+  // regardless of visit type: the same defect as #51 on the server, in the
+  // mirror that previews it. Fixing only the server would have been worse than
+  // leaving both, because the admin would read ₾200 here and ₾320 would save.
+  const computedTotal = tastingAmt + lunchAmt + regFee + masterclassAmt + extrasAmt
 
   // ── Masterclass helpers ───────────────────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -629,7 +635,7 @@ export default function NewOrderForm({
 
         {/* Breakdown lines */}
         <div className="space-y-1.5 mb-3">
-          {(tier || (!isCompany && manualTastingRate > 0) || (isCompany && tastingGuests > 0 && manualTastingRate > 0)) && (
+          {tastingAmt > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
                 {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {formatTetri(tier ? asTetri(tier.pricePerPerson) : manualTastingRate)})
@@ -637,10 +643,10 @@ export default function NewOrderForm({
               <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt), { decimals: true })}</span>
             </div>
           )}
-          {(lunchGuests > 0 || (!isCompany && manualLunchRate > 0)) && (lunchAmt > 0) && (
+          {lunchAmt > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(tier ? asTetri(comboRatePerPerson(tier)) : manualLunchRate)})
+                {at('orderDetail.total.tastingLunch')} ({isCompany ? lunchGuests : guestCount} × {formatTetri(tier ? asTetri(comboRatePerPerson(tier)) : manualLunchRate)})
               </span>
               <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt), { decimals: true })}</span>
             </div>
