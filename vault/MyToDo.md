@@ -35,7 +35,38 @@ which had been sitting in front of me all session.
 
 Three more (#47, #48, #49) were about bookings quietly re-pricing themselves later.
 
-### Please check on staging.vineworks.ge
+### I ran these live on staging — here is what I confirmed
+
+You asked me to run them rather than hand you a list. I did, on **Staging Winery**
+(the throwaway tenant). Confirmed working in the real app, cross-checked against
+the database:
+
+| What I did | What happened |
+|---|---|
+| Entered a walk-in: 1 individual, **Tasting + Lunch**, 4 guests, rates ₾50/₾80 | Saved as **₾320** — the lunch rate. It used to save ₾200. |
+| Added an extra "Transport", typed `20` | Showed **₾20.00**, and the total moved by exactly ₾20 (₾320 → ₾340). It used to store ₾0.20. |
+| Opened that order's detail page | **₾340** — the same number as the invoice and the database. It used to show ₾360. |
+| Looked at the rate badge on that page | **"Tasting 50₾/pp · Lunch 80₾/pp"** — the order's real rates. It used to say 50/50 for everything. |
+| Booked a visit as a guest on the public site | **₾280** on the form, **₾280** on the review sheet, and **280.00** on the card-payment page. |
+
+**Two I could not finish, and why:**
+
+- **The guest "thank you" screen (#43).** Your staging tenant takes card payment, so a
+  booking jumps straight to the payment page and never shows that screen. The amount is
+  provably right — the payment page itself said 280.00 — but I did not see that one screen.
+  To check it I would need to switch card payment off for that tenant for a minute. Say the
+  word and I will.
+- **The discounted wine order (#44).** No company on that tenant has an access code set up,
+  so I could not place one.
+
+**I also found and fixed a bug while testing.** My earlier fix changed the server but not
+the matching code in the New Order form, so the form showed ₾200 while the order saved as
+₾320. That is worse than the original bug. Fixed and re-verified — both now say ₾320.
+
+**Left behind on Staging Winery:** a test order "Pricing Testcase" (₾340) and an abandoned
+booking "Booking Totaltest". Delete them whenever, or leave them.
+
+### If you want to check anything yourself
 
 - [ ] **Book a visit as a guest** (one that does *not* go to card payment). The total on the "thank you" screen should read **₾280**, not `28000`.
 - [ ] **Place a wine order as a company that has a discount.** It should actually save. Before, it always failed.

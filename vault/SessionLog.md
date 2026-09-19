@@ -23,6 +23,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 >   `lib/pricingUtils.ts` and call it from all nine pricing sites. Shape and caller table
 >   are in [[KnownBugs]] under "The second blind review"; constraints in
 >   [[MaintenanceNotes]] §22. Tests for #50–#52 already exist and must stay green.
+> - **Live-verified on staging.vineworks.ge** (see "Live verification" below): #45, #50, #51
+>   (both halves), #52 confirmed in the running app + database. #43 verified by value but its
+>   success screen was not reached — that tenant takes card payment, so the booking redirects
+>   to Flitt. #44 and #46 not driven live.
 > - **Open question for Max:** whether the order detail screen should show two labelled
 >   numbers ("Total" + "If you save: ₾X") instead of one. Conservative fix shipped; the
 >   redesign is still the better end state.
@@ -175,6 +179,49 @@ The compiler caught one wrong assumption of mine mid-fix: I had said the snapsho
 reaching `OrderDetail` because the page query uses `include`. The query does load them, but the
 page builds its prop literal field by field and never passed these three down. Two errors, both
 real, both fixed.
+
+### Live verification on staging, and a bug the verification itself caught
+
+Max: *"you run the tests live and confirm."* Drove the real app on `staging.vineworks.ge`
+(tenant **Staging Winery**, the throwaway one — `demo.vineworks.ge` runs `master` and could
+not test these).
+
+**Verified in the running app and cross-checked against the database:**
+
+| # | Evidence |
+|---|---|
+| 51 | Individual, Tasting+Lunch, 4 guests, rates 50/80 → stored **₾320** (was ₾200). DB: `lunchRateSnapshot 8000`, and recalc-from-snapshots **matches** the stored total, so the second-order jump is gone. |
+| 45 | Typed `20` into "Amount (₾)" → stored **₾20.00**, DB `amount 2000`. |
+| 52 | Detail screen: Base 320 + Transport 20 = **₾340**, equal to the DB. Pre-fix it would have read ₾360. |
+| 50 | Rate badge showed the order's **own** rates, "Tasting 50₾/pp · Lunch 80₾/pp" — not the hardcoded 50/50. |
+| 43 | Value correct at every stage — ₾280 on the form, ₾280 on the review sheet, **280.00 at the Flitt checkout**. The success screen itself was NOT reached: this tenant takes card payment, so `createBooking` redirects before it. Reaching it needs a tenant with online payment off. |
+
+**#44 and #46 were not driven live.** No discounted company with an access code exists on this
+tenant, and the CSV is a file download.
+
+### The verification caught a bug the fixes had created
+
+`createOrderAdmin` was fixed in `c72ca0c`. **`NewOrderForm.tsx` is its client-side mirror and
+still had the original defect**, so the fix left the two disagreeing: the form read **₾200**
+while the order saved as **₾320**. That is worse than the bug it replaced, and no test caught
+it — only driving the real form did.
+
+Fixed in `b2c1d8b`, with the agreement added as a test case (9/9 → 11/11).
+
+A second, pre-existing defect surfaced in the same card: the breakdown read
+*"Tasting (4 × 50₾) — 0.00₾"* under a ₾320 total. The row's label used `guestCount` while its
+amount used `tastingGuests` (always 0 for an individual), and the total came from a third
+expression agreeing with neither. `dda619e` makes `computedTotal` one expression over the same
+two numbers the rows display, so breakdown and total cannot disagree by construction. Now
+reads **"Tasting+Lunch (4 × 80₾) — 320.00₾"** under a ₾320 total.
+
+**The lesson, and it is §22's lesson again:** fixing one copy of a duplicated formula and not
+its mirror is worse than fixing neither. I walked into it while fixing §22's own examples.
+This is the strongest argument yet for the extraction.
+
+**Test data left on Staging Winery:** one admin order "Pricing Testcase" (₾340) and one
+abandoned public booking "Booking Totaltest" (₾280, abandoned at the Flitt step). Both
+disposable.
 
 ### Next
 
