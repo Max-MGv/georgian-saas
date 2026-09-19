@@ -20,9 +20,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 > - Green: `tsc` 0 errors · `test-money.ts` 61/61 · `test-pricing-agreement.ts` **21/21** ·
 >   money lint rule 0 violations · full lint 206 problems vs 208 at baseline.
 > - Dev DB audited across every money column: **no damaged rows**. Demo reseeded, clean.
-> - **`priceBooking()` landed** — all nine sites now call one function, and the pricing tier
->   is chosen by party size rather than by paying head count (Max's call). [[MaintenanceNotes]]
->   §22 is closed out. **Not yet verified live on staging.**
+> - **`priceBooking()` landed and is live-verified** — all nine sites call one function, and
+>   the pricing tier is chosen by party size rather than by paying head count (Max's call).
+>   [[MaintenanceNotes]] §22 closed out.
 > - **Live-verified on staging.vineworks.ge** (see "Live verification" below): #45, #50, #51
 >   (both halves), #52 confirmed in the running app + database. #43 verified by value but its
 >   success screen was not reached — that tenant takes card payment, so the booking redirects
@@ -270,14 +270,43 @@ rewire orphaned five variables and I removed them). Re-seeded dev: totals moved 
 ₾227,892, which is the right direction (bigger parties → cheaper bands) with snapshot coverage
 holding at 395/395 and the money audit clean.
 
+### Live verification of the tier change
+
+Driven on `staging.vineworks.ge` against **Kakheti Wine Routes**, whose ladder has a band
+boundary at 10/11 (1–10 @₾55, 11–20 @₾45) — chosen because the change only shows where a
+boundary is actually crossed.
+
+**Party of 11: 9 tasting-only + 2 free.**
+
+```
+Tier in use: 11–20 guests · Tasting 45₾/pp · Lunch 85₾/pp
+Tasting (9 × 45₾)   405.00₾
+Total               405.00₾
+```
+
+The old rule would have tiered on the 9 payers → 1–10 band → ₾495. **₾405 against ₾495**, and
+the free guide and driver are what moved it.
+
+| Checked | Result |
+|---|---|
+| New "Total guests in the party" field | Present on **both** admin screens, entered not derived |
+| #53 relabelling | Live: "Tasting only ₾/pp", "Tasting+Lunch ₾/pp", "Tasting-only guests", "Tasting+Lunch guests" |
+| Tier follows party size | Party 11 → ₾405 (11–20 band); dropped to 9 → **₾495** (1–10 band), live on the detail screen |
+| Split guard, client | "The split adds up to 14, but the party is 11." Create button **disabled** |
+| Split guard, server | Save rejected: "The split adds up to 11 but the party is 9. Raise the guest count or lower the split." |
+| Live-preview caveat | Appears exactly when the figure differs from what is stored (#52's fix) |
+| Valid save | DB: `guestCount 9`, split `9/0/0`, `totalPrice ₾495`, snapshots `55/95` — the new band's rates, and `guestCount` written on edit, which is #54 |
+
+Both guard layers fire independently, with their own wording. Test data left on Staging
+Winery: "Tier Bandtest" (₾495), alongside the earlier "Pricing Testcase" and "Booking
+Totaltest". All disposable.
+
 ### Next
 
-1. **Now unblocked:** extract `priceBooking()` + rate resolvers into `pricingUtils.ts` and call
-   it from all nine sites. No technical obstacle — see [[KnownBugs]] for the proposed shape.
-   §22 updated.
+1. **Merge `staging` → `master`.** The only step left, and it is Max's call — it ships to real
+   customers. Everything below it is verified.
 2. **VAT dropped on Max's call** — not being added separately for now (2026-09-19).
-3. Staging verification of the ten fixes before the `master` merge.
-4. Production has not been inspected. The audit ran against **dev only**; if prod carries any
+3. Production has not been inspected. The audit ran against **dev only**; if prod carries any
    `OrderExtra` rows written since 2026-09-18 they would still need the #45 repair.
 
 ---
