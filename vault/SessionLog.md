@@ -8,7 +8,26 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-19 — Money-safety stress test, blind review, six bugs fixed
+## 2026-09-19 — Money-safety stress test, two blind reviews, ten bugs fixed
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch `staging`, working tree clean, **3 commits pushed**: `3d42a48` (#43–#48),
+>   `b366734` (#49 + audit tool), `c72ca0c` (#50–#52).
+> - **Nothing on `master`.** Production is untouched. The merge is gated on Max checking
+>   `staging.vineworks.ge` — his checklist is in [[MyToDo]] under 2026-09-19.
+> - Green: `tsc` 0 errors · `test-money.ts` 61/61 · `test-pricing-agreement.ts` 9/9 ·
+>   money lint rule 0 violations · lint on touched files unchanged from baseline.
+> - Dev DB audited across every money column: **no damaged rows**. Demo reseeded, clean.
+> - **Next task, unblocked and specced:** extract `priceBooking()` + rate resolvers into
+>   `lib/pricingUtils.ts` and call it from all nine pricing sites. Shape and caller table
+>   are in [[KnownBugs]] under "The second blind review"; constraints in
+>   [[MaintenanceNotes]] §22. Tests for #50–#52 already exist and must stay green.
+> - **Open question for Max:** whether the order detail screen should show two labelled
+>   numbers ("Total" + "If you save: ₾X") instead of one. Conservative fix shipped; the
+>   redesign is still the better end state.
+> - Not done deliberately: VAT (dropped on Max's call), production DB audit (dev only).
+
 
 Started as Max asking *what actually causes* the unit-mixing bug class (#42) and what risk it
 carries. Ended with six confirmed defects fixed and a lint rule that makes the display half

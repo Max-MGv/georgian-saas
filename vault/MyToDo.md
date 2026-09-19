@@ -8,6 +8,59 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🔴 2026-09-19 — TEN BUGS FIXED, ON STAGING, NOT YET ON PRODUCTION
+
+Three commits on `staging`. **Nothing has gone to `master`**, so the real site is
+untouched. Check these on **staging.vineworks.ge**, then tell me and I will merge.
+
+### What happened, in one paragraph
+
+The tetri money change that shipped on the 18th left holes behind. We found them by
+asking two fresh helpers to look at the code with **no idea what we had been
+discussing** — no notes, no history, nothing. That turned out to be worth far more
+than me checking my own work: between them they found **ten real bugs**, several of
+which had been sitting in front of me all session.
+
+### The ones that would have embarrassed us
+
+| # | What was wrong | Who would have seen it |
+|---|---|---|
+| 43 | A guest who booked without paying online saw **"28000"** where it should say **₾280** | Every customer on that path |
+| 44 | Any company with a discount **could not place a wine order at all** — it failed and just said "Something went wrong" | Your B2B customers |
+| 45 | Typing `20` into an order's "Amount (₾)" box stored **₾0.20** | You, on any order |
+| 46 | The orders CSV export was **100× too high** under a column headed "Total (GEL)" | Your accountant |
+| 50 | Editing guest counts on an individual booking **silently re-priced it at ₾50 and erased the real rate** | You — and the rate was gone for good |
+| 51 | A walk-in you entered by hand was charged **₾200** where the website charged **₾280** for the same visit | You and the guest, disagreeing |
+| 52 | The order detail page showed **₾280** while the invoice for the same order said **₾240** | You, every individual order |
+
+Three more (#47, #48, #49) were about bookings quietly re-pricing themselves later.
+
+### Please check on staging.vineworks.ge
+
+- [ ] **Book a visit as a guest** (one that does *not* go to card payment). The total on the "thank you" screen should read **₾280**, not `28000`.
+- [ ] **Place a wine order as a company that has a discount.** It should actually save. Before, it always failed.
+- [ ] **Open any individual booking in the admin.** The Total on that page should match the Total on its invoice. They disagreed before.
+- [ ] **On that same page, type a guest count into the breakdown and press Save.** The price must **not** change to ₾50. If the order has a rate, it stays on that rate; if it has none, the rate box shows "—" and nothing is re-priced.
+- [ ] **Add a new order by hand** for one guest type, tasting **with lunch**. It should cost the same as booking the identical visit on the public site.
+- [ ] **Add an extra to an existing order.** Type `20`, confirm it appears as **₾20**, not ₾0.20, and that the total moves by exactly ₾20.
+- [ ] **Export the orders CSV.** The "Total (GEL)" column should hold real lari (e.g. `280`), not `28000`.
+
+### Nothing was damaged
+
+I checked the whole dev database, every money column. **No bad rows anywhere.** Bug #45
+never actually got the chance to write one, because nobody had used that button since the
+change. The demo data was reseeded and is clean.
+
+### One decision waiting for you
+
+The order detail page currently shows **one** number that means two different things — the
+stored total, and a live preview of what it would become if you saved. I fixed the maths so
+the number is right, and it now says "live preview" whenever it differs from what is stored.
+The cleaner version shows **two** labelled numbers instead. I did not do that because you
+look at that screen every day and it is your call. Say if you want it.
+
+---
+
 ## ✅ 2026-09-18 (later) — DECIDED, BUILT AND **LIVE ON PRODUCTION**
 
 The decision below is closed and the whole data-model overhaul shipped. Read this
