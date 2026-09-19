@@ -135,5 +135,19 @@ console.log('#50 — saving guest counts must not invent a rate or destroy a sna
   check('...but a deliberately typed rate IS sent', typed !== null, true)
 }
 
+console.log('#51 — the new-order form preview must agree with what the server stores')
+{
+  // NewOrderForm.tsx computedTotal, individual branch — the mirror of
+  // createOrderAdmin. Fixing only the server would have been worse than fixing
+  // neither: the admin reads one number on the form and another lands in the
+  // database. Caught by driving the real form on staging, not by any test.
+  const newOrderFormPreview = (o: { visitType: VisitType; guestCount: number; rates: Snapshot; lines: number }) =>
+    o.guestCount * (o.visitType === 'TASTING_LUNCH' ? o.rates.lunch : o.rates.tasting) + o.lines
+
+  const shape = { visitType: 'TASTING_LUNCH' as VisitType, guestCount: 4, tastingGuestCount: 0, lunchGuestCount: 0, rates: RATES, lines: 0 }
+  check('the form preview equals the stored total', newOrderFormPreview(shape), adminWalkIn(shape))
+  check('...and both are 4 x 80 GEL, not 4 x 50', adminWalkIn(shape), 32000)
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed === 0 ? 0 : 1)

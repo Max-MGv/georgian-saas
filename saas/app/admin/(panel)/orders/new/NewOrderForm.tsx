@@ -162,15 +162,21 @@ export default function NewOrderForm({
 
   const showManualRates = !tier && (isCompany ? payingGuests > 0 : true)
 
+  // Must agree with createOrderAdmin, which this previews. The individual
+  // branch used `guestCount * manualTastingRate` regardless of visit type —
+  // the same defect as #51 on the server side, in its mirror. Fixing only the
+  // server would have been worse than leaving both: the admin would read ₾200
+  // on this form and the order would save as ₾320.
   const computedTotal =
     tier
       ? tastingAmt + lunchAmt + regFee + masterclassAmt + extrasAmt
       : isCompany && payingGuests === 0
         ? masterclassAmt + extrasAmt
-        : (isCompany ? tastingGuests : guestCount) * manualTastingRate +
-          lunchGuests * manualLunchRate +
-          masterclassAmt +
-          extrasAmt
+        : isCompany
+          ? tastingGuests * manualTastingRate + lunchGuests * manualLunchRate + masterclassAmt + extrasAmt
+          : guestCount * (visitType === 'TASTING_LUNCH' ? manualLunchRate : manualTastingRate) +
+            masterclassAmt +
+            extrasAmt
 
   // ── Masterclass helpers ───────────────────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
