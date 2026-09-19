@@ -9,7 +9,7 @@ import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import NationalityPicker from '@/components/NationalityPicker'
@@ -427,14 +427,21 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const masterclassAmt = activeMcLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
 
   // Price preview
-  const enhancedTier = isEnhanced && selectedCompany
-    ? findTier(selectedCompany.prices, payingGuests)
+  // Party size picks the tier (2026-09-19), and priceBooking is the same
+  // function the server prices with — this preview cannot drift from it.
+  const enhancedRates = isEnhanced && selectedCompany
+    ? ratesForParty(selectedCompany.prices, totalGuests)
     : null
-  const enhancedTotal = enhancedTier
-    ? tastingGuests * enhancedTier.pricePerPerson +
-      lunchGuests * comboRatePerPerson(enhancedTier) +
-      enhancedTier.registrationPrice +
-      masterclassAmt
+  const enhancedTier = isEnhanced && selectedCompany
+    ? findTier(selectedCompany.prices, totalGuests)
+    : null
+  const enhancedTotal = enhancedRates
+    ? priceBooking(
+        enhancedRates,
+        { guestCount: totalGuests, tastingGuests, lunchGuests },
+        visitType as 'TASTING' | 'TASTING_LUNCH',
+        { masterclass: masterclassAmt, extras: 0 },
+      )
     : masterclassAmt
 
   // Simple form price preview

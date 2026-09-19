@@ -5,10 +5,9 @@ import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manua
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
-import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -73,6 +72,8 @@ export async function updateOrder(id: string, data: {
 export async function updateOrderEnhanced(
   id: string,
   data: {
+    /** The party size. Drives the price tier, so it is editable (2026-09-19). */
+    guestCount: number
     tastingGuestCount: number
     lunchGuestCount: number
     freeGuestCount: number
@@ -98,6 +99,18 @@ export async function updateOrderEnhanced(
     })
     if (!order) return { error: 'Order not found' } as const
 
+    // The three buckets are subsets of the party, never more than it. Nothing
+    // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
+    // guests while every document it produced still said 10.
+    if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' } as const
+    const split = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
+    if (split > data.guestCount) {
+      return {
+        error: `The split adds up to ${split} but the party is ${data.guestCount}. ` +
+          `Raise the guest count or lower the split.`,
+      } as const
+    }
+
     const tastingGuests = data.tastingGuestCount
     const lunchGuests = data.lunchGuestCount
     const totalPayingGuests = tastingGuests + lunchGuests
@@ -114,31 +127,27 @@ export async function updateOrderEnhanced(
     let lunchRateSnapshot: number | null = null
     let registrationFeeSnapshot: number | null = null
 
-    if (totalPayingGuests > 0 && order.company?.prices?.length) {
-      const tier = findTier(order.company.prices, totalPayingGuests)
-      if (tier) {
-        tastingRateSnapshot = tier.pricePerPerson
-        lunchRateSnapshot = comboRatePerPerson(tier)
-        registrationFeeSnapshot = tier.registrationPrice
-        totalPrice =
-          tastingGuests * tier.pricePerPerson +
-          lunchGuests * comboRatePerPerson(tier) +
-          tier.registrationPrice +
-          masterclassAmt +
-          extrasAmt
-      }
-    } else if (totalPayingGuests > 0 && (data.manualTastingRate != null || data.manualLunchRate != null)) {
-      const tr = data.manualTastingRate ?? 0
-      const lr = data.manualLunchRate ?? 0
-      tastingRateSnapshot = tr
-      lunchRateSnapshot = lr
-      registrationFeeSnapshot = 0
-      totalPrice = tastingGuests * tr + lunchGuests * lr + masterclassAmt + extrasAmt
+    // The party size, not the paying head count, picks the tier (2026-09-19).
+    const guests = { guestCount: data.guestCount, tastingGuests, lunchGuests }
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
+
+    const rates = order.company?.prices?.length
+      ? ratesForParty(order.company.prices, data.guestCount)
+      : (data.manualTastingRate != null || data.manualLunchRate != null)
+        ? ratesFromManual(data.manualTastingRate ?? 0, data.manualLunchRate ?? 0)
+        : null
+
+    if (totalPayingGuests > 0 && rates) {
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
+      totalPrice = priceBooking(rates, guests, order.visitType, lines)
     }
 
     await tx.order.update({
       where: { id },
       data: {
+        guestCount: data.guestCount,
         tastingGuestCount: data.tastingGuestCount,
         lunchGuestCount: data.lunchGuestCount,
         freeGuestCount: data.freeGuestCount,
@@ -190,6 +199,10 @@ export async function createOrderAdmin(data: {
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (!data.date) return { error: 'Date is required.' }
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
+  const splitTotal = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
+  if (splitTotal > data.guestCount) {
+    return { error: `The split adds up to ${splitTotal} but the party is ${data.guestCount}.` }
+  }
 
   const tenantId = await getTenantId()
 
@@ -201,58 +214,34 @@ export async function createOrderAdmin(data: {
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
 
   let totalPrice: number | null = null
-  const payingGuests = data.tastingGuestCount + data.lunchGuestCount
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
-    if (payingGuests > 0 && data.companyId) {
-      const company = await tx.company.findFirst({
-        where: { id: data.companyId, tenantId },
-        include: { prices: true },
-      })
-      if (company?.prices.length) {
-        const tier = findTier(company.prices, payingGuests)
-        if (tier) {
-          // Freeze the rates this order is sold at, so a later edit cannot
-          // reprice it from tiers that have since changed (chunk 4).
-          tastingRateSnapshot = tier.pricePerPerson
-          lunchRateSnapshot = comboRatePerPerson(tier)
-          registrationFeeSnapshot = tier.registrationPrice
-          totalPrice =
-            data.tastingGuestCount * tier.pricePerPerson +
-            data.lunchGuestCount * comboRatePerPerson(tier) +
-            tier.registrationPrice +
-            masterclassAmt +
-            extrasAmt
-        }
-      }
+    // One lookup, on the party size (2026-09-19). Manual rates are the fallback
+    // when there is no ladder, and are just as much "what this was sold at" as a
+    // tier is — until 2026-09-18 they were used once and thrown away, which is
+    // why an order priced that way could never be recalculated at all.
+    const guests = {
+      guestCount: data.guestCount,
+      tastingGuests: data.tastingGuestCount,
+      lunchGuests: data.lunchGuestCount,
     }
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
-    if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
-      // Hand-typed rates are just as much "what this was sold at" as a tier is,
-      // and until now they were used once and thrown away — which is why an
-      // order priced this way could never be recalculated at all.
-      tastingRateSnapshot = data.manualTastingRate
-      lunchRateSnapshot = data.manualLunchRate
-      registrationFeeSnapshot = 0
-      // Deliberately the same shape as recalcOrderTotal's snapshot branch
-      // (pricing.ts:47-54), so the total written here and the total these
-      // snapshots recompute to are the same number.
-      //
-      // They were not until 2026-09-19 (#51). This used `data.companyId ?
-      // tastingGuestCount : guestCount` and never consulted `visitType`, so an
-      // individual TASTING_LUNCH walk-in was charged the TASTING rate — ₾200
-      // where the public site charged ₾280 for the identical visit. And because
-      // the snapshots above *were* visit-type aware, the row described two
-      // different orders: adding a ₾10 extra made recalc reprice from the
-      // snapshots and the total jumped ₾200 → ₾330.
-      totalPrice =
-        (payingGuests > 0
-          ? data.tastingGuestCount * data.manualTastingRate +
-            data.lunchGuestCount * data.manualLunchRate
-          : data.guestCount *
-            (data.visitType === 'TASTING_LUNCH' ? data.manualLunchRate : data.manualTastingRate)) +
-        masterclassAmt +
-        extrasAmt
+    const company = data.companyId
+      ? await tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
+      : null
+
+    const rates = company?.prices?.length
+      ? ratesForParty(company.prices, data.guestCount)
+      : (data.manualTastingRate > 0 || data.manualLunchRate > 0)
+        ? ratesFromManual(data.manualTastingRate, data.manualLunchRate)
+        : null
+
+    if (rates) {
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
+      totalPrice = priceBooking(rates, guests, data.visitType, lines)
     }
 
     if (totalPrice === null && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
@@ -530,7 +519,6 @@ export async function assignOrderCompany(
 
     const masterclassAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
     const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
-    const payingGuests = order.tastingGuestCount + order.lunchGuestCount
 
     // The three snapshots record the tier rates this order was actually sold
     // at, exactly as createBooking.ts does. They were NOT written here until
@@ -543,30 +531,20 @@ export async function assignOrderCompany(
     let lunchRateSnapshot: number | null = null
     let registrationFeeSnapshot: number | null = null
 
+    // The two branches this used to have differed only in which head count fed
+    // findTier. Now the party size always does, so there is one path.
+    const rates = ratesForParty(company.prices, order.guestCount)
     let totalPrice = 0
-    if (payingGuests > 0) {
-      // Enhanced/split booking — same shape as updateOrderEnhanced's calc.
-      const tier = findTier(company.prices, payingGuests)
-      if (tier) {
-        totalPrice =
-          order.tastingGuestCount * tier.pricePerPerson +
-          order.lunchGuestCount * comboRatePerPerson(tier) +
-          tier.registrationPrice + masterclassAmt + extrasAmt
-        tastingRateSnapshot = tier.pricePerPerson
-        lunchRateSnapshot = comboRatePerPerson(tier)
-        registrationFeeSnapshot = tier.registrationPrice
-      }
-    } else {
-      // Simple booking — priced off guestCount + visitType, same shape as
-      // createBooking.ts's COMPANY-with-companyId branch.
-      const tier = findTier(company.prices, order.guestCount)
-      if (tier) {
-        const ratePerPerson = order.visitType === 'TASTING' ? tier.pricePerPerson : comboRatePerPerson(tier)
-        totalPrice = ratePerPerson * order.guestCount + tier.registrationPrice + masterclassAmt + extrasAmt
-        tastingRateSnapshot = tier.pricePerPerson
-        lunchRateSnapshot = comboRatePerPerson(tier)
-        registrationFeeSnapshot = tier.registrationPrice
-      }
+    if (rates) {
+      totalPrice = priceBooking(
+        rates,
+        { guestCount: order.guestCount, tastingGuests: order.tastingGuestCount, lunchGuests: order.lunchGuestCount },
+        order.visitType,
+        { masterclass: masterclassAmt, extras: extrasAmt },
+      )
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
     }
     if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
 

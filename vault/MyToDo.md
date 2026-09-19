@@ -66,6 +66,32 @@ the matching code in the New Order form, so the form showed ₾200 while the ord
 **Left behind on Staging Winery:** a test order "Pricing Testcase" (₾340) and an abandoned
 booking "Booking Totaltest". Delete them whenever, or leave them.
 
+### Also changed after that: how the price tier is chosen
+
+You said the tier should come from the total number of guests, not from how many of them
+are paying. That is now how it works, everywhere.
+
+**What you will notice:**
+
+- **A party with free guests gets a better rate.** 8 people where 2 are a guide and a driver
+  now prices as a party of **8**, not 6. On the demo ladder that is ₾540 instead of ₾620.
+- **Moving guests between Tasting-only and Tasting+Lunch no longer changes the tier.** It only
+  changes what each of them pays. Before, re-splitting the same party could move it between
+  price bands.
+- **There is a new field on both admin order screens: "Total guests in the party."** You now
+  type it instead of it being worked out from the split. It is what picks the tier, and it
+  includes free guests.
+- **The split can no longer exceed the party.** If you put 4 + 4 into an order of 6, both
+  screens say so and refuse to save.
+
+**Worth a look on staging:** open an order, change "Total guests in the party", and check the
+price moves to the right band. Then try making the split bigger than the party — it should
+stop you.
+
+**One thing for your eye specifically:** I wrote the Georgian for three new labels and
+re-worded five existing ones (the rate fields now read "Tasting only" and "Tasting+Lunch").
+You are the native speaker — tell me if any of it reads like a translation.
+
 ### If you want to check anything yourself
 
 - [ ] **Book a visit as a guest** (one that does *not* go to card payment). The total on the "thank you" screen should read **₾280**, not `28000`.

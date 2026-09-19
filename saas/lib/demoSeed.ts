@@ -19,6 +19,7 @@
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
 import type { PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
+import { priceBooking } from '@/lib/pricingUtils'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -209,19 +210,22 @@ function computeTotal(opts: {
   tastingGuests: number; lunchGuests: number; masterclassAmt: number
 }): SeedPrice | null {
   const { tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt } = opts
-  const paying = tastingGuests + lunchGuests
-  const tier = findTier(tiers, paying > 0 ? paying : guestCount)
+  // The party size picks the tier, same rule as the app (2026-09-19).
+  const tier = findTier(tiers, guestCount)
   if (!tier) return null
 
-  const tastingRate = fromMajor(tier.pricePerPerson)
-  const lunchRate = fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson)
-  const registrationFee = fromMajor(tier.registrationPrice ?? 0)
-
-  const total = paying > 0
-    ? tastingGuests * tastingRate + lunchGuests * lunchRate + registrationFee + masterclassAmt
-    : guestCount * (visitType === 'TASTING_LUNCH' ? lunchRate : tastingRate) + registrationFee + masterclassAmt
-
-  return { total, tastingRate, lunchRate, registrationFee }
+  const rates = {
+    tasting: fromMajor(tier.pricePerPerson),
+    lunch: fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson),
+    registration: fromMajor(tier.registrationPrice ?? 0),
+  }
+  const total = priceBooking(
+    rates,
+    { guestCount, tastingGuests, lunchGuests },
+    visitType,
+    { masterclass: masterclassAmt, extras: 0 },
+  )
+  return { total, tastingRate: rates.tasting, lunchRate: rates.lunch, registrationFee: rates.registration }
 }
 
 // ---------------------------------------------------------------------------

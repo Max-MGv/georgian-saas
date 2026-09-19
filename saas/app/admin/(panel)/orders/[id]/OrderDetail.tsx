@@ -5,7 +5,7 @@ import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri } from '@/lib/m
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -304,6 +304,10 @@ export default function OrderDetail({
   }
   // ── Guest / dish / notes state ─────────────────────────────────────────────
   // String state so the user can clear the field and type a new number freely
+  // The party size. Editable since 2026-09-19 because it, not the split, picks
+  // the price tier — and because it used to drift from the split on every edit
+  // (#54), leaving the invoice and the price describing different bookings.
+  const [guestCountStr, setGuestCountStr] = useState(String(order.guestCount))
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
   const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
   const [freeGuestsStr, setFreeGuestsStr] = useState(String(order.freeGuestCount))
@@ -322,9 +326,11 @@ export default function OrderDetail({
   const [manualLunchRateStr, setManualLunchRateStr] = useState(snapshotLunchMajor)
   const [customRates, setCustomRates] = useState(false)
   // Parsed numbers for calculations
+  const partyGuestCount = Math.max(1, parseInt(guestCountStr) || 1)
   const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
   const lunchGuests = Math.max(0, parseInt(lunchGuestsStr) || 0)
   const freeGuests = Math.max(0, parseInt(freeGuestsStr) || 0)
+  const splitTotal = tastingGuests + lunchGuests + freeGuests
   const [hotDishVeg, setHotDishVeg] = useState(order.hotDishVegetable ?? '')
   const [hotDishMeat, setHotDishMeat] = useState(order.hotDishMeat ?? '')
   const [foodNotes, setFoodNotes] = useState(order.foodNotes ?? '')
@@ -437,18 +443,17 @@ export default function OrderDetail({
   const prices = order.company?.prices ?? []
   const payingGuests = tastingGuests + lunchGuests
 
-  // Tier driven by paying guests. If no exact range match, falls back to the
-  // highest-priced tier so small groups are never under-charged.
+  // Party size drives the tier (2026-09-19). If no exact range match, falls back
+  // to the highest-priced tier so small groups are never under-charged.
   const tier = useMemo(
-    () => findTier(prices, payingGuests),
-    [prices, payingGuests]
+    () => findTier(prices, partyGuestCount),
+    [prices, partyGuestCount]
   )
 
-  // Tier for original guestCount (pre-enhancement display fallback)
-  const legacyTier = useMemo(
-    () => findTier(prices, order.guestCount),
-    [prices, order.guestCount]
-  )
+  // Same lookup as `tier` now that both key off the party size; kept as its own
+  // name because the breakdown row below reads differently when it is the only
+  // basis for the total.
+  const legacyTier = tier
   // Base price derived from the original booking (guestCount × rate + reg fee).
   //
   // MUST exclude line items, because the caller adds masterclassAmt + extrasAmt
@@ -464,7 +469,7 @@ export default function OrderDetail({
   // null and the total falls back to the stored figure untouched.
   const snapshotBase =
     order.tastingRateSnapshot != null || order.lunchRateSnapshot != null
-      ? order.guestCount *
+      ? partyGuestCount *
           (order.visitType === 'TASTING_LUNCH'
             ? (order.lunchRateSnapshot ?? 0)
             : (order.tastingRateSnapshot ?? 0)) +
@@ -481,7 +486,6 @@ export default function OrderDetail({
 
   const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : null
   const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : null
-  const regFee = tier ? tier.registrationPrice : null
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
   // The inputs hold GEL; everything they feed into is tetri (chunk 3).
@@ -492,16 +496,25 @@ export default function OrderDetail({
   // stored order.totalPrice rather than a computed one. Every branch used to
   // return a number, which made that fallback unreachable and meant the screen
   // never displayed the stored total at all (#52).
-  const computedTotal: number | null =
+  // Whichever rates apply, the sum is priceBooking's — the same function the
+  // server uses, so this screen cannot disagree with what a Save will store.
+  const previewRates =
     tier != null
-      ? // Company tier: split counts × tier rates
-        tastingAmt! + lunchAmt! + regFee! + masterclassAmt + extrasAmt
-      : payingGuests === 0
-        ? // Pre-enhancement fallback: guestCount-based legacy total. legacyBase
-          // is line-free, so adding the lines here is correct.
-          (legacyBase != null ? legacyBase + masterclassAmt + extrasAmt : null)
-        : // Individual / no-tier: use admin-supplied per-person rates
-          tastingGuests * manualTastingRate + lunchGuests * manualLunchRate + masterclassAmt + extrasAmt
+      ? ratesForParty(prices, partyGuestCount)
+      : (order.tastingRateSnapshot != null || customRates)
+        ? (customRates
+            ? ratesFromManual(manualTastingRate, manualLunchRate)
+            : ratesFromSnapshot(order))
+        : null
+
+  const computedTotal: number | null = previewRates
+    ? priceBooking(
+        previewRates,
+        { guestCount: partyGuestCount, tastingGuests, lunchGuests },
+        order.visitType as 'TASTING' | 'TASTING_LUNCH',
+        { masterclass: masterclassAmt, extras: extrasAmt },
+      )
+    : null
 
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -525,6 +538,7 @@ export default function OrderDetail({
     setSaving(true)
     setSaveMsg('')
     const result = await updateOrderEnhanced(order.id, {
+      guestCount: partyGuestCount,
       tastingGuestCount: tastingGuests,
       lunchGuestCount: lunchGuests,
       freeGuestCount: freeGuests,
@@ -838,6 +852,31 @@ export default function OrderDetail({
             </a>{' '}
             {at('orderDetail.guestBreakdown.thenComeBack')}
           </div>
+        )}
+
+        {/* Party size — what the price tier is chosen by. */}
+        <div className="mb-3" style={{ maxWidth: 200 }}>
+          <label className="text-xs block mb-1" style={{ color: C.faint }}>
+            {at('orderDetail.guestBreakdown.partySize')}
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={guestCountStr}
+            onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
+            onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
+            style={inputStyle}
+          />
+          <p className="text-xs mt-1" style={{ color: C.faint }}>
+            {at('orderDetail.guestBreakdown.partySizeHint')}
+          </p>
+        </div>
+
+        {splitTotal > partyGuestCount && (
+          <p className="text-xs mb-3" style={{ color: '#b91c1c' }}>
+            {at('orderDetail.guestBreakdown.splitExceeds', { split: splitTotal, party: partyGuestCount })}
+          </p>
         )}
 
         {/* Guest count inputs */}

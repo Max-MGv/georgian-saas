@@ -17,7 +17,8 @@
  *
  * Run: npx tsx scripts/test-pricing-agreement.ts
  */
-import type { PriceTier } from '../lib/pricingUtils'
+import { findTier, priceBooking, ratesFromTier, type PriceTier } from '../lib/pricingUtils'
+const NO_LINES = { masterclass: 0, extras: 0 }
 import { fromMajor } from '../lib/money'
 
 let passed = 0, failed = 0
@@ -147,6 +148,52 @@ console.log('#51 — the new-order form preview must agree with what the server 
   const shape = { visitType: 'TASTING_LUNCH' as VisitType, guestCount: 4, tastingGuestCount: 0, lunchGuestCount: 0, rates: RATES, lines: 0 }
   check('the form preview equals the stored total', newOrderFormPreview(shape), adminWalkIn(shape))
   check('...and both are 4 x 80 GEL, not 4 x 50', adminWalkIn(shape), 32000)
+}
+
+console.log('the tier is the PARTY SIZE, not the paying head count (2026-09-19 rule change)')
+{
+  // The demo individuals ladder: 1-2 @90, 3-6 @70 (+50 lunch), 7-100 @60 (+45 lunch).
+  const LADDER = [
+    { minGuests: 1, maxGuests: 2, pricePerPerson: 9000, tastingLunchPricePerPerson: 6000, registrationPrice: 0 },
+    { minGuests: 3, maxGuests: 6, pricePerPerson: 7000, tastingLunchPricePerPerson: 5000, registrationPrice: 0 },
+    { minGuests: 7, maxGuests: 100, pricePerPerson: 6000, tastingLunchPricePerPerson: 4500, registrationPrice: 0 },
+  ]
+  // A party of 8: 2 tasting-only, 4 tasting+lunch, 2 free (guide + driver).
+  const party = { guestCount: 8, tastingGuests: 2, lunchGuests: 4 }
+
+  const oldTier = findTier(LADDER, party.tastingGuests + party.lunchGuests)!   // 6 paying -> 3-6 band
+  const newTier = findTier(LADDER, party.guestCount)!                          // 8 people -> 7-100 band
+  check('the old rule lands in the 3-6 band', oldTier.pricePerPerson, 7000)
+  check('the new rule lands in the 7-100 band', newTier.pricePerPerson, 6000)
+
+  const oldTotal = priceBooking(ratesFromTier(oldTier), party, 'TASTING', NO_LINES)
+  const newTotal = priceBooking(ratesFromTier(newTier), party, 'TASTING', NO_LINES)
+  check('old rule charged 620 GEL', oldTotal, 62000)
+  check('new rule charges 540 GEL', newTotal, 54000)
+
+  // Free guests are never charged, but they DO count toward the band.
+  const noFree = { guestCount: 6, tastingGuests: 2, lunchGuests: 4 }
+  check('the same 6 payers without a guide stay in the 3-6 band',
+    findTier(LADDER, noFree.guestCount)!.pricePerPerson, 7000)
+
+  // Moving guests between the two buckets must NOT move the band any more.
+  const a = { guestCount: 8, tastingGuests: 2, lunchGuests: 4 }
+  const b = { guestCount: 8, tastingGuests: 5, lunchGuests: 1 }
+  check('re-splitting a party does not change its tier',
+    findTier(LADDER, a.guestCount)!.pricePerPerson, findTier(LADDER, b.guestCount)!.pricePerPerson)
+}
+
+console.log('one function prices every site identically')
+{
+  const rates = { tasting: 5000, lunch: 8000, registration: 0 }
+  const lines = { masterclass: 0, extras: 0 }
+  // Individual, no split: the whole party is on one visit type.
+  check('individual TASTING_LUNCH', priceBooking(rates, { guestCount: 4, tastingGuests: 0, lunchGuests: 0 }, 'TASTING_LUNCH', lines), 32000)
+  check('individual TASTING', priceBooking(rates, { guestCount: 4, tastingGuests: 0, lunchGuests: 0 }, 'TASTING', lines), 20000)
+  // Split party: visitType is irrelevant, the buckets decide.
+  check('split party ignores visitType', priceBooking(rates, { guestCount: 6, tastingGuests: 2, lunchGuests: 3 }, 'TASTING', lines), 2 * 5000 + 3 * 8000)
+  // Lines are added once, never folded into the base.
+  check('lines add once', priceBooking(rates, { guestCount: 4, tastingGuests: 0, lunchGuests: 0 }, 'TASTING', { masterclass: 1200, extras: 800 }), 20000 + 2000)
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

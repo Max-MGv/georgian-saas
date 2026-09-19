@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
@@ -146,11 +146,16 @@ export default function NewOrderForm({
   const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
   const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
 
-  const totalGuestCount = isCompany ? tastingGuests + lunchGuests + freeGuests : guestCount
+  // The party size is entered, not derived, because it picks the price tier
+  // (2026-09-19). Deriving it meant a company's total was whatever the split
+  // happened to add up to, and on edit the two drifted apart entirely (#54).
+  const totalGuestCount = guestCount
+  const splitTotal = tastingGuests + lunchGuests + freeGuests
 
+  // Party size picks the tier (2026-09-19), not the paying head count.
   const tier = useMemo(
-    () => (prices.length > 0 && payingGuests > 0 ? findTier(prices, payingGuests) : null),
-    [prices, payingGuests]
+    () => (prices.length > 0 ? findTier(prices, totalGuestCount) : null),
+    [prices, totalGuestCount]
   )
 
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
@@ -172,17 +177,24 @@ export default function NewOrderForm({
     : isCompany
       ? lunchGuests * manualLunchRate
       : visitType === 'TASTING_LUNCH' ? guestCount * manualLunchRate : 0
-  const regFee = tier ? tier.registrationPrice : 0
 
   const showManualRates = !tier && (isCompany ? payingGuests > 0 : true)
 
-  // One expression for every case, so the breakdown rows above and this total
-  // cannot disagree — they are now the same two numbers. Previously the total
-  // was derived separately, and its individual branch used manualTastingRate
-  // regardless of visit type: the same defect as #51 on the server, in the
-  // mirror that previews it. Fixing only the server would have been worse than
-  // leaving both, because the admin would read ₾200 here and ₾320 would save.
-  const computedTotal = tastingAmt + lunchAmt + regFee + masterclassAmt + extrasAmt
+  // The same function the server prices with, so this preview cannot drift from
+  // what createOrderAdmin will store — which it did until 2026-09-19 (#51).
+  const previewRates = tier
+    ? ratesForParty(prices, totalGuestCount)
+    : ratesFromManual(manualTastingRate, manualLunchRate)
+  const splitExceedsParty = splitTotal > totalGuestCount
+
+  const computedTotal = previewRates
+    ? priceBooking(
+        previewRates,
+        { guestCount: totalGuestCount, tastingGuests, lunchGuests },
+        visitType,
+        { masterclass: masterclassAmt, extras: extrasAmt },
+      )
+    : masterclassAmt + extrasAmt
 
   // ── Masterclass helpers ───────────────────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -310,8 +322,8 @@ export default function NewOrderForm({
           </select>
         </Field>
 
-        {!isCompany && (
-          <Field label={at('newOrder.bookingDetails.guestCount')}>
+        {(
+          <Field label={at('orderDetail.guestBreakdown.partySize')}>
             <input
               type="text"
               inputMode="numeric"
@@ -682,11 +694,19 @@ export default function NewOrderForm({
           <p className="text-sm mt-3" style={{ color: '#b91c1c' }}>{error}</p>
         )}
 
+        {/* The buckets are subsets of the party. Caught here as well as on the
+            server, so the admin sees it before losing the form (#54). */}
+        {splitExceedsParty && (
+          <p className="text-sm mt-3" style={{ color: '#b91c1c' }}>
+            {at('orderDetail.guestBreakdown.splitExceeds', { split: splitTotal, party: totalGuestCount })}
+          </p>
+        )}
+
         <button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || splitExceedsParty}
           className="mt-4 w-full py-3 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: C.wine, opacity: submitting ? 0.7 : 1 }}
+          style={{ backgroundColor: C.wine, opacity: submitting || splitExceedsParty ? 0.7 : 1 }}
         >
           {submitting ? at('newOrder.total.creating') : at('newOrder.total.create')}
         </button>

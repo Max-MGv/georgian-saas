@@ -596,7 +596,7 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. NINE separate places compute a booking price — keep them in sync
+## 22. ~~Nine places compute a booking price~~ — DONE 2026-09-19, there is now one
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -680,6 +680,42 @@ fix them, then extract. That order was followed for #50–#52:
 
 **Do not** replace the client preview with a server round trip. A form has to show a number
 before it submits; the problem was drift, not the existence of a second copy.
+
+---
+
+---
+
+### RESOLVED 2026-09-19 — `priceBooking()` landed; this section is history
+
+All nine sites now call `priceBooking()` from `lib/pricingUtils.ts`. There is one arithmetic
+function and four rate resolvers:
+
+```ts
+priceBooking(rates: RateSet, guests: Headcount, visitType, lines: LineTotals): number
+ratesForParty(prices, guestCount, { chargeRegistration? })   // picks the tier itself
+ratesFromTier(tier) / ratesFromSnapshot(order) / ratesFromManual(t, l)
+```
+
+Rewired: `createBooking`, `updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`,
+`recalcOrderTotal`, `BookingForm`, `NewOrderForm`, `OrderDetail`, `demoSeed`.
+
+**Two rules now live in exactly one line each, instead of nine:**
+
+1. **The tier is chosen by party size** — `ratesForParty` does the `findTier` lookup, so no
+   call site picks a head count any more. Changed from `tastingGuests + lunchGuests` on Max's
+   call: *"if we have guest count then the pricing tier should only be derived from guest
+   count — that is exactly what pricing tier is for."* A party of 8 with a guide and a driver
+   now prices as 8, not 6, and re-splitting a party between the two buckets no longer moves it
+   between bands.
+2. **The split decides what each guest pays**, nothing else. `priceBooking` branches on whether
+   the buckets are set; `visitType` only applies to an unsplit party.
+
+**Watch for:** a new pricing path that calls `findTier` directly instead of `ratesForParty`.
+That is the one way the tier rule can drift again, and it is now greppable — `findTier` should
+appear only inside `pricingUtils.ts` and in the two display fallbacks.
+
+Covered by `saas/scripts/test-pricing-agreement.ts` (21 cases), which pins the tier rule with
+a worked example: the same party of 8 costs ₾620 under the old rule and ₾540 under the new one.
 
 ---
 

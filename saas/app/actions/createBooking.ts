@@ -8,7 +8,7 @@ import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -247,16 +247,22 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         include: { prices: { orderBy: { minGuests: 'asc' } } },
       })
     )
-    let pricePerPersonTasting: number | null = null
-    let pricePerPersonLunch: number | null = null
-    if (individualsCompany?.prices.length) {
-      const tier = findTier(individualsCompany.prices, guestCount)
-      if (tier) {
-        pricePerPersonTasting = tier.pricePerPerson
-        pricePerPersonLunch = comboRatePerPerson(tier)
-      }
+    // The party size picks the tier (2026-09-19). Registration is never charged
+    // on the individual path, which is why the resolver is told so here rather
+    // than the fee being zeroed afterwards.
+    const individualRates = individualsCompany?.prices.length
+      ? ratesForParty(individualsCompany.prices, guestCount, { chargeRegistration: false })
+      : null
+    const pricePerPersonTasting: number | null = individualRates?.tasting ?? null
+    const pricePerPersonLunch: number | null = individualRates?.lunch ?? null
+
+    // The party and its line totals, shared by both branches below.
+    const guests = {
+      guestCount,
+      tastingGuests: data.tastingGuestCount ?? 0,
+      lunchGuests: data.lunchGuestCount ?? 0,
     }
-    const pricePerPerson = data.visitType === 'TASTING' ? pricePerPersonTasting : pricePerPersonLunch
+    const lines = { masterclass: masterclassAmt, extras: 0 }
 
     // What this order is actually sold at, frozen onto the row (chunk 4).
     //
@@ -282,7 +288,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     let totalPrice = isEnhanced
       ? masterclassAmt
       : data.bookingType === 'INDIVIDUAL'
-        ? (pricePerPerson ?? 0) * guestCount
+        ? (individualRates ? priceBooking(individualRates, guests, data.visitType, lines) : 0)
         : 0
 
     let verifiedGuideId: string | null = null
@@ -299,26 +305,15 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       }
 
       if (company?.prices.length) {
-        const payingGuests = isEnhanced
-          ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
-          : guestCount
-        const tier = findTier(company.prices, payingGuests)
-        if (tier) {
-          tastingRateSnapshot = tier.pricePerPerson
-          lunchRateSnapshot = comboRatePerPerson(tier)
-          registrationFeeSnapshot = tier.registrationPrice
-          if (isEnhanced) {
-            totalPrice =
-              (data.tastingGuestCount ?? 0) * tier.pricePerPerson +
-              (data.lunchGuestCount ?? 0) * comboRatePerPerson(tier) +
-              tier.registrationPrice +
-              masterclassAmt
-          } else {
-            const ratePerPerson = data.visitType === 'TASTING'
-              ? tier.pricePerPerson
-              : comboRatePerPerson(tier)
-            totalPrice = ratePerPerson * guestCount + tier.registrationPrice
-          }
+        // One lookup on the party size, and one call: priceBooking already
+        // branches on whether the buckets are set, which is what the enhanced
+        // and simple cases used to hand-code separately.
+        const companyRates = ratesForParty(company.prices, guestCount)
+        if (companyRates) {
+          tastingRateSnapshot = companyRates.tasting
+          lunchRateSnapshot = companyRates.lunch
+          registrationFeeSnapshot = companyRates.registration
+          totalPrice = priceBooking(companyRates, guests, data.visitType, lines)
         } else if (!isEnhanced) {
           return { success: false, error: await mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount }) }
         }

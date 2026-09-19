@@ -12,17 +12,17 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 > **STATE ON EXIT — read this first if you are resuming cold.**
 >
-> - Branch `staging`, working tree clean, **3 commits pushed**: `3d42a48` (#43–#48),
->   `b366734` (#49 + audit tool), `c72ca0c` (#50–#52).
+> - Branch `staging`, working tree clean. Commits: `3d42a48` (#43–#48), `b366734` (#49 +
+>   audit tool), `c72ca0c` (#50–#52), `b2c1d8b` + `dda619e` (the NewOrderForm mirror, caught
+>   live), `47c3128` (#53 labels), and the `priceBooking()` extraction + tier-rule change.
 > - **Nothing on `master`.** Production is untouched. The merge is gated on Max checking
 >   `staging.vineworks.ge` — his checklist is in [[MyToDo]] under 2026-09-19.
-> - Green: `tsc` 0 errors · `test-money.ts` 61/61 · `test-pricing-agreement.ts` 9/9 ·
->   money lint rule 0 violations · lint on touched files unchanged from baseline.
+> - Green: `tsc` 0 errors · `test-money.ts` 61/61 · `test-pricing-agreement.ts` **21/21** ·
+>   money lint rule 0 violations · full lint 206 problems vs 208 at baseline.
 > - Dev DB audited across every money column: **no damaged rows**. Demo reseeded, clean.
-> - **Next task, unblocked and specced:** extract `priceBooking()` + rate resolvers into
->   `lib/pricingUtils.ts` and call it from all nine pricing sites. Shape and caller table
->   are in [[KnownBugs]] under "The second blind review"; constraints in
->   [[MaintenanceNotes]] §22. Tests for #50–#52 already exist and must stay green.
+> - **`priceBooking()` landed** — all nine sites now call one function, and the pricing tier
+>   is chosen by party size rather than by paying head count (Max's call). [[MaintenanceNotes]]
+>   §22 is closed out. **Not yet verified live on staging.**
 > - **Live-verified on staging.vineworks.ge** (see "Live verification" below): #45, #50, #51
 >   (both halves), #52 confirmed in the running app + database. #43 verified by value but its
 >   success screen was not reached — that tenant takes card payment, so the booking redirects
@@ -222,6 +222,53 @@ This is the strongest argument yet for the extraction.
 **Test data left on Staging Winery:** one admin order "Pricing Testcase" (₾340) and one
 abandoned public booking "Booking Totaltest" (₾280, abandoned at the Flitt step). Both
 disposable.
+
+### The extraction, and the tier-rule change that went with it
+
+Max: *"if we have guest count then the pricing tier should only be derived from guest count —
+that is exactly what pricing tier is for."* He is right, and it is a better rule than the one
+that shipped: a price ladder answers *how big is this booking*, which is a fact about the
+party, not about who happens to be eating.
+
+Done together with the extraction, because doing them separately meant touching all nine sites
+twice.
+
+**What landed in `lib/pricingUtils.ts`:**
+
+```ts
+priceBooking(rates, guests, visitType, lines): number   // the only arithmetic
+ratesForParty(prices, guestCount, { chargeRegistration? })  // does the findTier lookup
+ratesFromTier / ratesFromSnapshot / ratesFromManual
+```
+
+The reviewer's framing turned out to be exactly right: the sites never disagreed about the
+arithmetic, they disagreed about **where the rates come from**. One function plus four
+resolvers, and the nine call sites collapse to a resolver choice.
+
+**Two rules now live in one line each:**
+1. `ratesForParty` owns the `findTier` lookup, so no call site picks a head count any more.
+2. `priceBooking` branches on whether the buckets are set; `visitType` only applies to an
+   unsplit party.
+
+**Tests first again.** The tier rule went in as a failing test before any code moved, pinned
+with a worked example: a party of 8 (2 tasting-only, 4 tasting+lunch, 2 free) costs **₾620**
+under the old rule and **₾540** under the new one, because 6 payers sat in the 3–6 band while
+a party of 8 sits in the 7–100 band. 11 → 21 cases, all green.
+
+**Also closed #54**, which the tier change made blocking: the party size is now an *entered*
+field on both admin screens rather than a byproduct of the split, `updateOrderEnhanced` takes
+and writes it, and both server actions and both forms reject a split larger than the party.
+That was the only way to make "the tier comes from guestCount" safe, since an admin previously
+could not edit guestCount at all on an existing order.
+
+**Consequence to know:** free guests now count toward the volume band. A party of 12 with a
+guide and a driver tiers as 12. Max's call; it is a real pricing change.
+
+**Verification.** tsc 0 · test-pricing-agreement 21/21 · test-money 61/61 · money lint rule 0 ·
+full lint **206 problems vs 208 at baseline** (83 errors unchanged, two fewer warnings — the
+rewire orphaned five variables and I removed them). Re-seeded dev: totals moved ₾228,472 →
+₾227,892, which is the right direction (bigger parties → cheaper bands) with snapshot coverage
+holding at 395/395 and the money audit clean.
 
 ### Next
 

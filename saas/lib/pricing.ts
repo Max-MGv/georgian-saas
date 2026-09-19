@@ -1,5 +1,5 @@
 import { withTenantDb } from '@/lib/db'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { priceBooking, ratesForParty, ratesFromSnapshot } from '@/lib/pricingUtils'
 
 /**
  * Recompute an order's total after its lines change.
@@ -30,28 +30,20 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
       0
     )
     const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
-    const linesAmt = masterclassAmt + extrasAmt
 
-    const tastingGuests = order.tastingGuestCount
-    const lunchGuests = order.lunchGuestCount
-    const totalPayingGuests = tastingGuests + lunchGuests
+    const guests = {
+      guestCount: order.guestCount,
+      tastingGuests: order.tastingGuestCount,
+      lunchGuests: order.lunchGuestCount,
+    }
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
     // ── The normal path: price from what this order was actually sold at ──────
-    const snapTasting = order.tastingRateSnapshot
-    const snapLunch = order.lunchRateSnapshot
-    if (snapTasting != null || snapLunch != null) {
-      const tasting = snapTasting ?? 0
-      const lunch = snapLunch ?? 0
-      const registration = order.registrationFeeSnapshot ?? 0
-
-      const base =
-        totalPayingGuests > 0
-          ? tastingGuests * tasting + lunchGuests * lunch
-          : order.guestCount * (order.visitType === 'TASTING_LUNCH' ? lunch : tasting)
-
+    const snapshotRates = ratesFromSnapshot(order)
+    if (snapshotRates) {
       await tx.order.update({
         where: { id: orderId },
-        data: { totalPrice: base + registration + linesAmt },
+        data: { totalPrice: priceBooking(snapshotRates, guests, order.visitType, lines) },
       })
       return
     }
@@ -65,42 +57,29 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
     )
 
     const prices = order.company?.prices ?? []
-    let totalPrice: number
-
-    if (totalPayingGuests > 0) {
-      const tier = findTier(prices, totalPayingGuests)
-      if (!tier) {
-        // Previously a bare `return` — a silent no-op that left the total
-        // untouched and gave the caller no reason to think anything had gone
-        // wrong. It still cannot invent a price, but it no longer hides.
-        console.warn(
-          `[pricing] order ${orderId}: no price tier matches ${totalPayingGuests} paying guests; total left unchanged`
-        )
-        return
-      }
-      totalPrice =
-        tastingGuests * tier.pricePerPerson +
-        lunchGuests * comboRatePerPerson(tier) +
-        tier.registrationPrice +
-        linesAmt
-    } else if (prices.length > 0) {
-      const tier = findTier(prices, order.guestCount)
-      if (!tier) {
-        console.warn(
-          `[pricing] order ${orderId}: no price tier matches ${order.guestCount} guests; total left unchanged`
-        )
-        return
-      }
-      const rate =
-        order.visitType === 'TASTING_LUNCH' ? comboRatePerPerson(tier) : tier.pricePerPerson
-      totalPrice = order.guestCount * rate + tier.registrationPrice + linesAmt
-    } else {
+    if (prices.length === 0) {
       console.warn(
         `[pricing] order ${orderId}: no snapshot and no company tiers; total left unchanged`
       )
       return
     }
 
-    await tx.order.update({ where: { id: orderId }, data: { totalPrice } })
+    // The tier comes from the party size, so this is one lookup rather than the
+    // two branches it used to be (2026-09-19 — see pricingUtils.ratesForParty).
+    const liveRates = ratesForParty(prices, order.guestCount)
+    if (!liveRates) {
+      // Previously a bare `return` — a silent no-op that left the total
+      // untouched and gave the caller no reason to think anything had gone
+      // wrong. It still cannot invent a price, but it no longer hides.
+      console.warn(
+        `[pricing] order ${orderId}: no price tier matches a party of ${order.guestCount}; total left unchanged`
+      )
+      return
+    }
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: { totalPrice: priceBooking(liveRates, guests, order.visitType, lines) },
+    })
   })
 }
