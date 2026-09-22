@@ -56,7 +56,8 @@ type Company = {
   contactName: string | null
   contactPhone: string | null
   address: string | null
-  accessCode: string | null
+  /** Whether the company has an access code — never the code itself (KnownBugs #57). */
+  hasAccessCode: boolean
   wineDiscountPercent: number | null
   // Per-company payment override (#148). null/undefined = follow the WINE_ORDER
   // section default; true = always skip; false = always require. Optional
@@ -271,7 +272,7 @@ export default function WineCatalogueClient({
     }
     const company = companies.find(c => c.id === companyId)
     if (!company) return
-    if (!company.accessCode) {
+    if (!company.hasAccessCode) {
       applyProfile(company, { contactName: company.contactName, contactPhone: company.contactPhone, identificationCode: company.identificationCode, address: company.address })
       setDiscountPercent(company.wineDiscountPercent ?? null)
       return
@@ -326,7 +327,7 @@ export default function WineCatalogueClient({
     setDirectCompanyName(result.company.name)
     setDiscountPercent(result.company.wineDiscountPercent ?? null)
     applyProfile(
-      { ...result.company, accessCode: null },
+      { ...result.company, hasAccessCode: false },
       { contactName: result.company.contactName, contactPhone: result.company.contactPhone, identificationCode: result.company.identificationCode, address: result.company.address }
     )
   }

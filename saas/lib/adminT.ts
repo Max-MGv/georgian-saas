@@ -77,9 +77,9 @@ const en: Translations = {
   'messages.onsiteAccessCode.trigger': 'Shown when a guest picks a company from the dropdown that needs an access code. Field placeholder and buttons are fixed and not shown here.',
   // Guide picker (KnownBugs #55) — the step shown after the code popup when the
   // company has guides configured.
-  'messages.onsiteGuidePicker.explainer': 'Shown only when this company has guides. After a company-wide code is accepted, the guest picks which guide they are, so the booking still names a person.',
-  'messages.onsiteGuidePicker.titleField': 'Guide picker title',
-  'messages.onsiteGuidePicker.intro': 'Guide picker intro line',
+  'messages.onsiteContactPicker.explainer': 'Shown only when this company has people on file. After a company-wide code is accepted, the guest picks which person they are — once for each contact type you have set up — so the booking still names someone.',
+  'messages.onsiteContactPicker.titleField': 'Contact picker title',
+  'messages.onsiteContactPicker.intro': 'Contact picker intro line — {company} is replaced with the company name, {role} with the contact type being asked about',
   'messages.onsiteAccessCode.titleField': 'Popup title',
   'messages.onsiteAccessCode.intro': 'Intro line — {company} is replaced with the company\'s name',
   'messages.onsiteAccessCode.error': 'Incorrect-code error',
@@ -1310,9 +1310,9 @@ const ka: Translations = {
   'messages.onsiteAccessCode.title': 'კომპანიის კოდის ფანჯარა',
   'messages.onsiteAccessCode.trigger': 'ჩნდება, როცა სტუმარი ირჩევს ჩამონათვალიდან კომპანიას, რომელსაც სჭირდება წვდომის კოდი. ველის ველისმაგვარი ტექსტი და ღილაკები ფიქსირებულია და აქ არ ჩანს.',
   // KA drafted, not natively reviewed — standing caveat for Claude-added Georgian.
-  'messages.onsiteGuidePicker.explainer': 'ჩანს მხოლოდ მაშინ, როცა კომპანიას ჰყავს გიდები. კომპანიის საერთო კოდის მიღების შემდეგ სტუმარი ირჩევს, რომელი გიდია, რათა ჯავშანს კონკრეტული ადამიანი ერქვას.',
-  'messages.onsiteGuidePicker.titleField': 'გიდის არჩევის სათაური',
-  'messages.onsiteGuidePicker.intro': 'გიდის არჩევის შესავალი ტექსტი',
+  'messages.onsiteContactPicker.explainer': 'ჩანს მხოლოდ მაშინ, როცა კომპანიას ჰყავს დამატებული ადამიანები. კომპანიის საერთო კოდის მიღების შემდეგ სტუმარი ირჩევს, რომელი ადამიანია — თითოეული საკონტაქტო ტიპისთვის ცალკე — რათა ჯავშანს კონკრეტული ადამიანი ერქვას.',
+  'messages.onsiteContactPicker.titleField': 'საკონტაქტო პირის არჩევის სათაური',
+  'messages.onsiteContactPicker.intro': 'საკონტაქტო პირის არჩევის შესავალი ტექსტი — {company} ჩანაცვლდება კომპანიის სახელით, {role} — საკონტაქტო ტიპით',
   'messages.onsiteAccessCode.titleField': 'ფანჯრის სათაური',
   'messages.onsiteAccessCode.intro': 'შესავალი ტექსტი — {company} ჩანაცვლდება კომპანიის სახელით',
   'messages.onsiteAccessCode.error': 'არასწორი კოდის შეცდომა',

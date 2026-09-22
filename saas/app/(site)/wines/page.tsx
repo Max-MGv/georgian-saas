@@ -42,7 +42,14 @@ export default async function WinesPage() {
       // job), but threaded through to the client so the checkout button label can
       // reflect a company's own override once selected, not just the section default.
       select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
-    })),
+    })).then(rows => rows.map(({ accessCode, ...rest }) => ({
+      ...rest,
+      // Never the code itself — only whether one exists. Passing whole Company rows
+      // into this client component put every wine-order company's access code in the
+      // page source (KnownBugs #57 / Plan-ContactRoles F3), and the catalogue only
+      // ever used it as a boolean. Same one-line fix as app/(site)/page.tsx.
+      hasAccessCode: !!accessCode,
+    }))),
     getSetting('hide_company_dropdown'),
     // Two calls (#148), not one, so the client can tell "module/credentials
     // missing" (a hard block nothing can override) apart from "WINE_ORDER

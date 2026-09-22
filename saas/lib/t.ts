@@ -161,11 +161,22 @@ const en: Translations = {
   'form.access_code_checking': 'Checking…',
   'form.access_code_confirm': 'Confirm',
   'form.access_code_enter_manually': 'Enter Manually',
-  // Guide picker (KnownBugs #55) — shown after a COMPANY-level code is accepted
-  // for a company that has guides, so the booking is still attributed to a person.
-  'form.guide_picker_title': 'Who is bringing the group?',
-  'form.guide_picker_intro': '{company} — choose your name so the winery knows who to contact on the day.',
-  'form.guide_picker_not_listed': 'I am not on this list',
+  // Contact picker (KnownBugs #55, generalised to any role in Plan-ContactRoles
+  // Chunk 7) — shown after a COMPANY-level code is accepted for a company that has
+  // people on file, so the booking is still attributed to a person. One showing per
+  // role: `{role}` is that role's own admin-managed label, `{company}` its company.
+  'form.contact_picker_title': 'Who should we put on this booking?',
+  'form.contact_picker_intro': '{company} — choose the {role} for this visit so the winery knows who to contact.',
+  'form.contact_picker_not_listed': 'I am not on this list',
+  // Per-role detail fields, detailed variant only (Plan-ContactRoles §1 point 4).
+  // Deliberately plain t() calls, not SiteContent: the block's *heading* is the
+  // role's own label from the database, which is admin-managed data, so by
+  // MaintenanceNotes §1's own "fixed label vs. backed by other admin data" test
+  // none of this section belongs in FIELDS.form.
+  'form.contact_role_name': 'Name',
+  'form.contact_role_phone': 'Phone',
+  'form.contact_role_email': 'Email',
+  'form.contact_role_choose': 'Choose from list',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -370,11 +381,16 @@ const ka: Translations = {
   'form.access_code_checking': 'მოწმდება…',
   'form.access_code_confirm': 'დადასტურება',
   'form.access_code_enter_manually': 'ხელით შეყვანა',
-  // Guide picker (KnownBugs #55) — KA drafted, not natively reviewed, per the
-  // standing caveat on every Georgian string added by Claude in this project.
-  'form.guide_picker_title': 'ვინ მოჰყავს ჯგუფი?',
-  'form.guide_picker_intro': '{company} — აირჩიეთ თქვენი სახელი, რომ მარანმა იცოდეს ვის დაუკავშირდეს.',
-  'form.guide_picker_not_listed': 'ამ სიაში არ ვარ',
+  // Contact picker (KnownBugs #55, generalised in Chunk 7) — KA drafted, not
+  // natively reviewed, per the standing caveat on every Georgian string added by
+  // Claude in this project.
+  'form.contact_picker_title': 'ვინ დავამატოთ ამ ჯავშანში?',
+  'form.contact_picker_intro': '{company} — აირჩიეთ ამ ვიზიტის {role}, რომ მარანმა იცოდეს ვის დაუკავშირდეს.',
+  'form.contact_picker_not_listed': 'ამ სიაში არ ვარ',
+  'form.contact_role_name': 'სახელი',
+  'form.contact_role_phone': 'ტელეფონი',
+  'form.contact_role_email': 'ელფოსტა',
+  'form.contact_role_choose': 'არჩევა სიიდან',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

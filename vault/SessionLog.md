@@ -8,6 +8,91 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-22 (later) — Contact Roles chunk 7: the shared picker, and the app renders again
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**. Chunk 7 committed on top of `f9a8b73`.
+> - **`master` is untouched.** The migration has still run on the **dev** database only.
+> - **49 TypeScript errors** (was 54), none in a file chunk 7 owns. Still expected mid-rework.
+> - **The public site renders again.** `/`, `/about`, `/contact` and `/admin/login` all return
+>   200 on a fresh dev server.
+> - **⚠️ One catch the old notes got wrong.** They said `BookingForm.tsx` was *the* file
+>   500ing every route. There are **two**: `app/(site)/wines/WineCatalogueClient.tsx` still
+>   imports `verifyCompanyCode`/`findCompanyByCode`, which chunk 3 removed. Anything that
+>   compiles `/wines` puts `/admin/login` back to 500 until the dev server restarts. **Chunk 8
+>   owns that file.** Restart the server before any admin click-through, and stay off `/wines`.
+> - **Chunks 4, 5 and 6 still have never been rendered** — an admin screen needs a password
+>   typed into a login form, which Claude cannot do even when asked. The chunk 13 Playwright
+>   specs read `credentials.txt` themselves (`tests/helpers/credentials.ts` + `auth.ts`), so
+>   they are the route that keeps the credential out of Claude's hands entirely.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 8** — both wine order forms. It is now the only thing
+> still breaking the build at runtime.
+
+### What was built
+
+Two shared client pieces, and the public booking form as their first consumer (decision 10).
+
+- **`components/ContactPickerPopupView.tsx`** — `GuidePickerPopupView` generalised. Renders one
+  role's people per showing; the role lives entirely in the caller's title and intro, so the
+  component never branches on which role it is. H14's explicit `aria-label` carried across and
+  confirmed live. `GuidePickerPopupView.tsx` deleted; the admin Messages preview moved over.
+- **`lib/useContactSelection.ts`** — the state machine: the selection map, the queue of roles
+  still to ask about, the resolver call, and every reset. Form-agnostic by construction — it
+  hands a picked person back through an `onApply` callback rather than touching any field, so
+  the booking form's "split the name into two boxes" stays the booking form's business.
+- **`lib/contactResolution.ts`** gained `orderRolesFor(tenantId, module)` — the tenant's roles
+  with no people attached. Agreed with Max before building, and more than the plan budgeted for
+  `page.tsx`; the reasoning is in the plan's chunk 7 section.
+- **`BookingForm.tsx`** — `matchedGuideId` gone, hook in, a contact-details block per non-
+  contact-person role in the detailed variant only, and `contacts` replacing `guideId` in
+  `buildBookingPayload()`.
+
+### KnownBugs #57 is closed on `staging`
+
+Both public pages send `hasAccessCode: boolean` and never the code. Proved with a check written
+so it can distinguish the two outcomes (H13): the homepage genuinely carries 5 companies that
+*do* have codes, `hasAccessCode` is in the payload, and none of the 5 codes appears anywhere in
+the page source. **Still live on `master`** until chunk 14 merges.
+
+### A bug found by walking the screen rather than reading it
+
+Switching company cleared the Guide block but left the *previous* company's contact person in
+the four main fields — so "I am not on this list" on the new company would have submitted a
+booking for company B attributed to someone at company A. Pre-existing (the direct-code path
+already cleared them; the dropdown path never did), and precisely H3's "reset it everywhere with
+one path missed". Fixed and re-verified.
+
+### The duplicate `contact_person` rows: nothing to tidy
+
+Max's outstanding to-do turned out to rest on a wrong premise. All 25 people were read before
+anything was touched: on each of the five affected companies the two `contact_person` rows are
+**different people** with different names, phones and emails — one operational, one finance
+(`hello@`/`finance@`, `bookings@`/`invoices@`, and so on). Merging them would have lost a real
+address. Several contact persons per company is the model working as designed.
+
+Two rows *were* deleted, both hand-typed test junk on Alazani Valley Tours from 2026-09-19: a
+Contact Person called `test test` with no phone or email, and a Guide called `x` with phone `1`.
+Neither was referenced by an `OrderContact`. 27 → 25 people.
+
+Usefully, that leaves the fixtures split for H13: **Silk Road Journeys** has both roles populated
+(2 + 2) and **Alazani Valley Tours** has contact persons but no guides, so "one picker fires" and
+"two pickers fire" are now distinguishable outcomes.
+
+### Verified
+
+`tsc` clean for every chunk-7 file · i18n parity 1101/1101 EN+KA · `test-contact-roles-rls.ts`
+19/19 · `test-contact-resolution.ts` 22/22 · public routes 200 · and the full picker flow walked
+in a browser on Staging Winery: company code → Contact Person popup → Guide popup → both sets of
+fields filled from the right person; "I am not on this list"; the company-switch reset; and the
+Guide block disappearing on an INDIVIDUAL booking.
+
+**Not verified:** no booking was submitted — there is nothing to receive the `contacts` payload
+until chunk 9 writes `OrderContact` rows. No admin screen was opened.
+
+---
+
 ## 2026-09-22 — Contact Roles built: chunks 0–6 of 14
 
 > **STATE ON EXIT — read this first if you are resuming cold.**

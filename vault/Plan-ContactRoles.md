@@ -414,7 +414,7 @@ A `null` in the `polname` column is the bug.
 | **4** | Admin — Contact Roles management screen | ✅ Done |
 | **5** | Admin — Edit Company people list, role-driven | ✅ Done |
 | **6** | Settings — `person_codes_enabled` | 🚧 Done bar one live check |
-| **7** | **Shared picker + hook** + public booking form | ⬜ Not started |
+| **7** | **Shared picker + hook** + public booking form | ✅ Done |
 | **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
 | **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
 | **10** | Admin order surfaces — finally display contacts | ⬜ Not started |
@@ -425,41 +425,51 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–5 done, and 6 bar one live check (2026-09-22).
-**Chunk 7 next — the shared picker and the public booking form.** It is also what unblocks
-looking at any of this; see the note below.
+**Overall resume point:** Chunks 0–7 done, bar Chunk 6's one live check (2026-09-22).
+**Chunk 8 next — both wine order forms.** It is now the only thing still breaking the build at
+runtime: see Chunk 7's note on `WineCatalogueClient.tsx`, which 500s `/admin/login` the moment
+anything compiles `/wines`.
 
-**54 type errors remain**, all in Chunk 7–12 files: `app/admin/(panel)/orders/page.tsx` (9,
-Chunk 10), `app/actions/orders.ts` (9, Chunks 9/11), `scripts/backfill-test-fixtures.ts` (8,
-Chunk 12), `app/admin/onboarding/page.tsx` (5, Chunk 12), `app/actions/onboarding.ts` (5,
-Chunk 12), `lib/demoSeed.ts` (4, Chunk 12), `components/BookingForm.tsx` +
-`GuidePickerPopupView.tsx` (4, Chunk 7), `app/actions/createBooking.ts` (3, Chunk 9),
-`app/admin/(panel)/wine-orders/new/page.tsx` + `wines/page.tsx` + `WineCatalogueClient.tsx`
-(6, Chunk 8), `app/(site)/page.tsx` (1, Chunk 7).
+**49 type errors remain** (54 before Chunk 7), none of them in a file Chunk 7 owns:
+`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/actions/orders.ts` (9, Chunks 9/11),
+`scripts/backfill-test-fixtures.ts` (8, Chunk 12), `app/admin/onboarding/page.tsx` (5,
+Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12),
+`app/actions/createBooking.ts` (3, Chunk 9), `app/admin/(panel)/wine-orders/new/page.tsx` (2)
++ `wines/page.tsx` (2) + `WineCatalogueClient.tsx` (2) (6, Chunk 8).
 
-*(An earlier revision of this note said "~46". That was an arithmetic slip on a correct list —
-the count was 65 then and is 54 now.)*
+Chunk 7 cleared 5: one on `app/(site)/page.tsx`, three on `components/BookingForm.tsx`, and one
+that left with `GuidePickerPopupView.tsx`.
 
-### 🔴 Nothing renders until Chunk 7 — read before planning any visual check
+*(Count the lines matching `error TS`, not the lines of output — a multi-line "Type ... is
+missing the following properties" explanation belongs to the error above it. This note briefly
+said 45, from summing a per-file list by hand; 49 is what the compiler reports. The running
+figure has been 65 → 54 → 49. An earlier revision also said "~46", a separate slip on a
+correct list.)*
 
-Discovered at the end of Chunk 4. `components/BookingForm.tsx` still imports
-`verifyBookingCode` / `findBookingCodeByCode` / `GuideChoice`, which Chunk 3 removed. Turbopack
-resolves exports across the whole graph, so that one stale import file **fails every route**:
-`/admin/login` returns **500**, and with it every admin screen. `/admin/settings` itself compiles
-and returns a clean 307 to login, so the Chunk 4 code is fine — but it cannot be *seen*.
+### ✅ The app renders again as of Chunk 7 — with one live caveat, read it
+
+Chunk 7 rewrote `components/BookingForm.tsx`, and `/`, `/about`, `/contact` and
+`/admin/login` all return **200** again (measured 2026-09-22 on a fresh dev server).
+
+**But this section's original diagnosis was incomplete, and the handoff repeated it.** It named
+`BookingForm.tsx` as *the* file whose stale imports failed every route. There are **two**:
+`app/(site)/wines/WineCatalogueClient.tsx` still imports `verifyCompanyCode` and
+`findCompanyByCode`, which Chunk 3 also removed. Turbopack resolves exports across the whole
+graph, so the moment anything compiles `/wines`, `/admin/login` goes back to **500** and stays
+there until the dev server restarts. Chunk 7 measured all three orderings; see its section.
 
 Consequences, none of them blocking but all worth knowing:
 
-- **Chunks 4, 5 and 6 cannot be visually verified when they land.** Their verification is
-  deferred until Chunk 7 fixes `BookingForm.tsx`, at which point all four screens should be
-  walked together.
-- Do **not** "just fix the imports" to unblock a screenshot. That is Chunk 7's file, and a
-  half-rewritten `BookingForm` is exactly the state this plan's ground rules warn against.
+- **Chunks 4, 5 and 6 can now be visually verified** — restart the dev server first, and do not
+  open `/wines` until Chunk 8 lands.
+- Do **not** "just fix the imports" in `WineCatalogueClient.tsx` to unblock a screenshot. That is
+  Chunk 8's file, its call sites need rewiring to the resolver rather than a one-line import
+  swap, and a half-rewritten form is exactly the state this plan's ground rules warn against.
 - A second, independent constraint on admin screens: verifying one needs an admin login, and
-  **typing a password into a form is off-limits**. Feature 201 hit the same wall and left its
-  Messages-panel checkbox unticked for the same reason. Max may need to do the admin-side
-  click-through himself, or a Playwright spec (which owns its own credentials) can do it in
-  Chunk 13.
+  **typing a password into a form is off-limits for Claude**, including when asked to. Feature
+  201 hit the same wall. Either Max does that click-through, or the Chunk 13 Playwright specs do
+  — they already read `credentials.txt` themselves (`tests/helpers/credentials.ts`), so the
+  credential never passes through Claude.
 
 **Plan amended 2026-09-22** after a dependency re-check found two gaps: the admin manual
 wine-order form was missing entirely, and `app/admin/onboarding/page.tsx` was unlisted. Max chose
@@ -475,8 +485,8 @@ The running count is kept in the resume point above.
 land — the deployed code still selects dropped columns. Expected and recoverable, but worth
 knowing before demoing anything from staging.
 
-**Nothing has been committed.** The Feature 201 working tree from 2026-09-19 is still
-uncommitted underneath this work.
+**Chunks 0–7 are committed and pushed to `staging`.** Nothing has reached `master`; the
+production database still has the old tables and awaits `prisma migrate deploy` at Chunk 14.
 
 ---
 
@@ -789,10 +799,27 @@ run against the dev database: both roles returned in the right order, 9 of 9 com
 people, and **no active person falls outside a rendered role** — so nobody is invisible in the
 new panel.
 
-That check also showed the migration's predicted duplicate, working as designed: *Alazani Valley
+That check also showed the migration's predicted pair, working as designed: *Alazani Valley
 Tours* has both its old company contact (`Levan`, no code) and its old representative (`Tamuna`,
 code preserved) as `contact_person` rows. Chunk 1's comment called this out — visible and
 fixable in the panel, where a dropped phone number would have been neither.
+
+> **Correction, 2026-09-22 (Chunk 7).** The handoff called these "duplicate `contact_person`
+> rows … a two-minute tidy". **They are not duplicates and there is nothing to tidy.** All 25
+> rows were read before touching anything: on each of the five affected companies the two people
+> have different names, different phone numbers and different email addresses — one operational,
+> one finance (`hello@` / `finance@`, `bookings@` / `invoices@`, `groups@` / `accounts@`,
+> `ops@` / `billing@`, `reservations@` / `ap@`). Merging them would have thrown away a real
+> address. Several contact persons per company is the model working, not a migration artefact.
+>
+> Two rows *were* deleted, both hand-typed test junk on Alazani Valley Tours from 2026-09-19: a
+> Contact Person called `test test` with no phone or email, and a Guide called `x` with phone
+> `1`. Neither was referenced by an `OrderContact` (there are none until Chunk 9). 27 people →
+> 25.
+>
+> That also leaves the fixtures usefully split for H13: **Silk Road Journeys** is the company
+> with both roles populated (2 + 2), and **Alazani Valley Tours** is the contrast — contact
+> persons, no guides — so "one picker fires" and "two pickers fire" are distinguishable.
 
 **Not verified:** nothing has been rendered. Same two blockers as Chunk 4 — the app 500s on
 `BookingForm.tsx` until Chunk 7, and an admin screen needs a password typed in.
@@ -823,33 +850,122 @@ fixable in the panel, where a dropped phone number would have been neither.
 
 ## Chunk 7 — Shared picker + public booking form
 
-**Status:** ⬜ Not started · **Read §4b, F3, H3, H13, H14, ground rule 9. Folds in Feature 201.**
+**Status:** ✅ Done (2026-09-22) · typecheck clean for every file this chunk owns · parity
+1101/1101 · RLS 19/19 · resolver 22/22 · **and the app renders again** · **Read §4b, F3, H3,
+H13, H14, ground rule 9. Folds in Feature 201.**
 
 **This chunk builds the two shared client pieces** (decision 10). Chunks 8 and 10 consume them
 rather than reimplementing. The booking form is their first consumer, not their owner — if
 something here only makes sense for bookings, it belongs in the form, not in the shared piece.
 
-- [ ] **Fix F3 first:** `app/(site)/page.tsx` sends `hasAccessCode: boolean`, never the code.
-      Same on `wines/page.tsx`. One line each, closes a live leak ([[KnownBugs]] #57)
-- [ ] **Build `components/ContactPickerPopupView.tsx`** — generalised from
-      `GuidePickerPopupView.tsx`, role-driven, pure render, caller owns state. **Keep its
-      `aria-label`** (H14). Must render a list for *any* role, never assume "guide"
-- [ ] **Build `useContactSelection()`** — the `Record<roleId, personId>` map, applying a picked
-      person into the form's fields, and every reset. H3's "reset it everywhere" lives here
-      **once**. Shared by all four forms
-- [ ] Keep "I am not on this list" — a person not yet added to the panel is otherwise stranded
-      holding a valid code
-- [ ] `BookingForm.tsx` drops `matchedGuideId` and consumes `useContactSelection()` instead;
-      the resets it owns today (company change, "Not a rep", direct-code clear) move into the
-      hook
-- [ ] Pickers per PER_ORDER role where `appliesTo` includes BOOKING. **Guide fields only in the
+- [x] **Fix F3 first:** `app/(site)/page.tsx` sends `hasAccessCode: boolean`, never the code.
+      Same on `wines/page.tsx`. Closes a live leak ([[KnownBugs]] #57 — now resolved)
+- [x] **Build `components/ContactPickerPopupView.tsx`** — generalised from
+      `GuidePickerPopupView.tsx`, role-driven, pure render, caller owns state. **`aria-label`
+      kept** (H14) and confirmed live. Renders **one role per showing**; the role is expressed
+      only through the caller's `title`/`intro`, so the component never branches on which role
+      it is looking at. `GuidePickerPopupView.tsx` deleted
+- [x] **Build `useContactSelection()`** (`lib/useContactSelection.ts`) — the
+      `Record<roleId, ContactSelection>` map, the queue of roles still to ask about, the call to
+      the resolver, and every reset. Shared by all four forms
+- [x] Keep "I am not on this list" — verified live: it advances the queue without attributing
+      anyone, and whatever the guest types still reaches the payload as a snapshot
+- [x] `BookingForm.tsx` drops `matchedGuideId` and consumes `useContactSelection()`; the resets
+      it owned (company change, "Not a rep", direct-code clear) moved into the hook
+- [x] Pickers per PER_ORDER role where `appliesTo` includes BOOKING. **Guide fields only in the
       detailed variant** (`isEnhanced`); Contact Person in both — per the original brief
-- [ ] Codes on → no picker at all (decision 6)
-- [ ] ⚠️ **Extend `buildBookingPayload()`, not the submit handler** (H3)
-- [ ] Also closes the Feature 201 known gap: the form can now tell "has people" from "has a
-      code", so a company with people but no `accessCode` stops being unreachable
-- [ ] `BookingFormVisualPanel.tsx` mirrors the form ([[MaintenanceNotes]] #1) — decide whether a
-      new detailed-only section needs a `FIELDS.form` entry, using that note's own test
+- [x] Codes on → no picker at all (decision 6). Falls out of the resolver returning an empty
+      `roleChoices`; the hook's queue is then empty and nothing opens
+- [x] ⚠️ **Extended `buildBookingPayload()`, not the submit handler** (H3)
+- [x] Also closes the Feature 201 known gap: the form now tells "has people" from "has a code",
+      so a company with people but no `accessCode` is no longer unreachable
+- [x] `BookingFormVisualPanel.tsx` mirrors the form ([[MaintenanceNotes]] #1). Applying that
+      note's own test, the new detailed-only section gets **no `FIELDS.form` entry**: its
+      heading is the role's own `labelEn`/`labelKa` from `ContactRole`, which is admin-managed
+      data like the `MenuItem`/`MasterclassItem` rows, not SiteContent. The panel shows it as an
+      illustrative block, the same way it shows a masterclass row
+
+### One addition to the plan, agreed with Max before building
+
+**`app/(site)/page.tsx` also passes `bookingRoles`** — the tenant's PER_ORDER booking roles with
+no people attached, from a new `orderRolesFor(tenantId, module)` in `lib/contactResolution.ts`.
+The plan budgeted "one line" for that file.
+
+The reason is that `resolveCompanyContacts()` deliberately drops roles nobody is in, so a form
+driven only by it cannot render a Guide block until it knows the selected company has guides —
+the form's shape would flicker as the dropdown changed, and a company with no guides would offer
+nowhere to type one. Driving the blocks off the **role list** and the *people* off the resolver
+keeps the layout stable and the data per-company. Chunks 8 and 10 need the same function.
+
+Verified live: Alazani Valley Tours has contact persons and no guides, and still renders the
+Guide block — empty, and with no "Choose from list" control, because there is nobody to choose.
+
+### 🔴 A real bug this chunk found by walking the screen, not by reading it
+
+**Switching company left the previous company's contact person in the form's four fields.**
+
+The hook reset its own state — the Guide block cleared correctly — but `firstName`, `lastName`,
+`phone` and `email` belong to the form, not the hook, and the dropdown path never cleared them.
+Picking "I am not on this list" for the new company would then have submitted a booking for
+company B attributed to a person who works at company A.
+
+Pre-existing, not a regression: `applyProfile()` only ever *set* those fields. The direct-code
+path already cleared them (`clearDirectCode`); the dropdown path was the one that was missed —
+**H3's "reset it everywhere", with exactly one path forgotten, which is what that hurdle
+predicts.** Fixed with a `prevCompanyIdRef`, guarded so a guest who types their own details
+before choosing a company does not watch them vanish. Re-verified live.
+
+### 🔴 The plan and the handoff are both wrong about what unblocks the admin screens
+
+Both say `components/BookingForm.tsx` is *the* file whose stale imports 500 every route. **There
+are two.** `app/(site)/wines/WineCatalogueClient.tsx` imports `verifyCompanyCode` and
+`findCompanyByCode`, which Chunk 3 also removed, and Turbopack resolves exports across the whole
+graph in the same way.
+
+Measured on a freshly restarted dev server:
+
+| Request order | `/admin/login` |
+|---|---|
+| straight to `/admin/login` | **200** |
+| after `/` | **200** |
+| after `/wines` | **500** |
+
+So Chunk 7 *has* unblocked the admin screens — but only until something compiles `/wines`, after
+which they stay broken until the dev server is restarted. **Chunk 8 owns that file**, and fixing
+its two imports properly means rewiring its call sites to the resolver, which is that chunk's
+actual work — not a one-line import swap. Left alone deliberately, per ground rule "do not fix
+the build ahead of the chunk that owns each file".
+
+**Practical consequence for the admin click-through:** restart the dev server first, and do not
+open `/wines` during it.
+
+### Verified live, in a browser
+
+`Staging Winery` on `localhost:3000`, `person_codes_enabled` off, `enable_enhanced_company_booking` on.
+
+- `/`, `/about`, `/contact`, `/admin/login` all return **200** — the app renders for the first
+  time since Chunk 3
+- **KnownBugs #57 closed**, with a check built so it can tell the two outcomes apart (H13): the
+  homepage carries 5 companies that *do* have access codes, `hasAccessCode` is present in the
+  payload, and **none of the 5 codes appears anywhere in the page source**. Before this, all
+  five were in plain sight in View Source
+- Silk Road Journeys (2 contact persons + 2 guides) → company code → **Contact Person picker
+  first** (`sortOrder` 10), then **Guide picker** — two showings, one per role, each labelled
+  from the database. Picking filled Mariam Dolidze into the form's own four fields and Tinatin
+  Beruashvili into the Guide block
+- The picker buttons report accessible names (`button "Keti Dolidze"`), so H14's `aria-label`
+  survives the generalisation and Chunk 13 can target them
+- "I am not on this list" dismisses without attributing, leaving the fields to be typed
+- Switching to an INDIVIDUAL booking removes the Guide block, alongside Food Notes — the brief's
+  "only in the details booking option"
+- No console errors
+
+**Not verified:** no booking was submitted, so the `contacts` payload has not been round-tripped
+— there is nothing to receive it until Chunk 9 writes `OrderContact` rows. And no admin screen
+was opened: that needs a password typed into a login form, which is off-limits for Claude. The
+Chunk 13 Playwright specs supply their own credentials from `credentials.txt`
+(`tests/helpers/credentials.ts` + `auth.ts`) and are the route for Chunks 4/5/6's click-through
+if Max would rather not do it by hand.
 
 **Resume point:** —
 

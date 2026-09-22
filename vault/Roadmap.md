@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–6 OF 14 BUILT
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–7 OF 14 BUILT
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -408,7 +408,7 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 - [x] Chunk 4 — admin Contact Roles screen
 - [x] Chunk 5 — admin Edit Company, role-driven people list
 - [~] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s)
-- [ ] Chunk 7 — booking form per-role pickers; folds in Feature 201's uncommitted work
+- [x] Chunk 7 — shared picker + hook, booking form per-role pickers; folds in Feature 201's work
 - [ ] Chunk 8 — wine order form, same treatment (reverses the old plan's "out of scope")
 - [ ] Chunk 9 — write path: `OrderContact` rows with snapshots
 - [ ] Chunk 10 — admin order surfaces; **this is where the guide finally becomes readable**
@@ -417,7 +417,7 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 - [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge
 
-**Status 2026-09-22:** chunks 0–6 built and pushed to `staging` (HEAD `f9a8b73`). The migration has run on the **dev** database only; production is untouched. ⚠️ **The app does not render at all** until chunk 7 — `BookingForm.tsx` still imports symbols chunk 3 removed, which 500s every route including `/admin/login`. So chunks 4–6 are typecheck- and data-verified but visually unverified.
+**Status 2026-09-22:** chunks 0–7 built and pushed to `staging`. The migration has run on the **dev** database only; production is untouched. ✅ **The public site renders again** — `/`, `/about`, `/contact` and `/admin/login` all return 200, and the per-role picker was walked end to end in a browser. [[KnownBugs]] #57 (every company's access code in the public HTML) is fixed on `staging`, still live on `master` until chunk 14. ⚠️ **One route still poisons the graph:** `WineCatalogueClient.tsx` imports two symbols chunk 3 removed, so anything that compiles `/wines` puts `/admin/login` back to 500 until the dev server restarts — chunk 8 owns it. Chunks 4–6 remain visually unverified: an admin screen needs a password typed into a login form, which Claude cannot do; chunk 13's Playwright specs read `credentials.txt` themselves.
 
 **Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
 access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses

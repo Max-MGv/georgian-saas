@@ -30,13 +30,20 @@ export type ContactChoice = {
   email: string | null
 }
 
-/** One role, with the people available in it for this company. */
-export type RoleChoices = {
+/**
+ * A role on its own — no people. What a form needs to lay itself out before any
+ * company has been chosen (see `orderRolesFor`).
+ */
+export type OrderRole = {
   roleId: string
   key: string
   labelEn: string
   labelKa: string
   sortOrder: number
+}
+
+/** One role, with the people available in it for this company. */
+export type RoleChoices = OrderRole & {
   people: ContactChoice[]
 }
 
@@ -61,6 +68,47 @@ export type ResolveContactsResult =
       /** Empty when person codes are ON (deliberate — see below) or when nobody is configured. */
       roleChoices: RoleChoices[]
     }
+
+/**
+ * The per-order roles a tenant has defined for this kind of order, with no people.
+ *
+ * Distinct from `resolveCompanyContactsFor`, which answers "who can be picked for
+ * *this company*" and therefore drops roles nobody is in. A form needs this one
+ * instead when it has to lay itself out before a company exists: the public booking
+ * form renders its Guide block from the role list, not from whether some company
+ * happens to have guides, so the block is stable while the dropdown changes under it.
+ *
+ * COMPANY_LEVEL roles are excluded here for the same reason they are excluded there —
+ * they are company reference data and must never reach an order form. That is the
+ * whole job of `scope`.
+ *
+ * Safe to hand to a client component: role labels are tenant configuration an admin
+ * typed, and no person, and therefore no code, is attached.
+ */
+export async function orderRolesFor(
+  tenantId: string,
+  module: 'BOOKING' | 'WINE_ORDER'
+): Promise<OrderRole[]> {
+  return withTenantDb(tenantId, async tx => {
+    const roles = await tx.contactRole.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        scope: 'PER_ORDER',
+        appliesTo: { in: [module, 'BOTH'] },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { labelEn: 'asc' }],
+      select: { id: true, key: true, labelEn: true, labelKa: true, sortOrder: true },
+    })
+    return roles.map(r => ({
+      roleId: r.id,
+      key: r.key,
+      labelEn: r.labelEn,
+      labelKa: r.labelKa,
+      sortOrder: r.sortOrder,
+    }))
+  })
+}
 
 /**
  * The single contact resolver (vault/Plan-ContactRoles.md Chunk 3, decision 10).

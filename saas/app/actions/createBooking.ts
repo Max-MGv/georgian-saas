@@ -34,7 +34,33 @@ export type BookingFormData = {
   // Chunk 5/7) — lets the admin panel know exactly who was contacted, even if the guest then
   // edits the autofilled phone/name away from the guide's own. Ignored unless companyId is set
   // and the guide actually belongs to that company (re-checked server-side below).
+  //
+  // ⚠️ SUPERSEDED by `contacts` below, and the column behind it is already dropped —
+  // the read at line ~300 no longer compiles. Removing it, and writing OrderContact rows
+  // instead, is Chunk 9's job (Plan-ContactRoles); it is left here until then rather than
+  // half-rewriting the write path from the chunk that owns the form.
   guideId?: string
+  /**
+   * One entry per contact role, built by `buildBookingPayload()` in BookingForm.tsx —
+   * the only place a booking field may be added (MaintenanceNotes #1 / hurdle H3).
+   *
+   * `personId` is absent when the guest typed the details in by hand rather than
+   * picking someone on file ("I am not on this list"), which is exactly why the name
+   * and contact details travel alongside it rather than being looked up from the id:
+   * Chunk 9 stores them as snapshots, so deleting a person later loses the *link* and
+   * never the *facts* (finding F2 / KnownBugs #56).
+   *
+   * **Never trusted as sent.** Chunk 9 re-verifies every `personId` against
+   * `companyId` under the tenant before writing it, the way `verifiedGuideId` already
+   * does below — a client can send any id it likes.
+   */
+  contacts?: {
+    roleId: string
+    personId?: string
+    name: string
+    phone: string | null
+    email: string | null
+  }[]
   visitType: 'TASTING' | 'TASTING_LUNCH'
   date: string
   timeSlot: string

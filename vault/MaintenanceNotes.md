@@ -44,6 +44,22 @@ on (`AccessCodePopupView.tsx`/`NewCompanyPopupView.tsx`), not the pattern of the
 see `Features/Feature 184 - Booking Confirm Sheet.md` before changing either file's confirm-sheet
 section, so the two don't drift into duplicate or conflicting sources of truth for the same copy.
 
+**Since Plan-ContactRoles Chunk 7 (2026-09-22):** the detailed variant has a **fourth**
+section — one contact-details block (Name / Phone / Email) per contact role other than
+`contact_person`, which keeps the existing First Name / Last Name / Phone / Email fields. It has
+**no `FIELDS.form` entry**, and that is this note's own test applied rather than an oversight:
+each block's heading is a role's `labelEn`/`labelKa` from the `ContactRole` table, managed at
+Settings → Contact Types, so it is other admin data like the `MenuItem`/`MasterclassItem` rows —
+not SiteContent. The sub-labels are plain `t()` keys (`form.contact_role_name/_phone/_email`),
+matching how the guest sub-labels above them are handled. `BookingFormVisualPanel.tsx` mirrors
+it as a static illustrative block, the same way it mirrors a masterclass row.
+
+The blocks are driven by the tenant's **role list** (`orderRolesFor()`, passed as `bookingRoles`
+from `app/(site)/page.tsx`), not by which people the selected company happens to have — so the
+form's shape stays put as the dropdown changes, and a company with no guides still offers
+somewhere to type one. Adding a contact type in the admin panel adds a block here with no code
+change; that is the requirement the whole rework exists for.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the

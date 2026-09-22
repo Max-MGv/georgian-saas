@@ -10,6 +10,58 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🟢 2026-09-22 — Contact Roles chunk 7. The site works again. Two things for you.
+
+The booking form now asks who you are, once per contact type the company has people in — Contact
+Person first, then Guide — and fills the right details into the right places. I walked all of it
+in a browser myself, so this list is short.
+
+### Your two jobs
+
+- [ ] **The admin click-through.** Four screens have been built and **never once looked at** —
+      Settings → Contact Types, Settings → the Person Codes toggle, Edit Company's people list,
+      and Content → Messages → the contact-picker preview. I cannot open any of them: they need
+      a password typed into a login form, and that is the one thing I will not do even when you
+      tell me to. Sorry to keep bouncing this back.
+
+      **Before you start: restart the dev server, and do not open `/wines`.** The wine page is
+      still half-migrated and it breaks `/admin/login` the moment it loads. Restarting fixes it
+      again. Chunk 8 is where that goes away for good.
+
+- [ ] **Read the Georgian.** New wording, mine, drafted not natively reviewed:
+      **"ვინ დავამატოთ ამ ჯავშანში?"** (picker title) and the line under it,
+      **"{company} — აირჩიეთ ამ ვიზიტის {role}..."**. Switch the site to Georgian, pick a
+      company with a code, and see whether it reads naturally. Tell me if it doesn't.
+
+### Nothing else needs checking — here is what I already confirmed
+
+On Silk Road Journeys (two contact persons, two guides): entering the company code brought up
+the Contact Person list, then the Guide list; picking Mariam Dolidze filled the main name/phone/
+email fields and picking Tinatin Beruashvili filled a new Guide block; "I am not on this list"
+let me past without attributing anyone; switching company wiped everything clean; and choosing
+Individual made the Guide block disappear. No errors in the console.
+
+### One thing I did to your data
+
+You asked me to handle the duplicate contact rows. **They weren't duplicates** — on each of the
+five companies the two contact people have different names, different phone numbers and
+different email addresses. One is the operational contact, one is the finance contact
+(`hello@` and `finance@` on Alazani, `bookings@` and `invoices@` on Kakheti, and so on).
+Deleting either would have lost a real phone number. Two contact people per company is the new
+model working properly, not a migration leaving a mess.
+
+What I did delete were two obvious test rows on Alazani Valley Tours, both typed by hand on
+19 September: a contact person called **"test test"** with no phone or email, and a guide called
+**"x"** with phone **"1"**. Nothing referenced either. That is the whole tidy-up.
+
+### Still not on the real site
+
+Everything is on `staging`. `master` — the site your customers use — is untouched, and the
+access-code leak is still live there until we do the final merge. That merge is chunk 14 and it
+needs your explicit go-ahead, because it is also the step that changes the production database.
+
+---
+
 ## 🟡 2026-09-19 (later) — Guide picker built. NOT on staging yet, nothing for you to check *yet*.
 
 This is the change you designed: a company's shared code works again even when that company
