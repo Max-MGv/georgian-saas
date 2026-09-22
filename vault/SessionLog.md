@@ -12,7 +12,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 > **STATE ON EXIT — read this first if you are resuming cold.**
 >
-> - Branch **`staging`**. Chunk 7 committed on top of `f9a8b73`.
+> - Branch **`staging`**, HEAD **`66e4868`**, committed and pushed.
 > - **`master` is untouched.** The migration has still run on the **dev** database only.
 > - **49 TypeScript errors** (was 54), none in a file chunk 7 owns. Still expected mid-rework.
 > - **The public site renders again.** `/`, `/about`, `/contact` and `/admin/login` all return
