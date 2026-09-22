@@ -43,6 +43,16 @@ type Props = {
   onNotListed?: () => void
   labels: Labels
   preview?: boolean
+  /**
+   * Stacking layer for the overlay, as a Tailwind class. Defaults to the `z-50` the booking
+   * form wants.
+   *
+   * The wine catalogue renders this *over its own checkout drawer*, which is itself `z-50`, so
+   * the picker appeared behind it — visible but unreachable. That page's own access-code popup
+   * already uses `z-[60]` for the same reason. Exposed as a prop rather than raised globally
+   * because "what else is on this page" is the caller's knowledge, not this component's.
+   */
+  overlayZClass?: string
 }
 
 const C = {
@@ -51,7 +61,7 @@ const C = {
 }
 
 export default function ContactPickerPopupView({
-  title, intro, people, onPick, onNotListed, labels, preview,
+  title, intro, people, onPick, onNotListed, labels, preview, overlayZClass = 'z-50',
 }: Props) {
   const fields = (
     <>
@@ -130,7 +140,7 @@ export default function ContactPickerPopupView({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+    <div className={`fixed inset-0 ${overlayZClass} flex items-center justify-center px-4`} style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
       <div className={cardClass} style={cardStyle}>{fields}</div>
     </div>
   )

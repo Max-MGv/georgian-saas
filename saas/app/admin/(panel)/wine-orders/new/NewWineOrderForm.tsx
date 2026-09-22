@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createWineOrderAdmin } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
+import { useContactSelection } from '@/lib/useContactSelection'
+import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -28,8 +30,10 @@ type CompanyOption = {
   id: string
   name: string
   wineDiscountPercent: number | null
-  contactName: string | null
-  contactPhone: string | null
+  // No contactName/contactPhone: replaced by CompanyPerson rows resolved per company
+  // (Plan-ContactRoles Chunk 1). This form's old autofill from those columns, under a comment
+  // reading "Mirrors WineCatalogueClient.tsx's applyProfile()", is what produced decision 10 -
+  // the same job implemented twice and drifting. Both now call one resolver and one hook.
   address: string | null
   identificationCode: string | null
 }
@@ -67,12 +71,20 @@ function Field({ label, children, half, required }: { label: string; children: R
 
 export default function NewWineOrderForm({
   companies,
+  contactRoles = [],
   wines,
   locale = 'en',
 }: {
   companies: CompanyOption[]
   wines: WineOption[]
   locale?: string
+  /**
+   * The tenant's per-order roles that apply to wine orders, with no people attached. The
+   * choices come per company from the resolver and render **inline** here, not in the popup
+   * the public forms use: an admin has no code step to hang a popup off (plan §4b's "honest
+   * asymmetry" - same resolver, same hook, different trigger).
+   */
+  contactRoles?: OrderRole[]
 }) {
   const router = useRouter()
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
@@ -89,6 +101,32 @@ export default function NewWineOrderForm({
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
+
+  // ── Contact roles ─────────────────────────────────────────────────────────
+  // contact_person owns the three fields above, because those are what
+  // WineOrder.contactName/contactPhone/contactEmail are written from. Matched on `key`, since
+  // labels are renameable and `key` is what code matches on (Chunk 0).
+  const contactPersonRole = contactRoles.find(r => r.key === 'contact_person') ?? null
+  const extraRoles = contactRoles.filter(r => r.key !== 'contact_person')
+  const roleLabel = (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn
+
+  const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
+    if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
+    setContactName(person.name)
+    if (person.phone) setContactPhone(person.phone)
+    if (person.email) setContactEmail(person.email)
+  }, [contactPersonRole?.roleId])
+
+  const {
+    selected: selectedContacts,
+    contacts: pickedContacts,
+    roleChoices,
+    resolve: resolveContacts,
+    pickFor,
+    clearRole,
+    setTyped: setTypedContact,
+    reset: resetContacts,
+  } = useContactSelection({ module: 'WINE_ORDER', onApply: applyPickedPerson })
 
   // Wine lines (client-side only until submit)
   const [lines, setLines] = useState<LineItem[]>([])
@@ -114,12 +152,18 @@ export default function NewWineOrderForm({
     : subtotal
 
   // ── Company autofill ──────────────────────────────────────────────────────
-  // Mirrors WineCatalogueClient.tsx's applyProfile(): businessName/llcName take
-  // the company name unconditionally, everything else only overwrites when the
-  // company actually has that field set — so switching to a company never
+  // businessName/llcName take the company name unconditionally; everything else only
+  // overwrites when the company actually has that field set, so switching company never
   // blanks out something the admin already typed.
+  //
+  // The contact person no longer comes off the company row — it is one of that company's
+  // people, chosen from the inline dropdown below. A role with exactly one person fills itself
+  // in, because making an admin pick from a list of one is the friction this feature exists to
+  // remove. `resolve` hands the choices back rather than only storing them, since the stored
+  // copy is state and would still be empty in this closure.
   function handleCompanyChange(id: string) {
     setCompanyId(id)
+    resetContacts()
     if (!id) return
     const company = companies.find(c => c.id === id)
     if (!company) return
@@ -127,8 +171,32 @@ export default function NewWineOrderForm({
     setLlcName(company.name)
     if (company.identificationCode) setLlcId(company.identificationCode)
     if (company.address) setAddress(company.address)
-    if (company.contactName) setContactName(company.contactName)
-    if (company.contactPhone) setContactPhone(company.contactPhone)
+    void resolveContacts({ companyId: id }).then(result => {
+      if ('error' in result) return
+      for (const choices of result.roleChoices) {
+        if (choices.people.length === 1) pickFor(choices.people[0]!, choices)
+      }
+    })
+  }
+
+  /**
+   * Who to record against this order, one entry per contact role. Same shape and same reasoning
+   * as buildContacts() in BookingForm.tsx: contact_person is rebuilt from the live fields so an
+   * edited autofill stays truthful, keeping its `personId` when one was picked.
+   */
+  function buildContacts() {
+    if (!companyId) return undefined
+    const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
+    const all = contactPersonRole && contactName.trim()
+      ? [{
+          roleId: contactPersonRole.roleId,
+          personId: selectedContacts[contactPersonRole.roleId]?.personId,
+          name: contactName.trim(),
+          phone: contactPhone.trim() || null,
+          email: contactEmail.trim() || null,
+        }, ...others]
+      : others
+    return all.length > 0 ? all : undefined
   }
 
   // ── Wine line helpers ─────────────────────────────────────────────────────
@@ -175,6 +243,9 @@ export default function NewWineOrderForm({
       contactName,
       contactPhone,
       contactEmail: contactEmail || null,
+      // One entry per contact role. Chunk 9 turns these into OrderContact rows with
+      // snapshots; until then createWineOrderAdmin accepts and ignores them.
+      contacts: buildContacts(),
       wines: lines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity })),
     })
 
@@ -226,6 +297,34 @@ export default function NewWineOrderForm({
         <Field label={at('newWineOrder.contact.workingHours')}>
           <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
         </Field>
+        {/* Choose one of the company's people, inline. The public forms reach the same
+            choices through a code popup; an admin has no code step, so the list is simply a
+            dropdown (plan §4b). Rendered only when there is someone to choose: no company
+            selected, nobody on file, or person codes switched on all mean no list, and a
+            dropdown with nothing in it is worse than no dropdown. */}
+        {contactPersonRole && (() => {
+          const choices = roleChoices.find(r => r.roleId === contactPersonRole.roleId)
+          if (!choices || choices.people.length === 0) return null
+          const chosenId = selectedContacts[contactPersonRole.roleId]?.personId ?? ''
+          return (
+            <Field label={at('newWineOrder.contact.pickPerson', { role: roleLabel(contactPersonRole) })}>
+              <select
+                value={chosenId}
+                onChange={e => {
+                  const person = choices.people.find(pp => pp.id === e.target.value)
+                  if (person) pickFor(person, choices)
+                  else clearRole(contactPersonRole.roleId)
+                }}
+                style={inputStyle}
+              >
+                <option value="">{at('newWineOrder.contact.pickPersonNone')}</option>
+                {choices.people.map(pp => (
+                  <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
+                ))}
+              </select>
+            </Field>
+          )
+        })()}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <Field label={at('newWineOrder.contact.contactName')} half required>
             <input value={contactName} onChange={e => setContactName(e.target.value)} style={inputStyle} />
@@ -237,6 +336,46 @@ export default function NewWineOrderForm({
         <Field label={at('newWineOrder.contact.contactEmail')}>
           <input type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} style={inputStyle} />
         </Field>
+
+        {/* One block per wine-applicable role other than contact_person. None ship today -
+            `guide` is BOOKING-only - but a role added on the Contact Types screen appears here
+            with no code change. Same generic treatment as the public forms. */}
+        {extraRoles.map(role => {
+          const chosen = selectedContacts[role.roleId]
+          const choices = roleChoices.find(r => r.roleId === role.roleId)
+          return (
+            <div key={role.roleId}>
+              {choices && choices.people.length > 0 && (
+                <Field label={at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}>
+                  <select
+                    value={chosen?.personId ?? ''}
+                    onChange={e => {
+                      const person = choices.people.find(pp => pp.id === e.target.value)
+                      if (person) pickFor(person, choices)
+                      else clearRole(role.roleId)
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="">{at('newWineOrder.contact.pickPersonNone')}</option>
+                    {choices.people.map(pp => (
+                      <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <Field label={`${roleLabel(role)} — ${at('newWineOrder.contact.contactName')}`} half>
+                  <input value={chosen?.name ?? ''} style={inputStyle}
+                    onChange={e => setTypedContact(role.roleId, { name: e.target.value, phone: chosen?.phone, email: chosen?.email })} />
+                </Field>
+                <Field label={`${roleLabel(role)} — ${at('newWineOrder.contact.contactPhone')}`} half>
+                  <input type="tel" value={chosen?.phone ?? ''} style={inputStyle}
+                    onChange={e => setTypedContact(role.roleId, { name: chosen?.name ?? '', phone: e.target.value, email: chosen?.email })} />
+                </Field>
+              </div>
+            </div>
+          )
+        })}
       </Card>
 
       {/* ── Wines ── */}

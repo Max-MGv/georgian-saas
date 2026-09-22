@@ -116,6 +116,23 @@ export async function createWineOrderAdmin(data: {
   contactName: string
   contactPhone: string
   contactEmail: string | null
+  /**
+   * One entry per contact role, built by `buildContacts()` in NewWineOrderForm.tsx.
+   *
+   * `personId` is absent when the admin typed the details rather than picking someone on
+   * file, which is why the name and details travel alongside it: Chunk 9 stores them as
+   * snapshots, so deleting a person later loses the link and never the facts (finding F2).
+   *
+   * **Accepted and not yet written** — Chunk 9 owns the OrderContact write path and will
+   * re-verify every `personId` against `companyId` under the tenant before trusting it.
+   */
+  contacts?: {
+    roleId: string
+    personId?: string
+    name: string
+    phone: string | null
+    email: string | null
+  }[]
   wines: { vintageId: string; quantity: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
   await requireAdmin()

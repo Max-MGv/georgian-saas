@@ -8,6 +8,67 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-22 (later still) — Contact Roles chunk 8: both wine order forms, and the build is whole
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7 and 8 committed and pushed.
+> - **`master` untouched.** Migration still dev-database only.
+> - **43 TypeScript errors** (was 49), none in a file chunks 7 or 8 own.
+> - ✅ **Every route renders.** `/`, `/wines`, `/about`, `/contact`, `/admin/login` all 200 —
+>   and `/wines` no longer takes `/admin/login` down with it, which was the last of the
+>   stale-import breakage.
+> - ⚠️ `/admin/orders` still 500s. **Chunk 10's file.** Unlike the old `/wines` problem this is
+>   a per-request Prisma error, not module resolution, so it breaks only itself.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 9** — the write path. All four forms now build a
+> `contacts` payload and nothing consumes it yet.
+
+### What was built
+
+Both wine order forms became thin consumers of Chunk 7's shared pieces (decision 10).
+
+- **Public** (`WineCatalogueClient.tsx` + `wines/page.tsx`) — the two deleted resolvers became
+  `useContactSelection({module:'WINE_ORDER'})` + `ContactPickerPopupView`. Company facts come
+  from the resolver, person facts through `onApply`, and a hidden `contacts` field rides along
+  in the submitted FormData.
+- **Admin** (`NewWineOrderForm.tsx` + `page.tsx`) — **the gap that produced decision 10.** Its
+  autofill from `company.contactName`, under a comment reading *"Mirrors
+  WineCatalogueClient.tsx's applyProfile()"*, is gone. Choices render **inline** as a dropdown,
+  not in a popup: an admin has no code step (§4b's honest asymmetry).
+- `useContactSelection()` gained `pickFor()`, `clearRole()`, and `roleChoices` on the resolve
+  result — all three needed by the inline flow, all three shared rather than admin-specific.
+
+### Two things the plan had wrong, both found by opening the files
+
+It said the public wine path "has no company dropdown". **It has one**, plus the same
+`hideCompanyDropdown` direct-code variant the booking form has. It also has its own hand-rolled
+access-code popup rather than using `AccessCodePopupView` — left alone deliberately, since
+consolidating it is a different job from rewiring the resolver underneath it.
+
+### A bug, and a sharper lesson under it
+
+The picker rendered **behind the checkout drawer**: the component hard-coded `z-50` and the
+drawer is also `z-50`. Fine on the booking form, which has no competing layer. Fixed with an
+`overlayZClass` prop rather than raising the component globally.
+
+The first fix used `z-[70]` — an arbitrary Tailwind value **not in the generated CSS**, so it
+computed to `zIndex: auto` and the picker stayed behind the drawer with no error anywhere.
+Caught only by reading the computed style off the live element instead of trusting the class
+had applied. The working fix reuses `z-[60]`, already proven to exist on that page.
+
+### Verified
+
+`tsc` clean for every chunk-8 file · parity 1103/1103 EN+KA · RLS 19/19 · resolver 22/22 · all
+routes 200 · public wine form walked (Sighnaghi Wine Bar: code → 10% discount → picker above
+the drawer → Tamar Gogoladze into the fields, `contacts` payload carrying roleId + personId +
+snapshots) · admin wine form walked (Marani Import GmbH: 20% discount note, inline "Choose the
+Contact Person" pre-selected with Katrin Vogel).
+
+**Not verified:** no wine order was submitted — nothing receives `contacts` until chunk 9.
+
+---
+
 ## 2026-09-22 (later) — Contact Roles chunk 7: the shared picker, and the app renders again
 
 > **STATE ON EXIT — read this first if you are resuming cold.**

@@ -10,7 +10,7 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 🟢 2026-09-22 — Contact Roles chunk 7. The site works again. Two things for you.
+## 🟢 2026-09-22 — Contact Roles chunks 7 & 8. The whole site works again. One thing for you.
 
 The booking form now asks who you are, once per contact type the company has people in — Contact
 Person first, then Guide — and fills the right details into the right places. I walked all of it
@@ -27,9 +27,15 @@ in a browser myself, so this list is short.
       and with it on the booking form shows no picker and no colleague names at all, while a
       guide's own code takes them straight through. I put the setting back to off afterwards.
 
-      One caveat if you go back in yourself: **restart the dev server first and don't open
-      `/wines`** — the wine page is still half-migrated and breaks `/admin/login` the moment it
-      loads. Chunk 8 fixes that for good. `/admin/orders` also still errors; that's chunk 10.
+      ~~One caveat if you go back in yourself: restart the dev server first and don't open
+      `/wines`.~~ **No longer true — chunk 8 fixed the wine page**, so you can click anywhere
+      now without breaking the admin panel. The one screen that still errors is
+      **Orders** (`/admin/orders`); that's chunk 10 and it only breaks itself.
+
+      Wine orders also got the same treatment while I was there. If you want a look: the public
+      **Order Wine** page now asks who you are after you enter a company code, and
+      **Wine Orders → New Wine Order** in the admin has a "Choose the Contact Person" dropdown
+      that fills itself in when the company has only one. Both work; neither needs checking.
 
 - [ ] **Read the Georgian.** This is the only thing genuinely left for you. New wording, mine,
       drafted not natively reviewed:

@@ -415,7 +415,7 @@ A `null` in the `polname` column is the bug.
 | **5** | Admin — Edit Company people list, role-driven | ✅ Done |
 | **6** | Settings — `person_codes_enabled` | ✅ Done |
 | **7** | **Shared picker + hook** + public booking form | ✅ Done |
-| **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
+| **8** | Both wine order forms (public + admin manual) | ✅ Done |
 | **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
 | **10** | Admin order surfaces — finally display contacts | ⬜ Not started |
 | **11** | Emails — invoice recipient from roles | ⬜ Not started |
@@ -425,20 +425,20 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–7 all done (2026-09-22), including Chunk 6's live check.
-**Chunk 8 next — both wine order forms.** It is now the only thing still breaking the build at
-runtime: see Chunk 7's note on `WineCatalogueClient.tsx`, which 500s `/admin/login` the moment
-anything compiles `/wines`.
+**Overall resume point:** Chunks 0–8 all done (2026-09-22).
+**Chunk 9 next — the write path.** Both public forms and both admin forms now build a
+`contacts` payload and nothing consumes it yet; Chunk 9 turns those into `OrderContact` rows
+with snapshots. **Nothing breaks the build at runtime any more** — every route returns 200.
 
-**49 type errors remain** (54 before Chunk 7), none of them in a file Chunk 7 owns:
+**43 type errors remain**, none of them in a file Chunks 7 or 8 own:
 `app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/actions/orders.ts` (9, Chunks 9/11),
 `scripts/backfill-test-fixtures.ts` (8, Chunk 12), `app/admin/onboarding/page.tsx` (5,
 Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12),
-`app/actions/createBooking.ts` (3, Chunk 9), `app/admin/(panel)/wine-orders/new/page.tsx` (2)
-+ `wines/page.tsx` (2) + `WineCatalogueClient.tsx` (2) (6, Chunk 8).
+`app/actions/createBooking.ts` (3, Chunk 9).
 
-Chunk 7 cleared 5: one on `app/(site)/page.tsx`, three on `components/BookingForm.tsx`, and one
-that left with `GuidePickerPopupView.tsx`.
+Chunk 7 cleared 5 (one on `app/(site)/page.tsx`, three on `components/BookingForm.tsx`, one
+that left with `GuidePickerPopupView.tsx`); Chunk 8 cleared the remaining 6, across both wine
+pages and `WineCatalogueClient.tsx`.
 
 *(Count the lines matching `error TS`, not the lines of output — a multi-line "Type ... is
 missing the following properties" explanation belongs to the error above it. This note briefly
@@ -446,30 +446,29 @@ said 45, from summing a per-file list by hand; 49 is what the compiler reports. 
 figure has been 65 → 54 → 49. An earlier revision also said "~46", a separate slip on a
 correct list.)*
 
-### ✅ The app renders again as of Chunk 7 — with one live caveat, read it
+### ✅ Every route renders as of Chunk 8
 
-Chunk 7 rewrote `components/BookingForm.tsx`, and `/`, `/about`, `/contact` and
-`/admin/login` all return **200** again (measured 2026-09-22 on a fresh dev server).
+Chunk 7 rewrote `components/BookingForm.tsx` and Chunk 8 rewrote
+`app/(site)/wines/WineCatalogueClient.tsx` — the two files whose stale Chunk 3 imports failed
+every route through Turbopack's whole-graph export resolution. Measured 2026-09-22 after both:
+`/`, `/wines`, `/about`, `/contact` and `/admin/login` all return **200**, and `/wines` no
+longer takes `/admin/login` down with it.
 
-**But this section's original diagnosis was incomplete, and the handoff repeated it.** It named
-`BookingForm.tsx` as *the* file whose stale imports failed every route. There are **two**:
-`app/(site)/wines/WineCatalogueClient.tsx` still imports `verifyCompanyCode` and
-`findCompanyByCode`, which Chunk 3 also removed. Turbopack resolves exports across the whole
-graph, so the moment anything compiles `/wines`, `/admin/login` goes back to **500** and stays
-there until the dev server restarts. Chunk 7 measured all three orderings; see its section.
+**This section's original diagnosis named only one of those two files, and the handoff repeated
+it.** Chunk 7 found the second the hard way — the admin panel worked until something compiled
+`/wines`, then stayed broken until a dev-server restart. Worth remembering as a shape: "one
+stale import file breaks everything" is rarely a claim about exactly one file.
 
-Consequences, none of them blocking but all worth knowing:
+What remains, and does not block anything:
 
-- **Chunks 4, 5 and 6 can now be visually verified** — restart the dev server first, and do not
-  open `/wines` until Chunk 8 lands.
-- Do **not** "just fix the imports" in `WineCatalogueClient.tsx` to unblock a screenshot. That is
-  Chunk 8's file, its call sites need rewiring to the resolver rather than a one-line import
-  swap, and a half-rewritten form is exactly the state this plan's ground rules warn against.
-- A second, independent constraint on admin screens: verifying one needs an admin login, and
-  **typing a password into a form is off-limits for Claude**, including when asked to. Feature
-  201 hit the same wall. Either Max does that click-through, or the Chunk 13 Playwright specs do
-  — they already read `credentials.txt` themselves (`tests/helpers/credentials.ts`), so the
-  credential never passes through Claude.
+- `/admin/orders` still 500s — `app/admin/(panel)/orders/page.tsx` selects a dropped relation.
+  **Chunk 10 owns it.** It is a per-request Prisma error, not a module-resolution one, so
+  unlike `/wines` it does not poison the graph for other routes.
+- Verifying an admin screen needs an admin login, and **typing a password into a form is
+  off-limits for Claude**, including when asked to. Settled in practice on 2026-09-22: Max
+  signed in himself and handed the session over. The Chunk 13 Playwright specs are the other
+  route — they read `credentials.txt` directly (`tests/helpers/credentials.ts`), so the
+  credential never passes through Claude either way.
 
 **Plan amended 2026-09-22** after a dependency re-check found two gaps: the admin manual
 wine-order form was missing entirely, and `app/admin/onboarding/page.tsx` was unlisted. Max chose
@@ -1015,31 +1014,104 @@ round-tripped — there is nothing to receive it until Chunk 9 writes `OrderCont
 
 ## Chunk 8 — Both wine order forms
 
-**Status:** ⬜ Not started · **Read §4b — this chunk owns forms 2 and 4**
+**Status:** ✅ Done (2026-09-22) · typecheck clean for every file this chunk owns (49 → 43) ·
+parity 1103/1103 · RLS 19/19 · resolver 22/22 · **both forms walked in a browser** ·
+**Read §4b — this chunk owns forms 2 and 4**
 
 **Public** (`app/(site)/wines/WineCatalogueClient.tsx` + `wines/page.tsx`):
 
-- [ ] Consumes `resolveCompanyContacts()` + `ContactPickerPopupView` + `useContactSelection()`
+- [x] Consumes `resolveCompanyContacts()` + `ContactPickerPopupView` + `useContactSelection()`
       from Chunks 3 and 7. **No new picker implementation** (decision 10)
-- [ ] This path has no company dropdown — confirm the picker fires at the right moment in
-      *that* flow, not the booking one's
+- [x] The picker fires at the right moment in *this* flow, confirmed live — see the correction
+      below, because this plan was wrong about what that flow is
 
 **Admin manual entry** (`app/admin/(panel)/wine-orders/new/NewWineOrderForm.tsx` + `page.tsx`
 + `createWineOrderAdmin` in `app/actions/wineOrders.ts`):
 
-- [ ] **This was the gap** that produced decision 10 — it autofills from `company.contactName`
-      at line 130, under a comment reading *"Mirrors WineCatalogueClient.tsx's applyProfile()"*.
-      Its `CompanyOption` type carries `contactName`/`contactPhone` and its `page.tsx` selects
-      those columns; both must move to people
-- [ ] Renders the choices **inline, not in the popup** — an admin has no code step (§4b's
-      "honest asymmetry"). Same resolver, same hook, different trigger
-- [ ] `createWineOrderAdmin` writes `OrderContact` rows, same as the public path (Chunk 9)
+- [x] **The gap that produced decision 10 is closed** — the autofill from `company.contactName`
+      under its *"Mirrors WineCatalogueClient.tsx's applyProfile()"* comment is gone, and
+      `CompanyOption` no longer carries `contactName`/`contactPhone`; `page.tsx` stopped
+      selecting them. Both forms now call one resolver and one hook
+- [x] Renders the choices **inline, not in the popup** — a labelled dropdown per role. Verified
+      live on Marani Import GmbH: *"Choose the Contact Person"* with one option
+- [x] `createWineOrderAdmin` accepts `contacts`. **Writing the rows is Chunk 9** — the payload
+      is carried and deliberately ignored until the chunk that owns the write path
 
 **Both:**
 
-- [ ] Multiple role *types* supported; still one person per role per order (decision 9)
-- [ ] `WineOrder.contactName/contactPhone/contactEmail` keep being written, mirroring decision
-      4's approach — the wine form requires them and payment depends on `contactEmail`
+- [x] Multiple role *types* supported; still one person per role per order (decision 9). Only
+      `contact_person` applies to wine orders today, since `guide` is BOOKING-only — so the
+      generic per-role block renders nothing at present, which is data, not a special case
+- [x] `WineOrder.contactName/contactPhone/contactEmail` keep being written, mirroring decision
+      4 — the wine form requires them and payment depends on `contactEmail`
+
+### Corrections to this plan, found by opening the files (H1)
+
+**"This path has no company dropdown" was wrong.** `WineCatalogueClient.tsx` has exactly the
+same two-variant structure as the booking form: a company `<select>` *and* a
+`hideCompanyDropdown` direct-code variant. Both were rewired.
+
+**It also has its own hand-rolled access-code popup**, inline, rather than using
+`AccessCodePopupView` like the booking form does — more of the H4/§22 duplication this rework
+exists to reduce. **Left alone deliberately:** consolidating it is a separate job from this
+chunk's, and doing it here would have meant rewriting a working popup while rewiring the
+resolver underneath it.
+
+### Two additions to `useContactSelection()`, both driven by the admin form
+
+The hook was written in Chunk 7 against the popup flow. The inline flow needed two things, and
+both are genuinely shared rather than admin-specific — Chunk 10 will want them too:
+
+- **`resolve()` now returns `roleChoices` as well as storing them.** The stored copy is state
+  and is not readable from the closure that just awaited the call, so a caller acting on the
+  result immediately would otherwise have to reach for a ref.
+- **`pickFor(person, role)` and `clearRole(roleId)`** — select for a named role with no popup in
+  between, which is what a dropdown's `onChange` needs.
+
+**One deliberate asymmetry between the two forms.** The admin form **auto-selects a role that
+has exactly one person**; the public forms do not. That is not an oversight: on a public form
+the whole point is the customer *declaring* who they are, and pre-filling the only person on
+file would assert something that may be false — a different colleague could be ordering, which
+is exactly what "I am not on this list" exists for. An admin recording an order on a company's
+behalf is in the opposite position, and the old code auto-filled `company.contactName`
+unconditionally, so auto-selecting the single contact preserves the workflow they already had.
+
+### 🔴 A real bug, found by looking at the screen
+
+**The picker rendered behind the checkout drawer.** `ContactPickerPopupView` hard-coded `z-50`,
+which is fine on the booking form — it has no competing layer — but the wine catalogue's
+checkout drawer is *also* `z-50`, and the picker is opened from inside it. The popup was
+visible at the edge and completely unreachable. That page's own access-code popup already used
+`z-[60]` for precisely this reason.
+
+Fixed with an `overlayZClass` prop rather than by raising the component globally: what else is
+on the page is the caller's knowledge, not the component's.
+
+**And a second, sharper lesson underneath it.** The first fix used `z-[70]` — a fresh arbitrary
+Tailwind value that **was not in the generated CSS**, so it computed to `zIndex: auto` and the
+picker stayed behind the drawer with no error anywhere. Caught only by reading the computed
+style off the live element rather than trusting that the class had applied. The working fix
+reuses `z-[60]`, a class already proven to exist on that page. **A Tailwind arbitrary value
+that has never been used before is not guaranteed to exist at runtime; check the computed
+value, not the class name.**
+
+### Verified live, in a browser
+
+- **Public wine form** — Sighnaghi Wine Bar (code `SIGHNAGHI44`, 10% discount, one contact
+  person): code accepted → the discount applied (15₾ → 13.50₾) → company facts filled (business
+  name, LLC name, LLC id `412008551`, address) → the contact picker opened **above** the drawer
+  → picking Tamar Gogoladze filled name, phone and email. The hidden `contacts` field carried
+  `[{roleId, personId, name, phone, email}]`, ready for Chunk 9
+- **Admin wine form** — Marani Import GmbH (20% discount): company facts filled, the discount
+  note rendered, and the inline *"Choose the Contact Person"* dropdown appeared **pre-selected**
+  with Katrin Vogel, her phone and email filled
+- `/`, `/wines`, `/about`, `/contact`, `/admin/login` all **200**, and — the point of this
+  chunk for everything else — **`/wines` no longer poisons `/admin/login`.** The whole app now
+  renders
+- Server log shows `resolveCompanyContacts` called with `module: 'WINE_ORDER'` from both forms
+
+**Not verified:** no wine order was submitted, so the `contacts` payload has not been
+round-tripped — there is nothing to receive it until Chunk 9.
 
 **Resume point:** —
 

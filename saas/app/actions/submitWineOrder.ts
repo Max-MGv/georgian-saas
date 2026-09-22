@@ -40,6 +40,22 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
   const winesJson = formData.get('wines') as string
   const companyId = (formData.get('companyId') as string | null)?.trim() || null
+  // One entry per contact role, JSON like `wines` above (Plan-ContactRoles Chunk 8).
+  // **Parsed and not yet written** — Chunk 9 owns the OrderContact write path and will
+  // re-verify every personId against the company under the tenant before trusting it. Parsed
+  // here rather than left to that chunk so a malformed value fails now, on the form that sent
+  // it, instead of surfacing later as a write-path bug.
+  const contactsJson = formData.get('contacts') as string | null
+  let contacts: { roleId: string; personId?: string; name: string; phone: string | null; email: string | null }[] = []
+  if (contactsJson) {
+    try {
+      const parsed = JSON.parse(contactsJson)
+      if (Array.isArray(parsed)) contacts = parsed
+    } catch {
+      return { error: 'Please fill in all required fields.' }
+    }
+  }
+  void contacts
 
   if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }

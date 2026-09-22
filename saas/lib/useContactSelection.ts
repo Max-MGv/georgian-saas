@@ -57,6 +57,15 @@ type ResolveOutcome =
       matchType: 'person' | 'company'
       /** A person's own code matched — they are already selected, nothing to ask. */
       matchedPerson: ContactChoice | null
+      /**
+       * The pickable roles, returned as well as stored.
+       *
+       * The stored copy is state and therefore not readable from the closure that just awaited
+       * this call, so a caller wanting to act on the result immediately — an admin screen
+       * auto-selecting a role that has exactly one person, say — needs it in hand rather than
+       * reaching for a ref.
+       */
+      roleChoices: RoleChoices[]
     }
 
 type Options = {
@@ -171,8 +180,30 @@ export function useContactSelection({ module, onApply }: Options) {
       company: result.company,
       matchType: result.matchType,
       matchedPerson: result.matchedPerson,
+      roleChoices: result.roleChoices,
     }
   }, [module, applyPerson])
+
+  /**
+   * Select a person for a named role directly, with no popup in between.
+   *
+   * This is what the admin screens use: they have no code step to hang a popup off, so they
+   * render the same choices inline and call this from a dropdown (plan §4b). Takes the person
+   * and role as values rather than ids so it also works immediately after `resolve`, before
+   * the stored `roleChoices` state has landed.
+   */
+  const pickFor = useCallback((person: ContactChoice, role: OrderRole) => {
+    applyPerson(person, role)
+    setPending(prev => prev.filter(r => r.roleId !== role.roleId))
+  }, [applyPerson])
+
+  /** Drop a role's selection entirely — the admin dropdown's "nobody" option. */
+  const clearRole = useCallback((roleId: string) => {
+    setSelected(prev => {
+      const { [roleId]: _drop, ...rest } = prev
+      return rest
+    })
+  }, [])
 
   /**
    * Record details the guest typed themselves against a role — no `personId`, because
@@ -212,6 +243,8 @@ export function useContactSelection({ module, onApply }: Options) {
     loading,
     resolve,
     pick,
+    pickFor,
+    clearRole,
     skip,
     reopenRole,
     setTyped,

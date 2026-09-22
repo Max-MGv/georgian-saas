@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef, useTransition } from 'react'
+import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
-import { verifyCompanyCode, findCompanyByCode } from '@/app/actions/companies'
+import { useContactSelection } from '@/lib/useContactSelection'
+import ContactPickerPopupView from '@/components/ContactPickerPopupView'
+import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -53,8 +55,9 @@ type Company = {
   id: string
   name: string
   identificationCode: string | null
-  contactName: string | null
-  contactPhone: string | null
+  // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows in a
+  // contact_person role (Plan-ContactRoles Chunk 1). People arrive per company through
+  // resolveCompanyContacts(), via useContactSelection() below.
   address: string | null
   /** Whether the company has an access code — never the code itself (KnownBugs #57). */
   hasAccessCode: boolean
@@ -100,6 +103,7 @@ function WineBottlePlaceholder({ color }: { color: string }) {
 export default function WineCatalogueClient({
   wines: WINES,
   companies = [],
+  contactRoles = [],
   logoUrl = null,
   logoAlt = '',
   tenantName = '',
@@ -110,6 +114,14 @@ export default function WineCatalogueClient({
 }: {
   wines: DbWine[]
   companies?: Company[]
+  /**
+   * The tenant's per-order roles that apply to wine orders, with no people attached
+   * (`orderRolesFor()`). Today that is Contact Person alone — `guide` is BOOKING-only, since
+   * a wine order has no visit for a guide to attend — but the form is driven by this list
+   * rather than by that fact, so a wine-applicable role added on the Contact Types screen
+   * appears here with no code change.
+   */
+  contactRoles?: OrderRole[]
   logoUrl?: string | null
   logoAlt?: string
   tenantName?: string
@@ -265,59 +277,106 @@ export default function WineCatalogueClient({
     }
   }, [totalBottles])
 
+  /**
+   * Which role owns this form's contact fields.
+   *
+   * Matched on `key`, not label — labels are display-only and renameable, `key` is what code
+   * matches on (Plan-ContactRoles Chunk 0). `contact_person` keeps the three fields it has
+   * always had, because those are what `WineOrder.contactName/contactPhone/contactEmail` are
+   * written from. Any other wine-applicable role would get its own block, exactly as the
+   * booking form does — there are none today, and that is data, not a rule in this file.
+   */
+  const contactPersonRole = contactRoles.find(r => r.key === 'contact_person') ?? null
+  const extraRoles = contactRoles.filter(r => r.key !== 'contact_person')
+  const roleLabel = (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn
+
+  /** Company-level facts. These are still Company columns; only the people moved. */
+  function applyCompanyProfile(company: { name: string; identificationCode: string | null; address: string | null; wineDiscountPercent: number | null }) {
+    setBusinessName(company.name)
+    setLlcName(company.name)
+    if (company.identificationCode) setLlcId(company.identificationCode)
+    if (company.address) setAddress(company.address)
+    setDiscountPercent(company.wineDiscountPercent ?? null)
+  }
+
+  /**
+   * A picked person's details land in this form's own fields — but only for contact_person.
+   * Every other role is rendered straight out of the hook's state, so there is nothing to copy.
+   * The hook stays form-agnostic because this function, not the hook, knows this form keeps a
+   * whole name in one box where the booking form splits it into two.
+   */
+  const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
+    if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
+    setContactName(person.name)
+    if (person.phone) setContactPhone(person.phone)
+    if (person.email) setContactEmail(person.email)
+  }, [contactPersonRole?.roleId])
+
+  const {
+    selected: selectedContacts,
+    contacts: pickedContacts,
+    roleChoices,
+    activeRole,
+    resolve: resolveContacts,
+    pick: pickContact,
+    skip: skipContactRole,
+    reopenRole,
+    setTyped: setTypedContact,
+    reset: resetContacts,
+  } = useContactSelection({ module: 'WINE_ORDER', onApply: applyPickedPerson })
+
   useEffect(() => {
-    if (!companyId || hideCompanyDropdown) {
-      if (!companyId) setDiscountPercent(null)
+    if (hideCompanyDropdown) return
+    resetContacts()
+    setShowCodePopup(false)
+    if (!companyId) {
+      setDiscountPercent(null)
       return
     }
     const company = companies.find(c => c.id === companyId)
     if (!company) return
-    if (!company.hasAccessCode) {
-      applyProfile(company, { contactName: company.contactName, contactPhone: company.contactPhone, identificationCode: company.identificationCode, address: company.address })
-      setDiscountPercent(company.wineDiscountPercent ?? null)
+    if (company.hasAccessCode) {
+      setCodeInput('')
+      setCodeError('')
+      setShowCodeText(false)
+      setShowCodePopup(true)
       return
     }
-    setCodeInput('')
-    setCodeError('')
-    setShowCodeText(false)
-    setShowCodePopup(true)
+    // No code gate — resolve straight away so this company's people can be offered. Before
+    // Chunk 8 this branch copied the company's own contact columns, and those are gone.
+    applyCompanyProfile(company)
+    void resolveContacts({ companyId })
   }, [companyId, hideCompanyDropdown])
-
-  function applyProfile(company: Company, profile: { contactName: string | null; contactPhone: string | null; identificationCode: string | null; address: string | null }) {
-    setBusinessName(company.name)
-    setLlcName(company.name)
-    if (profile.identificationCode) setLlcId(profile.identificationCode)
-    if (profile.address) setAddress(profile.address)
-    if (profile.contactName) setContactName(profile.contactName)
-    if (profile.contactPhone) setContactPhone(profile.contactPhone)
-  }
 
   async function handleCodeSubmit() {
     if (!codeInput.trim()) return
     setCodeLoading(true)
     setCodeError('')
-    const result = await verifyCompanyCode(companyId, codeInput)
+    const result = await resolveContacts({ companyId, code: codeInput })
     setCodeLoading(false)
     if ('error' in result) {
       setCodeError('Incorrect code — please try again or contact the winery.')
       return
     }
-    const company = companies.find(c => c.id === companyId)!
-    applyProfile(company, result.profile)
-    setDiscountPercent(result.wineDiscountPercent ?? null)
+    applyCompanyProfile(result.company)
     setShowCodePopup(false)
+    // The picker below opens itself off `activeRole`. A person's own code has already named
+    // them; person codes on means no choices at all, deliberately.
   }
 
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
+    resetContacts()
   }
 
   async function handleDirectCodeSubmit() {
     if (!directCode.trim()) return
     setDirectCodeLoading(true)
     setDirectCodeError('')
-    const result = await findCompanyByCode(directCode, 'WINE_ORDER')
+    // No company chosen first — a tenant-wide lookup, same resolver and same rules as the
+    // dropdown path. One function cannot disagree with itself (hurdle H4).
+    const result = await resolveContacts({ code: directCode })
     setDirectCodeLoading(false)
     if ('error' in result) {
       setDirectCodeError('Code not recognised.')
@@ -325,11 +384,7 @@ export default function WineCatalogueClient({
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setDiscountPercent(result.company.wineDiscountPercent ?? null)
-    applyProfile(
-      { ...result.company, hasAccessCode: false },
-      { contactName: result.company.contactName, contactPhone: result.company.contactPhone, identificationCode: result.company.identificationCode, address: result.company.address }
-    )
+    applyCompanyProfile(result.company)
   }
 
   function clearDirectCode() {
@@ -338,7 +393,30 @@ export default function WineCatalogueClient({
     setDirectCode('')
     setDirectCodeError('')
     setDiscountPercent(null)
+    resetContacts()
     setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone('')
+  }
+
+  /**
+   * Who to record against this order, one entry per contact role.
+   *
+   * The contact_person entry is rebuilt from the live fields rather than from whatever the
+   * picker stored, because the customer may have picked someone and then edited the boxes —
+   * and those same fields are what `WineOrder.contactName/contactPhone/contactEmail` are
+   * written from. Its `personId` is kept when one was picked, so the link survives the edit
+   * while the snapshot stays truthful. Mirrors buildContacts() in BookingForm.tsx.
+   */
+  function buildContacts() {
+    if (!companyId) return []
+    const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
+    if (!contactPersonRole || !contactName.trim()) return others
+    return [{
+      roleId: contactPersonRole.roleId,
+      personId: selectedContacts[contactPersonRole.roleId]?.personId,
+      name: contactName.trim(),
+      phone: contactPhone.trim() || null,
+      email: contactEmail.trim() || null,
+    }, ...others]
   }
 
   async function handleNewCompanySubmit() {
@@ -485,6 +563,29 @@ export default function WineCatalogueClient({
 
   return (
     <>
+      {/* Contact picker - the same component the booking form uses, one showing per role
+          (decision 10, no second picker implementation). Opens itself off the hook's queue
+          and closes when the queue drains; never opens at all when person codes are on. */}
+      {activeRole && (
+        <ContactPickerPopupView
+          title={t(locale, 'form.contact_picker_title')}
+          intro={t(locale, 'form.contact_picker_intro', {
+            company: selectedCompany?.name ?? directCompanyName ?? '',
+            role: roleLabel(activeRole),
+          })}
+          people={activeRole.people}
+          onPick={pickContact}
+          onNotListed={skipContactRole}
+          labels={{ notListed: t(locale, 'form.contact_picker_not_listed') }}
+          // Above the checkout drawer, which is itself z-50. Deliberately the SAME z-[60] this
+          // page's access-code popup already uses — that class is known to exist in the
+          // generated CSS, and the two popups never show at once. A fresh arbitrary value
+          // (z-[70]) silently resolved to `zIndex: auto` and left the picker behind the
+          // drawer: visible, unreachable, and no error anywhere.
+          overlayZClass="z-[60]"
+        />
+      )}
+
       {/* ── Access code popup ─────────────────────────────────────────────── */}
       {showCodePopup && selectedCompany && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
@@ -705,6 +806,10 @@ export default function WineCatalogueClient({
                   <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <input type="hidden" name="companyId" value={companyId} />
                     <input type="hidden" name="discountPercent" value={discountPercent ?? ''} />
+                    {/* One entry per contact role, JSON like the `wines` field. Chunk 9 turns
+                        these into OrderContact rows with snapshots; until then
+                        submitWineOrder accepts and ignores them. */}
+                    <input type="hidden" name="contacts" value={JSON.stringify(buildContacts())} />
 
                     {companySelectorJsx}
 
@@ -723,6 +828,16 @@ export default function WineCatalogueClient({
                     <input name="workingHours" placeholder="Working hours"
                       value={workingHours} onChange={e => setWorkingHours(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                    {/* Only offered when there IS a list: with person codes on the resolver
+                        sends none, deliberately, and a control that opens an empty popup
+                        would be a dead one. */}
+                    {contactPersonRole && (roleChoices.find(r => r.roleId === contactPersonRole.roleId)?.people.length ?? 0) > 0 && (
+                      <button type="button" onClick={() => reopenRole(contactPersonRole.roleId)}
+                        className="self-start text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                        style={{ color: 'var(--color-brand)' }}>
+                        {t(locale, 'form.contact_role_choose')}
+                      </button>
+                    )}
                     <input name="contactName" required placeholder="Contact person full name"
                       value={contactName} onChange={e => setContactName(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
@@ -737,6 +852,43 @@ export default function WineCatalogueClient({
                       placeholder={paymentLabelActive ? 'Email address (for your receipt)' : 'Email address (optional)'}
                       value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+
+                    {/* One block per wine-applicable role other than contact_person, which
+                        already owns the three fields above. None ship today - `guide` is
+                        BOOKING-only - but a role added on the Contact Types screen appears
+                        here with no code change, which is the point of the rework. */}
+                    {extraRoles.map(role => {
+                      const chosen = selectedContacts[role.roleId]
+                      const offered = roleChoices.find(r => r.roleId === role.roleId)
+                      return (
+                        <div key={role.roleId} className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium" style={{ color: C.muted }}>{roleLabel(role)}</span>
+                            {offered && offered.people.length > 0 && (
+                              <button type="button" onClick={() => reopenRole(role.roleId)}
+                                className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                                style={{ color: 'var(--color-brand)' }}>
+                                {t(locale, 'form.contact_role_choose')}
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            aria-label={roleLabel(role) + ' \u2014 ' + t(locale, 'form.contact_role_name')}
+                            placeholder={t(locale, 'form.contact_role_name')}
+                            value={chosen?.name ?? ''}
+                            onChange={e => setTypedContact(role.roleId, { name: e.target.value, phone: chosen?.phone, email: chosen?.email })}
+                            className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                          <input
+                            type="tel"
+                            aria-label={roleLabel(role) + ' \u2014 ' + t(locale, 'form.contact_role_phone')}
+                            placeholder={t(locale, 'form.contact_role_phone')}
+                            value={chosen?.phone ?? ''}
+                            onChange={e => setTypedContact(role.roleId, { name: chosen?.name ?? '', phone: e.target.value, email: chosen?.email })}
+                            className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        </div>
+                      )
+                    })}
 
                     {error && <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{error}</p>}
 

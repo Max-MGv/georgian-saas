@@ -756,6 +756,10 @@ const en: Translations = {
   'newWineOrder.contact.contactName': 'Contact person full name',
   'newWineOrder.contact.contactPhone': 'Contact person phone number',
   'newWineOrder.contact.contactEmail': 'Email address (optional)',
+  // Inline person picker (Plan-ContactRoles Chunk 8). {role} is the contact type's own
+  // admin-managed label, so this key reads correctly for a type added later.
+  'newWineOrder.contact.pickPerson': 'Choose the {role}',
+  'newWineOrder.contact.pickPersonNone': '— type the details below —',
   'newWineOrder.wines.title': 'Wines',
   'newWineOrder.wines.none': 'No wines added yet.',
   'newWineOrder.wines.colWine': 'Wine',
@@ -1989,6 +1993,8 @@ const ka: Translations = {
   'newWineOrder.contact.contactName': 'საკონტაქტო პირის სრული სახელი',
   'newWineOrder.contact.contactPhone': 'საკონტაქტო პირის ტელეფონის ნომერი',
   'newWineOrder.contact.contactEmail': 'ელ. ფოსტა (არასავალდებულო)',
+  'newWineOrder.contact.pickPerson': 'აირჩიეთ {role}',
+  'newWineOrder.contact.pickPersonNone': '— დაწერეთ დეტალები ქვემოთ —',
   'newWineOrder.wines.title': 'ღვინოები',
   'newWineOrder.wines.none': 'ღვინო ჯერ არ დამატებულა.',
   'newWineOrder.wines.colWine': 'ღვინო',
