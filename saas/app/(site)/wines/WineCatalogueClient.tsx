@@ -824,9 +824,8 @@ export default function WineCatalogueClient({
                   <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <input type="hidden" name="companyId" value={companyId} />
                     <input type="hidden" name="discountPercent" value={discountPercent ?? ''} />
-                    {/* One entry per contact role, JSON like the `wines` field. Chunk 9 turns
-                        these into OrderContact rows with snapshots; until then
-                        submitWineOrder accepts and ignores them. */}
+                    {/* One entry per contact role, JSON like the `wines` field.
+                        submitWineOrder turns these into OrderContact rows with snapshots. */}
                     <input type="hidden" name="contacts" value={JSON.stringify(buildContacts())} />
 
                     {companySelectorJsx}

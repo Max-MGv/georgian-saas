@@ -38,6 +38,11 @@ function keyFromLabel(label: string): string {
 }
 
 export async function listContactRoles() {
+  // Every other export in this file calls requireAdmin(); this one did not, which made the
+  // tenant's whole role list readable by anyone with the page open. Labels and keys only, no
+  // credentials, so the impact was small — but an actions file where most functions are
+  // guarded and one is not is exactly where the next hole hides. Found by the 2026-09-22 audit.
+  await requireAdmin()
   const tenantId = await getTenantId()
   return withTenantDb(tenantId, tx =>
     tx.contactRole.findMany({ where: { tenantId }, orderBy: [{ sortOrder: 'asc' }, { labelEn: 'asc' }] })

@@ -124,8 +124,8 @@ export async function createWineOrderAdmin(data: {
    * file, which is why the name and details travel alongside it: Chunk 9 stores them as
    * snapshots, so deleting a person later loses the link and never the facts (finding F2).
    *
-   * **Accepted and not yet written** — Chunk 9 owns the OrderContact write path and will
-   * re-verify every `personId` against `companyId` under the tenant before trusting it.
+   * Written via `writeOrderContacts()`, the one base every order-creation path shares, which
+   * re-verifies every `roleId` and `personId` against `companyId` under the tenant first.
    */
   contacts?: {
     roleId: string

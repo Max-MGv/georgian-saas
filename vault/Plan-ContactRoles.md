@@ -639,6 +639,97 @@ construction. An end-to-end HTTP assertion belongs in the Chunk 13 Playwright wo
 
 ---
 
+## 9c. Production cutover — the pre-flight, written before it is needed
+
+The migration is hand-written and has only ever run against **dev**. Production still has
+`CompanyGuide`, `CompanyRepresentative`, `Order.guideId` and `Company.contactName/Phone/Email`.
+
+These five checks come from the 2026-09-22 audit. **Run them against production before Chunk 14
+merges anything**, not during. Each one is a way this goes wrong quietly.
+
+### 1. 🔴 RLS is not part of the migration, and forgetting it 500s the homepage
+
+`migration.sql` creates the three tables and stops. **Policies and grants live in
+`scripts/setup-rls.ts`, which is a manual run and is not invoked by `prisma migrate deploy`.**
+
+Skip it and `app_user` gets `permission denied for table "ContactRole"` on the first public
+booking — a hard failure on the public site, not a silent degradation. There is nothing in the
+migration file that says so.
+
+**Do:** run `npx tsx scripts/setup-rls.ts` against production immediately after `migrate deploy`,
+in the same sitting, then confirm every new table actually has a policy (H18 — a table with RLS
+on and no policy default-denies every row while every check still reports green):
+
+```sql
+SELECT relname, relrowsecurity, polname
+FROM pg_class LEFT JOIN pg_policy ON polrelid = oid
+WHERE relname IN ('ContactRole','CompanyPerson','OrderContact');
+```
+
+A `null` in `polname` is the bug.
+
+### 2. 🔴 A duplicate access code aborts the whole migration
+
+Step 10 creates `Company_accessCode_key` and `CompanyPerson_code_key` as **global** unique
+indexes. Until now uniqueness was only ever enforced per tenant, by `generateUniqueTenantCode()`
+— so two tenants sharing a code is entirely possible on production, and the index creation will
+abort the migration if so.
+
+The Chunk 1 pre-flight that found "no duplicate codes in any of the three sources" was run
+against **dev only**.
+
+```sql
+SELECT "accessCode", count(*) FROM "Company"
+WHERE "accessCode" IS NOT NULL GROUP BY 1 HAVING count(*) > 1;
+-- and the two person-code sources, pre-migration:
+SELECT code, count(*) FROM "CompanyGuide" WHERE code IS NOT NULL GROUP BY 1 HAVING count(*) > 1;
+SELECT code, count(*) FROM "CompanyRepresentative" WHERE code IS NOT NULL GROUP BY 1 HAVING count(*) > 1;
+```
+
+Note that `lib/demoSeed.ts` hard-codes `KAKHETI07`, `SILKROAD55` and friends and applies them to
+**every non-demo tenant** it seeds — so this is not hypothetical the moment a second tenant is
+seeded. See §9b's note on the P2002 handling, which makes the *runtime* version of this
+collision survivable but does nothing for the migration.
+
+### 3. 🔴 A company with a NULL `tenantId` loses its people, silently
+
+The carry-across INSERTs in steps 6–8 all `JOIN "ContactRole" r ON r."tenantId" = c."tenantId"`,
+and `Company.tenantId` **is nullable**. A null-tenant company's contact person, guides and reps
+join to nothing, are copied nowhere — and then step 9 drops the source columns and tables.
+
+Dev had none (the Chunk 1 pre-flight confirmed 22 companies, none with a null `tenantId`).
+Production is unverified.
+
+```sql
+SELECT count(*) FROM "Company" WHERE "tenantId" IS NULL;
+```
+
+Anything above zero: stop and decide what those rows are before running.
+
+### 4. 🟡 `Order.guideId` is dropped unconditionally
+
+Decision 7 rests on *"all orders are fake"*, which was true of dev — the pre-flight found **0
+orders with a `guideId`**. If production has non-null values they are gone, with no trace and no
+rollback.
+
+```sql
+SELECT count(*) FROM "Order" WHERE "guideId" IS NOT NULL;
+```
+
+Given F1 (nothing ever read the column), losing them costs nothing real — but it should be a
+decision, not a discovery.
+
+### 5. ⚠️ The schema and the app must land together
+
+`next build` cannot succeed while Chunks 10–12's files still reference dropped columns and
+deleted tables. So the migration cannot be deployed "ahead" of the code to de-risk it, and the
+code cannot ship until those chunks land.
+
+That is a constraint on sequencing, not a defect: plan the cutover as one deliberate step with
+the RLS script in the same window, and do it when someone is watching.
+
+---
+
 ## Chunk 0 — Seed roles
 
 **Status:** ✅ Done (2026-09-22)
@@ -1426,6 +1517,12 @@ contacts, and Chunk 10 needs one to display.
 ---
 
 ## Chunk 14 — Close-out
+
+> ⚠️ **Before this chunk merges anything to `master`, run §9c's five pre-flight checks against
+> the production database.** The RLS one in particular: policies are not part of
+> `prisma migrate deploy`, and skipping `scripts/setup-rls.ts` takes the public homepage down
+> on the first booking.
+
 
 **Status:** ⬜ Not started
 

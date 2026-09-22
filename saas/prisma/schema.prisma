@@ -67,8 +67,14 @@ model Company {
   identificationCode  String?
   address             String?
   // The company-level gate, distinct from a person's own code (CompanyPerson.code).
-  // Only consulted when the tenant has `company_access_codes_enabled` on — see
-  // vault/Plan-ContactRoles.md decision 6.
+  // NOT governed by `person_codes_enabled` — it works in both modes, because it is the only
+  // way the hide_company_dropdown variant can identify a company at all. Required server-side
+  // whenever it is set: see lib/contactResolution.ts, and Plan-ContactRoles §9b A1 for the
+  // audit that found it being enforced by the form alone.
+  //
+  // (This comment used to name a setting called `company_access_codes_enabled`. No such key
+  // exists — it was renamed to `person_codes_enabled` in Chunk 3 precisely because it governs
+  // people's codes, not the company's.)
   //
   // @unique is the first DB-level guarantee this code pool has ever had — uniqueness used to
   // be enforced only in generateUniqueTenantCode(), so a raw insert could silently collide
@@ -161,7 +167,7 @@ model CompanyPerson {
   name      String
   phone     String?
   email     String?
-  /// Null when the tenant has `company_access_codes_enabled` off and none was ever generated.
+  /// Null when the tenant has `person_codes_enabled` off and none was ever generated.
   /// Unique per tenant across Company.accessCode too — enforced in generateUniqueTenantCode(),
   /// and by the partial index this migration adds (the first DB-level guarantee this pool has
   /// ever had; see MaintenanceNotes #26 for the five days it went unenforced).

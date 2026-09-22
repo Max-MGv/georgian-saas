@@ -131,7 +131,15 @@ export async function setAccessCode(id: string, code: string) {
     if (existing.accessCode !== normalized && (await codeExistsInTenant(tx, tenantId, normalized))) {
       return { error: 'That code is already in use.' as const }
     }
-    await tx.company.update({ where: { id }, data: { accessCode: normalized } })
+    try {
+      await tx.company.update({ where: { id }, data: { accessCode: normalized } })
+    } catch (e) {
+      // Same global-index-vs-tenant-scoped-check gap as setPersonCode() — see the note there.
+      if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
+        return { error: 'That code is already in use.' as const }
+      }
+      throw e
+    }
     return { success: true as const }
   })
   if ('error' in result) return result

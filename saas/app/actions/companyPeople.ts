@@ -130,6 +130,25 @@ export async function regeneratePersonCode(id: string, companyId: string) {
   return result
 }
 
+/**
+ * A duplicate code that only the DATABASE can see.
+ *
+ * `codeExistsInTenant()` checks per tenant and runs as `app_user`, so RLS makes other tenants'
+ * codes structurally invisible to it. The unique indexes added in Chunk 1 are **global**. So a
+ * code already held by a different tenant passes every app-level check and then fails at the
+ * constraint — as an unhandled P2002 stack trace rather than a sentence an admin can act on.
+ *
+ * Vanishingly unlikely for generated codes (8 chars from a 32-char alphabet). Entirely likely
+ * for typed ones, and for seeded ones: `lib/demoSeed.ts` hard-codes `KAKHETI07`, `SILKROAD55`
+ * and friends and applies them to every non-demo tenant, so a second real tenant collides by
+ * construction. Found by the 2026-09-22 audit.
+ *
+ * Narrowed to P2002 deliberately: any other failure is still a bug and should still surface.
+ */
+function isDuplicateCodeError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002'
+}
+
 export async function setPersonCode(id: string, companyId: string, code: string) {
   await requireAdmin()
   if (!code.trim()) return { error: 'Code cannot be empty.' }
@@ -142,7 +161,12 @@ export async function setPersonCode(id: string, companyId: string, code: string)
     if (person.code !== normalized && (await codeExistsInTenant(tx, tenantId, normalized))) {
       return { error: 'That code is already in use.' }
     }
-    await tx.companyPerson.update({ where: { id }, data: { code: normalized } })
+    try {
+      await tx.companyPerson.update({ where: { id }, data: { code: normalized } })
+    } catch (e) {
+      if (isDuplicateCodeError(e)) return { error: 'That code is already in use.' }
+      throw e
+    }
     return { success: true as const }
   })
   if (!('error' in result)) revalidatePath('/admin/companies')

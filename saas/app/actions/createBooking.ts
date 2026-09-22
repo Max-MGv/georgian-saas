@@ -359,7 +359,8 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         // Never trust a client-sent array outright — filter to real ISO codes and
-        // dedupe, same defense-in-depth discipline as verifiedGuideId above.
+        // dedupe, the same defense-in-depth discipline buildOrderContactRows() applies to
+        // every client-sent roleId and personId below.
         nationalities: data.bookingType === 'COMPANY'
           ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
           : [],
