@@ -5,9 +5,8 @@ import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setA
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
 import { asTetri, fromMajor, toMajor, formatTetri, type Tetri } from '@/lib/money'
 import {
-  createGuide, updateGuide, deleteGuide, regenerateGuideCode, setGuideCode,
-  createRepresentative, updateRepresentative, deleteRepresentative, regenerateRepresentativeCode, setRepresentativeCode,
-} from '@/app/actions/companyGuides'
+  createPerson, updatePerson, deletePerson, regeneratePersonCode,
+} from '@/app/actions/companyPeople'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
@@ -28,8 +27,18 @@ type Price = {
   registrationPrice: Tetri
   isDisplayPrice: boolean
 }
-type Guide = { id: string; name: string; phone: string | null; code: string }
-type Representative = { id: string; name: string; email: string | null; phone: string | null; code: string }
+/** One person at this company, in one role. Replaces the separate Guide/Representative types. */
+type Person = {
+  id: string
+  roleId: string
+  name: string
+  phone: string | null
+  email: string | null
+  /** Null unless the tenant has person codes switched on. Never rendered when they are off. */
+  code: string | null
+}
+/** Just enough of a ContactRole to label and group a list. */
+type RoleLite = { id: string; key: string; labelEn: string; labelKa: string; sortOrder: number }
 type Company = {
   id: string
   name: string
@@ -41,15 +50,11 @@ type Company = {
   // section toggle; true = always skip (trusted); false = always require.
   skipPayment: boolean | null
   identificationCode: string | null
-  contactName: string | null
-  contactPhone: string | null
-  contactEmail: string | null
   address: string | null
   accessCode: string | null
   orderCount: number
   prices: Price[]
-  guides: Guide[]
-  representatives: Representative[]
+  people: Person[]
 }
 
 type Module = 'BOOKING' | 'WINE_ORDER'
@@ -61,7 +66,10 @@ type Module = 'BOOKING' | 'WINE_ORDER'
 function missingDetails(at: (key: string) => string, company: Company): string[] {
   const missing: string[] = []
   if (company.identificationCode === null) missing.push(at('companies.missing.idCode'))
-  if (!company.contactName && !company.contactPhone && !company.contactEmail && !company.address) {
+  // Was three scalar columns; now it is simply whether anyone is on file. `address` still
+  // counts, because a company with a billing address and no named person is configured enough
+  // to invoice.
+  if (company.people.length === 0 && !company.address) {
     missing.push(at('companies.missing.contact'))
   }
   if (company.isBookingCompany && company.prices.length === 0) missing.push(at('companies.missing.pricing'))
@@ -163,46 +171,50 @@ function PersonCodeField({ code, onRegenerate, loading, locale }: {
   )
 }
 
-function GuideForm({ initial, onSave, onCancel, loading, locale }: {
-  initial?: Guide; onSave: (data: { name: string; phone: string }) => void; onCancel: () => void; loading: boolean; locale: string
+function PersonForm({ initial, onSave, onCancel, loading, locale }: {
+  initial?: Person
+  onSave: (data: { name: string; phone: string; email: string }) => void
+  onCancel: () => void
+  loading: boolean
+  locale: string
 }) {
   const at = (key: string) => adminT(locale, key)
   const [name, setName] = useState(initial?.name ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
-  return (
-    <div className="flex flex-wrap items-end gap-3">
-      <SmallInput label={at('companies.people.name')} value={name} onChange={setName} width={160} />
-      <SmallInput label={at('companies.people.phone')} value={phone} onChange={setPhone} width={150} />
-      <div className="flex gap-2 pb-0.5">
-        <button onClick={() => onSave({ name, phone })} disabled={loading || !name.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
-        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
-      </div>
-    </div>
-  )
-}
-
-function RepresentativeForm({ initial, onSave, onCancel, loading, locale }: {
-  initial?: Representative; onSave: (data: { name: string; email: string; phone: string }) => void; onCancel: () => void; loading: boolean; locale: string
-}) {
-  const at = (key: string) => adminT(locale, key)
-  const [name, setName] = useState(initial?.name ?? '')
   const [email, setEmail] = useState(initial?.email ?? '')
-  const [phone, setPhone] = useState(initial?.phone ?? '')
   return (
     <div className="flex flex-wrap items-end gap-3">
       <SmallInput label={at('companies.people.name')} value={name} onChange={setName} width={160} />
-      <SmallInput label={at('companies.people.email')} value={email} onChange={setEmail} width={180} />
       <SmallInput label={at('companies.people.phone')} value={phone} onChange={setPhone} width={150} />
+      <SmallInput label={at('companies.people.email')} value={email} onChange={setEmail} width={180} />
       <div className="flex gap-2 pb-0.5">
-        <button onClick={() => onSave({ name, email, phone })} disabled={loading || !name.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+        <button onClick={() => onSave({ name, phone, email })} disabled={loading || !name.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
         <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
       </div>
     </div>
   )
 }
 
-function GuidesSection({ companyId, guides, setGuides, locale }: {
-  companyId: string; guides: Guide[]; setGuides: (g: Guide[]) => void; locale: string
+/**
+ * One role's people, for one company.
+ *
+ * Replaces `GuidesSection` and `RepresentativesSection`, which were ~75 lines each and differed
+ * only in which action they called and whether the form had an email box. Rendering this once
+ * per role is what makes "add a contact type" an admin action: a new role appears here with no
+ * code change at all.
+ *
+ * Every role gets the same three fields (name, phone, email) rather than a per-role field set.
+ * The old split — guides had no email, representatives had no reason to be called during a
+ * visit — was a guess baked into a table definition, and it is the kind of guess that needs a
+ * migration to undo. An unused box is cheap; a missing column is not.
+ */
+function PeopleSection({ companyId, role, people, setPeople, personCodesOn, locale }: {
+  companyId: string
+  role: RoleLite
+  people: Person[]
+  setPeople: (p: Person[]) => void
+  personCodesOn: boolean
+  locale: string
 }) {
   const at = (key: string) => adminT(locale, key)
   const [adding, setAdding] = useState(false)
@@ -211,161 +223,107 @@ function GuidesSection({ companyId, guides, setGuides, locale }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleAdd(data: { name: string; phone: string }) {
+  const mine = people.filter(p => p.roleId === role.id)
+  const roleLabel = locale === 'ka' ? role.labelKa : role.labelEn
+
+  async function handleAdd(data: { name: string; phone: string; email: string }) {
     setLoading(true); setError('')
-    const result = await createGuide(companyId, data)
-    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
-    setGuides([...guides, result.guide])
-    setAdding(false); setLoading(false)
-  }
-  async function handleUpdate(id: string, data: { name: string; phone: string }) {
-    setLoading(true); setError('')
-    const result = await updateGuide(id, companyId, data)
-    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
-    setGuides(guides.map(g => g.id === id ? { ...g, name: data.name, phone: data.phone || null } : g))
-    setEditingId(null); setLoading(false)
-  }
-  async function handleDelete(id: string) {
-    setLoading(true)
-    await deleteGuide(id, companyId)
-    setGuides(guides.filter(g => g.id !== id))
-    setDeletingId(null); setLoading(false)
-  }
-  async function handleRegenerate(id: string) {
-    setLoading(true)
-    const result = await regenerateGuideCode(id, companyId)
-    if (!('error' in result)) setGuides(guides.map(g => g.id === id ? { ...g, code: result.code } : g))
+    const result = await createPerson(companyId, role.id, data)
     setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); return }
+    if ('person' in result && result.person) setPeople([...people, result.person as Person])
+    setAdding(false)
+  }
+
+  async function handleUpdate(id: string, data: { name: string; phone: string; email: string }) {
+    setLoading(true); setError('')
+    const result = await updatePerson(id, companyId, data)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); return }
+    setPeople(people.map(p => p.id === id
+      ? { ...p, name: data.name, phone: data.phone || null, email: data.email || null }
+      : p))
+    setEditingId(null)
+  }
+
+  async function handleDelete(id: string) {
+    setLoading(true); setError('')
+    const result = await deletePerson(id, companyId)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); setDeletingId(null); return }
+    setPeople(people.filter(p => p.id !== id))
+    setDeletingId(null)
+  }
+
+  async function handleRegenerate(id: string) {
+    setLoading(true); setError('')
+    const result = await regeneratePersonCode(id, companyId)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); return }
+    if ('code' in result) setPeople(people.map(p => p.id === id ? { ...p, code: result.code as string } : p))
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.people.guidesTitle')}</p>
-        <HelpHint text={at('companies.people.guidesHint')} />
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{roleLabel}</p>
+        <HelpHint text={at('companies.people.roleHint')} />
       </div>
-      {guides.length === 0 && !adding && <p className="text-xs" style={{ color: C.faint }}>{at('companies.people.noGuides')}</p>}
-      {guides.map(guide => (
-        <div key={guide.id}>
-          {editingId === guide.id ? (
-            <GuideForm initial={guide} onSave={data => handleUpdate(guide.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
-          ) : deletingId === guide.id ? (
-            <div className="flex items-center gap-3 text-sm">
-              <span style={{ color: C.muted }}>{at('companies.people.deleteConfirm')}</span>
-              <button onClick={() => handleDelete(guide.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
-              <button onClick={() => setDeletingId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 flex-wrap text-sm">
-              <span style={{ color: C.text }}>{guide.name}</span>
-              {guide.phone && <span className="text-xs" style={{ color: C.faint }}>{guide.phone}</span>}
-              <PersonCodeField code={guide.code} onRegenerate={() => handleRegenerate(guide.id)} loading={loading} locale={locale} />
-              <button onClick={() => setEditingId(guide.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
-              <button onClick={() => setDeletingId(guide.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
-            </div>
-          )}
-        </div>
-      ))}
       {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
-      {adding ? (
-        <GuideForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
-      ) : (
-        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>{at('companies.people.addGuide')}</button>
+      {mine.length === 0 && !adding && (
+        <p className="text-xs" style={{ color: C.faint }}>{at('companies.people.noneYet')}</p>
       )}
-    </div>
-  )
-}
-
-function RepresentativesSection({ companyId, representatives, setRepresentatives, locale }: {
-  companyId: string; representatives: Representative[]; setRepresentatives: (r: Representative[]) => void; locale: string
-}) {
-  const at = (key: string) => adminT(locale, key)
-  const [adding, setAdding] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleAdd(data: { name: string; email: string; phone: string }) {
-    setLoading(true); setError('')
-    const result = await createRepresentative(companyId, data)
-    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
-    setRepresentatives([...representatives, result.representative])
-    setAdding(false); setLoading(false)
-  }
-  async function handleUpdate(id: string, data: { name: string; email: string; phone: string }) {
-    setLoading(true); setError('')
-    const result = await updateRepresentative(id, companyId, data)
-    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
-    setRepresentatives(representatives.map(r => r.id === id ? { ...r, name: data.name, email: data.email || null, phone: data.phone || null } : r))
-    setEditingId(null); setLoading(false)
-  }
-  async function handleDelete(id: string) {
-    setLoading(true)
-    await deleteRepresentative(id, companyId)
-    setRepresentatives(representatives.filter(r => r.id !== id))
-    setDeletingId(null); setLoading(false)
-  }
-  async function handleRegenerate(id: string) {
-    setLoading(true)
-    const result = await regenerateRepresentativeCode(id, companyId)
-    if (!('error' in result)) setRepresentatives(representatives.map(r => r.id === id ? { ...r, code: result.code } : r))
-    setLoading(false)
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.people.repsTitle')}</p>
-        <HelpHint text={at('companies.people.repsHint')} />
-      </div>
-      {representatives.length === 0 && !adding && <p className="text-xs" style={{ color: C.faint }}>{at('companies.people.noReps')}</p>}
-      {representatives.map(rep => (
-        <div key={rep.id}>
-          {editingId === rep.id ? (
-            <RepresentativeForm initial={rep} onSave={data => handleUpdate(rep.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
-          ) : deletingId === rep.id ? (
-            <div className="flex items-center gap-3 text-sm">
+      {mine.map(person => (
+        <div key={person.id}>
+          {editingId === person.id ? (
+            <PersonForm initial={person} onSave={data => handleUpdate(person.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
+          ) : deletingId === person.id ? (
+            <div className="flex items-center gap-2 text-xs">
               <span style={{ color: C.muted }}>{at('companies.people.deleteConfirm')}</span>
-              <button onClick={() => handleDelete(rep.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+              <button onClick={() => handleDelete(person.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
               <button onClick={() => setDeletingId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 flex-wrap text-sm">
-              <span style={{ color: C.text }}>{rep.name}</span>
-              {rep.email && <span className="text-xs" style={{ color: C.faint }}>{rep.email}</span>}
-              {rep.phone && <span className="text-xs" style={{ color: C.faint }}>{rep.phone}</span>}
-              <PersonCodeField code={rep.code} onRegenerate={() => handleRegenerate(rep.id)} loading={loading} locale={locale} />
-              <button onClick={() => setEditingId(rep.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
-              <button onClick={() => setDeletingId(rep.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span style={{ color: C.text }}>{person.name}</span>
+              {person.phone && <span className="text-xs" style={{ color: C.faint }}>{person.phone}</span>}
+              {person.email && <span className="text-xs" style={{ color: C.faint }}>{person.email}</span>}
+              {/* Only when the tenant actually uses person codes. A code control for a feature
+                  that is switched off is a live-looking credential nothing accepts — the same
+                  trap as an access code the panel kept displaying after guides retired it. */}
+              {personCodesOn && person.code && (
+                <PersonCodeField code={person.code} onRegenerate={() => handleRegenerate(person.id)} loading={loading} locale={locale} />
+              )}
+              <button onClick={() => setEditingId(person.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+              <button onClick={() => setDeletingId(person.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
             </div>
           )}
         </div>
       ))}
-      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
       {adding ? (
-        <RepresentativeForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
+        <PersonForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
       ) : (
-        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>{at('companies.people.addRepresentative')}</button>
+        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>
+          {at('companies.people.addTo').replace('{role}', roleLabel)}
+        </button>
       )}
     </div>
   )
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn }: {
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
   locale: string
   paymentModuleOn: boolean
+  roles: RoleLite[]
+  personCodesOn: boolean
 }) {
   const at = (key: string) => adminT(locale, key)
   const [name, setName] = useState(company.name)
   const [idCode, setIdCode] = useState(company.identificationCode ?? '')
-  const [contactName, setContactName] = useState(company.contactName ?? '')
-  const [contactPhone, setContactPhone] = useState(company.contactPhone ?? '')
-  const [contactEmail, setContactEmail] = useState(company.contactEmail ?? '')
   const [address, setAddress] = useState(company.address ?? '')
   const [code, setCode] = useState(company.accessCode ?? '')
   const [isBooking, setIsBooking] = useState(company.isBookingCompany)
@@ -380,13 +338,11 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [guides, setGuidesState] = useState(company.guides)
-  const [representatives, setRepresentativesState] = useState(company.representatives)
+  const [people, setPeopleState] = useState(company.people)
   // Guides/reps are edited live in this panel (unlike the other fields, which only save on the
   // main Save button) — propagate to the parent's list immediately so reopening the panel later
   // in the same session doesn't show a stale list.
-  function setGuides(next: Guide[]) { setGuidesState(next); onSaved({ guides: next }) }
-  function setRepresentatives(next: Representative[]) { setRepresentativesState(next); onSaved({ representatives: next }) }
+  function setPeople(next: Person[]) { setPeopleState(next); onSaved({ people: next }) }
 
   async function handleSave() {
     if (!isBooking && !isWineOrder) {
@@ -401,8 +357,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
       ? (skipPayment === 'skip' ? true : skipPayment === 'require' ? false : null)
       : undefined
     const result = await updateCompany(company.id, {
-      name, identificationCode: idCode,
-      contactName, contactPhone, contactEmail, address,
+      name, identificationCode: idCode, address,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
@@ -412,9 +367,6 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
     onSaved({
       name: name.trim(),
       identificationCode: idCode.trim() || null,
-      contactName: contactName.trim() || null,
-      contactPhone: contactPhone.trim() || null,
-      contactEmail: contactEmail.trim() || null,
       address: address.trim() || null,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
@@ -563,10 +515,9 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-4">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.contactPerson')}</p>
-            {field(at('companies.editPanel.fullName'), contactName, setContactName, at('companies.editPanel.fullNamePh'))}
-            {field(at('orderDetail.bookingInfo.phone'), contactPhone, setContactPhone, at('companies.editPanel.phonePh'))}
-            {field(at('orderDetail.bookingInfo.email'), contactEmail, setContactEmail, at('companies.editPanel.emailPh'))}
+            {/* The three company contact columns are gone (Plan-ContactRoles Chunk 1). The
+                people lists below replace them — a company's contact person is now a row in a
+                role, so there is one place to edit it rather than two that could disagree. */}
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-3">
@@ -619,10 +570,22 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn }: {
               {at('companies.editPanel.generateNewCode')}
             </button>
           </div>
-          <div className="h-px" style={{ backgroundColor: C.border }} />
-          <GuidesSection companyId={company.id} guides={guides} setGuides={setGuides} locale={locale} />
-          <div className="h-px" style={{ backgroundColor: C.border }} />
-          <RepresentativesSection companyId={company.id} representatives={representatives} setRepresentatives={setRepresentatives} locale={locale} />
+          {/* One section per active role, in the tenant's own order. A role added on the
+              settings screen shows up here with no code change — which is the point of the
+              whole rework. Previously this was two hardcoded sections. */}
+          {roles.map(role => (
+            <div key={role.id} className="contents">
+              <div className="h-px" style={{ backgroundColor: C.border }} />
+              <PeopleSection
+                companyId={company.id}
+                role={role}
+                people={people}
+                setPeople={setPeople}
+                personCodesOn={personCodesOn}
+                locale={locale}
+              />
+            </div>
+          ))}
         </div>
         <div className="px-6 py-4 border-t flex gap-3" style={{ borderColor: C.border }}>
           <button onClick={handleSave} disabled={loading} className="btn-wine flex-1 py-2.5 rounded-lg text-sm font-medium">
@@ -793,7 +756,7 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en' }: { companies: Company[]; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string }) {
+export default function CompaniesClient({ companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en' }: { companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
@@ -915,6 +878,8 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
           onClose={() => setEditingCompany(null)}
           onSaved={updated => setCompanies(prev => prev.map(c => c.id === editingCompany.id ? { ...c, ...updated } : c))}
           locale={locale}
+          roles={roles}
+          personCodesOn={personCodesOn}
           paymentModuleOn={paymentModuleOn}
         />
       )}
@@ -1074,15 +1039,18 @@ export default function CompaniesClient({ companies: initial, bookingOn = true, 
                 {expanded && activeModule === 'WINE_ORDER' && (
                   <div className="px-5 pb-5 pt-3" style={{ backgroundColor: '#faf5ef', borderTop: `1px solid ${C.border}` }}>
                     <div className="flex flex-wrap gap-4 text-xs" style={{ color: C.muted }}>
-                      {company.contactName && <span>{at('companies.wineOrdersTab.contact')} <span style={{ color: C.text }}>{company.contactName}</span></span>}
-                      {company.contactPhone && <span>{at('companies.wineOrdersTab.phone')} <span style={{ color: C.text }}>{company.contactPhone}</span></span>}
-                      {company.contactEmail && <span>{at('companies.wineOrdersTab.email')} <span style={{ color: C.text }}>{company.contactEmail}</span></span>}
+                      {/* Was three scalar columns; now the first person on file. A company can
+                          have several, but this is a one-line summary — the edit panel is where
+                          the full list lives. */}
+                      {company.people[0]?.name && <span>{at('companies.wineOrdersTab.contact')} <span style={{ color: C.text }}>{company.people[0].name}</span></span>}
+                      {company.people[0]?.phone && <span>{at('companies.wineOrdersTab.phone')} <span style={{ color: C.text }}>{company.people[0].phone}</span></span>}
+                      {company.people[0]?.email && <span>{at('companies.wineOrdersTab.email')} <span style={{ color: C.text }}>{company.people[0].email}</span></span>}
                       {company.wineDiscountPercent != null && company.wineDiscountPercent > 0 && (
                         <span className="px-2 py-0.5 rounded font-semibold" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
                           −{company.wineDiscountPercent}% {at('companies.wineOrdersTab.wineDiscount')}
                         </span>
                       )}
-                      {!company.contactName && !company.contactPhone && !company.contactEmail && !company.wineDiscountPercent && (
+                      {company.people.length === 0 && !company.wineDiscountPercent && (
                         <p style={{ color: C.faint }}>{at('companies.wineOrdersTab.noContact')}</p>
                       )}
                     </div>

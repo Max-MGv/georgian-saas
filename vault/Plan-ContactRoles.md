@@ -412,7 +412,7 @@ A `null` in the `polname` column is the bug.
 | **2** | RLS policies + two-tenant test | ✅ Done |
 | **3** | Server actions — roles, people, code resolution | ✅ Done |
 | **4** | Admin — Contact Roles management screen | ✅ Done |
-| **5** | Admin — Edit Company people list, role-driven | ⬜ Not started |
+| **5** | Admin — Edit Company people list, role-driven | ✅ Done |
 | **6** | Settings — `person_codes_enabled` | 🚧 Done bar one live check |
 | **7** | **Shared picker + hook** + public booking form | ⬜ Not started |
 | **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
@@ -425,8 +425,20 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–4 done (2026-09-22). **Chunk 5 next — the Edit Company
-people list.**
+**Overall resume point:** Chunks 0–5 done, and 6 bar one live check (2026-09-22).
+**Chunk 7 next — the shared picker and the public booking form.** It is also what unblocks
+looking at any of this; see the note below.
+
+**54 type errors remain**, all in Chunk 7–12 files: `app/admin/(panel)/orders/page.tsx` (9,
+Chunk 10), `app/actions/orders.ts` (9, Chunks 9/11), `scripts/backfill-test-fixtures.ts` (8,
+Chunk 12), `app/admin/onboarding/page.tsx` (5, Chunk 12), `app/actions/onboarding.ts` (5,
+Chunk 12), `lib/demoSeed.ts` (4, Chunk 12), `components/BookingForm.tsx` +
+`GuidePickerPopupView.tsx` (4, Chunk 7), `app/actions/createBooking.ts` (3, Chunk 9),
+`app/admin/(panel)/wine-orders/new/page.tsx` + `wines/page.tsx` + `WineCatalogueClient.tsx`
+(6, Chunk 8), `app/(site)/page.tsx` (1, Chunk 7).
+
+*(An earlier revision of this note said "~46". That was an arithmetic slip on a correct list —
+the count was 65 then and is 54 now.)*
 
 ### 🔴 Nothing renders until Chunk 7 — read before planning any visual check
 
@@ -456,14 +468,7 @@ to fix the *pattern* rather than the omission — see decision 10 and §4b.
 ⚠️ **The tree does not compile right now, and that is expected.** The migration is applied to the
 dev DB, so `CompanyGuide`, `CompanyRepresentative`, `Order.guideId` and
 `Company.contactName/Phone/Email` no longer exist while ~10 files still reference them —
-After Chunk 3 there are **~46 left**, in files owned by later chunks:
-`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/admin/(panel)/companies/page.tsx` (9,
-Chunk 5), `app/actions/orders.ts` (9, Chunks 9/11), `scripts/backfill-test-fixtures.ts` (8,
-Chunk 12), `app/admin/onboarding/page.tsx` (5, Chunk 12), `app/actions/onboarding.ts` (5,
-Chunk 12), `lib/demoSeed.ts` (4, Chunk 12), `components/BookingForm.tsx` +
-`GuidePickerPopupView.tsx` (4, Chunk 7), `app/actions/createBooking.ts` (3, Chunk 9),
-`app/admin/(panel)/wine-orders/new/page.tsx` + `WineCatalogueClient.tsx` + `wines/page.tsx`
-(6, Chunk 8), `CompaniesClient.tsx` (2, Chunk 5), `app/(site)/page.tsx` (1, Chunk 7).
+The running count is kept in the resume point above.
 **Do not try to "fix the build" ahead of the chunk that owns each file.**
 
 ⚠️ **`staging.vineworks.ge` reads the dev database and is therefore broken** until Chunks 3–7
@@ -739,17 +744,58 @@ typed in besides.
 
 ## Chunk 5 — Admin: Edit Company
 
-**Status:** ⬜ Not started
+**Status:** ✅ Done (2026-09-22) · typecheck + parity green; **visual check deferred to Chunk 7**
 
-- [ ] `CompaniesClient.tsx`: `GuidesSection` + `RepresentativesSection` (two near-identical
-      ~150-line components) become **one** section rendered per active role
-- [ ] Keep `PersonCodeField` (show/copy/regenerate) but render it **only when
-      `company_access_codes_enabled` is on** — a live-looking control for a disabled feature is
-      the H5 trap in miniature
-- [ ] `companies/page.tsx`: include people + roles; **project only the fields the client needs**
-      (H17)
-- [ ] The three old company contact inputs come out — they are `CompanyPerson` rows now
-- [ ] `companies.people.*` keys in `adminT.ts` generalised; role names come from the DB
+- [x] `GuidesSection` + `RepresentativesSection` (two near-identical ~75-line components, plus
+      two near-identical forms) collapse into **one `PeopleSection` rendered once per active
+      role**. A role added on the settings screen now appears here with no code change, which is
+      the requirement the whole rework exists for
+- [x] `PersonCodeField` kept, but rendered **only when `person_codes_enabled` is on** — a code
+      control for a switched-off feature is a live-looking credential nothing accepts, which is
+      H5's trap in miniature
+- [x] `companies/page.tsx` selects only the columns the client renders, and **drops `code`
+      entirely from the payload when person codes are off** (H17 — F3 and F4 were both
+      over-broad projections into a client component)
+- [x] Inactive people are filtered out of the panel; deactivating is how a person is retired
+      without erasing them from past orders
+- [x] The three company contact inputs are gone from the edit panel — they are `CompanyPerson`
+      rows now
+- [x] `companies.people.*` generalised: 8 dead keys removed (`guidesTitle`, `repsTitle`,
+      `addGuide`, `addRepresentative`, …), 3 added (`roleHint`, `noneYet`, `addTo`), EN + KA.
+      **Parity 1101/1101.** Role names come from the database, not the dictionary
+
+### One deliberate simplification
+
+**Every role now gets the same three fields — name, phone, email.** The old split gave guides no
+email and representatives no reason to be phoned during a visit. That was a guess baked into two
+table definitions, and it is exactly the kind of guess that needs a migration to undo. An unused
+box is cheap; a missing column is not.
+
+### Two smaller things worth knowing
+
+**`missingDetails()` changed meaning.** It used to flag a company whose three contact columns
+were all empty. It now flags one with **no people at all** and no address. Same intent, and it
+is still kept in sync with `getFinishDetailsStatus()` in `onboarding.ts`, which the function's
+own comment already required.
+
+**The wine-orders tab summary shows the first person on file** rather than the old scalar
+columns. A company can have several; that strip is a one-line summary and the edit panel is
+where the full list lives.
+
+### Verified
+
+`tsc --noEmit` clean for both companies files · i18n parity 1101/1101 · the page's real query
+run against the dev database: both roles returned in the right order, 9 of 9 companies have
+people, and **no active person falls outside a rendered role** — so nobody is invisible in the
+new panel.
+
+That check also showed the migration's predicted duplicate, working as designed: *Alazani Valley
+Tours* has both its old company contact (`Levan`, no code) and its old representative (`Tamuna`,
+code preserved) as `contact_person` rows. Chunk 1's comment called this out — visible and
+fixable in the panel, where a dropped phone number would have been neither.
+
+**Not verified:** nothing has been rendered. Same two blockers as Chunk 4 — the app 500s on
+`BookingForm.tsx` until Chunk 7, and an admin screen needs a password typed in.
 
 **Resume point:** —
 
