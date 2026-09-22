@@ -411,9 +411,9 @@ A `null` in the `polname` column is the bug.
 | **1** | Schema + migration (dev DB) | ✅ Done |
 | **2** | RLS policies + two-tenant test | ✅ Done |
 | **3** | Server actions — roles, people, code resolution | ✅ Done |
-| **4** | Admin — Contact Roles management screen | ⬜ Not started |
+| **4** | Admin — Contact Roles management screen | ✅ Done |
 | **5** | Admin — Edit Company people list, role-driven | ⬜ Not started |
-| **6** | Settings — `company_access_codes_enabled` | ⬜ Not started |
+| **6** | Settings — `person_codes_enabled` | 🚧 Done bar one live check |
 | **7** | **Shared picker + hook** + public booking form | ⬜ Not started |
 | **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
 | **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
@@ -425,8 +425,29 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–3 done (2026-09-22). **Chunk 4 next — the Contact Roles
-admin screen.**
+**Overall resume point:** Chunks 0–4 done (2026-09-22). **Chunk 5 next — the Edit Company
+people list.**
+
+### 🔴 Nothing renders until Chunk 7 — read before planning any visual check
+
+Discovered at the end of Chunk 4. `components/BookingForm.tsx` still imports
+`verifyBookingCode` / `findBookingCodeByCode` / `GuideChoice`, which Chunk 3 removed. Turbopack
+resolves exports across the whole graph, so that one stale import file **fails every route**:
+`/admin/login` returns **500**, and with it every admin screen. `/admin/settings` itself compiles
+and returns a clean 307 to login, so the Chunk 4 code is fine — but it cannot be *seen*.
+
+Consequences, none of them blocking but all worth knowing:
+
+- **Chunks 4, 5 and 6 cannot be visually verified when they land.** Their verification is
+  deferred until Chunk 7 fixes `BookingForm.tsx`, at which point all four screens should be
+  walked together.
+- Do **not** "just fix the imports" to unblock a screenshot. That is Chunk 7's file, and a
+  half-rewritten `BookingForm` is exactly the state this plan's ground rules warn against.
+- A second, independent constraint on admin screens: verifying one needs an admin login, and
+  **typing a password into a form is off-limits**. Feature 201 hit the same wall and left its
+  Messages-panel checkbox unticked for the same reason. Max may need to do the admin-side
+  click-through himself, or a Playwright spec (which owns its own credentials) can do it in
+  Chunk 13.
 
 **Plan amended 2026-09-22** after a dependency re-check found two gaps: the admin manual
 wine-order form was missing entirely, and `app/admin/onboarding/page.tsx` was unlisted. Max chose
@@ -671,16 +692,46 @@ typecheck clean, and `companyGuides.ts` is gone.
 
 ## Chunk 4 — Admin: Contact Roles screen
 
-**Status:** ⬜ Not started · **Read ground rule 9**
+**Status:** ✅ Done (2026-09-22) · typecheck + i18n parity green; **visual check deferred, see
+the resume note above**
 
-- [ ] New screen (likely under Settings) listing roles: label EN/KA, scope, appliesTo, sort
-      order, active
-- [ ] Add / edit / deactivate; system roles renameable, not deletable
-- [ ] **Must allow creating a COMPANY_LEVEL role** — Chunk 0 deferred building one, not the
-      ability to make one
-- [ ] `HelpHint` copy explaining PER_ORDER vs COMPANY_LEVEL in plain language — **the one
-      concept an admin must understand.** Max's own framing is the best available copy: *"this
-      is true for this company always"* vs *"this contact person type is for per order picker"*
+- [x] `app/admin/(panel)/settings/ContactRolesPanel.tsx` — add / edit / turn off / delete, with
+      label EN + KA, scope, appliesTo and sort order. A **sibling** of `SettingsClient.tsx`, not
+      a section inside it: that file is already ~1560 lines and this is self-contained
+- [x] System roles are renameable but have **no delete button at all**, rather than one that
+      always errors. The server refuses either way; an absent control is honest where a dead one
+      is the H5 trap in miniature
+- [x] **Creating a COMPANY_LEVEL role is supported**, which is what makes Chunk 0's deferral of
+      the CEO role legitimate rather than a quiet drop of the requirement
+- [x] `scope` is offered on create and **hidden on edit** — changing it would strand every
+      `OrderContact` already recorded against that role. The server refuses it too, so the UI is
+      not the only guard
+- [x] The `appliesTo` control is hidden entirely for tenants without the wine-orders module, and
+      a COMPANY_LEVEL role stores `BOTH` rather than a module restriction that means nothing
+- [x] 23 new `adminT` keys, EN + KA. **Parity 1106/1106** (was 1083)
+- [x] `person_codes_enabled` toggle added to `SettingsClient.tsx` — pulled forward from Chunk 6
+      because Chunk 5's code fields are gated on it and a half-wired setting is worse than a
+      finished one. Chunk 6 is now essentially done; it keeps its row only for the help copy
+- [x] `settings/page.tsx` fetches roles via `listContactRoles()` and passes the wine-orders
+      module flag through
+
+**Georgian labels were written, not transliterated.** They reuse the project's own existing
+vocabulary (`საკონტაქტო პირი`, `გიდი`, `დამატება`, `წაშლა`) rather than inventing terms, and
+`settings.common.save` / `.cancel` were reused outright instead of adding near-duplicate keys.
+Standing caveat from Feature 201 still applies: **drafted, not natively reviewed.**
+
+**On the scope copy.** The labels deliberately never say PER_ORDER or COMPANY_LEVEL. They say
+*"Chosen per booking — fills in the form"* and *"Company information — never on a booking
+form"*, which is Max's own framing from the brief. This is the one concept an admin has to
+understand for the feature to make sense, so it gets the plainest words available.
+
+**Verified:** `tsc --noEmit` clean for every settings file · i18n parity 1106/1106 ·
+`/admin/settings` returns 307 to login (route compiles, guard runs) · no `ContactRoles`-related
+entry in the dev server log.
+
+**Not verified, and honestly so:** the panel has never been *rendered*. See the resume note —
+the whole app 500s on `BookingForm.tsx` until Chunk 7, and an admin screen needs a password
+typed in besides.
 
 **Resume point:** —
 
@@ -706,16 +757,21 @@ typecheck clean, and `companyGuides.ts` is gone.
 
 ## Chunk 6 — Settings
 
-**Status:** ⬜ Not started · **Read H7, H17**
+**Status:** 🚧 Mostly done in Chunks 3–4 · **Read H7, H17**
 
-- [ ] `company_access_codes_enabled: 'false'` in `lib/settings.ts` `SETTING_DEFAULTS`
-- [ ] Toggle in `SettingsClient.tsx` + `settings/page.tsx`, copying
-      `enable_enhanced_company_booking`'s wiring exactly
-- [ ] **Keep it in `Setting`, not on `Tenant`** — H7 explains what that costs
-- [ ] Help text stating the trade-off plainly: on = codes prove identity but colleagues stay
+- [x] `person_codes_enabled: 'false'` in `lib/settings.ts` `SETTING_DEFAULTS` (Chunk 3 — the
+      resolver needed it). **Renamed from `company_access_codes_enabled`**; see Chunk 3 for why
+      the original name described the wrong thing and would have broken a live form
+- [x] Toggle in `SettingsClient.tsx` + `settings/page.tsx`, copying
+      `enable_enhanced_company_booking`'s wiring exactly (Chunk 4 — Chunk 5's code fields gate
+      on it, and a half-wired setting is worse than a finished one)
+- [x] **Kept in `Setting`, not on `Tenant`** — H7 explains what that costs
+- [x] Help text stating the trade-off plainly: on = codes prove identity but colleagues stay
       private; off = one-click autofill but everyone sees the list
+- [ ] **Remaining:** confirm the toggle actually flips live, once Chunk 7 makes the admin panel
+      reachable at all
 
-**Resume point:** —
+**Resume point:** the row stays open only for that one live check.
 
 ---
 
