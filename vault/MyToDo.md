@@ -10,6 +10,54 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🟢 2026-09-22 (later) — Chunk 9 done, and an audit that found four real problems
+
+Bookings and wine orders now actually **record who to contact**, on all four forms. And I had a
+second Claude audit the whole thing — with the vault hidden from it, so it couldn't just read my
+own notes back and agree with me. It found four genuine problems. All four are fixed.
+
+### The one worth telling you about
+
+**Anyone could read any company's staff list without the access code.** Not through the form —
+the form always asked. But the *server* never insisted, and the company ids are visible in the
+homepage's HTML, so someone technical could ask the server directly and get back every contact
+person and guide with their names, phone numbers and emails.
+
+It's fixed: the server now requires the code whenever a company has one. It was live on
+`staging` only — never on your real site, because none of this rework has reached `master`.
+
+I'll be blunt about why it slipped: **my own test asserted the broken behaviour was correct.** I
+wrote a test from what the code did rather than from what it should do, so it passed happily.
+That's on me and it's worth you knowing the shape of it.
+
+### The other three
+
+- Admin-created bookings were saving contact details in one place and not the other, so the
+  admin-entered ones were half-recorded. Now every form — public and admin — goes through one
+  shared piece of code, which is the thing you said: *don't duplicate, or it drifts.*
+- On the wine page, switching company left the previous company's contact person in the boxes.
+  I'd fixed that exact bug on the booking form and forgotten to carry it across.
+- Typing a guide's phone number *before* their name made the phone vanish as you typed.
+
+### Nothing new for you to test
+
+I drove all four forms by hand and checked the results in the database rather than trusting the
+screen. Your list is still the same one item: **read the Georgian** on the contact picker
+(Site Content → Messages → GEORGIAN → Company Access-Code Popup, scroll to the preview).
+
+### Where the project is
+
+**Chunks 0–9 of 14 done.** Five left: the admin order screens (10), invoice emails (11), demo
+seed and onboarding (12), Playwright tests (13), and the close-out plus the merge to your real
+site (14).
+
+Worth knowing: **10, 11 and 12 are not polish.** Until they're done, the Orders screen, the
+invoice email and the demo reseed are all broken, and the site cannot be deployed at all — the
+build won't complete. It all ships together or not at all. That's by design, but it does mean
+we're in the uncomfortable middle right now.
+
+---
+
 ## 🟢 2026-09-22 — Contact Roles chunks 7 & 8. The whole site works again. One thing for you.
 
 The booking form now asks who you are, once per contact type the company has people in — Contact

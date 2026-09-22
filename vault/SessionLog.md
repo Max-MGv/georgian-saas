@@ -76,6 +76,31 @@ the rewrite, along with the eight journeys and the fixtures that can tell outcom
 New: `scripts/inspect-order-contacts.ts`, a manual-testing aid — walking a form tells you what
 the screen did, this tells you what the database got.
 
+### The rest of the audit's list, closed after being asked directly
+
+Asked "did you finish everything?", the answer was no — three items from my own stated list were
+still open. Now done:
+
+- **`listContactRoles` had no `requireAdmin()`**, unlike every other export in that file. Low
+  impact (labels and keys, no credentials) but an actions file where most functions are guarded
+  and one is not is where the next hole hides.
+- **Admin-typed codes could crash rather than explain themselves.** `codeExistsInTenant` checks
+  per tenant as `app_user`, so RLS hides other tenants' codes from it, while the unique indexes
+  are global — a collision passed every app check and died at the constraint. `setPersonCode`
+  and `setAccessCode` now catch exactly P2002. Not hypothetical: `demoSeed` hard-codes
+  `KAKHETI07`/`SILKROAD55` for every non-demo tenant.
+- **Six stale comments, three of them mine.** The schema named a setting renamed in Chunk 3;
+  `createBooking` pointed at a deleted `verifiedGuideId`; three still said the contacts payload
+  was "accepted and ignored, Chunk 9 will write it" after Chunk 9 shipped. A comment describing
+  a plan rather than the code reads as fact and is worse than none.
+- **[[Plan-ContactRoles]] §9c — the production cutover pre-flight**, five checks written now
+  rather than in the moment, with Chunk 14 pointing at it. The one that matters: **RLS policies
+  are not part of `prisma migrate deploy`** — skip `scripts/setup-rls.ts` and the first public
+  booking gets permission-denied.
+
+And [[MaintenanceNotes]] **#30** now documents the coupling itself: one resolver, one picker,
+one write base, the server-side code gate, and the two client traps that have each been hit once.
+
 ### ⚠️ Re-filed, because the old framing was too gentle
 
 `/admin/orders`, `sendOrderInvoice`, `demoSeed.ts` and `onboarding.ts` were logged as "later

@@ -906,3 +906,78 @@ until someone reloads.
 `saas/app/actions/orders.ts`, `saas/app/actions/wineOrders.ts`,
 `saas/lib/payments/settle.ts`, `saas/lib/demoSeed.ts`. Design:
 `Features/Feature 191 - Order Status Two Axis Split.md`.
+
+---
+
+## 30. Contact roles: one resolver, one picker, one write — and the code gate belongs on the server
+
+**What the dependency is:**
+Four forms let someone attach contact details to an order, and all four must behave identically:
+
+| | Form | File |
+|---|---|---|
+| 1 | Public booking | `saas/components/BookingForm.tsx` |
+| 2 | Public wine order | `saas/app/(site)/wines/WineCatalogueClient.tsx` |
+| 3 | Admin manual booking | `saas/app/admin/(panel)/orders/new/NewOrderForm.tsx` |
+| 4 | Admin manual wine order | `saas/app/admin/(panel)/wine-orders/new/NewWineOrderForm.tsx` |
+
+They share **three** pieces, and the whole point is that none of them may grow a fourth:
+
+- **`lib/contactResolution.ts`** — *who can be picked*. `resolveCompanyContactsFor()` plus
+  `orderRolesFor()`. It replaced four overlapping functions that had silently disagreed for five
+  days (see note 26).
+- **`lib/useContactSelection.ts`** — the client state machine: the selection map, the queue of
+  roles still to ask about, and **every reset**.
+- **`lib/orderContacts.ts`** — *who was picked, and is any of it true*.
+  `writeOrderContacts()` is the **only** place an order records contacts.
+
+**If you add a form, or a write path that creates an order:** call `writeOrderContacts()`. Do
+not assemble `OrderContact` rows yourself. This is not style — the two paths that each built
+their own write are the two that drifted: `createBooking` wrote contact rows while
+`createOrderAdmin` wrote only the denormalised `Order.name/surname/phone/email` columns, so
+every admin-created booking had an empty source of truth for weeks (Plan-ContactRoles §9b A2).
+
+A screen with no picker on it still takes part: pass `fallbackContactPerson` and whatever was
+typed becomes a `contact_person` entry with **no `personId`** — a record of what was typed, not
+an invented attribution.
+
+**If you edit `Order.name/surname/phone/email`:** call `syncOrderContactPerson()` in the same
+transaction. Those four columns are a *denormalised copy* of the `contact_person` row
+(Plan-ContactRoles decision 4); editing the copy and leaving the original stale makes the two
+disagree permanently with nothing to reconcile them.
+
+**⚠️ The access-code gate must be enforced server-side, and was not.**
+`resolveCompanyContacts` is an **unauthenticated server action**, and booking-company ids are in
+the public homepage's HTML because they populate the dropdown. The code check once ran only
+`if (companyId && typed)`, so naming a company and sending no code returned that company's
+entire staff directory — names, phones, emails. An audit reproduced it live on 2026-09-22.
+
+If you touch that resolver, the rule is: **a company that has an `accessCode` requires a matching
+code.** The single exception is the `trusted` flag, which only a server-side caller can set —
+`resolveCompanyContacts` builds a fresh three-field object rather than spreading its input, so a
+crafted request cannot ask for it. **Never change that to a spread.** Admin screens go through
+`resolveCompanyContactsAsAdmin`, which calls `requireAdmin()` first.
+
+**Two client-side traps that have each been hit once:**
+
+- **Reset the form's own fields, not just the hook's state**, when the company changes. The hook
+  clears its map; `contactName`/`phone`/`email` belong to the form. Miss it and an order is filed
+  against company B attributed to company A's employee. Fixed in form 1, then **not carried
+  across to form 2** — the same bug twice, three weeks apart.
+- **`ContactPickerPopupView` defaults to `z-50`.** On a page with its own overlay (the wine
+  catalogue's checkout drawer) pass `overlayZClass`. And check the *computed* `zIndex`, not the
+  class name: an arbitrary Tailwind value never used elsewhere may not exist in the generated CSS
+  and silently resolves to `auto`.
+
+**Files involved:**
+- `saas/lib/contactResolution.ts`, `saas/lib/orderContacts.ts`, `saas/lib/useContactSelection.ts`
+- `saas/components/ContactPickerPopupView.tsx` — pure render, one role per showing; keeps an
+  explicit `aria-label` because the computed accessible name was otherwise empty
+- `saas/app/actions/` — `companies.ts`, `createBooking.ts`, `submitWineOrder.ts`,
+  `wineOrders.ts`, `orders.ts`
+- Tests: `saas/scripts/test-contact-resolution.ts` (26), `test-contact-roles-rls.ts` (19),
+  `test-order-contacts.ts` (36). `saas/scripts/inspect-order-contacts.ts` is a manual aid.
+- Full reasoning, the audit and the production pre-flight: [[Plan-ContactRoles]] §9b and §9c.
+  Playwright traps and journeys: [[Playwright/Notes-ContactRoles]].
+
+---
