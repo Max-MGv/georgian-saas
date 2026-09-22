@@ -113,6 +113,8 @@ Settled in the 2026-09-19 conversation. Do not re-open without Max.
 8. **Feature 201's uncommitted work folds in**, generalised from a guide-only picker to a
    per-role one. Not shipped separately first.
 9. **One person per role per order** — `@@unique([orderId, roleId])`. Confirmed 2026-09-19.
+10. **One shared resolver + one shared picker, consumed by all four forms** (Max, 2026-09-22,
+    choosing this over patching the gap it was found through). See §4b.
 
 ---
 
@@ -172,6 +174,47 @@ Built in Chunk 1. See `saas/prisma/schema.prisma` for the live version with its 
 
 `Company.accessCode` **stays** — it is the company-level gate, separate from a person's code,
 and now carries a `@unique` of its own.
+
+---
+
+## 4b. Four forms, one implementation
+
+**Found 2026-09-22**, while checking whether the plan covered every dependency. It did not:
+**four** forms autofill contact details from a company, and an early draft of this plan had them
+in three different chunks with the fourth missing entirely.
+
+| # | Form | File | Was |
+|---|---|---|---|
+| 1 | Public booking | `components/BookingForm.tsx` | Chunk 7 |
+| 2 | Public wine order | `app/(site)/wines/WineCatalogueClient.tsx` | Chunk 8 |
+| 3 | Admin manual booking | `app/admin/(panel)/orders/new/NewOrderForm.tsx` | Chunk 10 |
+| 4 | Admin manual wine order | `app/admin/(panel)/wine-orders/new/NewWineOrderForm.tsx` | **missing** |
+
+Form 4 autofills from `company.contactName` at line 130, under a comment that reads *"Mirrors
+WineCatalogueClient.tsx's applyProfile()"* — the duplication was already documented in the code
+and still went unnoticed.
+
+**That is the H4 / [[MaintenanceNotes]] #22 shape exactly**: the same job implemented in several
+places, drifting silently, eventually needing a consolidation someone has to pay for later.
+Patching the missing form would have fixed the omission and left the pattern.
+
+**Max's call: build it once.** Three shared pieces, and forms 1–4 become thin consumers:
+
+- **`resolveCompanyContacts()`** (Chunk 3, server) — the single resolver. Given a company and
+  optionally a typed code, returns `{ company, matchedPerson?, roleChoices }`, already filtered
+  by `appliesTo` and already respecting `company_access_codes_enabled`. Replaces the four
+  overlapping functions that caused H4.
+- **`ContactPickerPopupView.tsx`** (Chunk 7) — pure render, role-driven, caller owns state.
+  Generalised from Feature 201's `GuidePickerPopupView`, keeping its `aria-label` fix (H14).
+- **`useContactSelection()`** (Chunk 7) — the client state machine: the
+  `Record<roleId, personId>` map, applying a picked person's details into the form, and the
+  resets. This is where H3's "reset it everywhere" lives, **once**, instead of four times.
+
+**One honest asymmetry, not to be papered over.** The public forms reach the picker through a
+*code popup*; the admin forms have no code step — an admin picks from a dropdown inline. So they
+share the resolver, the hook and the option list, but the admin forms render the choices inline
+rather than in the popup. Same data, same state machine, different trigger. Do not force the
+popup into the admin screens to make the symmetry look neater than it is.
 
 ---
 
@@ -367,12 +410,12 @@ A `null` in the `polname` column is the bug.
 | **0** | Seed-role definitions | ✅ Done |
 | **1** | Schema + migration (dev DB) | ✅ Done |
 | **2** | RLS policies + two-tenant test | ✅ Done |
-| **3** | Server actions — roles, people, code resolution | ⬜ Not started |
+| **3** | Server actions — roles, people, code resolution | ✅ Done |
 | **4** | Admin — Contact Roles management screen | ⬜ Not started |
 | **5** | Admin — Edit Company people list, role-driven | ⬜ Not started |
 | **6** | Settings — `company_access_codes_enabled` | ⬜ Not started |
-| **7** | Booking form — per-role pickers | ⬜ Not started |
-| **8** | Wine order form — per-role pickers | ⬜ Not started |
+| **7** | **Shared picker + hook** + public booking form | ⬜ Not started |
+| **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
 | **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
 | **10** | Admin order surfaces — finally display contacts | ⬜ Not started |
 | **11** | Emails — invoice recipient from roles | ⬜ Not started |
@@ -382,16 +425,25 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–2 done (2026-09-22). **Chunk 3 next — server actions.**
+**Overall resume point:** Chunks 0–3 done (2026-09-22). **Chunk 4 next — the Contact Roles
+admin screen.**
+
+**Plan amended 2026-09-22** after a dependency re-check found two gaps: the admin manual
+wine-order form was missing entirely, and `app/admin/onboarding/page.tsx` was unlisted. Max chose
+to fix the *pattern* rather than the omission — see decision 10 and §4b.
 
 ⚠️ **The tree does not compile right now, and that is expected.** The migration is applied to the
 dev DB, so `CompanyGuide`, `CompanyRepresentative`, `Order.guideId` and
 `Company.contactName/Phone/Email` no longer exist while ~10 files still reference them —
-**131 TypeScript errors**, concentrated in `app/actions/companies.ts` (31),
-`app/actions/companyGuides.ts` (18), `app/admin/**` (20), `app/actions/orders.ts` (9),
-`scripts/backfill-test-fixtures.ts` (8), `app/actions/onboarding.ts` (5), `lib/demoSeed.ts` (4),
-`app/actions/createBooking.ts` (3). Chunks 3–12 are what close them. Do not try to "fix the
-build" ahead of the chunk that owns each file.
+After Chunk 3 there are **~46 left**, in files owned by later chunks:
+`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/admin/(panel)/companies/page.tsx` (9,
+Chunk 5), `app/actions/orders.ts` (9, Chunks 9/11), `scripts/backfill-test-fixtures.ts` (8,
+Chunk 12), `app/admin/onboarding/page.tsx` (5, Chunk 12), `app/actions/onboarding.ts` (5,
+Chunk 12), `lib/demoSeed.ts` (4, Chunk 12), `components/BookingForm.tsx` +
+`GuidePickerPopupView.tsx` (4, Chunk 7), `app/actions/createBooking.ts` (3, Chunk 9),
+`app/admin/(panel)/wine-orders/new/page.tsx` + `WineCatalogueClient.tsx` + `wines/page.tsx`
+(6, Chunk 8), `CompaniesClient.tsx` (2, Chunk 5), `app/(site)/page.tsx` (1, Chunk 7).
+**Do not try to "fix the build" ahead of the chunk that owns each file.**
 
 ⚠️ **`staging.vineworks.ge` reads the dev database and is therefore broken** until Chunks 3–7
 land — the deployed code still selects dropped columns. Expected and recoverable, but worth
@@ -539,23 +591,79 @@ landed in the wrong array, because **both arrays end with the same `'OrderEvent'
 
 ## Chunk 3 — Server actions
 
-**Status:** ⬜ Not started · **Read H4, H9. This chunk starts closing the 131 errors.**
+**Status:** ✅ Done (2026-09-22) · 22/22 resolver tests passing, twice
 
-- [ ] New `app/actions/contactRoles.ts` — role CRUD; deleting an `isSystem` role refused
-- [ ] Replace `app/actions/companyGuides.ts` with `app/actions/companyPeople.ts` — **ten
-      near-identical functions collapse to five generic ones.** That duplication is the clearest
-      evidence the old design didn't scale per type
-- [ ] `companies.ts`: `codeExistsInTenant` drops from three sources to two
-- [ ] **Collapse `verifyBookingCode` + `findBookingCodeByCode` + `verifyCompanyCode` +
-      `findCompanyByCode` into one resolver** returning `{ company, matchedPerson?, roleChoices }`.
-      This is the permanent fix for H4 — four functions with overlapping jobs is how they drifted
-- [ ] Resolver respects `company_access_codes_enabled`: off → no code check, return pickable
-      people; on → code required, return the matched person only, **never the choice list**
-- [ ] `withTenantDb` + re-verify the parent company's `tenantId`, per `prices.ts`
-- [ ] **Every `OrderContact` write must set `tenantId`** — it is nullable, and a NULL makes the
-      row invisible to its own tenant under the Chunk 2 policy
-- [ ] `npx tsc --noEmit` clean for `app/actions/**` (admin and form files stay broken until
-      their own chunks)
+- [x] `app/actions/contactRoles.ts` — role CRUD. Deleting a system role is refused, and so is
+      deleting any role still in use, with a sentence an admin can act on rather than a
+      foreign-key error. `scope` is deliberately **not** editable: flipping PER_ORDER →
+      COMPANY_LEVEL would strand every `OrderContact` already pointing at it
+- [x] `app/actions/companyPeople.ts` replaces `companyGuides.ts` — **ten near-identical
+      functions became five.** A code is only minted when the tenant actually uses person codes;
+      generating one while the feature is off would put a live-looking credential in the admin
+      panel that nothing accepts, which is the H5 trap in reverse
+- [x] `codeExistsInTenant` drops from three sources to two
+- [x] **`resolveCompanyContactsFor()` replaces all four resolvers** — `verifyCompanyCode`,
+      `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`. One function cannot
+      contradict itself, which is the permanent fix for H4
+- [x] Respects `person_codes_enabled` in both directions, including returning an **empty**
+      `roleChoices` on a successful company match when codes are on — that emptiness *is* the
+      privacy feature, and callers must read it as "ask them to type their details", never as an
+      error
+- [x] `withTenantDb` throughout; every write re-verifies the parent company's tenant
+- [x] `scripts/test-contact-resolution.ts` — 22 assertions over a throwaway tenant, both modes,
+      run twice, no leftover rows. `test-contact-roles-rls.ts` still 19/19
+
+### The setting is `person_codes_enabled`, not `company_access_codes_enabled`
+
+Decision 6 named it `company_access_codes_enabled`. Building it surfaced that the name described
+the wrong thing, and the wrong thing would have broken a live feature.
+
+Max's words were *"the access code system **they** have now"* — and "they", in the sentence
+before it, were the guides and contact persons who had just been given codes. So the setting
+governs **person codes**. `Company.accessCode` is untouched by it and works in both modes.
+
+That distinction is load-bearing, not pedantic: the company code is the **only** way the
+`hide_company_dropdown` booking variant (Features 113/114) can identify a company at all, since
+that variant has no dropdown. Gating it behind a tenant setting that defaults to off would have
+silently broken that form for any tenant using it — an H5-shaped failure, discovered by
+implementing rather than by planning.
+
+### 🔴 A real defect the resolver test caught — the `appliesTo`/`scope` hole
+
+The person-code lookup filtered the **company** by module but never the **role**. Two
+consequences, both live until the test found them:
+
+- a `BOOKING`-only guide code resolved on the **wine-order** form;
+- a `COMPANY_LEVEL` person — a CEO — holding a code would have resolved on a **public order
+  form**, which is the exact thing `scope` exists to prevent.
+
+This is the same shape as the hole the status redesign already hit: `appliesTo` filtered the
+dropdown but never the foreign key, so nothing stopped a booking being marked DELIVERED
+([[DataModel/Research-OrderStatusPatterns]]). **Filter where the value is chosen, not only where
+it is displayed.** Fixed, and both halves are now asserted.
+
+### Two structural choices worth knowing
+
+**The resolver lives in `lib/contactResolution.ts`, not in the actions file.** It takes an
+explicit `tenantId`, and a server action is callable by the browser — exporting a
+tenant-parameterised function from a `'use server'` file would let a client pass any tenant's
+id. `app/actions/companies.ts` holds two thin wrappers that resolve the tenant from the request.
+It also made the function testable at all, since `getTenantId()` needs a request context.
+Consumers import the types from `@/lib/contactResolution`, because a `'use server'` file cannot
+re-export even a type (H9 / [[MaintenanceNotes]] #24).
+
+**`ContactChoice` deliberately has no `code` field.** The shape goes to a browser, and F3 and F4
+are both this exact mistake already made once. A test asserts no code appears anywhere in the
+payload.
+
+### Correction to this chunk as originally written
+
+The last checkbox used to read *"`tsc --noEmit` clean for `app/actions/**`"*. That was wrong:
+`createBooking.ts` (Chunk 9), `orders.ts` (Chunks 9/11) and `onboarding.ts` (Chunk 12) are
+legitimately later chunks' work, and pulling them forward to chase a green check would have
+meant writing `OrderContact` rows before the chunk that designs that write path. The real
+criterion, met: `companies.ts`, `contactRoles.ts`, `companyPeople.ts` and `contactResolution.ts`
+typecheck clean, and `companyGuides.ts` is gone.
 
 **Resume point:** —
 
@@ -611,18 +719,27 @@ landed in the wrong array, because **both arrays end with the same `'OrderEvent'
 
 ---
 
-## Chunk 7 — Booking form
+## Chunk 7 — Shared picker + public booking form
 
-**Status:** ⬜ Not started · **Read F3, H3, H13, H14, ground rule 9. Folds in Feature 201.**
+**Status:** ⬜ Not started · **Read §4b, F3, H3, H13, H14, ground rule 9. Folds in Feature 201.**
+
+**This chunk builds the two shared client pieces** (decision 10). Chunks 8 and 10 consume them
+rather than reimplementing. The booking form is their first consumer, not their owner — if
+something here only makes sense for bookings, it belongs in the form, not in the shared piece.
 
 - [ ] **Fix F3 first:** `app/(site)/page.tsx` sends `hasAccessCode: boolean`, never the code.
       Same on `wines/page.tsx`. One line each, closes a live leak ([[KnownBugs]] #57)
-- [ ] Generalise `GuidePickerPopupView.tsx` → `ContactPickerPopupView.tsx`, role-driven. **Keep
-      its `aria-label`** (H14)
+- [ ] **Build `components/ContactPickerPopupView.tsx`** — generalised from
+      `GuidePickerPopupView.tsx`, role-driven, pure render, caller owns state. **Keep its
+      `aria-label`** (H14). Must render a list for *any* role, never assume "guide"
+- [ ] **Build `useContactSelection()`** — the `Record<roleId, personId>` map, applying a picked
+      person into the form's fields, and every reset. H3's "reset it everywhere" lives here
+      **once**. Shared by all four forms
 - [ ] Keep "I am not on this list" — a person not yet added to the panel is otherwise stranded
       holding a valid code
-- [ ] `matchedGuideId` → a `Record<roleId, personId>` map; reset it everywhere the single value
-      is reset today (company change, "Not a rep", direct-code clear)
+- [ ] `BookingForm.tsx` drops `matchedGuideId` and consumes `useContactSelection()` instead;
+      the resets it owns today (company change, "Not a rep", direct-code clear) move into the
+      hook
 - [ ] Pickers per PER_ORDER role where `appliesTo` includes BOOKING. **Guide fields only in the
       detailed variant** (`isEnhanced`); Contact Person in both — per the original brief
 - [ ] Codes on → no picker at all (decision 6)
@@ -636,16 +753,33 @@ landed in the wrong array, because **both arrays end with the same `'OrderEvent'
 
 ---
 
-## Chunk 8 — Wine order form
+## Chunk 8 — Both wine order forms
 
-**Status:** ⬜ Not started
+**Status:** ⬜ Not started · **Read §4b — this chunk owns forms 2 and 4**
 
-- [ ] `WineCatalogueClient.tsx` gets the same resolver and the same picker component
+**Public** (`app/(site)/wines/WineCatalogueClient.tsx` + `wines/page.tsx`):
+
+- [ ] Consumes `resolveCompanyContacts()` + `ContactPickerPopupView` + `useContactSelection()`
+      from Chunks 3 and 7. **No new picker implementation** (decision 10)
+- [ ] This path has no company dropdown — confirm the picker fires at the right moment in
+      *that* flow, not the booking one's
+
+**Admin manual entry** (`app/admin/(panel)/wine-orders/new/NewWineOrderForm.tsx` + `page.tsx`
++ `createWineOrderAdmin` in `app/actions/wineOrders.ts`):
+
+- [ ] **This was the gap** that produced decision 10 — it autofills from `company.contactName`
+      at line 130, under a comment reading *"Mirrors WineCatalogueClient.tsx's applyProfile()"*.
+      Its `CompanyOption` type carries `contactName`/`contactPhone` and its `page.tsx` selects
+      those columns; both must move to people
+- [ ] Renders the choices **inline, not in the popup** — an admin has no code step (§4b's
+      "honest asymmetry"). Same resolver, same hook, different trigger
+- [ ] `createWineOrderAdmin` writes `OrderContact` rows, same as the public path (Chunk 9)
+
+**Both:**
+
 - [ ] Multiple role *types* supported; still one person per role per order (decision 9)
 - [ ] `WineOrder.contactName/contactPhone/contactEmail` keep being written, mirroring decision
       4's approach — the wine form requires them and payment depends on `contactEmail`
-- [ ] This path has no company dropdown — confirm the picker appears at the right moment in
-      *that* flow, not the booking one's
 
 **Resume point:** —
 
@@ -679,8 +813,9 @@ landed in the wrong array, because **both arrays end with the same `'OrderEvent'
       rather than relying on autofill having copied it into the guest field.
       ⚠️ **H1 applies:** the old plan's assumption about this file was wrong. Open it first
 - [ ] `OrdersTable.tsx` / `columnDefs.ts` — decide whether a guide column is wanted
-- [ ] `orders/new/NewOrderForm.tsx` gains per-role pickers. It picks a company today and has no
-      contact picker at all — a gap under the one-of-each-per-order rule
+- [ ] `orders/new/NewOrderForm.tsx` (form 3 of §4b) gains per-role pickers, **consuming the
+      Chunk 7 shared pieces** — inline, not the popup, same as Chunk 8's admin form. It picks a
+      company today and has no contact picker at all, a gap under the one-of-each-per-order rule
 - [ ] **Narrow `orders/page.tsx:289`'s projection** so people's codes stop reaching the client
       (F4)
 - [ ] Any new order query spreads `NOT_ABANDONED` (H10)
@@ -716,8 +851,11 @@ landed in the wrong array, because **both arrays end with the same `'OrderEvent'
 - [ ] `scripts/backfill-test-fixtures.ts` updated to the new tables — it gained
       reconcile-existing behaviour in Feature 201 precisely because create-or-skip could never
       reach an already-seeded tenant
-- [ ] `onboarding.ts` / `CompaniesStep.tsx`: the wizard still does not prompt for people,
-      consistent with price tiers being a Companies-page concern
+- [ ] `actions/onboarding.ts`, `app/admin/onboarding/page.tsx` **and** `steps/CompaniesStep.tsx`
+      — the wizard still does not prompt for people, consistent with price tiers being a
+      Companies-page concern, but all three currently select the dropped columns.
+      `app/admin/onboarding/page.tsx` was the second gap found on 2026-09-22 (5 errors); it had
+      been omitted from this list
 
 **Resume point:** —
 

@@ -49,6 +49,21 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Defaults on: gating help behind an opt-in switch defeats its own purpose
   // for the first-time/confused admin who wouldn't know to look for it.
   show_admin_hints: 'true',
+  // Per-person access codes (Plan-ContactRoles decision 6). Off by default.
+  //
+  // ⚠️ This governs the codes belonging to PEOPLE (CompanyPerson.code), not the company's own
+  // `Company.accessCode`, which is unchanged and always active. Max's wording was "the access
+  // code system *they* have now" — "they" being the guides and contact persons who had just
+  // been given codes. The distinction is load-bearing: the company code is also the only way
+  // the `hide_company_dropdown` booking variant (Features 113/114) can identify a company at
+  // all, so disabling it tenant-wide would silently break that variant.
+  //
+  // Off: no person codes. A company code (or the dropdown) identifies the company, then the
+  //      guest picks their guide/contact person from a list, which autofills the form.
+  // On:  a person's own code identifies them directly, and the picker is suppressed entirely,
+  //      so colleagues never see each other's details. A company code still resolves the
+  //      company, but then the guest types their own details as they did before pickers.
+  person_codes_enabled: 'false',
 }
 
 /** A tenant's settings as `key → value`, straight from the DB (no defaults applied). */
