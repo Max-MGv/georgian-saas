@@ -8,6 +8,88 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-22 — Contact Roles built: chunks 0–6 of 14
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD **`f9a8b73`**, everything committed and pushed. Four commits:
+>   `9516d94` (chunks 0–2), `6e81f1c` (chunk 3), `b5862b2` (chunk 4), `f9a8b73` (chunk 5).
+> - **`master` is untouched.** The migration has run on the **dev** database only. Production
+>   still has `CompanyGuide` / `CompanyRepresentative` / `Order.guideId`.
+> - **The app does not compile: 54 TypeScript errors**, all in files owned by chunks 7–12.
+>   This is expected mid-rework, not breakage to chase.
+> - **⚠️ No page renders at all.** `components/BookingForm.tsx` still imports three symbols
+>   chunk 3 deleted, and Turbopack resolves exports across the whole graph, so that one file
+>   **500s every route including `/admin/login`**. Chunk 7 fixes it. Until then nothing —
+>   public or admin — can be opened in a browser, locally or on staging.
+> - **Chunks 4, 5 and 6 are typecheck- and data-verified but have never been rendered.** Walk
+>   all three screens together once chunk 7 lands.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 7**. Read that plan's §1 (Max's verbatim brief) and
+> §6 (the hurdles list) before starting.
+
+**What this was.** The rework planned on 2026-09-19 got built: three contact concepts
+(`Company.contactName/Phone/Email`, `CompanyGuide`, `CompanyRepresentative`) collapsed into
+`ContactRole` + `CompanyPerson`, and `Order.guideId` into a polymorphic `OrderContact` carrying
+detail snapshots. Full detail in [[Plan-ContactRoles]]; this is the summary.
+
+**Chunks 0–2 — schema, migration, RLS.** Migration `20260922101500_contact_roles`, hand-written
+because `prisma migrate dev` refuses to drop non-empty tables non-interactively and the generated
+version would only have dropped. Guides, reps and company contacts were carried across as
+`CompanyPerson` rows with **codes preserved verbatim** — regenerating them is exactly the
+silent-credential-breakage of [[KnownBugs]] #55. Three RLS policies, and a new
+`scripts/test-contact-roles-rls.ts` (19 assertions, two throwaway tenants).
+
+**Chunk 3 — the server layer.** Four overlapping resolvers became one; ten guide/rep functions
+became five; new `contactRoles.ts` gives roles their CRUD. `scripts/test-contact-resolution.ts`,
+22 assertions.
+
+**Chunks 4–6 — the admin screens.** A Contact types panel on the settings page, the
+`person_codes_enabled` toggle, and the Edit Company panel's two hardcoded people sections
+collapsed into one rendered per role.
+
+**Five findings worth carrying forward** (all written up in the plan):
+
+1. **`Order.guideId` was write-only.** The dev database had **0 orders** carrying one after five
+   days live. The attribution the guides feature existed for was never delivered anywhere;
+   chunk 10 is where it finally is.
+2. **The setting's name was wrong and would have broken a live form.** `company_access_codes_
+   enabled` became **`person_codes_enabled`**: it governs codes belonging to *people*, and
+   `Company.accessCode` is untouched. The company code is the only way the
+   `hide_company_dropdown` booking variant identifies a company at all, so gating it behind a
+   setting that defaults to off would have quietly killed that form.
+3. **A real `appliesTo`/`scope` hole, caught by the new resolver test.** The person-code lookup
+   filtered the company by module but never the role, so a BOOKING-only guide code resolved on
+   the wine form and a COMPANY_LEVEL person holding a code would have resolved on a public order
+   form. Same shape as the bug the status redesign hit — filter where a value is *chosen*, not
+   only where it is *displayed*.
+4. **`setup-rls.ts` has two lists**, and a table in only one of them gets RLS enabled with no
+   policy — Postgres then denies every row silently while `check-rls.ts` still reports it fine.
+   Hit during chunk 2, caught only by the two-tenant test. Now hurdle **H18**.
+5. **The plan's own dependency map had two gaps**, found when Max asked for a re-check before
+   continuing: the admin manual wine-order form was missing entirely, and
+   `app/admin/onboarding/page.tsx` was unlisted. Max chose to fix the *pattern* rather than the
+   omission — hence **decision 10** and **§4b**: one shared resolver, one shared picker, one
+   shared hook, consumed by all four company-autofill forms.
+
+**A mistake worth recording.** A Python edit script opened `Plan-ContactRoles.md` for writing,
+which truncates, then failed on an emoji escape before writing anything — emptying the file. It
+was rebuilt from context with nothing lost. Every later edit writes to a temp file and swaps only
+after a size assertion. If you are scripting edits to a vault file, do the same.
+
+**Verification done:** `test-contact-roles-rls.ts` 19/19 twice ·
+`test-contact-resolution.ts` 22/22 twice · no leftover `zz-` rows · i18n parity 1101/1101 ·
+the Edit Company page's real query run against dev data, confirming no active person falls
+outside a rendered role.
+
+**Verification NOT done, and not claimable:** nothing has been rendered in a browser. Two
+independent blockers — the `BookingForm.tsx` compile failure above, and the fact that opening an
+admin screen needs a password typed into a form, which is off-limits. Feature 201 hit the same
+wall. Either Max walks the admin screens once chunk 7 lands, or the chunk 13 Playwright specs do
+it with their own credentials.
+
+---
+
 ## 2026-09-19 (4) — Contact Roles: guides/reps reviewed, re-scoped, and planned
 
 > **STATE ON EXIT — read this first if you are resuming cold.**

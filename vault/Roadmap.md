@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 PLANNED, NOT STARTED
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–6 OF 14 BUILT
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -398,16 +398,16 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 `CompanyRepresentative` **and** `Company.contactName/Phone/Email`) + `OrderContact`
 (polymorphic over `Order`/`WineOrder`, with detail snapshots).
 
-- [ ] Chunk 0 — seed-role definitions; one open question (does a COMPANY_LEVEL role ship now, or
+- [x] Chunk 0 — seed-role definitions; one open question (does a COMPANY_LEVEL role ship now, or
       only the `scope` column that makes one possible later — CEO was Max's example, not a
       requirement)
-- [ ] Chunk 1 — schema + migration. ⚠️ must not touch `Company` rows or `Price`
-- [ ] Chunk 2 — RLS: three new tables, two-tenant test, not a green tick
-- [ ] Chunk 3 — server actions. Ten near-identical guide/rep functions collapse to five; four
+- [x] Chunk 1 — schema + migration. ⚠️ must not touch `Company` rows or `Price`
+- [x] Chunk 2 — RLS: three new tables, two-tenant test, not a green tick
+- [x] Chunk 3 — server actions. Ten near-identical guide/rep functions collapse to five; four
       overlapping code-resolution functions collapse to one
-- [ ] Chunk 4 — admin Contact Roles screen
-- [ ] Chunk 5 — admin Edit Company, role-driven people list
-- [ ] Chunk 6 — `company_access_codes_enabled` setting, default off, tenant-wide
+- [x] Chunk 4 — admin Contact Roles screen
+- [x] Chunk 5 — admin Edit Company, role-driven people list
+- [~] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s)
 - [ ] Chunk 7 — booking form per-role pickers; folds in Feature 201's uncommitted work
 - [ ] Chunk 8 — wine order form, same treatment (reverses the old plan's "out of scope")
 - [ ] Chunk 9 — write path: `OrderContact` rows with snapshots
@@ -416,6 +416,8 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 - [ ] Chunk 12 — demo seed, onboarding, fixtures
 - [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge
+
+**Status 2026-09-22:** chunks 0–6 built and pushed to `staging` (HEAD `f9a8b73`). The migration has run on the **dev** database only; production is untouched. ⚠️ **The app does not render at all** until chunk 7 — `BookingForm.tsx` still imports symbols chunk 3 removed, which 500s every route including `/admin/login`. So chunks 4–6 are typecheck- and data-verified but visually unverified.
 
 **Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
 access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses
