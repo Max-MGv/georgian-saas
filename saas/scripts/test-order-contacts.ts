@@ -13,7 +13,7 @@
  * Run: npx tsx scripts/test-order-contacts.ts
  */
 import { db } from '@/lib/db'
-import { buildOrderContactRows } from '@/lib/orderContacts'
+import { buildOrderContactRows, writeOrderContacts, syncOrderContactPerson } from '@/lib/orderContacts'
 
 let passed = 0
 let failed = 0
@@ -230,6 +230,90 @@ async function main() {
     check('…the link is gone', afterDelete.every(r => r.personId !== personA.id))
     check('…and the facts are NOT — this is what Order.guideId got wrong',
       afterDelete.some(r => r.nameSnapshot === 'Ana A' && r.phoneSnapshot === '+995 1'))
+
+    console.log('\n── The shared base: one write path for public and admin ────')
+
+    // An admin screen with no picker on it yet sends no `contacts` at all. Before the shared
+    // base existed, createOrderAdmin wrote the denormalised columns and no OrderContact rows,
+    // so an admin-created booking had an empty source of truth while a guest-created one had
+    // a full one. Two write paths, one forgotten — exactly the drift the base exists to stop.
+    const adminOrder = await db.order.create({
+      data: {
+        tenantId: tenantA.id, companyId: companyA.id, bookingType: 'COMPANY', visitType: 'TASTING',
+        date: new Date(), timeSlot: '13:00', guestCount: 2,
+        name: 'Admin', surname: 'Typed', email: 'typed@a.example', phone: '+995 8', totalPrice: 0,
+      },
+    })
+    const wrote = await writeOrderContacts(db, {
+      tenantId: tenantA.id,
+      target: { orderId: adminOrder.id },
+      companyId: companyA.id,
+      module: 'BOOKING',
+      contacts: undefined,
+      fallbackContactPerson: { name: 'Admin Typed', phone: '+995 8', email: 'typed@a.example' },
+    })
+    check('a path that sends no contacts still records one from what was typed', wrote === 1)
+    const adminRows = await db.orderContact.findMany({ where: { orderId: adminOrder.id } })
+    check('…as a contact_person with NO personId — typed, not attributed',
+      adminRows.length === 1 && adminRows[0]?.personId === null)
+    check('…carrying the typed facts', adminRows[0]?.nameSnapshot === 'Admin Typed')
+
+    // An explicit contact_person must win over the fallback, or a picked person would be
+    // silently overwritten by whatever happened to be in the form's boxes.
+    const explicitOrder = await db.order.create({
+      data: {
+        tenantId: tenantA.id, companyId: companyA.id, bookingType: 'COMPANY', visitType: 'TASTING',
+        date: new Date(), timeSlot: '14:00', guestCount: 2,
+        name: 'Ignored', surname: 'Fallback', totalPrice: 0,
+      },
+    })
+    await writeOrderContacts(db, {
+      tenantId: tenantA.id,
+      target: { orderId: explicitOrder.id },
+      companyId: companyA.id,
+      module: 'BOOKING',
+      contacts: [{ roleId: roleContact.id, personId: guideA.id, name: 'Explicit Pick', phone: null, email: null }],
+      fallbackContactPerson: { name: 'Ignored Fallback', phone: null, email: null },
+    })
+    const explicitRows = await db.orderContact.findMany({ where: { orderId: explicitOrder.id } })
+    check('an explicit contact_person beats the fallback',
+      explicitRows.length === 1 && explicitRows[0]?.nameSnapshot === 'Explicit Pick')
+
+    // No company means nobody to attribute to, so no fallback row either.
+    const soloOrder = await db.order.create({
+      data: {
+        tenantId: tenantA.id, bookingType: 'INDIVIDUAL', visitType: 'TASTING',
+        date: new Date(), timeSlot: '15:00', guestCount: 2,
+        name: 'Solo', surname: 'Guest', totalPrice: 0,
+      },
+    })
+    const soloWrote = await writeOrderContacts(db, {
+      tenantId: tenantA.id,
+      target: { orderId: soloOrder.id },
+      companyId: null,
+      module: 'BOOKING',
+      contacts: undefined,
+      fallbackContactPerson: { name: 'Solo Guest', phone: null, email: null },
+    })
+    check('an order with no company gets no fallback row', soloWrote === 0)
+
+    console.log('\n── Editing the columns keeps the snapshot in step ──────────')
+
+    const synced = await syncOrderContactPerson(db, {
+      tenantId: tenantA.id, orderId: adminOrder.id,
+      name: 'Corrected Spelling', phone: '+995 8 NEW', email: 'corrected@a.example',
+    })
+    check('syncing an order that HAS a contact row reports true', synced === true)
+    const afterSync = await db.orderContact.findFirst({ where: { orderId: adminOrder.id } })
+    check('…the snapshot now matches the edited columns',
+      afterSync?.nameSnapshot === 'Corrected Spelling' && afterSync?.phoneSnapshot === '+995 8 NEW')
+
+    const noRow = await syncOrderContactPerson(db, {
+      tenantId: tenantA.id, orderId: soloOrder.id, name: 'Nobody', phone: null, email: null,
+    })
+    check('…and an order with NO contact row is left alone, not given one', noRow === false)
+    check('…still none afterwards',
+      (await db.orderContact.count({ where: { orderId: soloOrder.id } })) === 0)
 
     console.log('\n──────────────────────────────────────────────────')
     console.log(`Results: ${passed} passed, ${failed} failed`)

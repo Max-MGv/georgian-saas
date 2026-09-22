@@ -126,7 +126,7 @@ export default function NewWineOrderForm({
     clearRole,
     setTyped: setTypedContact,
     reset: resetContacts,
-  } = useContactSelection({ module: 'WINE_ORDER', onApply: applyPickedPerson })
+  } = useContactSelection({ module: 'WINE_ORDER', onApply: applyPickedPerson, asAdmin: true })
 
   // Wine lines (client-side only until submit)
   const [lines, setLines] = useState<LineItem[]>([])

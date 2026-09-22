@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers'
 import { applyPercent, asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
-import { buildOrderContactRows } from '@/lib/orderContacts'
+import { writeOrderContacts } from '@/lib/orderContacts'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
@@ -161,17 +161,14 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
       // Person's details are also in WineOrder.contactName/contactPhone/contactEmail above,
       // for the same reason bookings keep Order.name/surname/phone/email — see the note in
       // createBooking.ts, which is the one place that special case is explained.
-      const contactRows = await buildOrderContactRows(tx, {
+      await writeOrderContacts(tx, {
         tenantId,
+        target: { wineOrderId: order.id },
         companyId: companyId || null,
         module: 'WINE_ORDER',
         contacts,
+        fallbackContactPerson: { name: contactName, phone: contactPhone, email: contactEmail },
       })
-      if (contactRows.length > 0) {
-        await tx.orderContact.createMany({
-          data: contactRows.map(r => ({ ...r, wineOrderId: order.id })),
-        })
-      }
       return order
     })
 

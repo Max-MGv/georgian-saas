@@ -123,3 +123,114 @@ export async function buildOrderContactRows(
   }
   return rows
 }
+
+/**
+ * Build and insert an order's contact rows — **the one place any order records who to
+ * contact**, whether the order came from a public form or an admin screen.
+ *
+ * Both entry points call this rather than each assembling their own write, because the two
+ * already drifted once: `createBooking` wrote `OrderContact` rows while `createOrderAdmin`
+ * wrote only the denormalised `Order.name/surname/phone/email` columns, so an admin-created
+ * booking had an empty source of truth. An audit found it. The fix is not to remember harder
+ * in two places; it is to have one place.
+ *
+ * `fallbackContactPerson` is what makes that work for a screen with no picker on it yet. When
+ * the caller supplies no explicit `contact_person` entry, the details typed into the form
+ * become one, with **no `personId`** — exactly the shape the public form produces when a guest
+ * picks "I am not on this list". That is a record of what the admin typed, not an invented
+ * attribution: nobody is linked to a real person they did not choose.
+ *
+ * Deliberately NOT applied to `assignOrderCompany()`, which links a company to an order that
+ * already exists. There the details were typed before any company was involved, so minting a
+ * contact row would assert an attribution that was never made. Creating and linking are
+ * different acts.
+ */
+export async function writeOrderContacts(
+  tx: TxClient,
+  opts: {
+    tenantId: string
+    /** Exactly one, matching OrderContact's own shape. */
+    target: { orderId: string } | { wineOrderId: string }
+    companyId: string | null
+    module: 'BOOKING' | 'WINE_ORDER'
+    contacts: IncomingContact[] | undefined
+    fallbackContactPerson?: { name: string; phone: string | null; email: string | null }
+  }
+): Promise<number> {
+  let contacts = opts.contacts ?? []
+
+  if (opts.fallbackContactPerson && opts.companyId) {
+    const contactRole = await tx.contactRole.findFirst({
+      where: {
+        tenantId: opts.tenantId,
+        key: 'contact_person',
+        isActive: true,
+        scope: 'PER_ORDER',
+        appliesTo: { in: [opts.module, 'BOTH'] },
+      },
+      select: { id: true },
+    })
+    // Matched on `key`, not label — labels are display-only and renameable, `key` is what code
+    // matches on (Plan-ContactRoles Chunk 0). A tenant that deleted or deactivated the role
+    // simply gets no fallback row, which is correct rather than an error.
+    if (contactRole && !contacts.some(c => c.roleId === contactRole.id)) {
+      contacts = [...contacts, { roleId: contactRole.id, ...opts.fallbackContactPerson }]
+    }
+  }
+
+  const rows = await buildOrderContactRows(tx, {
+    tenantId: opts.tenantId,
+    companyId: opts.companyId,
+    module: opts.module,
+    contacts,
+  })
+  if (rows.length === 0) return 0
+
+  await tx.orderContact.createMany({ data: rows.map(r => ({ ...r, ...opts.target })) })
+  return rows.length
+}
+
+/**
+ * Keep an order's `contact_person` snapshot in step when an admin edits the denormalised
+ * `Order.name/surname/phone/email` columns.
+ *
+ * Decision 4 makes `OrderContact` the source of truth and those four columns a copy of one of
+ * its rows. Editing the copy and leaving the original stale makes the two disagree permanently,
+ * with nothing to reconcile them — which is precisely the drift this rework exists to end, so
+ * it would be a poor place to reintroduce it.
+ *
+ * Only ever updates an existing row: no row means this order never had a contact recorded
+ * (every INDIVIDUAL booking, every pre-migration order), and an edit is not the moment to
+ * invent one. `personId` is left alone deliberately — the admin corrected a spelling, they did
+ * not say it is now a different person.
+ */
+export async function syncOrderContactPerson(
+  tx: TxClient,
+  opts: {
+    tenantId: string
+    orderId: string
+    name: string
+    phone: string | null
+    email: string | null
+  }
+): Promise<boolean> {
+  const existing = await tx.orderContact.findFirst({
+    where: {
+      orderId: opts.orderId,
+      tenantId: opts.tenantId,
+      role: { key: 'contact_person' },
+    },
+    select: { id: true },
+  })
+  if (!existing) return false
+
+  await tx.orderContact.update({
+    where: { id: existing.id },
+    data: {
+      nameSnapshot: opts.name.trim(),
+      phoneSnapshot: opts.phone?.trim() || null,
+      emailSnapshot: opts.email?.trim() || null,
+    },
+  })
+  return true
+}

@@ -145,6 +145,14 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
   module: 'BOOKING' | 'WINE_ORDER'
   companyId?: string
   code?: string
+  /**
+   * The caller has already proved it may see this company's people without a code — i.e. an
+   * authenticated admin. **Never settable from a browser**: the public server action
+   * destructures its input explicitly and does not forward this field.
+   *
+   * Without it, naming a company is not enough. See the gate below.
+   */
+  trusted?: boolean
 }): Promise<ResolveContactsResult> {
   const typed = input.code?.trim().toUpperCase() ?? ''
   if (!input.companyId && !typed) return { error: 'Code not recognised.' }
@@ -218,8 +226,12 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
 
     // ── 2. Resolve the company itself ────────────────────────────────────────
     const company = await tx.company.findFirst({
+      // `moduleWhere` on BOTH branches. It used to be on the code branch only, so naming a
+      // booking-only company's id resolved it on the wine-order form and vice versa — the
+      // same "filter where the value is used, not only where it is displayed" hole this
+      // resolver already fixed one layer down, reappearing one layer up.
       where: input.companyId
-        ? { id: input.companyId, tenantId }
+        ? { id: input.companyId, tenantId, isIndividual: false, ...moduleWhere }
         : { tenantId, accessCode: typed, isIndividual: false, ...moduleWhere },
       select: {
         id: true, name: true, accessCode: true, identificationCode: true, address: true,
@@ -228,18 +240,36 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
     })
     if (!company) return { error: 'Code not recognised.' }
 
-    // When the caller named the company AND typed a code, the code has to be that company's.
-    // (A person's code was already tried above and did not match.)
-    if (input.companyId && typed) {
-      if (!company.accessCode) {
-        // "No code set" would be a lie the guest cannot act on when the company does have
-        // person codes — just not the one typed.
-        const peopleWithCodes = codesOn
-          ? await tx.companyPerson.count({ where: { companyId: company.id, code: { not: null } } })
-          : 0
-        return { error: peopleWithCodes > 0 ? 'Incorrect code.' : 'No code set.' }
-      }
+    /**
+     * The access-code gate, enforced **server-side**.
+     *
+     * ⚠️ This used to read `if (input.companyId && typed)`, which meant naming a company and
+     * sending **no code at all** skipped the check entirely — and step 3 below then returned
+     * every one of that company's people with their names, phones and emails. Since
+     * `resolveCompanyContacts` is an unauthenticated server action and company ids are in the
+     * public homepage's HTML (they populate the dropdown), any visitor could read any
+     * company's staff directory without ever seeing the code. Found by an audit on
+     * 2026-09-22, which reproduced it against the running dev server.
+     *
+     * The form asked for the code; the server never insisted. **A gate that only the client
+     * enforces is not a gate** — the same lesson as F3/F4, one layer further in.
+     *
+     * The rule now: if the company has a code, a matching code is required, whether or not
+     * the caller also named the company. `trusted` is the single exception, and a browser
+     * cannot set it.
+     */
+    if (!input.trusted && company.accessCode) {
+      if (!typed) return { error: 'Code required.' }
       if (company.accessCode.toUpperCase() !== typed) return { error: 'Incorrect code.' }
+    }
+    if (!input.trusted && !company.accessCode && input.companyId && typed) {
+      // A code was offered for a company that has none. "No code set" would be a lie the
+      // guest cannot act on when the company does have *person* codes — just not the one
+      // typed.
+      const peopleWithCodes = codesOn
+        ? await tx.companyPerson.count({ where: { companyId: company.id, code: { not: null } } })
+        : 0
+      return { error: peopleWithCodes > 0 ? 'Incorrect code.' : 'No code set.' }
     }
 
     // ── 3. Who can be picked ─────────────────────────────────────────────────

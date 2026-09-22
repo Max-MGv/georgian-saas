@@ -514,6 +514,131 @@ production database still has the old tables and awaits `prisma migrate deploy` 
 
 ---
 
+## 9b. The audit, and what it found — 2026-09-22
+
+A subagent audited Chunks 0–9 against §1 and §2 with the vault **fenced off**: it could read the
+code, the schema, the migration and the database, but not this plan, the session log, the feature
+log or any commit message. Without that fence it would have read the implementer's own
+conclusions back, which is worth nothing. It was given only the brief, the ten decisions, §4b and
+the F1–F4 findings — the last labelled explicitly as *claims to check*.
+
+It was right about more than was comfortable. What it confirmed sound: the RLS policies, both
+`OrderContact` unique indexes at the database level, decision 6's picker suppression, decision 9,
+F2's snapshot behaviour, and F3 (verified empirically by grepping both public pages for all nine
+live access codes).
+
+### 🔴 A1 — the access-code gate was enforced only by the form
+
+`lib/contactResolution.ts` checked the code under `if (input.companyId && typed)`. **Naming a
+company and sending no code skipped the check entirely**, and the resolver then returned every
+one of that company's people with names, phones and emails. `resolveCompanyContacts` is an
+unauthenticated server action and company ids sit in the public homepage's HTML, so any visitor
+could read any company's staff directory. The auditor reproduced it against the running server.
+
+Three things make this worth remembering rather than just fixing:
+
+- **It was a regression.** The old `verifyCompanyCode` demanded company *and* code
+  unconditionally and returned one contact triple. The consolidation that replaced four
+  functions with one lost the gate along the way.
+- **The test asserted the bug as correct.** `test-contact-resolution.ts` read *"Known company
+  resolves with no code at all"* and passed. A test written from the implementation asserts what
+  the code does, not what it should — so the suite could never have caught it.
+- **Chunk 7's verification looked thorough and missed it.** It checked "codes on hides the
+  picker" and never asked "can the code be skipped".
+
+**Fixed:** if a company has an `accessCode`, a matching code is required, full stop. The one
+exception is `trusted`, which only a server-side caller can set — `resolveCompanyContacts`
+builds a fresh three-field object rather than spreading its input, so a crafted request cannot
+ask for it, and admin screens go through `resolveCompanyContactsAsAdmin`, which calls
+`requireAdmin()` first. The test now asserts the refusals, including that no name appears in
+either refusal.
+
+Also fixed in the same function: `moduleWhere` was applied to the code branch only, so a
+booking-only company resolved on the wine form when named by id.
+
+### 🔴 A2 — decision 4 was false in the code, and it had been asserted otherwise
+
+Decision 4 says `Order.name/surname/phone/email` are *"written in exactly one place"*. They were
+written in three: `createBooking.ts`, plus `updateOrder()` and `createOrderAdmin()` in
+`orders.ts`, **neither of which touched `OrderContact` at all**. So every admin-created booking
+had an empty source of truth, and an admin editing a contact name updated the copy while leaving
+the declared original stale, permanently, with nothing to reconcile them.
+
+Chunk 9's re-decision covered the two functions this plan *named* and never scanned the file for
+others. Naming two functions in a plan is not the same as checking the file.
+
+### The fix Max asked for, and the principle behind it
+
+Max's framing, on being shown the audit: *"we should be [not] dulicating logic … so there's no
+drift and loopholes, which is why we might want the same action — or same action as base — from
+admin and public to create an order."* That is decision 10 applied to the write path instead of
+the picker, and it is right.
+
+**`writeOrderContacts()` in `lib/orderContacts.ts` is now the single place any order records who
+to contact** — public booking, public wine, admin wine, admin booking. Not one merged action:
+an admin genuinely does different things (sets status, skips guest validation, sends no
+confirmation email). What must never differ is the contact write, so that is what was extracted.
+
+`fallbackContactPerson` is what lets a screen with no picker on it yet take part: when no
+explicit `contact_person` is supplied, the details typed into the form become one **with no
+`personId`** — the same shape a guest produces via "I am not on this list". A record of what was
+typed, not an invented attribution. Deliberately **not** applied to `assignOrderCompany()`, where
+the details predate any company and minting a row would assert an attribution nobody made.
+
+`syncOrderContactPerson()` keeps the snapshot in step when an admin edits the four columns. It
+only ever updates an existing row — no row means the order never had a contact recorded, and an
+edit is not the moment to invent one.
+
+### 🔴 A3 — H3 recurred inside the change meant to end H3
+
+The wine catalogue cleared the hook's state on a company switch but not its own
+`contactName/Phone/Email` inputs, so switching company and choosing "I am not on this list"
+filed the order against company B attributed to company A's employee. **The booking form already
+carried this exact fix, with a comment describing this exact failure** — it simply was not
+carried across when the wine form was rewired in Chunk 8. `clearDirectCode` had the same gap for
+`contactEmail`. Both fixed.
+
+### 🔴 A4 — typing a role's phone before its name discarded every keystroke
+
+`useContactSelection.setTyped` dropped the whole role entry when the name was blank, and the
+inputs render from the stored entry — so a guest filling the Guide **phone** box first watched
+each character vanish, with nothing saying name-first was required. Now the entry survives while
+*any* field has content; `buildOrderContactRows()` still refuses to write a nameless row, which
+is the right place for that guard.
+
+### Not fixed here, and why
+
+`/admin/orders`, `sendOrderInvoice`, `lib/demoSeed.ts`, `app/actions/onboarding.ts` and
+`scripts/backfill-test-fixtures.ts` all still reference dropped columns or deleted tables.
+They belong to Chunks 10, 11 and 12. **But the audit re-framed them correctly and this plan had
+them filed too gently:** they are not "later chunks' type errors", they are live outages —
+`/admin/orders` is down, the invoice email is down, and the demo reseed cron is down. One of
+them, `getFinishDetailsStatus`, is called from the admin panel *layout*, so it takes **every**
+admin page down for a launched tenant. Chunk 7's admin click-through passed only because
+`Staging Winery` is not launched and an early return skips the query.
+
+`next build` cannot succeed while those 40 errors stand, so none of this can deploy until
+Chunks 10–12 land. That is the honest status.
+
+### Verified after the fixes
+
+`tsc` 40 (unchanged — all Chunks 10–12) · parity 1103/1103 EN+KA · RLS 19/19 · resolver **26/26**
+(was 22; the gate assertions replaced the one that encoded the bug) · write path **36/36** (was
+27; nine new for the shared base and the snapshot sync).
+
+Eight journeys driven by hand in a browser and checked **in the database**, not on screen — the
+matrix and the traps are written up in [[Playwright/Notes-ContactRoles]] for the Playwright
+rewrite. All four forms now produce `OrderContact` rows; the admin booking produced none before.
+
+**One honest gap in the verification:** the auditor reproduced A1 over raw HTTP; that invocation
+could not be reconstructed here (Next 16 server actions need more of the RSC protocol than a
+plain `curl`), and a probe whose control fails proves nothing either way. The gate is proven at
+the function level with a control that *does* distinguish outcomes — trusted succeeds, untrusted
+is refused, neither leaks a name — plus the public wrapper cannot forward `trusted` by
+construction. An end-to-end HTTP assertion belongs in the Chunk 13 Playwright work.
+
+---
+
 ## Chunk 0 — Seed roles
 
 **Status:** ✅ Done (2026-09-22)

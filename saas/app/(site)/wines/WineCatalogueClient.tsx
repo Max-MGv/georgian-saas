@@ -178,6 +178,8 @@ export default function WineCatalogueClient({
   const [directCodeLoading, setDirectCodeLoading] = useState(false)
   const [directCodeError, setDirectCodeError] = useState('')
   const [directCompanyName, setDirectCompanyName] = useState('')
+  /** Which company the contact fields were last filled from — see the effect below. */
+  const prevCompanyIdRef = useRef('')
 
   // New company request popup
   const [showNewCompanyPopup, setShowNewCompanyPopup] = useState(false)
@@ -328,6 +330,22 @@ export default function WineCatalogueClient({
   useEffect(() => {
     if (hideCompanyDropdown) return
     resetContacts()
+    /**
+     * Clear the contact fields too — but only when leaving a company we filled them from.
+     *
+     * `resetContacts()` clears the hook's own map; these three inputs belong to the form, so
+     * switching companies left the *previous* company's contact person sitting in them. Choose
+     * "I am not on this list" for the new company and the order went out for company B
+     * attributed to someone who works at company A.
+     *
+     * The booking form already carried this exact fix, with a comment describing this exact
+     * failure — and it was not carried across when this form was rewired. H3's "reset it
+     * everywhere", missed in the change meant to end H3. Found by an audit.
+     */
+    if (prevCompanyIdRef.current && prevCompanyIdRef.current !== companyId) {
+      setContactName(''); setContactPhone(''); setContactEmail('')
+    }
+    prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
     if (!companyId) {
       setDiscountPercent(null)
@@ -394,7 +412,7 @@ export default function WineCatalogueClient({
     setDirectCodeError('')
     setDiscountPercent(null)
     resetContacts()
-    setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone('')
+    setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone(''); setContactEmail('')
   }
 
   /**

@@ -96,8 +96,40 @@ async function main() {
   await setCodes(false)
   console.log('  person_codes_enabled = false\n')
 
-  const byId = await resolveCompanyContactsFor(T, { module: 'BOOKING', companyId: company.id })
-  check('Known company resolves with no code at all', 'success' in byId)
+  /**
+   * ⚠️ THE ACCESS-CODE GATE. This block used to assert the opposite.
+   *
+   * It read "Known company resolves with no code at all" and passed — which is precisely the
+   * bug. `resolveCompanyContacts` is an unauthenticated server action and company ids are in
+   * the public homepage's HTML, so naming a company with no code returned that company's
+   * entire staff directory: names, phones, emails. An audit reproduced it against the running
+   * dev server on 2026-09-22.
+   *
+   * The test agreed with the code, so the suite could never have caught it. Worth remembering:
+   * a test written from the implementation asserts what the code does, not what it should.
+   */
+  const noCode = await resolveCompanyContactsFor(T, { module: 'BOOKING', companyId: company.id })
+  check('A company WITH a code is refused when no code is given',
+    'error' in noCode, `got ${JSON.stringify(noCode).slice(0, 80)}`)
+  const wrongCode = await resolveCompanyContactsFor(T, {
+    module: 'BOOKING', companyId: company.id, code: 'NOTTHECODE',
+  })
+  check('…and refused with the wrong code', 'error' in wrongCode)
+  const leaked = JSON.stringify(noCode) + JSON.stringify(wrongCode)
+  check('…and neither refusal leaks a single person',
+    !leaked.includes('ZZ Contact') && !leaked.includes('ZZ Guide'))
+
+  // An admin screen has already proved itself and may skip the code — the one exception,
+  // and one a browser cannot ask for (the public action never forwards `trusted`).
+  const asAdmin = await resolveCompanyContactsFor(T, {
+    module: 'BOOKING', companyId: company.id, trusted: true,
+  })
+  check('A trusted caller resolves the same company without a code', 'success' in asAdmin)
+
+  const byId = await resolveCompanyContactsFor(T, {
+    module: 'BOOKING', companyId: company.id, code: 'ZZCOMPANY',
+  })
+  check('Known company resolves with its own code', 'success' in byId)
   if ('success' in byId) {
     check('…returns both per-order roles', byId.roleChoices.length === 2,
       `got ${byId.roleChoices.map(r => r.key).join(',')}`)
@@ -112,7 +144,7 @@ async function main() {
       !JSON.stringify(byId).includes('ZZCONTACT') && !JSON.stringify(byId).includes('ZZGUIDE'))
   }
 
-  const wineOff = await resolveCompanyContactsFor(T, { module: 'WINE_ORDER', companyId: company.id })
+  const wineOff = await resolveCompanyContactsFor(T, { module: 'WINE_ORDER', companyId: company.id, code: 'ZZCOMPANY' })
   check('WINE_ORDER excludes the BOOKING-only guide role',
     'success' in wineOff && !wineOff.roleChoices.some(r => r.key === 'guide'),
     'success' in wineOff ? wineOff.roleChoices.map(r => r.key).join(',') : 'errored')
@@ -176,7 +208,7 @@ async function main() {
     data: { name: 'ZZ Empty', tenantId: T, accessCode: 'ZZEMPTY1', isBookingCompany: true },
   })
   await setCodes(false)
-  const none = await resolveCompanyContactsFor(T, { module: 'BOOKING', companyId: empty.id })
+  const none = await resolveCompanyContactsFor(T, { module: 'BOOKING', companyId: empty.id, code: 'ZZEMPTY1' })
   check('A company with nobody configured succeeds with an empty list, not an error',
     'success' in none && none.roleChoices.length === 0)
 

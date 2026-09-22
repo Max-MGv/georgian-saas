@@ -166,7 +166,36 @@ export async function resolveCompanyContacts(input: {
   companyId?: string
   code?: string
 }) {
-  return resolveCompanyContactsFor(await getTenantId(), input)
+  // ⚠️ Destructured field by field, NEVER spread. This action is reachable by anyone with
+  // the page open, so forwarding the caller's object wholesale would let a crafted request set
+  // `trusted: true` and skip the access-code gate — which is the very hole this call was
+  // found to have. Adding a field to the resolver means adding it here on purpose.
+  return resolveCompanyContactsFor(await getTenantId(), {
+    module: input.module,
+    companyId: input.companyId,
+    code: input.code,
+  })
+}
+
+/**
+ * The same resolver, for callers who have already proved they may see a company's people
+ * without a code — the admin manual-entry screens.
+ *
+ * A separate action rather than a `trusted` flag on the public one, because the flag has to be
+ * something a browser cannot set. `requireAdmin()` is what earns it, and it runs here.
+ */
+export async function resolveCompanyContactsAsAdmin(input: {
+  module: 'BOOKING' | 'WINE_ORDER'
+  companyId?: string
+  code?: string
+}) {
+  await requireAdmin()
+  return resolveCompanyContactsFor(await getTenantId(), {
+    module: input.module,
+    companyId: input.companyId,
+    code: input.code,
+    trusted: true,
+  })
 }
 
 /** Company-level contact reference data (COMPANY_LEVEL roles). Never reaches a public form. */

@@ -1,7 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
-import { buildOrderContactRows } from '@/lib/orderContacts'
+import { writeOrderContacts } from '@/lib/orderContacts'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { asTetri } from '@/lib/money'
 import { BookingType, VisitType } from '@prisma/client'
@@ -388,17 +388,20 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
        * *facts* (finding F2 / KnownBugs #56). That is why `personId` is `SetNull` here, where
        * the same Prisma default on `Order.guideId` was a silent data-loss bug.
        */
-      const contactRows = await buildOrderContactRows(tx, {
+      await writeOrderContacts(tx, {
         tenantId,
+        target: { orderId: created.id },
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
         module: 'BOOKING',
         contacts: data.contacts,
+        // The form always sends a contact_person for a company booking, so this rarely fires
+        // — but it makes the guarantee unconditional rather than dependent on the client.
+        fallbackContactPerson: {
+          name: `${data.name} ${data.surname}`.trim(),
+          phone: data.phone || null,
+          email: data.email || null,
+        },
       })
-      if (contactRows.length > 0) {
-        await tx.orderContact.createMany({
-          data: contactRows.map(r => ({ ...r, orderId: created.id })),
-        })
-      }
 
       // The first row of the order's timeline. GUEST, because a booking form
       // submission has no admin behind it (chunk 5).

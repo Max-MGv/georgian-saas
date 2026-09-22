@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { writeOrderContacts, syncOrderContactPerson } from '@/lib/orderContacts'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, toMajor, type Tetri } from '@/lib/money'
@@ -49,8 +50,8 @@ export async function updateOrder(id: string, data: {
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
 
   const tenantId = await getTenantId()
-  const result = await withTenantDb(tenantId, tx =>
-    tx.order.updateMany({
+  const result = await withTenantDb(tenantId, async tx => {
+    const updated = await tx.order.updateMany({
       where: { id, tenantId },
       data: {
         date: new Date(data.date),
@@ -63,7 +64,26 @@ export async function updateOrder(id: string, data: {
         notes: data.notes.trim() || null,
       },
     })
-  )
+    if (updated.count > 0) {
+      /**
+       * Keep the contact_person snapshot in step with the columns just edited.
+       *
+       * Decision 4 makes `OrderContact` the source of truth and these four columns a
+       * denormalised copy of one of its rows. Editing the copy alone left the original stale
+       * with nothing to reconcile them — found by an audit, and a poor place to reintroduce
+       * exactly the drift this rework exists to end. No-op when the order has no contact row,
+       * which is every INDIVIDUAL booking and every pre-migration order.
+       */
+      await syncOrderContactPerson(tx, {
+        tenantId,
+        orderId: id,
+        name: `${data.name} ${data.surname}`.trim(),
+        phone: data.phone,
+        email: data.email,
+      })
+    }
+    return updated
+  })
   if (result.count === 0) return { error: 'Order not found.' }
   revalidatePath('/admin/orders')
   return { success: true }
@@ -280,6 +300,32 @@ export async function createOrderAdmin(data: {
           : undefined,
       },
     })
+    /**
+     * Who to contact, through the same base the public form uses.
+     *
+     * This screen has no contact picker yet (that is Chunk 10), so there are no explicit
+     * `contacts` to send — the fallback turns what the admin typed into a `contact_person`
+     * entry with no `personId`, exactly the shape a guest produces by choosing "I am not on
+     * this list".
+     *
+     * Until an audit caught it, this path wrote `Order.name/surname/phone/email` and **no**
+     * `OrderContact` rows at all, so every admin-created company booking had an empty source
+     * of truth while the public form's had a full one. Two write paths, one of them forgotten
+     * — which is the exact drift the shared base exists to make impossible.
+     */
+    await writeOrderContacts(tx, {
+      tenantId,
+      target: { orderId: order.id },
+      companyId: data.companyId || null,
+      module: 'BOOKING',
+      contacts: undefined,
+      fallbackContactPerson: {
+        name: `${data.name} ${data.surname}`.trim(),
+        phone: data.phone?.trim() || null,
+        email: data.email?.trim() || null,
+      },
+    })
+
     // First row of the timeline. ADMIN here, unlike the public form's GUEST —
     // a walk-in entered by staff and a guest's own submission are different
     // facts and the history should not blur them (chunk 5).

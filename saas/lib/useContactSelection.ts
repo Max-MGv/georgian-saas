@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { resolveCompanyContacts } from '@/app/actions/companies'
+import { resolveCompanyContacts, resolveCompanyContactsAsAdmin } from '@/app/actions/companies'
 import type { ContactChoice, OrderRole, RoleChoices } from '@/lib/contactResolution'
 
 /**
@@ -71,6 +71,15 @@ type ResolveOutcome =
 type Options = {
   module: 'BOOKING' | 'WINE_ORDER'
   /**
+   * An admin screen, which may see a company's people without an access code.
+   *
+   * Routes through `resolveCompanyContactsAsAdmin`, which calls `requireAdmin()` server-side.
+   * The public action deliberately cannot be told to skip the code gate — a browser must not
+   * be able to ask for that, and an unauthenticated caller naming a company id is exactly how
+   * the gate was found to be bypassable.
+   */
+  asAdmin?: boolean
+  /**
    * Put a picked person's facts into the caller's own fields. Called for a person-code
    * match and for every pick from the popup, with the role so a caller can route the
    * Guide's details somewhere other than the Contact Person's.
@@ -78,7 +87,7 @@ type Options = {
   onApply?: (person: ContactChoice, role: OrderRole) => void
 }
 
-export function useContactSelection({ module, onApply }: Options) {
+export function useContactSelection({ module, onApply, asAdmin = false }: Options) {
   /** roleId → the chosen person. Also the payload, once flattened. */
   const [selected, setSelected] = useState<Record<string, ContactSelection>>({})
   /** Every role this company has people in, in the tenant's sort order. */
@@ -156,7 +165,9 @@ export function useContactSelection({ module, onApply }: Options) {
    */
   const resolve = useCallback(async (input: ResolveInput): Promise<ResolveOutcome> => {
     setLoading(true)
-    const result = await resolveCompanyContacts({ module, ...input })
+    const result = asAdmin
+      ? await resolveCompanyContactsAsAdmin({ module, ...input })
+      : await resolveCompanyContacts({ module, ...input })
     setLoading(false)
 
     if ('error' in result) return { error: result.error }
@@ -182,7 +193,7 @@ export function useContactSelection({ module, onApply }: Options) {
       matchedPerson: result.matchedPerson,
       roleChoices: result.roleChoices,
     }
-  }, [module, applyPerson])
+  }, [module, asAdmin, applyPerson])
 
   /**
    * Select a person for a named role directly, with no popup in between.
@@ -213,9 +224,21 @@ export function useContactSelection({ module, onApply }: Options) {
   const setTyped = useCallback((roleId: string, facts: { name: string; phone?: string | null; email?: string | null }) => {
     setSelected(prev => {
       const name = facts.name.trim()
-      if (!name) {
-        // An emptied field means "no one for this role", not "someone with a blank
-        // name" — a blank-named OrderContact row would be worse than no row.
+      const phone = facts.phone?.trim() || ''
+      const email = facts.email?.trim() || ''
+      /**
+       * Drop the entry only when the whole role is empty — not merely when the name is.
+       *
+       * This used to key on the name alone, and because these inputs render from the stored
+       * entry, someone who typed into a role's **phone** box before its **name** box watched
+       * every keystroke disappear: each change stored a nameless entry, the entry was deleted,
+       * and the input read back empty. Nothing said name-first was required, because nothing
+       * should.
+       *
+       * A nameless row still never reaches the database — `buildOrderContactRows()` drops
+       * blank names at write time, which is the right place for that guard.
+       */
+      if (!name && !phone && !email) {
         const { [roleId]: _drop, ...rest } = prev
         return rest
       }

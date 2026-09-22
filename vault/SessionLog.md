@@ -8,6 +8,86 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-22 (night) — The audit, and the fixes it forced
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7–9 plus the audit fixes committed and pushed.
+> - **40 TypeScript errors**, all Chunks 10–12. `next build` cannot succeed until they land,
+>   so **nothing here can deploy yet.**
+> - RLS 19/19 · resolver **26/26** · write path **36/36** · parity 1103/1103.
+>
+> **Next:** Chunk 10 — and it is more urgent than "admin order surfaces" sounds. See below.
+
+### The audit
+
+A subagent reviewed Chunks 0–9 against Max's brief with the vault **fenced off** — no plan, no
+session log, no commit messages. It got the brief, the ten decisions and the F1–F4 claims, and
+nothing else. That fence is why it was useful; without it, it reads my own conclusions back.
+
+It confirmed the database layer sound (RLS, both unique indexes, decisions 6 and 9, F2, and F3
+verified by grepping the live pages). It also found four real defects, two of them mine from
+this session.
+
+### A1 — the access-code gate was enforced only by the form
+
+`resolveCompanyContacts` is unauthenticated, company ids are in the public homepage's HTML, and
+the code check only ran **if a code was supplied**. Send a company id and no code, and back came
+every one of that company's people with names, phones and emails. The auditor reproduced it live.
+
+It was a regression — the old `verifyCompanyCode` demanded both, always. And **my own test
+asserted the broken behaviour as correct** ("Known company resolves with no code at all"), so
+the suite could never have caught it. A test written from the implementation asserts what the
+code does, not what it should.
+
+Fixed server-side; admin screens now go through a separate `resolveCompanyContactsAsAdmin` that
+calls `requireAdmin()`, and the public wrapper builds a fresh three-field object so a crafted
+request cannot ask to be trusted.
+
+### A2 — decision 4 was false, and I had said otherwise
+
+`Order.name/surname/phone/email` were written in three places, not one, and two of them touched
+no `OrderContact` at all. Admin-created bookings had an empty source of truth; admin edits left
+the snapshot stale forever.
+
+Max's response was the right architectural call: *"we should be [not] dulicating logic … same
+action — or same action as base — from admin and public"*. So `writeOrderContacts()` is now the
+single place any order records who to contact, with a `fallbackContactPerson` that lets a screen
+with no picker yet take part honestly (typed details, no `personId`). `syncOrderContactPerson()`
+keeps the snapshot in step on edit.
+
+### A3 and A4 — both mine, both small, both real
+
+The wine catalogue never cleared its contact fields on a company switch — **the booking form
+already had that exact fix with a comment describing that exact failure**, and I did not carry it
+across in Chunk 8. H3 recurring inside the change meant to end H3.
+
+And typing a role's phone before its name discarded every keystroke, because the entry was keyed
+on the name alone.
+
+### Extensive testing, by hand, verified in the database
+
+Eight journeys across all four forms, each checked against the database rather than the screen.
+All four now write `OrderContact` rows; the admin booking wrote none before. The traps (React's
+value tracking, the picker's aria-label, the z-index above the drawer, future-dated seed
+`createdAt`, the live payment redirect) are written up in [[Playwright/Notes-ContactRoles]] for
+the rewrite, along with the eight journeys and the fixtures that can tell outcomes apart.
+
+New: `scripts/inspect-order-contacts.ts`, a manual-testing aid — walking a form tells you what
+the screen did, this tells you what the database got.
+
+### ⚠️ Re-filed, because the old framing was too gentle
+
+`/admin/orders`, `sendOrderInvoice`, `demoSeed.ts` and `onboarding.ts` were logged as "later
+chunks' type errors". They are **live outages**: the orders screen is down, the invoice email is
+down, the demo reseed cron is down, and `getFinishDetailsStatus` is called from the admin panel
+*layout*, so it takes **every admin page** down for a launched tenant.
+
+Chunk 7's admin click-through passed only because Staging Winery is not launched and an early
+return skips that query. That is a verification gap worth remembering: it worked on this tenant.
+
+---
+
 ## 2026-09-22 (evening) — Contact Roles chunk 9: the write path, and F1 finally delivered
 
 > **STATE ON EXIT.**
