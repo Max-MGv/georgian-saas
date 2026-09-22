@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
+import type { GuideChoice } from '@/app/actions/companies'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
@@ -17,6 +18,7 @@ import { countryName } from '@/lib/countries'
 import NewCompanyPopupView from '@/components/NewCompanyPopupView'
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
 import AccessCodePopupView from '@/components/AccessCodePopupView'
+import GuidePickerPopupView from '@/components/GuidePickerPopupView'
 import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
 import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -164,6 +166,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
+  /**
+   * The "which guide are you?" step (KnownBugs #55). Non-empty only after a
+   * COMPANY-level code was accepted for a company that has guides — a guide's
+   * own code identifies them directly and skips this entirely.
+   */
+  const [guideChoices, setGuideChoices] = useState<GuideChoice[]>([])
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState('')
   const [codeLoading, setCodeLoading] = useState(false)
@@ -297,15 +305,43 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         await navigator.credentials.store(cred)
       } catch {}
     }
+    setShowCodePopup(false)
+    // A guide's own code already names the person — nothing left to ask.
+    // A company code for a company WITH guides needs the second step; one for a
+    // company without guides behaves exactly as it always did.
+    if (result.matchType === 'company' && result.guideChoices.length > 0) {
+      applyProfile(result.profile)   // company details as the starting point
+      setMatchedGuideId(null)
+      setGuideChoices(result.guideChoices)
+      return
+    }
     setMatchedGuideId(result.guideId)
     applyProfile(result.profile)
-    setShowCodePopup(false)
+  }
+
+  /** A guide was chosen from the picker — their name and phone replace the company's. */
+  function handleGuidePicked(guide: GuideChoice) {
+    setMatchedGuideId(guide.id)
+    applyProfile({ contactName: guide.name, contactPhone: guide.phone, contactEmail: null })
+    setGuideChoices([])
+  }
+
+  /**
+   * "I am not on this list" — proceed unattributed, on the company's own contact
+   * details (already applied when the code was accepted). This is the escape hatch
+   * for a guide who has joined the agency but has not been added in the admin panel
+   * yet; without it they would be stranded at this step with a valid code.
+   */
+  function handleGuideNotListed() {
+    setMatchedGuideId(null)
+    setGuideChoices([])
   }
 
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
     setMatchedGuideId(null)
+    setGuideChoices([])
     setBookingType('INDIVIDUAL')
   }
 
@@ -321,8 +357,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setMatchedGuideId(result.guideId)
     applyProfile({ contactName: result.company.contactName, contactPhone: result.company.contactPhone, contactEmail: result.company.contactEmail })
+    // Same second step as the dropdown path — a company code typed directly must
+    // behave identically to one entered after choosing the company.
+    if (result.matchType === 'company' && result.guideChoices.length > 0) {
+      setMatchedGuideId(null)
+      setGuideChoices(result.guideChoices)
+      return
+    }
+    setMatchedGuideId(result.guideId)
   }
 
   function clearDirectCode() {
@@ -331,6 +374,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCode('')
     setDirectCodeError('')
     setMatchedGuideId(null)
+    setGuideChoices([])
     setFirstName(''); setLastName(''); setPhone(''); setEmail('')
   }
 
@@ -675,6 +719,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           onSubmit={handleCodeSubmit}
           onEnterManually={handleNotARep}
           labels={buildAccessCodeLabels(locale)}
+        />
+      )}
+
+      {/* Guide picker — second step after a company-level code (KnownBugs #55) */}
+      {guideChoices.length > 0 && (
+        <GuidePickerPopupView
+          title={mc('onsite_guide_picker_title', 'form.guide_picker_title')}
+          intro={mc('onsite_guide_picker_intro', 'form.guide_picker_intro', { company: companies.find(c => c.id === companyId)?.name ?? directCompanyName ?? '' })}
+          guides={guideChoices}
+          onPick={handleGuidePicked}
+          onNotListed={handleGuideNotListed}
+          labels={{ notListed: t(locale, 'form.guide_picker_not_listed') }}
         />
       )}
 

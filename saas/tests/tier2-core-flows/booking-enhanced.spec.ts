@@ -1,6 +1,7 @@
 // spec: playwright/notes/05-booking-enhanced.md
 import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
+import { openReviewSheet, confirmButton } from '../helpers/bookingForm';
 
 // Reuses an existing real test company rather than creating one (per the
 // note's instruction to minimize footprint): "Test Company # 1" already has
@@ -239,7 +240,14 @@ test.describe('Booking form — enhanced/company variant', () => {
     // BookingForm.tsx is false here because Staging Winery's
     // paymentEnabledCompanies is false (backfilled false by #148, after this
     // test was originally written expecting the payment-active label).
-    await page.getByRole('button', { name: 'Request Booking' }).click();
+    //
+    // Since Feature 184 (2026-09-14) that click opens a "Review your visit"
+    // sheet rather than submitting; the sheet's "Confirm & Request Booking"
+    // is what actually calls createBooking(). This test predated the change
+    // and waited for a "Booking received!" heading that could never appear,
+    // failing on the 15s timeout. Fixed 2026-09-19.
+    await openReviewSheet(page, 'Request Booking');
+    await confirmButton(page).click();
     await expect(page.getByRole('heading', { name: 'Booking received!' })).toBeVisible({ timeout: 15_000 });
 
     // 8. Verify via the admin order row (not just the confirmation toast)

@@ -35,8 +35,11 @@ async function main() {
     'Order', 'Company', 'Price', 'Wine', 'WineVintage', 'WineOrder', 'WineOrderItem',
     'MenuItem', 'MasterclassItem', 'OrderMasterclass', 'OrderExtra',
     'BlockedDate', 'SiteContent', 'Setting', 'Payment',
-    // Guides/Reps (Plan-CompanyGuidesAndReps) — JOIN-to-Company RLS, same shape as Price.
-    'CompanyGuide', 'CompanyRepresentative',
+    // Contact roles (Plan-ContactRoles, 2026-09-22). Three shapes in one feature:
+    // ContactRole carries its own tenantId (a role belongs to the winery, not to one
+    // company), CompanyPerson is JOIN-to-Company like Price, and OrderContact carries its
+    // own tenantId like OrderEvent despite being a child of Order/WineOrder.
+    'ContactRole', 'CompanyPerson', 'OrderContact',
     // Demo analytics (2026-09-12). Only ever holds the demo tenant's rows, and
     // the server action refuses any other tenant — but it carries a tenantId and
     // goes through the same GRANT + policy as everything else, because a table
@@ -73,6 +76,20 @@ async function main() {
     // Carries its own tenantId, so it takes the simplest of the three policy
     // shapes rather than the JOIN-to-parent one Price and the line tables need.
     'OrderEvent',
+    // Plan-ContactRoles. ContactRole is tenant-owned outright; OrderContact is a child of
+    // Order/WineOrder but carries its own tenantId exactly as OrderEvent does, so both take
+    // the direct policy rather than a polymorphic JOIN.
+    //
+    // WARNING, and it bit during this very chunk: a table listed in writableTables gets RLS
+    // ENABLED, but only a table listed *here* gets a policy. Enabled-with-no-policy is the
+    // worst of both worlds — Postgres default-denies every row, reads come back empty with no
+    // error, and check-rls.ts still reports the table as fine. Same silent shape as
+    // MaintenanceNotes #27. Adding a table to one list and not the other is the mistake to
+    // watch for.
+    //
+    // Both tenantId columns are nullable, and NULL compares as NULL — never true — so a row
+    // written without one is invisible to every tenant. The write path must always set it.
+    'ContactRole', 'OrderContact',
   ]
 
   for (const t of tenantedTables) {
@@ -172,49 +189,38 @@ async function main() {
       );
   `)
 
-  // CompanyGuide: JOIN to Company
-  console.log('Creating policy on "CompanyGuide" (JOIN to Company)...')
-  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyGuide";`)
+  // CompanyPerson: JOIN to Company (no tenantId of its own — same shape as Price)
+  console.log('Creating policy on "CompanyPerson" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyPerson";`)
   await db.$executeRawUnsafe(`
-    CREATE POLICY tenant_isolation ON "CompanyGuide"
+    CREATE POLICY tenant_isolation ON "CompanyPerson"
       USING (
         EXISTS (
           SELECT 1 FROM "Company" c
-          WHERE c.id = "CompanyGuide"."companyId"
+          WHERE c.id = "CompanyPerson"."companyId"
             AND c."tenantId" = current_setting('app.tenant_id', true)
         )
       )
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM "Company" c
-          WHERE c.id = "CompanyGuide"."companyId"
+          WHERE c.id = "CompanyPerson"."companyId"
             AND c."tenantId" = current_setting('app.tenant_id', true)
         )
       );
   `)
 
-  // CompanyRepresentative: JOIN to Company
-  console.log('Creating policy on "CompanyRepresentative" (JOIN to Company)...')
-  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyRepresentative";`)
-  await db.$executeRawUnsafe(`
-    CREATE POLICY tenant_isolation ON "CompanyRepresentative"
-      USING (
-        EXISTS (
-          SELECT 1 FROM "Company" c
-          WHERE c.id = "CompanyRepresentative"."companyId"
-            AND c."tenantId" = current_setting('app.tenant_id', true)
-        )
-      )
-      WITH CHECK (
-        EXISTS (
-          SELECT 1 FROM "Company" c
-          WHERE c.id = "CompanyRepresentative"."companyId"
-            AND c."tenantId" = current_setting('app.tenant_id', true)
-        )
-      );
-  `)
-
-  console.log('\nDone. RLS policies created for all 16 tables.')
+  // Superseded by CompanyPerson (Plan-ContactRoles Chunk 1 dropped both tables). The DROPs are
+  // a no-op once the tables are gone, but keeping them means re-running this script against a
+  // database still mid-migration cleans up after itself.
+  for (const t of ['CompanyGuide', 'CompanyRepresentative']) {
+    try {
+      await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "${t}";`)
+    } catch {
+      // table already gone — nothing to drop
+    }
+  }
+  console.log('\nDone. RLS policies created for all ' + writableTables.length + ' tables.')
   console.log('Verify with: npx ts-node --compiler-options \'{"module":"CommonJS"}\' scripts/check-rls.ts')
 }
 

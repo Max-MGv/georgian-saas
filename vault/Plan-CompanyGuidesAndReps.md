@@ -4,6 +4,33 @@ tags: [plan, companies, hierarchy]
 
 # Plan — Company Guides & Representatives (third hierarchy level)
 
+> # ⛔ SUPERSEDED — 2026-09-19
+>
+> **Do not work from this plan.** It is replaced by [[Plan-ContactRoles]], which reworks what
+> this built. Kept for the reasoning in "Key considerations & tradeoffs" and as the record of
+> what shipped on 2026-09-14.
+>
+> **Why it was superseded.** Max reviewed the result: *"A company should have ability to have
+> Contact Person's & Guides. right now we have that + representative. but thats 1 extra."* Two
+> role types, not three, both as lists, one of each per order — and adding a new contact type
+> later must not require a migration. `CompanyGuide` + `CompanyRepresentative` +
+> `Company.contactName/Phone/Email` collapse into `ContactRole` + `CompanyPerson`;
+> `Order.guideId` becomes `OrderContact` rows with snapshots.
+>
+> **Three of this plan's own conclusions turned out to be wrong**, and the new plan records them
+> as hurdle H1 so they are not repeated:
+> - **Chunk 1's "wine orders are out of scope"** — reversed. They get the full treatment.
+> - **Chunk 7's "`Order.guideId` is enough"** — nothing ever read it. It is a write-only column,
+>   so the attribution this whole plan existed to deliver was never actually delivered. And
+>   because the relation defaults to `SetNull`, deleting a guide silently erases it on every
+>   past order ([[KnownBugs]] #56).
+> - **Chunks 8–10's four "confirmed by reading the file" corrections** were right to be made,
+>   and are exactly why the new plan says its own dependency map is a starting point, not a fact.
+>
+> Also found while reviewing this work: every company's access code is served in the public
+> homepage's HTML ([[KnownBugs]] #57).
+
+
 > **This is the live task tracker.** Update checkboxes and each chunk's Status line as work
 > happens. **Chunks are sequential — do not start chunk N+1 until chunk N's Status is ✅**,
 > unless a chunk's own notes say otherwise. If a session ends mid-chunk, note the resume point

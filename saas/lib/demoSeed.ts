@@ -46,9 +46,53 @@ type TierSpec = {
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice?: number
 }
 
-type BookingCompanySpec = {
+/**
+ * A guide (the person who actually walks the group in) or a representative
+ * (the person invoices go to). Both carry a `code` out of the SAME per-tenant
+ * namespace as `Company.accessCode` — see `codeExistsInTenant()` in
+ * `app/actions/companies.ts`, which checks all three tables. Codes here are
+ * therefore hand-picked to be globally distinct within one seeded tenant, and
+ * uppercase, because `findBookingCodeByCode()` upper-cases what the guest types
+ * before matching.
+ */
+export type PersonSpec = { name: string; phone?: string; email?: string; code: string }
+
+export type BookingCompanySpec = {
   name: string; contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; tiers: TierSpec[]; share: number
+  /**
+   * Applied ONLY when seeding a non-demo tenant (see `accessCode` handling in
+   * `seedDemoTenant`). The public demo deliberately leaves companies
+   * code-less: `BookingForm.tsx` shows the "Enter your company code" popup for
+   * any company that has one, and a prospect on the demo has nowhere to obtain
+   * a code — the booking form is step one of the guided tour, so gating it
+   * would dead-end the sales story.
+   */
+  accessCode: string
+  /**
+   * ⚠️ Giving a company guides RETIRES its `accessCode` on the booking form.
+   * `verifyBookingCode()` falls back to the company-level code **only when the
+   * company has zero guides** — that is the documented rule
+   * (Plan-CompanyGuidesAndReps Chunk 1 & 5), not an oversight: once guides
+   * exist, every booking must be attributable to a specific person.
+   *
+   * So guides are seeded on SOME companies, never all. Four of the five keep a
+   * working company code because four Playwright specs exercise that path;
+   * `Silk Road Journeys` carries guides so the guide path is covered too. That
+   * split is also just realistic — some operators route through named guides,
+   * some hand out one company code.
+   *
+   * Learned the hard way on 2026-09-19: seeding guides on all five silently
+   * retired every company code and broke four specs at once. If you add guides
+   * to another company here, check which spec uses it first.
+   */
+  guides: PersonSpec[]
+  /**
+   * Representatives are safe to seed anywhere — `verifyBookingCode()` never
+   * consults them. They are the person invoices go to, picked by an admin at
+   * send time, never typed into the public form.
+   */
+  representatives: PersonSpec[]
 }
 
 /**
@@ -56,8 +100,14 @@ type BookingCompanySpec = {
  * only thing that makes the per-company pricing feature visible to a visitor
  * looking at the Companies screen. All fictional; the .example domains are
  * reserved by RFC 2606 so none of these addresses can reach a real inbox.
+ *
+ * Exported so `scripts/backfill-test-fixtures.ts` can apply the same codes,
+ * guides and representatives to a tenant that was seeded before those existed,
+ * without a destructive re-seed. Sharing the constant is the point: two copies
+ * of these codes would drift, which is the exact failure this whole change is
+ * fixing.
  */
-const BOOKING_COMPANIES: BookingCompanySpec[] = [
+export const BOOKING_COMPANIES: BookingCompanySpec[] = [
   {
     name: 'Kakheti Wine Routes', contactName: 'Nino Beridze', contactPhone: '+995 599 41 22 08',
     contactEmail: 'bookings@kakhetiwineroutes.example', identificationCode: '404512338', address: 'Telavi, Kakheti',
@@ -65,6 +115,11 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 10, pricePerPerson: 55, tastingLunchPricePerPerson: 40 },
       { minGuests: 11, maxGuests: 20, pricePerPerson: 45, tastingLunchPricePerPerson: 40 },
       { minGuests: 21, maxGuests: 100, pricePerPerson: 38, tastingLunchPricePerPerson: 37 },
+    ],
+    accessCode: 'KAKHETI07',
+    guides: [],
+    representatives: [
+      { name: 'Eka Beridze', email: 'invoices@kakhetiwineroutes.example', phone: '+995 599 41 22 09', code: 'KWRREP1' },
     ],
     share: 9,
   },
@@ -75,6 +130,11 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 10, pricePerPerson: 60, tastingLunchPricePerPerson: 40 },
       { minGuests: 11, maxGuests: 30, pricePerPerson: 48, tastingLunchPricePerPerson: 40 },
     ],
+    accessCode: 'TBILISI14',
+    guides: [],
+    representatives: [
+      { name: 'Sofia Abuladze', email: 'accounts@tbilisitourcollective.example', phone: '+995 577 30 14 77', code: 'TTCREP1' },
+    ],
     share: 7,
   },
   {
@@ -83,6 +143,11 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     tiers: [
       { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 40 },
       { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38 },
+    ],
+    accessCode: 'CAUCASUS31',
+    guides: [],
+    representatives: [
+      { name: 'Lasha Tsereteli', email: 'billing@caucasusvinetravel.example', phone: '+995 595 88 60 32', code: 'CVTREP1' },
     ],
     share: 6,
   },
@@ -93,6 +158,11 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 12, pricePerPerson: 58, tastingLunchPricePerPerson: 40 },
       { minGuests: 13, maxGuests: 100, pricePerPerson: 46, tastingLunchPricePerPerson: 40 },
     ],
+    accessCode: 'ALAZANI90',
+    guides: [],
+    representatives: [
+      { name: 'Tamuna Chkheidze', email: 'finance@alazanivalleytours.example', phone: '+995 558 12 47 91', code: 'AVTREP1' },
+    ],
     share: 5,
   },
   {
@@ -101,6 +171,19 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     tiers: [
       { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 40 },
       { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 38 },
+    ],
+    accessCode: 'SILKROAD55',
+    guides: [
+      // Deliberately NOT the company's own contact person (Mariam Dolidze, above).
+      // When a company's contact and one of its guides are the same human, the
+      // "I am not on this list" fallback becomes impossible to verify — both the
+      // guide path and the company path fill the form with identical values. Found
+      // 2026-09-19 while testing exactly that path.
+      { name: 'Tinatin Beruashvili', phone: '+995 595 33 81 04', code: 'SRJGUIDE1' },
+      { name: 'Nika Kvaratskhelia', phone: '+995 577 62 90 18', code: 'SRJGUIDE2' },
+    ],
+    representatives: [
+      { name: 'Keti Dolidze', email: 'ap@silkroadjourneys.example', phone: '+995 591 76 20 56', code: 'SRJREP1' },
     ],
     share: 4,
   },
@@ -116,13 +199,23 @@ const INDIVIDUALS_TIERS: TierSpec[] = [
 type WineCompanySpec = {
   name: string; contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; discount: number; share: number
+  /**
+   * Same non-demo-only rule as the booking companies' `accessCode`, and for the
+   * same reason (see BookingCompanySpec).
+   *
+   * No guide complication here: the wine-order flow resolves codes through
+   * `findCompanyByCode(code, 'WINE_ORDER')` and never consults guides at all —
+   * Plan-CompanyGuidesAndReps scoped guides/reps to the booking flow only. So a
+   * wine company's code cannot be retired the way a booking company's can.
+   */
+  accessCode: string
 }
 
-const WINE_COMPANIES: WineCompanySpec[] = [
-  { name: 'Sighnaghi Wine Bar', contactName: 'Tamar Gogoladze', contactPhone: '+995 599 20 71 44', contactEmail: 'orders@sighnaghiwinebar.example', identificationCode: '412008551', address: 'Sighnaghi, Kakheti', discount: 10, share: 8 },
-  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7 },
-  { name: 'Vinoteka Batumi', contactName: 'Salome Jgerenaia', contactPhone: '+995 593 66 82 17', contactEmail: 'buy@vinotekabatumi.example', identificationCode: '445002318', address: 'Parnavaz Mepe St 22, Batumi', discount: 5, share: 5 },
-  { name: 'Marani Import GmbH', contactName: 'Katrin Vogel', contactPhone: '+49 30 5544 8820', contactEmail: 'purchasing@maraniimport.example', identificationCode: 'DE331904772', address: 'Prenzlauer Allee 8, Berlin', discount: 20, share: 4 },
+export const WINE_COMPANIES: WineCompanySpec[] = [
+  { name: 'Sighnaghi Wine Bar', contactName: 'Tamar Gogoladze', contactPhone: '+995 599 20 71 44', contactEmail: 'orders@sighnaghiwinebar.example', identificationCode: '412008551', address: 'Sighnaghi, Kakheti', discount: 10, share: 8, accessCode: 'SIGHNAGHI44' },
+  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7, accessCode: 'KAKHURI90' },
+  { name: 'Vinoteka Batumi', contactName: 'Salome Jgerenaia', contactPhone: '+995 593 66 82 17', contactEmail: 'buy@vinotekabatumi.example', identificationCode: '445002318', address: 'Parnavaz Mepe St 22, Batumi', discount: 5, share: 5, accessCode: 'VINOTEKA17' },
+  { name: 'Marani Import GmbH', contactName: 'Katrin Vogel', contactPhone: '+49 30 5544 8820', contactEmail: 'purchasing@maraniimport.example', identificationCode: 'DE331904772', address: 'Prenzlauer Allee 8, Berlin', discount: 20, share: 4, accessCode: 'MARANIIMP82' },
 ]
 
 const MENU_ITEMS: { name: string; type: 'VEGETABLE' | 'MEAT' }[] = [
@@ -439,6 +532,18 @@ export async function seedDemoTenant(
     },
   })
 
+  // Access codes are seeded for a throwaway/test tenant but NOT for the public
+  // demo. `BookingForm.tsx` shows the "Enter your company code" popup for any
+  // company that has one, and a demo visitor has nowhere to get a code — the
+  // booking form is the first stop on the guided tour, so a code prompt there
+  // is a dead end in the middle of the sales story. A non-demo slug is by
+  // definition a throwaway tenant (that option exists to refill Staging
+  // Winery), which is exactly where the Playwright suite needs a real code to
+  // exercise the access-code path. Guides and representatives are seeded for
+  // both: a guide code is optional on the form and gates nothing, so it enriches
+  // the demo instead of blocking it.
+  const seedAccessCodes = slug !== DEMO_SLUG
+
   const bookingCompanies: (BookingCompanySpec & { id: string })[] = []
   for (const c of BOOKING_COMPANIES) {
     const row = await db.company.create({
@@ -446,7 +551,14 @@ export async function seedDemoTenant(
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
         contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: true, isWineOrderCompany: false,
+        accessCode: seedAccessCodes ? c.accessCode : null,
         prices: { create: c.tiers.map(t => tierToTetri(t)) },
+        // Both cascade on Company delete (schema.prisma), so the wipe above
+        // already clears them — they need no deleteMany of their own.
+        guides: { create: c.guides.map(g => ({ name: g.name, phone: g.phone ?? null, code: g.code })) },
+        representatives: {
+          create: c.representatives.map(r => ({ name: r.name, email: r.email ?? null, phone: r.phone ?? null, code: r.code })),
+        },
       },
     })
     bookingCompanies.push({ ...c, id: row.id })
@@ -459,6 +571,7 @@ export async function seedDemoTenant(
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
         contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: false, isWineOrderCompany: true,
+        accessCode: seedAccessCodes ? c.accessCode : null,
         wineDiscountPercent: c.discount,
       },
     })

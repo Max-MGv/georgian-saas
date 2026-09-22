@@ -60,6 +60,75 @@ tags: [bugs]
 | 52 | Order detail double-counts line items on every individual order. `OrderDetail.tsx:441` falls back to `legacyBase = order.totalPrice ?? 0` — which already contains extras and masterclass lines — and line 458 adds `masterclassAmt + extrasAmt` on top. Hits every individual order, since `prices` comes from `order.company?.prices` and individuals carry no company. Individuals tier ₾50/pp, 4 guests, one ₾40 extra: the database, the orders table and the invoice all say **₾240**; the detail screen says **₾280**. The "Live preview — click Save to persist" caveat (line 1359) is gated on `payingGuests > 0` so it is **not shown** on this path, and the number reads as fact. Related: `computedTotal` is typed `number | null` but every branch returns a number, making the `order.totalPrice` fallback at line 1353 unreachable — the detail screen never displayed the stored total at all. | Admin / Orders | 🟢 Resolved |
 | 53 | The admin rate boxes and the company price ladder used **opposite meanings of the same word** with nothing to tell them apart. The tier field is labelled "+Lunch ₾/person (add-on)" and `comboRatePerPerson` adds it to the tasting rate; the manual boxes on the walk-in form and order detail said only "Lunch ₾/pp", but every consumer (`updateOrderEnhanced`, `recalcOrderTotal`, and `lunchRateSnapshot = comboRatePerPerson(tier)`) treats that slot as the **all-in** per-person price for a Tasting+Lunch guest. Two screens, two clicks apart, same word, opposite meaning. Max read it the natural way — as an add-on — which is exactly how an admin would **undercharge every lunch guest by the tasting rate**. No arithmetic was wrong; the labels were. Relabelled as a pair so the inclusion is self-evident: "Tasting only ₾/pp" and "Tasting+Lunch ₾/pp", plus the guest-count fields and the rate badge, EN and KA. No stored data changed. | Admin / Orders | 🟢 Resolved |
 | 54 | `Order.guestCount` silently drifts from the tasting/lunch split on **edit**. `NewOrderForm` derives it (`guestCount: totalGuestCount`, i.e. tasting + lunch + free) when an order is **created**, but `OrderDetail`'s Save sends only the three split counts and `updateOrderEnhanced` never writes `guestCount`. So changing the split on an existing order re-prices from the new split while `guestCount` keeps its old value — and `guestCount` is what the orders table, the invoice and the confirmation email display. An order can therefore **bill 14 paying guests while every document says 10**. Nothing validated that tasting + lunch + free stayed under `guestCount`. **Fixed 2026-09-19 together with the tier-rule change:** the party size is now an editable field on both admin screens rather than a derived byproduct, `updateOrderEnhanced` takes and writes it, and both server actions plus both forms reject a split that exceeds the party. | Admin / Orders | 🟢 Resolved |
+| 55 | Adding a guide to a company **silently retires that company's access code**, with nothing in the admin panel saying so. `verifyBookingCode()` falls back to `Company.accessCode` only when the company has zero guides — deliberate and documented (Plan-CompanyGuidesAndReps Chunk 1 & 5), so the logic is correct. The problem is the UI: `CompaniesClient.tsx` renders the access-code field identically whether it still works or not. A winery that hands `MARANI42` to a tour operator and later adds one guide turns that code dead — every guest using it gets "Incorrect code" — while the panel keeps displaying it as live. Nobody would connect "added a guide" to "partner says the code is broken". **Fixed 2026-09-19 (Feature 201):** the company code now works and the guest picks which guide they are. | Public / Booking form | 🟢 Resolved |
+| 56 | Deleting a guide **silently erases which guide was on every past order**. `Order.guide` is an optional relation with no `onDelete`, and Prisma defaults that to `SetNull` — so removing a guide in the Edit Company panel nulls `Order.guideId` across every historical order, with no warning and no trace. Same failure shape as the `Payment` orphaning recorded in `DataModel/Dependencies.md` finding 2. Currently invisible because **nothing reads `guideId` at all** (see #57's sibling finding, logged in [[Plan-ContactRoles]] as F1) — but it becomes a live data-loss bug the moment any screen displays it. **Fix is designed, not built:** [[Plan-ContactRoles]] replaces `guideId` with `OrderContact` rows carrying name/phone/email snapshots, so deleting a person loses the link but never the facts — the same rule `WineOrderItem.priceSnapshot` and `Order`'s rate snapshots already follow. | Admin / Companies | 🔴 Open — fix designed in [[Plan-ContactRoles]] Chunk 1/9, test in Chunk 13 |
+| 57 | **Every company's access code is served in the public homepage's HTML.** `app/(site)/page.tsx:52` selects whole `Company` rows and passes them to `BookingForm`, a client component whose `Company` type declares `accessCode: string | null` — so all booking companies' codes are in the page payload and readable with View Source, defeating the code gate entirely. The form only ever uses the value as a boolean (`if (!company.accessCode)`), so nothing needs the real code client-side. `app/(site)/wines/page.tsx` needs the same check. On `master` now. Related but lower severity: `app/admin/(panel)/orders/page.tsx:289` passes full representative rows *including their codes* into `OrdersTable` when only id/name/email are used. **Fix:** send `hasAccessCode: boolean` instead — one line per page. | Security / Public site | 🔴 Open — fix scheduled in [[Plan-ContactRoles]] Chunk 7 (F3/F4) |
+
+---
+
+## Bug #55 — Adding a guide silently retires a company's access code, and the admin panel doesn't say so
+
+**Severity:** Medium-High — no data loss, but it breaks a code already in circulation with a real partner, gives the guest a flatly wrong error ("Incorrect code" for a code the panel still shows), and gives the admin no way to connect cause to effect
+**Found:** 2026-09-19, while seeding guides onto Playwright fixture companies · **Status:** 🟢 Resolved 2026-09-19
+
+**This is not a logic bug.** `verifyBookingCode()` (`app/actions/companies.ts`) falls back to the company-level
+`accessCode` **only when the company has zero guides**, which is exactly what its own comment says and exactly
+what `Plan-CompanyGuidesAndReps` specifies in two places (Chunk 1 and Chunk 5). The rule is deliberate: once a
+company has guides, every booking should be attributable to a named person rather than a shared code. Changing
+the fallback would undo a real product decision, and it should not be changed.
+
+**The problem is that the UI does not reflect the rule.** `CompaniesClient.tsx` (~line 573) renders the access-code
+field unconditionally, with a static hint, no awareness of whether the company has guides. So:
+
+1. A winery gives `MARANI42` to a tour operator.
+2. Months later they add one guide to that company.
+3. `MARANI42` stops working that instant. Every guest using it is told "Incorrect code."
+4. `/admin/companies` still shows `MARANI42`, still lets you edit it, still looks live.
+
+Nobody would connect step 2 to step 3.
+
+**✅ FIXED — Max's design, built and verified on dev the same day. See [[Feature 201 - Guide Picker After Company Code]].**
+
+**The fix: keep the company code alive and disambiguate with a picker.**
+
+The company code continues to work even when guides exist. Entering it opens a second popup — "Which guide are
+you?" — listing the company's guides; the chosen one populates `matchedGuideId` exactly as a direct guide-code
+match does today. Guide codes remain the shortcut for anyone who has one.
+
+This is better than the alternative below because it keeps the code *useful* instead of merely admitting it is
+dead, while still satisfying the reason the rule exists: the booking is still attributed to a specific guide.
+It also removes the path asymmetry noted at the end of this entry — `findBookingCodeByCode()` already accepts a
+company code unconditionally, so under this design both entry points agree.
+
+**The one trade-off to decide deliberately.** Today a guide code *proves* identity: only that guide holds it.
+With a picker, anyone holding the company code can select any guide, so attribution becomes self-declared rather
+than authenticated — someone could pick a colleague and put that colleague's phone on the booking sheet. Whether
+that matters depends on what guide attribution is *for*. The plan's own rationale ("the printed booking sheet can
+show that guide's phone") reads as operational labelling, in which case the trade-off costs nothing real. It
+would matter if guide identity ever gates commissions or per-guide reporting.
+
+**Two details to settle when building it:**
+- An **"I'm not on this list"** option falling back to the company's own contact details, so a guide who has not
+  been added yet is not stuck.
+- The picker shows every guide's name to anyone holding the company code. Fine for a partner agency, but worth a
+  conscious decision rather than a surprise.
+
+**Weaker alternative, recorded for completeness (Claude's first suggestion — UI only, no behavioural change):**
+- When a company has ≥1 guide, render its access code as **superseded**: greyed, with a line such as "Not in use —
+  guests book with a guide's code." Keep the value visible for reference so it stops looking like a live credential.
+- Warn at the moment it happens: adding a company's **first** guide should say plainly that the shared company code
+  will stop working and anyone already holding it will be turned away.
+- Rejected in favour of the picker: it documents the trap instead of removing it.
+
+**Why it went unseen:** every fixture company had zero guides, so the interaction was never exercised — the
+Plan's own Chunk 5 checklist notes the specs "needed no changes" for exactly that reason. It surfaced only when
+seeded data was made more realistic. A documentation-based system map would not have caught it either: both
+files describe themselves accurately, and the hazard lives in the *interaction* between them.
+
+**Asymmetry worth noting separately (not part of this bug):** `findBookingCodeByCode()` — the direct-code-entry
+path, where the visitor types a code with no company selected — falls back to `findCompanyByCode` unconditionally.
+So the same company code can be rejected on the dropdown path and accepted on the direct-entry path. Both
+comments claim the two "mirror" each other. Worth a deliberate decision about which is right.
 
 ---
 
@@ -921,13 +990,23 @@ Expect `fra1::fra1::…`. A second segment of `iad1` means the region pin was lo
 ## Bug #15 — Nested `<button>` on `/admin/companies` causes a hydration mismatch
 
 **Severity:** Medium — no data loss by itself, but cost multiple clicks their effect unpredictably (row expand, tab toggle, "+ Add Booking Company") and once contributed to a stale-element-reference incident that briefly overwrote real Cookie Company data during manual testing (caught and reverted)
-**Found:** 2026-08-10, while building the Playwright suite's companies-CRUD test (#147 Phase 3) · **Status:** 🔴 Open
+**Found:** 2026-08-10, while building the Playwright suite's companies-CRUD test (#147 Phase 3) · **Status:** 🟢 Resolved 2026-09-12
+
+> **Reconciled 2026-09-19.** This entry still read 🔴 Open a week after the fix shipped, while the
+> resolved banner higher up this same file already said 2026-09-12 — one file contradicting itself.
+> Verified against the code before changing it: `CompaniesClient.tsx` now closes the row-summary
+> `<button>` before the `HelpHint`, and all four other `HelpHint` sites in that file sit in plain
+> `<div>` wrappers or as a sibling after `</button>`. The "Recommended fix" below is the fix that
+> was actually applied. Left in place rather than deleted because the incident it describes (the
+> accidental Cookie Company edit) is worth keeping findable.
 
 **Root cause:** `CompaniesClient.tsx`'s per-company row summary is a `<button onClick={() => setExpandedId(...)}>` (`app/admin/(panel)/companies/CompaniesClient.tsx` ~line 733) wrapping the row's whole content, including a conditionally-rendered `<HelpHint text={...} />` (~line 757) whenever the row has a "needs details" warning. `HelpHint.tsx` itself renders its "?" trigger as its own `<button type="button">` (~line 69) — so a `<button>` ends up nested inside another `<button>`, which is invalid HTML. Browsers correct this at parse time, so React's server-rendered markup and the DOM the browser actually builds disagree, producing a hydration mismatch on every page load, in any locale. (The similarly-structured Individuals row, ~line 664-685, is safe — its `HelpHint` sits as a sibling *after* the closing `</button>`, not inside it.)
 
-**Observed impact:** React periodically discards/rebuilds the affected DOM subtrees client-side to reconcile the mismatch, which cost clicks their effect unpredictably across the page — not one flaky element, a property of the whole page. Worked around in the Playwright test with a click-and-verify retry helper (`clickUntil()`); not fixed at the source. While diagnosing this live via `playwright-cli`, a stale cached element reference (pointing at a row that had just been rebuilt) briefly caused a real accidental edit to Cookie Company's live data — caught via the actual POST body and reverted via direct SQL, confirmed restored.
+**Observed impact:** React periodically discards/rebuilds the affected DOM subtrees client-side to reconcile the mismatch, which cost clicks their effect unpredictably across the page — not one flaky element, a property of the whole page. Worked around in the Playwright test with a click-and-verify retry helper (`clickUntil()`) before being fixed at the source on 2026-09-12. While diagnosing this live via `playwright-cli`, a stale cached element reference (pointing at a row that had just been rebuilt) briefly caused a real accidental edit to Cookie Company's live data — caught via the actual POST body and reverted via direct SQL, confirmed restored.
 
-**Recommended fix:** move any row's `HelpHint` outside the row-summary `<button>` (same pattern already used correctly for the Individuals row), or make the row-summary clickable via a non-`<button>` element (e.g. a `<div role="button" tabIndex={0}>`) if `HelpHint` needs to stay visually inside it. Not fixed here — flagged this session as task chip `task_b2b8da79`, tracked separately from the Playwright suite that found it (`playwright/KNOWN-ISSUES.md` #2).
+**Fix applied (2026-09-12):** moved the row's `HelpHint` outside the row-summary `<button>`, the same pattern the Individuals row already used correctly. (The alternative considered — making the row summary a `<div role="button" tabIndex={0}>` so the hint could stay visually inside — was not needed.) Originally flagged as task chip `task_b2b8da79`.
+
+**Consequence still outstanding for the test suite:** `clickUntil()`, the retry-until-verified click helper, was introduced *because* of this bug and is still wrapped around most meaningful clicks in `saas/tests/helpers/payments.ts` and `companies-crud.spec.ts`. With the cause gone, those retries will now mask a genuine regression — a click that truly stopped working is indistinguishable from one that was merely slow. Worth re-examining deliberately rather than stripping out blindly (clicks on this UI may still be slow for unrelated reasons).
 
 ---
 

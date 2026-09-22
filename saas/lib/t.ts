@@ -161,6 +161,11 @@ const en: Translations = {
   'form.access_code_checking': 'Checking…',
   'form.access_code_confirm': 'Confirm',
   'form.access_code_enter_manually': 'Enter Manually',
+  // Guide picker (KnownBugs #55) — shown after a COMPANY-level code is accepted
+  // for a company that has guides, so the booking is still attributed to a person.
+  'form.guide_picker_title': 'Who is bringing the group?',
+  'form.guide_picker_intro': '{company} — choose your name so the winery knows who to contact on the day.',
+  'form.guide_picker_not_listed': 'I am not on this list',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -365,6 +370,11 @@ const ka: Translations = {
   'form.access_code_checking': 'მოწმდება…',
   'form.access_code_confirm': 'დადასტურება',
   'form.access_code_enter_manually': 'ხელით შეყვანა',
+  // Guide picker (KnownBugs #55) — KA drafted, not natively reviewed, per the
+  // standing caveat on every Georgian string added by Claude in this project.
+  'form.guide_picker_title': 'ვინ მოჰყავს ჯგუფი?',
+  'form.guide_picker_intro': '{company} — აირჩიეთ თქვენი სახელი, რომ მარანმა იცოდეს ვის დაუკავშირდეს.',
+  'form.guide_picker_not_listed': 'ამ სიაში არ ვარ',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

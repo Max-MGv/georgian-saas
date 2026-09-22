@@ -8,6 +8,46 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+---
+
+## 🟡 2026-09-19 (later) — Guide picker built. NOT on staging yet, nothing for you to check *yet*.
+
+This is the change you designed: a company's shared code works again even when that company
+has guides, and the guest picks which guide they are.
+
+**Right now it only exists on my machine, against the dev database.** Nothing is committed or
+pushed, so there is nothing on staging.vineworks.ge to look at. When it does go up, these are
+the things worth two minutes of your time:
+
+- [ ] Pick a company that has guides, enter the **company** code → you should get a second
+      popup listing the guides. Before this change that code was simply refused.
+- [ ] Pick a guide → their name and phone fill the form (not the company's).
+- [ ] Press **"I am not on this list"** → the company's own contact details fill instead.
+- [ ] Enter a **guide's own** code → no second popup, straight through as before.
+- [ ] Switch the site to Georgian and repeat the first step — the wording is mine, drafted not
+      natively reviewed. **"ვინ მოჰყავს ჯგუფი?"** and **"ამ სიაში არ ვარ"**. If either reads
+      oddly to a Georgian speaker, tell me and I will change it.
+- [ ] **Admin → Content → Messages → Access Code section.** Two new editable fields with a live
+      preview. I could not check this one — it needs an admin login, and I will not type a
+      password into a login form. Worth a glance next time you are in there anyway.
+
+### The thing worth knowing regardless of this feature
+
+The bug this fixes was live and invisible. If a winery gave a tour operator a company code and
+**later added a single guide to that company**, the code stopped working that instant. Every
+guest using it was told "Incorrect code", and the admin panel carried on showing the code as
+though it were fine. Nobody would have connected the two events.
+
+If any real client has ever reported "our code stopped working", this is very likely why.
+
+### One judgement call I made that you should know about
+
+You asked me to fix a bug in the code-checking logic. **There was no bug** — I had misread a
+sentence in the plan that ran across two lines, and the rule was deliberate and documented.
+Had I just done as asked, I would have undone a real product decision in order to make my own
+broken test data pass. The thing actually broken was a change I had made half an hour earlier.
+I corrected it rather than quietly doing what was asked.
+
 ## 🔴 2026-09-19 — TEN BUGS FIXED, ON STAGING, NOT YET ON PRODUCTION
 
 Three commits on `staging`. **Nothing has gone to `master`**, so the real site is

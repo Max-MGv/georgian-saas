@@ -1,6 +1,7 @@
 // spec: playwright/notes/04-booking-simple.md
 import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
+import { openReviewSheet, confirmButton, abandonedRow } from '../helpers/bookingForm';
 
 // Unique per test run so the admin-orders lookup can't collide with a
 // leftover row from a previous failed run.
@@ -74,7 +75,20 @@ test.describe('Booking form — simple/individual variant', () => {
     // Default 30s is tight for this flow: public form interaction + an
     // external payment-gateway redirect + a second page's admin login (the
     // Supabase Auth round trip alone can take up to 15s cold, per auth.ts).
-    test.setTimeout(60_000);
+    //
+    // Raised 60s → 90s on 2026-09-19. This test does the most round trips of
+    // any in the suite — form → gateway redirect → admin login on a second
+    // page → /admin/abandoned → restore → /admin/orders → order detail →
+    // delete — and Feature 184's confirm sheet added another step;
+    // locale-integrity.spec.ts's admin tests already sit at 90s for less work.
+    //
+    // Note for whoever reads this next: a 2026-09-19 run that timed out here
+    // was FIRST misdiagnosed as this budget being too small. It wasn't — the
+    // real cause was the abandoned-row locator resolving to a div with no
+    // button in it (see abandonedRow() in helpers/bookingForm.ts), and raising
+    // the budget to 120s reproduced the identical failure. The raise is still
+    // justified on round-trip count alone, but it was not the fix.
+    test.setTimeout(90_000);
 
     // 1. Navigate to the booking form (home page — the form is embedded there,
     // not a dedicated route; real finding, resolves the note's open question)
@@ -162,13 +176,20 @@ test.describe('Booking form — simple/individual variant', () => {
     // entering card details (which this suite must never do — no financial
     // transactions). The redirect itself is the closest thing to a
     // "confirmation" this variant has.
+    // Since Feature 184 (2026-09-14) the submit button no longer calls
+    // createBooking() directly — it opens a "Review your visit" sheet, and
+    // the sheet's own "Confirm & Book" is what submits and redirects. This
+    // test predated that change and still clicked "Book & Pay" expecting an
+    // immediate redirect, so it sat waiting for a Flitt URL that could never
+    // arrive and failed on the 15s timeout. Fixed 2026-09-19.
+    await openReviewSheet(page, 'Book & Pay');
     await Promise.all([
       // waitUntil: 'commit' — the Flitt page itself is slow/never reaches a
       // full "load" event within a reasonable timeout in this environment;
       // we only need to confirm the redirect started, not that the external
       // gateway finished rendering (we never interact with it further).
       page.waitForURL(/pay\.flitt\.com/, { timeout: 15_000, waitUntil: 'commit' }),
-      page.getByRole('button', { name: 'Book & Pay' }).click(),
+      confirmButton(page).click(),
     ]);
 
     // 8. Cross-check via admin — confirms the submission actually persisted
@@ -184,7 +205,7 @@ test.describe('Booking form — simple/individual variant', () => {
     const admin = await context.newPage();
     await ensureAdminLoggedIn(admin);
     await admin.goto('/admin/abandoned');
-    const incomplete = admin.locator('div').filter({ hasText: TEST_EMAIL }).last();
+    const incomplete = abandonedRow(admin, TEST_EMAIL);
     await expect(incomplete).toBeVisible({ timeout: 15_000 });
 
     // expect: it is absent from the real order list, which is the whole point
@@ -197,7 +218,7 @@ test.describe('Booking form — simple/individual variant', () => {
     // on the order screens as before — and so the way back out of the
     // incomplete list is itself covered.
     await admin.goto('/admin/abandoned');
-    await admin.locator('div').filter({ hasText: TEST_EMAIL }).last()
+    await abandonedRow(admin, TEST_EMAIL)
       .getByRole('button', { name: 'Restore without payment' }).click();
     await admin.goto('/admin/orders');
     const row = admin.locator('tr', { hasText: TEST_EMAIL });

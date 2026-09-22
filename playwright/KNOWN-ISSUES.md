@@ -24,13 +24,73 @@ These are real bugs in the application itself, discovered while building tests. 
 
 **Worse than a flaky test:** while manually diagnosing this live, a stale cached element reference (from before one such DOM rebuild) ended up pointing at a different row after the rebuild, and a save action edited a real, unrelated company ("Cookie Company") instead of the intended one. Caught via the actual request body, reverted via direct SQL, confirmed restored — but this is a real risk for actual admin users on this page too, not just test tooling.
 
-**Not fixed in the app** — flagged as its own follow-up task (chip `task_b2b8da79`). Worked around in `companies-crud.spec.ts` with a `clickUntil(clickable, verify)` retry-with-verification helper applied to every meaningful click on that page. Full detail: `notes/09-companies-crud.md`.
+**✅ FIXED IN THE APP 2026-09-12** — `CompaniesClient.tsx` now closes the row-summary `<button>` before the `HelpHint`, matching the shape the Individuals row already used. Verified 2026-09-19: all five `HelpHint` sites in that file are clean. `vault/KnownBugs.md` #15 has the full writeup. (This section said "Not fixed in the app" for a week after the fix shipped — corrected 2026-09-19.)
+
+**But the workaround is still in place, and that now cuts the other way.** `clickUntil(clickable, verify)` — the retry-with-verification helper introduced for this bug — is still applied to every meaningful click in `companies-crud.spec.ts` and `helpers/payments.ts`. It retries until the expected effect is observed, so with the root cause gone it will silently absorb a *real* regression: a click that genuinely stopped working looks exactly like a click that was slow. Don't strip it out reflexively (this UI can still be slow under a loaded dev DB), but a `clickUntil` that is observed retrying is now a signal worth investigating rather than the expected background noise it used to be. Full detail: `notes/09-companies-crud.md`.
 
 ### 3. Wine Orders admin has no delete action
 
 Unlike regular Orders (`/admin/orders`, which has a real "Delete order" button), Wine Orders (`/admin/wine-orders`) only supports status transitions — "Mark as paid" / "Cancelled". There is no way to actually remove a row.
 
 **Consequence for this suite:** `06-wine-catalogue-order.spec.ts`'s cleanup can only mark its test order `Cancelled`, never delete it — every run of that test leaves a permanent row in the real `WineOrder` table. This is not a one-off; it accumulates every time the test runs. See "Recurring cleanup this suite needs" below.
+
+### 4. 🟡 PARTLY RESOLVED — the suite's fixture companies no longer exist on Staging Winery
+
+**What happened:** five spec files depended on hand-made companies that were deleted from the
+test tenant (`cmrxb85wo0000vlc0d964nzf8`, "Staging Winery") by the Feature 191 wipe on
+2026-09-18. Three have since been repointed; **three have not** — see the table further down for
+current state.
+
+| Missing fixture | Depended on by |
+|---|---|
+| `Test Company # 1` | `payment-amount-integrity.spec.ts`, `payment-label-precedence.spec.ts`, `booking-enhanced.spec.ts`, `company-nationality-tagging.spec.ts` |
+| `Wine Test Company` | `payment-amount-integrity.spec.ts` |
+| `Cookie Company` | `company-guide-code.spec.ts` |
+
+**Confirmed by direct DB query 2026-09-19.** The tenant now holds ten companies, all of them
+`lib/demoSeed.ts` names (Alazani Valley Tours, Caucasus Vine Travel, Kakheti Wine Routes, Silk
+Road Journeys, Tbilisi Tour Collective, Marani Import GmbH, Restaurant Kakhuri, Sighnaghi Wine
+Bar, Vinoteka Batumi, plus the `Individuals` pricing container). A demo reset replaced the
+fixtures at some point.
+
+This was the single biggest hole in the suite — it took out *both* payment specs, i.e. exactly
+the coverage that matters most. Not caused by the data-model migration itself: Chunk 3 deletes
+six tables and `Company` is not one of them. The tenant was refilled from the demo seed by an
+explicit one-off call afterwards, which is why it now holds demo-shaped companies.
+
+**Previously recorded only in `vault/SessionLog.md`'s 2026-09-18 narrative**, where it named two
+tests in one spec. The real blast radius is five spec files across two tiers. Surfaced here
+2026-09-19 after `booking-enhanced.spec.ts` failed on it in a live run.
+
+**Resolved for three specs, outstanding for three. Max's call (2026-09-19): repoint at the
+seeded demo companies** rather than recreate the deleted hand-made ones. The seeded companies'
+names, tiers and codes are constants in `lib/demoSeed.ts`, so if they are ever wiped again,
+restoring them is one documented command instead of rebuilding a company from memory.
+
+Access codes are now seeded too — `seedDemoTenant` sets them for a **non-demo slug only**, because
+giving the public demo's companies codes would gate its booking form behind a code no prospect can
+obtain, dead-ending the guided tour at its first stop.
+
+| Spec | Company | State |
+|---|---|---|
+| `payment-amount-integrity` | Caucasus Vine Travel + Sighnaghi Wine Bar | ✅ repointed |
+| `payment-label-precedence` | Alazani Valley Tours | ✅ repointed, green |
+| `guide-picker` (new) | Silk Road Journeys | ✅ green, 4/4 |
+| `booking-enhanced` | — | ⬜ still `Test Company # 1` |
+| `company-nationality-tagging` | — | ⬜ still `Test Company # 1` |
+| `company-guide-code` | — | ⬜ still `Cookie Company` |
+
+**Applied additively** via `saas/scripts/backfill-test-fixtures.ts`, not by re-running the seed —
+a re-seed deletes every order on the tenant. The script imports the specs from `demoSeed.ts`
+rather than copying codes (so they cannot drift), refuses the demo tenant, is idempotent, and
+converges rather than only adding: it will retract guides it wrongly created, scoped strictly to
+seed-owned codes so a hand-created guide is never touched.
+
+> ⚠️ **Before adding guides to another seeded company, read the warning on
+> `BookingCompanySpec.guides`.** Until Feature 201 shipped, giving a company guides retired its
+> access code, and seeding guides on all five broke four specs at once. Feature 201 removes that
+> hazard — once it is on staging and master, the one-company restriction can be lifted and guides
+> seeded everywhere for a more realistic demo.
 
 ## Environmental failure patterns
 

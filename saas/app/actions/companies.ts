@@ -169,11 +169,38 @@ export async function verifyCompanyCode(companyId: string, code: string) {
   }
 }
 
-// Booking form's code check (Plan-CompanyGuidesAndReps Chunk 5). Tries the company's guides
-// first — a matched guide identifies a specific person, not just the company, so the printed
-// booking sheet can show *that guide's* phone. Falls back to the legacy company-level
-// `accessCode` only when the company has zero guides configured (Chunk 1: no backfill, keep
-// existing companies working exactly as before).
+/**
+ * One option in the "which guide are you?" picker. Name and phone only — enough to choose
+ * from and to fill the form with, never the guide's own code.
+ */
+export type GuideChoice = { id: string; name: string; phone: string | null }
+
+/**
+ * Booking form's code check (Plan-CompanyGuidesAndReps Chunk 5, revised 2026-09-19 —
+ * KnownBugs #55).
+ *
+ * Two ways in, both valid:
+ *  - a **guide's own code** matches that guide directly — the shortcut, unchanged;
+ *  - the **company's `accessCode`** is also accepted, and when the company has guides the
+ *    caller is handed `guideChoices` so the guest can say which guide they are.
+ *
+ * **What changed and why.** Until 2026-09-19 a company with any guides rejected its own
+ * access code outright: the guide branch returned early and the company check was never
+ * reached. That was deliberate and documented — attribution should name a person — but it
+ * meant adding one guide silently killed a code already in circulation with a partner
+ * agency, with nothing in the admin panel saying so, and every guest holding it was told
+ * "Incorrect code". Max's resolution keeps the attribution requirement while removing the
+ * trap: the code still works, and the guest picks their guide instead of proving it.
+ *
+ * **The trade-off, accepted deliberately.** A guide code *proves* identity; a picker lets
+ * anyone holding the company code select any guide, so attribution becomes self-declared.
+ * That is acceptable because guide attribution is operational labelling — it puts the right
+ * person's phone on the booking sheet — not authentication. Revisit this if guide identity
+ * ever gates commissions or per-guide reporting.
+ *
+ * `guideChoices` is empty for a company with no guides, so callers can treat "company code
+ * matched, nobody to choose from" as today's plain company match with no extra step.
+ */
 export async function verifyBookingCode(companyId: string, code: string) {
   const tenantId = await getTenantId()
   const trimmed = code.trim().toUpperCase()
@@ -194,9 +221,9 @@ export async function verifyBookingCode(companyId: string, code: string) {
   )
   if (!company) return { error: 'Company not found.' }
 
-  if (company.guides.length > 0) {
-    const guide = company.guides.find(g => g.code.toUpperCase() === trimmed)
-    if (!guide) return { error: 'Incorrect code.' }
+  // 1. A guide's own code — the direct route, identity proven by the code itself.
+  const guide = company.guides.find(g => g.code.toUpperCase() === trimmed)
+  if (guide) {
     return {
       success: true as const,
       matchType: 'guide' as const,
@@ -209,35 +236,50 @@ export async function verifyBookingCode(companyId: string, code: string) {
         address: company.address,
       },
       wineDiscountPercent: company.wineDiscountPercent,
+      guideChoices: [] as GuideChoice[],
     }
   }
 
-  if (!company.accessCode) return { error: 'No code set.' }
-  if (company.accessCode.toUpperCase() !== trimmed) return { error: 'Incorrect code.' }
-  return {
-    success: true as const,
-    matchType: 'company' as const,
-    guideId: null,
-    profile: {
-      contactName: company.contactName,
-      contactPhone: company.contactPhone,
-      contactEmail: company.contactEmail,
-      identificationCode: company.identificationCode,
-      address: company.address,
-    },
-    wineDiscountPercent: company.wineDiscountPercent,
+  // 2. The company's shared code. Still valid even when guides exist — the caller then
+  //    asks which guide this is, rather than turning the guest away.
+  if (company.accessCode && company.accessCode.toUpperCase() === trimmed) {
+    return {
+      success: true as const,
+      matchType: 'company' as const,
+      guideId: null,
+      profile: {
+        contactName: company.contactName,
+        contactPhone: company.contactPhone,
+        contactEmail: company.contactEmail,
+        identificationCode: company.identificationCode,
+        address: company.address,
+      },
+      wineDiscountPercent: company.wineDiscountPercent,
+      guideChoices: company.guides.map(g => ({ id: g.id, name: g.name, phone: g.phone })),
+    }
   }
+
+  // 3. Neither. "No code set" only when there is genuinely nothing to match — a company
+  //    with guides but no shared code does have codes, just not this one, and saying
+  //    "no code set" there would be a lie the guest cannot act on.
+  if (!company.accessCode && company.guides.length === 0) return { error: 'No code set.' }
+  return { error: 'Incorrect code.' }
 }
 
 // Direct-code-entry booking form variant (Feature 113/114, `hideCompanyDropdown`) — the visitor
 // types a code with no company chosen first, so this searches every booking-enabled company's
-// guides in the tenant before falling back to `findCompanyByCode`'s existing Company.accessCode
-// search. Mirrors verifyBookingCode's guide-first/company-fallback shape from the other entry
-// point (Plan-CompanyGuidesAndReps Chunk 5).
+// guides in the tenant before falling back to `findCompanyByCode`'s Company.accessCode search.
+// Mirrors verifyBookingCode's shape from the other entry point, including `guideChoices`
+// (2026-09-19): a company code typed here resolves the company and then asks which guide, the
+// same as picking the company from the dropdown first. Before that the two genuinely disagreed
+// — this path accepted a company code unconditionally while the dropdown path rejected it for
+// any company with guides, so the same code worked or failed depending on how it was entered.
 type BookingCodeMatch = {
   success: true
   matchType: 'guide' | 'company'
   guideId: string | null
+  /** Empty for a guide-code match, or for a company with no guides. */
+  guideChoices: GuideChoice[]
   company: {
     id: string
     name: string
@@ -269,6 +311,7 @@ export async function findBookingCodeByCode(code: string): Promise<BookingCodeMa
       success: true as const,
       matchType: 'guide' as const,
       guideId: guide.id,
+      guideChoices: [],
       company: {
         id: guide.company.id,
         name: guide.company.name,
@@ -284,7 +327,22 @@ export async function findBookingCodeByCode(code: string): Promise<BookingCodeMa
 
   const result = await findCompanyByCode(code, 'BOOKING')
   if ('error' in result) return result
-  return { success: true as const, matchType: 'company' as const, guideId: null, company: result.company }
+  // The company's shared code matched. Hand back its guides so the caller can ask which one
+  // this is — same second step the dropdown path takes.
+  const guides = await withTenantDb(tenantId, tx =>
+    tx.companyGuide.findMany({
+      where: { company: { id: result.company.id, tenantId } },
+      select: { id: true, name: true, phone: true },
+      orderBy: { name: 'asc' },
+    })
+  )
+  return {
+    success: true as const,
+    matchType: 'company' as const,
+    guideId: null,
+    guideChoices: guides,
+    company: result.company,
+  }
 }
 
 export async function ensureIndividualsCompany(tenantId: string) {

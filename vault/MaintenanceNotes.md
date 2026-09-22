@@ -771,13 +771,29 @@ outputFileTracingIncludes: {
 
 ## 26. Guide/rep codes share one per-tenant pool with `Company.accessCode`, and the resolution logic exists in two places
 
+> **⚠️ Being replaced — 2026-09-19.** [[Plan-ContactRoles]] collapses the four overlapping
+> resolvers (`verifyBookingCode`, `findBookingCodeByCode`, `verifyCompanyCode`,
+> `findCompanyByCode`) into one, which is the permanent fix for the divergence described below,
+> and adds the DB-level unique index this note says does not exist. Until that lands,
+> everything below still holds. **Two live defects found while planning it:** deleting a guide
+> silently nulls `Order.guideId` on every past order ([[KnownBugs]] #56), and every company's
+> access code is served in the public homepage's HTML ([[KnownBugs]] #57). This entry gets
+> rewritten, not appended to, in that plan's Chunk 14.
+
+
 **What the dependency is:** since Plan-CompanyGuidesAndReps, a person's code (`CompanyGuide.code` / `CompanyRepresentative.code`) and a company's own `accessCode` all have to be unique across the same tenant — a guide's code and another company's `accessCode` must never collide, because both the wine-order flow's `findCompanyByCode` and the booking flow's `findBookingCodeByCode` do a **code-alone, tenant-wide** lookup with no company chosen first. Uniqueness is enforced only at the application level: `generateUniqueTenantCode()`/`codeExistsInTenant()` (`app/actions/companies.ts`) check all three sources (`Company`, `CompanyGuide`, `CompanyRepresentative`) before accepting a code, in every action that generates or manually sets one (`createCompany`, `regenerateAccessCode`, `setAccessCode`, and their guide/rep equivalents in `companyGuides.ts`). There is no DB-level constraint spanning the three tables — a direct `prisma.companyGuide.create()` or raw SQL insert that skips these helpers can silently create a colliding code.
 
-**The second half of the coupling:** the booking form has *two* code-resolution entry points that must stay in sync — `verifyBookingCode()` (dropdown flow: company already chosen, code just confirms the person) and `findBookingCodeByCode()` (direct-code-entry / `hideCompanyDropdown` flow: no company chosen, code alone is searched tenant-wide). Both independently implement "check this company's guides first, fall back to `Company.accessCode` when it has none" — a change to that fallback rule (e.g., changing what counts as "no guides", or extending it to reps) needs updating in both functions, the same shape as §22's three pricing call sites.
+**The second half of the coupling:** the booking form has *two* code-resolution entry points that must stay in sync — `verifyBookingCode()` (dropdown flow: company already chosen, code just confirms the person) and `findBookingCodeByCode()` (direct-code-entry / `hideCompanyDropdown` flow: no company chosen, code alone is searched tenant-wide). A change to the resolution rule needs making in **both**, the same shape as §22's three pricing call sites.
+
+> **They genuinely diverged, and nobody noticed for five days.** Until 2026-09-19 `verifyBookingCode()` fell back to `Company.accessCode` **only when the company had zero guides**, while `findBookingCodeByCode()` accepted a company code unconditionally — so the same code was rejected on the dropdown path and accepted on direct entry. Both functions' comments claimed they mirrored each other. **Feature 201** resolved it: both now accept the company code and return `guideChoices` so the guest picks which guide they are. If you touch one of these, diff it against the other before you finish.
+
+**⚠️ Giving a company guides used to retire its access code.** That was the documented rule, and it had a hidden cost: adding one guide silently killed a code already circulating with a partner agency, while `/admin/companies` kept displaying it as live. Feature 201 removed the hazard. **A live consequence still in the tree:** `lib/demoSeed.ts` seeds guides on only *one* booking company, because under the old rule seeding them everywhere retired every company code and broke four Playwright specs at once. Once Feature 201 is on staging and master, that restriction can be lifted — see the warning on `BookingCompanySpec.guides`.
+
+**A gap this left, not fixed:** `BookingForm.tsx` decides whether to show the code popup from `accessCode` alone (`if (!company.accessCode) { applyProfile(...); return }`), and never learns whether the company has guides. So a company with **guides but no shared code** shows no popup at all and its guide codes are unreachable on the dropdown path. Rare — `createCompany()` auto-generates a code — but reachable if an admin clears one. Fixing it means passing guide presence into the form's `companies` prop.
 
 **What this means in practice:** if you add a third way to look up a code (e.g., extending this to wine orders per Chunk 6, still unbuilt as of this note), route the code-uniqueness check through `generateUniqueTenantCode()`/`codeExistsInTenant()` rather than inventing a new check, and mirror whatever fallback order the other two resolvers use rather than picking a different one.
 
-**Files involved:** `saas/app/actions/companies.ts` (`generateUniqueTenantCode`, `codeExistsInTenant`, `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`), `saas/app/actions/companyGuides.ts`, `saas/components/BookingForm.tsx`. Full design: `Plan-CompanyGuidesAndReps.md`, `Features/Feature 185 - Company Guides and Representatives.md`.
+**Files involved:** `saas/app/actions/companies.ts` (`generateUniqueTenantCode`, `codeExistsInTenant`, `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`), `saas/app/actions/companyGuides.ts`, `saas/components/BookingForm.tsx`, `saas/components/GuidePickerPopupView.tsx`, `saas/lib/demoSeed.ts` (seeded codes/guides), `saas/scripts/backfill-test-fixtures.ts`. Full design: `Plan-CompanyGuidesAndReps.md`, `Features/Feature 185 - Company Guides and Representatives.md`, `Features/Feature 201 - Guide Picker After Company Code.md`. Covered by `saas/tests/tier2-core-flows/guide-picker.spec.ts`.
 
 ---
 

@@ -75,6 +75,11 @@ const en: Translations = {
   'messages.previewLabel': 'Preview',
   'messages.onsiteAccessCode.title': 'Company Access-Code Popup',
   'messages.onsiteAccessCode.trigger': 'Shown when a guest picks a company from the dropdown that needs an access code. Field placeholder and buttons are fixed and not shown here.',
+  // Guide picker (KnownBugs #55) — the step shown after the code popup when the
+  // company has guides configured.
+  'messages.onsiteGuidePicker.explainer': 'Shown only when this company has guides. After a company-wide code is accepted, the guest picks which guide they are, so the booking still names a person.',
+  'messages.onsiteGuidePicker.titleField': 'Guide picker title',
+  'messages.onsiteGuidePicker.intro': 'Guide picker intro line',
   'messages.onsiteAccessCode.titleField': 'Popup title',
   'messages.onsiteAccessCode.intro': 'Intro line — {company} is replaced with the company\'s name',
   'messages.onsiteAccessCode.error': 'Incorrect-code error',
@@ -1285,6 +1290,10 @@ const ka: Translations = {
   'messages.previewLabel': 'გადახედვა',
   'messages.onsiteAccessCode.title': 'კომპანიის კოდის ფანჯარა',
   'messages.onsiteAccessCode.trigger': 'ჩნდება, როცა სტუმარი ირჩევს ჩამონათვალიდან კომპანიას, რომელსაც სჭირდება წვდომის კოდი. ველის ველისმაგვარი ტექსტი და ღილაკები ფიქსირებულია და აქ არ ჩანს.',
+  // KA drafted, not natively reviewed — standing caveat for Claude-added Georgian.
+  'messages.onsiteGuidePicker.explainer': 'ჩანს მხოლოდ მაშინ, როცა კომპანიას ჰყავს გიდები. კომპანიის საერთო კოდის მიღების შემდეგ სტუმარი ირჩევს, რომელი გიდია, რათა ჯავშანს კონკრეტული ადამიანი ერქვას.',
+  'messages.onsiteGuidePicker.titleField': 'გიდის არჩევის სათაური',
+  'messages.onsiteGuidePicker.intro': 'გიდის არჩევის შესავალი ტექსტი',
   'messages.onsiteAccessCode.titleField': 'ფანჯრის სათაური',
   'messages.onsiteAccessCode.intro': 'შესავალი ტექსტი — {company} ჩანაცვლდება კომპანიის სახელით',
   'messages.onsiteAccessCode.error': 'არასწორი კოდის შეცდომა',

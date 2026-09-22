@@ -8,6 +8,302 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-19 (4) — Contact Roles: guides/reps reviewed, re-scoped, and planned
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD `7d319b4`. **No code was written this session.** The only
+>   changes are vault files: `Plan-ContactRoles.md` (new), `KnownBugs.md` (#56, #57),
+>   `Roadmap.md`, `FeatureLog.md`, `MaintenanceNotes.md` #26, and a supersede banner on
+>   `Plan-CompanyGuidesAndReps.md`.
+> - **The previous session's uncommitted working tree is still uncommitted and still stands** —
+>   Feature 201's `GuidePickerPopupView.tsx`, `guide-picker.spec.ts`,
+>   `backfill-test-fixtures.ts`, `tests/helpers/bookingForm.ts` and the edits to
+>   `companies.ts` / `BookingForm.tsx` / `MessagesPanel.tsx` / `t.ts` / `adminT.ts` /
+>   `demoSeed.ts`. Read the 2026-09-19 (3) entry below for its full state-on-exit, including
+>   the three specs still pointing at deleted fixtures. **All of it folds into the rework
+>   rather than shipping separately** — Max's call.
+>
+> **Next session starts at [[Plan-ContactRoles]] Chunk 0.**
+
+**What happened.** Max reviewed the shipped guides/representatives feature and found the model
+one level off. The ask, in his words: *"A company should have ability to have Contact Person's &
+Guides. right now we have that + representative. but thats 1 extra."* Several of each per
+company, **one of each per order**, with the company code prompting a picker whose whole purpose
+is autofill. Plus a standing requirement the old design cannot meet: *"it should be trivially
+easy, to in the future add or remove types of contact data attached to an order."*
+
+No code was written. The session produced a review and a plan.
+
+**The re-scope.** Three contact concepts collapse to two role *types* over one dimension table:
+
+- `ContactRole` — tenant-configurable rows (`guide`, `contact_person`, later `ceo`), with a
+  `scope` column separating "picked per order" from "company data that never appears on a
+  booking form". Adding a type becomes an admin action, not a migration.
+- `CompanyPerson` — replaces `CompanyGuide`, `CompanyRepresentative` **and**
+  `Company.contactName/contactPhone/contactEmail` (the "1 extra": a scalar doing a table's job).
+- `OrderContact` — polymorphic over `Order`/`WineOrder`, following `OrderEvent`/`Payment`'s
+  shape rather than two parallel tables, with name/phone/email **snapshots**.
+
+Decided along the way: wine orders get the full treatment, not structure-only (reversing the old
+plan's Chunk 1); access codes become tenant setting `company_access_codes_enabled`, default off,
+**tenant-wide only, no per-company override**; codes on suppresses the picker entirely so
+colleagues stay private; no order backfill (*"all orders are fake"*), but company-side
+configuration is copied across; `Order.name/surname/phone/email` keep being written as a
+denormalised copy of the Contact Person, because they are non-nullable and are the only place an
+INDIVIDUAL booking's guest name lives — the alternative branched ~16 production files.
+
+**Four findings from reading the code, all of which changed the plan.** Written up as F1–F4 in
+[[Plan-ContactRoles]] §5, and two of them logged as real bugs:
+
+1. **`Order.guideId` is write-only.** Written at `createBooking.ts:351`, read by nothing — no
+   screen, print or email. The attribution that justified the entire guides feature is not
+   delivered anywhere; the booking sheet only appears to work because autofill copies the
+   guide's phone into the guest's own field. Chunk 10 is where this gets paid off.
+2. **Deleting a guide silently erases order history** — optional relation, no `onDelete`,
+   Prisma defaults to `SetNull`. Now [[KnownBugs]] #56. Same shape as the `Payment` orphaning
+   in `DataModel/Dependencies.md` finding 2.
+3. **Every company's access code is in the public homepage's HTML** (`app/(site)/page.tsx:52`
+   ships whole `Company` rows to a client component). Now [[KnownBugs]] #57. On `master`.
+4. **Admin-side leak:** `orders/page.tsx:289` passes representatives' codes into `OrdersTable`.
+
+**Also carried into the plan, at Max's request:** his original brief verbatim as §1, so intent
+survives a long build; and §6, seventeen hurdles (H1–H17) this project has actually hit before,
+framed as suggestions rather than rules, each referenced from the chunk it applies to. The most
+load-bearing is **H1** — the old plan's dependency map was confidently wrong in four places
+(booking sheet, invoice modal, `Company.contactEmail`, demo seed), each caught only by opening
+the file. The new plan says explicitly that its own file list is a starting point, not a fact.
+
+**Open, deliberately left for Chunk 0:** whether a COMPANY_LEVEL role ships in this pass or only
+the `scope` column that makes one possible later. CEO was Max's example, not a requirement.
+
+**Next:** build starts tomorrow at [[Plan-ContactRoles]] Chunk 0, then Chunk 1's migration —
+which per ground rule 6 must not touch `Company` rows or `Price`, and whose generated SQL is to
+be read before it is run.
+
+---
+
+## 2026-09-19 (3) — Feature 201: guide picker after a company code
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD `7d319b4`. **Nothing committed, nothing pushed** — everything
+>   below is uncommitted working-tree changes, verified against the **dev** database only.
+>   Production and the deployed staging site are untouched.
+> - Green and verified live: `booking-simple`, `locale-integrity` (5/5),
+>   `payment-label-precedence`, `guide-picker` (4/4), and both booking tests in
+>   `payment-amount-integrity`.
+> - `tsc --noEmit` clean · i18n parity 169/169 (t.ts) and 1083/1083 (adminT.ts).
+>
+> **Not finished — pick up here:**
+> 1. **Three specs still point at deleted fixtures** and cannot run: `booking-enhanced`
+>    (`Test Company # 1`), `company-nationality-tagging` (`Test Company # 1`),
+>    `company-guide-code` (`Cookie Company`). Mapping and reasoning in
+>    `playwright/KNOWN-ISSUES.md` #4. `booking-enhanced` additionally asserts a literal `410₾`
+>    that must be recomputed for whichever company it is repointed at.
+> 2. **`payment-amount-integrity`'s wine-order test was fixed but never re-run** after the fix.
+> 3. **The new seed path has never executed.** `backfill-test-fixtures.ts` reproduces its end
+>    state additively, so `seedDemoTenant`'s new access-code/guide/rep code is unproven. Needs a
+>    scratch tenant — do NOT test it against Staging Winery, it deletes every order.
+> 4. **Feature 201 needs staging verification** before any merge (Rule 0).
+> 5. **Three junk orders on Staging Winery** (`ZZPaymentIntegrity DefaultOn`, 2026-09-19) from
+>    failed runs. Harmless — per-run unique markers mean they no longer collide — but litter.
+>    Left in place deliberately; deleting orders was not authorised.
+> 6. **`clickUntil()` wants a deliberate review.** Its cause (the nested-`<button>` hydration bug)
+>    was fixed 2026-09-12, so it now absorbs real regressions: a click that genuinely stopped
+>    working looks identical to a slow one. Do not strip it reflexively — this UI is still slow
+>    under a loaded dev DB.
+> 7. **Once Feature 201 reaches master**, `lib/demoSeed.ts` can seed guides on every booking
+>    company instead of just Silk Road Journeys. See the warning on `BookingCompanySpec.guides`.
+>
+> **Environmental:** the dev DB pool was exhausted twice by this session's run volume (`P2028`,
+> transactions timing out ~21s against a 15s limit). If admin pages start erroring, that is this —
+> stop running tests, wait, confirm with real page loads. A server restart does not help.
+
+
+Built and verified on dev. Resolves [[KnownBugs]] #55, which this session's own test work
+surfaced. Full writeup: [[Feature 201 - Guide Picker After Company Code]].
+
+**What changed.** A company's shared access code works again even when that company has guides;
+the guest then picks which guide they are. Guide codes still work as a direct shortcut.
+
+**Why it mattered.** `verifyBookingCode()` rejected a company's own code outright for any company
+with guides — deliberate and documented, but it meant adding one guide silently killed a code
+already circulating with a partner agency, while `/admin/companies` kept showing that dead code
+as live.
+
+**Max's design, not mine.** My first proposal was to make the admin panel *admit* the code was
+dead. His keeps it working and asks who is booking — it removes the trap rather than documenting
+it, and still satisfies the attribution requirement. Accepted trade-off: attribution becomes
+self-declared rather than proven. Fine while it is operational labelling; revisit if guide
+identity ever gates commissions.
+
+**A correction I had to make first.** I initially reported `verifyBookingCode` as a bug and Max
+told me to fix it. It was not a bug — I had quoted a plan sentence that broke across a line, and
+the full sentence says the opposite. Had I just done as asked, I would have undone a real product
+decision to make my own bad test data pass. The thing actually broken was my seed change, which
+had given guides to all five booking companies and thereby retired all five company codes.
+
+### Verified on dev
+
+`tests/tier2-core-flows/guide-picker.spec.ts` — **4/4 passing, 26.6s**. Plus by hand: picker
+appears, guide selection autofills that guide's own phone, "I am not on this list" falls back to
+the company contact, guide codes skip the picker, guide-less companies unaffected, wrong codes
+still rejected, and Georgian renders correctly.
+
+**Two things found while verifying, both fixed:**
+- The guide buttons had **no accessible name** — name and phone are separate nested spans, so the
+  computed name came back empty. A screen reader would have said "button" and nothing else, and
+  no spec could target them by role and name. Fixed with an explicit `aria-label`, now asserted.
+- The fixture made the fallback **unprovable**: Silk Road Journeys' contact person was also its
+  first guide, so "not on this list" and "pick guide 1" filled the form identically. Seed now uses
+  a distinct person, and `backfill-test-fixtures.ts` gained the ability to reconcile an existing
+  guide's name and phone rather than only create-or-skip.
+
+### Not verified
+
+Admin Messages preview (needs a login, and entering a password into a form is off-limits to me),
+the direct-code-entry variant, and `guideId` actually persisting on a submitted order. All three
+listed in the feature note.
+
+### Also this session, earlier
+
+The dev DB pool was exhausted mid-way (`P2028`, transactions timing out at ~21s against a 15s
+limit) by the day's Playwright volume — the exact shape `KNOWN-ISSUES.md` documents. Recovery was
+by waiting and confirming with real page loads, not a restart. One company-test "regression" was
+purely this, not a code fault.
+
+**State:** `tsc` clean, i18n parity 169/169 and 1083/1083. Nothing committed, nothing pushed.
+Staging verification still required before any merge (Rule 0).
+
+## 2026-09-19 (2) — Test-suite drift audit: two broken specs fixed, three stale docs reconciled
+
+Started as a scoping conversation about a generated system map ([[Plan-SystemMap]]) and Max's
+goal of "Playwright tests for all possible scenarios, starting with payments/bookings." Before
+planning new tests, audited what was already there. **No new tests written this session** — the
+plan for those is still unstarted, deliberately, until the existing suite is trustworthy.
+
+### Measured first
+
+- 129 server actions across 25 files — but only **4** create an order (`createBooking`,
+  `createOrderAdmin`, `submitWineOrder`, `createWineOrderAdmin`). The decision logic is already
+  well-centralized: one `priceBooking()`, one `shouldTakePayment()`, one `statusFlow.ts`.
+- The payment matrix is **~12–20 meaningful rows**, not hundreds — `shouldTakePayment()` is an
+  ordered decision table with early returns, so most of the combinatorial space is unreachable.
+  Booking shape adds ~25–30. Real target is ~40–50 scenarios, which is finite and knowable.
+- **E2E alone cannot carry that.** Payment specs mutate tenant-wide settings so they must run
+  serial (~50 min at that count), the dev DB pool already exhausts at the current 17 tests, and
+  a failed test leaves Staging Winery in a wrong state. Recommendation recorded but not built:
+  matrix-as-data, consumed by a fast pure-function layer, a server-action layer, and only ~6–8
+  browser journeys. Also noted: the Flitt **callback/settle** path is unreachable from Playwright
+  entirely — the browser leaves for the gateway and never returns under test control.
+
+### 🔴 Two specs were genuinely broken and nobody knew
+
+Feature 184 (2026-09-14) inserted the "Review your visit" sheet between the booking form's submit
+button and `createBooking()`. Two specs predated it and were never updated:
+
+- `booking-simple.spec.ts` — clicked "Book & Pay", waited for a `pay.flitt.com` redirect that
+  could no longer fire on the first click. Failed on a 15s timeout.
+- `booking-enhanced.spec.ts` — clicked "Request Booking", waited for a "Booking received!"
+  heading that could no longer appear. Same shape.
+
+Both failed on a **timeout**, which reads like a hang or a slow DB rather than a stale assertion —
+which is very likely why it went unnoticed. `booking-simple.spec.ts` had even been updated for
+Feature 191 on 2026-09-18: someone fixed the verification half and missed the submit half.
+
+**Fix:** new `saas/tests/helpers/bookingForm.ts` with `openReviewSheet()` + `confirmButton()`,
+extracted unchanged from the local copy in `payment-amount-integrity.spec.ts` (the one spec that
+*had* been updated). All three now share it, so the next change to that sheet breaks in one place.
+`company-guide-code.spec.ts` was checked too — unaffected, it never submits the form.
+
+### 🟢 The nested-`<button>` hydration bug was fixed a week ago; three docs still said otherwise
+
+KnownBugs #15 was fixed in the app **2026-09-12**. Verified against the code before changing
+anything: `CompaniesClient.tsx` now closes the row-summary `<button>` before the `HelpHint`, and
+all five `HelpHint` sites in that file are clean. But:
+
+| Source | Said |
+|---|---|
+| `KnownBugs.md` resolved banner | 🟢 Resolved 2026-09-12 |
+| `KnownBugs.md` #15 entry (same file!) | 🔴 **Open** |
+| `playwright/KNOWN-ISSUES.md` #2 | "**Not fixed in the app**" |
+
+All three reconciled. SessionLog entries left alone — they are dated records of what was true then.
+
+**A live consequence nobody had drawn:** `locale-integrity.spec.ts` carried a filter
+(`isKnownCompaniesHydrationError`) that suppressed hydration errors — applied to **all five**
+tests, including the public home page, wine catalogue, admin orders and admin settings, none of
+which render `CompaniesClient`. Worse, its second pattern matched React's *generic* "Hydration
+failed…" text, so **any new hydration mismatch anywhere in the app would have passed silently.**
+Removed; those five tests now assert on every console error they see.
+
+**Still outstanding, deliberately not touched:** `clickUntil()` — the retry-until-verified click
+helper — exists *because* of #15 and is still wrapped around most meaningful clicks in
+`helpers/payments.ts` and `companies-crud.spec.ts`. With the cause gone it will now mask a real
+regression: a click that truly stopped working is indistinguishable from a slow one. Wants a
+deliberate re-examination, not a blind strip-out (this UI can still be slow under a loaded DB).
+
+### Correction: the max-guests "bug" was already fixed
+
+Flagged mid-session as a live blocker, from `payment-amount-integrity.spec.ts`'s header comment
+(Staging Winery Wine Tasting min=4 / max=3, silently clamping). Max checked the admin panel and
+saw ∞. **He was right and the comment was stale** — that was KnownBugs #40, fixed 2026-09-16 both
+in code (`handleBookingRuleSave` now rejects a max below its own min) and in the live data. The
+comment was written 2026-09-15, the day before. Rewritten as history, not a live condition. Third
+instance of the same drift pattern in one session.
+
+### Run results — and a 🔴 blocker the run exposed
+
+Ran live against a warmed dev server: **5 passed / 2 failed**, then `booking-simple` fixed again
+and re-verified green at 55.5s.
+
+- ✅ **`locale-integrity` 5/5**, admin companies included. Removing the hydration filter surfaced
+  nothing — those assertions are now genuinely unconditional.
+- ✅ **`booking-simple`** — green, but needed **two** fixes, not one. After the confirm-sheet fix
+  it reached Flitt with the correct amount (280 GEL, visible in the failure's own page snapshot)
+  then hung in cleanup. **First misdiagnosed as a too-small timeout**; raising 60s → 120s
+  reproduced it exactly, which ruled that out. Real cause: Feature 191's move of abandoned orders
+  to their own screen was ported here as `locator('div').filter({hasText}).last()`, which resolves
+  to the innermost div holding the email — no button inside it. `payment-amount-integrity.spec.ts`
+  had the correct `has:`-filtered version all along. Now shared as `abandonedRow()`.
+- ❌ **`booking-enhanced`** — confirm-sheet fix is correct but unreachable.
+
+### 🔴 The suite's fixture companies are gone — four specs cannot run
+
+Confirmed by direct DB query: Staging Winery holds ten companies, **all `demoSeed.ts` names**.
+`Test Company # 1`, `Wine Test Company` and `Cookie Company` no longer exist. That takes out
+`payment-amount-integrity`, `payment-label-precedence`, `booking-enhanced`,
+`company-nationality-tagging` and `company-guide-code` — **including both payment specs, the exact
+coverage Max wants to build on.**
+
+This was **already known** — recorded in this log's own 2026-09-18 entry — but only as narrative,
+naming "tests 2–3" of one spec. Real blast radius: five spec files. It never reached
+`playwright/KNOWN-ISSUES.md` or `Progress.md`, so nothing surfaced it. Now written up as
+KNOWN-ISSUES #4 with both resolution options and why they are not equivalent (demo-seed companies
+have `accessCode: null`, and repointing at them just re-arms the same trap one demo reset later).
+
+**Needs Max's decision — not patched unilaterally, since either option writes to a shared tenant.**
+
+### The pattern, stated plainly
+
+Three times this session, one spec or doc got a careful update for an app change and its sibling
+got a sloppy one or none: Feature 184 (two specs missed), Feature 191 (one spec's locator),
+KnownBugs #15 (three docs disagreeing). Both fixes here became **shared helpers** rather than
+local patches, deliberately — that is the structural answer, and it is the same argument as the
+executable-matrix idea discussed at the top of the session.
+
+### State
+
+`tsc --noEmit` clean. `booking-simple` and `locale-integrity` verified green live;
+`booking-enhanced` blocked on fixtures. Changed: `booking-simple.spec.ts`,
+`booking-enhanced.spec.ts`, `payment-amount-integrity.spec.ts`, `locale-integrity.spec.ts`,
+new `helpers/bookingForm.ts` (`openReviewSheet`, `confirmButton`, `abandonedRow`),
+`vault/KnownBugs.md`, `playwright/KNOWN-ISSUES.md`, `playwright/Progress.md`. **Nothing committed,
+nothing pushed.** One test order was created and cleaned up on Staging Winery per run.
+
+---
+
 ## 2026-09-19 — Money-safety stress test, two blind reviews, ten bugs fixed
 
 > **STATE ON EXIT — read this first if you are resuming cold.**

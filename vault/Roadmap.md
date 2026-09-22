@@ -215,6 +215,11 @@ Findings from an industry-standards audit of how images and hero banners are han
 
 Full plan: `vault/Plan-CompanyAccessCodes.md`
 
+> **Superseded in part by v1.13.** The code mechanism built here stays, but becomes a
+> tenant setting (`company_access_codes_enabled`, **off by default**) rather than always-on,
+> and the company-level contact fields added in Step 1 move into `CompanyPerson` rows.
+> See [[Plan-ContactRoles]]. Step 4's auto-fill is what the new picker replaces.
+
 - [x] **Step 1 — DB schema**: add `contactName`, `contactPhone`, `contactEmail`, `address`, `accessCode` to Company model
 - [x] **Step 2 — Server actions**: extend `updateCompany`; add `verifyCompanyCode` (public), `regenerateAccessCode` (admin)
 - [x] **Step 3 — Admin slide-over panel**: replace inline company edit with full side panel; access code field with show/hide, copy, regenerate
@@ -372,6 +377,62 @@ a single linear status column cannot express "delivered but not yet paid".
 **Decisions by Max:** board columns are the fulfilment axis only, payment as a ₾✓ card marker (2026-09-17) · display metadata stays in frontend code · an abandoned checkout and a declined card are the same thing, they are not orders, and they belong on a completely separate screen (2026-09-18) · they must stay recoverable.
 
 **Findings worth keeping:** `Payment.settledAt` was empty on dev, so `paidAt` was not recoverable as the plan first assumed · 290 `COMPLETED` bookings against 31 `PAID` showed the winery had never used that column to track payment at all · 83 `created` Payment rows against 13 limbo orders, which is why limbo could not be derived from `Payment` · 38 dev rows were marked paid with no payment date, and the gaps report called them clean because it only looked for NULL foreign keys.
+
+---
+
+## v1.13 — Contact Roles (company people, generalised) 🚧 PLANNED, NOT STARTED
+
+Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
+shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
+plan.
+
+**Why.** The guides/representatives feature shipped 2026-09-14 with the model one level off.
+Max, 2026-09-19: *"A company should have ability to have Contact Person's & Guides. right now we
+have that + representative. but thats 1 extra."* Several of each per company, **one of each per
+order**, the company code prompting a picker whose purpose is autofill — plus a requirement the
+old design structurally cannot meet: adding a new contact type later must be an admin action,
+not a migration.
+
+**The shape.** `ContactRole` (tenant-configurable, with a `scope` column separating per-order
+roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
+`CompanyRepresentative` **and** `Company.contactName/Phone/Email`) + `OrderContact`
+(polymorphic over `Order`/`WineOrder`, with detail snapshots).
+
+- [ ] Chunk 0 — seed-role definitions; one open question (does a COMPANY_LEVEL role ship now, or
+      only the `scope` column that makes one possible later — CEO was Max's example, not a
+      requirement)
+- [ ] Chunk 1 — schema + migration. ⚠️ must not touch `Company` rows or `Price`
+- [ ] Chunk 2 — RLS: three new tables, two-tenant test, not a green tick
+- [ ] Chunk 3 — server actions. Ten near-identical guide/rep functions collapse to five; four
+      overlapping code-resolution functions collapse to one
+- [ ] Chunk 4 — admin Contact Roles screen
+- [ ] Chunk 5 — admin Edit Company, role-driven people list
+- [ ] Chunk 6 — `company_access_codes_enabled` setting, default off, tenant-wide
+- [ ] Chunk 7 — booking form per-role pickers; folds in Feature 201's uncommitted work
+- [ ] Chunk 8 — wine order form, same treatment (reverses the old plan's "out of scope")
+- [ ] Chunk 9 — write path: `OrderContact` rows with snapshots
+- [ ] Chunk 10 — admin order surfaces; **this is where the guide finally becomes readable**
+- [ ] Chunk 11 — emails, invoice recipient from roles
+- [ ] Chunk 12 — demo seed, onboarding, fixtures
+- [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
+- [ ] Chunk 14 — vault close-out, staging verification, merge
+
+**Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
+access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses
+the picker so colleagues stay private · no order backfill (*"all orders are fake"*), company
+configuration copied across · `Order.name/surname/phone/email` keep being written as a
+denormalised copy of the Contact Person · Feature 201 folds in rather than shipping separately ·
+one person per role per order.
+
+**Findings that changed the plan** (§5 of it): `Order.guideId` is **write-only** — nothing
+reads it, so the attribution that justified the whole feature is undelivered · deleting a guide
+silently nulls it on every past order ([[KnownBugs]] #56) · **every company's access code is in
+the public homepage's HTML** ([[KnownBugs]] #57, on `master` now) · representatives' codes reach
+the admin client bundle.
+
+**Carried forward at Max's request:** §6 of the plan lists seventeen hurdles this project has
+actually hit before, as suggestions rather than rules. H1 is the sharpest — the old plan's
+dependency map was confidently wrong in four places, each caught only by opening the file.
 
 ---
 
