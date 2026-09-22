@@ -407,7 +407,7 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
       overlapping code-resolution functions collapse to one
 - [x] Chunk 4 — admin Contact Roles screen
 - [x] Chunk 5 — admin Edit Company, role-driven people list
-- [~] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s)
+- [x] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s). Live-checked 2026-09-22
 - [x] Chunk 7 — shared picker + hook, booking form per-role pickers; folds in Feature 201's work
 - [ ] Chunk 8 — wine order form, same treatment (reverses the old plan's "out of scope")
 - [ ] Chunk 9 — write path: `OrderContact` rows with snapshots

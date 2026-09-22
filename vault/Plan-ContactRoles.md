@@ -413,7 +413,7 @@ A `null` in the `polname` column is the bug.
 | **3** | Server actions — roles, people, code resolution | ✅ Done |
 | **4** | Admin — Contact Roles management screen | ✅ Done |
 | **5** | Admin — Edit Company people list, role-driven | ✅ Done |
-| **6** | Settings — `person_codes_enabled` | 🚧 Done bar one live check |
+| **6** | Settings — `person_codes_enabled` | ✅ Done |
 | **7** | **Shared picker + hook** + public booking form | ✅ Done |
 | **8** | Both wine order forms (public + admin manual) | ⬜ Not started |
 | **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
@@ -425,7 +425,7 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–7 done, bar Chunk 6's one live check (2026-09-22).
+**Overall resume point:** Chunks 0–7 all done (2026-09-22), including Chunk 6's live check.
 **Chunk 8 next — both wine order forms.** It is now the only thing still breaking the build at
 runtime: see Chunk 7's note on `WineCatalogueClient.tsx`, which 500s `/admin/login` the moment
 anything compiles `/wines`.
@@ -830,7 +830,7 @@ fixable in the panel, where a dropped phone number would have been neither.
 
 ## Chunk 6 — Settings
 
-**Status:** 🚧 Mostly done in Chunks 3–4 · **Read H7, H17**
+**Status:** ✅ Done (2026-09-22) · built across Chunks 3–4, live-checked in Chunk 7 · **Read H7, H17**
 
 - [x] `person_codes_enabled: 'false'` in `lib/settings.ts` `SETTING_DEFAULTS` (Chunk 3 — the
       resolver needed it). **Renamed from `company_access_codes_enabled`**; see Chunk 3 for why
@@ -841,10 +841,12 @@ fixable in the panel, where a dropped phone number would have been neither.
 - [x] **Kept in `Setting`, not on `Tenant`** — H7 explains what that costs
 - [x] Help text stating the trade-off plainly: on = codes prove identity but colleagues stay
       private; off = one-click autofill but everyone sees the list
-- [ ] **Remaining:** confirm the toggle actually flips live, once Chunk 7 makes the admin panel
-      reachable at all
+- [x] **Confirmed live 2026-09-22** (Chunk 7's click-through): the toggle flips, persists to the
+      database, and survives a page reload. Its consequence was checked on the public form too —
+      codes on means no picker and no colleague names in the page, and a person's own code
+      resolves them directly into their own role's fields. Setting restored to `false` after
 
-**Resume point:** the row stays open only for that one live check.
+**Resume point:** —
 
 ---
 
@@ -960,12 +962,52 @@ open `/wines` during it.
   "only in the details booking option"
 - No console errors
 
-**Not verified:** no booking was submitted, so the `contacts` payload has not been round-tripped
-— there is nothing to receive it until Chunk 9 writes `OrderContact` rows. And no admin screen
-was opened: that needs a password typed into a login form, which is off-limits for Claude. The
-Chunk 13 Playwright specs supply their own credentials from `credentials.txt`
-(`tests/helpers/credentials.ts` + `auth.ts`) and are the route for Chunks 4/5/6's click-through
-if Max would rather not do it by hand.
+### ✅ The admin click-through — done 2026-09-22, Max typed the password
+
+Max signed in himself and handed the session over, which is the arrangement that works: he holds
+the credential, Claude drives everything after it. **All four screens rendered for the first
+time**, and every claim Chunks 4–6 made without seeing them held.
+
+**Chunk 4 — Settings → Contact Types.** Both built-in roles listed with their Georgian labels and
+the plain-words scope copy ("Chosen per booking · Bookings and wine orders" / "· Bookings only").
+System roles show `Turn off` and `Edit` and **no delete button at all**, as designed. Creating a
+role offers *"Company information — never on a booking form"* — so a COMPANY_LEVEL role really is
+creatable, which is what makes Chunk 0's deferral of the CEO role legitimate rather than a quiet
+drop. On **edit** the scope control is **absent** (name, Georgian name, order and "Used on"
+only), exactly as that chunk claimed.
+
+**Chunk 6 — the one checkbox left open.** The `person_codes_enabled` toggle flipped, persisted to
+the database, and survived a full page reload. Its consequence was then verified on the public
+form, which is the part that actually matters:
+
+- **Codes ON + company code** → code accepted, **no picker opened, and not one colleague's name
+  appears anywhere in the page**. That emptiness is decision 6's privacy feature, confirmed end
+  to end rather than inferred from the resolver's tests.
+- **Codes ON + a guide's own code** (`SRJGUIDE1`) → resolved straight to Tinatin Beruashvili and
+  filled the **Guide block**, leaving the contact-person fields empty for the guest. So the hook
+  routes a matched person by role correctly, and no other colleague leaked into the page.
+
+The setting was put back to `false` afterwards and re-checked in the database.
+
+**Chunk 5 — Edit Company.** Silk Road Journeys renders **one section per role**: Contact Person
+(Keti Dolidze, Mariam Dolidze) and Guide (Nika Kvaratskhelia, Tinatin Beruashvili), each with
+`+ Add Contact Person` / `+ Add Guide` labels built from the role name. No per-person code field,
+because person codes are off — H5's trap avoided. The three old company contact inputs are gone.
+
+**Chunk 7 — Content → Messages.** The renamed fields render and the preview shows the real
+`ContactPickerPopupView` with both placeholders resolved.
+
+### One small thing fixed during the click-through
+
+The Messages preview hardcoded `SAMPLE_ROLE = 'Guide'`, so on the **Georgian** tab it read
+*"…ამ ვიზიტის Guide, რომ…"* — a half-translated line the live form never produces, since the real
+picker takes the role name from `ContactRole.labelKa`. An admin reviewing the Georgian would
+reasonably have reported it as a translation bug. Made locale-aware; it now reads
+*"Beridze LLC — აირჩიეთ ამ ვიზიტის გიდი, რომ მარანმა იცოდეს ვის დაუკავშირდეს."*
+
+**Still not verified:** no booking was submitted, so the `contacts` payload has not been
+round-tripped — there is nothing to receive it until Chunk 9 writes `OrderContact` rows.
+`/admin/orders` also still 500s, which is Chunk 10's file and expected.
 
 **Resume point:** —
 

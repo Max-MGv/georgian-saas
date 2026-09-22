@@ -68,7 +68,11 @@ const SAMPLE_COMPANY = 'Beridze LLC'
 // Two visibly different people, and a role label alongside them: the picker is
 // role-driven now, and a preview that could not tell one role from another would
 // prove nothing about it (hurdle H13).
-const SAMPLE_ROLE = 'Guide'
+// Locale-aware, because the real picker takes this from ContactRole.labelEn/labelKa and so
+// renders a Georgian role name on a Georgian page. A fixed English 'Guide' made the Georgian
+// preview read "…ამ ვიზიტის Guide, რომ…" — a half-translated line the live form never produces,
+// which is exactly the kind of thing an admin would report as a translation bug.
+const SAMPLE_ROLE: Record<string, string> = { en: 'Guide', ka: 'გიდი' }
 const SAMPLE_PEOPLE = [
   { id: 'sample-1', roleId: 'sample-role', name: 'Nino Beridze', phone: '+995 599 41 22 08', email: null },
   { id: 'sample-2', roleId: 'sample-role', name: 'Irakli Tsiklauri', phone: '+995 593 07 55 12', email: null },
@@ -773,7 +777,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               title={drafts.onsite_contact_picker_title}
               intro={drafts.onsite_contact_picker_intro
                 .replaceAll('{company}', SAMPLE_COMPANY)
-                .replaceAll('{role}', SAMPLE_ROLE)}
+                .replaceAll('{role}', SAMPLE_ROLE[locale] ?? SAMPLE_ROLE.en)}
               people={SAMPLE_PEOPLE}
               labels={{ notListed: t(locale, 'form.contact_picker_not_listed') }}
               preview

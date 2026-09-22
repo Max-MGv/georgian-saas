@@ -18,20 +18,28 @@ in a browser myself, so this list is short.
 
 ### Your two jobs
 
-- [ ] **The admin click-through.** Four screens have been built and **never once looked at** —
-      Settings → Contact Types, Settings → the Person Codes toggle, Edit Company's people list,
-      and Content → Messages → the contact-picker preview. I cannot open any of them: they need
-      a password typed into a login form, and that is the one thing I will not do even when you
-      tell me to. Sorry to keep bouncing this back.
+- [x] ~~**The admin click-through.**~~ **Done — you logged in and I walked all four screens.**
+      Everything the earlier chunks claimed without seeing them turned out to be true: Contact
+      Types lists both built-in roles with no delete button, offers the company-level option when
+      creating one, and correctly hides the scope control when editing; Edit Company shows one
+      people section per role; the Messages preview renders the real picker. **I also closed the
+      last open item on the settings chunk** — the Personal access codes toggle flips and sticks,
+      and with it on the booking form shows no picker and no colleague names at all, while a
+      guide's own code takes them straight through. I put the setting back to off afterwards.
 
-      **Before you start: restart the dev server, and do not open `/wines`.** The wine page is
-      still half-migrated and it breaks `/admin/login` the moment it loads. Restarting fixes it
-      again. Chunk 8 is where that goes away for good.
+      One caveat if you go back in yourself: **restart the dev server first and don't open
+      `/wines`** — the wine page is still half-migrated and breaks `/admin/login` the moment it
+      loads. Chunk 8 fixes that for good. `/admin/orders` also still errors; that's chunk 10.
 
-- [ ] **Read the Georgian.** New wording, mine, drafted not natively reviewed:
-      **"ვინ დავამატოთ ამ ჯავშანში?"** (picker title) and the line under it,
-      **"{company} — აირჩიეთ ამ ვიზიტის {role}..."**. Switch the site to Georgian, pick a
-      company with a code, and see whether it reads naturally. Tell me if it doesn't.
+- [ ] **Read the Georgian.** This is the only thing genuinely left for you. New wording, mine,
+      drafted not natively reviewed:
+      **"ვინ დავამატოთ ამ ჯავშანში?"** (the picker's title) and under it
+      **"{company} — აირჩიეთ ამ ვიზიტის {role}, რომ მარანმა იცოდეს ვის დაუკავშირდეს."**
+
+      Quickest way to see it: **Site Content → Messages → GEORGIAN → Company Access-Code Popup**,
+      and scroll to the preview at the bottom of that section. It renders the real thing. Or
+      switch the public site to KA and pick a company with a code. Tell me if either line reads
+      oddly and I'll change it.
 
 ### Nothing else needs checking — here is what I already confirmed
 

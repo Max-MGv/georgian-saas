@@ -22,10 +22,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 >   imports `verifyCompanyCode`/`findCompanyByCode`, which chunk 3 removed. Anything that
 >   compiles `/wines` puts `/admin/login` back to 500 until the dev server restarts. **Chunk 8
 >   owns that file.** Restart the server before any admin click-through, and stay off `/wines`.
-> - **Chunks 4, 5 and 6 still have never been rendered** — an admin screen needs a password
->   typed into a login form, which Claude cannot do even when asked. The chunk 13 Playwright
->   specs read `credentials.txt` themselves (`tests/helpers/credentials.ts` + `auth.ts`), so
->   they are the route that keeps the credential out of Claude's hands entirely.
+> - **Chunks 4, 5 and 6 have now been walked** — Max typed the password himself and handed the
+>   session over, which is the arrangement that works. All four screens rendered and every claim
+>   those chunks made without seeing them held. **Chunk 6 is now fully closed**, including the
+>   live toggle check it had been holding open. Details in the plan's chunk 7 section.
 >
 > **Next:** [[Plan-ContactRoles]] **Chunk 8** — both wine order forms. It is now the only thing
 > still breaking the build at runtime.
@@ -88,8 +88,21 @@ in a browser on Staging Winery: company code → Contact Person popup → Guide 
 fields filled from the right person; "I am not on this list"; the company-switch reset; and the
 Guide block disappearing on an INDIVIDUAL booking.
 
+### The admin click-through, later the same day
+
+Max signed in and handed over the session. All four screens rendered for the first time.
+Settings → Contact Types is right, including the company-level option on create and the scope
+control correctly hidden on edit. Edit Company shows one people section per role. **Chunk 6's
+last open checkbox is now closed**: the person-codes toggle flips, persists and survives a
+reload — and on the public form, codes-on means no picker and no colleague names in the page,
+while a guide's own code resolves straight into the Guide block. Setting restored to `false`.
+
+Fixed one thing found there: the Messages preview hardcoded an English `'Guide'` as its sample
+role, so the Georgian tab read "…ამ ვიზიტის Guide, რომ…" — a half-translated line the real form
+never produces, since it reads `ContactRole.labelKa`. Now locale-aware.
+
 **Not verified:** no booking was submitted — there is nothing to receive the `contacts` payload
-until chunk 9 writes `OrderContact` rows. No admin screen was opened.
+until chunk 9 writes `OrderContact` rows. `/admin/orders` still 500s (chunk 10's file).
 
 ---
 
