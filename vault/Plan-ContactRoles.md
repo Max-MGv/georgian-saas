@@ -416,7 +416,7 @@ A `null` in the `polname` column is the bug.
 | **6** | Settings — `person_codes_enabled` | ✅ Done |
 | **7** | **Shared picker + hook** + public booking form | ✅ Done |
 | **8** | Both wine order forms (public + admin manual) | ✅ Done |
-| **9** | Write path — `OrderContact` rows + snapshots | ⬜ Not started |
+| **9** | Write path — `OrderContact` rows + snapshots | ✅ Done |
 | **10** | Admin order surfaces — finally display contacts | ⬜ Not started |
 | **11** | Emails — invoice recipient from roles | ⬜ Not started |
 | **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
@@ -425,20 +425,24 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–8 all done (2026-09-22).
-**Chunk 9 next — the write path.** Both public forms and both admin forms now build a
-`contacts` payload and nothing consumes it yet; Chunk 9 turns those into `OrderContact` rows
-with snapshots. **Nothing breaks the build at runtime any more** — every route returns 200.
+**Overall resume point:** Chunks 0–9 all done (2026-09-22).
+**Chunk 10 next — admin order surfaces**, where the contacts finally become *readable*. That is
+where finding F1 gets paid off for the admin, and where F4 (representatives' codes reaching
+`OrdersTable`) is closed. `/admin/orders` currently 500s on a dropped relation, and Chunk 10
+owns that file. There is one real order carrying contacts in the dev database to display.
 
-**43 type errors remain**, none of them in a file Chunks 7 or 8 own:
-`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/actions/orders.ts` (9, Chunks 9/11),
+**40 type errors remain**, none in a file Chunks 7–9 own:
+`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/actions/orders.ts` (9, **all nine in
+`sendOrderInvoice`** — Chunk 11, not 9; one bad `include` cascades into eight more),
 `scripts/backfill-test-fixtures.ts` (8, Chunk 12), `app/admin/onboarding/page.tsx` (5,
-Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12),
-`app/actions/createBooking.ts` (3, Chunk 9).
+Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12).
 
-Chunk 7 cleared 5 (one on `app/(site)/page.tsx`, three on `components/BookingForm.tsx`, one
-that left with `GuidePickerPopupView.tsx`); Chunk 8 cleared the remaining 6, across both wine
-pages and `WineCatalogueClient.tsx`.
+Running total: 65 → 54 → 49 (Chunk 7) → 43 (Chunk 8) → 40 (Chunk 9).
+
+*(This plan previously filed `orders.ts` under "Chunks 9/11". Opening it showed all nine
+errors are the invoice recipient's `company.representatives` include — squarely Chunk 11.
+Chunk 9's business in that file was the re-decision recorded in its section, which needed no
+type change.)*
 
 *(Count the lines matching `error TS`, not the lines of output — a multi-line "Type ... is
 missing the following properties" explanation belongs to the error above it. This note briefly
@@ -1119,18 +1123,98 @@ round-tripped — there is nothing to receive it until Chunk 9.
 
 ## Chunk 9 — Write path
 
-**Status:** ⬜ Not started · **Read F2**
+**Status:** ✅ Done (2026-09-22) · 27/27 new write-path tests · typecheck 43 → 40 · parity
+1103/1103 · RLS 19/19 · resolver 22/22 · **a real booking submitted through the public form
+wrote its rows** · **Read F2**
 
-- [ ] `createBooking.ts` writes an `OrderContact` row per picked role **with snapshots**, and
-      re-verifies each person belongs to `data.companyId` under the tenant before trusting a
-      client-sent id — the existing `verifiedGuideId` pattern, generalised
-- [ ] **Set `tenantId` on every row** — see the Chunk 3 note; a NULL makes it invisible
-- [ ] Contact Person **also** writes `Order.name/surname/phone/email` (decision 4). **This is
-      the one special case in the whole design — comment it here and nowhere else**
-- [ ] Same for the wine order creation path
-- [ ] `updateOrderEnhanced()` / `assignOrderCompany()` in `orders.ts`: the old plan left these
-      alone because there was no code step for an admin to hook into. With pickers in the admin
-      (Chunk 10) that reasoning no longer holds — **re-decide, don't inherit**
+- [x] `createBooking.ts` writes an `OrderContact` row per picked role **with snapshots**, and
+      re-verifies each person against `data.companyId` under the tenant before trusting a
+      client-sent id — the `verifiedGuideId` pattern, generalised into
+      `lib/orderContacts.ts`
+- [x] **`tenantId` set on every row.** A NULL would make the row invisible to every
+      tenant-scoped read afterwards, silently, which is the shape of [[MaintenanceNotes]] #27
+- [x] Contact Person **also** writes `Order.name/surname/phone/email` (decision 4).
+      **Commented in `createBooking.ts` and nowhere else**, as this plan required
+- [x] Same for both wine order creation paths — public (`submitWineOrder.ts`) and admin
+      (`createWineOrderAdmin` in `wineOrders.ts`)
+- [x] `updateOrderEnhanced()` / `assignOrderCompany()` — **re-decided, not inherited.** See
+      below
+
+### `lib/orderContacts.ts` — the write half, deliberately apart from the read half
+
+`contactResolution.ts` answers *"who can be picked"*; this answers *"who was picked, and is any
+of it true"*. Keeping them in separate modules means a form cannot reach a write path through a
+lookup. `buildOrderContactRows()` is shared by all three creation paths, so there is one place
+where a client-sent contact is checked rather than three.
+
+**Four checks, each closing something real rather than theoretical:**
+
+1. **The role must be this tenant's**, active, `PER_ORDER`, and applicable to this kind of
+   order. Filtering the person but not the role is exactly the hole the Chunk 3 resolver test
+   caught, one layer up — *filter where the value is used, not only where it is displayed*.
+2. **The person must belong to the order's company**, under this tenant, **and hold that very
+   role**. A real person claimed under someone else's role is refused too.
+3. **A person who fails that check loses the link, not the facts** — the row is still written
+   with its snapshots. Dropping it would discard contact details the customer actually gave,
+   and F2 is the whole reason snapshots exist.
+4. **One row per role.** `@@unique([orderId, roleId])` would otherwise reject the entire write
+   and take the order down with it — a duplicate in the payload must not cost a booking.
+
+`requireAdmin()` does not change any of this on the admin path: it proves who is calling, not
+that the ids in their payload are real. Both wine paths run the same function.
+
+### The `orders.ts` re-decision, since the plan asked for one
+
+The old plan left `updateOrderEnhanced()` and `assignOrderCompany()` alone because there was no
+admin code step to hook into. Pickers now exist on the admin side, so that reasoning expired
+and the question was asked again. **Same answer, different reasons**, both recorded in the file:
+
+- `updateOrderEnhanced()` edits the *visit* — guest counts, dishes, notes. Contacts are a
+  different thing on a different screen, and putting the same edit in two places is the
+  duplication this rework exists to undo.
+- `assignOrderCompany()` links a company to an order that had none. Tempting to synthesise a
+  `contact_person` row from `Order.name/surname/phone/email` at that moment — but **nobody
+  picked anyone**, so the row would assert an attribution that was never made, and its
+  snapshots would only duplicate columns that already exist.
+
+An order with no `OrderContact` rows is an ordinary state, not a gap: every INDIVIDUAL booking
+and every pre-migration order is in it, so Chunk 10's surfaces must fall back to those columns
+regardless. If contacts ever become editable after the fact, that belongs next to where Chunk
+10 displays them.
+
+### `scripts/test-order-contacts.ts` — 27 assertions, two tenants
+
+A green `tsc` proves the shape compiles. It proves nothing about whether a crafted payload can
+attach another company's person to an order, which is the only question worth asking about a
+write path a browser can reach. Two tenants, so cross-tenant leakage is a scenario the test can
+actually **fail** on — H6 / [[MaintenanceNotes]] #10, where a one-tenant fixture makes the
+isolation assertions vacuous and they pass without testing anything.
+
+What it pins, beyond the happy path: a person from another company of the same tenant, a person
+from another tenant, another tenant's *role*, a `COMPANY_LEVEL` role, a `BOOKING`-only role on
+a wine order, a deactivated role, a deactivated person, a real person under the wrong role, an
+order with no company, two people for one role, a blank name, and an absent array. Then it
+inserts for real and **deletes the person**, asserting the rows survive with their facts and
+lose only the link — the property `Order.guideId` got wrong (F2 / [[KnownBugs]] #56).
+
+### Verified live — F1 is finally paid off
+
+A real company booking submitted through the public form on `Staging Winery`: Silk Road
+Journeys, Contact Person **Keti Dolidze**, Guide **Nika Kvaratskhelia**, 6 guests, ₾312.
+
+```
+Order columns:  Keti Dolidze / +995 591 76 20 56 / ap@silkroadjourneys.example
+OrderContact:   Guide           | Nika Kvaratskhelia | +995 577 62 90 18 | link=yes | tenantId=set
+                Contact Person  | Keti Dolidze       | +995 591 76 20 56 | link=yes | tenantId=set
+```
+
+**That guide row is the point of the entire feature.** Finding F1 recorded that `Order.guideId`
+was written on every company booking and read by nothing, and that the dev database held **0
+orders with a guideId** after five days of the feature being live. The first booking through
+the new path records the guide properly, with snapshots that survive the person being deleted.
+
+The order is left in the dev database on purpose: it is currently the **only** order with
+contacts, and Chunk 10 needs one to display.
 
 **Resume point:** —
 

@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { buildOrderContactRows } from '@/lib/orderContacts'
 import { applyPercent, asTetri } from '@/lib/money'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
@@ -198,6 +199,20 @@ export async function createWineOrderAdmin(data: {
         quantity: w.quantity,
       })),
     })
+    // Same rows the public wine path writes — one write path per order type, shared
+    // verification. An admin-sent personId is no more trustworthy than a guest-sent one:
+    // requireAdmin() proves who is calling, not that the ids in the payload are real.
+    const contactRows = await buildOrderContactRows(tx, {
+      tenantId,
+      companyId: data.companyId || null,
+      module: 'WINE_ORDER',
+      contacts: data.contacts,
+    })
+    if (contactRows.length > 0) {
+      await tx.orderContact.createMany({
+        data: contactRows.map(r => ({ ...r, wineOrderId: order.id })),
+      })
+    }
     return order.id
   })
 

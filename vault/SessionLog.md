@@ -8,6 +8,67 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-22 (evening) — Contact Roles chunk 9: the write path, and F1 finally delivered
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7, 8 and 9 committed and pushed.
+> - **`master` untouched.** Migration still dev-database only.
+> - **40 TypeScript errors**, none in a file chunks 7–9 own. Running total 65 → 54 → 49 → 43 → 40.
+> - ✅ Every route renders. ⚠️ `/admin/orders` still 500s — chunk 10's file, breaks only itself.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 10** — admin order surfaces, where contacts become
+> *readable*. There is one real order carrying contacts in the dev DB to display.
+
+### What was built
+
+**`lib/orderContacts.ts`** — `buildOrderContactRows()`, shared by all three order-creation
+paths (booking, public wine, admin wine), so a client-sent contact is verified in one place
+rather than three. Deliberately separate from `contactResolution.ts`: that one answers "who can
+be picked", this one answers "who was picked, and is any of it true".
+
+Four checks, each closing something real: the role must be this tenant's, active, PER_ORDER and
+applicable to this order type; the person must belong to the order's company **and hold that
+role**; a person failing the check **loses the link, not the facts** (the row is still written
+with snapshots — F2 is why snapshots exist); and one row per role, because
+`@@unique([orderId, roleId])` would otherwise reject the whole write and cost the booking.
+
+`Order.guideId` is gone from `createBooking.ts`. Decision 4's special case — Contact Person
+also populating `Order.name/surname/phone/email` — is commented there and nowhere else, as
+the plan required.
+
+### The re-decision the plan asked for
+
+`updateOrderEnhanced()` and `assignOrderCompany()` in `orders.ts`: same answer as the old plan
+(no contact writes), **different reasons**, both written into the file. The interesting one is
+`assignOrderCompany` — synthesising a `contact_person` row from the order's own columns was
+tempting, but nobody *picked* anyone, so the row would assert an attribution never made and its
+snapshots would duplicate columns that already exist.
+
+A correction while in there: this plan filed `orders.ts`'s nine errors under "Chunks 9/11".
+All nine are in `sendOrderInvoice`'s `company.representatives` include — squarely **Chunk 11**.
+
+### Verified — and this is the one that matters
+
+`scripts/test-order-contacts.ts`, **27 assertions over two tenants** (H6: a one-tenant fixture
+makes isolation assertions vacuous). Covers cross-tenant and cross-company people, another
+tenant's role, COMPANY_LEVEL on an order form, a BOOKING-only role on a wine order, deactivated
+roles and people, a real person under the wrong role, duplicates, blank names — then inserts
+for real, deletes the person, and asserts the rows survive with their facts.
+
+Then a **real booking through the public form**: Silk Road Journeys, Contact Person Keti
+Dolidze, Guide Nika Kvaratskhelia, 6 guests, ₾312. Two `OrderContact` rows written, both
+linked, both with `tenantId` set.
+
+**That guide row is the whole point of the feature.** F1 recorded that `Order.guideId` was
+written on every company booking and read by nothing, with **0 orders carrying one** after five
+days live. The first booking through the new path records it properly.
+
+The order is left in the dev database deliberately — it is the only one with contacts, and
+chunk 10 needs something to display.
+
+---
+
 ## 2026-09-22 (later still) — Contact Roles chunk 8: both wine order forms, and the build is whole
 
 > **STATE ON EXIT.**

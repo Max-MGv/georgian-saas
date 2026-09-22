@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–8 OF 14 BUILT
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–9 OF 14 BUILT
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -410,14 +410,14 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 - [x] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s). Live-checked 2026-09-22
 - [x] Chunk 7 — shared picker + hook, booking form per-role pickers; folds in Feature 201's work
 - [x] Chunk 8 — **both** wine order forms, public and admin manual entry (reverses the old plan's "out of scope", and closes the missed fourth form that produced decision 10)
-- [ ] Chunk 9 — write path: `OrderContact` rows with snapshots
+- [x] Chunk 9 — write path: `OrderContact` rows with snapshots, one shared verifier for all three creation paths, 27 assertions over two tenants
 - [ ] Chunk 10 — admin order surfaces; **this is where the guide finally becomes readable**
 - [ ] Chunk 11 — emails, invoice recipient from roles
 - [ ] Chunk 12 — demo seed, onboarding, fixtures
 - [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge
 
-**Status 2026-09-22:** chunks 0–8 built and pushed to `staging`. The migration has run on the **dev** database only; production is untouched. ✅ **Every route renders again** — `/`, `/wines`, `/about`, `/contact` and `/admin/login` all return 200, and both booking and wine-order pickers were walked end to end in a browser. The admin screens were walked too (Max signed in, Claude drove). [[KnownBugs]] #57 (every company's access code in the public HTML) is fixed on `staging`, still live on `master` until chunk 14. ⚠️ `/admin/orders` still 500s — chunk 10's file, and unlike the old `/wines` problem it does not affect any other route.
+**Status 2026-09-22:** chunks 0–9 built and pushed to `staging`. The migration has run on the **dev** database only; production is untouched. ✅ **Every route renders again** — `/`, `/wines`, `/about`, `/contact` and `/admin/login` all return 200, and both booking and wine-order pickers were walked end to end in a browser. The admin screens were walked too (Max signed in, Claude drove). [[KnownBugs]] #57 (every company's access code in the public HTML) is fixed on `staging`, still live on `master` until chunk 14. ⚠️ `/admin/orders` still 500s — chunk 10's file, and unlike the old `/wines` problem it does not affect any other route.
 
 **Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
 access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses

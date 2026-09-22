@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { buildOrderContactRows } from '@/lib/orderContacts'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { asTetri } from '@/lib/money'
 import { BookingType, VisitType } from '@prisma/client'
@@ -30,16 +31,6 @@ const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   companyId?: string
-  // Which of the company's guides matched the code entered on the form (Plan-CompanyGuidesAndReps
-  // Chunk 5/7) — lets the admin panel know exactly who was contacted, even if the guest then
-  // edits the autofilled phone/name away from the guide's own. Ignored unless companyId is set
-  // and the guide actually belongs to that company (re-checked server-side below).
-  //
-  // ⚠️ SUPERSEDED by `contacts` below, and the column behind it is already dropped —
-  // the read at line ~300 no longer compiles. Removing it, and writing OrderContact rows
-  // instead, is Chunk 9's job (Plan-ContactRoles); it is left here until then rather than
-  // half-rewriting the write path from the chunk that owns the form.
-  guideId?: string
   /**
    * One entry per contact role, built by `buildBookingPayload()` in BookingForm.tsx —
    * the only place a booking field may be added (MaintenanceNotes #1 / hurdle H3).
@@ -50,9 +41,10 @@ export type BookingFormData = {
    * Chunk 9 stores them as snapshots, so deleting a person later loses the *link* and
    * never the *facts* (finding F2 / KnownBugs #56).
    *
-   * **Never trusted as sent.** Chunk 9 re-verifies every `personId` against
-   * `companyId` under the tenant before writing it, the way `verifiedGuideId` already
-   * does below — a client can send any id it likes.
+   * **Never trusted as sent** — `buildOrderContactRows()` re-verifies every role and every
+   * `personId` against `companyId` under the tenant before any of it is written. It replaced
+   * `guideId`, which was written on every company booking and **read by nothing** (finding
+   * F1): the attribution the guides feature existed for was never delivered anywhere.
    */
   contacts?: {
     roleId: string
@@ -317,18 +309,10 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         ? (individualRates ? priceBooking(individualRates, guests, data.visitType, lines) : 0)
         : 0
 
-    let verifiedGuideId: string | null = null
     if (data.bookingType === 'COMPANY' && data.companyId) {
       const company = await withTenantDb(tenantId, tx =>
         tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
       )
-
-      if (data.guideId) {
-        const guide = await withTenantDb(tenantId, tx =>
-          tx.companyGuide.findFirst({ where: { id: data.guideId, companyId: data.companyId } })
-        )
-        if (guide) verifiedGuideId = guide.id
-      }
 
       if (company?.prices.length) {
         // One lookup on the party size, and one call: priceBooking already
@@ -374,7 +358,6 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         tenantId,
         ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
-        guideId: data.bookingType === 'COMPANY' ? verifiedGuideId : null,
         // Never trust a client-sent array outright — filter to real ISO codes and
         // dedupe, same defense-in-depth discipline as verifiedGuideId above.
         nationalities: data.bookingType === 'COMPANY'
@@ -389,6 +372,34 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         } : undefined,
       },
     })
+      /**
+       * Who to contact about this booking, one row per role, with snapshots.
+       *
+       * ⚠️ **The one special case in the whole design, commented here and nowhere else.**
+       * The Contact Person's details are *also* in `Order.name/surname/phone/email` above —
+       * not by a second write, but because those columns are populated from the very form
+       * fields the Contact Person fills (decision 4). They are non-nullable and are the only
+       * place an INDIVIDUAL booking's guest name exists, so they cannot be removed; ~16 files
+       * read them. One consistent meaning — "who to contact about this booking" — beats
+       * sixteen `if (companyBooking)` branches. `OrderContact` is the source of truth; those
+       * four columns are a denormalised copy of one of its rows.
+       *
+       * Snapshots, not just a link: deleting a person later loses the *link* and never the
+       * *facts* (finding F2 / KnownBugs #56). That is why `personId` is `SetNull` here, where
+       * the same Prisma default on `Order.guideId` was a silent data-loss bug.
+       */
+      const contactRows = await buildOrderContactRows(tx, {
+        tenantId,
+        companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
+        module: 'BOOKING',
+        contacts: data.contacts,
+      })
+      if (contactRows.length > 0) {
+        await tx.orderContact.createMany({
+          data: contactRows.map(r => ({ ...r, orderId: created.id })),
+        })
+      }
+
       // The first row of the order's timeline. GUEST, because a booking form
       // submission has no admin behind it (chunk 5).
       await recordOrderEvent(tx, {

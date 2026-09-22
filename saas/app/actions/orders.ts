@@ -496,6 +496,27 @@ export async function exportOrdersCsv(filters: {
  * is a one-time link-up for an order that has never had a company, not a
  * general "reassign company" tool.
  */
+/**
+ * Contact roles and this file: **re-decided in Chunk 9, not inherited.**
+ *
+ * The previous plan left `updateOrderEnhanced()` and `assignOrderCompany()` alone because
+ * there was no code step for an admin to hook a picker into. Pickers now exist on the admin
+ * side, so that reasoning expired and the question was asked again. The answer is still "no
+ * contact writes here", for two new reasons:
+ *
+ * - `updateOrderEnhanced()` edits the *visit* — guest counts, dishes, notes. Contacts are a
+ *   different thing on a different screen; putting them here would put the same edit in two
+ *   places, which is the duplication this whole rework exists to undo.
+ * - `assignOrderCompany()` links a company to an order that had none. Tempting to synthesise
+ *   a `contact_person` row from `Order.name/surname/phone/email` at that moment — but nobody
+ *   *picked* anyone, so the row would assert an attribution that was never made, and its
+ *   snapshots would only duplicate columns that already exist. An order with no OrderContact
+ *   rows is an ordinary, expected state: every INDIVIDUAL booking and every pre-migration
+ *   order is in it, so Chunk 10's surfaces must fall back to those columns regardless.
+ *
+ * If contacts ever become editable after the fact, that belongs in Chunk 10's order detail
+ * screen, next to where they are displayed.
+ */
 export async function assignOrderCompany(
   orderId: string,
   companyId: string
