@@ -484,9 +484,37 @@ dev DB, so `CompanyGuide`, `CompanyRepresentative`, `Order.guideId` and
 The running count is kept in the resume point above.
 **Do not try to "fix the build" ahead of the chunk that owns each file.**
 
-⚠️ **`staging.vineworks.ge` reads the dev database and is therefore broken** until Chunks 3–7
-land — the deployed code still selects dropped columns. Expected and recoverable, but worth
-knowing before demoing anything from staging.
+### 🔴 `staging.vineworks.ge` is DOWN, and stays down until Chunk 12
+
+Corrected 2026-09-22 — this note previously said "until Chunks 3–7 land". Those landed and it is
+still down, because the reason is not the one the note gave.
+
+**Every staging build has failed since Chunk 1.** Vercel reports
+`errorCode: "type_error"`, `"npm run build exited with 1"` — the 40 remaining TypeScript errors,
+with no `ignoreBuildErrors` in `next.config.ts` to wave them through. Six consecutive ERROR
+deployments confirmed via the Vercel API on 2026-09-22.
+
+When a build fails Vercel keeps the last good deployment serving. That is **`7d319b4`**, the
+commit immediately *before* this feature began. So the URL serves **pre-migration code against a
+migrated dev database**: it selects `Company.contactName`, which Chunk 1 dropped, and every page
+touching companies throws. The tab title still renders (middleware headers), the body does not.
+
+**The failing files belong to Chunks 10–12** (`app/admin/(panel)/orders/page.tsx`,
+`app/actions/orders.ts`, `app/actions/onboarding.ts`, `app/admin/onboarding/page.tsx`,
+`lib/demoSeed.ts`, `scripts/backfill-test-fixtures.ts`). **Staging comes back when Chunk 12
+lands, not before** — nothing in Chunks 10 or 11 alone clears the whole list.
+
+Two things follow:
+
+- **Do not demo from staging, and do not read it as a signal.** Local `next dev` is the only
+  place this feature is visible until then; it does not typecheck-gate, which is why everything
+  worked there all session.
+- **A green local session says nothing about deployability.** `npx tsc --noEmit` is the check
+  that matches what Vercel does. Watch the count, not the dev server.
+
+*(Also worth knowing: `curl` reports **HTTP 200** for the broken page, because Next's error page
+is returned after headers are flushed. A status-code check cannot tell "working" from "server
+error" here — grep the body for `next-error-h1` instead.)*
 
 **Chunks 0–7 are committed and pushed to `staging`.** Nothing has reached `master`; the
 production database still has the old tables and awaits `prisma migrate deploy` at Chunk 14.

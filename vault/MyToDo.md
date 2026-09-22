@@ -45,6 +45,18 @@ I drove all four forms by hand and checked the results in the database rather th
 screen. Your list is still the same one item: **read the Georgian** on the contact picker
 (Site Content → Messages → GEORGIAN → Company Access-Code Popup, scroll to the preview).
 
+### One thing you noticed before I did
+
+**`staging.vineworks.ge` is down**, and it has been since this rework started — not since
+today. Every build there has failed, so the address is serving the *old* version of the site
+against the *new* database, and the two no longer fit together.
+
+It comes back on its own once chunks 10–12 are done. Nothing is lost and nothing needs doing.
+But until then: **don't demo from staging, and don't read it as a sign anything is wrong** — it
+will look broken the whole time regardless of how the work is going.
+
+I should have told you that outright instead of leaving you to spot it.
+
 ### Where the project is
 
 **Chunks 0–9 of 14 done.** Five left: the admin order screens (10), invoice emails (11), demo

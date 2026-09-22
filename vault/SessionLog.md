@@ -120,7 +120,12 @@ return skips that query. That is a verification gap worth remembering: it worked
 > - Branch **`staging`**. Chunks 7, 8 and 9 committed and pushed.
 > - **`master` untouched.** Migration still dev-database only.
 > - **40 TypeScript errors**, none in a file chunks 7–9 own. Running total 65 → 54 → 49 → 43 → 40.
-> - ✅ Every route renders. ⚠️ `/admin/orders` still 500s — chunk 10's file, breaks only itself.
+> - ✅ Every route renders **locally**. ⚠️ `/admin/orders` still 500s — chunk 10's file.
+> - 🔴 **`staging.vineworks.ge` is DOWN and has been since chunk 1.** Every Vercel build fails
+>   with `errorCode: "type_error"`, so the URL serves the last good deployment (`7d319b4`,
+>   pre-migration code) against the migrated dev DB. It returns **HTTP 200 with an error page**,
+>   so a status-code check cannot detect it — grep the body for `next-error-h1`. Comes back when
+>   **chunk 12** lands, not chunk 10. See [[Plan-ContactRoles]] §7's corrected note.
 >
 > **Next:** [[Plan-ContactRoles]] **Chunk 10** — admin order surfaces, where contacts become
 > *readable*. There is one real order carrying contacts in the dev DB to display.
