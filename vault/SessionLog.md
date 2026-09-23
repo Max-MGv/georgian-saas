@@ -13,8 +13,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 > **STATE ON EXIT.**
 >
 > - Branch **`staging`**. Chunk 11a committed and pushed (`0c8fa88`). `InvoiceSent` work
->   (schema + RLS + write path + Invoice History card + vault) made and verified this same
->   session, **not yet committed** — next action.
+>   (schema + RLS + write path + Invoice History card + vault) committed and pushed (`c371559`).
 > - **22 TypeScript errors** (unchanged all session — every change so far has been additive or
 >   display-only). Parity 173/173 + 1109/1109 (was 1107; two new invoice-history keys, EN+KA).
 >   `test-order-contacts.ts` 36/36 (unchanged).
@@ -24,10 +23,15 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 >   "Invoice History" card on the order detail page. Live-verified: two real sends on the same
 >   order produced two separate rows, not an overwrite.
 >
-> **Next:** commit + push the `InvoiceSent` work to `staging`. Then [[Plan-ContactRoles]]
-> **Chunk 12** — demo seed, onboarding, fixtures (the 22 remaining type errors all live there).
-> Production still needs `prisma migrate deploy` + `setup-rls.ts` for `InvoiceSent` whenever
-> `staging` → `master` next happens (same pre-flight shape as §9c).
+> - **Feature 204 recorded, not built:** Max wants "Send Invoice" to ask *"View invoice already
+>   sent"* vs. *"Send new invoice"* once `order.invoicesSent.length > 0`, instead of always
+>   firing a new email. Logged in [[FeatureLog]] as 📋 Planned per his ask — `InvoiceSent`
+>   already carries every field a view would need, so no schema work, just UI.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, fixtures (the 22
+> remaining type errors all live there). Production still needs `prisma migrate deploy` +
+> `setup-rls.ts` for `InvoiceSent` whenever `staging` → `master` next happens (same pre-flight
+> shape as §9c). Feature 204 whenever Max wants it built.
 
 Investigated before touching any display code, per the handoff's two-part sequencing. **Part 1:**
 re-grepped every read of `Order.name/surname/phone/email` — 13 files now (was ~16 on 2026-09-19,
