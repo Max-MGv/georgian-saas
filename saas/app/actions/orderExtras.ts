@@ -6,10 +6,19 @@ import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import type { Tetri } from '@/lib/money'
 
+/**
+ * `amount` is TETRI, not lari.
+ *
+ * It was typed `number` until 2026-09-18, and the admin screen passed it a raw
+ * `parseFloat()` of a field labelled "Amount (₾)" — so typing 20 stored ₾0.20
+ * (bug #45). The brand is the fix: a caller now has to say `fromMajor()` out
+ * loud, and a major-unit value no longer compiles.
+ */
 export async function addOrderExtra(
   orderId: string,
-  data: { label: string; amount: number }
+  data: { label: string; amount: Tetri }
 ): Promise<{ success: true; extraId: string } | { error: string }> {
   const actor = await requireAdmin()
   if (!data.label.trim()) return { error: 'Label is required' }

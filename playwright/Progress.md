@@ -43,13 +43,21 @@ This file is the chronological record — what was built, when, and what was fou
 
 **Later update (during Phase 2 work):** `helpers/auth.ts`'s post-login `toHaveURL` timeout — built here as 15s — needed bumping to 25s after a Phase 1 test (`mobile-georgian-overflow.spec.ts`'s admin-orders case) failed on it under sustained DB load. Full incident writeup in the Phase 2 section below, since that's where it was diagnosed.
 
-## Phase 2 — Tier 2: Core customer flows — ✅ COMPLETE (3/3 tests passing, full suite reconfirmed 14/14 green)
+## Phase 2 — Tier 2: Core customer flows — 🚧 (2 of 3 broke later; 1 fixed + verified 2026-09-19, 1 blocked on fixtures)
+
+> ⚠️ **The "3/3 passing" below was true when written and stopped being true on 2026-09-14.**
+> Feature 184 inserted the "Review your visit" confirm sheet between the booking form's submit
+> button and `createBooking()`. Tests 4 and 5 predated it, kept clicking submit and waiting for
+> an outcome that could no longer happen, and failed on a **timeout** — a failure shape that
+> reads like a slow DB rather than a stale assertion, which is why it went unnoticed for five
+> days. Found and fixed 2026-09-19 (see the drift-audit entry at the bottom of this file); both now
+> share `helpers/bookingForm.ts`'s `openReviewSheet()` with the payment spec.
 
 | # | Test | Note | Status |
 |---|---|---|---|
-| 4 | Booking form — simple variant | [04-booking-simple.md](notes/04-booking-simple.md) | ✅ — 1/1 passing |
-| 5 | Booking form — enhanced/company variant | [05-booking-enhanced.md](notes/05-booking-enhanced.md) | ✅ — 1/1 passing |
-| 6 | Wine catalogue → order | [06-wine-catalogue-order.md](notes/06-wine-catalogue-order.md) | ✅ — 1/1 passing |
+| 4 | Booking form — simple variant | [04-booking-simple.md](notes/04-booking-simple.md) | ✅ — re-verified green 2026-09-19 (55.5s), after a *second* stale bug was found and fixed (see below) |
+| 5 | Booking form — enhanced/company variant | [05-booking-enhanced.md](notes/05-booking-enhanced.md) | ❌ **BLOCKED** — confirm-sheet fix is in, but the spec cannot reach it: fixture company `Test Company # 1` no longer exists (KNOWN-ISSUES #4) |
+| 6 | Wine catalogue → order | [06-wine-catalogue-order.md](notes/06-wine-catalogue-order.md) | ✅ — 1/1 passing (wine orders were not changed by #184) |
 
 **Real findings, all written up in their own notes:** individual bookings and wine orders redirect to the real Flitt payment gateway rather than showing an inline confirmation (order is created server-side before the redirect, so verification never needs to touch the payment form); company bookings never take online payment and show an inline "Booking received!" instead; the enhanced booking form's "no rate for this guest count" alert doesn't exist at all (by design — `findTier()` always falls back to the highest-priced tier); Wine Orders admin has no delete action, only status transitions; the admin Companies list's Edit-button click has a real intermittent timing race (mitigated with a bounded retry in the test, worth a closer look separately).
 
@@ -132,3 +140,126 @@ PLAYWRIGHT_HTML_OPEN=never npx playwright test
 Before running `onboarding-wizard.spec.ts` (directly or as part of a full run), its fixture tenant needs a manual reset — see `notes/10-onboarding-wizard.md` for the SQL. Skipping it fails that one test at its first assertion; it isn't a real regression.
 
 Dev server must be running (`npm run dev` from `saas/`) before running the suite — see [README.md](README.md).
+
+---
+
+## 2026-09-19 — Drift audit: two broken specs, one harmful filter, three stale docs
+
+Not a new phase — an audit of the existing suite, triggered by Max asking to scale up to
+"tests for all possible scenarios, starting with payments/bookings." Checked the suite's
+trustworthiness before adding to it. **No new tests written.**
+
+**Two specs were broken and silently had been since 2026-09-14** (Feature 184's confirm
+sheet): `booking-simple.spec.ts` and `booking-enhanced.spec.ts`. See the warning box in
+Phase 2 above for the full shape. Fixed by extracting `openReviewSheet()` from
+`payment-amount-integrity.spec.ts` — the one spec that had been kept current — into a new
+shared `saas/tests/helpers/bookingForm.ts`. `company-guide-code.spec.ts` was checked and is
+unaffected (it never submits the form).
+
+**`locale-integrity.spec.ts`'s hydration filter removed.** `isKnownCompaniesHydrationError()`
+existed for KNOWN-ISSUES #2, which was **fixed in the app on 2026-09-12**. It was applied to
+all five tests — including the public home page, wine catalogue, admin orders and admin
+settings, none of which render `CompaniesClient` — and its second pattern matched React's
+*generic* "Hydration failed…" message. Any new hydration mismatch introduced anywhere in the
+app would have passed those five tests silently. They now assert on every console error.
+**If this surfaces a failure on the next run, it is a real one** — check it before re-adding
+any suppression.
+
+**Open follow-up: re-examine `clickUntil()`.** It was introduced to work around KNOWN-ISSUES
+#2's click loss. With that bug fixed, a retry that actually fires is now a signal rather than
+expected noise — and the helper will happily absorb a genuine regression, since a click that
+truly stopped working looks identical to a slow one. Not stripped out here: this UI can still
+be slow against a loaded dev DB, so it needs a deliberate pass, not a reflex.
+
+### Run results, 2026-09-19 (live, warmed dev server, `--workers=1`)
+
+**5 passed / 2 failed**, then booking-simple fixed and re-verified green.
+
+- ✅ `locale-integrity.spec.ts` **5/5**, including admin companies (37.5s). **Removing the
+  hydration filter surfaced nothing** — those five assertions are now genuinely unconditional
+  rather than nominally so.
+- ✅ `booking-simple.spec.ts` — green at **55.5s** after two fixes, not one (below).
+- ❌ `booking-enhanced.spec.ts` — the confirm-sheet fix is correct but unreachable; the spec
+  dies in setup on the missing fixture company. See KNOWN-ISSUES #4.
+
+**A second stale bug in `booking-simple.spec.ts`, found only by running it.** After the
+confirm-sheet fix the test reached the Flitt gateway with the right amount (280 GEL, visible in
+the failure's own page snapshot) and then hung in *cleanup*. This was **first misdiagnosed as a
+too-small test timeout**; raising 60s → 120s reproduced the identical failure, which is what
+ruled that out. The real cause: Feature 191 (2026-09-18) moved abandoned orders to their own
+screen, and this spec's port of that change used
+`locator('div').filter({ hasText: marker }).last()` — which resolves to the *innermost* div
+holding the email text, containing no buttons. Asserting it visible passes; asking for a button
+inside it hangs forever. `payment-amount-integrity.spec.ts` had the correct `has:`-filtered
+version all along. Now shared as `abandonedRow()` in `helpers/bookingForm.ts`. Timeout left at
+90s, justified on round-trip count alone rather than as the fix.
+
+**The pattern worth naming:** three separate times now, one spec got a careful update for an app
+change and its sibling got a sloppy one or none at all — Feature 184 (two specs missed), Feature
+191 (one spec's locator), KnownBugs #15 (three docs). Shared helpers are the structural answer,
+which is why both fixes this session became helpers rather than local patches.
+
+---
+
+## 2026-09-19 (later the same day) — fixtures repointed, payment specs green, guide-picker spec added
+
+**Max's call on the fixture hole (KNOWN-ISSUES #4): point the specs at the seeded demo
+companies** rather than recreate the deleted hand-made ones. Reasoning, which turned out to be
+better founded than the version first offered: the seeded companies' names, tiers and codes are
+constants in `lib/demoSeed.ts`, so if they are ever wiped again, restoring them is one documented
+command instead of rebuilding a company from memory.
+
+Applied additively via a new `saas/scripts/backfill-test-fixtures.ts` rather than by re-running
+the seed, which would have deleted Staging Winery's orders. The script imports
+`BOOKING_COMPANIES`/`WINE_COMPANIES` from the seed rather than copying codes, so the two cannot
+drift; it refuses the demo tenant; it is idempotent; and it **converges** rather than only adding
+(it retracted six guides it had wrongly created, scoped strictly to seed-owned codes so a
+hand-created guide can never be deleted).
+
+### Fixture mapping now in force
+
+| Spec | Company | Notes |
+|---|---|---|
+| `payment-amount-integrity` | Caucasus Vine Travel + Sighnaghi Wine Bar | booking + wine |
+| `payment-label-precedence` | Alazani Valley Tours | its own, so override flips cannot collide |
+| `guide-picker` | Silk Road Journeys | the only company seeded WITH guides |
+| `booking-enhanced` | ⬜ not repointed | still `Test Company # 1` |
+| `company-nationality-tagging` | ⬜ not repointed | still `Test Company # 1` |
+| `company-guide-code` | ⬜ not repointed | still `Cookie Company` |
+
+### Three more bugs in `payment-amount-integrity`, each hidden behind the last
+
+That file needed **four** independent fixes in total, and none was visible until the one before it
+was cleared. It reported "1 failed" four times running, each time for a different reason:
+
+1. Fixture companies deleted → failed in setup
+2. The **company** test's `verifyAndCleanup` looked for gateway-bound orders on `/admin/orders`;
+   Feature 191 moved them to the Incomplete screen, and it asserted on an "Awaiting Payment"
+   control Feature 191 deleted
+3. Scenario markers were fixed literals (`DefaultOn`), typed into the Last Name field — so every
+   failed run left debris that broke the *next* run, one run later than the run that caused it.
+   Now suffixed with a per-run id
+4. The **wine-order** test had the same Feature 191 problem as #2, on a different screen. Also
+   removed `cancelWineOrderOnAdminPage`, now dead and itself stale
+
+**A test that fails early tells you nothing about what is behind the failure.** Worth remembering
+before reading a single red result as "one thing is broken".
+
+### New spec
+
+`tests/tier2-core-flows/guide-picker.spec.ts` — **4/4 passing, 26.6s.** Covers Feature 201
+(company code opens the picker, guide selection, the "not on this list" fallback, a guide's own
+code skipping the picker, a wrong code still rejected). Read-only: touches no tenant settings and
+creates no orders, which is why it is fast and leaves nothing behind.
+
+### Environmental
+
+The dev DB pool was exhausted mid-session by the day's run volume (`P2028`, transactions timing
+out at ~21s against a 15s limit). One company-test "regression" was **purely this**, not a code
+fault — it had passed on the previous run. Recovery was by waiting and confirming with real page
+loads, per KNOWN-ISSUES; a server restart does not help.
+
+**Status:** `tsc --noEmit` clean, i18n parity clean. Green and verified: `booking-simple`,
+`locale-integrity` (5/5), `payment-label-precedence`, `guide-picker` (4/4), and both booking tests
+in `payment-amount-integrity`. `payment-amount-integrity`'s wine test fixed but **not re-run since
+the fix**. Three specs still unrepointed (table above). Nothing committed, nothing pushed.

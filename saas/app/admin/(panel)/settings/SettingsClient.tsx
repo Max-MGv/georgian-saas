@@ -17,7 +17,7 @@ const C = {
 }
 
 type Props = {
-  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean; hide_company_dropdown: boolean; show_admin_hints: boolean }
+  settings: { show_company_price_after_booking: boolean; enable_enhanced_company_booking: boolean; invoice_detailed: boolean; hide_company_dropdown: boolean; show_admin_hints: boolean; person_codes_enabled: boolean }
   defaultLocale: string
   payment: {
     payment_recipient_name: string
@@ -110,6 +110,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
   const [showAdminHints, setShowAdminHints] = useState(settings.show_admin_hints)
+  const [personCodes, setPersonCodes] = useState(settings.person_codes_enabled)
   const [showPrice, setShowPrice] = useState(settings.show_company_price_after_booking)
   const [enhancedBooking, setEnhancedBooking] = useState(settings.enable_enhanced_company_booking)
   const [invoiceDetailed, setInvoiceDetailed] = useState(settings.invoice_detailed)
@@ -186,6 +187,25 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     startTransition(async () => {
       await updateSetting('admin_language', locale)
       setSavedKey('admin_language')
+      setTimeout(() => setSavedKey(null), 2000)
+    })
+  }
+
+  /**
+   * Personal access codes (Plan-ContactRoles decision 6, off by default).
+   *
+   * Governs codes belonging to PEOPLE, not `Company.accessCode`, which is unaffected and works
+   * in both modes — the company code is the only way the "hide company dropdown" booking
+   * variant can identify a company at all, so gating it here would have broken that form.
+   *
+   * Turning this ON also suppresses the contact picker on every form: that is the privacy
+   * half of the feature, not a side effect.
+   */
+  function handlePersonCodesToggle(value: boolean) {
+    setPersonCodes(value)
+    startTransition(async () => {
+      await updateSetting('person_codes_enabled', value ? 'true' : 'false')
+      setSavedKey('person_codes_enabled')
       setTimeout(() => setSavedKey(null), 2000)
     })
   }
@@ -700,6 +720,21 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
             )}
             <Toggle enabled={enhancedBooking} onChange={handleEnhancedToggle} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"
+          style={{ backgroundColor: C.bg, borderColor: C.border }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: C.text }}>{at('settings.booking.personCodes.label')}</p>
+            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+              {at('settings.booking.personCodes.hint')}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {savedKey === 'person_codes_enabled' && !isPending && (
+              <span className="text-xs" style={{ color: '#16a34a' }}>✓ {at('settings.saved')}</span>
+            )}
+            <Toggle enabled={personCodes} onChange={handlePersonCodesToggle} />
           </div>
         </div>
         <div className="flex items-center justify-between gap-6 px-5 py-4 border-b"

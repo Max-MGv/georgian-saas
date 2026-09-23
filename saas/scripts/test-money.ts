@@ -105,5 +105,27 @@ const total: Tetri = sumTetri([guests, fromMajor(25), masterclass, fromMajor(40)
 check('total in tetri', total, 44500)
 check('total displays correctly', formatTetri(total), '445₾')
 
+// Regression guard for bug #44 (2026-09-18). Both wine-order paths carried
+// `Math.round(subtotal * (1 - p/100) * 100) / 100` — correct while subtotal was
+// a Float of lari, meaningless against tetri. It rounds at the wrong scale and
+// leaves a fraction, which an Int column rejects, so every discounted company's
+// wine order failed to save. The point of these cases is not the exact figure
+// but that applyPercent is ALWAYS integral where the old expression was not.
+console.log('bug #44 — discounts must never produce a fractional tetri')
+const staleRounding = (subtotal: number, pct: number) =>
+  Math.round(subtotal * (1 - pct / 100) * 100) / 100
+for (const [subtotal, pct, expected] of [
+  [4550, 15, 3868], [8999, 12, 7919], [1999, 5, 1899], [9900, 12.5, 8663], [6000, 10, 5400],
+] as [number, number, number][]) {
+  const got = applyPercent(asTetri(subtotal), pct)
+  check(`${subtotal} less ${pct}% is whole tetri`, Number.isInteger(got), true)
+  check(`${subtotal} less ${pct}% = ${expected}`, got, expected)
+  // asTetri is what an Int column would have rejected — prove the old
+  // expression really did fail on the cases we claim it did.
+  if (!Number.isInteger(staleRounding(subtotal, pct))) {
+    throws(`...and the old expression was rejected`, () => asTetri(staleRounding(subtotal, pct)))
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed === 0 ? 0 : 1)

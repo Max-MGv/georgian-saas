@@ -4,11 +4,16 @@ import { getTenantId } from '@/lib/tenant'
 import { headers } from 'next/headers'
 import { ensureIndividualsCompany } from '@/app/actions/companies'
 import { getSetting } from '@/app/actions/settings'
+import { listContactRoles } from '@/app/actions/contactRoles'
 import { adminT } from '@/lib/adminT'
 import CompaniesClient from './CompaniesClient'
 
 export default async function CompaniesPage() {
-  const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
+  const [tenantId, h, adminLanguage, personCodesEnabled, allRoles] = await Promise.all([
+    getTenantId(), headers(), getSetting('admin_language'),
+    getSetting('person_codes_enabled'), listContactRoles(),
+  ])
+  const personCodesOn = personCodesEnabled === 'true'
   const locale = adminLanguage || 'en'
   const bookingOn = h.get('x-tenant-modules-booking') !== 'false'
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
@@ -24,8 +29,14 @@ export default async function CompaniesPage() {
       include: {
         _count: { select: { orders: true } },
         prices: { orderBy: { minGuests: 'asc' } },
-        guides: { orderBy: { createdAt: 'asc' } },
-        representatives: { orderBy: { createdAt: 'asc' } },
+        // Only the columns the client actually renders. `code` is included solely so the
+        // per-row code control can show it, and only when the tenant has person codes on —
+        // see the projection below, which drops it otherwise (H17: F3 and F4 were both
+        // over-broad projections into a client component).
+        people: {
+          orderBy: [{ roleId: 'asc' }, { name: 'asc' }],
+          select: { id: true, roleId: true, name: true, phone: true, email: true, code: true, isActive: true },
+        },
       },
     })
   )
@@ -43,6 +54,10 @@ export default async function CompaniesPage() {
         </span>
       </div>
       <CompaniesClient
+        roles={allRoles
+          .filter(r => r.isActive && r.scope === 'PER_ORDER')
+          .map(r => ({ id: r.id, key: r.key, labelEn: r.labelEn, labelKa: r.labelKa, sortOrder: r.sortOrder }))}
+        personCodesOn={personCodesOn}
         bookingOn={bookingOn}
         wineOrdersOn={wineOrdersOn}
         paymentModuleOn={paymentModuleOn}
@@ -56,9 +71,6 @@ export default async function CompaniesPage() {
           wineDiscountPercent: c.wineDiscountPercent,
           skipPayment: c.skipPayment,
           identificationCode: c.identificationCode,
-          contactName: c.contactName,
-          contactPhone: c.contactPhone,
-          contactEmail: c.contactEmail,
           address: c.address,
           accessCode: c.accessCode,
           orderCount: c._count.orders,
@@ -70,8 +82,19 @@ export default async function CompaniesPage() {
             tastingLunchPricePerPerson: asTetri(pr.tastingLunchPricePerPerson),
             registrationPrice: asTetri(pr.registrationPrice),
           })),
-          guides: c.guides,
-          representatives: c.representatives,
+          // Inactive people are hidden from the panel; deactivating is how a person is
+          // retired without erasing them from past orders.
+          people: c.people
+            .filter(p => p.isActive)
+            .map(p => ({
+              id: p.id,
+              roleId: p.roleId,
+              name: p.name,
+              phone: p.phone,
+              email: p.email,
+              // Never ship a credential the UI will not render.
+              code: personCodesOn ? p.code : null,
+            })),
         }))}
       />
     </div>

@@ -1,6 +1,8 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { writeOrderContacts } from '@/lib/orderContacts'
+import { applyPercent, asTetri } from '@/lib/money'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
@@ -67,7 +69,7 @@ export async function changeWineOrderStatus(
         if (change.kind === 'paid') {
           if (change.value) {
             await recordManualPayment(tx, {
-              tenantId, wineOrderId: id, amount: current.totalAmount ?? 0, at: now,
+              tenantId, wineOrderId: id, amount: asTetri(current.totalAmount ?? 0), at: now,
             })
           } else {
             await reverseManualPayments(tx, { wineOrderId: id, at: now })
@@ -115,6 +117,23 @@ export async function createWineOrderAdmin(data: {
   contactName: string
   contactPhone: string
   contactEmail: string | null
+  /**
+   * One entry per contact role, built by `buildContacts()` in NewWineOrderForm.tsx.
+   *
+   * `personId` is absent when the admin typed the details rather than picking someone on
+   * file, which is why the name and details travel alongside it: Chunk 9 stores them as
+   * snapshots, so deleting a person later loses the link and never the facts (finding F2).
+   *
+   * Written via `writeOrderContacts()`, the one base every order-creation path shares, which
+   * re-verifies every `roleId` and `personId` against `companyId` under the tenant first.
+   */
+  contacts?: {
+    roleId: string
+    personId?: string
+    name: string
+    phone: string | null
+    email: string | null
+  }[]
   wines: { vintageId: string; quantity: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
   await requireAdmin()
@@ -146,9 +165,11 @@ export async function createWineOrderAdmin(data: {
     : null
 
   const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * vintageMap[w.vintageId].price, 0)
+  // Same stale major-unit rounding as submitWineOrder.ts carried — see the
+  // comment there. Rounding at tetri scale is what keeps this an integer (#44).
   const totalAmount = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+    ? applyPercent(asTetri(subtotal), discountPercent)
+    : asTetri(subtotal)
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
     const order = await tx.wineOrder.create({
@@ -177,6 +198,21 @@ export async function createWineOrderAdmin(data: {
         priceSnapshot: vintageMap[w.vintageId].price,
         quantity: w.quantity,
       })),
+    })
+    // Same rows the public wine path writes — one write path per order type, shared
+    // verification. An admin-sent personId is no more trustworthy than a guest-sent one:
+    // requireAdmin() proves who is calling, not that the ids in the payload are real.
+    await writeOrderContacts(tx, {
+      tenantId,
+      target: { wineOrderId: order.id },
+      companyId: data.companyId || null,
+      module: 'WINE_ORDER',
+      contacts: data.contacts,
+      fallbackContactPerson: {
+        name: data.contactName.trim(),
+        phone: data.contactPhone.trim() || null,
+        email: data.contactEmail?.trim() || null,
+      },
     })
     return order.id
   })

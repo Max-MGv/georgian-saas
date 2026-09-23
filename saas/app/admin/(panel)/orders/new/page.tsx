@@ -3,6 +3,7 @@ import { getTenantId } from '@/lib/tenant'
 import Link from 'next/link'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
+import { orderRolesFor } from '@/lib/contactResolution'
 import NewOrderForm from './NewOrderForm'
 
 const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
@@ -10,6 +11,7 @@ const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
 export default async function NewOrderPage() {
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
+  const contactRoles = await orderRolesFor(tenantId, 'BOOKING')
   const [companies, menuItems, masterclassItems] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({
       where: { tenantId },
@@ -36,6 +38,7 @@ export default async function NewOrderPage() {
 
       <NewOrderForm
         locale={locale}
+        contactRoles={contactRoles}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,

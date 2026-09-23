@@ -8,6 +8,1265 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-23 (newest) — Contact Roles chunk 14: close-out — vault writeups, the `createTenant()` fix, a blind audit
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, HEAD `e95e94c` (Chunk 13's commit) when this session started —
+>   this session's changes not yet committed or pushed (not asked for).
+> - **tsc 0** (unchanged throughout every code change this session — `createTenant()`'s seed
+>   fix and `demoSeed.ts`'s contact-write fix, below). Parity 173/173 + 1109/1109 (unchanged).
+>   `test-order-contacts.ts` 36/36 (unchanged). `audit-money.ts` clean.
+> - `createTenant()` now seeds the two system `ContactRole` rows for a brand-new tenant
+>   (the Chunk 12 gap), same literal values the Chunk 1 migration back-filled onto every
+>   pre-existing tenant. Not independently browser-verified — doing so would mean creating a
+>   real tenant through the super-admin panel, which needs a super-admin login Claude does not
+>   type; the values are proven valid by the migration's own identical `INSERT`.
+> - `MaintenanceNotes.md` #26 rewritten (the old two-resolver-disagreement story is gone;
+>   replaced with the three couplings that actually exist now — the `Order.name/surname`
+>   mirror, the `OrderContact` snapshot/`SetNull` guarantee, and H18's two-lists trap).
+>   `RLS-Architecture.md`'s table list updated: `CompanyGuide`/`CompanyRepresentative` rows
+>   removed, `ContactRole`/`CompanyPerson`/`OrderContact` added — also added a pre-existing
+>   gap noticed in passing (`InvoiceSent`, from Feature 203, was never added either), and
+>   corrected the stale "14 tables" GRANT comment to point at `setup-rls.ts`'s array instead
+>   of a hand count (verified: 21 tables in `writableTables`, not 18 as first computed by hand
+>   — three more pre-existing gaps found, `Payment`/`DemoEvent`/`OrderEvent` missing from the
+>   doc table entirely, spawned as a separate follow-up task rather than fixed here).
+> - `vault/Features/Feature 202 - Contact Roles.md` written, folding in Feature 185 and
+>   Feature 201 as history; both of those retired with a superseded banner (same pattern as
+>   `Plan-CompanyGuidesAndReps.md`, which was already marked superseded from when this plan
+>   started and needed no further edit).
+> - **Blind audit came back** (a subagent with `vault/`, git log, and commit messages all
+>   explicitly fenced off, given the brief and ten decisions inline rather than by reading the
+>   plan): 9 of 10 decisions and 3 of 4 "don't break" checks confirmed solid. **One real defect
+>   found and fixed the same day, logged as [[KnownBugs]] #59:** `demoSeed.ts` wrote the
+>   denormalised `Order`/`WineOrder` contact columns directly from the seed spec but never wrote
+>   a matching `OrderContact` row — a fourth silent write site decision 4 didn't account for.
+>   Confirmed independently before fixing (0 of 125 demo company bookings, 0 of 45 demo wine
+>   orders had any `OrderContact` row), user-visible on the public sales demo. Fixed by
+>   capturing each seeded person's id alongside the spec and attaching a nested
+>   `contacts: { create: [...] } }` to both order-writing loops using that same person — proven
+>   by re-seeding the dev demo tenant for real, not just typechecked: 135/135 company bookings
+>   now carry a contact row (135/135 also a guide row), 45/45 wine orders, 258/258 individuals
+>   correctly carry none, 0 dangling `personId`s, a spot-checked order's denormalised columns
+>   match its `OrderContact` snapshot exactly.
+> - **§9c's production pre-flight — run and clean.** Initially blocked by this session's own
+>   sandbox refusing all production-database reads at the tooling level regardless of which tool
+>   was used to reach them (tried a direct Prisma connection and the Supabase MCP tool). Max
+>   dropped the session from Auto to default permission mode so the retry surfaced as a normal
+>   approval prompt instead of a silent classifier block, approved it, and all four checkable
+>   items came back clean against the real production database: 0 duplicate access codes (and 0
+>   cross-source collisions), 0 companies with a NULL `tenantId`, 0 orders with a `guideId` set.
+>   RLS isn't checkable until right after `migrate deploy` (the tables don't exist yet on
+>   production). Production volume for context: 16 companies, 393 orders, 2 tenants.
+>
+> **Next:** the `staging` → `master` merge itself is the only thing left in this whole 14-chunk
+> arc — needs Max's explicit go-ahead, separately from everything else in this chunk (Rule 0).
+
+Picked up via a pasted handoff prompt for Chunk 14 (everything in it verified against the actual
+repo before acting on it, per the prompt's own instruction not to trust it blindly — branch, HEAD,
+and the "chunks 0–13 done" claim all checked out exactly, and the `#56`/`#57` KnownBugs rows were
+re-read directly rather than trusted from the handoff's summary — both already correctly say
+"closes fully when staging reaches master," so their status text needed no change, only their
+resolution needs to wait for the real merge).
+
+Read the handoff's named files in order (`ClaudeInstructions.md` Rules 0/8; `Plan-ContactRoles.md`
+§1/§2/§9c/the Chunk 14 section/H20; `MaintenanceNotes.md` #26; `KnownBugs.md` #55–#58;
+`RLS-Architecture.md`; `SessionLog.md`'s exit state), then asked Max two concrete questions before
+editing anything (per Rule 8): whether to close the `createTenant()` gap now or just record it, and
+whether to run the optional blind review. Both answered yes.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 13: Playwright tests for the role-driven picker, replacing the guide-only specs
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, HEAD `80de9af` (Chunk 12's commit) when this session started — this
+>   session's changes not yet committed or pushed (not asked for).
+> - **tsc 0** (unchanged). Parity 173/173 + 1109/1109 (unchanged). `test-order-contacts.ts` 36/36
+>   (unchanged) — this chunk added tests, it didn't touch app code.
+> - New `tests/tier2-core-flows/contact-role-picker.spec.ts` (5 tests) and
+>   `tests/tier2-core-flows/contact-orphan-safety.spec.ts` (1 test, the F2 proof), replacing
+>   `company-guide-code.spec.ts` + `guide-picker.spec.ts`. All 6 new tests pass, each run twice,
+>   confirmed no leftover rows in the dev DB directly (not just by re-passing).
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 14** — close-out: vault writeups, the `createTenant()`
+> ContactRole-seeding gap, rewriting [[MaintenanceNotes]] #26, and the production cutover
+> pre-flight (§9c) before `staging` → `master`. Two unrelated issues found while running the full
+> `tests/tier2-core-flows/` suite were spawned as a separate background task rather than fixed
+> here — see below.
+
+Picked up via a pasted handoff prompt, verified against the actual repo before acting on it (per
+the prompt's own instruction not to trust it blindly) — branch, HEAD, and the "chunks 0–12 of 14
+done" claim all checked out exactly. Read the handoff's named files in order
+(`ClaudeInstructions.md`; `Plan-ContactRoles.md` §1/§2/Chunk 13/H11/H12/H13/H14/H19;
+`MaintenanceNotes.md`, skimmed — nothing chunk-13-specific; `SessionLog.md`'s exit state), then read
+the actual current code (`useContactSelection.ts`, `ContactPickerPopupView.tsx`,
+`contactResolution.ts`, `BookingForm.tsx`, `NewOrderForm.tsx`, `CompaniesClient.tsx`) and queried
+the dev DB directly for the Silk Road Journeys / Kakheti Wine Routes fixtures' actual current
+shape, rather than trusting the old specs' or the handoff's comments about them — both had drifted
+since Chunk 7/12.
+
+**Two real design changes found this way, not from the old specs:** the picker's title is now
+tenant-editable copy ("Who should we put on this booking?", not the old hardcoded "Who is bringing
+the group?"), and "I am not on this list" no longer falls back to a company-level contact — Contact
+Person is itself a per-order role now, so skipping it just leaves it blank. Also found: a matched
+person only fills the classic First/Last Name fields when the matched role IS Contact Person; a
+guide's own code fills the Guide role's own block instead. Recorded as new hurdle **H20**.
+
+Stated the concrete plan (two new spec files, what each covers, the file split) and got Max's
+go-ahead before writing any test code, per Rule 8.
+
+**`contact-role-picker.spec.ts`** — role-driven, against Silk Road Journeys (now 2 Contact Persons
++ 2 Guides, not 1+2 as the old spec's comments assumed): codes off asks about each role in turn and
+fills the right fields per role (asserting the picker buttons' `aria-label`, H14), "not on this
+list" leaves a role blank, a wrong code is still rejected, and with codes on a person's own code
+skips the picker while a company code is accepted but the picker never opens — the whole file
+toggles the shared `person_codes_enabled` setting mid-run, so it's wrapped in
+`test.describe.serial()` to survive Playwright's default `fullyParallel` config, with the original
+setting value read once and restored in `afterAll`.
+
+**`contact-orphan-safety.spec.ts`** — the one Chunk 13's own checklist called out as what this
+design most needs: proves F2 (deleting a person leaves a past order's Contacts card reading from
+the snapshot, not a live join). Admin adds a throwaway guide to Kakheti Wine Routes (deliberately a
+company that already has people in both roles, not a fresh throwaway one — closer to real use, and
+rules out `NewOrderForm`'s auto-pick-if-exactly-one masking the actual thing under test), creates a
+real order picking them from the role dropdown, deletes them from the company, reloads the order —
+name still there.
+
+**Two real bugs found by actually running the new specs, not by writing them:** a URL-match regex
+that also matched the literal `/admin/orders/new` path (since "new" is alphabetic), so an
+unsubmitted form read as a created order; and a delete-confirmation race where checking the
+person's name had disappeared from the row proved nothing about whether the server call had
+actually finished (the row hides the name the instant "Delete" is clicked, client-side, before the
+request even starts) — fixed by waiting for the confirm row's own "Yes" button to disappear
+instead. Also found and worked around: running the whole test file (or the whole
+`tests/tier2-core-flows/` directory) at Playwright's default parallelism overloads the one
+`next dev` process badly enough that admin logins across unrelated spec files start timing out
+together — confirmed by re-running with `--workers=1` and getting clean, repeatable results both
+times.
+
+**Ran the full `tests/tier2-core-flows/` suite**, not just the new specs, since Chunk 12 touched
+shared seed/fixture data other tiers read (per the handoff's own suggestion). Found 3 pre-existing
+failures, none caused by this chunk: `booking-enhanced.spec.ts` and
+`company-nationality-tagging.spec.ts` both depend on a company named "Test Company # 1" that no
+longer exists in the dev DB, and `wine-catalogue-order.spec.ts` found that a freshly-abandoned wine
+order is written correctly (`abandonedAt` set, confirmed via direct query) but never appears on
+`/admin/abandoned`. Left the dev DB clean regardless — deleted the two stray `WineOrder` rows that
+spec's own cleanup routine couldn't find (same underlying bug). Spawned the abandoned-orders
+finding as a separate background task rather than investigating it here, since it's unrelated to
+Contact Roles.
+
+Vault updated: [[Plan-ContactRoles]] Chunk 13 marked ✅ Done with the full writeup, new hurdle H20
+added, §7's status table and resume line updated. [[FeatureLog]] Feature 202 row appended. **Not
+yet committed** — Max hasn't asked for a commit this session.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 12: fixed the demoSeed/onboarding/backfill build errors (tsc 22→0), reseeded the demo tenant for real, worked around the `CompanyPerson.code` global-uniqueness collision (H19). Committed and pushed to `staging` (`80de9af`).
+
+---
+
+## 2026-09-23 — Contact Roles chunk 11a fixed (`OrderDetail.tsx`'s duplicate Contact Person display), then a database walkthrough with Max surfaced that invoices had no permanent record and Feature 203 (`InvoiceSent` table, append-only, RLS'd, Invoice History card) was built and verified live the same session. Committed and pushed to `staging` (`0c8fa88`, `c371559`).
+
+---
+
+## 2026-09-23 (later) — Contact Roles chunk 11: invoice recipients, without a schema change
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, HEAD `4cccb3c`. Chunk 11 committed and pushed.
+> - **22 TypeScript errors**, all in Chunk 12's four files. Running total
+>   65 → 54 → 49 → 43 → 40 → 31 → 22.
+> - The "Send Invoice" email button's recipient dropdown works again, verified live.
+> - RLS 19/19 · resolver 26/26 · write path 36/36 (unchanged) · parity 1107/1107 (unchanged).
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 11a** (new, not in the original 14) — see below.
+> Chunk 12 remains queued behind it.
+
+### What "billing-capable roles" turned out to mean
+
+The plan's own three-bullet Chunk 11 stub didn't say. First pass proposed a real schema flag —
+`ContactRole.canReceiveInvoices`, a migration, an admin toggle. Max's actual answer was
+simpler and different: *"contact person is the company representative, and they are the target
+for the email. but pass the role and dont hardcode anything... keeping it flexible... in case
+another role becomes the destination, or plural."* And then, once it was clear the first
+proposal had over-read "flexible" as a tenant-admin-facing control: *"by keeping it flexible i
+meant it for us as superadmins... for normal admins, just pass the contact person as the
+default... keep it simple in the code to change."*
+
+Built accordingly: one exported constant, `INVOICE_RECIPIENT_ROLE_KEYS` (currently
+`['contact_person']`), and one shared function, `invoiceRecipientsFor()`, both in
+`lib/contactResolution.ts`. `orders/page.tsx` batches it once per page load across every company
+on the page (not per order); `sendOrderInvoice()` calls it again server-side to re-validate a
+client-sent recipient rather than trusting it — the exact same crash Chunk 10 fixed in
+`orders/page.tsx` (`company: { include: { representatives: true } }`) was still sitting in this
+file too, which is the second time H1's warning about this exact file proved right.
+
+The superadmin-configurable version of "flexible" is recorded, not built:
+`vault/SuperAdminPlans/InvoiceRecipientRoles.md` — a new folder, per Max's ask, for platform-side
+feature ideas that aren't scheduled.
+
+### A real bug the live check caught
+
+Silk Road Journeys' Chunk-10 test order has its Contact Person's email identical to the order's
+own guest email (she was who got picked). The recipient dropdown offered both anyway — same
+address twice — and React logged a duplicate-`key` console error on the `<option>` list.
+De-duplicated by email inside `invoiceRecipientOptions()`. Caught only because verification went
+all the way to actually opening the dropdown and reading its options, not just checking `tsc`.
+
+### Verified live, down to the DOM
+
+The desktop table layout needed a wider viewport than the pane's default, and the resize/click
+tooling had enough coordinate friction in this session that direct DOM inspection
+(`document.querySelectorAll` + `.click()` + reading `<option>` text) was faster and more
+reliable than screenshot-driven clicking — used here for verification only, not to implement
+anything. Confirmed: a company order's dropdown lists each eligible Contact Person as a separate
+option (Silk Road Journeys has two — the plural case Max asked about), de-duplicated against the
+guest email; an individual order with no company shows no dropdown at all, just the guest's own
+address, unchanged.
+
+Committed and pushed (`4cccb3c`).
+
+### New chunk recorded — 11a, found while looking at the result, not while working the list
+
+Max looked at the order detail page this Contacts card lives on (a screenshot, not a bug report)
+and asked why it showed 3 people's worth of contact info for an order with only 2 (Contact
+Person + Guide). Answer: it's 2 people, but the Contact Person's phone/email render **twice** —
+once unlabeled under Booking Info (`Order.phone`/`Order.email`, decision 4's denormalised copy),
+once labeled under Contacts (the real `OrderContact` row, Chunk 10). Not a new bug — decision 4
+always intended the duplication — but nobody had put both cards on screen at once before Chunk 10
+did, so it went unnoticed until now.
+
+Recorded as [[Plan-ContactRoles]] **Chunk 11a**, inserted ahead of Chunk 12 rather than appended
+after Chunk 14, since it's a live open thread, not a someday-idea. Max's fix direction: hide
+Booking Info's Phone/Email for company bookings only (individuals still need them — no
+`OrderContact` row exists or ever will for an individual booking). But the first thing he wants,
+before any display code changes, is to re-investigate whether `Order.name/surname/phone/email`
+are still earning their place at all now that `OrderContact` exists, or whether they're pure
+legacy weight for the company-booking case — decision 4's "~16 files read them" claim from
+2026-09-19 hasn't been re-checked since Chunk 10 gave some of those files somewhere better to
+read from. Nothing built yet; this session only recorded the chunk and the two-part
+investigate-then-fix shape, per Max's explicit ask not to edit anything while brainstorming it.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 10: admin order surfaces — `/admin/orders` fixed, Contacts card + booking-sheet Guide column added, admin manual booking gained per-role pickers; verified live down to `scripts/inspect-order-contacts.ts` confirming both `OrderContact` rows in the database. tsc 40 → 31.
+
+---
+
+## 2026-09-22 (night) — The audit, and the fixes it forced
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7–9 plus the audit fixes committed and pushed.
+> - **40 TypeScript errors**, all Chunks 10–12. `next build` cannot succeed until they land,
+>   so **nothing here can deploy yet.**
+> - RLS 19/19 · resolver **26/26** · write path **36/36** · parity 1103/1103.
+>
+> **Next:** Chunk 10 — and it is more urgent than "admin order surfaces" sounds. See below.
+
+### The audit
+
+A subagent reviewed Chunks 0–9 against Max's brief with the vault **fenced off** — no plan, no
+session log, no commit messages. It got the brief, the ten decisions and the F1–F4 claims, and
+nothing else. That fence is why it was useful; without it, it reads my own conclusions back.
+
+It confirmed the database layer sound (RLS, both unique indexes, decisions 6 and 9, F2, and F3
+verified by grepping the live pages). It also found four real defects, two of them mine from
+this session.
+
+### A1 — the access-code gate was enforced only by the form
+
+`resolveCompanyContacts` is unauthenticated, company ids are in the public homepage's HTML, and
+the code check only ran **if a code was supplied**. Send a company id and no code, and back came
+every one of that company's people with names, phones and emails. The auditor reproduced it live.
+
+It was a regression — the old `verifyCompanyCode` demanded both, always. And **my own test
+asserted the broken behaviour as correct** ("Known company resolves with no code at all"), so
+the suite could never have caught it. A test written from the implementation asserts what the
+code does, not what it should.
+
+Fixed server-side; admin screens now go through a separate `resolveCompanyContactsAsAdmin` that
+calls `requireAdmin()`, and the public wrapper builds a fresh three-field object so a crafted
+request cannot ask to be trusted.
+
+### A2 — decision 4 was false, and I had said otherwise
+
+`Order.name/surname/phone/email` were written in three places, not one, and two of them touched
+no `OrderContact` at all. Admin-created bookings had an empty source of truth; admin edits left
+the snapshot stale forever.
+
+Max's response was the right architectural call: *"we should be [not] dulicating logic … same
+action — or same action as base — from admin and public"*. So `writeOrderContacts()` is now the
+single place any order records who to contact, with a `fallbackContactPerson` that lets a screen
+with no picker yet take part honestly (typed details, no `personId`). `syncOrderContactPerson()`
+keeps the snapshot in step on edit.
+
+### A3 and A4 — both mine, both small, both real
+
+The wine catalogue never cleared its contact fields on a company switch — **the booking form
+already had that exact fix with a comment describing that exact failure**, and I did not carry it
+across in Chunk 8. H3 recurring inside the change meant to end H3.
+
+And typing a role's phone before its name discarded every keystroke, because the entry was keyed
+on the name alone.
+
+### Extensive testing, by hand, verified in the database
+
+Eight journeys across all four forms, each checked against the database rather than the screen.
+All four now write `OrderContact` rows; the admin booking wrote none before. The traps (React's
+value tracking, the picker's aria-label, the z-index above the drawer, future-dated seed
+`createdAt`, the live payment redirect) are written up in [[Playwright/Notes-ContactRoles]] for
+the rewrite, along with the eight journeys and the fixtures that can tell outcomes apart.
+
+New: `scripts/inspect-order-contacts.ts`, a manual-testing aid — walking a form tells you what
+the screen did, this tells you what the database got.
+
+### The rest of the audit's list, closed after being asked directly
+
+Asked "did you finish everything?", the answer was no — three items from my own stated list were
+still open. Now done:
+
+- **`listContactRoles` had no `requireAdmin()`**, unlike every other export in that file. Low
+  impact (labels and keys, no credentials) but an actions file where most functions are guarded
+  and one is not is where the next hole hides.
+- **Admin-typed codes could crash rather than explain themselves.** `codeExistsInTenant` checks
+  per tenant as `app_user`, so RLS hides other tenants' codes from it, while the unique indexes
+  are global — a collision passed every app check and died at the constraint. `setPersonCode`
+  and `setAccessCode` now catch exactly P2002. Not hypothetical: `demoSeed` hard-codes
+  `KAKHETI07`/`SILKROAD55` for every non-demo tenant.
+- **Six stale comments, three of them mine.** The schema named a setting renamed in Chunk 3;
+  `createBooking` pointed at a deleted `verifiedGuideId`; three still said the contacts payload
+  was "accepted and ignored, Chunk 9 will write it" after Chunk 9 shipped. A comment describing
+  a plan rather than the code reads as fact and is worse than none.
+- **[[Plan-ContactRoles]] §9c — the production cutover pre-flight**, five checks written now
+  rather than in the moment, with Chunk 14 pointing at it. The one that matters: **RLS policies
+  are not part of `prisma migrate deploy`** — skip `scripts/setup-rls.ts` and the first public
+  booking gets permission-denied.
+
+And [[MaintenanceNotes]] **#30** now documents the coupling itself: one resolver, one picker,
+one write base, the server-side code gate, and the two client traps that have each been hit once.
+
+### ⚠️ Re-filed, because the old framing was too gentle
+
+`/admin/orders`, `sendOrderInvoice`, `demoSeed.ts` and `onboarding.ts` were logged as "later
+chunks' type errors". They are **live outages**: the orders screen is down, the invoice email is
+down, the demo reseed cron is down, and `getFinishDetailsStatus` is called from the admin panel
+*layout*, so it takes **every admin page** down for a launched tenant.
+
+Chunk 7's admin click-through passed only because Staging Winery is not launched and an early
+return skips that query. That is a verification gap worth remembering: it worked on this tenant.
+
+---
+
+## 2026-09-22 (evening) — Contact Roles chunk 9: the write path, and F1 finally delivered
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7, 8 and 9 committed and pushed.
+> - **`master` untouched.** Migration still dev-database only.
+> - **40 TypeScript errors**, none in a file chunks 7–9 own. Running total 65 → 54 → 49 → 43 → 40.
+> - ✅ Every route renders **locally**. ⚠️ `/admin/orders` still 500s — chunk 10's file.
+> - 🔴 **`staging.vineworks.ge` is DOWN and has been since chunk 1.** Every Vercel build fails
+>   with `errorCode: "type_error"`, so the URL serves the last good deployment (`7d319b4`,
+>   pre-migration code) against the migrated dev DB. It returns **HTTP 200 with an error page**,
+>   so a status-code check cannot detect it — grep the body for `next-error-h1`. Comes back when
+>   **chunk 12** lands, not chunk 10. See [[Plan-ContactRoles]] §7's corrected note.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 10** — admin order surfaces, where contacts become
+> *readable*. There is one real order carrying contacts in the dev DB to display.
+
+### What was built
+
+**`lib/orderContacts.ts`** — `buildOrderContactRows()`, shared by all three order-creation
+paths (booking, public wine, admin wine), so a client-sent contact is verified in one place
+rather than three. Deliberately separate from `contactResolution.ts`: that one answers "who can
+be picked", this one answers "who was picked, and is any of it true".
+
+Four checks, each closing something real: the role must be this tenant's, active, PER_ORDER and
+applicable to this order type; the person must belong to the order's company **and hold that
+role**; a person failing the check **loses the link, not the facts** (the row is still written
+with snapshots — F2 is why snapshots exist); and one row per role, because
+`@@unique([orderId, roleId])` would otherwise reject the whole write and cost the booking.
+
+`Order.guideId` is gone from `createBooking.ts`. Decision 4's special case — Contact Person
+also populating `Order.name/surname/phone/email` — is commented there and nowhere else, as
+the plan required.
+
+### The re-decision the plan asked for
+
+`updateOrderEnhanced()` and `assignOrderCompany()` in `orders.ts`: same answer as the old plan
+(no contact writes), **different reasons**, both written into the file. The interesting one is
+`assignOrderCompany` — synthesising a `contact_person` row from the order's own columns was
+tempting, but nobody *picked* anyone, so the row would assert an attribution never made and its
+snapshots would duplicate columns that already exist.
+
+A correction while in there: this plan filed `orders.ts`'s nine errors under "Chunks 9/11".
+All nine are in `sendOrderInvoice`'s `company.representatives` include — squarely **Chunk 11**.
+
+### Verified — and this is the one that matters
+
+`scripts/test-order-contacts.ts`, **27 assertions over two tenants** (H6: a one-tenant fixture
+makes isolation assertions vacuous). Covers cross-tenant and cross-company people, another
+tenant's role, COMPANY_LEVEL on an order form, a BOOKING-only role on a wine order, deactivated
+roles and people, a real person under the wrong role, duplicates, blank names — then inserts
+for real, deletes the person, and asserts the rows survive with their facts.
+
+Then a **real booking through the public form**: Silk Road Journeys, Contact Person Keti
+Dolidze, Guide Nika Kvaratskhelia, 6 guests, ₾312. Two `OrderContact` rows written, both
+linked, both with `tenantId` set.
+
+**That guide row is the whole point of the feature.** F1 recorded that `Order.guideId` was
+written on every company booking and read by nothing, with **0 orders carrying one** after five
+days live. The first booking through the new path records it properly.
+
+The order is left in the dev database deliberately — it is the only one with contacts, and
+chunk 10 needs something to display.
+
+---
+
+## 2026-09-22 (later still) — Contact Roles chunk 8: both wine order forms, and the build is whole
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunks 7 and 8 committed and pushed.
+> - **`master` untouched.** Migration still dev-database only.
+> - **43 TypeScript errors** (was 49), none in a file chunks 7 or 8 own.
+> - ✅ **Every route renders.** `/`, `/wines`, `/about`, `/contact`, `/admin/login` all 200 —
+>   and `/wines` no longer takes `/admin/login` down with it, which was the last of the
+>   stale-import breakage.
+> - ⚠️ `/admin/orders` still 500s. **Chunk 10's file.** Unlike the old `/wines` problem this is
+>   a per-request Prisma error, not module resolution, so it breaks only itself.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 9** — the write path. All four forms now build a
+> `contacts` payload and nothing consumes it yet.
+
+### What was built
+
+Both wine order forms became thin consumers of Chunk 7's shared pieces (decision 10).
+
+- **Public** (`WineCatalogueClient.tsx` + `wines/page.tsx`) — the two deleted resolvers became
+  `useContactSelection({module:'WINE_ORDER'})` + `ContactPickerPopupView`. Company facts come
+  from the resolver, person facts through `onApply`, and a hidden `contacts` field rides along
+  in the submitted FormData.
+- **Admin** (`NewWineOrderForm.tsx` + `page.tsx`) — **the gap that produced decision 10.** Its
+  autofill from `company.contactName`, under a comment reading *"Mirrors
+  WineCatalogueClient.tsx's applyProfile()"*, is gone. Choices render **inline** as a dropdown,
+  not in a popup: an admin has no code step (§4b's honest asymmetry).
+- `useContactSelection()` gained `pickFor()`, `clearRole()`, and `roleChoices` on the resolve
+  result — all three needed by the inline flow, all three shared rather than admin-specific.
+
+### Two things the plan had wrong, both found by opening the files
+
+It said the public wine path "has no company dropdown". **It has one**, plus the same
+`hideCompanyDropdown` direct-code variant the booking form has. It also has its own hand-rolled
+access-code popup rather than using `AccessCodePopupView` — left alone deliberately, since
+consolidating it is a different job from rewiring the resolver underneath it.
+
+### A bug, and a sharper lesson under it
+
+The picker rendered **behind the checkout drawer**: the component hard-coded `z-50` and the
+drawer is also `z-50`. Fine on the booking form, which has no competing layer. Fixed with an
+`overlayZClass` prop rather than raising the component globally.
+
+The first fix used `z-[70]` — an arbitrary Tailwind value **not in the generated CSS**, so it
+computed to `zIndex: auto` and the picker stayed behind the drawer with no error anywhere.
+Caught only by reading the computed style off the live element instead of trusting the class
+had applied. The working fix reuses `z-[60]`, already proven to exist on that page.
+
+### Verified
+
+`tsc` clean for every chunk-8 file · parity 1103/1103 EN+KA · RLS 19/19 · resolver 22/22 · all
+routes 200 · public wine form walked (Sighnaghi Wine Bar: code → 10% discount → picker above
+the drawer → Tamar Gogoladze into the fields, `contacts` payload carrying roleId + personId +
+snapshots) · admin wine form walked (Marani Import GmbH: 20% discount note, inline "Choose the
+Contact Person" pre-selected with Katrin Vogel).
+
+**Not verified:** no wine order was submitted — nothing receives `contacts` until chunk 9.
+
+---
+
+## 2026-09-22 (later) — Contact Roles chunk 7: the shared picker, and the app renders again
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD **`66e4868`**, committed and pushed.
+> - **`master` is untouched.** The migration has still run on the **dev** database only.
+> - **49 TypeScript errors** (was 54), none in a file chunk 7 owns. Still expected mid-rework.
+> - **The public site renders again.** `/`, `/about`, `/contact` and `/admin/login` all return
+>   200 on a fresh dev server.
+> - **⚠️ One catch the old notes got wrong.** They said `BookingForm.tsx` was *the* file
+>   500ing every route. There are **two**: `app/(site)/wines/WineCatalogueClient.tsx` still
+>   imports `verifyCompanyCode`/`findCompanyByCode`, which chunk 3 removed. Anything that
+>   compiles `/wines` puts `/admin/login` back to 500 until the dev server restarts. **Chunk 8
+>   owns that file.** Restart the server before any admin click-through, and stay off `/wines`.
+> - **Chunks 4, 5 and 6 have now been walked** — Max typed the password himself and handed the
+>   session over, which is the arrangement that works. All four screens rendered and every claim
+>   those chunks made without seeing them held. **Chunk 6 is now fully closed**, including the
+>   live toggle check it had been holding open. Details in the plan's chunk 7 section.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 8** — both wine order forms. It is now the only thing
+> still breaking the build at runtime.
+
+### What was built
+
+Two shared client pieces, and the public booking form as their first consumer (decision 10).
+
+- **`components/ContactPickerPopupView.tsx`** — `GuidePickerPopupView` generalised. Renders one
+  role's people per showing; the role lives entirely in the caller's title and intro, so the
+  component never branches on which role it is. H14's explicit `aria-label` carried across and
+  confirmed live. `GuidePickerPopupView.tsx` deleted; the admin Messages preview moved over.
+- **`lib/useContactSelection.ts`** — the state machine: the selection map, the queue of roles
+  still to ask about, the resolver call, and every reset. Form-agnostic by construction — it
+  hands a picked person back through an `onApply` callback rather than touching any field, so
+  the booking form's "split the name into two boxes" stays the booking form's business.
+- **`lib/contactResolution.ts`** gained `orderRolesFor(tenantId, module)` — the tenant's roles
+  with no people attached. Agreed with Max before building, and more than the plan budgeted for
+  `page.tsx`; the reasoning is in the plan's chunk 7 section.
+- **`BookingForm.tsx`** — `matchedGuideId` gone, hook in, a contact-details block per non-
+  contact-person role in the detailed variant only, and `contacts` replacing `guideId` in
+  `buildBookingPayload()`.
+
+### KnownBugs #57 is closed on `staging`
+
+Both public pages send `hasAccessCode: boolean` and never the code. Proved with a check written
+so it can distinguish the two outcomes (H13): the homepage genuinely carries 5 companies that
+*do* have codes, `hasAccessCode` is in the payload, and none of the 5 codes appears anywhere in
+the page source. **Still live on `master`** until chunk 14 merges.
+
+### A bug found by walking the screen rather than reading it
+
+Switching company cleared the Guide block but left the *previous* company's contact person in
+the four main fields — so "I am not on this list" on the new company would have submitted a
+booking for company B attributed to someone at company A. Pre-existing (the direct-code path
+already cleared them; the dropdown path never did), and precisely H3's "reset it everywhere with
+one path missed". Fixed and re-verified.
+
+### The duplicate `contact_person` rows: nothing to tidy
+
+Max's outstanding to-do turned out to rest on a wrong premise. All 25 people were read before
+anything was touched: on each of the five affected companies the two `contact_person` rows are
+**different people** with different names, phones and emails — one operational, one finance
+(`hello@`/`finance@`, `bookings@`/`invoices@`, and so on). Merging them would have lost a real
+address. Several contact persons per company is the model working as designed.
+
+Two rows *were* deleted, both hand-typed test junk on Alazani Valley Tours from 2026-09-19: a
+Contact Person called `test test` with no phone or email, and a Guide called `x` with phone `1`.
+Neither was referenced by an `OrderContact`. 27 → 25 people.
+
+Usefully, that leaves the fixtures split for H13: **Silk Road Journeys** has both roles populated
+(2 + 2) and **Alazani Valley Tours** has contact persons but no guides, so "one picker fires" and
+"two pickers fire" are now distinguishable outcomes.
+
+### Verified
+
+`tsc` clean for every chunk-7 file · i18n parity 1101/1101 EN+KA · `test-contact-roles-rls.ts`
+19/19 · `test-contact-resolution.ts` 22/22 · public routes 200 · and the full picker flow walked
+in a browser on Staging Winery: company code → Contact Person popup → Guide popup → both sets of
+fields filled from the right person; "I am not on this list"; the company-switch reset; and the
+Guide block disappearing on an INDIVIDUAL booking.
+
+### The admin click-through, later the same day
+
+Max signed in and handed over the session. All four screens rendered for the first time.
+Settings → Contact Types is right, including the company-level option on create and the scope
+control correctly hidden on edit. Edit Company shows one people section per role. **Chunk 6's
+last open checkbox is now closed**: the person-codes toggle flips, persists and survives a
+reload — and on the public form, codes-on means no picker and no colleague names in the page,
+while a guide's own code resolves straight into the Guide block. Setting restored to `false`.
+
+Fixed one thing found there: the Messages preview hardcoded an English `'Guide'` as its sample
+role, so the Georgian tab read "…ამ ვიზიტის Guide, რომ…" — a half-translated line the real form
+never produces, since it reads `ContactRole.labelKa`. Now locale-aware.
+
+**Not verified:** no booking was submitted — there is nothing to receive the `contacts` payload
+until chunk 9 writes `OrderContact` rows. `/admin/orders` still 500s (chunk 10's file).
+
+---
+
+## 2026-09-22 — Contact Roles built: chunks 0–6 of 14
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD **`f9a8b73`**, everything committed and pushed. Four commits:
+>   `9516d94` (chunks 0–2), `6e81f1c` (chunk 3), `b5862b2` (chunk 4), `f9a8b73` (chunk 5).
+> - **`master` is untouched.** The migration has run on the **dev** database only. Production
+>   still has `CompanyGuide` / `CompanyRepresentative` / `Order.guideId`.
+> - **The app does not compile: 54 TypeScript errors**, all in files owned by chunks 7–12.
+>   This is expected mid-rework, not breakage to chase.
+> - **⚠️ No page renders at all.** `components/BookingForm.tsx` still imports three symbols
+>   chunk 3 deleted, and Turbopack resolves exports across the whole graph, so that one file
+>   **500s every route including `/admin/login`**. Chunk 7 fixes it. Until then nothing —
+>   public or admin — can be opened in a browser, locally or on staging.
+> - **Chunks 4, 5 and 6 are typecheck- and data-verified but have never been rendered.** Walk
+>   all three screens together once chunk 7 lands.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 7**. Read that plan's §1 (Max's verbatim brief) and
+> §6 (the hurdles list) before starting.
+
+**What this was.** The rework planned on 2026-09-19 got built: three contact concepts
+(`Company.contactName/Phone/Email`, `CompanyGuide`, `CompanyRepresentative`) collapsed into
+`ContactRole` + `CompanyPerson`, and `Order.guideId` into a polymorphic `OrderContact` carrying
+detail snapshots. Full detail in [[Plan-ContactRoles]]; this is the summary.
+
+**Chunks 0–2 — schema, migration, RLS.** Migration `20260922101500_contact_roles`, hand-written
+because `prisma migrate dev` refuses to drop non-empty tables non-interactively and the generated
+version would only have dropped. Guides, reps and company contacts were carried across as
+`CompanyPerson` rows with **codes preserved verbatim** — regenerating them is exactly the
+silent-credential-breakage of [[KnownBugs]] #55. Three RLS policies, and a new
+`scripts/test-contact-roles-rls.ts` (19 assertions, two throwaway tenants).
+
+**Chunk 3 — the server layer.** Four overlapping resolvers became one; ten guide/rep functions
+became five; new `contactRoles.ts` gives roles their CRUD. `scripts/test-contact-resolution.ts`,
+22 assertions.
+
+**Chunks 4–6 — the admin screens.** A Contact types panel on the settings page, the
+`person_codes_enabled` toggle, and the Edit Company panel's two hardcoded people sections
+collapsed into one rendered per role.
+
+**Five findings worth carrying forward** (all written up in the plan):
+
+1. **`Order.guideId` was write-only.** The dev database had **0 orders** carrying one after five
+   days live. The attribution the guides feature existed for was never delivered anywhere;
+   chunk 10 is where it finally is.
+2. **The setting's name was wrong and would have broken a live form.** `company_access_codes_
+   enabled` became **`person_codes_enabled`**: it governs codes belonging to *people*, and
+   `Company.accessCode` is untouched. The company code is the only way the
+   `hide_company_dropdown` booking variant identifies a company at all, so gating it behind a
+   setting that defaults to off would have quietly killed that form.
+3. **A real `appliesTo`/`scope` hole, caught by the new resolver test.** The person-code lookup
+   filtered the company by module but never the role, so a BOOKING-only guide code resolved on
+   the wine form and a COMPANY_LEVEL person holding a code would have resolved on a public order
+   form. Same shape as the bug the status redesign hit — filter where a value is *chosen*, not
+   only where it is *displayed*.
+4. **`setup-rls.ts` has two lists**, and a table in only one of them gets RLS enabled with no
+   policy — Postgres then denies every row silently while `check-rls.ts` still reports it fine.
+   Hit during chunk 2, caught only by the two-tenant test. Now hurdle **H18**.
+5. **The plan's own dependency map had two gaps**, found when Max asked for a re-check before
+   continuing: the admin manual wine-order form was missing entirely, and
+   `app/admin/onboarding/page.tsx` was unlisted. Max chose to fix the *pattern* rather than the
+   omission — hence **decision 10** and **§4b**: one shared resolver, one shared picker, one
+   shared hook, consumed by all four company-autofill forms.
+
+**A mistake worth recording.** A Python edit script opened `Plan-ContactRoles.md` for writing,
+which truncates, then failed on an emoji escape before writing anything — emptying the file. It
+was rebuilt from context with nothing lost. Every later edit writes to a temp file and swaps only
+after a size assertion. If you are scripting edits to a vault file, do the same.
+
+**Verification done:** `test-contact-roles-rls.ts` 19/19 twice ·
+`test-contact-resolution.ts` 22/22 twice · no leftover `zz-` rows · i18n parity 1101/1101 ·
+the Edit Company page's real query run against dev data, confirming no active person falls
+outside a rendered role.
+
+**Verification NOT done, and not claimable:** nothing has been rendered in a browser. Two
+independent blockers — the `BookingForm.tsx` compile failure above, and the fact that opening an
+admin screen needs a password typed into a form, which is off-limits. Feature 201 hit the same
+wall. Either Max walks the admin screens once chunk 7 lands, or the chunk 13 Playwright specs do
+it with their own credentials.
+
+---
+
+## 2026-09-19 (4) — Contact Roles: guides/reps reviewed, re-scoped, and planned
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD `7d319b4`. **No code was written this session.** The only
+>   changes are vault files: `Plan-ContactRoles.md` (new), `KnownBugs.md` (#56, #57),
+>   `Roadmap.md`, `FeatureLog.md`, `MaintenanceNotes.md` #26, and a supersede banner on
+>   `Plan-CompanyGuidesAndReps.md`.
+> - **The previous session's uncommitted working tree is still uncommitted and still stands** —
+>   Feature 201's `GuidePickerPopupView.tsx`, `guide-picker.spec.ts`,
+>   `backfill-test-fixtures.ts`, `tests/helpers/bookingForm.ts` and the edits to
+>   `companies.ts` / `BookingForm.tsx` / `MessagesPanel.tsx` / `t.ts` / `adminT.ts` /
+>   `demoSeed.ts`. Read the 2026-09-19 (3) entry below for its full state-on-exit, including
+>   the three specs still pointing at deleted fixtures. **All of it folds into the rework
+>   rather than shipping separately** — Max's call.
+>
+> **Next session starts at [[Plan-ContactRoles]] Chunk 0.**
+
+**What happened.** Max reviewed the shipped guides/representatives feature and found the model
+one level off. The ask, in his words: *"A company should have ability to have Contact Person's &
+Guides. right now we have that + representative. but thats 1 extra."* Several of each per
+company, **one of each per order**, with the company code prompting a picker whose whole purpose
+is autofill. Plus a standing requirement the old design cannot meet: *"it should be trivially
+easy, to in the future add or remove types of contact data attached to an order."*
+
+No code was written. The session produced a review and a plan.
+
+**The re-scope.** Three contact concepts collapse to two role *types* over one dimension table:
+
+- `ContactRole` — tenant-configurable rows (`guide`, `contact_person`, later `ceo`), with a
+  `scope` column separating "picked per order" from "company data that never appears on a
+  booking form". Adding a type becomes an admin action, not a migration.
+- `CompanyPerson` — replaces `CompanyGuide`, `CompanyRepresentative` **and**
+  `Company.contactName/contactPhone/contactEmail` (the "1 extra": a scalar doing a table's job).
+- `OrderContact` — polymorphic over `Order`/`WineOrder`, following `OrderEvent`/`Payment`'s
+  shape rather than two parallel tables, with name/phone/email **snapshots**.
+
+Decided along the way: wine orders get the full treatment, not structure-only (reversing the old
+plan's Chunk 1); access codes become tenant setting `company_access_codes_enabled`, default off,
+**tenant-wide only, no per-company override**; codes on suppresses the picker entirely so
+colleagues stay private; no order backfill (*"all orders are fake"*), but company-side
+configuration is copied across; `Order.name/surname/phone/email` keep being written as a
+denormalised copy of the Contact Person, because they are non-nullable and are the only place an
+INDIVIDUAL booking's guest name lives — the alternative branched ~16 production files.
+
+**Four findings from reading the code, all of which changed the plan.** Written up as F1–F4 in
+[[Plan-ContactRoles]] §5, and two of them logged as real bugs:
+
+1. **`Order.guideId` is write-only.** Written at `createBooking.ts:351`, read by nothing — no
+   screen, print or email. The attribution that justified the entire guides feature is not
+   delivered anywhere; the booking sheet only appears to work because autofill copies the
+   guide's phone into the guest's own field. Chunk 10 is where this gets paid off.
+2. **Deleting a guide silently erases order history** — optional relation, no `onDelete`,
+   Prisma defaults to `SetNull`. Now [[KnownBugs]] #56. Same shape as the `Payment` orphaning
+   in `DataModel/Dependencies.md` finding 2.
+3. **Every company's access code is in the public homepage's HTML** (`app/(site)/page.tsx:52`
+   ships whole `Company` rows to a client component). Now [[KnownBugs]] #57. On `master`.
+4. **Admin-side leak:** `orders/page.tsx:289` passes representatives' codes into `OrdersTable`.
+
+**Also carried into the plan, at Max's request:** his original brief verbatim as §1, so intent
+survives a long build; and §6, seventeen hurdles (H1–H17) this project has actually hit before,
+framed as suggestions rather than rules, each referenced from the chunk it applies to. The most
+load-bearing is **H1** — the old plan's dependency map was confidently wrong in four places
+(booking sheet, invoice modal, `Company.contactEmail`, demo seed), each caught only by opening
+the file. The new plan says explicitly that its own file list is a starting point, not a fact.
+
+**Open, deliberately left for Chunk 0:** whether a COMPANY_LEVEL role ships in this pass or only
+the `scope` column that makes one possible later. CEO was Max's example, not a requirement.
+
+**Next:** build starts tomorrow at [[Plan-ContactRoles]] Chunk 0, then Chunk 1's migration —
+which per ground rule 6 must not touch `Company` rows or `Price`, and whose generated SQL is to
+be read before it is run.
+
+---
+
+## 2026-09-19 (3) — Feature 201: guide picker after a company code
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch **`staging`**, HEAD `7d319b4`. **Nothing committed, nothing pushed** — everything
+>   below is uncommitted working-tree changes, verified against the **dev** database only.
+>   Production and the deployed staging site are untouched.
+> - Green and verified live: `booking-simple`, `locale-integrity` (5/5),
+>   `payment-label-precedence`, `guide-picker` (4/4), and both booking tests in
+>   `payment-amount-integrity`.
+> - `tsc --noEmit` clean · i18n parity 169/169 (t.ts) and 1083/1083 (adminT.ts).
+>
+> **Not finished — pick up here:**
+> 1. **Three specs still point at deleted fixtures** and cannot run: `booking-enhanced`
+>    (`Test Company # 1`), `company-nationality-tagging` (`Test Company # 1`),
+>    `company-guide-code` (`Cookie Company`). Mapping and reasoning in
+>    `playwright/KNOWN-ISSUES.md` #4. `booking-enhanced` additionally asserts a literal `410₾`
+>    that must be recomputed for whichever company it is repointed at.
+> 2. **`payment-amount-integrity`'s wine-order test was fixed but never re-run** after the fix.
+> 3. **The new seed path has never executed.** `backfill-test-fixtures.ts` reproduces its end
+>    state additively, so `seedDemoTenant`'s new access-code/guide/rep code is unproven. Needs a
+>    scratch tenant — do NOT test it against Staging Winery, it deletes every order.
+> 4. **Feature 201 needs staging verification** before any merge (Rule 0).
+> 5. **Three junk orders on Staging Winery** (`ZZPaymentIntegrity DefaultOn`, 2026-09-19) from
+>    failed runs. Harmless — per-run unique markers mean they no longer collide — but litter.
+>    Left in place deliberately; deleting orders was not authorised.
+> 6. **`clickUntil()` wants a deliberate review.** Its cause (the nested-`<button>` hydration bug)
+>    was fixed 2026-09-12, so it now absorbs real regressions: a click that genuinely stopped
+>    working looks identical to a slow one. Do not strip it reflexively — this UI is still slow
+>    under a loaded dev DB.
+> 7. **Once Feature 201 reaches master**, `lib/demoSeed.ts` can seed guides on every booking
+>    company instead of just Silk Road Journeys. See the warning on `BookingCompanySpec.guides`.
+>
+> **Environmental:** the dev DB pool was exhausted twice by this session's run volume (`P2028`,
+> transactions timing out ~21s against a 15s limit). If admin pages start erroring, that is this —
+> stop running tests, wait, confirm with real page loads. A server restart does not help.
+
+
+Built and verified on dev. Resolves [[KnownBugs]] #55, which this session's own test work
+surfaced. Full writeup: [[Feature 201 - Guide Picker After Company Code]].
+
+**What changed.** A company's shared access code works again even when that company has guides;
+the guest then picks which guide they are. Guide codes still work as a direct shortcut.
+
+**Why it mattered.** `verifyBookingCode()` rejected a company's own code outright for any company
+with guides — deliberate and documented, but it meant adding one guide silently killed a code
+already circulating with a partner agency, while `/admin/companies` kept showing that dead code
+as live.
+
+**Max's design, not mine.** My first proposal was to make the admin panel *admit* the code was
+dead. His keeps it working and asks who is booking — it removes the trap rather than documenting
+it, and still satisfies the attribution requirement. Accepted trade-off: attribution becomes
+self-declared rather than proven. Fine while it is operational labelling; revisit if guide
+identity ever gates commissions.
+
+**A correction I had to make first.** I initially reported `verifyBookingCode` as a bug and Max
+told me to fix it. It was not a bug — I had quoted a plan sentence that broke across a line, and
+the full sentence says the opposite. Had I just done as asked, I would have undone a real product
+decision to make my own bad test data pass. The thing actually broken was my seed change, which
+had given guides to all five booking companies and thereby retired all five company codes.
+
+### Verified on dev
+
+`tests/tier2-core-flows/guide-picker.spec.ts` — **4/4 passing, 26.6s**. Plus by hand: picker
+appears, guide selection autofills that guide's own phone, "I am not on this list" falls back to
+the company contact, guide codes skip the picker, guide-less companies unaffected, wrong codes
+still rejected, and Georgian renders correctly.
+
+**Two things found while verifying, both fixed:**
+- The guide buttons had **no accessible name** — name and phone are separate nested spans, so the
+  computed name came back empty. A screen reader would have said "button" and nothing else, and
+  no spec could target them by role and name. Fixed with an explicit `aria-label`, now asserted.
+- The fixture made the fallback **unprovable**: Silk Road Journeys' contact person was also its
+  first guide, so "not on this list" and "pick guide 1" filled the form identically. Seed now uses
+  a distinct person, and `backfill-test-fixtures.ts` gained the ability to reconcile an existing
+  guide's name and phone rather than only create-or-skip.
+
+### Not verified
+
+Admin Messages preview (needs a login, and entering a password into a form is off-limits to me),
+the direct-code-entry variant, and `guideId` actually persisting on a submitted order. All three
+listed in the feature note.
+
+### Also this session, earlier
+
+The dev DB pool was exhausted mid-way (`P2028`, transactions timing out at ~21s against a 15s
+limit) by the day's Playwright volume — the exact shape `KNOWN-ISSUES.md` documents. Recovery was
+by waiting and confirming with real page loads, not a restart. One company-test "regression" was
+purely this, not a code fault.
+
+**State:** `tsc` clean, i18n parity 169/169 and 1083/1083. Nothing committed, nothing pushed.
+Staging verification still required before any merge (Rule 0).
+
+## 2026-09-19 (2) — Test-suite drift audit: two broken specs fixed, three stale docs reconciled
+
+Started as a scoping conversation about a generated system map ([[Plan-SystemMap]]) and Max's
+goal of "Playwright tests for all possible scenarios, starting with payments/bookings." Before
+planning new tests, audited what was already there. **No new tests written this session** — the
+plan for those is still unstarted, deliberately, until the existing suite is trustworthy.
+
+### Measured first
+
+- 129 server actions across 25 files — but only **4** create an order (`createBooking`,
+  `createOrderAdmin`, `submitWineOrder`, `createWineOrderAdmin`). The decision logic is already
+  well-centralized: one `priceBooking()`, one `shouldTakePayment()`, one `statusFlow.ts`.
+- The payment matrix is **~12–20 meaningful rows**, not hundreds — `shouldTakePayment()` is an
+  ordered decision table with early returns, so most of the combinatorial space is unreachable.
+  Booking shape adds ~25–30. Real target is ~40–50 scenarios, which is finite and knowable.
+- **E2E alone cannot carry that.** Payment specs mutate tenant-wide settings so they must run
+  serial (~50 min at that count), the dev DB pool already exhausts at the current 17 tests, and
+  a failed test leaves Staging Winery in a wrong state. Recommendation recorded but not built:
+  matrix-as-data, consumed by a fast pure-function layer, a server-action layer, and only ~6–8
+  browser journeys. Also noted: the Flitt **callback/settle** path is unreachable from Playwright
+  entirely — the browser leaves for the gateway and never returns under test control.
+
+### 🔴 Two specs were genuinely broken and nobody knew
+
+Feature 184 (2026-09-14) inserted the "Review your visit" sheet between the booking form's submit
+button and `createBooking()`. Two specs predated it and were never updated:
+
+- `booking-simple.spec.ts` — clicked "Book & Pay", waited for a `pay.flitt.com` redirect that
+  could no longer fire on the first click. Failed on a 15s timeout.
+- `booking-enhanced.spec.ts` — clicked "Request Booking", waited for a "Booking received!"
+  heading that could no longer appear. Same shape.
+
+Both failed on a **timeout**, which reads like a hang or a slow DB rather than a stale assertion —
+which is very likely why it went unnoticed. `booking-simple.spec.ts` had even been updated for
+Feature 191 on 2026-09-18: someone fixed the verification half and missed the submit half.
+
+**Fix:** new `saas/tests/helpers/bookingForm.ts` with `openReviewSheet()` + `confirmButton()`,
+extracted unchanged from the local copy in `payment-amount-integrity.spec.ts` (the one spec that
+*had* been updated). All three now share it, so the next change to that sheet breaks in one place.
+`company-guide-code.spec.ts` was checked too — unaffected, it never submits the form.
+
+### 🟢 The nested-`<button>` hydration bug was fixed a week ago; three docs still said otherwise
+
+KnownBugs #15 was fixed in the app **2026-09-12**. Verified against the code before changing
+anything: `CompaniesClient.tsx` now closes the row-summary `<button>` before the `HelpHint`, and
+all five `HelpHint` sites in that file are clean. But:
+
+| Source | Said |
+|---|---|
+| `KnownBugs.md` resolved banner | 🟢 Resolved 2026-09-12 |
+| `KnownBugs.md` #15 entry (same file!) | 🔴 **Open** |
+| `playwright/KNOWN-ISSUES.md` #2 | "**Not fixed in the app**" |
+
+All three reconciled. SessionLog entries left alone — they are dated records of what was true then.
+
+**A live consequence nobody had drawn:** `locale-integrity.spec.ts` carried a filter
+(`isKnownCompaniesHydrationError`) that suppressed hydration errors — applied to **all five**
+tests, including the public home page, wine catalogue, admin orders and admin settings, none of
+which render `CompaniesClient`. Worse, its second pattern matched React's *generic* "Hydration
+failed…" text, so **any new hydration mismatch anywhere in the app would have passed silently.**
+Removed; those five tests now assert on every console error they see.
+
+**Still outstanding, deliberately not touched:** `clickUntil()` — the retry-until-verified click
+helper — exists *because* of #15 and is still wrapped around most meaningful clicks in
+`helpers/payments.ts` and `companies-crud.spec.ts`. With the cause gone it will now mask a real
+regression: a click that truly stopped working is indistinguishable from a slow one. Wants a
+deliberate re-examination, not a blind strip-out (this UI can still be slow under a loaded DB).
+
+### Correction: the max-guests "bug" was already fixed
+
+Flagged mid-session as a live blocker, from `payment-amount-integrity.spec.ts`'s header comment
+(Staging Winery Wine Tasting min=4 / max=3, silently clamping). Max checked the admin panel and
+saw ∞. **He was right and the comment was stale** — that was KnownBugs #40, fixed 2026-09-16 both
+in code (`handleBookingRuleSave` now rejects a max below its own min) and in the live data. The
+comment was written 2026-09-15, the day before. Rewritten as history, not a live condition. Third
+instance of the same drift pattern in one session.
+
+### Run results — and a 🔴 blocker the run exposed
+
+Ran live against a warmed dev server: **5 passed / 2 failed**, then `booking-simple` fixed again
+and re-verified green at 55.5s.
+
+- ✅ **`locale-integrity` 5/5**, admin companies included. Removing the hydration filter surfaced
+  nothing — those assertions are now genuinely unconditional.
+- ✅ **`booking-simple`** — green, but needed **two** fixes, not one. After the confirm-sheet fix
+  it reached Flitt with the correct amount (280 GEL, visible in the failure's own page snapshot)
+  then hung in cleanup. **First misdiagnosed as a too-small timeout**; raising 60s → 120s
+  reproduced it exactly, which ruled that out. Real cause: Feature 191's move of abandoned orders
+  to their own screen was ported here as `locator('div').filter({hasText}).last()`, which resolves
+  to the innermost div holding the email — no button inside it. `payment-amount-integrity.spec.ts`
+  had the correct `has:`-filtered version all along. Now shared as `abandonedRow()`.
+- ❌ **`booking-enhanced`** — confirm-sheet fix is correct but unreachable.
+
+### 🔴 The suite's fixture companies are gone — four specs cannot run
+
+Confirmed by direct DB query: Staging Winery holds ten companies, **all `demoSeed.ts` names**.
+`Test Company # 1`, `Wine Test Company` and `Cookie Company` no longer exist. That takes out
+`payment-amount-integrity`, `payment-label-precedence`, `booking-enhanced`,
+`company-nationality-tagging` and `company-guide-code` — **including both payment specs, the exact
+coverage Max wants to build on.**
+
+This was **already known** — recorded in this log's own 2026-09-18 entry — but only as narrative,
+naming "tests 2–3" of one spec. Real blast radius: five spec files. It never reached
+`playwright/KNOWN-ISSUES.md` or `Progress.md`, so nothing surfaced it. Now written up as
+KNOWN-ISSUES #4 with both resolution options and why they are not equivalent (demo-seed companies
+have `accessCode: null`, and repointing at them just re-arms the same trap one demo reset later).
+
+**Needs Max's decision — not patched unilaterally, since either option writes to a shared tenant.**
+
+### The pattern, stated plainly
+
+Three times this session, one spec or doc got a careful update for an app change and its sibling
+got a sloppy one or none: Feature 184 (two specs missed), Feature 191 (one spec's locator),
+KnownBugs #15 (three docs disagreeing). Both fixes here became **shared helpers** rather than
+local patches, deliberately — that is the structural answer, and it is the same argument as the
+executable-matrix idea discussed at the top of the session.
+
+### State
+
+`tsc --noEmit` clean. `booking-simple` and `locale-integrity` verified green live;
+`booking-enhanced` blocked on fixtures. Changed: `booking-simple.spec.ts`,
+`booking-enhanced.spec.ts`, `payment-amount-integrity.spec.ts`, `locale-integrity.spec.ts`,
+new `helpers/bookingForm.ts` (`openReviewSheet`, `confirmButton`, `abandonedRow`),
+`vault/KnownBugs.md`, `playwright/KNOWN-ISSUES.md`, `playwright/Progress.md`. **Nothing committed,
+nothing pushed.** One test order was created and cleaned up on Staging Winery per run.
+
+---
+
+## 2026-09-19 — Money-safety stress test, two blind reviews, ten bugs fixed
+
+> **STATE ON EXIT — read this first if you are resuming cold.**
+>
+> - Branch `staging`, working tree clean. Commits: `3d42a48` (#43–#48), `b366734` (#49 +
+>   audit tool), `c72ca0c` (#50–#52), `b2c1d8b` + `dda619e` (the NewOrderForm mirror, caught
+>   live), `47c3128` (#53 labels), and the `priceBooking()` extraction + tier-rule change.
+> - **Nothing on `master`.** Production is untouched. The merge is gated on Max checking
+>   `staging.vineworks.ge` — his checklist is in [[MyToDo]] under 2026-09-19.
+> - Green: `tsc` 0 errors · `test-money.ts` 61/61 · `test-pricing-agreement.ts` **21/21** ·
+>   money lint rule 0 violations · full lint 206 problems vs 208 at baseline.
+> - Dev DB audited across every money column: **no damaged rows**. Demo reseeded, clean.
+> - **`priceBooking()` landed and is live-verified** — all nine sites call one function, and
+>   the pricing tier is chosen by party size rather than by paying head count (Max's call).
+>   [[MaintenanceNotes]] §22 closed out.
+> - **Live-verified on staging.vineworks.ge** (see "Live verification" below): #45, #50, #51
+>   (both halves), #52 confirmed in the running app + database. #43 verified by value but its
+>   success screen was not reached — that tenant takes card payment, so the booking redirects
+>   to Flitt. #44 and #46 not driven live.
+> - **Open question for Max:** whether the order detail screen should show two labelled
+>   numbers ("Total" + "If you save: ₾X") instead of one. Conservative fix shipped; the
+>   redesign is still the better end state.
+> - Not done deliberately: VAT (dropped on Max's call), production DB audit (dev only).
+
+
+Started as Max asking *what actually causes* the unit-mixing bug class (#42) and what risk it
+carries. Ended with six confirmed defects fixed and a lint rule that makes the display half
+of the class impossible to reintroduce.
+
+### The measurement that redirected the work
+
+Built a throwaway lab (35 adversarial files, 4 candidate designs, compiled with `tsc --strict`
+and executed) to answer "how much does each defence actually catch?" Ground rule: no `as`
+casts to force a failure — only code someone would naturally write.
+
+| Design | Compiler caught | Runtime caught | **Silent wrong values** |
+|---|---|---|---|
+| Current `number & {__tetri}` brand | 4 | 1 | **12 of 18** |
+| Opaque Tetri (not a `number` subtype) | 7 | 1 | **10** |
+| Opaque `Gel` **and** `Tetri` + typed DB boundary | 15 | 1 | **2** |
+| Boxed `Money` class, `valueOf()` throws | 12 | 6 | **3** |
+
+Two findings worth keeping:
+
+- **The brand is a one-way door.** `Tetri` is assignable to `number`, so declaring a
+  parameter `number` silently strips the brand on the way in. That is exactly how #42 and
+  #45 got through — not a failure of the brand, it was never in the room.
+- **Branding alone would not have caught #42.** TypeScript does not type-check arithmetic
+  between branded numbers: `gel + tetri` compiles and returns a bare `number`. What catches
+  it is the *helpers* (`sumTetri`/`multiplyTetri` reject a bare `number`), not the brand.
+
+I then proposed migrating to a boxed `Money` class. **That was over-engineering**, and the
+blind review below is what proved it — see "Where I was wrong".
+
+### Industry check
+
+Asked how Shopify and others do it. No consensus on representation — Stripe/Square/Adyen use
+integer minor units (our tetri, and what Flitt expects); Shopify's GraphQL uses a Decimal
+serialised as a **string**, with its own Ruby gem BigDecimal-backed and stored
+`decimal(21,3)` + a separate currency column. Near-unanimous on **shape**: money is a value
+object carrying amount + currency, arithmetic as methods (Fowler's Money pattern, 2002).
+
+Our representation is right and matches our gateway. Shopify avoids this bug class not by
+better numbers but by **never having a bare number** — which is the gap we kept.
+
+### The blind review — the highest-value step of the session
+
+Max asked for a second opinion from a subagent given **no context**: no decisions, no
+reasoning, just "examine how this codebase handles money." It hunted live defects instead of
+design quality and found five; a sixth surfaced while verifying it. All six confirmed against
+source before being recorded: **#43–#48** in [[KnownBugs]], with the full classification and
+the "why the ₾-anchored sweep missed them" analysis there.
+
+Worst two: **#45** wrote ₾0.20 for a typed `20` and corrupts rows permanently; **#44** made
+every discounted B2B company silently unable to place a wine order, swallowed by a bare
+`catch {}`.
+
+### Where I was wrong
+
+The review's "leave alone" list opened with *don't add a `Money` class* — a direct
+contradiction of my recommendation, and it was right. My attack suite optimised hard for
+display bugs, and the measured display surface is 154 `formatTetri` sites with **zero**
+bypasses; the review found exactly one (#43). Meanwhile the real mechanism behind #45 was a
+single server action typed `amount: number`, and there were only **two** such parameters left
+in the codebase. Two lines closed what a half-week migration would have.
+
+Retained from my analysis: the compute path is where coverage is thin. `pricing.ts` and
+`pricingUtils.ts` import the money module **not at all**; `orders.ts` imports only the type.
+Every `multiplyTetri` call in the codebase is inside a `formatTetri` for display. The module
+is deployed on the read side and absent from the write side — which is where all six bugs
+were.
+
+### Verification
+
+- `tsc --noEmit`: **0 errors.** The two retypings surfaced 5 call sites, all passing genuine
+  tetri; re-branded with `asTetri`, no further bugs behind them.
+- `scripts/test-money.ts`: **61 passed, 0 failed** (was 47 — added 14 cases guarding #44).
+- ESLint: money rule **0 violations** codebase-wide; the 12 pre-existing problems in touched
+  files are byte-identical before and after (verified via `git stash`).
+- #44 fix measured against the five failing cases: all now integral.
+
+### Then: the database audit, and a seventh bug
+
+Max authorised direct inspection and repair of dev data ("all data is fake anyway; we aren't
+taking real orders yet"). Built `saas/scripts/audit-money.ts`, a read-only plausibility sweep
+over every money column. **Kept** — it is the cheapest way to answer "did anything get
+written wrong" after future money work.
+
+**No damaged rows anywhere.** #45 never actually wrote one: `OrderExtra` is empty, because
+nobody has used the admin "add extra" button since the migration. The bug was real and would
+have corrupted the first row it touched; it never got the chance. Full table in [[KnownBugs]].
+
+The audit surfaced **#49**, which code-reading had not: `demoSeed.ts` never wrote rate
+snapshots, so **393 of 393** demo orders were snapshot-less — #47's shape at 100% of the demo
+data, meaning `recalcOrderTotal` took its legacy repricing branch for every demo booking.
+`computeTotal` now returns the three rates instead of discarding them.
+
+**A false alarm worth recording.** Re-seeding after the fix moved the total order sum by ₾270,
+which looked like the refactor changing a number. It was not: the seed's date window is
+relative to `now`, and the date rolled from the 18th to the 19th mid-session. Proven two ways
+— three back-to-back seeds on the same day produced byte-identical totals, and the old and new
+`computeTotal` were compared directly across **1,944 input combinations with 0 differences**.
+Snapshot coverage went 0/393 → 393/393 with every total otherwise untouched.
+
+### Second blind review — pricing — and three more bugs
+
+Max asked for another context-free second opinion, this time on pricing, with `vault/`
+explicitly fenced off (it by then held this entire analysis, which would have anchored the
+reviewer instead of testing it).
+
+It counted **nine** pricing sites, not five, found **#50–#52**, and **corrected the previous
+conclusion**: the claim that consolidation needs a design decision was wrong. `pricingUtils.ts`
+has no `'use server'` and no server-only imports and is already imported by eight files on both
+sides of the boundary. There is nothing to cross. Its better framing, now in [[KnownBugs]]:
+*the sites do not disagree about pricing, they disagree about where rates come from.*
+
+Worst of the three: **#50** silently destroys the record — a Save on an individual order sent a
+hardcoded ₾50 and overwrote the real rate snapshot, taking a ₾280 booking to ₾200 with the
+original rate gone.
+
+### Fixed, tests first
+
+Followed the reviewer's sequencing, which was the sharpest thing it said: extraction will change
+behaviour at these exact sites, so extracting first buries three fixes in a mechanical diff
+where a fix and a fresh bug look identical.
+
+Wrote `scripts/test-pricing-agreement.ts` **before touching any code**. It failed 6 of 8 with
+exactly the predicted numbers — admin walk-in ₾200 vs the public site's ₾280; a ₾10 extra moving
+a total by ₾130; the detail screen at ₾280 against the invoice's ₾240; a Save sending
+`{5000, 5000}` and overwriting a 7000 snapshot. Then fixed, and it went **9/9**.
+
+Be honest about what that suite is: the formulas live inside a server action and a React
+component and cannot be imported, so each is **replicated** in the test file. A replica can drift
+from the site it mirrors. It is written that way deliberately and temporarily — when
+`priceBooking()` lands, every replica is deleted and the assertions point at the real function.
+The file says so at the top.
+
+**Two judgement calls made without asking**, both the conservative option:
+- A snapshot-less legacy order now simply does not reprice when guest counts change, until an
+  admin types a rate. Same stance `recalcOrderTotal`'s legacy branch takes — say nothing rather
+  than guess.
+- Took the arithmetic fix on the detail screen rather than the two-number redesign
+  ("Total" + "If you save"), since that screen is used daily. The live-preview caveat is now
+  gated on `computedTotal !== order.totalPrice`, so it appears exactly when the figure is not
+  what is stored, instead of on a guess about which code path produced it. The redesign is
+  still the better end state.
+
+The compiler caught one wrong assumption of mine mid-fix: I had said the snapshots were already
+reaching `OrderDetail` because the page query uses `include`. The query does load them, but the
+page builds its prop literal field by field and never passed these three down. Two errors, both
+real, both fixed.
+
+### Live verification on staging, and a bug the verification itself caught
+
+Max: *"you run the tests live and confirm."* Drove the real app on `staging.vineworks.ge`
+(tenant **Staging Winery**, the throwaway one — `demo.vineworks.ge` runs `master` and could
+not test these).
+
+**Verified in the running app and cross-checked against the database:**
+
+| # | Evidence |
+|---|---|
+| 51 | Individual, Tasting+Lunch, 4 guests, rates 50/80 → stored **₾320** (was ₾200). DB: `lunchRateSnapshot 8000`, and recalc-from-snapshots **matches** the stored total, so the second-order jump is gone. |
+| 45 | Typed `20` into "Amount (₾)" → stored **₾20.00**, DB `amount 2000`. |
+| 52 | Detail screen: Base 320 + Transport 20 = **₾340**, equal to the DB. Pre-fix it would have read ₾360. |
+| 50 | Rate badge showed the order's **own** rates, "Tasting 50₾/pp · Lunch 80₾/pp" — not the hardcoded 50/50. |
+| 43 | Value correct at every stage — ₾280 on the form, ₾280 on the review sheet, **280.00 at the Flitt checkout**. The success screen itself was NOT reached: this tenant takes card payment, so `createBooking` redirects before it. Reaching it needs a tenant with online payment off. |
+
+**#44 and #46 were not driven live.** No discounted company with an access code exists on this
+tenant, and the CSV is a file download.
+
+### The verification caught a bug the fixes had created
+
+`createOrderAdmin` was fixed in `c72ca0c`. **`NewOrderForm.tsx` is its client-side mirror and
+still had the original defect**, so the fix left the two disagreeing: the form read **₾200**
+while the order saved as **₾320**. That is worse than the bug it replaced, and no test caught
+it — only driving the real form did.
+
+Fixed in `b2c1d8b`, with the agreement added as a test case (9/9 → 11/11).
+
+A second, pre-existing defect surfaced in the same card: the breakdown read
+*"Tasting (4 × 50₾) — 0.00₾"* under a ₾320 total. The row's label used `guestCount` while its
+amount used `tastingGuests` (always 0 for an individual), and the total came from a third
+expression agreeing with neither. `dda619e` makes `computedTotal` one expression over the same
+two numbers the rows display, so breakdown and total cannot disagree by construction. Now
+reads **"Tasting+Lunch (4 × 80₾) — 320.00₾"** under a ₾320 total.
+
+**The lesson, and it is §22's lesson again:** fixing one copy of a duplicated formula and not
+its mirror is worse than fixing neither. I walked into it while fixing §22's own examples.
+This is the strongest argument yet for the extraction.
+
+**Test data left on Staging Winery:** one admin order "Pricing Testcase" (₾340) and one
+abandoned public booking "Booking Totaltest" (₾280, abandoned at the Flitt step). Both
+disposable.
+
+### The extraction, and the tier-rule change that went with it
+
+Max: *"if we have guest count then the pricing tier should only be derived from guest count —
+that is exactly what pricing tier is for."* He is right, and it is a better rule than the one
+that shipped: a price ladder answers *how big is this booking*, which is a fact about the
+party, not about who happens to be eating.
+
+Done together with the extraction, because doing them separately meant touching all nine sites
+twice.
+
+**What landed in `lib/pricingUtils.ts`:**
+
+```ts
+priceBooking(rates, guests, visitType, lines): number   // the only arithmetic
+ratesForParty(prices, guestCount, { chargeRegistration? })  // does the findTier lookup
+ratesFromTier / ratesFromSnapshot / ratesFromManual
+```
+
+The reviewer's framing turned out to be exactly right: the sites never disagreed about the
+arithmetic, they disagreed about **where the rates come from**. One function plus four
+resolvers, and the nine call sites collapse to a resolver choice.
+
+**Two rules now live in one line each:**
+1. `ratesForParty` owns the `findTier` lookup, so no call site picks a head count any more.
+2. `priceBooking` branches on whether the buckets are set; `visitType` only applies to an
+   unsplit party.
+
+**Tests first again.** The tier rule went in as a failing test before any code moved, pinned
+with a worked example: a party of 8 (2 tasting-only, 4 tasting+lunch, 2 free) costs **₾620**
+under the old rule and **₾540** under the new one, because 6 payers sat in the 3–6 band while
+a party of 8 sits in the 7–100 band. 11 → 21 cases, all green.
+
+**Also closed #54**, which the tier change made blocking: the party size is now an *entered*
+field on both admin screens rather than a byproduct of the split, `updateOrderEnhanced` takes
+and writes it, and both server actions and both forms reject a split larger than the party.
+That was the only way to make "the tier comes from guestCount" safe, since an admin previously
+could not edit guestCount at all on an existing order.
+
+**Consequence to know:** free guests now count toward the volume band. A party of 12 with a
+guide and a driver tiers as 12. Max's call; it is a real pricing change.
+
+**Verification.** tsc 0 · test-pricing-agreement 21/21 · test-money 61/61 · money lint rule 0 ·
+full lint **206 problems vs 208 at baseline** (83 errors unchanged, two fewer warnings — the
+rewire orphaned five variables and I removed them). Re-seeded dev: totals moved ₾228,472 →
+₾227,892, which is the right direction (bigger parties → cheaper bands) with snapshot coverage
+holding at 395/395 and the money audit clean.
+
+### Live verification of the tier change
+
+Driven on `staging.vineworks.ge` against **Kakheti Wine Routes**, whose ladder has a band
+boundary at 10/11 (1–10 @₾55, 11–20 @₾45) — chosen because the change only shows where a
+boundary is actually crossed.
+
+**Party of 11: 9 tasting-only + 2 free.**
+
+```
+Tier in use: 11–20 guests · Tasting 45₾/pp · Lunch 85₾/pp
+Tasting (9 × 45₾)   405.00₾
+Total               405.00₾
+```
+
+The old rule would have tiered on the 9 payers → 1–10 band → ₾495. **₾405 against ₾495**, and
+the free guide and driver are what moved it.
+
+| Checked | Result |
+|---|---|
+| New "Total guests in the party" field | Present on **both** admin screens, entered not derived |
+| #53 relabelling | Live: "Tasting only ₾/pp", "Tasting+Lunch ₾/pp", "Tasting-only guests", "Tasting+Lunch guests" |
+| Tier follows party size | Party 11 → ₾405 (11–20 band); dropped to 9 → **₾495** (1–10 band), live on the detail screen |
+| Split guard, client | "The split adds up to 14, but the party is 11." Create button **disabled** |
+| Split guard, server | Save rejected: "The split adds up to 11 but the party is 9. Raise the guest count or lower the split." |
+| Live-preview caveat | Appears exactly when the figure differs from what is stored (#52's fix) |
+| Valid save | DB: `guestCount 9`, split `9/0/0`, `totalPrice ₾495`, snapshots `55/95` — the new band's rates, and `guestCount` written on edit, which is #54 |
+
+Both guard layers fire independently, with their own wording. Test data left on Staging
+Winery: "Tier Bandtest" (₾495), alongside the earlier "Pricing Testcase" and "Booking
+Totaltest". All disposable.
+
+### Next
+
+1. **Merge `staging` → `master`.** The only step left, and it is Max's call — it ships to real
+   customers. Everything below it is verified.
+2. **VAT dropped on Max's call** — not being added separately for now (2026-09-19).
+3. Production has not been inspected. The audit ran against **dev only**; if prod carries any
+   `OrderExtra` rows written since 2026-09-18 they would still need the #45 repair.
+
+---
+
 ## 2026-09-18 (later) — Status settled as C; data-model plan written, nothing built
 
 **The contested shape is now decided.** Max interrogated the transactional schema from

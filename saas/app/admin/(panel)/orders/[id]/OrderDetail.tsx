@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
+import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -191,6 +191,14 @@ type OrderProp = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  // The rates this order was actually sold at. The page's query already loaded
+  // them (it uses `include`), but its prop literal listed fields one by one and
+  // never passed these three down — so this screen had no way to know what the
+  // order cost, and invented ₾50 instead (#50) while double-counting its lines
+  // against the stored total (#52). Both fixes need these here.
+  tastingRateSnapshot: number | null
+  lunchRateSnapshot: number | null
+  registrationFeeSnapshot: number | null
   requestedCompanyName: string | null
   company: {
     id: string
@@ -200,6 +208,8 @@ type OrderProp = {
   } | null
   masterclassLines: MasterclassLine[]
   extras: ExtraRow[]
+  contacts: { roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
+  invoicesSent: { id: string; sentAt: Date | string; recipientEmail: string; totalPrice: number }[]
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -296,17 +306,33 @@ export default function OrderDetail({
   }
   // ── Guest / dish / notes state ─────────────────────────────────────────────
   // String state so the user can clear the field and type a new number freely
+  // The party size. Editable since 2026-09-19 because it, not the split, picks
+  // the price tier — and because it used to drift from the split on every edit
+  // (#54), leaving the invoice and the price describing different bookings.
+  const [guestCountStr, setGuestCountStr] = useState(String(order.guestCount))
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
   const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
   const [freeGuestsStr, setFreeGuestsStr] = useState(String(order.freeGuestCount))
-  // Manual per-person rates for individual / no-tier orders
-  const [manualTastingRateStr, setManualTastingRateStr] = useState('50')
-  const [manualLunchRateStr, setManualLunchRateStr] = useState('50')
+  // Manual per-person rates for individual / no-tier orders.
+  //
+  // Seeded from the order's own rate snapshot, NOT from a constant. Both boxes
+  // were `useState('50')` until 2026-09-19 (#50), which meant the screen showed
+  // "Rate: 50/50" for every individual order as though that were what it had
+  // been sold at — and, because handleSave sent the boxes whenever the order
+  // had no company prices, a Save after editing guest counts re-priced a ₾70/pp
+  // booking at ₾50 and overwrote its real snapshot. Empty when there is no
+  // snapshot to show: inventing a number here is the bug.
+  const snapshotTastingMajor = order.tastingRateSnapshot != null ? String(toMajor(asTetri(order.tastingRateSnapshot))) : ''
+  const snapshotLunchMajor = order.lunchRateSnapshot != null ? String(toMajor(asTetri(order.lunchRateSnapshot))) : ''
+  const [manualTastingRateStr, setManualTastingRateStr] = useState(snapshotTastingMajor)
+  const [manualLunchRateStr, setManualLunchRateStr] = useState(snapshotLunchMajor)
   const [customRates, setCustomRates] = useState(false)
   // Parsed numbers for calculations
+  const partyGuestCount = Math.max(1, parseInt(guestCountStr) || 1)
   const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
   const lunchGuests = Math.max(0, parseInt(lunchGuestsStr) || 0)
   const freeGuests = Math.max(0, parseInt(freeGuestsStr) || 0)
+  const splitTotal = tastingGuests + lunchGuests + freeGuests
   const [hotDishVeg, setHotDishVeg] = useState(order.hotDishVegetable ?? '')
   const [hotDishMeat, setHotDishMeat] = useState(order.hotDishMeat ?? '')
   const [foodNotes, setFoodNotes] = useState(order.foodNotes ?? '')
@@ -419,45 +445,78 @@ export default function OrderDetail({
   const prices = order.company?.prices ?? []
   const payingGuests = tastingGuests + lunchGuests
 
-  // Tier driven by paying guests. If no exact range match, falls back to the
-  // highest-priced tier so small groups are never under-charged.
+  // Party size drives the tier (2026-09-19). If no exact range match, falls back
+  // to the highest-priced tier so small groups are never under-charged.
   const tier = useMemo(
-    () => findTier(prices, payingGuests),
-    [prices, payingGuests]
+    () => findTier(prices, partyGuestCount),
+    [prices, partyGuestCount]
   )
 
-  // Tier for original guestCount (pre-enhancement display fallback)
-  const legacyTier = useMemo(
-    () => findTier(prices, order.guestCount),
-    [prices, order.guestCount]
-  )
-  // Base price derived from the original booking (guestCount × rate + reg fee)
-  const legacyBase = legacyTier
+  // Same lookup as `tier` now that both key off the party size; kept as its own
+  // name because the breakdown row below reads differently when it is the only
+  // basis for the total.
+  const legacyTier = tier
+  // Base price derived from the original booking (guestCount × rate + reg fee).
+  //
+  // MUST exclude line items, because the caller adds masterclassAmt + extrasAmt
+  // to it. The fallback was `order.totalPrice ?? 0` until 2026-09-19 (#52) —
+  // a figure that already contains those lines, so they were counted twice on
+  // every individual order (`prices` comes from order.company?.prices, and an
+  // individual has no company). The database, the orders table and the invoice
+  // said ₾240; this screen said ₾280.
+  //
+  // The snapshot is the honest source for a line-free base, and reconstructing
+  // it here is exactly what recalcOrderTotal does (pricing.ts:47-54). When
+  // there is no snapshot there is nothing to rebuild from, so legacyBase is
+  // null and the total falls back to the stored figure untouched.
+  const snapshotBase =
+    order.tastingRateSnapshot != null || order.lunchRateSnapshot != null
+      ? partyGuestCount *
+          (order.visitType === 'TASTING_LUNCH'
+            ? (order.lunchRateSnapshot ?? 0)
+            : (order.tastingRateSnapshot ?? 0)) +
+        (order.registrationFeeSnapshot ?? 0)
+      : null
+
+  const legacyBase: number | null = legacyTier
     ? order.guestCount *
         (order.visitType === 'TASTING_LUNCH'
           ? comboRatePerPerson(legacyTier)
           : legacyTier.pricePerPerson) +
       legacyTier.registrationPrice
-    : (order.totalPrice ?? 0)
+    : snapshotBase
 
   const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : null
   const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : null
-  const regFee = tier ? tier.registrationPrice : null
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
   // The inputs hold GEL; everything they feed into is tetri (chunk 3).
   const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
   const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
 
-  const computedTotal: number | null =
+  // null means "this screen cannot derive a total" — the display then shows the
+  // stored order.totalPrice rather than a computed one. Every branch used to
+  // return a number, which made that fallback unreachable and meant the screen
+  // never displayed the stored total at all (#52).
+  // Whichever rates apply, the sum is priceBooking's — the same function the
+  // server uses, so this screen cannot disagree with what a Save will store.
+  const previewRates =
     tier != null
-      ? // Company tier: split counts × tier rates
-        tastingAmt! + lunchAmt! + regFee! + masterclassAmt + extrasAmt
-      : payingGuests === 0
-        ? // Pre-enhancement fallback: guestCount-based legacy total
-          legacyBase + masterclassAmt + extrasAmt
-        : // Individual / no-tier: use admin-supplied per-person rates
-          tastingGuests * manualTastingRate + lunchGuests * manualLunchRate + masterclassAmt + extrasAmt
+      ? ratesForParty(prices, partyGuestCount)
+      : (order.tastingRateSnapshot != null || customRates)
+        ? (customRates
+            ? ratesFromManual(manualTastingRate, manualLunchRate)
+            : ratesFromSnapshot(order))
+        : null
+
+  const computedTotal: number | null = previewRates
+    ? priceBooking(
+        previewRates,
+        { guestCount: partyGuestCount, tastingGuests, lunchGuests },
+        order.visitType as 'TASTING' | 'TASTING_LUNCH',
+        { masterclass: masterclassAmt, extras: extrasAmt },
+      )
+    : null
 
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -481,13 +540,20 @@ export default function OrderDetail({
     setSaving(true)
     setSaveMsg('')
     const result = await updateOrderEnhanced(order.id, {
+      guestCount: partyGuestCount,
       tastingGuestCount: tastingGuests,
       lunchGuestCount: lunchGuests,
       freeGuestCount: freeGuests,
       hotDishVegetable: hotDishVeg || null,
       hotDishMeat: hotDishMeat || null,
       foodNotes: foodNotes || null,
-      ...(prices.length === 0 && payingGuests > 0
+      // Only send rates there is a reason to believe: one the order already
+      // carries, or one the admin deliberately typed. Sending unconditionally
+      // is what let a hardcoded ₾50 overwrite a real snapshot (#50). When
+      // neither holds, updateOrderEnhanced's manual branch does not fire and
+      // the stored total and snapshot are left alone — the same stance
+      // recalcOrderTotal's legacy branch takes: say nothing rather than guess.
+      ...(prices.length === 0 && payingGuests > 0 && (order.tastingRateSnapshot != null || customRates)
         ? { manualTastingRate, manualLunchRate }
         : {}),
     })
@@ -539,7 +605,10 @@ export default function OrderDetail({
   async function handleAddExtra() {
     if (!newExtraLabel.trim() || !newExtraAmount) return
     setExtraLoading(true)
-    const amount = parseFloat(newExtraAmount) || 0
+    // The field is labelled "Amount (₾)", so what the admin typed is lari.
+    // Everything downstream — ExtraRow, extrasAmt, the formatTetri renders —
+    // is tetri, so convert here (bug #45; NewOrderForm.tsx has always done it).
+    const amount = fromMajor(parseFloat(newExtraAmount) || 0)
     const result = await addOrderExtra(order.id, { label: newExtraLabel, amount })
     if ('extraId' in result) {
       setExtras(prev => [...prev, { id: result.extraId, label: newExtraLabel, amount }])
@@ -766,9 +835,47 @@ export default function OrderDetail({
           </div>
         )}
         <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
-        <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
-        <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
+        {/* Plan-ContactRoles Chunk 11a: for company bookings these are a synced copy of the
+            Contacts card's Contact Person row (decision 4) — showing both duplicated the same
+            person. Individuals have no OrderContact row at all, so they still need these here. */}
+        {order.bookingType !== 'COMPANY' && (
+          <>
+            <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
+            <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
+          </>
+        )}
         {order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
+      </Card>
+
+      {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1) ── */}
+      <Card title={at('orderDetail.contacts.title')}>
+        {order.contacts.length === 0 ? (
+          <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.contacts.none')}</p>
+        ) : (
+          order.contacts.map((c, i) => (
+            <InfoRow
+              key={i}
+              label={locale === 'ka' ? c.roleLabelKa : c.roleLabelEn}
+              value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')}
+            />
+          ))
+        )}
+      </Card>
+
+      {/* ── Invoice history — a permanent record of what was actually billed, since the
+          email itself is rebuilt live from current order data on every send ── */}
+      <Card title={at('orderDetail.invoiceHistory.title')}>
+        {order.invoicesSent.length === 0 ? (
+          <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.invoiceHistory.none')}</p>
+        ) : (
+          order.invoicesSent.map(inv => (
+            <InfoRow
+              key={inv.id}
+              label={`${formatDate(new Date(inv.sentAt))} · ${new Date(inv.sentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`}
+              value={`${inv.recipientEmail} · ${formatTetri(asTetri(inv.totalPrice))}`}
+            />
+          ))
+        )}
       </Card>
 
       {/* ── Guest Breakdown & Dishes ── */}
@@ -785,6 +892,31 @@ export default function OrderDetail({
             </a>{' '}
             {at('orderDetail.guestBreakdown.thenComeBack')}
           </div>
+        )}
+
+        {/* Party size — what the price tier is chosen by. */}
+        <div className="mb-3" style={{ maxWidth: 200 }}>
+          <label className="text-xs block mb-1" style={{ color: C.faint }}>
+            {at('orderDetail.guestBreakdown.partySize')}
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={guestCountStr}
+            onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
+            onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
+            style={inputStyle}
+          />
+          <p className="text-xs mt-1" style={{ color: C.faint }}>
+            {at('orderDetail.guestBreakdown.partySizeHint')}
+          </p>
+        </div>
+
+        {splitTotal > partyGuestCount && (
+          <p className="text-xs mb-3" style={{ color: '#b91c1c' }}>
+            {at('orderDetail.guestBreakdown.splitExceeds', { split: splitTotal, party: partyGuestCount })}
+          </p>
         )}
 
         {/* Guest count inputs */}
@@ -846,7 +978,12 @@ export default function OrderDetail({
                   className="text-xs px-2.5 py-1 rounded-full font-medium"
                   style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
                 >
-                  {at('orderDetail.guestBreakdown.rateBadge', { t: formatTetri(manualTastingRate, { symbol: false }), l: formatTetri(manualLunchRate, { symbol: false }) })}
+                  {/* An em dash when the order carries no rate and nobody has
+                      set one. Showing "50 / 50" there was the display half of
+                      #50 — a made-up figure presented as the agreed rate. */}
+                  {order.tastingRateSnapshot == null && !customRates
+                    ? '—'
+                    : at('orderDetail.guestBreakdown.rateBadge', { t: formatTetri(manualTastingRate, { symbol: false }), l: formatTetri(manualLunchRate, { symbol: false }) })}
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
@@ -865,8 +1002,9 @@ export default function OrderDetail({
                   <span className="text-xs font-medium" style={{ color: C.muted }}>{at('orderDetail.guestBreakdown.customRates')}</span>
                   <button
                     onClick={() => {
-                      setManualTastingRateStr('50')
-                      setManualLunchRateStr('50')
+                      // Back to what the order was sold at, not to a constant (#50).
+                      setManualTastingRateStr(snapshotTastingMajor)
+                      setManualLunchRateStr(snapshotLunchMajor)
                       setCustomRates(false)
                     }}
                     className="text-xs"
@@ -1308,8 +1446,11 @@ export default function OrderDetail({
               </span>
             </div>
           )}
-          {/* Pre-enhancement fallback: split counts not set yet */}
-          {payingGuests === 0 && order.guestCount > 0 && (
+          {/* Pre-enhancement fallback: split counts not set yet. Hidden when
+              legacyBase is null — no tier and no snapshot means there is no
+              line-free base to show, and printing the stored total here would
+              list it beside the very lines it already contains (#52). */}
+          {payingGuests === 0 && order.guestCount > 0 && legacyBase != null && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
                 {legacyTier
@@ -1353,7 +1494,11 @@ export default function OrderDetail({
           </span>
         </div>
 
-        {payingGuests > 0 && (tier || prices.length === 0) && (
+        {/* Shown whenever the figure above is NOT what is stored, rather than on
+            a guess about which path produced it. The old `payingGuests > 0`
+            gate hid it on exactly the path where the number was wrong (#52),
+            so a live preview read as the settled total. */}
+        {computedTotal != null && computedTotal !== order.totalPrice && (
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
             {at('orderDetail.total.livePreview')}
           </p>

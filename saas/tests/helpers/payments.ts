@@ -68,6 +68,17 @@ export async function setShowCompanyPriceToggle(page: Page, desired: boolean): P
   return setSettingsToggle(page, 'Show price after company booking', desired);
 }
 
+// Plan-ContactRoles §2 decision 6 — `person_codes_enabled` (admin label "Personal access
+// codes"). Off: the public booking form offers a picker for every role a company has people
+// in. On: a person's own code identifies them directly and the picker never opens at all.
+export async function readPersonCodesToggle(page: Page): Promise<boolean> {
+  return readSettingsToggle(page, 'Personal access codes');
+}
+
+export async function setPersonCodesToggle(page: Page, desired: boolean): Promise<void> {
+  return setSettingsToggle(page, 'Personal access codes', desired);
+}
+
 // ── Flitt merchant ID (/admin/settings) ──────────────────────────────────────
 // Ordinary text, saved on blur (SettingsClient.tsx's handleFlittMerchantIdBlur)
 // — unlike the secret key, this is not write-only, so a test can safely read

@@ -25,6 +25,7 @@ import PaymentResultView, { type PaymentResultKind } from '@/components/PaymentR
 import NewCompanyPopupView, { type NewCompanyPopupStatus } from '@/components/NewCompanyPopupView'
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
 import AccessCodePopupView, { type AccessCodePopupStatus } from '@/components/AccessCodePopupView'
+import ContactPickerPopupView from '@/components/ContactPickerPopupView'
 import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
 import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import type { ResolvedTheme } from '@/lib/themePresets'
@@ -63,6 +64,19 @@ const SAMPLE_DATE_RAW = new Date(2026, 8, 12) // Saturday, 12 September 2026
 const SAMPLE_TIME = '14:00'
 const SAMPLE_GUEST = { name: 'Ana', surname: 'Beridze', email: 'ana.beridze@example.com', phone: '+995 555 12 34 56' }
 const SAMPLE_COMPANY = 'Beridze LLC'
+/** Two is enough to show the picker is a list, not a single confirm button. */
+// Two visibly different people, and a role label alongside them: the picker is
+// role-driven now, and a preview that could not tell one role from another would
+// prove nothing about it (hurdle H13).
+// Locale-aware, because the real picker takes this from ContactRole.labelEn/labelKa and so
+// renders a Georgian role name on a Georgian page. A fixed English 'Guide' made the Georgian
+// preview read "…ამ ვიზიტის Guide, რომ…" — a half-translated line the live form never produces,
+// which is exactly the kind of thing an admin would report as a translation bug.
+const SAMPLE_ROLE: Record<string, string> = { en: 'Guide', ka: 'გიდი' }
+const SAMPLE_PEOPLE = [
+  { id: 'sample-1', roleId: 'sample-role', name: 'Nino Beridze', phone: '+995 599 41 22 08', email: null },
+  { id: 'sample-2', roleId: 'sample-role', name: 'Irakli Tsiklauri', phone: '+995 593 07 55 12', email: null },
+]
 
 type BookingVariant = 'unpaid' | 'paid' | 'pendingCompany'
 type NewCompanyVariant = 'withBooking' | 'noBooking' | 'sent' | 'error'
@@ -264,6 +278,8 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_access_code_intro: c.onsite_access_code_intro ?? t(locale, 'form.access_code_intro'),
     onsite_access_code_error: c.onsite_access_code_error ?? t(locale, 'form.access_code_error'),
     onsite_access_code_direct_not_recognised: c.onsite_access_code_direct_not_recognised ?? t(locale, 'form.access_code_direct_not_recognised'),
+    onsite_contact_picker_title: c.onsite_contact_picker_title ?? t(locale, 'form.contact_picker_title'),
+    onsite_contact_picker_intro: c.onsite_contact_picker_intro ?? t(locale, 'form.contact_picker_intro'),
     onsite_err_select_date: c.onsite_err_select_date ?? t(locale, 'form.err_select_date'),
     onsite_err_future_date: c.onsite_err_future_date ?? t(locale, 'form.err_future_date'),
     onsite_err_contact: c.onsite_err_contact ?? t(locale, 'form.err_contact'),
@@ -741,6 +757,32 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
 
           <EditField label={at('messages.onsiteAccessCode.directNotRecognised')} draftKey="onsite_access_code_direct_not_recognised"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          {/* Contact picker — the step AFTER this popup when the company has people
+              on file (KnownBugs #55, generalised to any contact type in
+              Plan-ContactRoles Chunk 7). Kept inside this same section rather than
+              given its own: it is the second half of one flow the guest experiences
+              as a single "prove who you are" moment, and splitting it would invite
+              an admin to edit one half and not the other. */}
+          <div className="h-px my-5" style={{ backgroundColor: C.border }} />
+          <p className="text-xs mb-3" style={{ color: C.faint }}>{at('messages.onsiteContactPicker.explainer')}</p>
+          <EditField label={at('messages.onsiteContactPicker.titleField')} draftKey="onsite_contact_picker_title"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteContactPicker.intro')} draftKey="onsite_contact_picker_intro"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+
+          <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
+            <ContactPickerPopupView
+              title={drafts.onsite_contact_picker_title}
+              intro={drafts.onsite_contact_picker_intro
+                .replaceAll('{company}', SAMPLE_COMPANY)
+                .replaceAll('{role}', SAMPLE_ROLE[locale] ?? SAMPLE_ROLE.en)}
+              people={SAMPLE_PEOPLE}
+              labels={{ notListed: t(locale, 'form.contact_picker_not_listed') }}
+              preview
+            />
+          </div>
         </Section>
 
         <Section

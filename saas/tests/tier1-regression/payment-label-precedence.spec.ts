@@ -12,9 +12,24 @@ import {
   readCompanyAccessCode, PaymentOverride,
 } from '../helpers/payments';
 
-// Shared read-only fixture, reused by booking-enhanced.spec.ts too — real
-// access code, not flagged "Needs details".
-const COMPANY_NAME = 'Test Company # 1';
+// Fixture companies, seeded by lib/demoSeed.ts and given their access codes by
+// scripts/backfill-test-fixtures.ts (2026-09-19).
+//
+// These replaced the hand-made `Test Company # 1` / `Wine Test Company`, which
+// the Feature 191 wipe deleted on 2026-09-18 — taking this spec and four others
+// down with them, unnoticed, because nothing outside a SessionLog entry recorded
+// it. Seeded companies are the more durable choice: their names, tiers and codes
+// are constants in demoSeed.ts, so a refill restores them exactly rather than
+// requiring someone to rebuild a company from memory.
+//
+// Each spec that mutates company-level settings uses a DIFFERENT company, so two
+// specs can never fight over the same payment override.
+//
+// Its own company rather than one shared with payment-amount-integrity.spec.ts:
+// both flip this company's payment override, and the previous arrangement had
+// them share one fixture, which is a real correctness hazard if they ever run
+// concurrently rather than merely a slow one.
+const COMPANY_NAME = 'Alazani Valley Tours';
 
 async function expectSubmitLabel(page: Page, expected: 'Request Booking' | 'Book & Pay') {
   await expect(page.getByRole('button', { name: expected, exact: true })).toBeVisible({ timeout: 15_000 });

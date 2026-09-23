@@ -1,8 +1,9 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { asTetri } from '@/lib/money'
+import { applyPercent, asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
+import { writeOrderContacts } from '@/lib/orderContacts'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
@@ -40,6 +41,20 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
   const winesJson = formData.get('wines') as string
   const companyId = (formData.get('companyId') as string | null)?.trim() || null
+  // One entry per contact role, JSON like `wines` above (Plan-ContactRoles Chunk 8).
+  // Written below via writeOrderContacts(), which re-verifies every roleId and personId
+  // against the company under the tenant before trusting any of it. Parsed here, separately,
+  // so a malformed value fails on the form that sent it rather than deeper in the write.
+  const contactsJson = formData.get('contacts') as string | null
+  let contacts: { roleId: string; personId?: string; name: string; phone: string | null; email: string | null }[] = []
+  if (contactsJson) {
+    try {
+      const parsed = JSON.parse(contactsJson)
+      if (Array.isArray(parsed)) contacts = parsed
+    } catch {
+      return { error: 'Please fill in all required fields.' }
+    }
+  }
 
   if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
@@ -84,9 +99,15 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     : null
 
   const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * priceMap[w.vintageId], 0)
+  // `Math.round(x * (1 - p/100) * 100) / 100` lived here until 2026-09-18. It
+  // meant "round to two decimals of lari" and was correct while subtotal was a
+  // Float of lari. Against tetri it rounds at the wrong scale and leaves a
+  // fraction — 4550 at 15% gave 3867.5, which an Int column rejects, so every
+  // discounted company's wine order failed to save (bug #44). applyPercent
+  // rounds at tetri scale and always returns a whole number.
   const totalAmount = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+    ? applyPercent(asTetri(subtotal), discountPercent)
+    : asTetri(subtotal)
 
   // Wine orders always show the customer their total, so unlike company
   // bookings there's no hidden-price case to exclude here (§7.4).
@@ -135,6 +156,18 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           quantity: w.quantity,
         })),
       })
+      // Who to contact about this order, one row per role, with snapshots. The Contact
+      // Person's details are also in WineOrder.contactName/contactPhone/contactEmail above,
+      // for the same reason bookings keep Order.name/surname/phone/email — see the note in
+      // createBooking.ts, which is the one place that special case is explained.
+      await writeOrderContacts(tx, {
+        tenantId,
+        target: { wineOrderId: order.id },
+        companyId: companyId || null,
+        module: 'WINE_ORDER',
+        contacts,
+        fallbackContactPerson: { name: contactName, phone: contactPhone, email: contactEmail },
+      })
       return order
     })
 
@@ -171,7 +204,12 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     }
 
     return { success: true }
-  } catch {
+  } catch (err) {
+    // This catch swallowed bug #44 in silence for as long as it shipped: every
+    // discounted company's order failed on the Int write and the customer saw
+    // only "Something went wrong", with nothing anywhere saying why. The
+    // message to the customer stays vague on purpose; the log does not.
+    console.error('[submitWineOrder] failed to place wine order', err)
     return { error: 'Something went wrong. Please try again.' }
   }
 }

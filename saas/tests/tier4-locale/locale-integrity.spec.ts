@@ -51,21 +51,27 @@ async function findRawKeyLeaks(page: Page): Promise<string[]> {
   }, RAW_KEY_RE.source);
 }
 
-// KNOWN-ISSUES.md #2: CompaniesClient.tsx nests a <button> (the HelpHint "?"
-// trigger) inside another <button> (the row summary button) — invalid HTML,
-// which throws a real React hydration-mismatch console error on every single
-// load of /admin/companies, in any locale. Confirmed live while building this
-// test (2026-08-11): fresh login → /admin/companies → exactly this error,
-// nothing else. It's a standing app bug unrelated to translations (already
-// flagged as its own follow-up, not fixed here) — filtered out so this test
-// doesn't perpetually fail for a reason that has nothing to do with locale
-// integrity. Anything else surfacing here is a real, new problem.
-function isKnownCompaniesHydrationError(text: string): boolean {
-  return (
-    /cannot contain a nested/i.test(text) ||
-    /Hydration failed because the server rendered HTML didn't match the client/i.test(text)
-  );
-}
+// Removed 2026-09-19: `isKnownCompaniesHydrationError()`, a filter that
+// suppressed hydration errors in all five tests below.
+//
+// It existed for KNOWN-ISSUES.md #2 — CompaniesClient.tsx nesting HelpHint's
+// "?" <button> inside the row-summary <button>, which threw a hydration
+// mismatch on every load of /admin/companies. **That bug was fixed in the app
+// on 2026-09-12** (KnownBugs #15), so the filter no longer suppresses anything
+// it was built to suppress.
+//
+// Worth removing rather than leaving inert, because it was over-broad in two
+// ways that only matter once the real error stops firing:
+//  - it was applied to all five tests, including the public home page, the
+//    wine catalogue, admin orders and admin settings — none of which render
+//    CompaniesClient at all;
+//  - its second pattern matched React's *generic* "Hydration failed because
+//    the server rendered HTML didn't match the client" text, not just the
+//    nested-button case, so ANY new hydration mismatch introduced anywhere in
+//    the app would have passed these tests silently.
+//
+// These tests now assert on every console error they see. If that surfaces a
+// failure, it is a real one — check it before re-adding any suppression.
 
 function trackConsoleErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -94,10 +100,9 @@ test.describe('Locale integrity — public pages', () => {
     const leaks = await findRawKeyLeaks(page);
     expect(leaks, 'raw i18n keys leaked onto the Georgian home page').toEqual([]);
 
-    // expect: zero real console errors during the toggle (known companies-page
-    // hydration bug excluded — see isKnownCompaniesHydrationError above)
-    const realErrors = consoleErrors.filter((e) => !isKnownCompaniesHydrationError(e));
-    expect(realErrors, 'console errors during the locale toggle').toEqual([]);
+    // expect: zero console errors during the toggle — no exclusions since
+    // 2026-09-19 (see the note above the trackConsoleErrors helper)
+    expect(consoleErrors, 'console errors during the locale toggle').toEqual([]);
 
     await setSiteLanguage(page, 'en');
 
@@ -116,8 +121,7 @@ test.describe('Locale integrity — public pages', () => {
     const leaks = await findRawKeyLeaks(page);
     expect(leaks, 'raw i18n keys leaked onto the Georgian wine catalogue').toEqual([]);
 
-    const realErrors = consoleErrors.filter((e) => !isKnownCompaniesHydrationError(e));
-    expect(realErrors, 'console errors during the locale toggle').toEqual([]);
+    expect(consoleErrors, 'console errors during the locale toggle').toEqual([]);
 
     await setSiteLanguage(page, 'en');
 
@@ -152,8 +156,7 @@ test.describe('Locale integrity — admin pages', () => {
     const leaks = await findRawKeyLeaks(page);
     expect(leaks, 'raw i18n keys leaked onto the Georgian admin orders page').toEqual([]);
 
-    const realErrors = consoleErrors.filter((e) => !isKnownCompaniesHydrationError(e));
-    expect(realErrors, 'console errors during the locale toggle').toEqual([]);
+    expect(consoleErrors, 'console errors during the locale toggle').toEqual([]);
 
     await setAdminPanelLanguage(page, 'en');
     await page.goto('/admin/orders');
@@ -174,8 +177,7 @@ test.describe('Locale integrity — admin pages', () => {
     const leaks = await findRawKeyLeaks(page);
     expect(leaks, 'raw i18n keys leaked onto the Georgian admin settings page').toEqual([]);
 
-    const realErrors = consoleErrors.filter((e) => !isKnownCompaniesHydrationError(e));
-    expect(realErrors, 'console errors during the locale toggle').toEqual([]);
+    expect(consoleErrors, 'console errors during the locale toggle').toEqual([]);
 
     await setAdminPanelLanguage(page, 'en');
     await page.goto('/admin/settings');
@@ -198,11 +200,12 @@ test.describe('Locale integrity — admin pages', () => {
     const leaks = await findRawKeyLeaks(page);
     expect(leaks, 'raw i18n keys leaked onto the Georgian admin companies page').toEqual([]);
 
-    // expect: zero *unexpected* console errors — KNOWN-ISSUES.md #2's nested-
-    // button hydration mismatch fires on every load of this exact page
-    // regardless of locale (filtered above); anything else would be new.
-    const realErrors = consoleErrors.filter((e) => !isKnownCompaniesHydrationError(e));
-    expect(realErrors, 'console errors during the locale toggle').toEqual([]);
+    // expect: zero console errors. This page used to throw KNOWN-ISSUES.md
+    // #2's nested-button hydration mismatch on every load regardless of
+    // locale, which was filtered out; that bug was fixed 2026-09-12 and the
+    // filter removed 2026-09-19, so this is now an unconditional assertion —
+    // /admin/companies is the page most likely to prove it.
+    expect(consoleErrors, 'console errors during the locale toggle').toEqual([]);
 
     await setAdminPanelLanguage(page, 'en');
     await page.goto('/admin/companies');

@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb, type TxClient } from '@/lib/db'
+import { resolveCompanyContactsFor, companyLevelContactsFor } from '@/lib/contactResolution'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -17,17 +18,23 @@ function generateCode(): string {
   return code
 }
 
-// Guide codes, rep codes, and Company.accessCode all draw from one collision-checked pool
-// per tenant (Plan-CompanyGuidesAndReps Chunk 1) — this is what keeps the wine-order form's
-// tenant-wide code-alone lookup mechanically compatible even though it isn't guide/rep-aware.
-// CompanyGuide/CompanyRepresentative have no own tenantId, so both checks JOIN through Company.
+// Person codes and Company.accessCode draw from one collision-checked pool per tenant — this is
+// what keeps the code-alone, no-company-chosen lookups (wine orders, and the
+// `hide_company_dropdown` booking variant) able to tell in one query what a typed code refers to.
+//
+// Two sources now, not three: CompanyGuide and CompanyRepresentative collapsed into
+// CompanyPerson (Plan-ContactRoles Chunk 1). CompanyPerson has no own tenantId, so its check
+// JOINs through Company.
+//
+// Since that chunk this is belt *and* braces: both columns now carry a real unique index, so a
+// collision fails loudly at the database even if some future caller skips this helper. It stayed
+// because the helper gives a usable error message where the constraint gives a stack trace.
 export async function codeExistsInTenant(tx: TxClient, tenantId: string, code: string): Promise<boolean> {
-  const [company, guide, rep] = await Promise.all([
+  const [company, person] = await Promise.all([
     tx.company.findFirst({ where: { tenantId, accessCode: code } }),
-    tx.companyGuide.findFirst({ where: { code, company: { tenantId } } }),
-    tx.companyRepresentative.findFirst({ where: { code, company: { tenantId } } }),
+    tx.companyPerson.findFirst({ where: { code, company: { tenantId } } }),
   ])
-  return !!(company || guide || rep)
+  return !!(company || person)
 }
 
 export async function generateUniqueTenantCode(tx: TxClient, tenantId: string): Promise<string> {
@@ -41,9 +48,9 @@ export async function generateUniqueTenantCode(tx: TxClient, tenantId: string): 
 type CompanyProfile = {
   name: string
   identificationCode?: string
-  contactName?: string
-  contactPhone?: string
-  contactEmail?: string
+  // No contactName/contactPhone/contactEmail: those three columns are gone, replaced by
+  // CompanyPerson rows in a contact_person role (Plan-ContactRoles Chunk 1). People are
+  // managed through companyPeople.ts, not by updating the company.
   address?: string
   isBookingCompany?: boolean
   isWineOrderCompany?: boolean
@@ -84,9 +91,6 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
       data: {
         name: profile.name.trim(),
         identificationCode: profile.identificationCode?.trim() || null,
-        contactName: profile.contactName?.trim() || null,
-        contactPhone: profile.contactPhone?.trim() || null,
-        contactEmail: profile.contactEmail?.trim() || null,
         address: profile.address?.trim() || null,
         ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
         ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
@@ -127,164 +131,20 @@ export async function setAccessCode(id: string, code: string) {
     if (existing.accessCode !== normalized && (await codeExistsInTenant(tx, tenantId, normalized))) {
       return { error: 'That code is already in use.' as const }
     }
-    await tx.company.update({ where: { id }, data: { accessCode: normalized } })
+    try {
+      await tx.company.update({ where: { id }, data: { accessCode: normalized } })
+    } catch (e) {
+      // Same global-index-vs-tenant-scoped-check gap as setPersonCode() — see the note there.
+      if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
+        return { error: 'That code is already in use.' as const }
+      }
+      throw e
+    }
     return { success: true as const }
   })
   if ('error' in result) return result
   revalidatePath('/admin/companies')
   return { success: true }
-}
-
-export async function verifyCompanyCode(companyId: string, code: string) {
-  const tenantId = await getTenantId()
-  const company = await withTenantDb(tenantId, tx =>
-    tx.company.findFirst({
-      where: { id: companyId, tenantId },
-      select: {
-        accessCode: true,
-        contactName: true,
-        contactPhone: true,
-        contactEmail: true,
-        identificationCode: true,
-        address: true,
-        wineDiscountPercent: true,
-      },
-    })
-  )
-  if (!company) return { error: 'Company not found.' }
-  if (!company.accessCode) return { error: 'No code set.' }
-  if (company.accessCode.toUpperCase() !== code.trim().toUpperCase()) {
-    return { error: 'Incorrect code.' }
-  }
-  return {
-    success: true,
-    profile: {
-      contactName: company.contactName,
-      contactPhone: company.contactPhone,
-      contactEmail: company.contactEmail,
-      identificationCode: company.identificationCode,
-      address: company.address,
-    },
-    wineDiscountPercent: company.wineDiscountPercent,
-  }
-}
-
-// Booking form's code check (Plan-CompanyGuidesAndReps Chunk 5). Tries the company's guides
-// first — a matched guide identifies a specific person, not just the company, so the printed
-// booking sheet can show *that guide's* phone. Falls back to the legacy company-level
-// `accessCode` only when the company has zero guides configured (Chunk 1: no backfill, keep
-// existing companies working exactly as before).
-export async function verifyBookingCode(companyId: string, code: string) {
-  const tenantId = await getTenantId()
-  const trimmed = code.trim().toUpperCase()
-  const company = await withTenantDb(tenantId, tx =>
-    tx.company.findFirst({
-      where: { id: companyId, tenantId },
-      select: {
-        accessCode: true,
-        contactName: true,
-        contactPhone: true,
-        contactEmail: true,
-        identificationCode: true,
-        address: true,
-        wineDiscountPercent: true,
-        guides: { select: { id: true, name: true, phone: true, code: true } },
-      },
-    })
-  )
-  if (!company) return { error: 'Company not found.' }
-
-  if (company.guides.length > 0) {
-    const guide = company.guides.find(g => g.code.toUpperCase() === trimmed)
-    if (!guide) return { error: 'Incorrect code.' }
-    return {
-      success: true as const,
-      matchType: 'guide' as const,
-      guideId: guide.id,
-      profile: {
-        contactName: guide.name,
-        contactPhone: guide.phone,
-        contactEmail: company.contactEmail,
-        identificationCode: company.identificationCode,
-        address: company.address,
-      },
-      wineDiscountPercent: company.wineDiscountPercent,
-    }
-  }
-
-  if (!company.accessCode) return { error: 'No code set.' }
-  if (company.accessCode.toUpperCase() !== trimmed) return { error: 'Incorrect code.' }
-  return {
-    success: true as const,
-    matchType: 'company' as const,
-    guideId: null,
-    profile: {
-      contactName: company.contactName,
-      contactPhone: company.contactPhone,
-      contactEmail: company.contactEmail,
-      identificationCode: company.identificationCode,
-      address: company.address,
-    },
-    wineDiscountPercent: company.wineDiscountPercent,
-  }
-}
-
-// Direct-code-entry booking form variant (Feature 113/114, `hideCompanyDropdown`) — the visitor
-// types a code with no company chosen first, so this searches every booking-enabled company's
-// guides in the tenant before falling back to `findCompanyByCode`'s existing Company.accessCode
-// search. Mirrors verifyBookingCode's guide-first/company-fallback shape from the other entry
-// point (Plan-CompanyGuidesAndReps Chunk 5).
-type BookingCodeMatch = {
-  success: true
-  matchType: 'guide' | 'company'
-  guideId: string | null
-  company: {
-    id: string
-    name: string
-    contactName: string | null
-    contactPhone: string | null
-    contactEmail: string | null
-    identificationCode: string | null
-    address: string | null
-    wineDiscountPercent: number | null
-  }
-}
-
-export async function findBookingCodeByCode(code: string): Promise<BookingCodeMatch | { error: string }> {
-  if (!code.trim()) return { error: 'Code not recognised.' as const }
-  const tenantId = await getTenantId()
-  const trimmed = code.trim().toUpperCase()
-
-  const guide = await withTenantDb(tenantId, tx =>
-    tx.companyGuide.findFirst({
-      where: { code: trimmed, company: { tenantId, isBookingCompany: true, isIndividual: false } },
-      select: {
-        id: true, name: true, phone: true,
-        company: { select: { id: true, name: true, contactEmail: true, identificationCode: true, address: true, wineDiscountPercent: true } },
-      },
-    })
-  )
-  if (guide) {
-    return {
-      success: true as const,
-      matchType: 'guide' as const,
-      guideId: guide.id,
-      company: {
-        id: guide.company.id,
-        name: guide.company.name,
-        contactName: guide.name,
-        contactPhone: guide.phone,
-        contactEmail: guide.company.contactEmail,
-        identificationCode: guide.company.identificationCode,
-        address: guide.company.address,
-        wineDiscountPercent: guide.company.wineDiscountPercent,
-      },
-    }
-  }
-
-  const result = await findCompanyByCode(code, 'BOOKING')
-  if ('error' in result) return result
-  return { success: true as const, matchType: 'company' as const, guideId: null, company: result.company }
 }
 
 export async function ensureIndividualsCompany(tenantId: string) {
@@ -297,25 +157,58 @@ export async function ensureIndividualsCompany(tenantId: string) {
   )
 }
 
-export async function findCompanyByCode(code: string, module: 'BOOKING' | 'WINE_ORDER'): Promise<
-  | { error: string }
-  | { success: true; company: { id: string; name: string; contactName: string | null; contactPhone: string | null; contactEmail: string | null; identificationCode: string | null; address: string | null; wineDiscountPercent: number | null } }
-> {
-  if (!code.trim()) return { error: 'Code not recognised.' as const }
-  const tenantId = await getTenantId()
-  const company = await withTenantDb(tenantId, tx =>
-    tx.company.findFirst({
-      where: {
-        tenantId,
-        accessCode: code.trim().toUpperCase(),
-        isIndividual: false,
-        ...(module === 'BOOKING' ? { isBookingCompany: true } : { isWineOrderCompany: true }),
-      },
-      select: { id: true, name: true, contactName: true, contactPhone: true, contactEmail: true, identificationCode: true, address: true, wineDiscountPercent: true },
-    })
-  )
-  if (!company) return { error: 'Code not recognised.' as const }
-  return { success: true as const, company }
+
+/**
+ * Request-context wrappers over `lib/contactResolution.ts`.
+ *
+ * The real logic lives there and takes an explicit `tenantId`. These resolve the tenant from
+ * the request and pass it in — which is the whole point: a server action is callable by the
+ * browser, so the tenant must never be a parameter the client supplies.
+ *
+ * Types (`ContactChoice`, `RoleChoices`, `ResolveContactsResult`) are imported from
+ * `@/lib/contactResolution`, not from here — a `'use server'` file may only export async
+ * functions and not even a type re-export survives that (MaintenanceNotes #24).
+ */
+export async function resolveCompanyContacts(input: {
+  module: 'BOOKING' | 'WINE_ORDER'
+  companyId?: string
+  code?: string
+}) {
+  // ⚠️ Destructured field by field, NEVER spread. This action is reachable by anyone with
+  // the page open, so forwarding the caller's object wholesale would let a crafted request set
+  // `trusted: true` and skip the access-code gate — which is the very hole this call was
+  // found to have. Adding a field to the resolver means adding it here on purpose.
+  return resolveCompanyContactsFor(await getTenantId(), {
+    module: input.module,
+    companyId: input.companyId,
+    code: input.code,
+  })
+}
+
+/**
+ * The same resolver, for callers who have already proved they may see a company's people
+ * without a code — the admin manual-entry screens.
+ *
+ * A separate action rather than a `trusted` flag on the public one, because the flag has to be
+ * something a browser cannot set. `requireAdmin()` is what earns it, and it runs here.
+ */
+export async function resolveCompanyContactsAsAdmin(input: {
+  module: 'BOOKING' | 'WINE_ORDER'
+  companyId?: string
+  code?: string
+}) {
+  await requireAdmin()
+  return resolveCompanyContactsFor(await getTenantId(), {
+    module: input.module,
+    companyId: input.companyId,
+    code: input.code,
+    trusted: true,
+  })
+}
+
+/** Company-level contact reference data (COMPANY_LEVEL roles). Never reaches a public form. */
+export async function getCompanyLevelContacts(companyId: string) {
+  return companyLevelContactsFor(await getTenantId(), companyId)
 }
 
 export async function deleteCompany(id: string) {

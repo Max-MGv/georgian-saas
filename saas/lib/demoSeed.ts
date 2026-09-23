@@ -19,6 +19,7 @@
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
 import type { PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
+import { priceBooking } from '@/lib/pricingUtils'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -45,9 +46,64 @@ type TierSpec = {
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice?: number
 }
 
-type BookingCompanySpec = {
-  name: string; contactName: string; contactPhone: string; contactEmail: string
+/**
+ * A guide (the person who actually walks the group in) or a contact person
+ * (who invoices go to — this used to be called a "representative" before
+ * Plan-ContactRoles collapsed the two into one role). Both carry a `code` out
+ * of the SAME per-tenant namespace as `Company.accessCode` — see
+ * `codeExistsInTenant()` in `app/actions/companies.ts`. Codes here are
+ * therefore hand-picked to be globally distinct within one seeded tenant, and
+ * uppercase, because `findBookingCodeByCode()` upper-cases what the guest types
+ * before matching.
+ *
+ * `role` names the `ContactRole.key` the person is seeded under ('guide' or
+ * 'contact_person') — every tenant has exactly these two system roles
+ * (Plan-ContactRoles Chunk 0), so the seed resolves each to a roleId once and
+ * writes a `CompanyPerson` row per person rather than the old per-role tables.
+ */
+export type PersonSpec = { name: string; phone?: string; email?: string; code: string; role: 'guide' | 'contact_person' }
+
+export type BookingCompanySpec = {
+  name: string
+  // These three used to write straight to Company.contactName/contactPhone/
+  // contactEmail. Those columns are gone (Plan-ContactRoles Chunk 1) — the
+  // seed now turns them into one more 'contact_person' CompanyPerson row,
+  // exactly like each entry in `representatives` below.
+  contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; tiers: TierSpec[]; share: number
+  /**
+   * Applied ONLY when seeding a non-demo tenant (see `accessCode` handling in
+   * `seedDemoTenant`). The public demo deliberately leaves companies
+   * code-less: `BookingForm.tsx` shows the "Enter your company code" popup for
+   * any company that has one, and a prospect on the demo has nowhere to obtain
+   * a code — the booking form is step one of the guided tour, so gating it
+   * would dead-end the sales story.
+   */
+  accessCode: string
+  /**
+   * Used to be seeded on only ONE company (Silk Road Journeys): giving a
+   * company guides used to retire its `accessCode` on the booking form
+   * (`verifyBookingCode()` fell back to the company-level code only when the
+   * company had zero guides), and seeding guides on all five once silently
+   * broke four Playwright specs that relied on those codes still working
+   * (2026-09-19). Feature 201 removed that fallback behaviour — the picker
+   * now offers the company code alongside every guide/rep choice instead of
+   * the code being retired — so that restriction no longer applies
+   * (Plan-ContactRoles Chunk 12, MaintenanceNotes #26). Every company below
+   * now has at least one guide.
+   *
+   * Each guide is still a person distinct from the company's own contact name
+   * and its representatives (H13): reusing a name across roles makes "I am
+   * not on this list" and "pick this person" fill the form identically,
+   * which defeats the point of testing either path.
+   */
+  guides: PersonSpec[]
+  /**
+   * Representatives are safe to seed anywhere — `verifyBookingCode()` never
+   * consults them. They are the person invoices go to, picked by an admin at
+   * send time, never typed into the public form.
+   */
+  representatives: PersonSpec[]
 }
 
 /**
@@ -55,8 +111,14 @@ type BookingCompanySpec = {
  * only thing that makes the per-company pricing feature visible to a visitor
  * looking at the Companies screen. All fictional; the .example domains are
  * reserved by RFC 2606 so none of these addresses can reach a real inbox.
+ *
+ * Exported so `scripts/backfill-test-fixtures.ts` can apply the same codes,
+ * guides and representatives to a tenant that was seeded before those existed,
+ * without a destructive re-seed. Sharing the constant is the point: two copies
+ * of these codes would drift, which is the exact failure this whole change is
+ * fixing.
  */
-const BOOKING_COMPANIES: BookingCompanySpec[] = [
+export const BOOKING_COMPANIES: BookingCompanySpec[] = [
   {
     name: 'Kakheti Wine Routes', contactName: 'Nino Beridze', contactPhone: '+995 599 41 22 08',
     contactEmail: 'bookings@kakhetiwineroutes.example', identificationCode: '404512338', address: 'Telavi, Kakheti',
@@ -64,6 +126,14 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 10, pricePerPerson: 55, tastingLunchPricePerPerson: 40 },
       { minGuests: 11, maxGuests: 20, pricePerPerson: 45, tastingLunchPricePerPerson: 40 },
       { minGuests: 21, maxGuests: 100, pricePerPerson: 38, tastingLunchPricePerPerson: 37 },
+    ],
+    accessCode: 'KAKHETI07',
+    guides: [
+      { name: 'Data Kiknadze', phone: '+995 599 41 22 10', code: 'KWRGUIDE1', role: 'guide' },
+      { name: 'Irakli Sturua', phone: '+995 599 41 22 11', code: 'KWRGUIDE2', role: 'guide' },
+    ],
+    representatives: [
+      { name: 'Eka Beridze', email: 'invoices@kakhetiwineroutes.example', phone: '+995 599 41 22 09', code: 'KWRREP1', role: 'contact_person' },
     ],
     share: 9,
   },
@@ -74,6 +144,13 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 10, pricePerPerson: 60, tastingLunchPricePerPerson: 40 },
       { minGuests: 11, maxGuests: 30, pricePerPerson: 48, tastingLunchPricePerPerson: 40 },
     ],
+    accessCode: 'TBILISI14',
+    guides: [
+      { name: 'Nutsa Japaridze', phone: '+995 577 30 14 78', code: 'TTCGUIDE1', role: 'guide' },
+    ],
+    representatives: [
+      { name: 'Sofia Abuladze', email: 'accounts@tbilisitourcollective.example', phone: '+995 577 30 14 77', code: 'TTCREP1', role: 'contact_person' },
+    ],
     share: 7,
   },
   {
@@ -82,6 +159,14 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     tiers: [
       { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 40 },
       { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38 },
+    ],
+    accessCode: 'CAUCASUS31',
+    guides: [
+      { name: 'Beka Lomidze', phone: '+995 595 88 60 33', code: 'CVTGUIDE1', role: 'guide' },
+      { name: 'Salome Kikvadze', phone: '+995 595 88 60 34', code: 'CVTGUIDE2', role: 'guide' },
+    ],
+    representatives: [
+      { name: 'Lasha Tsereteli', email: 'billing@caucasusvinetravel.example', phone: '+995 595 88 60 32', code: 'CVTREP1', role: 'contact_person' },
     ],
     share: 6,
   },
@@ -92,6 +177,13 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 1, maxGuests: 12, pricePerPerson: 58, tastingLunchPricePerPerson: 40 },
       { minGuests: 13, maxGuests: 100, pricePerPerson: 46, tastingLunchPricePerPerson: 40 },
     ],
+    accessCode: 'ALAZANI90',
+    guides: [
+      { name: 'Zviad Menabde', phone: '+995 558 12 47 92', code: 'AVTGUIDE1', role: 'guide' },
+    ],
+    representatives: [
+      { name: 'Tamuna Chkheidze', email: 'finance@alazanivalleytours.example', phone: '+995 558 12 47 91', code: 'AVTREP1', role: 'contact_person' },
+    ],
     share: 5,
   },
   {
@@ -100,6 +192,19 @@ const BOOKING_COMPANIES: BookingCompanySpec[] = [
     tiers: [
       { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 40 },
       { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 38 },
+    ],
+    accessCode: 'SILKROAD55',
+    guides: [
+      // Deliberately NOT the company's own contact person (Mariam Dolidze, above).
+      // When a company's contact and one of its guides are the same human, the
+      // "I am not on this list" fallback becomes impossible to verify — both the
+      // guide path and the company path fill the form with identical values. Found
+      // 2026-09-19 while testing exactly that path.
+      { name: 'Tinatin Beruashvili', phone: '+995 595 33 81 04', code: 'SRJGUIDE1', role: 'guide' },
+      { name: 'Nika Kvaratskhelia', phone: '+995 577 62 90 18', code: 'SRJGUIDE2', role: 'guide' },
+    ],
+    representatives: [
+      { name: 'Keti Dolidze', email: 'ap@silkroadjourneys.example', phone: '+995 591 76 20 56', code: 'SRJREP1', role: 'contact_person' },
     ],
     share: 4,
   },
@@ -115,13 +220,23 @@ const INDIVIDUALS_TIERS: TierSpec[] = [
 type WineCompanySpec = {
   name: string; contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; discount: number; share: number
+  /**
+   * Same non-demo-only rule as the booking companies' `accessCode`, and for the
+   * same reason (see BookingCompanySpec).
+   *
+   * No guide complication here: the wine-order flow resolves codes through
+   * `findCompanyByCode(code, 'WINE_ORDER')` and never consults guides at all —
+   * Plan-CompanyGuidesAndReps scoped guides/reps to the booking flow only. So a
+   * wine company's code cannot be retired the way a booking company's can.
+   */
+  accessCode: string
 }
 
-const WINE_COMPANIES: WineCompanySpec[] = [
-  { name: 'Sighnaghi Wine Bar', contactName: 'Tamar Gogoladze', contactPhone: '+995 599 20 71 44', contactEmail: 'orders@sighnaghiwinebar.example', identificationCode: '412008551', address: 'Sighnaghi, Kakheti', discount: 10, share: 8 },
-  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7 },
-  { name: 'Vinoteka Batumi', contactName: 'Salome Jgerenaia', contactPhone: '+995 593 66 82 17', contactEmail: 'buy@vinotekabatumi.example', identificationCode: '445002318', address: 'Parnavaz Mepe St 22, Batumi', discount: 5, share: 5 },
-  { name: 'Marani Import GmbH', contactName: 'Katrin Vogel', contactPhone: '+49 30 5544 8820', contactEmail: 'purchasing@maraniimport.example', identificationCode: 'DE331904772', address: 'Prenzlauer Allee 8, Berlin', discount: 20, share: 4 },
+export const WINE_COMPANIES: WineCompanySpec[] = [
+  { name: 'Sighnaghi Wine Bar', contactName: 'Tamar Gogoladze', contactPhone: '+995 599 20 71 44', contactEmail: 'orders@sighnaghiwinebar.example', identificationCode: '412008551', address: 'Sighnaghi, Kakheti', discount: 10, share: 8, accessCode: 'SIGHNAGHI44' },
+  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7, accessCode: 'KAKHURI90' },
+  { name: 'Vinoteka Batumi', contactName: 'Salome Jgerenaia', contactPhone: '+995 593 66 82 17', contactEmail: 'buy@vinotekabatumi.example', identificationCode: '445002318', address: 'Parnavaz Mepe St 22, Batumi', discount: 5, share: 5, accessCode: 'VINOTEKA17' },
+  { name: 'Marani Import GmbH', contactName: 'Katrin Vogel', contactPhone: '+49 30 5544 8820', contactEmail: 'purchasing@maraniimport.example', identificationCode: 'DE331904772', address: 'Prenzlauer Allee 8, Berlin', discount: 20, share: 4, accessCode: 'MARANIIMP82' },
 ]
 
 const MENU_ITEMS: { name: string; type: 'VEGETABLE' | 'MEAT' }[] = [
@@ -187,25 +302,44 @@ function findTier(tiers: TierSpec[], guestCount: number): TierSpec | undefined {
  * masterclass line added on at full size. Every tier value is converted here,
  * at the one place they are read for arithmetic.
  */
+/**
+ * Returns the total AND the three tier rates it was derived from.
+ *
+ * The rates are returned, not discarded, because every seeded order has to
+ * carry `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`.
+ * Until 2026-09-19 the seed wrote none of them, so all 393 demo orders were
+ * snapshot-less — and those columns are nullable only to mean "created before
+ * the columns existed". `recalcOrderTotal` therefore took its legacy branch for
+ * every demo order, re-pricing the whole booking off live tiers the moment a
+ * visitor added an extra. Same shape as bug #47, at 100% of the demo data.
+ *
+ * The rates match what `recalcOrderTotal`'s snapshot branch expects:
+ * tasting = the per-person TASTING rate, lunch = the per-person COMBO rate.
+ * Both branches below then reproduce exactly what recalc would compute.
+ */
+type SeedPrice = { total: number; tastingRate: number; lunchRate: number; registrationFee: number }
+
 function computeTotal(opts: {
   tiers: TierSpec[]; visitType: VisitType; guestCount: number
   tastingGuests: number; lunchGuests: number; masterclassAmt: number
-}): number | null {
+}): SeedPrice | null {
   const { tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt } = opts
-  const paying = tastingGuests + lunchGuests
-  if (paying > 0) {
-    const tier = findTier(tiers, paying)
-    if (!tier) return null
-    return tastingGuests * fromMajor(tier.pricePerPerson)
-      + lunchGuests * fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson)
-      + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
-  }
+  // The party size picks the tier, same rule as the app (2026-09-19).
   const tier = findTier(tiers, guestCount)
   if (!tier) return null
-  const rateMajor = visitType === 'TASTING_LUNCH'
-    ? tier.pricePerPerson + tier.tastingLunchPricePerPerson
-    : tier.pricePerPerson
-  return guestCount * fromMajor(rateMajor) + fromMajor(tier.registrationPrice ?? 0) + masterclassAmt
+
+  const rates = {
+    tasting: fromMajor(tier.pricePerPerson),
+    lunch: fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson),
+    registration: fromMajor(tier.registrationPrice ?? 0),
+  }
+  const total = priceBooking(
+    rates,
+    { guestCount, tastingGuests, lunchGuests },
+    visitType,
+    { masterclass: masterclassAmt, extras: 0 },
+  )
+  return { total, tastingRate: rates.tasting, lunchRate: rates.lunch, registrationFee: rates.registration }
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +362,7 @@ async function inBatches<T>(tasks: (() => Promise<T>)[], size = 10): Promise<voi
   }
 }
 
-export type ExistingCompany = { name: string; contactName: string | null; contactPhone: string | null; contactEmail: string | null }
+export type ExistingCompany = { name: string; contacts: { name: string; phone: string | null; email: string | null }[] }
 
 export type SeedReport = {
   tenantId: string
@@ -362,9 +496,9 @@ export async function seedDemoTenant(
 
   const existingCompanies: ExistingCompany[] = await db.company.findMany({
     where: { tenantId: tid },
-    select: { name: true, contactName: true, contactPhone: true, contactEmail: true },
+    select: { name: true, people: { select: { name: true, phone: true, email: true } } },
     orderBy: { name: 'asc' },
-  })
+  }).then(rows => rows.map(r => ({ name: r.name, contacts: r.people })))
 
   const today = opts.now ? new Date(opts.now) : new Date()
   today.setHours(0, 0, 0, 0)
@@ -411,6 +545,22 @@ export async function seedDemoTenant(
   await db.menuItem.deleteMany({ where: { tenantId: tid } })
   await db.masterclassItem.deleteMany({ where: { tenantId: tid } })
 
+  // Every tenant has exactly these two system roles, seeded once
+  // (Plan-ContactRoles Chunk 0/1) and never deleted by this reseed — the wipe
+  // above only clears Company rows (and CompanyPerson cascades with them).
+  const [contactPersonRole, guideRole] = await Promise.all([
+    db.contactRole.findFirst({ where: { tenantId: tid, key: 'contact_person' } }),
+    db.contactRole.findFirst({ where: { tenantId: tid, key: 'guide' } }),
+  ])
+  if (!contactPersonRole || !guideRole) {
+    throw new Error(
+      `Tenant '${slug}' is missing its 'contact_person'/'guide' ContactRole rows. These are ` +
+      `seeded once per tenant and this reseed does not create them — see Plan-ContactRoles ` +
+      `Chunk 0/1.`
+    )
+  }
+  const roleIdFor = (role: 'contact_person' | 'guide') => role === 'guide' ? guideRole.id : contactPersonRole.id
+
   // --- Cast ---
   const individuals = await db.company.create({
     data: {
@@ -419,30 +569,94 @@ export async function seedDemoTenant(
     },
   })
 
-  const bookingCompanies: (BookingCompanySpec & { id: string })[] = []
+  // Access codes are seeded for a throwaway/test tenant but NOT for the public
+  // demo. `BookingForm.tsx` shows the "Enter your company code" popup for any
+  // company that has one, and a demo visitor has nowhere to get a code — the
+  // booking form is the first stop on the guided tour, so a code prompt there
+  // is a dead end in the middle of the sales story. A non-demo slug is by
+  // definition a throwaway tenant (that option exists to refill Staging
+  // Winery), which is exactly where the Playwright suite needs a real code to
+  // exercise the access-code path.
+  //
+  // Since Plan-ContactRoles Chunk 1, this same gate has to cover guide/rep
+  // codes too, not just the company's own accessCode. `CompanyPerson.code` got
+  // a GLOBAL unique index (not per-tenant — see the Chunk 1 migration), and
+  // Staging Winery permanently holds this exact fixture's literal codes
+  // (SRJGUIDE1 etc., carried over from the old CompanyGuide/CompanyRepresentative
+  // tables). Before Chunk 1 that constraint didn't exist, so the demo tenant
+  // could safely reuse the same literal codes on its own copy of these people;
+  // now doing so collides with Staging Winery's rows on every reseed. A guide
+  // code is optional and gates nothing on the demo anyway (same reasoning as
+  // the company code above, just never actually needed there), so the fix is
+  // to leave it null rather than invent a second set of demo-only codes that
+  // would only drift from this one.
+  const seedAccessCodes = slug !== DEMO_SLUG
+
+  // Each seeded person's id is kept alongside the company so the order-writing loops below can
+  // attribute a real OrderContact row to them, instead of just copying names onto the order's
+  // own denormalised columns and leaving `OrderContact` empty (a real gap found by a 2026-09-23
+  // blind audit — see [[Plan-ContactRoles]] Chunk 14 / [[KnownBugs]]).
+  type SeededPerson = { id: string; name: string; phone: string | null; email: string | null }
+  const bookingCompanies: (BookingCompanySpec & { id: string; contactPerson: SeededPerson; guidePeople: SeededPerson[] })[] = []
   for (const c of BOOKING_COMPANIES) {
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: true, isWineOrderCompany: false,
+        accessCode: seedAccessCodes ? c.accessCode : null,
         prices: { create: c.tiers.map(t => tierToTetri(t)) },
       },
     })
-    bookingCompanies.push({ ...c, id: row.id })
+    // CompanyPerson cascades on Company delete (schema.prisma), so the wipe
+    // above already clears any from a previous run. The company's own scalar
+    // contact and each representative are all 'contact_person' rows —
+    // Plan-ContactRoles decision 2 folds "representative" into "contact
+    // person". Guides are their own role, tagged on each PersonSpec.
+    const contactPersonRow = await db.companyPerson.create({
+      data: {
+        companyId: row.id, roleId: roleIdFor('contact_person'),
+        name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
+      },
+    })
+    const guidePeople: SeededPerson[] = []
+    for (const p of [...c.representatives, ...c.guides]) {
+      const personRow = await db.companyPerson.create({
+        data: {
+          companyId: row.id, roleId: roleIdFor(p.role), name: p.name,
+          phone: p.phone ?? null, email: p.email ?? null,
+          code: seedAccessCodes ? p.code : null,
+        },
+      })
+      if (p.role === 'guide') {
+        guidePeople.push({ id: personRow.id, name: p.name, phone: p.phone ?? null, email: p.email ?? null })
+      }
+    }
+    bookingCompanies.push({
+      ...c, id: row.id, guidePeople,
+      contactPerson: { id: contactPersonRow.id, name: c.contactName, phone: c.contactPhone, email: c.contactEmail },
+    })
   }
 
-  const wineCompanies: (WineCompanySpec & { id: string })[] = []
+  const wineCompanies: (WineCompanySpec & { id: string; contactPerson: SeededPerson })[] = []
   for (const c of WINE_COMPANIES) {
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: false, isWineOrderCompany: true,
+        accessCode: seedAccessCodes ? c.accessCode : null,
         wineDiscountPercent: c.discount,
       },
     })
-    wineCompanies.push({ ...c, id: row.id })
+    const contactPersonRow = await db.companyPerson.create({
+      data: {
+        companyId: row.id, roleId: roleIdFor('contact_person'),
+        name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
+      },
+    })
+    wineCompanies.push({
+      ...c, id: row.id,
+      contactPerson: { id: contactPersonRow.id, name: c.contactName, phone: c.contactPhone, email: c.contactEmail },
+    })
   }
 
   await db.menuItem.createMany({
@@ -511,7 +725,8 @@ export async function seedDemoTenant(
         masterclassAmt = qty * item.pricePerUnit
       }
 
-      const totalPrice = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
+      const priced = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
+      const totalPrice = priced?.total ?? null
 
       // Rolled BEFORE the stage, because an abandoned checkout is a slice of
       // every booking attempt, not a fraction of the ones that happened to stay
@@ -539,6 +754,26 @@ export async function seedDemoTenant(
         ? { confirmedAt: null, completedAt: null, invoiceSentAt: null, paidAt: null, abandonedAt: createdAt }
         : bookingDates(stage, createdAt, date)
 
+      // OrderContact rows — company bookings only, mirroring what the real booking form/admin
+      // screens write (decision 4: `Order.name/surname/phone/email` and the `contact_person`
+      // OrderContact row must agree, so this uses the SAME person the columns above are copied
+      // from, not a separately-rolled name). A guide row is added too when the company has one,
+      // since that is exactly the attribution the picker exists to record.
+      const contactRows: { tenantId: string; roleId: string; personId: string; nameSnapshot: string; phoneSnapshot: string | null; emailSnapshot: string | null }[] = []
+      if (company) {
+        contactRows.push({
+          tenantId: tid, roleId: contactPersonRole.id, personId: company.contactPerson.id,
+          nameSnapshot: company.contactPerson.name, phoneSnapshot: company.contactPerson.phone, emailSnapshot: company.contactPerson.email,
+        })
+        if (company.guidePeople.length > 0) {
+          const guide = pick(company.guidePeople)
+          contactRows.push({
+            tenantId: tid, roleId: guideRole.id, personId: guide.id,
+            nameSnapshot: guide.name, phoneSnapshot: guide.phone, emailSnapshot: guide.email,
+          })
+        }
+      }
+
       const orderData = {
           tenantId: tid, stage, bookingType, visitType, date,
           timeSlot: pick(TIME_SLOTS), guestCount,
@@ -551,8 +786,14 @@ export async function seedDemoTenant(
           phone: company ? company.contactPhone : `+995 5${rand(50, 99)} ${rand(10, 99)} ${rand(10, 99)} ${rand(10, 99)}`,
           companyId: company ? company.id : individuals.id,
           totalPrice, createdAt,
+          // Carry the rates this order was sold at, so recalc uses its snapshot
+          // branch rather than repricing off live tiers (#49).
+          tastingRateSnapshot: priced?.tastingRate ?? null,
+          lunchRateSnapshot: priced?.lunchRate ?? null,
+          registrationFeeSnapshot: priced?.registrationFee ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
+          contacts: contactRows.length ? { create: contactRows } : undefined,
       }
       orderWrites.push(() => db.order.create({ data: orderData }))
     }
@@ -607,6 +848,14 @@ export async function seedDemoTenant(
           discountPercent: buyer.discount, totalAmount, stage, createdAt,
           ...dates,
           wineItems: { create: items },
+          // Same reasoning as the booking loop above — the contact_person row must mirror the
+          // `contactName/Phone/Email` columns written just above, not a separately-rolled name.
+          contacts: {
+            create: [{
+              tenantId: tid, roleId: contactPersonRole.id, personId: buyer.contactPerson.id,
+              nameSnapshot: buyer.contactPerson.name, phoneSnapshot: buyer.contactPerson.phone, emailSnapshot: buyer.contactPerson.email,
+            }],
+          },
       }
       wineWrites.push(() => db.wineOrder.create({ data: wineData }))
     }

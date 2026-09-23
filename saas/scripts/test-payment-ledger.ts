@@ -20,6 +20,7 @@
  */
 import { db, withTenantDb } from '../lib/db'
 import { recordManualPayment, reverseManualPayments } from '../lib/payments/manualPayment'
+import { asTetri } from '../lib/money'
 
 const TENANT = 'cmrxb85wo0000vlc0d964nzf8' // Staging Winery
 
@@ -49,7 +50,7 @@ async function main() {
   // ── 1. A hand-recorded payment becomes a real row ─────────────────────────
   const manual = await makeOrder('LedgerManual', 24000) // ₾240
   await withTenantDb(TENANT, tx =>
-    recordManualPayment(tx, { tenantId: TENANT, orderId: manual.id, amount: 24000, at: new Date() }))
+    recordManualPayment(tx, { tenantId: TENANT, orderId: manual.id, amount: asTetri(24000), at: new Date() }))
 
   let rows = await db.payment.findMany({ where: { orderId: manual.id } })
   check('marking paid by hand writes a payment row', rows.length, 1)
@@ -67,7 +68,7 @@ async function main() {
 
   // ── 3. Re-paying after a reversal records a fresh payment ─────────────────
   await withTenantDb(TENANT, tx =>
-    recordManualPayment(tx, { tenantId: TENANT, orderId: manual.id, amount: 24000, at: new Date() }))
+    recordManualPayment(tx, { tenantId: TENANT, orderId: manual.id, amount: asTetri(24000), at: new Date() }))
   check('re-paying records a new row', (await db.payment.count({ where: { orderId: manual.id } })), 2)
   check('  ...and exactly one counts', (await live(manual.id)).length, 1)
 
@@ -81,7 +82,7 @@ async function main() {
     },
   })
   await withTenantDb(TENANT, tx =>
-    recordManualPayment(tx, { tenantId: TENANT, orderId: card.id, amount: 30000, at: new Date() }))
+    recordManualPayment(tx, { tenantId: TENANT, orderId: card.id, amount: asTetri(30000), at: new Date() }))
   check('a gateway-settled order gains NO second row', (await db.payment.count({ where: { orderId: card.id } })), 1)
   check('  ...so revenue is not double counted',
     (await live(card.id)).reduce((s, p) => s + p.amount, 0), 30000)

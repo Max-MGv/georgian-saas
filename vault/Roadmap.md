@@ -215,6 +215,11 @@ Findings from an industry-standards audit of how images and hero banners are han
 
 Full plan: `vault/Plan-CompanyAccessCodes.md`
 
+> **Superseded in part by v1.13.** The code mechanism built here stays, but becomes a
+> tenant setting (`company_access_codes_enabled`, **off by default**) rather than always-on,
+> and the company-level contact fields added in Step 1 move into `CompanyPerson` rows.
+> See [[Plan-ContactRoles]]. Step 4's auto-fill is what the new picker replaces.
+
 - [x] **Step 1 — DB schema**: add `contactName`, `contactPhone`, `contactEmail`, `address`, `accessCode` to Company model
 - [x] **Step 2 — Server actions**: extend `updateCompany`; add `verifyCompanyCode` (public), `regenerateAccessCode` (admin)
 - [x] **Step 3 — Admin slide-over panel**: replace inline company edit with full side panel; access code field with show/hide, copy, regenerate
@@ -358,7 +363,9 @@ a single linear status column cannot express "delivered but not yet paid".
 - [x] Chunk 4 — UI: the merged one-line flow, per-order dropdowns, a second AND-combined payment filter axis, boards regrouped onto the fulfilment axis with a paid marker
 - [~] **Chunk 5 — replaced the design rather than contracting it (2026-09-18). BUILT BUT CONTESTED — see `Plan-StatusModel.md`.** Max: *"I feel like we are over-complicating this."* He then asked why each order type did not get its own pair of status tables; Claude argued against it and built enums without confirming the argument landed. Max's reply on seeing the result: *"that isn't what we discussed earlier in the session, we said 2 status table per transactional table."* **The choice between four tables, two process tables, and two enums is still open.** The two reference tables became two Postgres enums (`BookingStage`, `WineOrderStage`) and the financial axis became milestone dates (`invoiceSentAt`, `paidAt`). Payment limbo became one `abandonedAt` timestamp and its own screen. **Deleted: 3 columns, 2 tables, 2 enums, 4 modules. Added: 1 column, 2 enums, 2 modules.**
 - [x] Verified on dev and driven in a browser; `test-rls.ts` 21/21; new `test-order-status.ts` 43/43; local production build clean (never run before this chunk)
-- [ ] **Not pushed and not on prod**, pending the shape decision above. The migration also deletes all order data — disposable on both DBs per Max, but re-confirm before running it. Rule 0: its own deliberate step.
+- [x] **Shipped to production** (2026-09-18, commit `18450f1`). The shape question was settled as **C** the same day after industry practice was checked — see [[DataModel/Research-OrderStatusPatterns]]. The migration deleted all order data, which Max had confirmed as disposable on both DBs.
+- [x] **Extracted one `priceBooking()` helper, called from all nine pricing sites** (2026-09-19) — done together with the tier-rule change (the tier is now the party size, not the paying head count) and with making the party size editable. See [[MaintenanceNotes]] §22. Original note follows:
+- [x] ~~**Extract one `priceBooking()` helper and call it from all nine pricing sites**~~ — `lib/pricingUtils.ts`, per [[MaintenanceNotes]] §22 (updated 2026-09-19). Nine places independently decide what a booking costs; four have already drifted (bugs #48, #50, #51, #52). There is **no technical obstacle** — `pricingUtils.ts` is already imported by eight files on both sides of the client/server line. The constraint is sequencing: extraction changes behaviour at the drifted sites, so the disagreements go in as tests first. `saas/scripts/test-pricing-agreement.ts` already covers #50–#52 and its replicated formulas get deleted when the real helper lands. ~half a day.
 
 **What chunk 5 changed about the plan's own reasoning** (full detail in `Plan-StatusModel.md`):
 
@@ -370,6 +377,74 @@ a single linear status column cannot express "delivered but not yet paid".
 **Decisions by Max:** board columns are the fulfilment axis only, payment as a ₾✓ card marker (2026-09-17) · display metadata stays in frontend code · an abandoned checkout and a declined card are the same thing, they are not orders, and they belong on a completely separate screen (2026-09-18) · they must stay recoverable.
 
 **Findings worth keeping:** `Payment.settledAt` was empty on dev, so `paidAt` was not recoverable as the plan first assumed · 290 `COMPLETED` bookings against 31 `PAID` showed the winery had never used that column to track payment at all · 83 `created` Payment rows against 13 limbo orders, which is why limbo could not be derived from `Payment` · 38 dev rows were marked paid with no payment date, and the gaps report called them clean because it only looked for NULL foreign keys.
+
+---
+
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–13 OF 14 BUILT, CHUNK 14 IN PROGRESS
+
+Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
+shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
+plan.
+
+**Why.** The guides/representatives feature shipped 2026-09-14 with the model one level off.
+Max, 2026-09-19: *"A company should have ability to have Contact Person's & Guides. right now we
+have that + representative. but thats 1 extra."* Several of each per company, **one of each per
+order**, the company code prompting a picker whose purpose is autofill — plus a requirement the
+old design structurally cannot meet: adding a new contact type later must be an admin action,
+not a migration.
+
+**The shape.** `ContactRole` (tenant-configurable, with a `scope` column separating per-order
+roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
+`CompanyRepresentative` **and** `Company.contactName/Phone/Email`) + `OrderContact`
+(polymorphic over `Order`/`WineOrder`, with detail snapshots).
+
+- [x] Chunk 0 — seed-role definitions; one open question (does a COMPANY_LEVEL role ship now, or
+      only the `scope` column that makes one possible later — CEO was Max's example, not a
+      requirement)
+- [x] Chunk 1 — schema + migration. ⚠️ must not touch `Company` rows or `Price`
+- [x] Chunk 2 — RLS: three new tables, two-tenant test, not a green tick
+- [x] Chunk 3 — server actions. Ten near-identical guide/rep functions collapse to five; four
+      overlapping code-resolution functions collapse to one
+- [x] Chunk 4 — admin Contact Roles screen
+- [x] Chunk 5 — admin Edit Company, role-driven people list
+- [x] Chunk 6 — `person_codes_enabled` setting, default off, tenant-wide (renamed from `company_access_codes_enabled` in chunk 3 — it governs people’s codes, not the company’s). Live-checked 2026-09-22
+- [x] Chunk 7 — shared picker + hook, booking form per-role pickers; folds in Feature 201's work
+- [x] Chunk 8 — **both** wine order forms, public and admin manual entry (reverses the old plan's "out of scope", and closes the missed fourth form that produced decision 10)
+- [x] Chunk 9 — write path: `OrderContact` rows with snapshots, one shared verifier for all three creation paths, 27 assertions over two tenants
+- [x] Chunk 10 — admin order surfaces; the Contacts card, the print sheet's Guide column, the
+      `/admin/orders` crash fix (F4), and the admin booking form's new per-role pickers all
+      verified live, the last one down to the database via `inspect-order-contacts.ts`
+- [x] Chunk 11 — emails; invoice recipient moved off the dropped `company.representatives` onto
+      one shared `invoiceRecipientsFor()`, driven by a single role-key constant rather than a
+      new schema flag (Max's call — the tenant-configurable version is a recorded future want,
+      not built: `vault/SuperAdminPlans/InvoiceRecipientRoles.md`)
+- [x] Chunk 11a — **new, not in the original 14**: the Contact Person's phone/email rendered twice
+      on the order detail page (once unlabeled in Booking Info, once labeled in Contacts).
+      Investigated whether `Order.name/surname/phone/email` were still needed at all now that
+      `OrderContact` exists (yes, for individual bookings), then hid those two Booking Info
+      fields for company bookings only
+- [x] Chunk 12 — demo seed, onboarding, fixtures
+- [x] Chunk 13 — tests, including one that proves deleting a person does not erase history
+- [ ] Chunk 14 — vault close-out, staging verification, merge
+
+**Status 2026-09-23:** chunks 0–13 built, verified, and pushed to `staging` (`e95e94c`). tsc 0, i18n parity 173/173+1109/1109, `test-order-contacts.ts` 36/36. Chunk 7 was **audited by a fenced-off subagent** which found four real defects — including an unauthenticated action that returned any company's staff directory without its access code — all fixed and pushed the same day ([[Plan-ContactRoles]] §9b). Chunk 14 (in progress) has done its vault writeups, closed the `createTenant()` ContactRole-seeding gap, and run a **second fenced-off audit of the whole feature** — 9/10 decisions and 3/4 "don't break" checks confirmed solid, one real defect found and fixed the same day ([[KnownBugs]] #59 — `demoSeed.ts` never wrote `OrderContact` rows for seeded orders, leaving the public demo tenant's Contacts card empty everywhere; fixed and verified with a real reseed). The migration has run on the **dev** database only; production is untouched, but the §9c pre-flight (five read-only checks) has now been run against it and come back clean — 0 duplicate access codes, 0 companies with a NULL tenantId, 0 orders with a guideId set (RLS isn't checkable until right after `migrate deploy`). ✅ **Every route renders again**, `/admin/orders` included since chunk 10. [[KnownBugs]] #57 (every company's access code in the public HTML) and #56 (deleting a guide erasing order history, now regression-tested) are fixed on `staging`, still live on `master` until the cutover. **The only thing left in the whole 14-chunk arc is the `staging` → `master` merge itself**, which needs Max's explicit go-ahead (Rule 0).
+
+**Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
+access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses
+the picker so colleagues stay private · no order backfill (*"all orders are fake"*), company
+configuration copied across · `Order.name/surname/phone/email` keep being written as a
+denormalised copy of the Contact Person · Feature 201 folds in rather than shipping separately ·
+one person per role per order.
+
+**Findings that changed the plan** (§5 of it): `Order.guideId` is **write-only** — nothing
+reads it, so the attribution that justified the whole feature is undelivered · deleting a guide
+silently nulls it on every past order ([[KnownBugs]] #56) · **every company's access code is in
+the public homepage's HTML** ([[KnownBugs]] #57, on `master` now) · representatives' codes reach
+the admin client bundle.
+
+**Carried forward at Max's request:** §6 of the plan lists seventeen hurdles this project has
+actually hit before, as suggestions rather than rules. H1 is the sharpest — the old plan's
+dependency map was confidently wrong in four places, each caught only by opening the file.
 
 ---
 

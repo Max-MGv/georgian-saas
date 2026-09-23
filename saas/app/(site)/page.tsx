@@ -15,6 +15,7 @@ import EditableText from '@/components/EditableText'
 import EditModeSuppressor from '@/components/EditModeSuppressor'
 import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
+import { orderRolesFor } from '@/lib/contactResolution'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,8 +49,23 @@ export default async function Home({ searchParams }: PageProps) {
   // boolean per booking type would make it impossible to tell "module off" apart
   // from "COMPANY section merely off by default" client-side — the former must
   // never be overridable, the latter must be (see Feature 148's build-time notes).
-  const [allCompanies, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
-    withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId, isBookingCompany: true }, orderBy: { name: 'asc' }, include: { prices: { orderBy: { minGuests: 'asc' } } } })),
+  const [allCompanies, bookingRoles, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
+    // `accessCode` is read here but NEVER handed to the client — see the companies
+    // projection below. An explicit select, not `include`, so adding a column to
+    // Company doesn't silently widen what this page loads (H17).
+    withTenantDb(tenantId, tx => tx.company.findMany({
+      where: { tenantId, isBookingCompany: true },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true, name: true, isIndividual: true, accessCode: true, skipPayment: true,
+        prices: { orderBy: { minGuests: 'asc' } },
+      },
+    })),
+    // The tenant's per-order booking roles, with no people attached — the form needs
+    // to know a "Guide" role exists before any company is chosen, so it can render
+    // that block in the detailed variant. People arrive later, per company, through
+    // resolveCompanyContacts().
+    orderRolesFor(tenantId, 'BOOKING'),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     getBlockedDates(),
@@ -98,7 +114,25 @@ export default async function Home({ searchParams }: PageProps) {
   const heroBgMobileZoom        = settingValue(settings, 'home_hero_bg_mobile_zoom')
 
   const individualsRow = allCompanies.find(c => c.isIndividual)
-  const companies = allCompanies.filter(c => !c.isIndividual)
+  /**
+   * What crosses to BookingForm, a client component — and nothing more.
+   *
+   * `accessCode` used to travel with the whole Company row, which put every booking
+   * company's code in the page source of the public homepage for anyone who pressed
+   * View Source (KnownBugs #57 / Plan-ContactRoles F3). The form never needed the code
+   * itself — only whether one exists, to decide whether to ask for it — so it gets a
+   * boolean. Same mistake, same costume, as handing a client the whole settings map
+   * (MaintenanceNotes #9).
+   */
+  const companies = allCompanies
+    .filter(c => !c.isIndividual)
+    .map(c => ({
+      id: c.id,
+      name: c.name,
+      prices: c.prices,
+      hasAccessCode: !!c.accessCode,
+      skipPayment: c.skipPayment,
+    }))
   // No invented default prices — the price line is hidden until the tenant sets a display tier
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
   const displayPriceTasting = displayTier?.pricePerPerson ?? null
@@ -395,6 +429,7 @@ export default async function Home({ searchParams }: PageProps) {
             enhancedEnabled={enhancedBookingStr === 'true'}
             nationalityBreakdownEnabled={tenantFlags?.enableCompanyNationalityBreakdown ?? false}
             hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
+            bookingRoles={bookingRoles}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
             masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
             minGuestsTasting={parseInt(minGuestsTasting) || 4}

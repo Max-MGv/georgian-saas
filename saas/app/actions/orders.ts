@@ -1,14 +1,15 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
+import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
+import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
-import type { Tetri } from '@/lib/money'
+import { asTetri, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
-import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -50,8 +51,8 @@ export async function updateOrder(id: string, data: {
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
 
   const tenantId = await getTenantId()
-  const result = await withTenantDb(tenantId, tx =>
-    tx.order.updateMany({
+  const result = await withTenantDb(tenantId, async tx => {
+    const updated = await tx.order.updateMany({
       where: { id, tenantId },
       data: {
         date: new Date(data.date),
@@ -64,7 +65,26 @@ export async function updateOrder(id: string, data: {
         notes: data.notes.trim() || null,
       },
     })
-  )
+    if (updated.count > 0) {
+      /**
+       * Keep the contact_person snapshot in step with the columns just edited.
+       *
+       * Decision 4 makes `OrderContact` the source of truth and these four columns a
+       * denormalised copy of one of its rows. Editing the copy alone left the original stale
+       * with nothing to reconcile them — found by an audit, and a poor place to reintroduce
+       * exactly the drift this rework exists to end. No-op when the order has no contact row,
+       * which is every INDIVIDUAL booking and every pre-migration order.
+       */
+      await syncOrderContactPerson(tx, {
+        tenantId,
+        orderId: id,
+        name: `${data.name} ${data.surname}`.trim(),
+        phone: data.phone,
+        email: data.email,
+      })
+    }
+    return updated
+  })
   if (result.count === 0) return { error: 'Order not found.' }
   revalidatePath('/admin/orders')
   return { success: true }
@@ -73,6 +93,8 @@ export async function updateOrder(id: string, data: {
 export async function updateOrderEnhanced(
   id: string,
   data: {
+    /** The party size. Drives the price tier, so it is editable (2026-09-19). */
+    guestCount: number
     tastingGuestCount: number
     lunchGuestCount: number
     freeGuestCount: number
@@ -98,6 +120,18 @@ export async function updateOrderEnhanced(
     })
     if (!order) return { error: 'Order not found' } as const
 
+    // The three buckets are subsets of the party, never more than it. Nothing
+    // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
+    // guests while every document it produced still said 10.
+    if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' } as const
+    const split = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
+    if (split > data.guestCount) {
+      return {
+        error: `The split adds up to ${split} but the party is ${data.guestCount}. ` +
+          `Raise the guest count or lower the split.`,
+      } as const
+    }
+
     const tastingGuests = data.tastingGuestCount
     const lunchGuests = data.lunchGuestCount
     const totalPayingGuests = tastingGuests + lunchGuests
@@ -114,31 +148,27 @@ export async function updateOrderEnhanced(
     let lunchRateSnapshot: number | null = null
     let registrationFeeSnapshot: number | null = null
 
-    if (totalPayingGuests > 0 && order.company?.prices?.length) {
-      const tier = findTier(order.company.prices, totalPayingGuests)
-      if (tier) {
-        tastingRateSnapshot = tier.pricePerPerson
-        lunchRateSnapshot = comboRatePerPerson(tier)
-        registrationFeeSnapshot = tier.registrationPrice
-        totalPrice =
-          tastingGuests * tier.pricePerPerson +
-          lunchGuests * comboRatePerPerson(tier) +
-          tier.registrationPrice +
-          masterclassAmt +
-          extrasAmt
-      }
-    } else if (totalPayingGuests > 0 && (data.manualTastingRate != null || data.manualLunchRate != null)) {
-      const tr = data.manualTastingRate ?? 0
-      const lr = data.manualLunchRate ?? 0
-      tastingRateSnapshot = tr
-      lunchRateSnapshot = lr
-      registrationFeeSnapshot = 0
-      totalPrice = tastingGuests * tr + lunchGuests * lr + masterclassAmt + extrasAmt
+    // The party size, not the paying head count, picks the tier (2026-09-19).
+    const guests = { guestCount: data.guestCount, tastingGuests, lunchGuests }
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
+
+    const rates = order.company?.prices?.length
+      ? ratesForParty(order.company.prices, data.guestCount)
+      : (data.manualTastingRate != null || data.manualLunchRate != null)
+        ? ratesFromManual(data.manualTastingRate ?? 0, data.manualLunchRate ?? 0)
+        : null
+
+    if (totalPayingGuests > 0 && rates) {
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
+      totalPrice = priceBooking(rates, guests, order.visitType, lines)
     }
 
     await tx.order.update({
       where: { id },
       data: {
+        guestCount: data.guestCount,
         tastingGuestCount: data.tastingGuestCount,
         lunchGuestCount: data.lunchGuestCount,
         freeGuestCount: data.freeGuestCount,
@@ -184,12 +214,22 @@ export async function createOrderAdmin(data: {
   manualLunchRate: Tetri
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+  /**
+   * One entry per contact role, from the admin's inline pickers (Plan-ContactRoles Chunk 10).
+   * Written via `writeOrderContacts()`, the one base every order-creation path shares, which
+   * re-verifies every `roleId` and `personId` against `companyId` under the tenant first.
+   */
+  contacts?: IncomingContact[]
 }): Promise<{ orderId: string } | { error: string }> {
   const actor = await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
   if (!data.date) return { error: 'Date is required.' }
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
+  const splitTotal = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
+  if (splitTotal > data.guestCount) {
+    return { error: `The split adds up to ${splitTotal} but the party is ${data.guestCount}.` }
+  }
 
   const tenantId = await getTenantId()
 
@@ -201,45 +241,34 @@ export async function createOrderAdmin(data: {
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
 
   let totalPrice: number | null = null
-  const payingGuests = data.tastingGuestCount + data.lunchGuestCount
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
-    if (payingGuests > 0 && data.companyId) {
-      const company = await tx.company.findFirst({
-        where: { id: data.companyId, tenantId },
-        include: { prices: true },
-      })
-      if (company?.prices.length) {
-        const tier = findTier(company.prices, payingGuests)
-        if (tier) {
-          // Freeze the rates this order is sold at, so a later edit cannot
-          // reprice it from tiers that have since changed (chunk 4).
-          tastingRateSnapshot = tier.pricePerPerson
-          lunchRateSnapshot = comboRatePerPerson(tier)
-          registrationFeeSnapshot = tier.registrationPrice
-          totalPrice =
-            data.tastingGuestCount * tier.pricePerPerson +
-            data.lunchGuestCount * comboRatePerPerson(tier) +
-            tier.registrationPrice +
-            masterclassAmt +
-            extrasAmt
-        }
-      }
+    // One lookup, on the party size (2026-09-19). Manual rates are the fallback
+    // when there is no ladder, and are just as much "what this was sold at" as a
+    // tier is — until 2026-09-18 they were used once and thrown away, which is
+    // why an order priced that way could never be recalculated at all.
+    const guests = {
+      guestCount: data.guestCount,
+      tastingGuests: data.tastingGuestCount,
+      lunchGuests: data.lunchGuestCount,
     }
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
-    if (totalPrice === null && (data.manualTastingRate > 0 || data.manualLunchRate > 0)) {
-      const tastingCount = data.companyId ? data.tastingGuestCount : data.guestCount
-      // Hand-typed rates are just as much "what this was sold at" as a tier is,
-      // and until now they were used once and thrown away — which is why an
-      // order priced this way could never be recalculated at all.
-      tastingRateSnapshot = data.manualTastingRate
-      lunchRateSnapshot = data.manualLunchRate
-      registrationFeeSnapshot = 0
-      totalPrice =
-        tastingCount * data.manualTastingRate +
-        data.lunchGuestCount * data.manualLunchRate +
-        masterclassAmt +
-        extrasAmt
+    const company = data.companyId
+      ? await tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
+      : null
+
+    const rates = company?.prices?.length
+      ? ratesForParty(company.prices, data.guestCount)
+      : (data.manualTastingRate > 0 || data.manualLunchRate > 0)
+        ? ratesFromManual(data.manualTastingRate, data.manualLunchRate)
+        : null
+
+    if (rates) {
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
+      totalPrice = priceBooking(rates, guests, data.visitType, lines)
     }
 
     if (totalPrice === null && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
@@ -278,6 +307,29 @@ export async function createOrderAdmin(data: {
           : undefined,
       },
     })
+    /**
+     * Who to contact, through the same base the public form uses. `fallbackContactPerson`
+     * covers a company order whose admin typed contact-person details without picking from the
+     * inline dropdown — the same shape a guest produces by choosing "I am not on this list".
+     *
+     * Until an audit caught it, this path wrote `Order.name/surname/phone/email` and **no**
+     * `OrderContact` rows at all, so every admin-created company booking had an empty source
+     * of truth while the public form's had a full one. Two write paths, one of them forgotten
+     * — which is the exact drift the shared base exists to make impossible.
+     */
+    await writeOrderContacts(tx, {
+      tenantId,
+      target: { orderId: order.id },
+      companyId: data.companyId || null,
+      module: 'BOOKING',
+      contacts: data.contacts,
+      fallbackContactPerson: {
+        name: `${data.name} ${data.surname}`.trim(),
+        phone: data.phone?.trim() || null,
+        email: data.email?.trim() || null,
+      },
+    })
+
     // First row of the timeline. ADMIN here, unlike the public form's GUEST —
     // a walk-in entered by staff and a guest's own submission are different
     // facts and the history should not blur them (chunk 5).
@@ -302,9 +354,9 @@ export async function sendOrderInvoice(
   orderId: string,
   customMessage: string,
   locale: 'en' | 'ka' = 'ka',
-  // Lets the admin pick a company Representative's email as the recipient instead of the
-  // order's own (Plan-CompanyGuidesAndReps Chunk 9) — falls back to order.email when omitted.
-  // Re-checked against the order's own company's representatives below, not trusted as-is.
+  // Lets the admin pick a company person's email as the recipient instead of the order's own
+  // (Plan-ContactRoles Chunk 11) — falls back to order.email when omitted. Re-checked against
+  // lib/contactResolution.ts's invoiceRecipientsFor() below, not trusted as-is.
   recipientEmail?: string
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
@@ -314,7 +366,7 @@ export async function sendOrderInvoice(
       tx.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
-          company: { include: { representatives: true } },
+          company: { select: { id: true, name: true, identificationCode: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
         },
@@ -324,8 +376,8 @@ export async function sendOrderInvoice(
     if (!order) return { error: 'Order not found.' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
-      const validRep = order.company?.representatives.some(r => r.email === recipientEmail)
-      if (!validRep) return { error: 'That recipient is not valid for this order.' }
+      const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []
+      if (!eligible.some(p => p.email === recipientEmail)) return { error: 'That recipient is not valid for this order.' }
       recipient = recipientEmail
     }
     if (!recipient) return { error: 'This order has no email address.' }
@@ -371,20 +423,52 @@ export async function sendOrderInvoice(
       locale,
     })
 
-    // Sending an invoice stamps a date and nothing else. It records that we
-    // have asked for money, which says nothing about whether the visit has
-    // happened — so it does not touch `stage`, and it is recorded whatever
-    // stage the booking is at, including a completed one being billed after
-    // the fact. Under the previous design this was a rung on a payment ladder,
-    // which is why marking such an order paid used to erase it.
-    if (order.invoiceSentAt == null) {
-      await withTenantDb(tenantId, tx =>
-        tx.order.update({
+    await withTenantDb(tenantId, async tx => {
+      // The permanent record of what this invoice actually said — see InvoiceSent's schema
+      // comment. sendOrderInvoice() builds the email live from the order's current data every
+      // time it's called, so without this row a later edit to price/guests/masterclass lines
+      // leaves no trace of what was originally billed. One row per send, never updated.
+      await tx.invoiceSent.create({
+        data: {
+          tenantId,
+          orderId,
+          recipientEmail: recipient,
+          recipientName: `${order.name} ${order.surname}`.trim(),
+          companyName: order.company?.name ?? null,
+          totalPrice: order.totalPrice ?? 0,
+          guestCount: order.guestCount,
+          tastingGuestCount: order.tastingGuestCount,
+          lunchGuestCount: order.lunchGuestCount,
+          freeGuestCount: order.freeGuestCount,
+          visitType: order.visitType,
+          masterclassLines: order.masterclassLines.map(l => ({
+            name: l.masterclassItem.name,
+            quantity: l.quantity,
+            pricePerUnit: l.pricePerUnit,
+          })),
+          extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
+          customMessage,
+          locale,
+        },
+      })
+
+      // Sending an invoice stamps a date and nothing else. It records that we
+      // have asked for money, which says nothing about whether the visit has
+      // happened — so it does not touch `stage`, and it is recorded whatever
+      // stage the booking is at, including a completed one being billed after
+      // the fact. Under the previous design this was a rung on a payment ladder,
+      // which is why marking such an order paid used to erase it.
+      //
+      // Only stamped once — a resend does not move this date — but the InvoiceSent
+      // row above is written on every send regardless, same as Payment being
+      // append-only for every payment event.
+      if (order.invoiceSentAt == null) {
+        await tx.order.update({
           where: { id: orderId },
           data: invoiceSentPatch(true, toCurrentDates(order), new Date()),
         })
-      )
-    }
+      }
+    })
 
     revalidatePath('/admin/orders')
     return { success: true }
@@ -465,7 +549,11 @@ export async function exportOrdersCsv(filters: {
     o.visitType,
     o.guestCount,
     o.nationalities.map(countryName).join('; '),
-    o.totalPrice ?? '',
+    // The header says "Total (GEL)" and this shipped as raw tetri, so every
+    // exported row read 100x high in a file an accountant opens in Excel
+    // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
+    // it text and break the column's arithmetic.
+    o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
@@ -490,6 +578,27 @@ export async function exportOrdersCsv(filters: {
  * is a one-time link-up for an order that has never had a company, not a
  * general "reassign company" tool.
  */
+/**
+ * Contact roles and this file: **re-decided in Chunk 9, not inherited.**
+ *
+ * The previous plan left `updateOrderEnhanced()` and `assignOrderCompany()` alone because
+ * there was no code step for an admin to hook a picker into. Pickers now exist on the admin
+ * side, so that reasoning expired and the question was asked again. The answer is still "no
+ * contact writes here", for two new reasons:
+ *
+ * - `updateOrderEnhanced()` edits the *visit* — guest counts, dishes, notes. Contacts are a
+ *   different thing on a different screen; putting them here would put the same edit in two
+ *   places, which is the duplication this whole rework exists to undo.
+ * - `assignOrderCompany()` links a company to an order that had none. Tempting to synthesise
+ *   a `contact_person` row from `Order.name/surname/phone/email` at that moment — but nobody
+ *   *picked* anyone, so the row would assert an attribution that was never made, and its
+ *   snapshots would only duplicate columns that already exist. An order with no OrderContact
+ *   rows is an ordinary, expected state: every INDIVIDUAL booking and every pre-migration
+ *   order is in it, so Chunk 10's surfaces must fall back to those columns regardless.
+ *
+ * If contacts ever become editable after the fact, that belongs in Chunk 10's order detail
+ * screen, next to where they are displayed.
+ */
 export async function assignOrderCompany(
   orderId: string,
   companyId: string
@@ -513,32 +622,41 @@ export async function assignOrderCompany(
 
     const masterclassAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
     const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
-    const payingGuests = order.tastingGuestCount + order.lunchGuestCount
 
+    // The three snapshots record the tier rates this order was actually sold
+    // at, exactly as createBooking.ts does. They were NOT written here until
+    // 2026-09-18 (bug #47): this path produced a brand-new order with null
+    // snapshots, and the nullable columns are supposed to mean "created before
+    // the columns existed". recalcOrderTotal then fell into its legacy branch
+    // and re-priced the whole booking off whatever the company's tiers said
+    // that day — the precise repricing bug chunk 4 was written to close.
+    let tastingRateSnapshot: number | null = null
+    let lunchRateSnapshot: number | null = null
+    let registrationFeeSnapshot: number | null = null
+
+    // The two branches this used to have differed only in which head count fed
+    // findTier. Now the party size always does, so there is one path.
+    const rates = ratesForParty(company.prices, order.guestCount)
     let totalPrice = 0
-    if (payingGuests > 0) {
-      // Enhanced/split booking — same shape as updateOrderEnhanced's calc.
-      const tier = findTier(company.prices, payingGuests)
-      if (tier) {
-        totalPrice =
-          order.tastingGuestCount * tier.pricePerPerson +
-          order.lunchGuestCount * comboRatePerPerson(tier) +
-          tier.registrationPrice + masterclassAmt + extrasAmt
-      }
-    } else {
-      // Simple booking — priced off guestCount + visitType, same shape as
-      // createBooking.ts's COMPANY-with-companyId branch.
-      const tier = findTier(company.prices, order.guestCount)
-      if (tier) {
-        const ratePerPerson = order.visitType === 'TASTING' ? tier.pricePerPerson : comboRatePerPerson(tier)
-        totalPrice = ratePerPerson * order.guestCount + tier.registrationPrice + masterclassAmt + extrasAmt
-      }
+    if (rates) {
+      totalPrice = priceBooking(
+        rates,
+        { guestCount: order.guestCount, tastingGuests: order.tastingGuestCount, lunchGuests: order.lunchGuestCount },
+        order.visitType,
+        { masterclass: masterclassAmt, extras: extrasAmt },
+      )
+      tastingRateSnapshot = rates.tasting
+      lunchRateSnapshot = rates.lunch
+      registrationFeeSnapshot = rates.registration
     }
     if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
 
     await tx.order.update({
       where: { id: orderId },
-      data: { companyId, bookingType: 'COMPANY', totalPrice },
+      data: {
+        companyId, bookingType: 'COMPANY', totalPrice,
+        tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot,
+      },
     })
     return { success: true as const, totalPrice }
   })
@@ -608,7 +726,7 @@ export async function changeBookingStatus(
         if (change.kind === 'paid') {
           if (change.value) {
             await recordManualPayment(tx, {
-              tenantId, orderId, amount: current.totalPrice ?? 0, at: now,
+              tenantId, orderId, amount: asTetri(current.totalPrice ?? 0), at: now,
             })
           } else {
             await reverseManualPayments(tx, { orderId, at: now })

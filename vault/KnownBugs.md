@@ -47,6 +47,228 @@ tags: [bugs]
 | 39 | On mobile, tapping the booking form's Date field (or its calendar icon) did nothing — no native picker opened, only manual DD/MM/YYYY typing worked. The real `<input type="date">` behind the styled field was hidden with a 0×0 box and relied on a JS `.showPicker()` call, which is unreliable on some mobile engines | Public / Booking form | 🟢 Resolved |
 | 40 | Settings → Booking Rules has no validation that a visit type's maximum guest count is ≥ its minimum. Found live on Staging Winery: Wine Tasting minimum is 4, maximum is 3 — any Wine Tasting booking for 4 or 5 guests is silently clamped down to 3 server-side before pricing (confirmed: a 5-guest submission settled at 150GEL/3 guests, not 250GEL/5), with no warning to the admin who set it or the guest who booked it | Admin / Settings, Public / Booking form | 🟢 Resolved |
 | 41 | `scripts/test-rls.ts` depends on ambient seeded data: three of its checks assert `rows.length > 0` on `Order`, so they fail whenever the orders table is empty. Chunk 3's authorised wipe emptied it, and the suite went 21/21 → 18/3 with **no RLS regression at all** — proven by inserting two throwaway orders, re-running to 21/21, and removing them again. It is a false alarm that looks exactly like a security failure, which is the worst kind. Fix is to have the test create its own fixture rather than rely on whatever happens to be in the database. | Testing / RLS | 🔴 Open |
+| 42 | Demo seed mixed units after the tetri conversion: `demoSeed.ts`'s tier literals are written in GEL, and chunk 3 converted them with `fromMajor` where they are written to `Price` — but `computeTotal` reads the **same literals a second time** for seeded order totals and adds `masterclassAmt`, which comes back from the database already in tetri. Seeded bookings came out at ~1/100 of their intended total with a full-size masterclass line on top. **Sales-facing** — it is the data behind `demo.vineworks.ge`'s admin screens, and Max hit it the first time he pressed Reset Demo after the release. **Third instance of one pattern** (after `OrderDetail.tsx` and `NewOrderForm.tsx`): a Float→integer unit change is invisible to the compiler, so every site doing arithmetic on money must be found by reading, not tooling. Fixed and verified by running the real `seedDemoTenant` against dev: 393 bookings ₾180–₾2,875 (avg ₾580), 45 wine orders ₾163–₾7,079. | Demo / Seeding | 🟢 Resolved |
+| 43 | Booking form's success screen rendered `Order.totalPrice` raw — `{confirmedPrice}` with no `formatTetri` (`BookingForm.tsx:628`). A ₾280 booking told the guest **"28000"** under "Estimated total". **Customer-facing.** Reachable on the reservation-only path (an order with a `checkoutUrl` redirects before this screen paints). The same file formats correctly 120 lines earlier when building `confirmTotalValue`, so it was one missed site out of two, not a misunderstanding. Regression introduced by the 2026-09-18 tetri conversion. | Public / Booking form | 🟢 Resolved |
+| 44 | Both wine-order paths kept `Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100` (`submitWineOrder.ts:87`, `wineOrders.ts:149`). That expression meant "round to two decimals of lari" and was **correct** while subtotal was a Float of lari; against tetri it rounds at the wrong scale and leaves a fraction, which the `Int` column rejects. Measured: 4550 at 15% → 3867.5, 8999 at 12% → 7919.12, 1999 at 5% → 1899.05, 9900 at 12.5% → 8662.5 — 4 of 5 realistic cases fail the write. **So every discounted B2B company was silently unable to place a wine order**, and `submitWineOrder.ts`'s bare `catch {}` swallowed the throw with no logging, leaving only "Something went wrong. Please try again." Dormant only while all wine prices are whole lari *and* all discounts whole percents. Fixed with `applyPercent`, which rounds at tetri scale; the bare catch now logs. Regression guard added to `scripts/test-money.ts`. | Public / Wine orders, Admin / Wine orders | 🟢 Resolved |
+| 45 | Order detail's "add extra" wrote lari into a tetri column — `parseFloat(newExtraAmount) \|\| 0` with no `fromMajor` (`OrderDetail.tsx:542`), against a field labelled "Amount (₾)". Typing `20` stored 20 tetri (**₾0.20**) and dragged the order total down with it; typing `20.50` failed the `Int` write outright. **This one corrupts data — rows written before the fix stay wrong.** The sibling screen (`NewOrderForm.tsx:212`) always did it correctly. Root cause of the escape: `orderExtras.ts:12` declared `data: { label: string; amount: number }` rather than `Tetri`, so the brand had nothing to catch. Both retyped; the same untyped parameter in `manualPayment.ts:61` was closed at the same time (no live bug behind that one, but it was the last unbranded money parameter in the codebase). | Admin / Orders | 🟢 Resolved |
+| 46 | Orders CSV export shipped raw tetri under a header reading **"Total (GEL)"** (`orders.ts:468`, `o.totalPrice ?? ''`) — every exported row 100× high in a file an accountant opens in Excel. Fixed with `toMajor`, deliberately not `formatTetri`: a `₾` in the cell makes it text and breaks the column's arithmetic. Regression introduced by the 2026-09-18 tetri conversion. | Admin / Orders | 🟢 Resolved |
+| 47 | `assignOrderCompany()` (`orders.ts`) wrote `totalPrice` but **not** `tastingRateSnapshot` / `lunchRateSnapshot` / `registrationFeeSnapshot`, so linking a no-company order to a company produced a brand-new order with null snapshots. Those columns are nullable only to mean "created before the columns existed" — `recalcOrderTotal` therefore fell into its legacy branch on the next extra or masterclass line and re-priced the whole booking off whatever the company's tiers said that day. **This is precisely the repricing bug chunk 4 was written to close, reintroduced through a path chunk 4 did not touch.** Not a money-units bug — it would have existed without the tetri conversion. Both branches now write the three snapshots, matching `createBooking.ts:307-309`. Verified equivalent: `VisitType` has only `TASTING`/`TASTING_LUNCH`, so the branch's rate selection and `recalcOrderTotal`'s reproduce the same total. | Admin / Orders | 🟢 Resolved |
+| 48 | Booking form's company price preview dropped the lunch add-on: `estimatedTotal` used `matchedTier.pricePerPerson * guestCount` for the COMPANY branch while `matchedTierRate` — computed two lines above, and what `createBooking.ts:317-320` actually charges — selects `comboRatePerPerson(tier)` for `TASTING_LUNCH`. So a company `TASTING_LUNCH` quote **under-stated** the total the server then stored, visible whenever `showCompanyPrice` is on. Not a money-units bug; drift between two of the five copies of the tier-pricing formula (see [[MaintenanceNotes]] §22). The INDIVIDUAL branch was already correct. | Public / Booking form | 🟢 Resolved |
+| 49 | `demoSeed.ts` never wrote `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`, so **all 393 seeded demo orders were snapshot-less** — the #47 shape at 100% of the demo data. Those columns are nullable only to mean "created before the columns existed", so `recalcOrderTotal` took its legacy branch for every demo booking and would reprice the whole thing off live tiers the moment a visitor added an extra. Found by auditing the dev database rather than by reading code. `computeTotal` now returns the three rates alongside the total instead of discarding them. Verified: re-seeded dev, snapshot coverage 0/393 → **393/393**, and the refactor proven arithmetically identical to its predecessor across **1,944 input combinations, 0 differences**. | Demo / Seeding | 🟢 Resolved |
+| 50 | `/admin/orders/<id>` invents a ₾50 per-person rate and can silently destroy the real one. `OrderDetail.tsx:303-304` initialises both manual rate boxes to `useState('50')` — not seeded from the order's `tastingRateSnapshot` — and the `customRates` flag only toggles the UI (lines 845/868); it does **not** gate the send. `handleSave` ships the rates whenever `prices.length === 0 && payingGuests > 0`, so an admin who types a guest count into an individual order and presses Save re-prices it at ₾50: a booking sold at ₾70/pp goes **₾280 → ₾200 and its 7000 snapshot is overwritten with 5000 — the original rate is gone**. The screen also *displays* "Rate: 50/50" for every individual order as if that were what it was sold at. Directly contradicts the "No invented 50/100 defaults" rule `createBooking.ts:242` states for itself. `NewOrderForm.tsx:114-115` correctly defaults to `'0'`. | Admin / Orders | 🟢 Resolved |
+| 51 | `createOrderAdmin` (`orders.ts:231,239`) never consults `visitType`, unlike `createBooking.ts:259`. An admin-entered walk-in for an individual is always charged the **tasting** rate even when the visit is TASTING_LUNCH. Individual, TASTING_LUNCH, 4 guests, rates 50/80: the public site stores **₾280**, the identical admin walk-in stores **₾200**. Worse second-order effect: the snapshots written at `orders.ts:235-237` *are* visit-type aware even though the creation formula that produced the total was not, so the row describes two different orders — adding a ₾10 extra makes `recalcOrderTotal` recompute from the snapshots and the order **jumps ₾200 → ₾330**. | Admin / Orders | 🟢 Resolved |
+| 52 | Order detail double-counts line items on every individual order. `OrderDetail.tsx:441` falls back to `legacyBase = order.totalPrice ?? 0` — which already contains extras and masterclass lines — and line 458 adds `masterclassAmt + extrasAmt` on top. Hits every individual order, since `prices` comes from `order.company?.prices` and individuals carry no company. Individuals tier ₾50/pp, 4 guests, one ₾40 extra: the database, the orders table and the invoice all say **₾240**; the detail screen says **₾280**. The "Live preview — click Save to persist" caveat (line 1359) is gated on `payingGuests > 0` so it is **not shown** on this path, and the number reads as fact. Related: `computedTotal` is typed `number | null` but every branch returns a number, making the `order.totalPrice` fallback at line 1353 unreachable — the detail screen never displayed the stored total at all. | Admin / Orders | 🟢 Resolved |
+| 53 | The admin rate boxes and the company price ladder used **opposite meanings of the same word** with nothing to tell them apart. The tier field is labelled "+Lunch ₾/person (add-on)" and `comboRatePerPerson` adds it to the tasting rate; the manual boxes on the walk-in form and order detail said only "Lunch ₾/pp", but every consumer (`updateOrderEnhanced`, `recalcOrderTotal`, and `lunchRateSnapshot = comboRatePerPerson(tier)`) treats that slot as the **all-in** per-person price for a Tasting+Lunch guest. Two screens, two clicks apart, same word, opposite meaning. Max read it the natural way — as an add-on — which is exactly how an admin would **undercharge every lunch guest by the tasting rate**. No arithmetic was wrong; the labels were. Relabelled as a pair so the inclusion is self-evident: "Tasting only ₾/pp" and "Tasting+Lunch ₾/pp", plus the guest-count fields and the rate badge, EN and KA. No stored data changed. | Admin / Orders | 🟢 Resolved |
+| 54 | `Order.guestCount` silently drifts from the tasting/lunch split on **edit**. `NewOrderForm` derives it (`guestCount: totalGuestCount`, i.e. tasting + lunch + free) when an order is **created**, but `OrderDetail`'s Save sends only the three split counts and `updateOrderEnhanced` never writes `guestCount`. So changing the split on an existing order re-prices from the new split while `guestCount` keeps its old value — and `guestCount` is what the orders table, the invoice and the confirmation email display. An order can therefore **bill 14 paying guests while every document says 10**. Nothing validated that tasting + lunch + free stayed under `guestCount`. **Fixed 2026-09-19 together with the tier-rule change:** the party size is now an editable field on both admin screens rather than a derived byproduct, `updateOrderEnhanced` takes and writes it, and both server actions plus both forms reject a split that exceeds the party. | Admin / Orders | 🟢 Resolved |
+| 55 | Adding a guide to a company **silently retires that company's access code**, with nothing in the admin panel saying so. `verifyBookingCode()` falls back to `Company.accessCode` only when the company has zero guides — deliberate and documented (Plan-CompanyGuidesAndReps Chunk 1 & 5), so the logic is correct. The problem is the UI: `CompaniesClient.tsx` renders the access-code field identically whether it still works or not. A winery that hands `MARANI42` to a tour operator and later adds one guide turns that code dead — every guest using it gets "Incorrect code" — while the panel keeps displaying it as live. Nobody would connect "added a guide" to "partner says the code is broken". **Fixed 2026-09-19 (Feature 201):** the company code now works and the guest picks which guide they are. | Public / Booking form | 🟢 Resolved |
+| 56 | Deleting a guide **silently erases which guide was on every past order**. `Order.guide` is an optional relation with no `onDelete`, and Prisma defaults that to `SetNull` — so removing a guide in the Edit Company panel nulls `Order.guideId` across every historical order, with no warning and no trace. Same failure shape as the `Payment` orphaning recorded in `DataModel/Dependencies.md` finding 2. Currently invisible because **nothing reads `guideId` at all** (see #57's sibling finding, logged in [[Plan-ContactRoles]] as F1) — but it becomes a live data-loss bug the moment any screen displays it. **Fix is designed, not built:** [[Plan-ContactRoles]] replaces `guideId` with `OrderContact` rows carrying name/phone/email snapshots, so deleting a person loses the link but never the facts — the same rule `WineOrderItem.priceSnapshot` and `Order`'s rate snapshots already follow. | Admin / Companies | 🟡 Fixed on dev, not in production — `Order.guideId` is gone and `OrderContact` carries name/phone/email snapshots, so deleting a person loses the link and never the facts ([[Plan-ContactRoles]] chunk 1, 2026-09-22). **Regression test written 2026-09-23 — chunk 13, `tests/tier2-core-flows/contact-orphan-safety.spec.ts`:** an admin-created guide is put on a real order, deleted from the company, and the order's Contacts card is confirmed to still show their name from the snapshot; passing twice in a row with no leftover rows. Closes fully when that plan reaches `master`. |
+| 58 | A wine order that goes to the Flitt card-payment gateway and never pays writes its `WineOrder` row correctly (confirmed via direct DB query — `abandonedAt` set, correct `businessName`) but never appears on `/admin/abandoned` — the winery has no way to see or restore-without-payment an incomplete wine order. Found 2026-09-23 running `tests/tier2-core-flows/wine-catalogue-order.spec.ts` for Contact Roles chunk 13 (unrelated to that plan — a pre-existing, separately-scoped issue). Booking-form abandoned orders were not checked for the same gap. Not investigated further — spawned as its own follow-up task rather than fixed in passing. | Admin / Wine orders | 🔴 Open |
+| 59 | **Every seeded demo order had zero `OrderContact` rows** — `lib/demoSeed.ts` wrote `Order.name/surname/phone/email`/`WineOrder.contactName/Phone/Email` directly from the seed spec via `db.order.create()`/`db.wineOrder.create()`, but never called the real write path (`writeOrderContacts()`) or wrote any `contacts` relation at all, despite `CompanyPerson` rows (with real codes) being correctly seeded for the same companies since chunk 12. Confirmed on the dev DB before the fix: 0 of 125 demo-tenant company bookings and 0 of 45 demo wine orders had any `OrderContact` row. Consequence: opening any seeded company booking or wine order in the public demo tenant's admin panel (`demo.vineworks.ge`) showed no Guide/Contact Person on the Contacts card, even though the feature is fully built and every other tenant's real orders work correctly. Found by a 2026-09-23 blind audit (vault fenced off, [[Plan-ContactRoles]] Chunk 14) — it also flagged this as decision 4's "written in exactly one place" being violated by a fourth, silent write site. **Fixed same day:** the company/wine-company seed loops now keep each seeded person's id alongside the spec, and both order-writing loops attach a nested `contacts: { create: [...] }` using that same person's id and current name/phone/email — so the `OrderContact` snapshot always agrees with the columns it mirrors, exactly as decision 4 requires. Verified by re-seeding the dev demo tenant for real: 135/135 company bookings now carry a `contact_person` row, all 135 also carry a `guide` row (every company has a guide since chunk 12), 45/45 wine orders carry a `contact_person` row, 258/258 individual bookings correctly carry none (matches real app behaviour), 0 dangling `personId` references, and a spot-checked sample order's `Order.name/surname/phone/email` match its `OrderContact` snapshot exactly. `tsc` 0, parity 173/173+1109/1109, `test-order-contacts.ts` 36/36, `audit-money.ts` clean — all unchanged. | Demo / Seeding | 🟢 Resolved |
+| 57 | **Every company's access code is served in the public homepage's HTML.** `app/(site)/page.tsx:52` selects whole `Company` rows and passes them to `BookingForm`, a client component whose `Company` type declares `accessCode: string | null` — so all booking companies' codes are in the page payload and readable with View Source, defeating the code gate entirely. The form only ever uses the value as a boolean (`if (!company.accessCode)`), so nothing needs the real code client-side. `app/(site)/wines/page.tsx` needs the same check. On `master` now. Related but lower severity: `app/admin/(panel)/orders/page.tsx:289` passes full representative rows *including their codes* into `OrdersTable` when only id/name/email are used. **Fix:** send `hasAccessCode: boolean` instead — one line per page. | Security / Public site | 🟡 **Fixed on `staging`, still live on `master`.** ⚠️ **A second, deeper leak of the same family was found by an audit on 2026-09-22 and fixed the same day** — `resolveCompanyContacts`, an unauthenticated server action, returned a company's entire staff directory (names, phones, emails) when given a company id and **no access code**, because the code check only ran when a code was supplied. Company ids are in the public homepage's HTML. The gate is now enforced server-side whenever the company has a code; see [[Plan-ContactRoles]] §9b A1. The form asked for the code; the server never insisted — **a gate only the client enforces is not a gate.** [[Plan-ContactRoles]] chunk 7 (2026-09-22): both pages now send `hasAccessCode: boolean` and never the code. Verified live on the dev tenant with a check built to tell the two outcomes apart — the homepage carries 5 companies that *do* have codes, `hasAccessCode` is present in the payload, and none of the 5 codes appears anywhere in the page source. `WineCatalogueClient.tsx`’s own `accessCode` field went with it. **Closes fully when `staging` reaches `master` (chunk 14) — until then the codes are still in the real site’s HTML.** The admin-side half (F4, representatives’ codes reaching `OrdersTable`) is chunk 10 and remains open. |
+
+---
+
+## Bug #55 — Adding a guide silently retires a company's access code, and the admin panel doesn't say so
+
+**Severity:** Medium-High — no data loss, but it breaks a code already in circulation with a real partner, gives the guest a flatly wrong error ("Incorrect code" for a code the panel still shows), and gives the admin no way to connect cause to effect
+**Found:** 2026-09-19, while seeding guides onto Playwright fixture companies · **Status:** 🟢 Resolved 2026-09-19
+
+**This is not a logic bug.** `verifyBookingCode()` (`app/actions/companies.ts`) falls back to the company-level
+`accessCode` **only when the company has zero guides**, which is exactly what its own comment says and exactly
+what `Plan-CompanyGuidesAndReps` specifies in two places (Chunk 1 and Chunk 5). The rule is deliberate: once a
+company has guides, every booking should be attributable to a named person rather than a shared code. Changing
+the fallback would undo a real product decision, and it should not be changed.
+
+**The problem is that the UI does not reflect the rule.** `CompaniesClient.tsx` (~line 573) renders the access-code
+field unconditionally, with a static hint, no awareness of whether the company has guides. So:
+
+1. A winery gives `MARANI42` to a tour operator.
+2. Months later they add one guide to that company.
+3. `MARANI42` stops working that instant. Every guest using it is told "Incorrect code."
+4. `/admin/companies` still shows `MARANI42`, still lets you edit it, still looks live.
+
+Nobody would connect step 2 to step 3.
+
+**✅ FIXED — Max's design, built and verified on dev the same day. See [[Feature 201 - Guide Picker After Company Code]].**
+
+**The fix: keep the company code alive and disambiguate with a picker.**
+
+The company code continues to work even when guides exist. Entering it opens a second popup — "Which guide are
+you?" — listing the company's guides; the chosen one populates `matchedGuideId` exactly as a direct guide-code
+match does today. Guide codes remain the shortcut for anyone who has one.
+
+This is better than the alternative below because it keeps the code *useful* instead of merely admitting it is
+dead, while still satisfying the reason the rule exists: the booking is still attributed to a specific guide.
+It also removes the path asymmetry noted at the end of this entry — `findBookingCodeByCode()` already accepts a
+company code unconditionally, so under this design both entry points agree.
+
+**The one trade-off to decide deliberately.** Today a guide code *proves* identity: only that guide holds it.
+With a picker, anyone holding the company code can select any guide, so attribution becomes self-declared rather
+than authenticated — someone could pick a colleague and put that colleague's phone on the booking sheet. Whether
+that matters depends on what guide attribution is *for*. The plan's own rationale ("the printed booking sheet can
+show that guide's phone") reads as operational labelling, in which case the trade-off costs nothing real. It
+would matter if guide identity ever gates commissions or per-guide reporting.
+
+**Two details to settle when building it:**
+- An **"I'm not on this list"** option falling back to the company's own contact details, so a guide who has not
+  been added yet is not stuck.
+- The picker shows every guide's name to anyone holding the company code. Fine for a partner agency, but worth a
+  conscious decision rather than a surprise.
+
+**Weaker alternative, recorded for completeness (Claude's first suggestion — UI only, no behavioural change):**
+- When a company has ≥1 guide, render its access code as **superseded**: greyed, with a line such as "Not in use —
+  guests book with a guide's code." Keep the value visible for reference so it stops looking like a live credential.
+- Warn at the moment it happens: adding a company's **first** guide should say plainly that the shared company code
+  will stop working and anyone already holding it will be turned away.
+- Rejected in favour of the picker: it documents the trap instead of removing it.
+
+**Why it went unseen:** every fixture company had zero guides, so the interaction was never exercised — the
+Plan's own Chunk 5 checklist notes the specs "needed no changes" for exactly that reason. It surfaced only when
+seeded data was made more realistic. A documentation-based system map would not have caught it either: both
+files describe themselves accurately, and the hazard lives in the *interaction* between them.
+
+**Asymmetry worth noting separately (not part of this bug):** `findBookingCodeByCode()` — the direct-code-entry
+path, where the visitor types a code with no company selected — falls back to `findCompanyByCode` unconditionally.
+So the same company code can be rejected on the dropdown path and accepted on the direct-entry path. Both
+comments claim the two "mirror" each other. Worth a deliberate decision about which is right.
+
+---
+
+## Bugs #43–#52 — the tetri conversion's residue, found 2026-09-18, fixed 2026-09-19
+
+Found by a deliberately **uninformed** review. Max asked for a second opinion on the money
+design and specified the reviewer be given no context — no decisions, no thought process,
+just "examine how this codebase handles money." It went looking for live defects rather
+than design quality and found five; a sixth (#48) surfaced while verifying its claims.
+Every one was confirmed against the source before being written down here.
+
+### They are not all the same kind of thing
+
+Max's question on reading them — *"is the point that some actions don't treat our values as
+tetri? we simply forgot to update the code?"* — is right for three of the six, and the
+exceptions are the interesting part.
+
+| Kind | Bugs | Where the wrong value lands | What prevents it |
+|---|---|---|---|
+| Missed a **display** conversion | #43, #46 | On a screen or in a file. DB is fine. | The lint rule below |
+| Missed an **input** conversion | #45 | **Written to the database, permanently** | Typing the parameter `Tetri` |
+| **Stale logic** that was correct before | #44 | Throws — the app fails rather than lies | Nothing mechanical. Only reading. |
+| Not a money-units bug at all | #47, #48 | Repricing / a wrong quote | A shared pricing helper (§22) |
+
+**#44 is the one worth understanding.** Nobody forgot to convert anything. The line
+`Math.round(x * (1 - p/100) * 100) / 100` was *correct, deliberate* code meaning "round to
+two decimals of lari". Under tetri it is not a missing conversion — it is an operation whose
+**purpose evaporated** while it kept running and kept returning a number. No conversion
+audit finds this: grep every money site for a missing `fromMajor` and this line passes,
+because nothing is missing. Finding these requires asking "why does this line exist?",
+not "is this converted?".
+
+### Why the original sweep missed them
+
+`Plan-DataModel.md` records the conversion's own biggest finding: **`tsc` catches nothing.**
+Prisma maps both `Float` and `Int` to `number`, so changing every money column produced
+**zero** type errors across the codebase. The remediation was a grep anchored on the `₾`
+character — 198 occurrences.
+
+Its blind spot is exactly *a money site with no `₾` next to it*. All four
+display/IO defects sat in it. That is not bad luck; it is the shape of residue that method
+leaves, and it was predictable from the method.
+
+### What now holds the line
+
+`saas/eslint.config.mjs` gained a `no-restricted-syntax` rule rejecting money identifiers
+rendered directly as JSX children — `<p>{confirmedPrice}</p>`, `<p>{order.totalPrice}</p>`,
+`` <p>{`${total} GEL`}</p> ``. It exists because the compiler provably cannot help here.
+
+Two design notes, both learned by testing rather than assumed:
+
+- **The identifier list is explicit**, not a `/price|amount|total/` pattern, so it does not
+  fire on `totalOrders` or `priceLabel`.
+- **Every selector is rooted at `JSXElement >`** — only money *rendered as a child*. An
+  attribute (`value={price}` on an admin input, `total={x}` passed to a component) is not
+  flagged: passing tetri to a prop is correct, and those inputs hold an editable lari
+  *string*. Without that root the rule reported **9 false positives and zero real defects**.
+
+Verified against a probe covering all three bad forms plus four good ones, then run across
+the codebase: **0 violations** once #43 was fixed.
+
+### The database audit — what was actually damaged
+
+Max authorised inspecting and repairing dev data directly ("all data is fake anyway; we
+aren't taking real orders yet"). Built `saas/scripts/audit-money.ts` — a read-only
+plausibility sweep over every money column looking for the two shapes a unit error leaves:
+a value ~100x too small, and a non-integer (what #44's stale rounding produced).
+
+**Result: no damaged rows anywhere.**
+
+| Column | n | min | max | under floor | fractional |
+|---|---|---|---|---|---|
+| `Order.totalPrice` | 393 | ₾180 | ₾2,875 | 0 | 0 |
+| `OrderMasterclass.pricePerUnit` | 73 | ₾25 | ₾60 | 0 | 0 |
+| `WineOrder.totalAmount` | 45 | ₾163.20 | ₾7,078.80 | 0 | 0 |
+| `Price.pricePerPerson` | 30 | ₾25 | ₾90 | 0 | 0 |
+| `WineVintage.price` | 17 | ₾15 | ₾40 | 0 | 0 |
+| `WineOrderItem.priceSnapshot` | 109 | ₾15 | ₾40 | 0 | 0 |
+| `OrderExtra.amount` | **0 rows** | — | — | — | — |
+
+**#45 never wrote a bad row** — `OrderExtra` is empty, because nobody has used the admin
+"add extra" button since the migration. The bug was real and would have corrupted the first
+row it touched; it simply never got the chance.
+
+The non-round wine totals (₾163.20, ₾7,078.80) are the useful signal in that table:
+discounts *are* being applied and *are* landing on exact tetri, which is #44's fix working
+on real data rather than in a test.
+
+The audit's one genuine finding was #49, which no amount of code-reading had surfaced:
+393 of 393 orders missing their rate snapshots. Keep `audit-money.ts` — it is read-only and
+is the cheapest way to answer "did anything get written wrong" after future money work.
+
+### The second blind review — pricing, 2026-09-19
+
+Max asked for an independent read of *pricing* specifically, again with no context, and this
+time with the `vault/` directory explicitly fenced off — by then it held the whole prior
+analysis, which would have anchored the reviewer instead of testing it.
+
+It counted **nine** places that decide what a booking costs, not the five §22-plus-my-own-count
+had reached: five server sites that write `Order.totalPrice` (`createBooking`,
+`updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`, `recalcOrderTotal`), three
+client sites that display a total (`BookingForm`, `NewOrderForm`, `OrderDetail`), and the seed.
+Six of the nine agree. Three disagreements were real and are #50–#52 above.
+
+**It also corrected the previous conclusion about consolidation.** The stated obstacle had been
+that a shared helper must take rates as arguments because the browser preview cannot see
+snapshots — framed as a design decision needing Max's sign-off. Checking the import graph
+settles it: `lib/pricingUtils.ts` has no `'use server'` and no server-only imports, and is
+already imported by eight files spanning both sides (`BookingForm.tsx`, `OrderDetail.tsx`,
+`NewOrderForm.tsx`, `CompaniesClient.tsx`, `createBooking.ts`, `orders.ts`, `pricing.ts`,
+`app/(site)/page.tsx`). There is no boundary to cross. Taking rates as arguments is the
+obvious shape, not a hard call.
+
+The better framing, which replaces §22's: **the sites do not disagree about pricing, they
+disagree about where rates come from.** Three ask "what is this worth at the agreed rates"
+(`createBooking`, `recalcOrderTotal`, `assignOrderCompany`); two ask "what should this be
+re-priced to now" (`updateOrderEnhanced`, `createOrderAdmin`). That entire distinction
+collapses into which rate resolver you call — one arithmetic function plus three or four
+resolvers, with the one genuine policy asymmetry (individuals do not pay the tier's
+registration fee) living in a resolver rather than in the arithmetic.
+
+**Sequencing, which is the part that matters.** Extraction will change behaviour at exactly
+these three sites, because they have drifted — so extracting first buries three fixes in a
+mechanical diff where a fix and a fresh bug look identical. Tests first, then fix, then
+extract.
+
+### Still open
+
+The tier-pricing formula is copy-pasted in **nine** places (see the second blind review above).
+#48 and #50–#52 are that drift already having happened, four times. Extracting a single
+`priceBooking()` plus rate resolvers into `lib/pricingUtils.ts` is the outstanding item — see
+§22, updated 2026-09-19. There is no technical obstacle; the only caveat is sequencing.
+
+Also outstanding: `findTier` silently falls back to the highest tier for an out-of-range guest
+count. That is deliberate, documented and covered by
+`tests/tier2-core-flows/booking-enhanced.spec.ts:186-204` — but the name hides it. Renaming it
+`findTierOrHighest` (behaviour unchanged) would make the fallback visible at all eight call
+sites.
 
 ---
 
@@ -770,13 +992,23 @@ Expect `fra1::fra1::…`. A second segment of `iad1` means the region pin was lo
 ## Bug #15 — Nested `<button>` on `/admin/companies` causes a hydration mismatch
 
 **Severity:** Medium — no data loss by itself, but cost multiple clicks their effect unpredictably (row expand, tab toggle, "+ Add Booking Company") and once contributed to a stale-element-reference incident that briefly overwrote real Cookie Company data during manual testing (caught and reverted)
-**Found:** 2026-08-10, while building the Playwright suite's companies-CRUD test (#147 Phase 3) · **Status:** 🔴 Open
+**Found:** 2026-08-10, while building the Playwright suite's companies-CRUD test (#147 Phase 3) · **Status:** 🟢 Resolved 2026-09-12
+
+> **Reconciled 2026-09-19.** This entry still read 🔴 Open a week after the fix shipped, while the
+> resolved banner higher up this same file already said 2026-09-12 — one file contradicting itself.
+> Verified against the code before changing it: `CompaniesClient.tsx` now closes the row-summary
+> `<button>` before the `HelpHint`, and all four other `HelpHint` sites in that file sit in plain
+> `<div>` wrappers or as a sibling after `</button>`. The "Recommended fix" below is the fix that
+> was actually applied. Left in place rather than deleted because the incident it describes (the
+> accidental Cookie Company edit) is worth keeping findable.
 
 **Root cause:** `CompaniesClient.tsx`'s per-company row summary is a `<button onClick={() => setExpandedId(...)}>` (`app/admin/(panel)/companies/CompaniesClient.tsx` ~line 733) wrapping the row's whole content, including a conditionally-rendered `<HelpHint text={...} />` (~line 757) whenever the row has a "needs details" warning. `HelpHint.tsx` itself renders its "?" trigger as its own `<button type="button">` (~line 69) — so a `<button>` ends up nested inside another `<button>`, which is invalid HTML. Browsers correct this at parse time, so React's server-rendered markup and the DOM the browser actually builds disagree, producing a hydration mismatch on every page load, in any locale. (The similarly-structured Individuals row, ~line 664-685, is safe — its `HelpHint` sits as a sibling *after* the closing `</button>`, not inside it.)
 
-**Observed impact:** React periodically discards/rebuilds the affected DOM subtrees client-side to reconcile the mismatch, which cost clicks their effect unpredictably across the page — not one flaky element, a property of the whole page. Worked around in the Playwright test with a click-and-verify retry helper (`clickUntil()`); not fixed at the source. While diagnosing this live via `playwright-cli`, a stale cached element reference (pointing at a row that had just been rebuilt) briefly caused a real accidental edit to Cookie Company's live data — caught via the actual POST body and reverted via direct SQL, confirmed restored.
+**Observed impact:** React periodically discards/rebuilds the affected DOM subtrees client-side to reconcile the mismatch, which cost clicks their effect unpredictably across the page — not one flaky element, a property of the whole page. Worked around in the Playwright test with a click-and-verify retry helper (`clickUntil()`) before being fixed at the source on 2026-09-12. While diagnosing this live via `playwright-cli`, a stale cached element reference (pointing at a row that had just been rebuilt) briefly caused a real accidental edit to Cookie Company's live data — caught via the actual POST body and reverted via direct SQL, confirmed restored.
 
-**Recommended fix:** move any row's `HelpHint` outside the row-summary `<button>` (same pattern already used correctly for the Individuals row), or make the row-summary clickable via a non-`<button>` element (e.g. a `<div role="button" tabIndex={0}>`) if `HelpHint` needs to stay visually inside it. Not fixed here — flagged this session as task chip `task_b2b8da79`, tracked separately from the Playwright suite that found it (`playwright/KNOWN-ISSUES.md` #2).
+**Fix applied (2026-09-12):** moved the row's `HelpHint` outside the row-summary `<button>`, the same pattern the Individuals row already used correctly. (The alternative considered — making the row summary a `<div role="button" tabIndex={0}>` so the hint could stay visually inside — was not needed.) Originally flagged as task chip `task_b2b8da79`.
+
+**Consequence still outstanding for the test suite:** `clickUntil()`, the retry-until-verified click helper, was introduced *because* of this bug and is still wrapped around most meaningful clicks in `saas/tests/helpers/payments.ts` and `companies-crud.spec.ts`. With the cause gone, those retries will now mask a genuine regression — a click that truly stopped working is indistinguishable from one that was merely slow. Worth re-examining deliberately rather than stripping out blindly (clicks on this UI may still be slow for unrelated reasons).
 
 ---
 

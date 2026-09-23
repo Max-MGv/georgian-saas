@@ -5,6 +5,8 @@ import { headers } from 'next/headers'
 import { adminT } from '@/lib/adminT'
 import PaymentSetupBanner from '../PaymentSetupBanner'
 import SettingsClient from './SettingsClient'
+import ContactRolesPanel from './ContactRolesPanel'
+import { listContactRoles } from '@/app/actions/contactRoles'
 
 export default async function SettingsPage() {
   const [
@@ -41,6 +43,8 @@ export default async function SettingsPage() {
     contactFacebook,
     contactInstagram,
     adminLanguage,
+    personCodesEnabled,
+    contactRoles,
     h,
   ] = await Promise.all([
     getSetting('show_company_price_after_booking'),
@@ -76,6 +80,8 @@ export default async function SettingsPage() {
     getSetting('contact_facebook'),
     getSetting('contact_instagram'),
     getSetting('admin_language'),
+    getSetting('person_codes_enabled'),
+    listContactRoles(),
     headers(),
   ])
 
@@ -86,6 +92,7 @@ export default async function SettingsPage() {
   // Module flag comes from the proxy header, same source the site layout uses.
   // Tenants without the module never get the credentials section — and never get
   // the lookup either. getPaymentCredentials returns `secretKeySet`, never the key.
+  const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
   const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
   const credentials = onlinePaymentOn ? await getPaymentCredentials() : null
 
@@ -106,6 +113,7 @@ export default async function SettingsPage() {
           invoice_detailed: invoiceDetailed === 'true',
           hide_company_dropdown: hideCompanyDropdown === 'true',
           show_admin_hints: showAdminHints === 'true',
+          person_codes_enabled: personCodesEnabled === 'true',
         }}
         payment={{
           payment_recipient_name: recipientName,
@@ -147,6 +155,14 @@ export default async function SettingsPage() {
         contactFacebook={contactFacebook}
         contactInstagram={contactInstagram}
         adminLanguage={adminLanguage || 'en'}
+      />
+
+      {/* Contact types (Plan-ContactRoles Chunk 4). A sibling of SettingsClient rather than a
+          section inside it — that file is already ~1560 lines and this is self-contained. */}
+      <ContactRolesPanel
+        roles={contactRoles}
+        locale={adminLanguage || 'en'}
+        wineOrdersOn={wineOrdersOn}
       />
     </div>
   )

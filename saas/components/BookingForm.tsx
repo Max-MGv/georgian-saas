@@ -4,12 +4,13 @@
 // FIELDS.form inside saas/app/admin/content/ContentClient.tsx so the admin panel stays in sync.
 // See vault/MaintenanceNotes.md §1 for full details.
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
-import { verifyBookingCode, findBookingCodeByCode } from '@/app/actions/companies'
+import { useContactSelection } from '@/lib/useContactSelection'
+import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { comboRatePerPerson, findTier } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import NationalityPicker from '@/components/NationalityPicker'
@@ -17,6 +18,7 @@ import { countryName } from '@/lib/countries'
 import NewCompanyPopupView from '@/components/NewCompanyPopupView'
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
 import AccessCodePopupView from '@/components/AccessCodePopupView'
+import ContactPickerPopupView from '@/components/ContactPickerPopupView'
 import { buildAccessCodeLabels } from '@/lib/accessCodePopupLabels'
 import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingConfirmPopupView'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -27,8 +29,16 @@ type Price = {
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
 }
 type Company = {
-  id: string; name: string; prices: Price[]; accessCode: string | null
-  contactName: string | null; contactPhone: string | null; contactEmail: string | null
+  id: string; name: string; prices: Price[]
+  /**
+   * Whether the company has an access code — **never the code itself**. Passing whole
+   * Company rows here put every booking company's code in the public homepage's source
+   * (KnownBugs #57 / Plan-ContactRoles F3); the form only ever used it as a boolean.
+   */
+  hasAccessCode: boolean
+  // No contactName/contactPhone/contactEmail: those three columns are gone, replaced by
+  // CompanyPerson rows in a contact_person role (Plan-ContactRoles Chunk 1). Contact
+  // details now arrive per company through resolveCompanyContacts(), not on this prop.
   // Per-company payment override (#148). null = follow the Companies section
   // default; true = always skip; false = always require. Label-only here —
   // the real gate is shouldTakePayment(), server-side, in createBooking.ts.
@@ -67,6 +77,18 @@ type Props = {
    * independent of `enhancedEnabled`/`isEnhanced` below, not nested inside it. */
   nationalityBreakdownEnabled?: boolean
   hideCompanyDropdown?: boolean
+  /**
+   * The tenant's PER_ORDER roles that apply to bookings, with no people attached
+   * (`orderRolesFor()`), in the admin's own sort order.
+   *
+   * Separate from the people the resolver returns per company, and deliberately so:
+   * the detailed variant renders a block per non-contact-person role, and that block
+   * has to exist before any company is chosen. Driving it off "does some company have
+   * guides" would make the form's shape flicker as the dropdown changed. A role added
+   * on the Contact Types screen appears here with no code change — which is the
+   * requirement this whole rework exists for.
+   */
+  bookingRoles?: OrderRole[]
   menuItems?: MenuItem[]
   masterclassItems?: MasterclassItem[]
   minGuestsTasting?: number
@@ -107,7 +129,7 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
     let str = messagesContent[key] || t(locale, tKey)
@@ -119,9 +141,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [guestInput, setGuestInput] = useState('4')
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
-  // Which guide's code matched, if any (Plan-CompanyGuidesAndReps Chunk 5/7) — flows through
-  // buildBookingPayload() into createBooking() so the order remembers who was contacted.
-  const [matchedGuideId, setMatchedGuideId] = useState<string | null>(null)
   // Company-booking nationality tags (Plan-CompanyNationality) — ISO codes, no per-country
   // count. Reset whenever the visitor switches to an INDIVIDUAL booking (see the toggle below).
   const [nationalities, setNationalities] = useState<string[]>([])
@@ -161,6 +180,62 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  /** Which company the four fields above were last filled from — see the effect below. */
+  const prevCompanyIdRef = useRef('')
+
+  /**
+   * Which role owns the form's existing name / phone / email fields.
+   *
+   * `contact_person` is a system role seeded per tenant and matched on its `key`, not
+   * its label — labels are display-only and renameable, `key` is what code matches on
+   * (Plan-ContactRoles Chunk 0). It keeps the four fields it has always had, because
+   * those are the columns `Order.name/surname/phone/email` are written from
+   * (decision 4). Every *other* booking role gets its own block, detailed variant only
+   * — which is the brief's "we also want to add guide info as well … only in the
+   * details booking option", generalised so a third role needs no code change.
+   */
+  const contactPersonRole = useMemo(
+    () => bookingRoles.find(r => r.key === 'contact_person') ?? null,
+    [bookingRoles]
+  )
+  const extraRoles = useMemo(
+    () => bookingRoles.filter(r => r.key !== 'contact_person'),
+    [bookingRoles]
+  )
+  const roleLabel = useCallback(
+    (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn,
+    [locale]
+  )
+
+  /**
+   * Put a picked person's details into the form.
+   *
+   * Only the contact_person role touches the form's own inputs; every other role is
+   * rendered straight out of the hook's own state, so there is nothing to copy. The
+   * hook stays form-agnostic precisely because this function, not the hook, knows that
+   * this particular form splits a name into two boxes.
+   */
+  const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
+    if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
+    const parts = person.name.trim().split(' ')
+    setFirstName(parts[0] ?? '')
+    setLastName(parts.slice(1).join(' '))
+    if (person.phone) setPhone(person.phone)
+    if (person.email) setEmail(person.email)
+  }, [contactPersonRole])
+
+  const {
+    selected: selectedContacts,
+    contacts: pickedContacts,
+    roleChoices,
+    activeRole,
+    resolve: resolveContacts,
+    pick: pickContact,
+    skip: skipContactRole,
+    reopenRole,
+    setTyped: setTypedContact,
+    reset: resetContacts,
+  } = useContactSelection({ module: 'BOOKING', onApply: applyPickedPerson })
 
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
@@ -252,37 +327,57 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           ? true
           : onlinePaymentEnabled.company
 
-  // Show access code popup when a company with a code is selected; auto-fill directly if no code
+  /**
+   * A company was chosen from the dropdown.
+   *
+   * With a code, ask for it. Without one, resolve immediately so this company's people
+   * can be offered — before Chunk 7 this branch copied the company's own contact
+   * columns, and those columns no longer exist. It also closes the gap Feature 201
+   * left behind: the form can now tell "has people" from "has a code", so a company
+   * with people but **no** accessCode is no longer unreachable.
+   */
   useEffect(() => {
-    if (!companyId || bookingType !== 'COMPANY' || hideCompanyDropdown) return
+    if (bookingType !== 'COMPANY' || hideCompanyDropdown) return
+    resetContacts()
+    /**
+     * Clear the contact_person fields too — but only when leaving a company we had
+     * actually filled them from.
+     *
+     * Found by walking the form in Chunk 7: the hook resets its own state, but these
+     * four inputs belong to the form, so switching companies left the *previous*
+     * company's contact person sitting in them. Picking "I am not on this list" for
+     * the new company would then have submitted a booking for company B attributed to
+     * a person who works at company A. The direct-code path already cleared them
+     * (`clearDirectCode`); the dropdown path never did — H3's "reset it everywhere",
+     * with one path missed, exactly as that hurdle predicts.
+     *
+     * Guarded on there having *been* a previous company so a guest who typed their own
+     * details first and only then chose a company does not watch them vanish.
+     */
+    if (prevCompanyIdRef.current && prevCompanyIdRef.current !== companyId) {
+      setFirstName(''); setLastName(''); setPhone(''); setEmail('')
+    }
+    prevCompanyIdRef.current = companyId
+    setShowCodePopup(false)
+    // '__new__' is the dropdown's sentinel, not a company — handleSubmit deals with it.
+    if (!companyId || companyId === '__new__') return
     const company = companies.find(c => c.id === companyId)
     if (!company) return
-    setMatchedGuideId(null)
-    if (!company.accessCode) {
-      applyProfile({ contactName: company.contactName, contactPhone: company.contactPhone, contactEmail: company.contactEmail })
+    if (company.hasAccessCode) {
+      setCodeInput('')
+      setCodeError('')
+      setShowCodePopup(true)
       return
     }
-    setCodeInput('')
-    setCodeError('')
-    setShowCodePopup(true)
+    void resolveContacts({ companyId })
   }, [companyId, bookingType, hideCompanyDropdown])
-
-  function applyProfile(profile: { contactName: string | null; contactPhone: string | null; contactEmail: string | null }) {
-    if (profile.contactName) {
-      const parts = profile.contactName.trim().split(' ')
-      setFirstName(parts[0] ?? '')
-      setLastName(parts.slice(1).join(' '))
-    }
-    if (profile.contactPhone) setPhone(profile.contactPhone)
-    if (profile.contactEmail) setEmail(profile.contactEmail)
-  }
 
   async function handleCodeSubmit(e?: React.FormEvent) {
     e?.preventDefault()
     if (!codeInput.trim()) return
     setCodeLoading(true)
     setCodeError('')
-    const result = await verifyBookingCode(companyId, codeInput)
+    const result = await resolveContacts({ companyId, code: codeInput })
     setCodeLoading(false)
     if ('error' in result) {
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
@@ -297,15 +392,17 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         await navigator.credentials.store(cred)
       } catch {}
     }
-    setMatchedGuideId(result.guideId)
-    applyProfile(result.profile)
     setShowCodePopup(false)
+    // Nothing else to do here. A person's own code already named them and the hook has
+    // applied their details; a company code leaves a queue of roles to ask about, and
+    // the picker below opens itself off `activeRole`. When person codes are on, the
+    // resolver deliberately returns no choices at all, so no list is ever shown.
   }
 
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
-    setMatchedGuideId(null)
+    resetContacts()
     setBookingType('INDIVIDUAL')
   }
 
@@ -313,7 +410,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (!directCode.trim()) return
     setDirectCodeLoading(true)
     setDirectCodeError('')
-    const result = await findBookingCodeByCode(directCode)
+    // No company chosen first — a tenant-wide lookup. Same resolver, same rules: a code
+    // typed directly must behave identically to one entered after the dropdown.
+    const result = await resolveContacts({ code: directCode })
     setDirectCodeLoading(false)
     if ('error' in result) {
       setDirectCodeError(mc('onsite_access_code_direct_not_recognised', 'form.access_code_direct_not_recognised'))
@@ -321,8 +420,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setMatchedGuideId(result.guideId)
-    applyProfile({ contactName: result.company.contactName, contactPhone: result.company.contactPhone, contactEmail: result.company.contactEmail })
   }
 
   function clearDirectCode() {
@@ -330,7 +427,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCompanyName('')
     setDirectCode('')
     setDirectCodeError('')
-    setMatchedGuideId(null)
+    resetContacts()
     setFirstName(''); setLastName(''); setPhone(''); setEmail('')
   }
 
@@ -377,9 +474,47 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
   }
 
+  /**
+   * Who to record against this booking, one entry per contact role.
+   *
+   * The contact_person entry is rebuilt from the **live** form fields rather than from
+   * whatever the picker stored, because the guest may have picked someone and then
+   * edited the boxes — and those same four fields are what `Order.name/surname/phone/
+   * email` are written from (decision 4). Its `personId` is kept when one was picked,
+   * so the link survives the edit while the snapshot stays truthful.
+   *
+   * Every other role comes straight from the hook, whether the person was picked from
+   * the list or typed in by hand after "I am not on this list". A typed-in person has
+   * no `personId` and that is the point: Chunk 9 stores the facts as snapshots, so
+   * somebody who has not been added in the admin panel yet still reaches the order.
+   */
+  function buildContacts() {
+    if (bookingType !== 'COMPANY') return undefined
+    const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
+    const contactPerson = contactPersonRole
+      ? (() => {
+          const name = `${firstName} ${lastName}`.trim()
+          if (!name) return null
+          return {
+            roleId: contactPersonRole.roleId,
+            personId: selectedContacts[contactPersonRole.roleId]?.personId,
+            name,
+            phone: phone || null,
+            email: email || null,
+          }
+        })()
+      : null
+    const all = contactPerson ? [contactPerson, ...others] : others
+    return all.length > 0 ? all : undefined
+  }
+
   /** Shared with handleNewCompanySubmit so a booking submitted through the
    * "New Company?" popup carries the exact same payload a normal submit
-   * would — only `requestedCompanyName` differs. */
+   * would — only `requestedCompanyName` differs.
+   *
+   * ⚠️ MaintenanceNotes #1 / hurdle H3: this is the ONLY place a booking field may be
+   * added. A field set in handleSubmit's own createBooking() call instead is silently
+   * dropped by the "New Company?" submit path. That has already happened once. */
   function buildBookingPayload(): BookingFormData {
     return {
       bookingType,
@@ -387,7 +522,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
-      guideId: bookingType === 'COMPANY' && matchedGuideId ? matchedGuideId : undefined,
+      // Replaces `guideId` (Plan-ContactRoles Chunk 7). That column was write-only —
+      // written on every company booking and read by nothing, so the attribution the
+      // guides feature existed for was never actually delivered anywhere (finding F1).
+      // Chunk 9 turns these into OrderContact rows with snapshots; Chunk 10 is where
+      // they finally get shown.
+      contacts: buildContacts(),
       nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
       date: selectedDate,
       timeSlot,
@@ -427,14 +567,21 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const masterclassAmt = activeMcLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
 
   // Price preview
-  const enhancedTier = isEnhanced && selectedCompany
-    ? findTier(selectedCompany.prices, payingGuests)
+  // Party size picks the tier (2026-09-19), and priceBooking is the same
+  // function the server prices with — this preview cannot drift from it.
+  const enhancedRates = isEnhanced && selectedCompany
+    ? ratesForParty(selectedCompany.prices, totalGuests)
     : null
-  const enhancedTotal = enhancedTier
-    ? tastingGuests * enhancedTier.pricePerPerson +
-      lunchGuests * comboRatePerPerson(enhancedTier) +
-      enhancedTier.registrationPrice +
-      masterclassAmt
+  const enhancedTier = isEnhanced && selectedCompany
+    ? findTier(selectedCompany.prices, totalGuests)
+    : null
+  const enhancedTotal = enhancedRates
+    ? priceBooking(
+        enhancedRates,
+        { guestCount: totalGuests, tastingGuests, lunchGuests },
+        visitType as 'TASTING' | 'TASTING_LUNCH',
+        { masterclass: masterclassAmt, extras: 0 },
+      )
     : masterclassAmt
 
   // Simple form price preview
@@ -450,8 +597,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const matchedTierRate = matchedTier
     ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : comboRatePerPerson(matchedTier))
     : null
+  // Both branches price off matchedTierRate, which already picks
+  // comboRatePerPerson for TASTING_LUNCH. The COMPANY branch used
+  // matchedTier.pricePerPerson directly until 2026-09-18, so a company
+  // TASTING_LUNCH quote dropped the lunch add-on and under-stated the total
+  // the server then stored (bug #48). createBooking.ts is the authority here.
   const estimatedTotal = matchedTier
-    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTier.pricePerPerson * guestCount + matchedTier.registrationPrice)
+    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTierRate! * guestCount + matchedTier.registrationPrice)
     : basePrice != null ? basePrice * guestCount : null
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
@@ -625,7 +777,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {showPrice && confirmedPrice != null && (
           <div className="mt-6 inline-block rounded-lg px-6 py-3 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: C.border }}>
             <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: C.faint }}>{t(locale, 'form.est_total_label')}</p>
-            <p className="text-2xl font-bold" style={{ color: C.wine }}>{confirmedPrice}</p>
+            {/* confirmedPrice is the server's Order.totalPrice — tetri. Rendered
+                raw until 2026-09-18, so a ₾280 booking told the guest "28000"
+                (bug #43). Never interpolate a money value; see lib/money.ts. */}
+            <p className="text-2xl font-bold" style={{ color: C.wine }}>{formatTetri(asTetri(confirmedPrice))}</p>
           </div>
         )}
       </div>
@@ -660,6 +815,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           onSubmit={handleCodeSubmit}
           onEnterManually={handleNotARep}
           labels={buildAccessCodeLabels(locale)}
+        />
+      )}
+
+      {/* Contact picker — the step after a company-level code (KnownBugs #55), now once
+          per role the company has people in. `activeRole` is the front of the hook's
+          queue, so picking or skipping simply advances it; when the queue empties the
+          popup disappears on its own. Never opens at all when person codes are on. */}
+      {activeRole && (
+        <ContactPickerPopupView
+          title={mc('onsite_contact_picker_title', 'form.contact_picker_title')}
+          intro={mc('onsite_contact_picker_intro', 'form.contact_picker_intro', {
+            company: companies.find(c => c.id === companyId)?.name ?? directCompanyName ?? '',
+            role: roleLabel(activeRole),
+          })}
+          people={activeRole.people}
+          onPick={pickContact}
+          onNotListed={skipContactRole}
+          labels={{ notListed: t(locale, 'form.contact_picker_not_listed') }}
         />
       )}
 
@@ -716,7 +889,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         <div>
           <label style={labelStyle}>{fc('form_booking_type', 'form.booking_type')}</label>
           <div className="grid grid-cols-2 gap-3">
-            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId(''); setNationalities([]) }}>
+            <ToggleButton active={bookingType === 'INDIVIDUAL'} onClick={() => { setBookingType('INDIVIDUAL'); setCompanyId(''); setNationalities([]); resetContacts() }}>
               {fc('form_individual', 'form.individual')}
             </ToggleButton>
             <ToggleButton active={bookingType === 'COMPANY'} onClick={() => setBookingType('COMPANY')}>
@@ -999,6 +1172,62 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               className="w-full rounded-lg border px-3 py-2.5 text-sm resize-none" style={inputStyle} />
           </div>
         )}
+
+        {/* Per-role contact details — detailed variant only.
+            "now we also want to add guide info as well allright? only in the details
+            booking option" (Plan-ContactRoles §1). One block per booking role other
+            than contact_person, which already owns the name/phone/email fields below.
+            Driven by the tenant's role list, so adding a third contact type on the
+            Contact Types screen makes a third block appear with no code change.
+
+            Headings are the role's own admin-managed label from the database, which is
+            why none of this is in FIELDS.form — MaintenanceNotes §1's own test for a
+            new detailed-only section is "fixed label, or backed by other admin data?",
+            and this is the latter, like the masterclass and menu rows above. */}
+        {isEnhanced && extraRoles.map(role => {
+          const chosen = selectedContacts[role.roleId]
+          const offered = roleChoices.find(r => r.roleId === role.roleId)
+          return (
+            <div key={role.roleId}>
+              <div className="flex items-center justify-between mb-1.5">
+                <label style={{ ...labelStyle, marginBottom: 0 }}>{roleLabel(role)}</label>
+                {/* Re-open the list for this one role. Only offered when there IS a
+                    list: with person codes on the resolver sends none, deliberately,
+                    and a button that opens an empty popup would be a dead control. */}
+                {offered && offered.people.length > 0 && (
+                  <button type="button" onClick={() => reopenRole(role.roleId)}
+                    className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                    style={{ color: 'var(--color-brand)' }}>
+                    {t(locale, 'form.contact_role_choose')}
+                  </button>
+                )}
+              </div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  aria-label={`${roleLabel(role)} — ${t(locale, 'form.contact_role_name')}`}
+                  placeholder={t(locale, 'form.contact_role_name')}
+                  value={chosen?.name ?? ''}
+                  onChange={e => setTypedContact(role.roleId, { name: e.target.value, phone: chosen?.phone, email: chosen?.email })}
+                  className="rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+                <input
+                  type="tel"
+                  aria-label={`${roleLabel(role)} — ${t(locale, 'form.contact_role_phone')}`}
+                  placeholder={t(locale, 'form.contact_role_phone')}
+                  value={chosen?.phone ?? ''}
+                  onChange={e => setTypedContact(role.roleId, { name: chosen?.name ?? '', phone: e.target.value, email: chosen?.email })}
+                  className="rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+                <input
+                  type="email"
+                  aria-label={`${roleLabel(role)} — ${t(locale, 'form.contact_role_email')}`}
+                  placeholder={t(locale, 'form.contact_role_email')}
+                  value={chosen?.email ?? ''}
+                  onChange={e => setTypedContact(role.roleId, { name: chosen?.name ?? '', phone: chosen?.phone, email: e.target.value })}
+                  className="rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+              </div>
+            </div>
+          )
+        })}
 
         {/* Name & surname */}
         <div className="grid sm:grid-cols-2 gap-4">

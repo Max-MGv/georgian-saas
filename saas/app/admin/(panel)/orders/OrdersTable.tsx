@@ -96,10 +96,14 @@ type Order = {
   hotDishMeat: string | null
   foodNotes: string | null
   nationalities: string[]
-  company: { name: string; identificationCode: string | null; representatives: { id: string; name: string; email: string | null }[] } | null
+  company: { name: string; identificationCode: string | null } | null
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+  contacts: { roleKey: string; roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
+  /** People eligible to receive this order's invoice email — see lib/contactResolution.ts's
+   *  INVOICE_RECIPIENT_ROLE_KEYS (Plan-ContactRoles Chunk 11). Never carries a `code`. */
+  invoiceRecipients: { id: string; name: string; email: string }[]
 }
 
 /** The subset the flow-line needs - every order row already satisfies it. */
@@ -643,8 +647,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   function invoiceRecipientOptions(order: Order): { label: string; email: string }[] {
     const options: { label: string; email: string }[] = []
     if (order.email) options.push({ label: at('orders.emailModal.guestEmail'), email: order.email })
-    for (const rep of order.company?.representatives ?? []) {
-      if (rep.email) options.push({ label: rep.name, email: rep.email })
+    // A company person's own record can share the guest's address — the contact_person picked
+    // for this very booking is exactly that case. Same inbox either way, so one option, not two
+    // (and a duplicate `email` key would collide in the <select> below).
+    for (const r of order.invoiceRecipients) {
+      if (!options.some(o => o.email === r.email)) options.push({ label: r.name, email: r.email })
     }
     return options
   }

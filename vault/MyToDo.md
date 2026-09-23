@@ -8,6 +8,293 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+---
+
+## 🟢 2026-09-22 (later) — Chunk 9 done, and an audit that found four real problems
+
+Bookings and wine orders now actually **record who to contact**, on all four forms. And I had a
+second Claude audit the whole thing — with the vault hidden from it, so it couldn't just read my
+own notes back and agree with me. It found four genuine problems. All four are fixed.
+
+### The one worth telling you about
+
+**Anyone could read any company's staff list without the access code.** Not through the form —
+the form always asked. But the *server* never insisted, and the company ids are visible in the
+homepage's HTML, so someone technical could ask the server directly and get back every contact
+person and guide with their names, phone numbers and emails.
+
+It's fixed: the server now requires the code whenever a company has one. It was live on
+`staging` only — never on your real site, because none of this rework has reached `master`.
+
+I'll be blunt about why it slipped: **my own test asserted the broken behaviour was correct.** I
+wrote a test from what the code did rather than from what it should do, so it passed happily.
+That's on me and it's worth you knowing the shape of it.
+
+### The other three
+
+- Admin-created bookings were saving contact details in one place and not the other, so the
+  admin-entered ones were half-recorded. Now every form — public and admin — goes through one
+  shared piece of code, which is the thing you said: *don't duplicate, or it drifts.*
+- On the wine page, switching company left the previous company's contact person in the boxes.
+  I'd fixed that exact bug on the booking form and forgotten to carry it across.
+- Typing a guide's phone number *before* their name made the phone vanish as you typed.
+
+### Nothing new for you to test
+
+I drove all four forms by hand and checked the results in the database rather than trusting the
+screen. Your list is still the same one item: **read the Georgian** on the contact picker
+(Site Content → Messages → GEORGIAN → Company Access-Code Popup, scroll to the preview).
+
+### One thing you noticed before I did
+
+**`staging.vineworks.ge` is down**, and it has been since this rework started — not since
+today. Every build there has failed, so the address is serving the *old* version of the site
+against the *new* database, and the two no longer fit together.
+
+It comes back on its own once chunks 10–12 are done. Nothing is lost and nothing needs doing.
+But until then: **don't demo from staging, and don't read it as a sign anything is wrong** — it
+will look broken the whole time regardless of how the work is going.
+
+I should have told you that outright instead of leaving you to spot it.
+
+### Where the project is
+
+**Chunks 0–9 of 14 done.** Five left: the admin order screens (10), invoice emails (11), demo
+seed and onboarding (12), Playwright tests (13), and the close-out plus the merge to your real
+site (14).
+
+Worth knowing: **10, 11 and 12 are not polish.** Until they're done, the Orders screen, the
+invoice email and the demo reseed are all broken, and the site cannot be deployed at all — the
+build won't complete. It all ships together or not at all. That's by design, but it does mean
+we're in the uncomfortable middle right now.
+
+---
+
+## 🟢 2026-09-22 — Contact Roles chunks 7 & 8. The whole site works again. One thing for you.
+
+The booking form now asks who you are, once per contact type the company has people in — Contact
+Person first, then Guide — and fills the right details into the right places. I walked all of it
+in a browser myself, so this list is short.
+
+### Your two jobs
+
+- [x] ~~**The admin click-through.**~~ **Done — you logged in and I walked all four screens.**
+      Everything the earlier chunks claimed without seeing them turned out to be true: Contact
+      Types lists both built-in roles with no delete button, offers the company-level option when
+      creating one, and correctly hides the scope control when editing; Edit Company shows one
+      people section per role; the Messages preview renders the real picker. **I also closed the
+      last open item on the settings chunk** — the Personal access codes toggle flips and sticks,
+      and with it on the booking form shows no picker and no colleague names at all, while a
+      guide's own code takes them straight through. I put the setting back to off afterwards.
+
+      ~~One caveat if you go back in yourself: restart the dev server first and don't open
+      `/wines`.~~ **No longer true — chunk 8 fixed the wine page**, so you can click anywhere
+      now without breaking the admin panel. The one screen that still errors is
+      **Orders** (`/admin/orders`); that's chunk 10 and it only breaks itself.
+
+      Wine orders also got the same treatment while I was there. If you want a look: the public
+      **Order Wine** page now asks who you are after you enter a company code, and
+      **Wine Orders → New Wine Order** in the admin has a "Choose the Contact Person" dropdown
+      that fills itself in when the company has only one. Both work; neither needs checking.
+
+- [ ] **Read the Georgian.** This is the only thing genuinely left for you. New wording, mine,
+      drafted not natively reviewed:
+      **"ვინ დავამატოთ ამ ჯავშანში?"** (the picker's title) and under it
+      **"{company} — აირჩიეთ ამ ვიზიტის {role}, რომ მარანმა იცოდეს ვის დაუკავშირდეს."**
+
+      Quickest way to see it: **Site Content → Messages → GEORGIAN → Company Access-Code Popup**,
+      and scroll to the preview at the bottom of that section. It renders the real thing. Or
+      switch the public site to KA and pick a company with a code. Tell me if either line reads
+      oddly and I'll change it.
+
+### Nothing else needs checking — here is what I already confirmed
+
+On Silk Road Journeys (two contact persons, two guides): entering the company code brought up
+the Contact Person list, then the Guide list; picking Mariam Dolidze filled the main name/phone/
+email fields and picking Tinatin Beruashvili filled a new Guide block; "I am not on this list"
+let me past without attributing anyone; switching company wiped everything clean; and choosing
+Individual made the Guide block disappear. No errors in the console.
+
+### One thing I did to your data
+
+You asked me to handle the duplicate contact rows. **They weren't duplicates** — on each of the
+five companies the two contact people have different names, different phone numbers and
+different email addresses. One is the operational contact, one is the finance contact
+(`hello@` and `finance@` on Alazani, `bookings@` and `invoices@` on Kakheti, and so on).
+Deleting either would have lost a real phone number. Two contact people per company is the new
+model working properly, not a migration leaving a mess.
+
+What I did delete were two obvious test rows on Alazani Valley Tours, both typed by hand on
+19 September: a contact person called **"test test"** with no phone or email, and a guide called
+**"x"** with phone **"1"**. Nothing referenced either. That is the whole tidy-up.
+
+### Still not on the real site
+
+Everything is on `staging`. `master` — the site your customers use — is untouched, and the
+access-code leak is still live there until we do the final merge. That merge is chunk 14 and it
+needs your explicit go-ahead, because it is also the step that changes the production database.
+
+---
+
+## 🟡 2026-09-19 (later) — Guide picker built. NOT on staging yet, nothing for you to check *yet*.
+
+This is the change you designed: a company's shared code works again even when that company
+has guides, and the guest picks which guide they are.
+
+**Right now it only exists on my machine, against the dev database.** Nothing is committed or
+pushed, so there is nothing on staging.vineworks.ge to look at. When it does go up, these are
+the things worth two minutes of your time:
+
+- [ ] Pick a company that has guides, enter the **company** code → you should get a second
+      popup listing the guides. Before this change that code was simply refused.
+- [ ] Pick a guide → their name and phone fill the form (not the company's).
+- [ ] Press **"I am not on this list"** → the company's own contact details fill instead.
+- [ ] Enter a **guide's own** code → no second popup, straight through as before.
+- [ ] Switch the site to Georgian and repeat the first step — the wording is mine, drafted not
+      natively reviewed. **"ვინ მოჰყავს ჯგუფი?"** and **"ამ სიაში არ ვარ"**. If either reads
+      oddly to a Georgian speaker, tell me and I will change it.
+- [ ] **Admin → Content → Messages → Access Code section.** Two new editable fields with a live
+      preview. I could not check this one — it needs an admin login, and I will not type a
+      password into a login form. Worth a glance next time you are in there anyway.
+
+### The thing worth knowing regardless of this feature
+
+The bug this fixes was live and invisible. If a winery gave a tour operator a company code and
+**later added a single guide to that company**, the code stopped working that instant. Every
+guest using it was told "Incorrect code", and the admin panel carried on showing the code as
+though it were fine. Nobody would have connected the two events.
+
+If any real client has ever reported "our code stopped working", this is very likely why.
+
+### One judgement call I made that you should know about
+
+You asked me to fix a bug in the code-checking logic. **There was no bug** — I had misread a
+sentence in the plan that ran across two lines, and the rule was deliberate and documented.
+Had I just done as asked, I would have undone a real product decision in order to make my own
+broken test data pass. The thing actually broken was a change I had made half an hour earlier.
+I corrected it rather than quietly doing what was asked.
+
+## 🔴 2026-09-19 — TEN BUGS FIXED, ON STAGING, NOT YET ON PRODUCTION
+
+Three commits on `staging`. **Nothing has gone to `master`**, so the real site is
+untouched. Check these on **staging.vineworks.ge**, then tell me and I will merge.
+
+### What happened, in one paragraph
+
+The tetri money change that shipped on the 18th left holes behind. We found them by
+asking two fresh helpers to look at the code with **no idea what we had been
+discussing** — no notes, no history, nothing. That turned out to be worth far more
+than me checking my own work: between them they found **ten real bugs**, several of
+which had been sitting in front of me all session.
+
+### The ones that would have embarrassed us
+
+| # | What was wrong | Who would have seen it |
+|---|---|---|
+| 43 | A guest who booked without paying online saw **"28000"** where it should say **₾280** | Every customer on that path |
+| 44 | Any company with a discount **could not place a wine order at all** — it failed and just said "Something went wrong" | Your B2B customers |
+| 45 | Typing `20` into an order's "Amount (₾)" box stored **₾0.20** | You, on any order |
+| 46 | The orders CSV export was **100× too high** under a column headed "Total (GEL)" | Your accountant |
+| 50 | Editing guest counts on an individual booking **silently re-priced it at ₾50 and erased the real rate** | You — and the rate was gone for good |
+| 51 | A walk-in you entered by hand was charged **₾200** where the website charged **₾280** for the same visit | You and the guest, disagreeing |
+| 52 | The order detail page showed **₾280** while the invoice for the same order said **₾240** | You, every individual order |
+
+Three more (#47, #48, #49) were about bookings quietly re-pricing themselves later.
+
+### I ran these live on staging — here is what I confirmed
+
+You asked me to run them rather than hand you a list. I did, on **Staging Winery**
+(the throwaway tenant). Confirmed working in the real app, cross-checked against
+the database:
+
+| What I did | What happened |
+|---|---|
+| Entered a walk-in: 1 individual, **Tasting + Lunch**, 4 guests, rates ₾50/₾80 | Saved as **₾320** — the lunch rate. It used to save ₾200. |
+| Added an extra "Transport", typed `20` | Showed **₾20.00**, and the total moved by exactly ₾20 (₾320 → ₾340). It used to store ₾0.20. |
+| Opened that order's detail page | **₾340** — the same number as the invoice and the database. It used to show ₾360. |
+| Looked at the rate badge on that page | **"Tasting 50₾/pp · Lunch 80₾/pp"** — the order's real rates. It used to say 50/50 for everything. |
+| Booked a visit as a guest on the public site | **₾280** on the form, **₾280** on the review sheet, and **280.00** on the card-payment page. |
+
+**Two I could not finish, and why:**
+
+- **The guest "thank you" screen (#43).** Your staging tenant takes card payment, so a
+  booking jumps straight to the payment page and never shows that screen. The amount is
+  provably right — the payment page itself said 280.00 — but I did not see that one screen.
+  To check it I would need to switch card payment off for that tenant for a minute. Say the
+  word and I will.
+- **The discounted wine order (#44).** No company on that tenant has an access code set up,
+  so I could not place one.
+
+**I also found and fixed a bug while testing.** My earlier fix changed the server but not
+the matching code in the New Order form, so the form showed ₾200 while the order saved as
+₾320. That is worse than the original bug. Fixed and re-verified — both now say ₾320.
+
+**Left behind on Staging Winery:** a test order "Pricing Testcase" (₾340) and an abandoned
+booking "Booking Totaltest". Delete them whenever, or leave them.
+
+### Also changed after that: how the price tier is chosen
+
+You said the tier should come from the total number of guests, not from how many of them
+are paying. That is now how it works, everywhere.
+
+**What you will notice:**
+
+- **A party with free guests gets a better rate.** 8 people where 2 are a guide and a driver
+  now prices as a party of **8**, not 6. On the demo ladder that is ₾540 instead of ₾620.
+- **Moving guests between Tasting-only and Tasting+Lunch no longer changes the tier.** It only
+  changes what each of them pays. Before, re-splitting the same party could move it between
+  price bands.
+- **There is a new field on both admin order screens: "Total guests in the party."** You now
+  type it instead of it being worked out from the split. It is what picks the tier, and it
+  includes free guests.
+- **The split can no longer exceed the party.** If you put 4 + 4 into an order of 6, both
+  screens say so and refuse to save.
+
+**I checked all of this live on staging.** Using Kakheti Wine Routes, whose rates step down
+at 11 guests:
+
+- A party of **11** (9 paying + 2 free) priced at **₾405** — the 11-20 rate. Under the old
+  rule those 9 payers would have been charged the 1-10 rate, **₾495**. The guide and driver
+  are what earned the better band.
+- Changing the party to **9** on the order page moved it straight back to **₾495**, and the
+  page said "live preview" until I saved.
+- Putting a split of 14 into a party of 11 **blocked the Create button**, and saving a bad
+  split on an existing order was **refused by the server too** — both layers, separately.
+- After saving, the database held exactly what the screen showed: party 9, total ₾495, rate
+  ₾55.
+
+Nothing left for you to verify on this one unless you want to see it yourself.
+
+**One thing for your eye specifically:** I wrote the Georgian for three new labels and
+re-worded five existing ones (the rate fields now read "Tasting only" and "Tasting+Lunch").
+You are the native speaker — tell me if any of it reads like a translation.
+
+### If you want to check anything yourself
+
+- [ ] **Book a visit as a guest** (one that does *not* go to card payment). The total on the "thank you" screen should read **₾280**, not `28000`.
+- [ ] **Place a wine order as a company that has a discount.** It should actually save. Before, it always failed.
+- [ ] **Open any individual booking in the admin.** The Total on that page should match the Total on its invoice. They disagreed before.
+- [ ] **On that same page, type a guest count into the breakdown and press Save.** The price must **not** change to ₾50. If the order has a rate, it stays on that rate; if it has none, the rate box shows "—" and nothing is re-priced.
+- [ ] **Add a new order by hand** for one guest type, tasting **with lunch**. It should cost the same as booking the identical visit on the public site.
+- [ ] **Add an extra to an existing order.** Type `20`, confirm it appears as **₾20**, not ₾0.20, and that the total moves by exactly ₾20.
+- [ ] **Export the orders CSV.** The "Total (GEL)" column should hold real lari (e.g. `280`), not `28000`.
+
+### Nothing was damaged
+
+I checked the whole dev database, every money column. **No bad rows anywhere.** Bug #45
+never actually got the chance to write one, because nobody had used that button since the
+change. The demo data was reseeded and is clean.
+
+### One decision waiting for you
+
+The order detail page currently shows **one** number that means two different things — the
+stored total, and a live preview of what it would become if you saved. I fixed the maths so
+the number is right, and it now says "live preview" whenever it differs from what is stored.
+The cleaner version shows **two** labelled numbers instead. I did not do that because you
+look at that screen every day and it is your call. Say if you want it.
+
+---
+
 ## ✅ 2026-09-18 (later) — DECIDED, BUILT AND **LIVE ON PRODUCTION**
 
 The decision below is closed and the whole data-model overhaul shipped. Read this
@@ -41,10 +328,13 @@ table together with its editing screen, never a table nothing writes.
 
 ### 🔴 Two things to do on production
 
-1. **Reseed the demo.** The migration wiped all orders, including
-   `demo.vineworks.ge`'s seeded ones. The public pages are fine — I checked the
-   prices — but its **admin Orders and Statistics are probably empty**, and that
-   is what you show prospects. Super-admin → **Reset Demo** card.
+1. **Reseed the demo — again, now that the fix is live.** The migration wiped all
+   orders including `demo.vineworks.ge`'s. Your first Reset Demo press rebuilt
+   them **at 1/100 of their real totals** — a bug I introduced in the tetri
+   conversion and missed (KnownBugs #42). Fixed and deployed to production
+   (`7c905e6`). **Press Reset Demo once more** and the figures will be right:
+   expect roughly 390 bookings averaging ₾580, and 45 wine orders. If the
+   numbers still look tiny, tell me.
 2. **Your own Orders screen is empty.** Expected — the wipe you approved. Not a
    fault.
 

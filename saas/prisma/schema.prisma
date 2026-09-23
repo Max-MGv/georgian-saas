@@ -62,17 +62,28 @@ model Tenant {
 }
 
 model Company {
-  id                  String                  @id @default(cuid())
+  id                  String          @id @default(cuid())
   name                String
   identificationCode  String?
-  contactName         String?
-  contactPhone        String?
-  contactEmail        String?
   address             String?
-  accessCode          String?
-  isIndividual        Boolean                 @default(false)
-  isBookingCompany    Boolean                 @default(true)
-  isWineOrderCompany  Boolean                 @default(false)
+  // The company-level gate, distinct from a person's own code (CompanyPerson.code).
+  // NOT governed by `person_codes_enabled` — it works in both modes, because it is the only
+  // way the hide_company_dropdown variant can identify a company at all. Required server-side
+  // whenever it is set: see lib/contactResolution.ts, and Plan-ContactRoles §9b A1 for the
+  // audit that found it being enforced by the form alone.
+  //
+  // (This comment used to name a setting called `company_access_codes_enabled`. No such key
+  // exists — it was renamed to `person_codes_enabled` in Chunk 3 precisely because it governs
+  // people's codes, not the company's.)
+  //
+  // @unique is the first DB-level guarantee this code pool has ever had — uniqueness used to
+  // be enforced only in generateUniqueTenantCode(), so a raw insert could silently collide
+  // (MaintenanceNotes #26). Postgres treats NULLs as distinct, so the many code-less
+  // companies are unaffected.
+  accessCode          String?         @unique
+  isIndividual        Boolean         @default(false)
+  isBookingCompany    Boolean         @default(true)
+  isWineOrderCompany  Boolean         @default(false)
   wineDiscountPercent Float?
   // Per-company override of the tenant's Companies section toggle (#148).
   // null = follow paymentEnabledCompanies; true = always skip (trusted,
@@ -82,43 +93,166 @@ model Company {
   // orders alike — see edge case notes in Feature 148 on why it isn't split per-module.
   skipPayment         Boolean?
   tenantId            String?
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @default(now()) @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @default(now()) @updatedAt
   orders              Order[]
   wineOrders          WineOrder[]
   prices              Price[]
-  guides              CompanyGuide[]
-  representatives     CompanyRepresentative[]
+  people              CompanyPerson[]
 
   @@index([tenantId])
 }
 
-// Person who can be contacted during the actual dinner/booking (Plan-CompanyGuidesAndReps).
-// Same code mechanism as Company.accessCode, but identifies a specific person, not just the
-// company. No own tenantId — RLS is JOIN-to-Company, same shape as Price.
-model CompanyGuide {
-  id        String   @id @default(cuid())
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name      String
-  phone     String?
-  code      String
-  createdAt DateTime @default(now())
-  orders    Order[]
+/// A kind of contact a company can have — "Guide", "Contact Person", later "CEO".
+///
+/// A dimension table rather than an enum, because the requirement is that adding a type is an
+/// admin action, not a migration (Max, 2026-09-19: *"it should be trivially easy, to in the
+/// future add or remove types of contact data attached to an order"*). This does **not**
+/// contradict vault/DataModel/Research-OrderStatusPatterns.md's "statuses stay enums" finding:
+/// that rule is about a state machine code branches on. Nothing branches on "is this a guide" —
+/// only on `scope`. Same split Magento makes between a fixed `state` and a customisable `status`.
+///
+/// Has its OWN tenantId, unlike CompanyPerson — a role belongs to the winery, not to one
+/// company. So its RLS policy is a direct tenantId check, not a JOIN.
+model ContactRole {
+  id        String          @id @default(cuid())
+  tenantId  String
+  /// Stable machine key ('guide', 'contact_person'). Code matches on this; labels are display
+  /// only, which is what makes renaming a system role safe.
+  key       String
+  labelEn   String
+  labelKa   String
+  scope     ContactScope
+  appliesTo ContactApplies
+  sortOrder Int             @default(0)
+  isActive  Boolean         @default(true)
+  /// Seeded roles. Renameable and deactivatable, never deletable — every CompanyPerson and
+  /// OrderContact points at a role, so deleting one orphans live rows. Deactivating hides it
+  /// from the pickers while leaving history readable, which is what an admin actually wants.
+  isSystem  Boolean         @default(false)
+  people    CompanyPerson[]
+  contacts  OrderContact[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
 }
 
-// Person invoices get sent to. Picked manually by an admin at invoice-send time — never typed
-// into a public form, never stored on an Order (Chunk 1 decision). Same JOIN-to-Company RLS
-// shape as CompanyGuide/Price.
-model CompanyRepresentative {
-  id        String   @id @default(cuid())
+/// PER_ORDER    — picked per booking/wine order, autofills the form, stored on OrderContact.
+/// COMPANY_LEVEL — company data only. Never appears on a public form (Max's CEO example).
+enum ContactScope {
+  PER_ORDER
+  COMPANY_LEVEL
+}
+
+enum ContactApplies {
+  BOOKING
+  WINE_ORDER
+  BOTH
+}
+
+/// One person at one company, in one role. Replaces CompanyGuide, CompanyRepresentative **and**
+/// Company.contactName/contactPhone/contactEmail — the three concepts Max identified as "1
+/// extra" on 2026-09-19.
+///
+/// No own tenantId — RLS is JOIN-to-Company, the same shape as Price.
+model CompanyPerson {
+  id        String         @id @default(cuid())
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleId    String
+  /// Restrict, not Cascade: deleting a role must not silently delete the people in it. The
+  /// admin UI deactivates roles instead of deleting them, so this should never fire — it is
+  /// here so that if it ever does, it fails loudly rather than removing data.
+  role      ContactRole    @relation(fields: [roleId], references: [id], onDelete: Restrict)
   name      String
-  email     String?
   phone     String?
-  code      String
-  createdAt DateTime @default(now())
+  email     String?
+  /// Null when the tenant has `person_codes_enabled` off and none was ever generated.
+  /// Unique per tenant across Company.accessCode too — enforced in generateUniqueTenantCode(),
+  /// and by the partial index this migration adds (the first DB-level guarantee this pool has
+  /// ever had; see MaintenanceNotes #26 for the five days it went unenforced).
+  code      String?        @unique
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  contacts  OrderContact[]
+
+  @@index([companyId, roleId])
+}
+
+/// Who was on THIS order, in which role, and what their details were **at the time**.
+///
+/// Polymorphic over Order/WineOrder like OrderEvent and Payment, rather than two parallel
+/// tables — reusing a convention already in the schema beats inventing a third.
+///
+/// The snapshots are the point. `Order.guideId` (which this replaces) was an optional relation
+/// with no onDelete, so Prisma defaulted it to SetNull: deleting a guide silently erased which
+/// guide was on every past order, with no warning (KnownBugs #56). Here personId may go null
+/// and nothing is lost, because the facts live on this row. Same rule as
+/// WineOrderItem.priceSnapshot and Order's rate snapshots — a fact must not move when a
+/// dimension changes.
+model OrderContact {
+  id            String         @id @default(cuid())
+  tenantId      String?
+  /// Exactly one of these is set. Cascade — a contact whose order is gone is unreadable.
+  orderId       String?
+  order         Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  wineOrderId   String?
+  wineOrder     WineOrder?     @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  roleId        String
+  role          ContactRole    @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  /// SetNull is correct here, unlike Order.guideId — see the snapshot note above.
+  personId      String?
+  person        CompanyPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  nameSnapshot  String
+  phoneSnapshot String?
+  emailSnapshot String?
+  createdAt     DateTime       @default(now())
+
+  /// One person per role per order (Max, 2026-09-19). Postgres treats NULLs as distinct, so
+  /// wine-order rows (orderId null) never collide with each other under the first index, and
+  /// booking rows never collide under the second.
+  @@unique([orderId, roleId])
+  @@unique([wineOrderId, roleId])
+  @@index([tenantId, orderId])
+  @@index([tenantId, wineOrderId])
+}
+
+/// A permanent record of what an invoice email actually said, at the moment it was sent.
+///
+/// `sendOrderInvoice()` builds the email live from the order's *current* data on every call —
+/// price, guest counts and masterclass lines can all change after a send. Without this table
+/// the only trace an invoice was ever sent is `Order.invoiceSentAt`, a bare timestamp with no
+/// content: reprint or resend after an edit and there is no way to tell what was actually
+/// billed the first time. Same reasoning as `OrderContact`/`WineOrderItem`'s snapshots, and the
+/// same shape `Payment` already uses for money actually received — this is the equivalent for
+/// money actually billed.
+///
+/// Append-only, one row per send. A resend after a correction is its own event, not an
+/// overwrite — `Payment`'s pattern, not an update-in-place.
+model InvoiceSent {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sentAt            DateTime @default(now())
+  recipientEmail    String
+  /// Copied at send time — Order.name/surname can differ from this by the time anyone looks
+  /// back, since decision 4 (Plan-ContactRoles) keeps that column synced to whichever contact
+  /// is linked *today*, not to who was billed.
+  recipientName     String
+  companyName       String?
+  totalPrice        Int
+  guestCount        Int
+  tastingGuestCount Int
+  lunchGuestCount   Int
+  freeGuestCount    Int
+  visitType         String
+  masterclassLines  Json
+  extras            Json
+  customMessage     String
+  locale            String
+
+  @@index([tenantId, orderId])
 }
 
 model Order {
@@ -178,11 +312,16 @@ model Order {
   // used for pricing or access-code lookups. See Feature 180.
   requestedCompanyName    String?
   company                 Company?           @relation(fields: [companyId], references: [id])
-  // Which guide's code matched at booking time — the phone-during-dinner case needs a
-  // specific order to remember which person, not just which company (Plan-CompanyGuidesAndReps
-  // Chunk 1). Representatives are not tracked per-order; see that plan for why.
-  guideId                 String?
-  guide                   CompanyGuide?      @relation(fields: [guideId], references: [id])
+  // Who was on this booking, by role — the guide to call during the visit, the contact person
+  // to invoice. Replaces the old single `guideId` column, which nothing ever read and which
+  // silently nulled itself when a guide was deleted (KnownBugs #56).
+  //
+  // ⚠️ The Contact Person's details are ALSO written to name/surname/phone/email above. That
+  // is deliberate and is the one special case in this design (Plan-ContactRoles decision 4):
+  // those columns are non-nullable and are the only place an INDIVIDUAL booking's guest name
+  // lives, so they cannot be repurposed. `contacts` is the source of truth; they are a
+  // denormalised copy, written in exactly one place — createBooking.ts.
+  contacts                OrderContact[]
   // ISO 3166-1 alpha-2 codes, COMPANY bookings only (Plan-CompanyNationality). No per-country
   // counts — "at most a mix" per Max, not a headcount breakdown. Plain array on the already
   // tenant-scoped Order row, so it needs no new RLS policy/grant of its own.
@@ -213,6 +352,7 @@ model Order {
   extras                  OrderExtra[]
   payments                Payment[]
   orderEvents             OrderEvent[]
+  invoicesSent            InvoiceSent[]
 
   // Every query here is tenant-scoped by RLS, and the admin list/calendar both
   // filter-and-order by date while the board and its filter pills group by
@@ -398,6 +538,10 @@ model WineOrder {
   wineItems       WineOrderItem[]
   payments        Payment[]
   events          OrderEvent[]
+  // Same as Order.contacts — see the note there. The Contact Person's details are also mirrored
+  // into contactName/contactPhone/contactEmail above, which the wine form requires and which
+  // payment depends on.
+  contacts        OrderContact[]
 
   // Mirrors Order: the board groups by stage, and the list's date-range
   // filters run on createdAt (wine orders have no separate business date).

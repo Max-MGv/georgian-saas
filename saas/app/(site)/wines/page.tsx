@@ -8,6 +8,7 @@ import { headers, cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { type Metadata } from 'next'
 import WineCatalogueClient from './WineCatalogueClient'
+import { orderRolesFor } from '@/lib/contactResolution'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export default async function WinesPage() {
   const logoUrl = h.get('x-tenant-logo')
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
-  const [wineProducts, companies, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
+  const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
@@ -41,8 +42,22 @@ export default async function WinesPage() {
       // skipPayment (#148) — not used server-side here (that's shouldTakePayment()'s
       // job), but threaded through to the client so the checkout button label can
       // reflect a company's own override once selected, not just the section default.
-      select: { id: true, name: true, identificationCode: true, contactName: true, contactPhone: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
-    })),
+      // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows
+      // (Plan-ContactRoles Chunk 1). Contact details now arrive per company through
+      // resolveCompanyContacts(), not on this prop.
+      select: { id: true, name: true, identificationCode: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
+    })).then(rows => rows.map(({ accessCode, ...rest }) => ({
+      ...rest,
+      // Never the code itself — only whether one exists. Passing whole Company rows
+      // into this client component put every wine-order company's access code in the
+      // page source (KnownBugs #57 / Plan-ContactRoles F3), and the catalogue only
+      // ever used it as a boolean. Same one-line fix as app/(site)/page.tsx.
+      hasAccessCode: !!accessCode,
+    }))),
+    // The tenant's per-order roles that apply to wine orders, with no people attached. Same
+    // shape the booking form takes: the form's layout comes from the role list, the people
+    // come per company from the resolver.
+    orderRolesFor(tenantId, 'WINE_ORDER'),
     getSetting('hide_company_dropdown'),
     // Two calls (#148), not one, so the client can tell "module/credentials
     // missing" (a hard block nothing can override) apart from "WINE_ORDER
@@ -77,6 +92,7 @@ export default async function WinesPage() {
     <WineCatalogueClient
       wines={wines}
       companies={companies}
+      contactRoles={contactRoles}
       logoUrl={logoUrl}
       logoAlt={logoAlt}
       tenantName={tenantName}

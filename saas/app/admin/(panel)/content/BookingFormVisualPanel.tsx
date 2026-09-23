@@ -13,9 +13,10 @@
 // - detailed: split guest counts (Tasting/Lunch/Free-Guide), Hot Dish Selection, Masterclass
 //             Add-ons, then Food Notes. Only the 3 new section headers are tenant-editable
 //             here (see FIELDS.form in ContentClient.tsx) — the guest sub-labels, dropdown
-//             option text, and masterclass item row are illustrative mockups, not editable
-//             content: the real values come from the minGuestsTasting/Lunch settings and
-//             the MenuItem/MasterclassItem admin pages, not from SiteContent.
+//             option text, masterclass item row and contact-type block are illustrative
+//             mockups, not editable content: the real values come from the
+//             minGuestsTasting/Lunch settings, the MenuItem/MasterclassItem admin pages
+//             and Settings → Contact Types, not from SiteContent.
 
 import EditableText from '@/components/EditableText'
 
@@ -134,6 +135,25 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
                 Wine Blending Workshop <span className="text-xs" style={{ color: C.faint }}>25₾/pp</span>
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed only: per-role contact details (Plan-ContactRoles Chunk 7).
+          One block per contact type other than Contact Person, which already owns the
+          First Name / Last Name / Phone / Email fields below.
+
+          Illustrative, not editable, for the same reason the masterclass row above is:
+          the heading is a contact type's own label, managed on Settings → Contact
+          Types, so it is other admin data rather than SiteContent. That is
+          MaintenanceNotes §1's own test for a new detailed-only section, applied. */}
+      {isDetailed && (
+        <div>
+          <label style={labelStyle}>Guide <span style={{ color: C.faint, fontWeight: 400 }}>(contact type)</span></label>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {['Name', 'Phone', 'Email'].map(ph => (
+              <div key={ph} className="rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: C.faint }}>{ph}</div>
+            ))}
           </div>
         </div>
       )}

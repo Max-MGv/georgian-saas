@@ -44,6 +44,22 @@ on (`AccessCodePopupView.tsx`/`NewCompanyPopupView.tsx`), not the pattern of the
 see `Features/Feature 184 - Booking Confirm Sheet.md` before changing either file's confirm-sheet
 section, so the two don't drift into duplicate or conflicting sources of truth for the same copy.
 
+**Since Plan-ContactRoles Chunk 7 (2026-09-22):** the detailed variant has a **fourth**
+section — one contact-details block (Name / Phone / Email) per contact role other than
+`contact_person`, which keeps the existing First Name / Last Name / Phone / Email fields. It has
+**no `FIELDS.form` entry**, and that is this note's own test applied rather than an oversight:
+each block's heading is a role's `labelEn`/`labelKa` from the `ContactRole` table, managed at
+Settings → Contact Types, so it is other admin data like the `MenuItem`/`MasterclassItem` rows —
+not SiteContent. The sub-labels are plain `t()` keys (`form.contact_role_name/_phone/_email`),
+matching how the guest sub-labels above them are handled. `BookingFormVisualPanel.tsx` mirrors
+it as a static illustrative block, the same way it mirrors a masterclass row.
+
+The blocks are driven by the tenant's **role list** (`orderRolesFor()`, passed as `bookingRoles`
+from `app/(site)/page.tsx`), not by which people the selected company happens to have — so the
+form's shape stays put as the dropdown changes, and a company with no guides still offers
+somewhere to type one. Adding a contact type in the admin panel adds a block here with no code
+change; that is the requirement the whole rework exists for.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the
@@ -596,7 +612,7 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. Three separate places compute a company-tier price from `(tastingGuestCount, lunchGuestCount, guestCount)` — keep them in sync
+## 22. ~~Nine places compute a booking price~~ — DONE 2026-09-19, there is now one
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -614,6 +630,108 @@ differently depending on which code path last touched it.
 **Files involved:** `saas/app/actions/createBooking.ts`, `saas/app/actions/orders.ts`
 (`updateOrderEnhanced`, `assignOrderCompany`), `saas/lib/pricingUtils.ts` (`findTier`,
 `comboRatePerPerson`, the two functions that are already shared).
+
+---
+
+### Update 2026-09-19 — it is five sites, not three, and they have already drifted
+
+Counted while fixing bugs #47/#48. Two more copies exist that this note did not name:
+
+4. **`saas/lib/pricing.ts`** — `recalcOrderTotal`'s fallback branch, for orders with no
+   rate snapshot. It re-derives the same formula from live `Price` rows.
+5. **`saas/components/BookingForm.tsx`** — the client-side price *preview* (`estimatedTotal`
+   / `enhancedTotal`). It runs in the browser off the same tier data and must agree with
+   what `createBooking.ts` will store, or the guest is quoted one number and charged another.
+
+**The drift this note warned about has now happened, twice:**
+
+- **#48** — `BookingForm.tsx`'s COMPANY branch priced `TASTING_LUNCH` at
+  `matchedTier.pricePerPerson` while `createBooking.ts` charged `comboRatePerPerson(tier)`.
+  The quote silently under-stated the stored total by the lunch add-on × guests.
+- **#47** — `assignOrderCompany` computed its total correctly but wrote no rate snapshots,
+  so site 4's fallback branch took over on the next recalc and re-priced the booking at
+  current tiers. Exactly the failure mode chunk 4 was built to eliminate.
+
+Both are fixed, but **by hand, in the copies** — the structural problem is untouched. The
+outstanding work is to extract one helper into `pricingUtils.ts` and call it from all five.
+Note that doing so requires a decision, not just a refactor: sites 1–4 are server-side and
+authoritative, site 5 is a browser preview that cannot see snapshots, so the shared helper
+has to take rates as arguments rather than read them.
+
+---
+
+---
+
+### Update 2026-09-19 (second pass) — nine sites, and the obstacle was imaginary
+
+An independent review counted the real number. **Five server sites** write `Order.totalPrice`
+(`createBooking`, `updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`,
+`recalcOrderTotal`), **three client sites** display a total (`BookingForm`, `NewOrderForm`,
+`OrderDetail`), and `demoSeed` makes nine. Six agree; the three that did not were #50–#52.
+
+**The stated obstacle above — that a shared helper needs a design decision because the browser
+preview cannot see snapshots — is wrong.** `lib/pricingUtils.ts` has no `'use server'` and no
+server-only imports, and is already imported by eight files spanning both sides. There is no
+boundary to cross, and taking rates as arguments is the obvious shape rather than a hard call.
+
+**The framing that replaces this whole section:** the sites do not disagree about pricing, they
+disagree about *where rates come from*. Three ask "what is this worth at the agreed rates"
+(`createBooking`, `recalcOrderTotal`, `assignOrderCompany`); two ask "what should this be
+re-priced to now" (`updateOrderEnhanced`, `createOrderAdmin`). That collapses into which
+resolver you call:
+
+```ts
+priceBooking(rates: RateSet, guests: Headcount, visitType, lines: LineTotals): number
+ratesFromTier(t) / ratesForIndividual(t) / ratesFromSnapshot(order) / ratesFromManual(t, l)
+```
+
+The body is `recalcOrderTotal`'s snapshot branch verbatim — that path is already correct, so it
+becomes the definition. The one genuine policy asymmetry (individuals do not pay the tier's
+registration fee) lives in `ratesForIndividual`, not in the arithmetic.
+
+**Sequencing is the only real constraint.** Extraction changes behaviour at the drifted sites,
+so extracting first hides fixes inside a mechanical diff. Write the disagreements as tests,
+fix them, then extract. That order was followed for #50–#52:
+`saas/scripts/test-pricing-agreement.ts` was written first and failed 6 of 8.
+
+**Do not** replace the client preview with a server round trip. A form has to show a number
+before it submits; the problem was drift, not the existence of a second copy.
+
+---
+
+---
+
+### RESOLVED 2026-09-19 — `priceBooking()` landed; this section is history
+
+All nine sites now call `priceBooking()` from `lib/pricingUtils.ts`. There is one arithmetic
+function and four rate resolvers:
+
+```ts
+priceBooking(rates: RateSet, guests: Headcount, visitType, lines: LineTotals): number
+ratesForParty(prices, guestCount, { chargeRegistration? })   // picks the tier itself
+ratesFromTier(tier) / ratesFromSnapshot(order) / ratesFromManual(t, l)
+```
+
+Rewired: `createBooking`, `updateOrderEnhanced`, `createOrderAdmin`, `assignOrderCompany`,
+`recalcOrderTotal`, `BookingForm`, `NewOrderForm`, `OrderDetail`, `demoSeed`.
+
+**Two rules now live in exactly one line each, instead of nine:**
+
+1. **The tier is chosen by party size** — `ratesForParty` does the `findTier` lookup, so no
+   call site picks a head count any more. Changed from `tastingGuests + lunchGuests` on Max's
+   call: *"if we have guest count then the pricing tier should only be derived from guest
+   count — that is exactly what pricing tier is for."* A party of 8 with a guide and a driver
+   now prices as 8, not 6, and re-splitting a party between the two buckets no longer moves it
+   between bands.
+2. **The split decides what each guest pays**, nothing else. `priceBooking` branches on whether
+   the buckets are set; `visitType` only applies to an unsplit party.
+
+**Watch for:** a new pricing path that calls `findTier` directly instead of `ratesForParty`.
+That is the one way the tier rule can drift again, and it is now greppable — `findTier` should
+appear only inside `pricingUtils.ts` and in the two display fallbacks.
+
+Covered by `saas/scripts/test-pricing-agreement.ts` (21 cases), which pins the tier rule with
+a worked example: the same party of 8 costs ₾620 under the old rule and ₾540 under the new one.
 
 ---
 
@@ -667,15 +785,24 @@ outputFileTracingIncludes: {
 
 ---
 
-## 26. Guide/rep codes share one per-tenant pool with `Company.accessCode`, and the resolution logic exists in two places
+## 26. Contact roles: three couplings that replaced the old guide/rep code-resolver split
 
-**What the dependency is:** since Plan-CompanyGuidesAndReps, a person's code (`CompanyGuide.code` / `CompanyRepresentative.code`) and a company's own `accessCode` all have to be unique across the same tenant — a guide's code and another company's `accessCode` must never collide, because both the wine-order flow's `findCompanyByCode` and the booking flow's `findBookingCodeByCode` do a **code-alone, tenant-wide** lookup with no company chosen first. Uniqueness is enforced only at the application level: `generateUniqueTenantCode()`/`codeExistsInTenant()` (`app/actions/companies.ts`) check all three sources (`Company`, `CompanyGuide`, `CompanyRepresentative`) before accepting a code, in every action that generates or manually sets one (`createCompany`, `regenerateAccessCode`, `setAccessCode`, and their guide/rep equivalents in `companyGuides.ts`). There is no DB-level constraint spanning the three tables — a direct `prisma.companyGuide.create()` or raw SQL insert that skips these helpers can silently create a colliding code.
+> **Rewritten 2026-09-23 — [[Plan-ContactRoles]] Chunk 14.** This section used to document two
+> code-resolution functions (`verifyBookingCode` / `findBookingCodeByCode`) that had silently
+> diverged. Both are gone — [[Plan-ContactRoles]] Chunk 3 collapsed all four of the old
+> guide/rep/company resolvers into one, `resolveCompanyContacts()` in `lib/contactResolution.ts`.
+> There is now exactly one resolver, so that specific failure mode (two functions' comments
+> both claiming to mirror each other, actually drifted) cannot recur **in this file** — but three
+> new couplings replaced it, below. History: [[KnownBugs]] #56/#57, [[Feature 185 - Company
+> Guides and Representatives]], [[Feature 201 - Guide Picker After Company Code]].
 
-**The second half of the coupling:** the booking form has *two* code-resolution entry points that must stay in sync — `verifyBookingCode()` (dropdown flow: company already chosen, code just confirms the person) and `findBookingCodeByCode()` (direct-code-entry / `hideCompanyDropdown` flow: no company chosen, code alone is searched tenant-wide). Both independently implement "check this company's guides first, fall back to `Company.accessCode` when it has none" — a change to that fallback rule (e.g., changing what counts as "no guides", or extending it to reps) needs updating in both functions, the same shape as §22's three pricing call sites.
+**Coupling 1 — `Order.name/surname/phone/email` are a denormalised mirror of the Contact Person, written in exactly one place.** These four columns are non-nullable and remain the only record of an *individual* booking's guest — they cannot be dropped. For a company booking they are a copy of the `contact_person` `OrderContact` row, kept in sync by `syncOrderContactPerson()` (`lib/orderContacts.ts`), called from every place those columns can be edited. **If you add a new way to edit an order's contact name/phone/email, it must call `syncOrderContactPerson()` too**, or the legacy columns and the `OrderContact` snapshot silently diverge — this happened once already (found in the Chunk 9 audit, `Plan-ContactRoles.md` §9b A2: `updateOrder()`/`createOrderAdmin()` wrote the columns but never touched `OrderContact` at all).
 
-**What this means in practice:** if you add a third way to look up a code (e.g., extending this to wine orders per Chunk 6, still unbuilt as of this note), route the code-uniqueness check through `generateUniqueTenantCode()`/`codeExistsInTenant()` rather than inventing a new check, and mirror whatever fallback order the other two resolvers use rather than picking a different one.
+**Coupling 2 — the snapshot on `OrderContact` is what makes deleting a person safe, and it depends on `personId` being nullable (`SetNull`), not `Restrict` or `Cascade`.** `OrderContact.nameSnapshot`/`phoneSnapshot`/`emailSnapshot` are written once, at order-creation time, and never read back from the live `CompanyPerson` row afterward. Deleting a person nulls `OrderContact.personId` (the *link*) but leaves the three snapshot columns standing (the *facts*) — this is what closed [[KnownBugs]] #56, where deleting a guide used to null `Order.guideId` with no trace. **If a future change makes `OrderContact` re-read the live person instead of trusting its own snapshot, this guarantee is gone** — the snapshot exists specifically so a past order's Contacts card is a historical record, not a live join. Regression-tested: `tests/tier2-core-flows/contact-orphan-safety.spec.ts`.
 
-**Files involved:** `saas/app/actions/companies.ts` (`generateUniqueTenantCode`, `codeExistsInTenant`, `verifyBookingCode`, `findBookingCodeByCode`, `findCompanyByCode`), `saas/app/actions/companyGuides.ts`, `saas/components/BookingForm.tsx`. Full design: `Plan-CompanyGuidesAndReps.md`, `Features/Feature 185 - Company Guides and Representatives.md`.
+**Coupling 3 — H18: `setup-rls.ts` has two lists, and a table in only one of them silently returns nothing.** `writableTables` switches RLS **on** and grants `app_user` access; `tenantedTables` creates the **policy**. A table in the first but not the second has RLS enabled with zero policies — Postgres default-denies every row, nothing throws, and `check-rls.ts` still reports the table as fine. Hit for real during Chunk 2: `ContactRole` and `OrderContact` were added to `writableTables` but not `tenantedTables`, because **both arrays end with the identical line `'OrderEvent',`**, so an edit aimed at the second landed in the first. Caught only by `test-contact-roles-rls.ts`'s two-tenant assertions (H6 — a green `check-rls.ts` proves a policy *exists*, not that a table has one). **If you add a new tenanted table, add it to both arrays and confirm the row count each one prints at the end**, or run the query in [[Plan-ContactRoles]] H18 directly against `pg_policy`.
+
+**Files involved:** `saas/lib/contactResolution.ts` (the one resolver), `saas/lib/orderContacts.ts` (`writeOrderContacts`, `syncOrderContactPerson`), `saas/prisma/schema.prisma` (`OrderContact.person` relation, `onDelete: SetNull`), `saas/scripts/setup-rls.ts`. Full design and the audit that found couplings 1 and 3: [[Plan-ContactRoles]] §9b, §2 decision 4. Covered by `saas/scripts/test-order-contacts.ts` (36/36) and `saas/tests/tier2-core-flows/contact-orphan-safety.spec.ts`.
 
 ---
 
@@ -772,3 +899,118 @@ until someone reloads.
 `saas/app/actions/orders.ts`, `saas/app/actions/wineOrders.ts`,
 `saas/lib/payments/settle.ts`, `saas/lib/demoSeed.ts`. Design:
 `Features/Feature 191 - Order Status Two Axis Split.md`.
+
+---
+
+## 30. Contact roles: one resolver, one picker, one write — and the code gate belongs on the server
+
+**What the dependency is:**
+Four forms let someone attach contact details to an order, and all four must behave identically:
+
+| | Form | File |
+|---|---|---|
+| 1 | Public booking | `saas/components/BookingForm.tsx` |
+| 2 | Public wine order | `saas/app/(site)/wines/WineCatalogueClient.tsx` |
+| 3 | Admin manual booking | `saas/app/admin/(panel)/orders/new/NewOrderForm.tsx` |
+| 4 | Admin manual wine order | `saas/app/admin/(panel)/wine-orders/new/NewWineOrderForm.tsx` |
+
+They share **three** pieces, and the whole point is that none of them may grow a fourth:
+
+- **`lib/contactResolution.ts`** — *who can be picked*. `resolveCompanyContactsFor()` plus
+  `orderRolesFor()`. It replaced four overlapping functions that had silently disagreed for five
+  days (see note 26).
+- **`lib/useContactSelection.ts`** — the client state machine: the selection map, the queue of
+  roles still to ask about, and **every reset**.
+- **`lib/orderContacts.ts`** — *who was picked, and is any of it true*.
+  `writeOrderContacts()` is the **only** place an order records contacts.
+
+**If you add a form, or a write path that creates an order:** call `writeOrderContacts()`. Do
+not assemble `OrderContact` rows yourself. This is not style — the two paths that each built
+their own write are the two that drifted: `createBooking` wrote contact rows while
+`createOrderAdmin` wrote only the denormalised `Order.name/surname/phone/email` columns, so
+every admin-created booking had an empty source of truth for weeks (Plan-ContactRoles §9b A2).
+
+A screen with no picker on it still takes part: pass `fallbackContactPerson` and whatever was
+typed becomes a `contact_person` entry with **no `personId`** — a record of what was typed, not
+an invented attribution.
+
+**If you edit `Order.name/surname/phone/email`:** call `syncOrderContactPerson()` in the same
+transaction. Those four columns are a *denormalised copy* of the `contact_person` row
+(Plan-ContactRoles decision 4); editing the copy and leaving the original stale makes the two
+disagree permanently with nothing to reconcile them.
+
+**⚠️ The access-code gate must be enforced server-side, and was not.**
+`resolveCompanyContacts` is an **unauthenticated server action**, and booking-company ids are in
+the public homepage's HTML because they populate the dropdown. The code check once ran only
+`if (companyId && typed)`, so naming a company and sending no code returned that company's
+entire staff directory — names, phones, emails. An audit reproduced it live on 2026-09-22.
+
+If you touch that resolver, the rule is: **a company that has an `accessCode` requires a matching
+code.** The single exception is the `trusted` flag, which only a server-side caller can set —
+`resolveCompanyContacts` builds a fresh three-field object rather than spreading its input, so a
+crafted request cannot ask for it. **Never change that to a spread.** Admin screens go through
+`resolveCompanyContactsAsAdmin`, which calls `requireAdmin()` first.
+
+**Two client-side traps that have each been hit once:**
+
+- **Reset the form's own fields, not just the hook's state**, when the company changes. The hook
+  clears its map; `contactName`/`phone`/`email` belong to the form. Miss it and an order is filed
+  against company B attributed to company A's employee. Fixed in form 1, then **not carried
+  across to form 2** — the same bug twice, three weeks apart.
+- **`ContactPickerPopupView` defaults to `z-50`.** On a page with its own overlay (the wine
+  catalogue's checkout drawer) pass `overlayZClass`. And check the *computed* `zIndex`, not the
+  class name: an arbitrary Tailwind value never used elsewhere may not exist in the generated CSS
+  and silently resolves to `auto`.
+
+**Files involved:**
+- `saas/lib/contactResolution.ts`, `saas/lib/orderContacts.ts`, `saas/lib/useContactSelection.ts`
+- `saas/components/ContactPickerPopupView.tsx` — pure render, one role per showing; keeps an
+  explicit `aria-label` because the computed accessible name was otherwise empty
+- `saas/app/actions/` — `companies.ts`, `createBooking.ts`, `submitWineOrder.ts`,
+  `wineOrders.ts`, `orders.ts`
+- Tests: `saas/scripts/test-contact-resolution.ts` (26), `test-contact-roles-rls.ts` (19),
+  `test-order-contacts.ts` (36). `saas/scripts/inspect-order-contacts.ts` is a manual aid.
+- Full reasoning, the audit and the production pre-flight: [[Plan-ContactRoles]] §9b and §9c.
+  Playwright traps and journeys: [[Playwright/Notes-ContactRoles]].
+
+---
+
+## 31. `InvoiceSent` is the one place an invoice's actual content survives — write through it, don't rebuild it from the live order
+
+**What the dependency is:**
+`sendOrderInvoice()` (`saas/app/actions/orders.ts`) builds the invoice email **live, at send
+time**, from the order's *current* data — current price, current guest counts, current
+masterclass lines. That was the only behavior until 2026-09-23: nothing about what was actually
+billed was ever saved, only `Order.invoiceSentAt`, a bare timestamp with no content. Edit the
+order's price after sending and reprint/resend, and there was no way to tell what the first send
+actually said.
+
+**The fix:** `InvoiceSent`, an append-only table — one row per send, never updated — recording
+the recipient, amount, guest/visit breakdown, line items, custom message and locale exactly as
+they were at that moment. A resend after a correction is its own new row, matching `Payment`'s
+shape for money actually *received*; this is the equivalent for money actually *billed*. Full
+reasoning and the field-by-field rationale: [[DataModel/Reference-SnapshotVsLive]].
+
+**What this means in practice:**
+- If you add a second way to send or regenerate an invoice (a bulk-send feature, a "resend from
+  the orders list" shortcut, anything that calls `sendInvoiceEmail()`), write an `InvoiceSent`
+  row alongside it. Don't let a second call site rebuild the email from the live order and skip
+  the snapshot — that's exactly the shape `MaintenanceNotes` #22 and #26 warn about: one job,
+  implemented twice, drifting silently.
+- **Don't update an `InvoiceSent` row after the fact.** If a bug is found in what was recorded,
+  fix the write path and let future sends be correct — editing a snapshot row defeats the reason
+  it exists.
+- The tenant's banking details (IBAN, bank name, recipient name) are deliberately **not**
+  snapshotted here — they're the winery's own identity, essentially static, and duplicating them
+  on every row would be low-value bulk. If banking details ever became genuinely
+  per-invoice-variable, revisit that.
+- New tenanted table: it's in both `writableTables` and `tenantedTables` in
+  `scripts/setup-rls.ts` (H18 — a table in only one list silently default-denies every row).
+  Direct `tenantId` column, following `OrderContact`/`Payment`'s shape rather than a JOIN, since
+  the caller always has `tenantId` in scope at write time.
+
+**Files involved:** `saas/prisma/schema.prisma` (`InvoiceSent` model), `saas/app/actions/orders.ts`
+(`sendOrderInvoice`), `saas/app/admin/(panel)/orders/[id]/page.tsx` and `OrderDetail.tsx` (the
+Invoice History card), `saas/scripts/setup-rls.ts`.
+
+---

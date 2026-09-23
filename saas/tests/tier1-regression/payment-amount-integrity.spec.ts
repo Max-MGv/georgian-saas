@@ -10,20 +10,27 @@
 // inserted a "Review your visit" confirm sheet between the booking form's
 // submit button and the actual createBooking() call, for BOTH individual and
 // company bookings. booking-simple.spec.ts and booking-enhanced.spec.ts
-// predate that change and click the submit button expecting an immediate
-// redirect / "Booking received!" heading — they very likely now hang on the
-// confirm sheet instead. Wine orders (submitWineOrder.ts) were NOT changed
-// by #184 and still submit directly on the one button click.
+// predated that change and clicked the submit button expecting an immediate
+// redirect / "Booking received!" heading.
+//   → CONFIRMED and FIXED 2026-09-19: both were genuinely broken, each
+//     failing on a 15s timeout that read like a hang rather than a stale
+//     assertion. The sheet-opening step now lives in helpers/bookingForm.ts
+//     and all three specs share it. company-guide-code.spec.ts was checked
+//     too and is unaffected — it never submits the form, stopping at the
+//     guide-code autofill assertions.
+// Wine orders (submitWineOrder.ts) were NOT changed by #184 and still submit
+// directly on the one button click.
 //
-// Real finding: Staging Winery's "Wine Tasting maximum" guest cap (3) is
-// configured BELOW "Wine Tasting minimum" (4) — any Wine Tasting booking
-// with guestCount 4 or 5 is silently clamped to 3 server-side before pricing
-// (confirmed live: a 5-guest submission settled at 150GEL/3 guests, not
-// 250GEL/5). That's a real, separate data-quality bug worth fixing on its
-// own, and it also means booking-simple.spec.ts's guestCount=4 assertion may
-// itself be silently wrong today. To keep this file's own expected amounts
-// stable regardless of that separate bug, the individual-booking test below
-// uses "Tasting + Lunch" (max = unlimited) rather than "Wine Tasting".
+// Historical finding, NO LONGER TRUE (kept because the workaround below still
+// reads as deliberate): on 2026-09-15 Staging Winery's "Wine Tasting maximum"
+// guest cap (3) was configured BELOW "Wine Tasting minimum" (4), silently
+// clamping any 4-5 guest Wine Tasting booking to 3 before pricing (confirmed
+// live: a 5-guest submission settled at 150GEL/3 guests, not 250GEL/5). That
+// was KnownBugs #40 — fixed 2026-09-16 in SettingsClient.tsx's
+// handleBookingRuleSave() (a max below its own min is now rejected), and the
+// live bad data cleared to "no limit" the same day. The individual-booking
+// test below still uses "Tasting + Lunch" rather than "Wine Tasting"; that is
+// now just an arbitrary-but-harmless choice, not a workaround.
 //
 // Real finding: every scenario here uses a DEDICATED, throwaway page for the
 // public-facing form, never the admin `page` fixture. booking-simple.spec.ts
@@ -44,6 +51,7 @@ import {
   readCompanyAccessCode, readFlittMerchantId, setFlittMerchantId,
   clickUntil, PaymentOverride,
 } from '../helpers/payments';
+import { openReviewSheet, abandonedRow } from '../helpers/bookingForm';
 
 // Every test in this file mutates the SAME tenant-wide payment settings
 // (section toggles, a company's payment override, the Flitt merchant ID) —
@@ -57,9 +65,25 @@ import {
 // in this file's own logic) — running one at a time avoids that too.
 test.describe.configure({ mode: 'serial' });
 
-// Shared read-only fixtures — real access codes, not flagged "Needs details".
-const COMPANY_NAME = 'Test Company # 1';
-const WINE_COMPANY_NAME = 'Wine Test Company';
+// Fixture companies, seeded by lib/demoSeed.ts and given their access codes by
+// scripts/backfill-test-fixtures.ts (2026-09-19).
+//
+// These replaced the hand-made `Test Company # 1` / `Wine Test Company`, which
+// the Feature 191 wipe deleted on 2026-09-18 — taking this spec and four others
+// down with them, unnoticed, because nothing outside a SessionLog entry recorded
+// it. Seeded companies are the more durable choice: their names, tiers and codes
+// are constants in demoSeed.ts, so a refill restores them exactly rather than
+// requiring someone to rebuild a company from memory.
+//
+// Each spec that mutates company-level settings uses a DIFFERENT company, so two
+// specs can never fight over the same payment override.
+//
+// This spec needs one booking company and one wine-order company. It does NOT
+// hardcode any price: it reads the quoted total off the form and asserts that
+// same number reaches Flitt and then the admin panel, so a company with
+// different rate tiers changes nothing here.
+const COMPANY_NAME = 'Caucasus Vine Travel';
+const WINE_COMPANY_NAME = 'Sighnaghi Wine Bar';
 
 function formatDate(d: Date): string {
   const dd = String(d.getDate()).padStart(2, '0');
@@ -79,25 +103,11 @@ async function deleteTestOrderOnAdminPage(page: Page, marker: string) {
   }
 }
 
-/**
- * The Incomplete screen's row for a given marker.
- *
- * Since Feature 191 (2026-09-18) an order that reaches the card gateway is
- * stamped `abandonedAt` and leaves `/admin/orders` entirely — it lives here
- * until someone brings it back. This spec predates that change and was still
- * looking for the order in the main table, which is why it broke; the money
- * assertion it exists for is unaffected and simply moved screens.
- *
- * Rows are divs, not table rows, so the row is found as the innermost div that
- * holds both the marker and its own restore button.
- */
-function abandonedRow(page: Page, marker: string) {
-  return page
-    .locator('div')
-    .filter({ hasText: marker })
-    .filter({ has: page.getByRole('button', { name: 'Restore without payment' }) })
-    .last()
-}
+// `abandonedRow` was defined locally here until 2026-09-19. It moved to
+// helpers/bookingForm.ts unchanged: booking-simple.spec.ts had a subtly
+// different (and broken) copy of the same idea, which is exactly the kind of
+// divergence a shared helper prevents. The reasoning for the `has:` filter
+// lives with it there.
 
 /** Bring an incomplete order back, then delete it from the main table. */
 async function restoreAndDeleteAbandoned(page: Page, marker: string) {
@@ -110,50 +120,21 @@ async function restoreAndDeleteAbandoned(page: Page, marker: string) {
   await deleteTestOrderOnAdminPage(page, marker)
 }
 
-async function cancelWineOrderOnAdminPage(page: Page, businessName: string) {
-  await page.goto('/admin/wine-orders');
-  await page.locator('table, [class*="grid"]').first().waitFor({ timeout: 15_000 }).catch(() => {});
-  // Awaiting-Payment orders are hidden under the default "All" filter (same
-  // finding documented in wine-catalogue-order.spec.ts) — try both.
-  for (const filterName of [/Awaiting Payment/, 'All']) {
-    const filterBtn = page.getByRole('button', { name: filterName });
-    if (await filterBtn.count() > 0) await filterBtn.first().click();
-    const card = page.getByText(businessName, { exact: true }).locator('xpath=../../..');
-    if (await card.count() > 0) {
-      await card.getByRole('button', { name: 'Cancelled', exact: true }).click();
-      await card.getByRole('button', { name: '✓' }).click();
-      await expect(page.getByText(businessName, { exact: true })).toHaveCount(0);
-      return;
-    }
-  }
-}
+// `cancelWineOrderOnAdminPage` was removed 2026-09-19. All three wine scenarios
+// now skip cleanup: the two reservation-only ones never enter payment limbo, so
+// WineOrdersClient.tsx renders no "Cancelled" control for them (documented at
+// each call site below), and the paid one stays on the Incomplete screen where
+// it belongs. The helper had also gone stale — it filtered on an "Awaiting
+// Payment" control Feature 191 removed — so keeping it would have meant dead
+// code describing a screen that no longer works that way. Wine-order debris
+// still needs the periodic manual sweep KNOWN-ISSUES.md documents; there is
+// still no delete action on that admin screen.
 
-// Clicks the booking form's submit button and waits for the Feature-184
-// review sheet to open. Deliberately does NOT click the sheet's own
-// "Confirm & …" button — that click is the one that actually redirects (or
-// doesn't), so each caller performs it exactly once, wrapped in whatever
-// assertion (waitForURL vs. an on-site success heading) that scenario needs.
-// Real bug caught building this: an earlier version clicked "Confirm & …"
-// here AND a second time in the ON scenario below — by the time the second
-// click ran, the button was already gone (the first click had already
-// submitted and the page was mid-redirect), and Playwright's wait for a
-// stale locator ate the entire test timeout instead of failing fast.
-//
-// Real finding: a plain, unretried `.click()` on this exact submit button
-// timed out waiting for the review sheet on its first live run here — not
-// reproducible by hand (an identical manual click-through opened the sheet
-// immediately) — matching the class of bug companies-crud.spec.ts already
-// documents elsewhere on this admin/public UI: "ANY click can occasionally
-// be lost — it resolves without throwing, but the click handler never
-// runs." `clickUntil` (the same retry-until-verified helper the Companies
-// edit panel already relies on) is the established fix for that class, not
-// a one-off workaround invented for this file.
-async function openReviewSheet(formPage: Page, submitLabel: 'Book & Pay' | 'Request Booking') {
-  await clickUntil(
-    formPage.getByRole('button', { name: submitLabel, exact: true }),
-    () => expect(formPage.getByRole('heading', { name: 'Review your visit' })).toBeVisible({ timeout: 3_000 })
-  );
-}
+// `openReviewSheet` was defined locally here until 2026-09-19. It moved to
+// helpers/bookingForm.ts unchanged, once booking-simple.spec.ts and
+// booking-enhanced.spec.ts turned out to need exactly the same step — the
+// whole reason they were broken. The reasoning that shaped it (why it stops
+// short of the confirm click, why the click is retried) lives with it there.
 
 test.describe('Individual booking — payment on/off carries the correct amount to Flitt', () => {
   test('payment ON: redirects to Flitt with the exact quoted amount; payment OFF: reservation-only, no checkout', async ({ page, context }) => {
@@ -329,20 +310,70 @@ test.describe('Company booking — section × per-company override × hidden-pri
       return { total, redirected: false };
     }
 
+    /**
+     * Where the order ends up depends on whether it was sent to the gateway.
+     *
+     * Since Feature 191 (2026-09-18) an order that reached the card gateway and
+     * has not paid is stamped `abandonedAt` and leaves `/admin/orders` entirely
+     * — it lives on the Incomplete screen until someone restores it. The old
+     * shape here looked in the orders table for BOTH cases and asserted on an
+     * "Awaiting Payment" control that Feature 191 removed.
+     *
+     * Fixed 2026-09-19, mirroring the individual-booking test above, which had
+     * already been updated. This one had not — and could not have been caught,
+     * because it was unrunnable the whole time: its fixture company had been
+     * deleted, so it failed in setup long before reaching this assertion. Two
+     * independent staleness bugs stacked on one test, the outer one hiding the
+     * inner.
+     */
     async function verifyAndCleanup(marker: string, expectPaid: boolean, expectedAmount: number) {
+      if (expectPaid) {
+        await page.goto('/admin/abandoned');
+        const row = abandonedRow(page, marker);
+        await expect(row).toBeVisible({ timeout: 15_000 });
+        // Whitespace-insensitive: the Incomplete screen renders money with a
+        // space before the symbol ("480 ₾"), the orders table without one —
+        // same formatTetri, different separator option. The assertion is about
+        // the amount, not the spacing.
+        expect(((await row.textContent()) ?? '').replace(/\s+/g, '')).toContain(`${expectedAmount}₾`);
+        // expect: and it is NOT in the orders table pretending to be live.
+        await page.goto('/admin/orders');
+        await expect(page.locator('tr', { hasText: marker })).toHaveCount(0);
+        await restoreAndDeleteAbandoned(page, marker);
+        return;
+      }
+
+      // Reservation-only: never went to a gateway, so it is a normal order.
       await page.goto('/admin/orders');
       const row = page.locator('tr', { hasText: marker });
       await expect(row).toBeVisible({ timeout: 15_000 });
       await expect(row).toContainText(`${expectedAmount}₾`);
-      if (expectPaid) {
-        await expect(row.getByRole('button', { name: /Awaiting Payment/ })).toBeVisible();
-      } else {
-        await expect(row.getByRole('button', { name: /Awaiting Payment/ })).toHaveCount(0);
-      }
+      // expect: and it is not sitting on the Incomplete screen either.
+      await page.goto('/admin/abandoned');
+      await expect(abandonedRow(page, marker)).toHaveCount(0);
       await deleteTestOrderOnAdminPage(page, marker);
     }
 
-    async function runScenario(marker: string, expectPaid: boolean) {
+    /**
+     * Scenario markers must be unique per RUN, not just per scenario.
+     *
+     * `marker` is typed into the booking form's Last Name field and is then the
+     * only handle this test has for finding and deleting its own order. It used
+     * to be a bare literal ('DefaultOn'), identical on every run — so any run
+     * that died before cleanup left a `DefaultOn` order behind, and the NEXT
+     * run's `expect(...).toHaveCount(0)` could never pass: it restored one row
+     * while its predecessors' rows still matched. The failure surfaces one run
+     * later than the run that caused it, which makes it read like a flake.
+     *
+     * The individual-booking test above already avoided this by putting
+     * `Date.now()` in its email. Doing the same here, once per run so all five
+     * scenarios share a suffix and a manual sweep can find them together.
+     */
+    const runId = String(Date.now()).slice(-6);
+    const scenarioMarker = (name: string) => `${name}${runId}`;
+
+    async function runScenario(name: string, expectPaid: boolean) {
+      const marker = scenarioMarker(name);
       const formPage = await context.newPage();
       const { total, redirected } = await submitCompanyBooking(formPage, marker);
       expect(redirected, `${marker}: expected redirected=${expectPaid}, got ${redirected}`).toBe(expectPaid);
@@ -429,13 +460,30 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       ]);
       await formPageOn.close();
 
-      const cardOn = page.getByText(businessOn, { exact: true }).locator('xpath=../../..');
-      await page.goto('/admin/wine-orders');
-      const filterBtnOn = page.getByRole('button', { name: /Awaiting Payment/ });
-      if (await filterBtnOn.count() > 0) await filterBtnOn.first().click();
+      // Feature 191 (2026-09-18) applies to wine orders exactly as it does to
+      // bookings: `WineOrder.abandonedAt` is stamped when the order is sent to
+      // the card gateway, and /admin/abandoned lists both kinds through the
+      // same Row component. This block used to look on /admin/wine-orders and
+      // filter by an "Awaiting Payment" control that Feature 191 removed, so it
+      // could never find the card. Fixed 2026-09-19 — the fourth stale spot
+      // from that one feature in this file, each hidden behind the one before.
+      await page.goto('/admin/abandoned');
+      const cardOn = abandonedRow(page, businessOn);
       await expect(cardOn).toBeVisible({ timeout: 20_000 });
-      await expect(cardOn).toContainText(`${unitPriceOn}₾`);
-      await cancelWineOrderOnAdminPage(page, businessOn);
+      // Whitespace-stripped: this screen renders money via
+      // formatTetri(..., { space: true }) — "480 ₾" — while the wine-orders
+      // table does not. The assertion is about the amount, not the spacing.
+      expect(((await cardOn.textContent()) ?? '').replace(/\s+/g, '')).toContain(`${unitPriceOn}₾`);
+      // Deliberately NOT restored-and-cancelled. Restoring returns the order to
+      // a plain pending state, and WineOrdersClient.tsx only offers a
+      // "Cancelled" control for orders in payment limbo (its `isLimbo` branch)
+      // — so cancelling it afterwards would find the card and then time out
+      // waiting for a button that is not rendered, exactly as documented for
+      // the OFF case below. Leaving it on the Incomplete screen is also the
+      // honest state: it IS an abandoned checkout. The business name carries a
+      // Date.now() suffix, so runs never collide; this adds one row per run to
+      // the wine-order debris that KNOWN-ISSUES.md already flags for a periodic
+      // manual sweep.
 
       // ── OFF, no company ──────────────────────────────────────────────────
       await setPaymentSectionToggle(page, 'Wine orders', false);

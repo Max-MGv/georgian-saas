@@ -2,6 +2,14 @@
 tags: [feature, companies, booking]
 ---
 
+> # ⛔ SUPERSEDED — 2026-09-23
+>
+> **Retired as history.** [[Feature 202 - Contact Roles]] replaces everything this feature built:
+> `CompanyGuide` + `CompanyRepresentative` + `Company.contactName/Phone/Email` collapse into
+> `ContactRole` + `CompanyPerson`; `Order.guideId` becomes `OrderContact` rows with snapshots.
+> Kept for the design reasoning below and the record of what shipped 2026-09-14. Do not build
+> against this note.
+
 # Feature 185 — Company Guides and Representatives
 
 ## What it does (user-facing)

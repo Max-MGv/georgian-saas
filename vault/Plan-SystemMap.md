@@ -38,7 +38,7 @@ More hand-written docs make this worse, not better. The fix is to generate the m
 
 ## Proposed layers
 
-### 1. Generated map script
+### 1. Generated map script -- Max this is i think outdated - the 'dashboard' i think is also out of date
 `saas\scripts\generate-map.ts` → writes to `vault\generated\*.md`.
 
 Walks the route tree, parses `app/actions/*.ts` exports, reads `SETTING_DEFAULTS`, extracts Prisma enums/models. Output is an *inventory*, not prose.
