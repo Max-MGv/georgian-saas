@@ -419,20 +419,20 @@ A `null` in the `polname` column is the bug.
 | **9** | Write path — `OrderContact` rows + snapshots | ✅ Done |
 | **10** | Admin order surfaces — finally display contacts | ✅ Done |
 | **11** | Emails — invoice recipient from roles | ✅ Done |
-| **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ⬜ Not started |
+| **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ✅ Done |
 | **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
 | **13** | Tests | ⬜ Not started |
 | **14** | Vault + close-out | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–11 all done (2026-09-23).
-**Chunk 11a next** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
-spotted the Contact Person's info rendering twice on a real order page. Starts with an
-investigation (is `Order.name/surname/phone/email` still earning its place now that
-`OrderContact` exists?), not the display fix itself. Chunk 12 remains the next item from the
-original sequence once 11a is resolved; all 22 remaining type errors are in files Chunk 12 owns,
-untouched by 11a.
+**Overall resume point:** Chunks 0–11 and 11a all done (2026-09-23). Chunk 12 is next.
+**Chunk 11a done** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
+spotted the Contact Person's info rendering twice on a real order page. Investigation confirmed
+`Order.name/surname/phone/email` are pure legacy weight for company bookings now that Chunk 9
+guarantees a synced `OrderContact` `contact_person` row, but remain the only record for
+individual bookings — see the chunk's own section below for the full writeup. All 22 remaining
+type errors are in files Chunk 12 owns, untouched by 11a.
 
 **22 type errors remain**, all Chunk 12's:
 `scripts/backfill-test-fixtures.ts` (8), `app/admin/onboarding/page.tsx` (5),
@@ -1637,7 +1637,42 @@ resolver at all).
 **Then, and only then, the fix:** conditionally render Booking Info's Phone/Email rows on
 `bookingType === 'COMPANY'` in `OrderDetail.tsx`.
 
-**Resume point:** — investigation 1 (Order columns vs. OrderContact) has not started.
+**Status:** ✅ Done (2026-09-23)
+
+**Investigation 1 findings.** Re-ran the grep: 13 files read `Order.name`/`.surname`/`.phone`/
+`.email` today (down from ~16 on 2026-09-19 — some call sites folded onto `OrderContact` when
+Chunk 9 fixed the admin-write gap). All four order-creation paths (`createBooking.ts`,
+`orders.ts`'s `createOrderAdmin`, `wineOrders.ts`, `submitWineOrder.ts`) call `writeOrderContacts()`
+with `fallbackContactPerson`, which only fires `if (opts.companyId)` — so **every company booking
+is guaranteed a matching `contact_person` `OrderContact` row**, and `updateOrder()` calls
+`syncOrderContactPerson()` in the same transaction as any edit to the four columns, keeping it in
+step. So for company bookings the four columns are a synced copy with nowhere for them to drift —
+pure legacy weight for *display* purposes. For individual bookings nothing changed: no
+`OrderContact` row is ever written (`fallbackContactPerson` requires a `companyId`), so the four
+columns remain the only record. A few other screens (`OrdersTable.tsx`'s list subheading,
+`CalendarView.tsx`, `BookingSheetPrint.tsx`) still read `order.name`/`.surname` for company
+bookings too, for unrelated display purposes (day sheet, list row) — out of scope for this fix,
+untouched, and not evidence against decision 4.
+
+**Investigation 2 findings.** `BookingSheetPrint.tsx` and `InvoicePrint.tsx` both take `order` as
+a plain prop, rendered independently of `OrderDetail.tsx` — no shared state; `InvoicePrint`
+already prefers `order.company?.name` and only falls back to `order.name/surname` when there's no
+company. The edit path for these four columns is `OrdersTable.tsx`'s slide-over
+(`openEdit`/`handleUpdate` → `updateOrder()` in `app/actions/orders.ts`) — a **separate page**
+from `OrderDetail.tsx`, which has **no edit control for these fields at all** (only
+`updateOrderEnhanced` for guest counts/pricing). So hiding the display on `OrderDetail.tsx`
+cannot hide an edit affordance that was never there. The "Send Invoice" button's
+enabled/disabled state reads `order.email` directly and independently of the display row.
+
+**The fix:** `OrderDetail.tsx`'s Booking Info Phone/Email `InfoRow`s wrapped in
+`order.bookingType !== 'COMPANY' &&`.
+
+**Verified:** tsc 22 (unchanged), parity 173/173 + 1107/1107 (unchanged),
+`test-order-contacts.ts` 36/36 (unchanged) — confirms display-only. Live in the browser: Silk
+Road Journeys' company order shows Phone/Email once, under Contacts, correctly labelled; the
+"Pricing Testcase" individual order still shows Phone/Email under Booking Info exactly as before.
+
+**Resume point:** —
 
 ---
 

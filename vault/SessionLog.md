@@ -8,6 +8,42 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-23 (latest) — Contact Roles chunk 11a: the duplication is fixed
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, HEAD `e99f8a8` at session start, clean tree. Chunk 11a's edit made and
+>   verified; not yet committed/pushed this turn.
+> - **22 TypeScript errors** (unchanged — all Chunk 12's). Parity 173/173 + 1107/1107 (unchanged).
+>   `test-order-contacts.ts` 36/36 (unchanged). Display-only chunk, confirmed by nothing moving.
+> - Booking Info's Phone/Email rows on `OrderDetail.tsx` now hidden for company bookings.
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, fixtures (the 22
+> remaining type errors all live there).
+
+Investigated before touching any display code, per the handoff's two-part sequencing. **Part 1:**
+re-grepped every read of `Order.name/surname/phone/email` — 13 files now (was ~16 on 2026-09-19,
+some folded onto `OrderContact` since Chunk 9). Confirmed all four order-creation paths guarantee
+a synced `contact_person` `OrderContact` row for every company booking (`writeOrderContacts()`'s
+`fallbackContactPerson`, gated on `companyId`), kept in step on edit by `syncOrderContactPerson()`
+(called from `updateOrder()`). So the four columns are pure legacy weight for company-booking
+*display*, while remaining the only record that exists at all for individual bookings — decision
+4 confirmed still correct, not reopened. **Part 2:** `BookingSheetPrint.tsx`/`InvoicePrint.tsx`
+take `order` as an independent prop, no shared state; the only edit path for these four columns is
+`OrdersTable.tsx`'s slide-over (`updateOrder()`), a different page — `OrderDetail.tsx` never had
+an inline edit for them, so nothing was at risk of being hidden alongside the display.
+
+Findings reported to Max in plain language before editing (Rule 8), confirmed, then the fix:
+`order.bookingType !== 'COMPANY'` gates the two `InfoRow`s in `OrderDetail.tsx`. Verified live in
+the browser (already-logged-in admin session, no password typed): Silk Road Journeys' company
+order now shows Phone/Email once, correctly labelled "Contact Person" under Contacts; the
+"Pricing Testcase" individual order still shows Phone/Email under Booking Info, unchanged.
+
+Vault updated: [[Plan-ContactRoles]] Chunk 11a marked ✅ Done with the full writeup,
+[[FeatureLog]] Feature 202 row appended. **Not yet committed to `staging`** — next action.
+
+---
+
 ## 2026-09-23 (later) — Contact Roles chunk 11: invoice recipients, without a schema change
 
 > **STATE ON EXIT.**
@@ -88,62 +124,7 @@ investigate-then-fix shape, per Max's explicit ask not to edit anything while br
 
 ---
 
-## 2026-09-23 — Contact Roles chunk 10: admin order surfaces, and F1 finally reaches the admin
-
-> **STATE ON EXIT.**
->
-> - Branch **`staging`**. Chunk 10 committed and pushed (not yet — see note below).
-> - **31 TypeScript errors** (was 40), none in a file Chunk 10 owns. Running total
->   65 → 54 → 49 → 43 → 40 → 31.
-> - `/admin/orders` renders again — the crash (F4's "leak" was actually a hard crash by the time
->   this chunk started; `CompanyRepresentative` no longer exists) is fixed.
-> - RLS 19/19 · resolver 26/26 · write path 36/36 · parity 1107/1107.
->
-> **Next:** [[Plan-ContactRoles]] **Chunk 11** — emails. `sendOrderInvoice`'s nine type errors
-> are all in one `company.representatives` include; the invoice recipient needs to move to
-> people in billing-capable roles.
-
-### What was built
-
-- `OrderDetail.tsx` — a Contacts card, one row per `OrderContact`, role label from the locale.
-- `BookingSheetPrint.tsx` — a Guide name/phone column, sourced from `contacts` where
-  `role.key === 'guide'`, not from the guest's own fields (this is what F1 asked for on the
-  print side).
-- `orders/page.tsx` — the crash fix and F4 in one edit: `company: { include: { representatives:
-  true } }` (a dropped relation) replaced with an explicit `select`, plus a new `contacts`
-  include threaded through to both `OrderDetail` and `BookingSheetPrint`.
-- `OrdersTable.tsx` — `invoiceRecipientOptions()` no longer reads `company.representatives`
-  (gone); it offers only the guest email until Chunk 11 restores a company option via roles.
-- `orders/new/NewOrderForm.tsx` — the admin booking form gained the same inline per-role pickers
-  Chunk 8 built for `NewWineOrderForm.tsx`: `useContactSelection({ module: 'BOOKING', asAdmin:
-  true })`, auto-select on a company with exactly one person per role, `contact_person` rebuilt
-  from the live name/surname/phone/email fields. `createOrderAdmin()` gained a `contacts` param
-  — it previously called `writeOrderContacts()` fallback-only, since this screen had no picker.
-
-Max chose **no new Guide column on the orders table** — the detail page and print sheet are
-enough for this chunk.
-
-### A dev-server trap for H12
-
-A *freshly started* Turbopack server 404'd on `/admin/orders/new` immediately — not H12's
-"degrades after hours" shape, but the same family. `rm -rf .next/dev` + restart fixed it
-instantly. Worth folding into H12 at Chunk 14.
-
-### Verified live, all of it — including the one gap the first pass left
-
-`/admin/orders` and the order detail page were checked in Max's signed-in browser session
-(Claude never typed a password): the Contacts card and the booking-sheet Guide column both
-render real data correctly for Silk Road Journeys' one pre-existing order with contacts, and
-show "—" for orders without one.
-
-The browser session reset mid-session (unrelated environment change) and came back logged out,
-leaving `/admin/orders/new`'s new pickers unverified. Max confirmed the admin page was logged in
-again, so that gap was closed in the same session: picked Silk Road Journeys (2 people per
-role, so nothing auto-fills and both dropdowns had to be driven by hand), picked Keti Dolidze
-and Nika Kvaratskhelia from the two dropdowns, watched the First/Last Name/Phone/Email and Guide
-fields fill from their records, and submitted a real order. Its Contacts card matched, and
-`scripts/inspect-order-contacts.ts <orderId>` confirmed both rows **in the database** — both
-linked (`personId` set), both with `tenantId` set. Chunk 10 is fully proven now, not partially.
+## 2026-09-23 — Contact Roles chunk 10: admin order surfaces — `/admin/orders` fixed, Contacts card + booking-sheet Guide column added, admin manual booking gained per-role pickers; verified live down to `scripts/inspect-order-contacts.ts` confirming both `OrderContact` rows in the database. tsc 40 → 31.
 
 ---
 

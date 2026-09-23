@@ -834,8 +834,15 @@ export default function OrderDetail({
           </div>
         )}
         <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
-        <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
-        <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
+        {/* Plan-ContactRoles Chunk 11a: for company bookings these are a synced copy of the
+            Contacts card's Contact Person row (decision 4) — showing both duplicated the same
+            person. Individuals have no OrderContact row at all, so they still need these here. */}
+        {order.bookingType !== 'COMPANY' && (
+          <>
+            <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
+            <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
+          </>
+        )}
         {order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
       </Card>
 
