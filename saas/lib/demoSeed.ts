@@ -47,18 +47,29 @@ type TierSpec = {
 }
 
 /**
- * A guide (the person who actually walks the group in) or a representative
- * (the person invoices go to). Both carry a `code` out of the SAME per-tenant
- * namespace as `Company.accessCode` — see `codeExistsInTenant()` in
- * `app/actions/companies.ts`, which checks all three tables. Codes here are
+ * A guide (the person who actually walks the group in) or a contact person
+ * (who invoices go to — this used to be called a "representative" before
+ * Plan-ContactRoles collapsed the two into one role). Both carry a `code` out
+ * of the SAME per-tenant namespace as `Company.accessCode` — see
+ * `codeExistsInTenant()` in `app/actions/companies.ts`. Codes here are
  * therefore hand-picked to be globally distinct within one seeded tenant, and
  * uppercase, because `findBookingCodeByCode()` upper-cases what the guest types
  * before matching.
+ *
+ * `role` names the `ContactRole.key` the person is seeded under ('guide' or
+ * 'contact_person') — every tenant has exactly these two system roles
+ * (Plan-ContactRoles Chunk 0), so the seed resolves each to a roleId once and
+ * writes a `CompanyPerson` row per person rather than the old per-role tables.
  */
-export type PersonSpec = { name: string; phone?: string; email?: string; code: string }
+export type PersonSpec = { name: string; phone?: string; email?: string; code: string; role: 'guide' | 'contact_person' }
 
 export type BookingCompanySpec = {
-  name: string; contactName: string; contactPhone: string; contactEmail: string
+  name: string
+  // These three used to write straight to Company.contactName/contactPhone/
+  // contactEmail. Those columns are gone (Plan-ContactRoles Chunk 1) — the
+  // seed now turns them into one more 'contact_person' CompanyPerson row,
+  // exactly like each entry in `representatives` below.
+  contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; tiers: TierSpec[]; share: number
   /**
    * Applied ONLY when seeding a non-demo tenant (see `accessCode` handling in
@@ -70,21 +81,21 @@ export type BookingCompanySpec = {
    */
   accessCode: string
   /**
-   * ⚠️ Giving a company guides RETIRES its `accessCode` on the booking form.
-   * `verifyBookingCode()` falls back to the company-level code **only when the
-   * company has zero guides** — that is the documented rule
-   * (Plan-CompanyGuidesAndReps Chunk 1 & 5), not an oversight: once guides
-   * exist, every booking must be attributable to a specific person.
+   * Used to be seeded on only ONE company (Silk Road Journeys): giving a
+   * company guides used to retire its `accessCode` on the booking form
+   * (`verifyBookingCode()` fell back to the company-level code only when the
+   * company had zero guides), and seeding guides on all five once silently
+   * broke four Playwright specs that relied on those codes still working
+   * (2026-09-19). Feature 201 removed that fallback behaviour — the picker
+   * now offers the company code alongside every guide/rep choice instead of
+   * the code being retired — so that restriction no longer applies
+   * (Plan-ContactRoles Chunk 12, MaintenanceNotes #26). Every company below
+   * now has at least one guide.
    *
-   * So guides are seeded on SOME companies, never all. Four of the five keep a
-   * working company code because four Playwright specs exercise that path;
-   * `Silk Road Journeys` carries guides so the guide path is covered too. That
-   * split is also just realistic — some operators route through named guides,
-   * some hand out one company code.
-   *
-   * Learned the hard way on 2026-09-19: seeding guides on all five silently
-   * retired every company code and broke four specs at once. If you add guides
-   * to another company here, check which spec uses it first.
+   * Each guide is still a person distinct from the company's own contact name
+   * and its representatives (H13): reusing a name across roles makes "I am
+   * not on this list" and "pick this person" fill the form identically,
+   * which defeats the point of testing either path.
    */
   guides: PersonSpec[]
   /**
@@ -117,9 +128,12 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 21, maxGuests: 100, pricePerPerson: 38, tastingLunchPricePerPerson: 37 },
     ],
     accessCode: 'KAKHETI07',
-    guides: [],
+    guides: [
+      { name: 'Data Kiknadze', phone: '+995 599 41 22 10', code: 'KWRGUIDE1', role: 'guide' },
+      { name: 'Irakli Sturua', phone: '+995 599 41 22 11', code: 'KWRGUIDE2', role: 'guide' },
+    ],
     representatives: [
-      { name: 'Eka Beridze', email: 'invoices@kakhetiwineroutes.example', phone: '+995 599 41 22 09', code: 'KWRREP1' },
+      { name: 'Eka Beridze', email: 'invoices@kakhetiwineroutes.example', phone: '+995 599 41 22 09', code: 'KWRREP1', role: 'contact_person' },
     ],
     share: 9,
   },
@@ -131,9 +145,11 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 11, maxGuests: 30, pricePerPerson: 48, tastingLunchPricePerPerson: 40 },
     ],
     accessCode: 'TBILISI14',
-    guides: [],
+    guides: [
+      { name: 'Nutsa Japaridze', phone: '+995 577 30 14 78', code: 'TTCGUIDE1', role: 'guide' },
+    ],
     representatives: [
-      { name: 'Sofia Abuladze', email: 'accounts@tbilisitourcollective.example', phone: '+995 577 30 14 77', code: 'TTCREP1' },
+      { name: 'Sofia Abuladze', email: 'accounts@tbilisitourcollective.example', phone: '+995 577 30 14 77', code: 'TTCREP1', role: 'contact_person' },
     ],
     share: 7,
   },
@@ -145,9 +161,12 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38 },
     ],
     accessCode: 'CAUCASUS31',
-    guides: [],
+    guides: [
+      { name: 'Beka Lomidze', phone: '+995 595 88 60 33', code: 'CVTGUIDE1', role: 'guide' },
+      { name: 'Salome Kikvadze', phone: '+995 595 88 60 34', code: 'CVTGUIDE2', role: 'guide' },
+    ],
     representatives: [
-      { name: 'Lasha Tsereteli', email: 'billing@caucasusvinetravel.example', phone: '+995 595 88 60 32', code: 'CVTREP1' },
+      { name: 'Lasha Tsereteli', email: 'billing@caucasusvinetravel.example', phone: '+995 595 88 60 32', code: 'CVTREP1', role: 'contact_person' },
     ],
     share: 6,
   },
@@ -159,9 +178,11 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
       { minGuests: 13, maxGuests: 100, pricePerPerson: 46, tastingLunchPricePerPerson: 40 },
     ],
     accessCode: 'ALAZANI90',
-    guides: [],
+    guides: [
+      { name: 'Zviad Menabde', phone: '+995 558 12 47 92', code: 'AVTGUIDE1', role: 'guide' },
+    ],
     representatives: [
-      { name: 'Tamuna Chkheidze', email: 'finance@alazanivalleytours.example', phone: '+995 558 12 47 91', code: 'AVTREP1' },
+      { name: 'Tamuna Chkheidze', email: 'finance@alazanivalleytours.example', phone: '+995 558 12 47 91', code: 'AVTREP1', role: 'contact_person' },
     ],
     share: 5,
   },
@@ -179,11 +200,11 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
       // "I am not on this list" fallback becomes impossible to verify — both the
       // guide path and the company path fill the form with identical values. Found
       // 2026-09-19 while testing exactly that path.
-      { name: 'Tinatin Beruashvili', phone: '+995 595 33 81 04', code: 'SRJGUIDE1' },
-      { name: 'Nika Kvaratskhelia', phone: '+995 577 62 90 18', code: 'SRJGUIDE2' },
+      { name: 'Tinatin Beruashvili', phone: '+995 595 33 81 04', code: 'SRJGUIDE1', role: 'guide' },
+      { name: 'Nika Kvaratskhelia', phone: '+995 577 62 90 18', code: 'SRJGUIDE2', role: 'guide' },
     ],
     representatives: [
-      { name: 'Keti Dolidze', email: 'ap@silkroadjourneys.example', phone: '+995 591 76 20 56', code: 'SRJREP1' },
+      { name: 'Keti Dolidze', email: 'ap@silkroadjourneys.example', phone: '+995 591 76 20 56', code: 'SRJREP1', role: 'contact_person' },
     ],
     share: 4,
   },
@@ -341,7 +362,7 @@ async function inBatches<T>(tasks: (() => Promise<T>)[], size = 10): Promise<voi
   }
 }
 
-export type ExistingCompany = { name: string; contactName: string | null; contactPhone: string | null; contactEmail: string | null }
+export type ExistingCompany = { name: string; contacts: { name: string; phone: string | null; email: string | null }[] }
 
 export type SeedReport = {
   tenantId: string
@@ -475,9 +496,9 @@ export async function seedDemoTenant(
 
   const existingCompanies: ExistingCompany[] = await db.company.findMany({
     where: { tenantId: tid },
-    select: { name: true, contactName: true, contactPhone: true, contactEmail: true },
+    select: { name: true, people: { select: { name: true, phone: true, email: true } } },
     orderBy: { name: 'asc' },
-  })
+  }).then(rows => rows.map(r => ({ name: r.name, contacts: r.people })))
 
   const today = opts.now ? new Date(opts.now) : new Date()
   today.setHours(0, 0, 0, 0)
@@ -524,6 +545,22 @@ export async function seedDemoTenant(
   await db.menuItem.deleteMany({ where: { tenantId: tid } })
   await db.masterclassItem.deleteMany({ where: { tenantId: tid } })
 
+  // Every tenant has exactly these two system roles, seeded once
+  // (Plan-ContactRoles Chunk 0/1) and never deleted by this reseed — the wipe
+  // above only clears Company rows (and CompanyPerson cascades with them).
+  const [contactPersonRole, guideRole] = await Promise.all([
+    db.contactRole.findFirst({ where: { tenantId: tid, key: 'contact_person' } }),
+    db.contactRole.findFirst({ where: { tenantId: tid, key: 'guide' } }),
+  ])
+  if (!contactPersonRole || !guideRole) {
+    throw new Error(
+      `Tenant '${slug}' is missing its 'contact_person'/'guide' ContactRole rows. These are ` +
+      `seeded once per tenant and this reseed does not create them — see Plan-ContactRoles ` +
+      `Chunk 0/1.`
+    )
+  }
+  const roleIdFor = (role: 'contact_person' | 'guide') => role === 'guide' ? guideRole.id : contactPersonRole.id
+
   // --- Cast ---
   const individuals = await db.company.create({
     data: {
@@ -539,9 +576,20 @@ export async function seedDemoTenant(
   // is a dead end in the middle of the sales story. A non-demo slug is by
   // definition a throwaway tenant (that option exists to refill Staging
   // Winery), which is exactly where the Playwright suite needs a real code to
-  // exercise the access-code path. Guides and representatives are seeded for
-  // both: a guide code is optional on the form and gates nothing, so it enriches
-  // the demo instead of blocking it.
+  // exercise the access-code path.
+  //
+  // Since Plan-ContactRoles Chunk 1, this same gate has to cover guide/rep
+  // codes too, not just the company's own accessCode. `CompanyPerson.code` got
+  // a GLOBAL unique index (not per-tenant — see the Chunk 1 migration), and
+  // Staging Winery permanently holds this exact fixture's literal codes
+  // (SRJGUIDE1 etc., carried over from the old CompanyGuide/CompanyRepresentative
+  // tables). Before Chunk 1 that constraint didn't exist, so the demo tenant
+  // could safely reuse the same literal codes on its own copy of these people;
+  // now doing so collides with Staging Winery's rows on every reseed. A guide
+  // code is optional and gates nothing on the demo anyway (same reasoning as
+  // the company code above, just never actually needed there), so the fix is
+  // to leave it null rather than invent a second set of demo-only codes that
+  // would only drift from this one.
   const seedAccessCodes = slug !== DEMO_SLUG
 
   const bookingCompanies: (BookingCompanySpec & { id: string })[] = []
@@ -549,18 +597,31 @@ export async function seedDemoTenant(
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: true, isWineOrderCompany: false,
         accessCode: seedAccessCodes ? c.accessCode : null,
         prices: { create: c.tiers.map(t => tierToTetri(t)) },
-        // Both cascade on Company delete (schema.prisma), so the wipe above
-        // already clears them — they need no deleteMany of their own.
-        guides: { create: c.guides.map(g => ({ name: g.name, phone: g.phone ?? null, code: g.code })) },
-        representatives: {
-          create: c.representatives.map(r => ({ name: r.name, email: r.email ?? null, phone: r.phone ?? null, code: r.code })),
-        },
       },
     })
+    // CompanyPerson cascades on Company delete (schema.prisma), so the wipe
+    // above already clears any from a previous run. The company's own scalar
+    // contact and each representative are all 'contact_person' rows —
+    // Plan-ContactRoles decision 2 folds "representative" into "contact
+    // person". Guides are their own role, tagged on each PersonSpec.
+    await db.companyPerson.create({
+      data: {
+        companyId: row.id, roleId: roleIdFor('contact_person'),
+        name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
+      },
+    })
+    for (const p of [...c.representatives, ...c.guides]) {
+      await db.companyPerson.create({
+        data: {
+          companyId: row.id, roleId: roleIdFor(p.role), name: p.name,
+          phone: p.phone ?? null, email: p.email ?? null,
+          code: seedAccessCodes ? p.code : null,
+        },
+      })
+    }
     bookingCompanies.push({ ...c, id: row.id })
   }
 
@@ -569,10 +630,15 @@ export async function seedDemoTenant(
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        contactName: c.contactName, contactPhone: c.contactPhone, contactEmail: c.contactEmail,
         address: c.address, isBookingCompany: false, isWineOrderCompany: true,
         accessCode: seedAccessCodes ? c.accessCode : null,
         wineDiscountPercent: c.discount,
+      },
+    })
+    await db.companyPerson.create({
+      data: {
+        companyId: row.id, roleId: roleIdFor('contact_person'),
+        name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
       },
     })
     wineCompanies.push({ ...c, id: row.id })

@@ -8,7 +8,80 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (latest) — Contact Roles chunk 11a fixed, then a database walkthrough surfaced a real invoice gap and closed it
+## 2026-09-23 (newest) — Contact Roles chunk 12: the seed/onboarding/fixtures build fix, picked up from a handoff prompt
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, working tree clean before this session started (`7cf89df`). Chunk 12
+>   committed and pushed — see commit hash once pushed.
+> - **tsc 22 → 0.** All 22 remaining errors lived in the 4 files the handoff named:
+>   `lib/demoSeed.ts`, `scripts/backfill-test-fixtures.ts`, `app/actions/onboarding.ts`,
+>   `app/admin/onboarding/page.tsx`. Parity 173/173 + 1109/1109 (unchanged).
+>   `test-order-contacts.ts` 36/36 (unchanged).
+> - Demo tenant reseeded for real on the dev DB (10 companies, every booking company now has at
+>   least one guide, all seeded people visibly distinct per company). `audit-money.ts` clean.
+>   `backfill-test-fixtures.ts` run twice against Staging Winery — 6 guides added, then 0
+>   (idempotent).
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 13** — Tests. Also two follow-ups recorded, not
+> built: `createTenant()` doesn't seed the two system `ContactRole` rows for a new tenant
+> (Chunk 14 checklist), and H19 (`CompanyPerson.code` is now globally unique — a second
+> non-demo throwaway tenant sharing the fixture constant would still collide with Staging
+> Winery). Production still needs `prisma migrate deploy` + `setup-rls.ts` for the whole
+> Contact Roles schema whenever `staging` → `master` happens (§9c pre-flight).
+
+Picked up via a handoff prompt from the previous session (everything in it verified against the
+actual repo before acting on it, per the prompt's own instruction not to trust it blindly — branch,
+HEAD, and the 22-error/4-file claim all checked out exactly).
+
+Read the handoff's named files in order (`ClaudeInstructions.md`, `Plan-ContactRoles.md`'s Chunk 12
+section + H13/H16, `MaintenanceNotes.md` #24 and #26, `SessionLog.md`'s exit state) before writing
+any code, per Rule 8 — then stated the concrete plan (which columns/tables moved to
+`ContactRole`/`CompanyPerson`, which of the 4 files needed which edit) and got Max's go-ahead
+before editing.
+
+**The core fix:** `Company.contactName/contactPhone/contactEmail` and the `CompanyGuide`/
+`CompanyRepresentative` tables were dropped in Chunk 1; these 4 files were the only code left still
+reading them. `demoSeed.ts`'s `PersonSpec` gained a `role: 'guide' | 'contact_person'` field, and
+its seeding loop now resolves each tenant's two system `ContactRole` ids once and writes
+`CompanyPerson` rows instead of the old nested `guides:`/`representatives:` relation creates. Per
+the plan's own checklist: lifted the "guides seeded on only one company" restriction (its reason —
+guides retiring a company's access code — was fixed by Feature 201 back in the original
+`Plan-ContactRoles` work), giving every booking company at least one guide, each a visibly distinct
+person from that company's own contact/rep (H13). Re-ran `scripts/audit-money.ts` after (H16) —
+clean. `scripts/backfill-test-fixtures.ts` got the same table swap, reconcile-existing behaviour
+unchanged. The two onboarding files' `select`s and "is this company filled in" checks moved onto
+`people: { select: { id: true } }`, mirroring `CompaniesClient.tsx`'s `missingDetails()` exactly (a
+comment there already said to keep both in sync). `steps/CompaniesStep.tsx` was checked and needed
+no change — the plan's checklist claimed it also read a dropped column; it doesn't, it only takes a
+plain boolean computed upstream.
+
+**A real bug `tsc` couldn't have caught, found only by actually running the reseed:** the first
+real run of `seedDemoTenant` against the dev DB failed with a unique-constraint violation on
+`CompanyPerson.code`. Chunk 1 made that column globally unique (not per-tenant), and Staging
+Winery's permanent fixture rows — carried over from the old tables at migration time — already
+hold the exact literal codes (`SRJGUIDE1` etc.) `demoSeed.ts` hard-codes for its own copy of the
+same fictional companies. Recorded as new hurdle **H19**; fixed by extending the demo tenant's
+existing "no access codes on the public demo" gate to guide/rep codes too, since they were already
+supposed to be optional and non-gating there. This is exactly the kind of thing the handoff warned
+about — verified by actually running the scripts against the dev DB and reading the output, not by
+trusting a clean `tsc` alone.
+
+**Found in passing, deliberately not fixed:** `createTenant()` (`app/actions/superAdmin.ts`) never
+seeds the two system `ContactRole` rows for a brand-new tenant — they were only backfilled once,
+for tenants that existed at Chunk 1's migration time. Doesn't break anything today (the base
+Contact Person fields are hardcoded form fields; only extra role blocks like Guide silently don't
+appear), but a real winery onboarded after this plan ships would need someone to manually recreate
+the roles. Max's call: record it in the plan's Chunk 14 checklist rather than fix it now, to stay
+scoped to Chunk 12.
+
+Vault updated: [[Plan-ContactRoles]] Chunk 12 marked ✅ Done with the full writeup, new hurdle H19
+added, Chunk 14's checklist gained the `createTenant()` follow-up. [[FeatureLog]] Feature 202 row
+updated (chunks 0–12 of 14 done). Committed and pushed to `staging`.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 11a fixed, then a database walkthrough surfaced a real invoice gap and closed it
 
 > **STATE ON EXIT.**
 >

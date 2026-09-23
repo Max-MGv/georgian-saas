@@ -401,6 +401,33 @@ WHERE relname IN ('ContactRole','CompanyPerson','OrderContact');
 
 A `null` in the `polname` column is the bug.
 
+### H19 — `CompanyPerson.code` is a GLOBAL unique column; two tenants can no longer share a literal fixture code
+
+Found in Chunk 12, the first time `demoSeed.ts` actually ran again after Chunk 1. Before Chunk 1,
+`CompanyGuide.code`/`CompanyRepresentative.code` had no DB-level uniqueness at all — only
+`codeExistsInTenant()`'s app-level check, scoped to one tenant. `demoSeed.ts`'s `BOOKING_COMPANIES`
+constant hard-codes the same literal codes (`SRJGUIDE1` etc.) on purpose, reused by both the demo
+tenant (`seedDemoTenant`) and Staging Winery (`backfill-test-fixtures.ts`) — "two copies of these
+codes would drift" is the file's own stated reason for sharing one constant. That was safe when
+uniqueness was per-tenant. Chunk 1's migration made `CompanyPerson.code` globally unique
+(deliberately, treating cross-tenant collisions as "vanishingly rare" for *randomly generated*
+codes — H18's neighbour in the same migration file), which silently broke the demo/fixture-sharing
+design: Staging Winery's real `CompanyPerson` rows (carried over from the old tables at migration
+time) now permanently occupy `SRJGUIDE1`/`SRJGUIDE2`/`SRJREP1`, and reseeding the demo tenant with
+the same literal codes hits `Unique constraint failed on the fields: (code)`.
+
+**The fix taken:** extend the demo tenant's existing `seedAccessCodes` gate (which already nulls
+out the company-level `accessCode` on the demo, since a demo visitor has no code to type in) to
+guide/rep codes too. A guide code was already optional and gated nothing on the demo — this just
+makes that true for real instead of accidentally colliding. Staging Winery (and any other non-demo
+throwaway tenant `backfill-test-fixtures.ts` targets) keeps real codes, since that is what the
+Playwright suite actually types into the form.
+
+**Not fully closed:** a *second* non-demo throwaway tenant (some `--slug` other than
+`staging-winery`) would still collide with Staging Winery's permanent rows if ever backfilled with
+this same constant. Nobody does that today, so it wasn't fixed — flagging it here rather than
+guessing at a fix nobody asked for.
+
 ---
 
 ## 7. Current status
@@ -420,7 +447,7 @@ A `null` in the `polname` column is the bug.
 | **10** | Admin order surfaces — finally display contacts | ✅ Done |
 | **11** | Emails — invoice recipient from roles | ✅ Done |
 | **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ✅ Done |
-| **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
+| **12** | Demo seed, onboarding, test fixtures | ✅ Done (2026-09-23) |
 | **13** | Tests | ⬜ Not started |
 | **14** | Vault + close-out | ⬜ Not started |
 
@@ -1678,23 +1705,51 @@ Road Journeys' company order shows Phone/Email once, under Contacts, correctly l
 
 ## Chunk 12 — Seed, onboarding, fixtures
 
-**Status:** ⬜ Not started · **Read H13, H16**
+**Status:** ✅ Done (2026-09-23) · tsc 22 → 0 · **Read H13, H16, H19**
 
-- [ ] `lib/demoSeed.ts`: `PersonSpec` gains a role; **lift the "guides on only one company"
-      restriction** — it exists solely because guides used to retire a company's access code
-      (H5), which this plan removes. Update the warning comment on `BookingCompanySpec.guides`
-- [ ] **Give every seeded role a visibly distinct person** (H13)
-- [ ] Re-run the money plausibility audit after touching the seed (H16)
-- [ ] `scripts/backfill-test-fixtures.ts` updated to the new tables — it gained
-      reconcile-existing behaviour in Feature 201 precisely because create-or-skip could never
-      reach an already-seeded tenant
-- [ ] `actions/onboarding.ts`, `app/admin/onboarding/page.tsx` **and** `steps/CompaniesStep.tsx`
-      — the wizard still does not prompt for people, consistent with price tiers being a
-      Companies-page concern, but all three currently select the dropped columns.
-      `app/admin/onboarding/page.tsx` was the second gap found on 2026-09-22 (5 errors); it had
-      been omitted from this list
+- [x] `lib/demoSeed.ts`: `PersonSpec` gains a `role: 'guide' | 'contact_person'`; **lifted the
+      "guides on only one company" restriction** — Feature 201 already removed the access-code
+      hazard it existed for (H5). Every booking company now has at least one guide. Rewrote
+      the warning comment on `BookingCompanySpec.guides` accordingly. The old scalar
+      `contactName`/`contactPhone`/`contactEmail` (Company columns, dropped in Chunk 1) and each
+      `representatives[]` entry both become `contact_person` `CompanyPerson` rows; `guides[]`
+      become `guide` rows. Role ids resolved once per reseed via `contactRole.findFirst` —
+      fails loudly if a tenant's two system roles are missing rather than silently seeding
+      orphaned people.
+- [x] **Every seeded role is a visibly distinct person** (H13) — added 6 new guides (2 each for
+      Kakheti Wine Routes and Caucasus Vine Travel, 1 each for Tbilisi Tour Collective and
+      Alazani Valley Tours), none sharing a name with that company's own contact or
+      representative.
+- [x] Re-ran `scripts/audit-money.ts` after reseeding — no implausible or fractional values.
+- [x] `scripts/backfill-test-fixtures.ts` moved from `companyGuide`/`companyRepresentative` onto
+      `companyPerson` with the resolved roleId; the reconcile-existing behaviour (Feature 201)
+      is unchanged, just retargeted. Verified live against Staging Winery: dry run showed the
+      correct plan (6 new guides, existing reps left alone), a real run applied it, and a second
+      real run reported 0 changes (idempotent).
+- [x] `actions/onboarding.ts` and `app/admin/onboarding/page.tsx` — both `select`s swapped the
+      three dropped columns for `people: { select: { id: true } }`; the "does this company look
+      filled in" checks now mirror `CompaniesClient.tsx`'s `missingDetails()` exactly
+      (`people.length === 0 && !address`, comment already said to keep both in sync).
+- [x] `steps/CompaniesStep.tsx` — checked, not edited. It only receives a plain
+      `contactInfoSet: boolean` computed upstream in `page.tsx`; it never reads a dropped column
+      directly. The plan's claim that all three files "select the dropped columns" was wrong for
+      this one — worth knowing so a future session doesn't go looking for a change that isn't
+      there.
+- [x] **Found while actually running the reseed, not from `tsc`:** the demo tenant's reseed
+      collided with Staging Winery's permanent fixture codes now that `CompanyPerson.code` is
+      globally unique (H1's lesson, again — read the code, `tsc` passing does not mean the seed
+      runs). Recorded as **H19** and fixed by extending the existing `seedAccessCodes` gate to
+      person codes, not just the company's own `accessCode`.
+- [ ] **Not done here, found in passing, deliberately deferred to Chunk 14 or later (Max's
+      call, 2026-09-23):** `createTenant()` (`app/actions/superAdmin.ts`) never seeds the two
+      system `ContactRole` rows for a brand-new tenant — they were only backfilled once, for
+      tenants that existed at Chunk 1's migration time. A tenant onboarded today gets no
+      `contact_person`/`guide` roles until someone visits Settings → Contact Types and recreates
+      them by hand. Doesn't crash anything (the base Contact Person fields are hardcoded form
+      fields, not role-driven — only the *extra* role blocks, like Guide, silently don't
+      appear), but it is a real gap for the first real winery onboarded after this plan ships.
 
-**Resume point:** —
+**Resume point:** Chunk 13 (Tests).
 
 ---
 
@@ -1733,6 +1788,10 @@ Road Journeys' company order shows Phone/Email once, under Contacts, correctly l
 
 - [ ] `SessionLog.md`, `FeatureLog.md`, `Roadmap.md` per Rules 1 and 4
 - [ ] `Features/Feature NNN - Contact Roles.md` per Rule 9
+- [ ] **Decide what to do about `createTenant()` never seeding the two system `ContactRole` rows
+      for a new tenant** (found in Chunk 12, deferred — see that chunk's checklist). A one-line
+      fix (create both roles right after `db.tenant.create()`, same shape as the legal-content
+      seed a few lines below it) if Max wants it closed before this plan is called done.
 - [ ] **Rewrite [[MaintenanceNotes]] #26** — the two-places-resolve-codes coupling is gone. The
       new couplings to document: the `Order.name/surname` mirror (decision 4), the snapshot rule
       that makes person deletion safe, and **H18** (`setup-rls.ts`'s two lists)

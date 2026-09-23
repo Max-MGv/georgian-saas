@@ -67,6 +67,18 @@ async function main() {
   if (!tenant) throw new Error(`No tenant with slug '${slug}'.`)
   console.log(`Tenant: ${tenant.name} (${slug})${dryRun ? '  [DRY RUN — nothing will be written]' : ''}\n`)
 
+  // Guides and representatives are both CompanyPerson rows now (Plan-ContactRoles
+  // Chunk 1) — 'guide' and 'contact_person' are the two system roles every tenant
+  // has, seeded once and never deleted. Fail loudly if they're missing rather than
+  // silently writing people nobody's picker will ever show.
+  const [guideRole, contactPersonRole] = await Promise.all([
+    db.contactRole.findFirst({ where: { tenantId: tenant.id, key: 'guide' } }),
+    db.contactRole.findFirst({ where: { tenantId: tenant.id, key: 'contact_person' } }),
+  ])
+  if (!guideRole || !contactPersonRole) {
+    throw new Error(`Tenant '${slug}' is missing its 'guide'/'contact_person' ContactRole rows.`)
+  }
+
   let codesSet = 0, guidesAdded = 0, guidesUpdated = 0, repsAdded = 0, skipped = 0
 
   for (const spec of BOOKING_COMPANIES) {
@@ -92,13 +104,11 @@ async function main() {
       codesSet++
     }
 
-    // Codes share one namespace per tenant across Company/CompanyGuide/
-    // CompanyRepresentative (see codeExistsInTenant in app/actions/companies.ts),
-    // so existence is checked across all three rather than just the table being
-    // written — otherwise a re-run could introduce a duplicate the app treats as
-    // ambiguous.
+    // The code pool is global across Company.accessCode and CompanyPerson.code
+    // (see MaintenanceNotes #26 / the unique indexes in the Chunk 1 migration),
+    // so a clash lookup by code alone is enough — no need to also filter by role.
     for (const g of spec.guides) {
-      const clash = await db.companyGuide.findFirst({ where: { code: g.code, company: { tenantId: tenant.id } } })
+      const clash = await db.companyPerson.findFirst({ where: { code: g.code, company: { tenantId: tenant.id } } })
       if (clash) {
         // Reconcile, don't just skip. The code is the identity; the name and phone
         // are attributes that can be corrected in the spec later — as one was on
@@ -109,7 +119,7 @@ async function main() {
         if (clash.name !== g.name || (clash.phone ?? null) !== (g.phone ?? null)) {
           console.log(`      guide ${g.code}: updating "${clash.name}" -> "${g.name}"`)
           if (!dryRun) {
-            await db.companyGuide.update({ where: { id: clash.id }, data: { name: g.name, phone: g.phone ?? null } })
+            await db.companyPerson.update({ where: { id: clash.id }, data: { name: g.name, phone: g.phone ?? null } })
           }
           guidesUpdated++
         } else {
@@ -119,18 +129,18 @@ async function main() {
       }
       console.log(`      guide ${g.code} (${g.name})  ← adding`)
       if (!dryRun) {
-        await db.companyGuide.create({ data: { companyId: company.id, name: g.name, phone: g.phone ?? null, code: g.code } })
+        await db.companyPerson.create({ data: { companyId: company.id, roleId: guideRole.id, name: g.name, phone: g.phone ?? null, code: g.code } })
       }
       guidesAdded++
     }
 
     for (const r of spec.representatives) {
-      const clash = await db.companyRepresentative.findFirst({ where: { code: r.code, company: { tenantId: tenant.id } } })
+      const clash = await db.companyPerson.findFirst({ where: { code: r.code, company: { tenantId: tenant.id } } })
       if (clash) { console.log(`      rep ${r.code}: exists — skipped`); continue }
       console.log(`      rep ${r.code} (${r.name})  ← adding`)
       if (!dryRun) {
-        await db.companyRepresentative.create({
-          data: { companyId: company.id, name: r.name, email: r.email ?? null, phone: r.phone ?? null, code: r.code },
+        await db.companyPerson.create({
+          data: { companyId: company.id, roleId: contactPersonRole.id, name: r.name, email: r.email ?? null, phone: r.phone ?? null, code: r.code },
         })
       }
       repsAdded++
@@ -172,15 +182,15 @@ async function main() {
   // removed. Only seed-owned codes are ever deleted — a guide someone added by
   // hand is never touched.
   const current = new Set(BOOKING_COMPANIES.flatMap(c => c.guides.map(g => g.code)))
-  const staleSeeded = (await db.companyGuide.findMany({
-    where: { company: { tenantId: tenant.id } },
+  const staleSeeded = (await db.companyPerson.findMany({
+    where: { roleId: guideRole.id, company: { tenantId: tenant.id } },
     select: { id: true, code: true, name: true, company: { select: { name: true } } },
-  })).filter(g => ALL_SEED_GUIDE_CODES.has(g.code) && !current.has(g.code))
+  })).filter(g => g.code !== null && ALL_SEED_GUIDE_CODES.has(g.code) && !current.has(g.code))
 
   for (const g of staleSeeded) {
     console.log(`  ${g.company.name}`)
     console.log(`      guide ${g.code} (${g.name})  <- removing (no longer in the seed spec)`)
-    if (!dryRun) await db.companyGuide.delete({ where: { id: g.id } })
+    if (!dryRun) await db.companyPerson.delete({ where: { id: g.id } })
   }
 
   console.log(

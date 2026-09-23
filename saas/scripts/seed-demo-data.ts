@@ -83,8 +83,10 @@ async function main() {
     if (r.existingCompanies.length) {
       console.log('\nCompanies currently on this tenant (all of these will be deleted):')
       for (const c of r.existingCompanies) {
-        const contact = [c.contactName, c.contactPhone, c.contactEmail].filter(Boolean).join(' · ')
-        console.log(`  - ${c.name}${contact ? `  [${contact}]` : ''}`)
+        const contacts = c.contacts
+          .map(p => [p.name, p.phone, p.email].filter(Boolean).join(' · '))
+          .join('; ')
+        console.log(`  - ${c.name}${contacts ? `  [${contacts}]` : ''}`)
       }
       console.log('  ^ check these for real customer contact details before continuing.')
     }
