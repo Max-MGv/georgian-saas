@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–13 OF 14 BUILT, CHUNK 14 IN PROGRESS
+## v1.13 — Contact Roles (company people, generalised) ✅ ALL 14 CHUNKS DONE, LIVE ON PRODUCTION
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -425,9 +425,26 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
       fields for company bookings only
 - [x] Chunk 12 — demo seed, onboarding, fixtures
 - [x] Chunk 13 — tests, including one that proves deleting a person does not erase history
-- [ ] Chunk 14 — vault close-out, staging verification, merge
+- [x] Chunk 14 — vault close-out, staging verification, merge
 
-**Status 2026-09-23:** chunks 0–13 built, verified, and pushed to `staging` (`e95e94c`). tsc 0, i18n parity 173/173+1109/1109, `test-order-contacts.ts` 36/36. Chunk 7 was **audited by a fenced-off subagent** which found four real defects — including an unauthenticated action that returned any company's staff directory without its access code — all fixed and pushed the same day ([[Plan-ContactRoles]] §9b). Chunk 14 (in progress) has done its vault writeups, closed the `createTenant()` ContactRole-seeding gap, and run a **second fenced-off audit of the whole feature** — 9/10 decisions and 3/4 "don't break" checks confirmed solid, one real defect found and fixed the same day ([[KnownBugs]] #59 — `demoSeed.ts` never wrote `OrderContact` rows for seeded orders, leaving the public demo tenant's Contacts card empty everywhere; fixed and verified with a real reseed). The migration has run on the **dev** database only; production is untouched, but the §9c pre-flight (five read-only checks) has now been run against it and come back clean — 0 duplicate access codes, 0 companies with a NULL tenantId, 0 orders with a guideId set (RLS isn't checkable until right after `migrate deploy`). ✅ **Every route renders again**, `/admin/orders` included since chunk 10. [[KnownBugs]] #57 (every company's access code in the public HTML) and #56 (deleting a guide erasing order history, now regression-tested) are fixed on `staging`, still live on `master` until the cutover. **The only thing left in the whole 14-chunk arc is the `staging` → `master` merge itself**, which needs Max's explicit go-ahead (Rule 0).
+**Status 2026-09-23: PLAN COMPLETE, LIVE ON PRODUCTION.** All 14 chunks built, verified, merged to
+`master` (`e6a37a2`) and shipped. tsc 0, i18n parity 173/173+1109/1109, `test-order-contacts.ts`
+36/36. Chunk 7 was **audited by a fenced-off subagent** which found four real defects — including
+an unauthenticated action that returned any company's staff directory without its access code —
+all fixed and pushed the same day ([[Plan-ContactRoles]] §9b). Chunk 14 ran a **second fenced-off
+audit of the whole feature** — 9/10 decisions and 3/4 "don't break" checks confirmed solid, one
+real defect found and fixed the same day ([[KnownBugs]] #59 — `demoSeed.ts` never wrote
+`OrderContact` rows for seeded orders, leaving the public demo tenant's Contacts card empty
+everywhere; fixed and verified with a real reseed), and also closed the `createTenant()`
+ContactRole-seeding gap. The §9c production pre-flight ran clean (0 duplicate access codes, 0
+companies with a NULL tenantId, 0 orders with a guideId set), then Max approved the
+`staging` → `master` merge: `prisma migrate deploy` applied both pending migrations to
+**production**, `scripts/setup-rls.ts` policied all 21 tenanted tables (H18 check clean on all
+four new tables), and the live site was walked afterward — homepage and `/wines` render real
+content, `/admin/login` returns 200 with the correct route matched, no console errors. ✅ **Every
+route renders again**, `/admin/orders` included since chunk 10. [[KnownBugs]] #57 (every company's
+access code in the public HTML) and #56 (deleting a guide erasing order history) are now fully
+🟢 Resolved on production.
 
 **Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
 access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses

@@ -60,8 +60,16 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 >   RLS isn't checkable until right after `migrate deploy` (the tables don't exist yet on
 >   production). Production volume for context: 16 companies, 393 orders, 2 tenants.
 >
-> **Next:** the `staging` → `master` merge itself is the only thing left in this whole 14-chunk
-> arc — needs Max's explicit go-ahead, separately from everything else in this chunk (Rule 0).
+> - **Merged to `master` and live on production, same session.** Max approved the merge; committed
+>   and pushed Chunk 14 to `staging` (`c897aa3`) first, then `staging` → `master` (`e6a37a2`).
+>   Immediately after the push: `prisma migrate deploy` applied both pending migrations to
+>   **production**, then `scripts/setup-rls.ts` (21 tables policied, confirmed via the H18 query —
+>   no `null` polname on any of the four new tables). Verified live:
+>   `nikalasmarani.vercel.app` homepage and `/wines` render real content, `/admin/login` returns
+>   200 with the correct route matched, no console errors, no failed requests besides one benign
+>   aborted prefetch. [[KnownBugs]] #56 and #57 flipped to fully 🟢 Resolved.
+>
+> **The whole 14-chunk Contact Roles plan is complete.** Nothing left — this is the exit state.
 
 Picked up via a pasted handoff prompt for Chunk 14 (everything in it verified against the actual
 repo before acting on it, per the prompt's own instruction not to trust it blindly — branch, HEAD,
