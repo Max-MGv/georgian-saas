@@ -419,6 +419,7 @@ A `null` in the `polname` column is the bug.
 | **9** | Write path — `OrderContact` rows + snapshots | ✅ Done |
 | **10** | Admin order surfaces — finally display contacts | ✅ Done |
 | **11** | Emails — invoice recipient from roles | ✅ Done |
+| **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ⬜ Not started |
 | **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
 | **13** | Tests | ⬜ Not started |
 | **14** | Vault + close-out | ⬜ Not started |
@@ -426,8 +427,12 @@ A `null` in the `polname` column is the bug.
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
 **Overall resume point:** Chunks 0–11 all done (2026-09-23).
-**Chunk 12 next — demo seed, onboarding, test fixtures.** All 22 remaining type errors are in
-files that chunk owns.
+**Chunk 11a next** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
+spotted the Contact Person's info rendering twice on a real order page. Starts with an
+investigation (is `Order.name/surname/phone/email` still earning its place now that
+`OrderContact` exists?), not the display fix itself. Chunk 12 remains the next item from the
+original sequence once 11a is resolved; all 22 remaining type errors are in files Chunk 12 owns,
+untouched by 11a.
 
 **22 type errors remain**, all Chunk 12's:
 `scripts/backfill-test-fixtures.ts` (8), `app/admin/onboarding/page.tsx` (5),
@@ -1584,6 +1589,55 @@ each with its own email. An individual (no-company) order correctly shows no dro
 just the guest's own email, matching the existing `length > 1 ? <select> : <p>` branch.
 
 **Resume point:** —
+
+---
+
+## Chunk 11a — Booking Info shows the Contact Person twice; find out why the legacy columns still exist before touching the display
+
+**Status:** ⬜ Not started · recorded 2026-09-23, not queued from the original plan — found by Max
+looking at a real order page, not by working the chunk list in order
+
+**The symptom.** `OrderDetail.tsx`'s "Booking Info" card shows Phone/Email with no name label
+(decision 4: these are `Order.phone`/`Order.email`, a denormalised copy of the Contact Person).
+The new "Contacts" card (Chunk 10) then shows **the same person's same phone and email again**,
+this time correctly labelled "Contact Person". Not a bug — decision 4 always intended this
+duplication — but now that both cards render on the same screen, it reads as three people where
+there are only two (Contact Person + Guide). Screenshot discussion: 2026-09-23.
+
+**Max's call on the fix:** hide Phone/Email from Booking Info **for company bookings only**
+(`order.bookingType === 'COMPANY'`) — individuals keep showing them there, since for an
+individual booking those columns are the *only* record of who to contact; there is no
+`OrderContact` row and never will be (individual bookings never go through the company contact
+resolver at all).
+
+**Before touching any display code, two investigations — in this order:**
+
+1. **First: how the Contact Person/Guide connection to an order actually works today, and
+   whether `Order.name/surname/phone/email` are still earning their place.** Re-open the
+   question decision 4 settled 2026-09-19, with fresh eyes: *"those columns are non-nullable and
+   are the only place an INDIVIDUAL booking's guest name exists, so they cannot be removed. ~16
+   production files read them."* Confirm that's still true rather than assuming it — re-run the
+   kind of grep that produced "~16 files" and see what actually reads `Order.name` /
+   `.surname` / `.phone` / `.email` today, now that Chunk 10 exists and some of those call sites
+   may have moved onto `OrderContact`/`contacts` themselves. The real question: is the
+   COMPANY-booking case of these four columns pure legacy weight now that `OrderContact` is the
+   source of truth, or is something still built on them that the hide-for-company-bookings fix
+   would silently break? `lib/orderContacts.ts`'s `writeOrderContacts()` doc comments and
+   `MaintenanceNotes` #30 are the fastest way back into this, not a re-read of the whole plan.
+2. **Then: dependency-check the specific UI change** — hiding Booking Info's Phone/Email for
+   `bookingType === 'COMPANY'` on `OrderDetail.tsx`. Does anything on that page, or anything that
+   reads the same order data shape, rely on those fields always rendering there? Check
+   `BookingSheetPrint.tsx` (prints `o.phone` directly, unrelated to this card — probably fine but
+   confirm), `InvoicePrint.tsx`, and whether `OrderDetail.tsx`'s own edit flow
+   (`updateOrder`/`handleUpdate` via `OrdersTable.tsx`'s edit slide-over) still needs to show
+   these fields somewhere even if Booking Info stops displaying them, since that's the only UI
+   that can currently correct a misspelled contact name — hiding the *display* must not hide the
+   *edit* path along with it.
+
+**Then, and only then, the fix:** conditionally render Booking Info's Phone/Email rows on
+`bookingType === 'COMPANY'` in `OrderDetail.tsx`.
+
+**Resume point:** — investigation 1 (Order columns vs. OrderContact) has not started.
 
 ---
 

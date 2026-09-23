@@ -12,15 +12,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 > **STATE ON EXIT.**
 >
-> - Branch **`staging`**. Chunk 11 not yet committed — see note below.
-> - **22 TypeScript errors** (was 31), all in Chunk 12's four files. Running total
+> - Branch **`staging`**, HEAD `4cccb3c`. Chunk 11 committed and pushed.
+> - **22 TypeScript errors**, all in Chunk 12's four files. Running total
 >   65 → 54 → 49 → 43 → 40 → 31 → 22.
 > - The "Send Invoice" email button's recipient dropdown works again, verified live.
 > - RLS 19/19 · resolver 26/26 · write path 36/36 (unchanged) · parity 1107/1107 (unchanged).
 >
-> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, test fixtures. All 22
-> remaining type errors are in files that chunk owns; `staging.vineworks.ge` comes back once it
-> lands.
+> **Next:** [[Plan-ContactRoles]] **Chunk 11a** (new, not in the original 14) — see below.
+> Chunk 12 remains queued behind it.
 
 ### What "billing-capable roles" turned out to mean
 
@@ -64,7 +63,28 @@ option (Silk Road Journeys has two — the plural case Max asked about), de-dupl
 guest email; an individual order with no company shows no dropdown at all, just the guest's own
 address, unchanged.
 
-**Not committed.** Ready for `git add` + commit + push to `staging` once confirmed.
+Committed and pushed (`4cccb3c`).
+
+### New chunk recorded — 11a, found while looking at the result, not while working the list
+
+Max looked at the order detail page this Contacts card lives on (a screenshot, not a bug report)
+and asked why it showed 3 people's worth of contact info for an order with only 2 (Contact
+Person + Guide). Answer: it's 2 people, but the Contact Person's phone/email render **twice** —
+once unlabeled under Booking Info (`Order.phone`/`Order.email`, decision 4's denormalised copy),
+once labeled under Contacts (the real `OrderContact` row, Chunk 10). Not a new bug — decision 4
+always intended the duplication — but nobody had put both cards on screen at once before Chunk 10
+did, so it went unnoticed until now.
+
+Recorded as [[Plan-ContactRoles]] **Chunk 11a**, inserted ahead of Chunk 12 rather than appended
+after Chunk 14, since it's a live open thread, not a someday-idea. Max's fix direction: hide
+Booking Info's Phone/Email for company bookings only (individuals still need them — no
+`OrderContact` row exists or ever will for an individual booking). But the first thing he wants,
+before any display code changes, is to re-investigate whether `Order.name/surname/phone/email`
+are still earning their place at all now that `OrderContact` exists, or whether they're pure
+legacy weight for the company-booking case — decision 4's "~16 files read them" claim from
+2026-09-19 hasn't been re-checked since Chunk 10 gave some of those files somewhere better to
+read from. Nothing built yet; this session only recorded the chunk and the two-part
+investigate-then-fix shape, per Max's explicit ask not to edit anything while brainstorming it.
 
 ---
 

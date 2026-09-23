@@ -418,6 +418,11 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
       one shared `invoiceRecipientsFor()`, driven by a single role-key constant rather than a
       new schema flag (Max's call — the tenant-configurable version is a recorded future want,
       not built: `vault/SuperAdminPlans/InvoiceRecipientRoles.md`)
+- [ ] Chunk 11a — **new, not in the original 14**: the Contact Person's phone/email render twice
+      on the order detail page (once unlabeled in Booking Info, once labeled in Contacts).
+      Starts with re-investigating whether `Order.name/surname/phone/email` are still needed at
+      all now that `OrderContact` exists, before touching the display fix (hide those two fields
+      from Booking Info for company bookings only)
 - [ ] Chunk 12 — demo seed, onboarding, fixtures
 - [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge
