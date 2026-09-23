@@ -81,13 +81,6 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
 
   const orderStatus = body.order_status != null ? String(body.order_status) : ''
 
-  // ── Gate 3: idempotency ────────────────────────────────────────────────────
-  // Flitt retries, and the return and callback routes both fire for the same
-  // payment. Settling twice would double-send the customer's email.
-  if (payment.settledAt) {
-    return { ok: true, outcome: 'already-settled', tenantId }
-  }
-
   // Record the outcome whatever it is — a decline is real history worth keeping,
   // and rawResponse is what a human reconciles against Flitt's portal when
   // something goes wrong. Only an approval advances the order.
@@ -97,15 +90,33 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // gateway record and the order can never disagree about when money arrived.
   const settledAt = new Date()
 
-  await withTenantDb(tenantId, async tx => {
-    await tx.payment.update({
-      where: { id: payment.id },
+  const outcome = await withTenantDb(tenantId, async tx => {
+    // ── Gate 3: idempotency ──────────────────────────────────────────────────
+    // Flitt retries, and the return and callback routes both fire for the same
+    // payment — confirmed live: both response_url and server_callback_url can
+    // land inside the same tens-of-milliseconds, well before either write below
+    // commits. Checking `payment.settledAt` from the read above is not enough —
+    // both concurrent calls would see it still null and both would proceed. The
+    // fix is to make the claim itself atomic: this conditional update is the
+    // idempotency gate, not a check before one. `status: 'created'` is the
+    // default every Payment row starts with and the only value it holds before
+    // settlePayment ever touches it (checked: nothing else in the codebase
+    // writes Payment.status after creation), so it means "no prior settlePayment
+    // call has finalized this row yet" for both the approved and declined case —
+    // unlike `settledAt`, which a decline never sets at all.
+    const claim = await tx.payment.updateMany({
+      where: { id: payment.id, status: 'created' },
       data: {
         status: orderStatus || 'unknown',
         rawResponse: body as object,
         settledAt: approved ? settledAt : null,
       },
     })
+    if (claim.count === 0) {
+      // Someone else — a concurrent call, or a genuine retry — already claimed
+      // this row. Don't record another event, don't touch the order.
+      return 'already-settled' as const
+    }
 
     if (!approved) {
       // A refusal is real history. The Payment row keeps the gateway's verbatim
@@ -129,7 +140,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
       // `processing` was the reason this used to branch — it is still in flight
       // and may yet approve — and that distinction now costs nothing, because
       // neither case writes to the order.
-      return
+      return 'not-approved' as const
     }
 
     // Money arriving is what turns an incomplete checkout into a real order, so
@@ -163,6 +174,8 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
         data: paidColumns,
       })
     }
+
+    return 'settled' as const
   })
 
   // ── Notification ───────────────────────────────────────────────────────────
@@ -170,8 +183,10 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // browser return, and only past the idempotency gate above so a retried
   // callback can't double-send. Never awaited into the response — a mail
   // failure must not make the callback look failed to Flitt, which would earn
-  // a retry for a payment that already settled correctly.
-  if (approved) {
+  // a retry for a payment that already settled correctly. Gated on the
+  // transaction's own outcome (the winner of the atomic claim above), not on
+  // `approved` alone — the loser of a concurrent race must never send this.
+  if (outcome === 'settled') {
     void sendSettlementEmail(tenantId, payment.orderId, payment.wineOrderId).catch(err =>
       // Logged loudly rather than swallowed: the money moved, so a missing
       // receipt is a real support issue someone has to chase manually.
@@ -179,7 +194,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     )
   }
 
-  return { ok: true, outcome: approved ? 'settled' : 'not-approved', tenantId }
+  return { ok: true, outcome, tenantId }
 }
 
 /**
