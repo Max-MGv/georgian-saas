@@ -20,6 +20,9 @@ type Order = {
   // enableCompanyNationalityBreakdown flag, since this just renders whatever the order already
   // has (per that plan's "toggle-off never hides existing data" decision).
   nationalities: string[]
+  // The guide's own name/phone, not the guest's — this used to rely on autofill having copied
+  // the guide's phone into the guest's own field, which is finding F1 (Plan-ContactRoles).
+  contacts: { roleKey: string; name: string; phone: string | null }[]
 }
 
 type Props = { orders: Order[]; displayName?: string; locale?: string }
@@ -60,6 +63,8 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
     at('orders.sheet.nationality'),
     at('orders.sheet.contactName'),
     at('orders.sheet.contactPhone'),
+    at('orders.sheet.guideName'),
+    at('orders.sheet.guidePhone'),
   ]
 
   return (
@@ -89,22 +94,27 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
             </tr>
           </thead>
           <tbody>
-            {sorted.map((o, i) => (
-              <tr key={o.id} style={{ backgroundColor: i % 2 === 1 ? '#fbf6ec' : '#fff' }}>
-                <Cell bold>{formatDate(o.date)} · {o.timeSlot}</Cell>
-                <Cell bold>{o.tastingGuestCount > 0 ? o.tastingGuestCount : '—'}</Cell>
-                <Cell bold>{o.lunchGuestCount > 0 ? o.lunchGuestCount : '—'}</Cell>
-                <Cell bold>{o.freeGuestCount > 0 ? o.freeGuestCount : '—'}</Cell>
-                <Cell>{o.hotDishVegetable}</Cell>
-                <Cell>{o.hotDishMeat}</Cell>
-                <Cell>{o.foodNotes}</Cell>
-                <Cell>{o.notes}</Cell>
-                <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
-                <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
-                <Cell>{o.name} {o.surname}</Cell>
-                <Cell>{o.phone}</Cell>
-              </tr>
-            ))}
+            {sorted.map((o, i) => {
+              const guide = o.contacts.find(c => c.roleKey === 'guide')
+              return (
+                <tr key={o.id} style={{ backgroundColor: i % 2 === 1 ? '#fbf6ec' : '#fff' }}>
+                  <Cell bold>{formatDate(o.date)} · {o.timeSlot}</Cell>
+                  <Cell bold>{o.tastingGuestCount > 0 ? o.tastingGuestCount : '—'}</Cell>
+                  <Cell bold>{o.lunchGuestCount > 0 ? o.lunchGuestCount : '—'}</Cell>
+                  <Cell bold>{o.freeGuestCount > 0 ? o.freeGuestCount : '—'}</Cell>
+                  <Cell>{o.hotDishVegetable}</Cell>
+                  <Cell>{o.hotDishMeat}</Cell>
+                  <Cell>{o.foodNotes}</Cell>
+                  <Cell>{o.notes}</Cell>
+                  <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
+                  <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
+                  <Cell>{o.name} {o.surname}</Cell>
+                  <Cell>{o.phone}</Cell>
+                  <Cell>{guide?.name}</Cell>
+                  <Cell>{guide?.phone}</Cell>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

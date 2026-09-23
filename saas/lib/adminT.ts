@@ -455,6 +455,8 @@ const en: Translations = {
   'orders.sheet.notes': 'Notes',
   'orders.sheet.contactName': 'Contact',
   'orders.sheet.contactPhone': 'Phone',
+  'orders.sheet.guideName': 'Guide',
+  'orders.sheet.guidePhone': 'Guide Phone',
   'orders.sheet.nationality': 'Nationality',
   'orders.sheet.previewTitle': 'Booking sheet preview',
   'orders.sheet.print': 'Print',
@@ -485,6 +487,9 @@ const en: Translations = {
   'orderDetail.bookingInfo.phone': 'Phone',
   'orderDetail.bookingInfo.email': 'Email',
   'orderDetail.bookingInfo.notes': 'Notes',
+
+  'orderDetail.contacts.title': 'Contacts',
+  'orderDetail.contacts.none': 'No contacts recorded.',
 
   'orderDetail.guestBreakdown.title': 'Guest Breakdown & Dishes',
   'orderDetail.guestBreakdown.noTiers': 'No price tiers found for {name}.',
@@ -1690,6 +1695,9 @@ const ka: Translations = {
   'orders.sheet.notes': 'შენიშვნა',
   'orders.sheet.contactName': 'საკონტაქტო პირი',
   'orders.sheet.contactPhone': 'ტელეფონი',
+  // Drafted, not native-reviewed (Plan-ContactRoles) — flag for Max.
+  'orders.sheet.guideName': 'გიდი',
+  'orders.sheet.guidePhone': 'გიდის ტელეფონი',
   // Drafted, not native-reviewed (Plan-CompanyNationality) — flag for Max.
   'orders.sheet.nationality': 'ეროვნება',
   'orders.sheet.previewTitle': 'ჯავშნების ცხრილის გადახედვა',
@@ -1721,6 +1729,10 @@ const ka: Translations = {
   'orderDetail.bookingInfo.phone': 'ტელეფონი',
   'orderDetail.bookingInfo.email': 'ელ-ფოსტა',
   'orderDetail.bookingInfo.notes': 'შენიშვნები',
+
+  // Drafted, not native-reviewed (Plan-ContactRoles) — flag for Max.
+  'orderDetail.contacts.title': 'კონტაქტები',
+  'orderDetail.contacts.none': 'კონტაქტები არ არის ჩაწერილი.',
 
   'orderDetail.guestBreakdown.title': 'სტუმრების დაყოფა და კერძები',
   'orderDetail.guestBreakdown.noTiers': '{name}-ს ფასების კატეგორია არ მოიძებნა.',

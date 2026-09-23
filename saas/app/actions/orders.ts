@@ -1,7 +1,7 @@
 'use server'
 
 import { db, withTenantDb } from '@/lib/db'
-import { writeOrderContacts, syncOrderContactPerson } from '@/lib/orderContacts'
+import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, toMajor, type Tetri } from '@/lib/money'
@@ -213,6 +213,12 @@ export async function createOrderAdmin(data: {
   manualLunchRate: Tetri
   masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+  /**
+   * One entry per contact role, from the admin's inline pickers (Plan-ContactRoles Chunk 10).
+   * Written via `writeOrderContacts()`, the one base every order-creation path shares, which
+   * re-verifies every `roleId` and `personId` against `companyId` under the tenant first.
+   */
+  contacts?: IncomingContact[]
 }): Promise<{ orderId: string } | { error: string }> {
   const actor = await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
@@ -301,12 +307,9 @@ export async function createOrderAdmin(data: {
       },
     })
     /**
-     * Who to contact, through the same base the public form uses.
-     *
-     * This screen has no contact picker yet (that is Chunk 10), so there are no explicit
-     * `contacts` to send — the fallback turns what the admin typed into a `contact_person`
-     * entry with no `personId`, exactly the shape a guest produces by choosing "I am not on
-     * this list".
+     * Who to contact, through the same base the public form uses. `fallbackContactPerson`
+     * covers a company order whose admin typed contact-person details without picking from the
+     * inline dropdown — the same shape a guest produces by choosing "I am not on this list".
      *
      * Until an audit caught it, this path wrote `Order.name/surname/phone/email` and **no**
      * `OrderContact` rows at all, so every admin-created company booking had an empty source
@@ -318,7 +321,7 @@ export async function createOrderAdmin(data: {
       target: { orderId: order.id },
       companyId: data.companyId || null,
       module: 'BOOKING',
-      contacts: undefined,
+      contacts: data.contacts,
       fallbackContactPerson: {
         name: `${data.name} ${data.surname}`.trim(),
         phone: data.phone?.trim() || null,

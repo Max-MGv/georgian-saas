@@ -208,6 +208,7 @@ type OrderProp = {
   } | null
   masterclassLines: MasterclassLine[]
   extras: ExtraRow[]
+  contacts: { roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -836,6 +837,21 @@ export default function OrderDetail({
         <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
         <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
         {order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
+      </Card>
+
+      {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1) ── */}
+      <Card title={at('orderDetail.contacts.title')}>
+        {order.contacts.length === 0 ? (
+          <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.contacts.none')}</p>
+        ) : (
+          order.contacts.map((c, i) => (
+            <InfoRow
+              key={i}
+              label={locale === 'ka' ? c.roleLabelKa : c.roleLabelEn}
+              value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')}
+            />
+          ))
+        )}
       </Card>
 
       {/* ── Guest Breakdown & Dishes ── */}

@@ -417,7 +417,7 @@ A `null` in the `polname` column is the bug.
 | **7** | **Shared picker + hook** + public booking form | ✅ Done |
 | **8** | Both wine order forms (public + admin manual) | ✅ Done |
 | **9** | Write path — `OrderContact` rows + snapshots | ✅ Done |
-| **10** | Admin order surfaces — finally display contacts | ⬜ Not started |
+| **10** | Admin order surfaces — finally display contacts | ✅ Done |
 | **11** | Emails — invoice recipient from roles | ⬜ Not started |
 | **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
 | **13** | Tests | ⬜ Not started |
@@ -425,19 +425,17 @@ A `null` in the `polname` column is the bug.
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–9 all done (2026-09-22).
-**Chunk 10 next — admin order surfaces**, where the contacts finally become *readable*. That is
-where finding F1 gets paid off for the admin, and where F4 (representatives' codes reaching
-`OrdersTable`) is closed. `/admin/orders` currently 500s on a dropped relation, and Chunk 10
-owns that file. There is one real order carrying contacts in the dev database to display.
+**Overall resume point:** Chunks 0–10 all done (2026-09-23).
+**Chunk 11 next — emails**, where the invoice recipient moves from `company.representatives`
+(gone) to people in billing-capable roles. `sendOrderInvoice` is still down; all nine of
+`app/actions/orders.ts`'s remaining type errors are inside it.
 
-**40 type errors remain**, none in a file Chunks 7–9 own:
-`app/admin/(panel)/orders/page.tsx` (9, Chunk 10), `app/actions/orders.ts` (9, **all nine in
-`sendOrderInvoice`** — Chunk 11, not 9; one bad `include` cascades into eight more),
+**31 type errors remain**, none in a file Chunks 7–10 own:
+`app/actions/orders.ts` (9, **all nine in `sendOrderInvoice`** — Chunk 11),
 `scripts/backfill-test-fixtures.ts` (8, Chunk 12), `app/admin/onboarding/page.tsx` (5,
 Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12).
 
-Running total: 65 → 54 → 49 (Chunk 7) → 43 (Chunk 8) → 40 (Chunk 9).
+Running total: 65 → 54 → 49 (Chunk 7) → 43 (Chunk 8) → 40 (Chunk 9) → 31 (Chunk 10).
 
 *(This plan previously filed `orders.ts` under "Chunks 9/11". Opening it showed all nine
 errors are the invoice recipient's `company.representatives` include — squarely Chunk 11.
@@ -1466,19 +1464,78 @@ contacts, and Chunk 10 needs one to display.
 
 ## Chunk 10 — Admin order surfaces
 
-**Status:** ⬜ Not started · **This is where F1 gets paid off. Read F4, H1, H10.**
+**Status:** ✅ Done (2026-09-23) · tsc 40 → 31 (the nine `orders/page.tsx` errors this chunk
+owned, all gone) · parity 1107/1107 · RLS 19/19 · resolver 26/26 · write path 36/36
 
-- [ ] `OrderDetail.tsx` shows the order's contacts, by role
-- [ ] `BookingSheetPrint.tsx` prints the **Guide's** name and phone as its own labelled row,
-      rather than relying on autofill having copied it into the guest field.
-      ⚠️ **H1 applies:** the old plan's assumption about this file was wrong. Open it first
-- [ ] `OrdersTable.tsx` / `columnDefs.ts` — decide whether a guide column is wanted
-- [ ] `orders/new/NewOrderForm.tsx` (form 3 of §4b) gains per-role pickers, **consuming the
-      Chunk 7 shared pieces** — inline, not the popup, same as Chunk 8's admin form. It picks a
-      company today and has no contact picker at all, a gap under the one-of-each-per-order rule
-- [ ] **Narrow `orders/page.tsx:289`'s projection** so people's codes stop reaching the client
-      (F4)
-- [ ] Any new order query spreads `NOT_ABANDONED` (H10)
+- [x] `OrderDetail.tsx` shows the order's contacts, by role — a new Contacts card right after
+      Booking Info, one row per `OrderContact`, role label from the locale
+      (`labelEn`/`labelKa`), name/phone/email from the snapshot. Verified live: Silk Road
+      Journeys' one real order shows *Contact Person — Keti Dolidze* and *Guide — Nika
+      Kvaratskhelia*, both with phone and email
+- [x] `BookingSheetPrint.tsx` prints the **Guide's** name and phone as its own labelled column
+      (`orders.sheet.guideName`/`guidePhone`, EN + KA), sourced from the order's `contacts`
+      where `role.key === 'guide'` — not from the guest's own fields. Verified live in the
+      booking-sheet preview: Keti Dolidze's row shows Guide "Nika Kvaratskhelia" / phone
+      "+995 577 62 90 18"; orders with no guide show "—"
+- [x] `OrdersTable.tsx` / `columnDefs.ts` — **decided with Max: no table column**, detail page +
+      print sheet are enough for this chunk
+- [x] `orders/new/NewOrderForm.tsx` (form 3 of §4b) gains per-role inline pickers, consuming the
+      Chunk 7 shared pieces (`useContactSelection`, `resolveCompanyContactsAsAdmin`) — same
+      shape as Chunk 8's `NewWineOrderForm.tsx`: a dropdown per role, auto-selecting a role with
+      exactly one person on company change, contact_person rebuilt from the live name/surname/
+      phone/email fields so an edited autofill stays truthful. `createOrderAdmin()` gained a
+      `contacts` param, threaded into the existing `writeOrderContacts()` call (which previously
+      only ever ran with `contacts: undefined`, fallback-only, since this screen had no picker)
+- [x] **Narrowed `orders/page.tsx`'s company projection** (F4) — `company: { include: {
+      representatives: true } }` (a dropped relation; this was the actual crash) replaced with
+      an explicit `select` of `id`/`name`/`identificationCode`. `OrdersTable.tsx`'s
+      `invoiceRecipientOptions()` no longer reads `company.representatives` either — it offers
+      only the guest email until Chunk 11 restores a company-people option through contact roles
+- [x] The one order query this chunk touches already spread `NOT_ABANDONED` (H10) — only its
+      `include` changed, no new order-listing query was added
+
+### What F4 actually was
+
+The plan's own diagnosis was half right. `orders/page.tsx:289` did leak whole representative
+rows into `OrdersTable`, but by the time this chunk started, `CompanyRepresentative` no longer
+existed — Chunk 1 dropped it. So the "leak" was already a hard crash (`error TS2353: Unknown
+field 'representatives'`), confirmed live: every `/admin/orders` request 404's-into-a-Next-error
+page, reproduced with `npx tsc --noEmit` showing the exact cascade H1 predicts — one bad
+`include` at line 173 collapses `orders`' inferred type, which then breaks every downstream
+`.map()` at lines 289–296. Fixing the crash and closing the leak were the same edit.
+
+### A dev-server trap, hit and logged for H12
+
+A fresh Turbopack dev server 404'd on `/admin/orders/new` immediately after starting — not the
+"degrades after many hours" shape H12 describes, but the same family: `rm -rf .next/dev` and a
+restart fixed it instantly. Worth adding to H12 at Chunk 14: a *freshly started* server can also
+serve a stale route table, not only a long-lived one.
+
+### Verified live, in a browser — including the one gap left by the first pass
+
+Max's admin session (already signed in) was reused — Claude never typed a password.
+`/admin/orders` renders cleanly (6 bookings, all views), the one pre-existing order carrying
+contacts (Silk Road Journeys, via Keti Dolidze) shows its Contacts card correctly, and the
+booking-sheet print preview shows the Guide column populated for the two orders that have one
+and "—" for the four that don't.
+
+**`/admin/orders/new`'s inline pickers, closed out after Max reconfirmed the session was live.**
+Selected Silk Road Journeys (2 Contact Persons + 2 Guides, so nothing auto-fills and both
+dropdowns must be driven by hand) — both "Choose the Contact Person" and "Choose the Guide"
+dropdowns appeared with the right names and phones. Picking Keti Dolidze filled First/Last
+Name, Phone and Email from her record; picking Nika Kvaratskhelia filled the Guide block's typed
+fields from his. Submitted a real order (25 Nov 2026, 4 guests) — its detail page shows the same
+Contacts card as the pre-existing order, and `scripts/inspect-order-contacts.ts
+cmudmzsow0001vlk8e80g04n4` confirms it **at the database level**, not just on screen:
+
+```
+Contact Person  Keti Dolidze           ph=+995 591 76 20 56  em=ap@silkroadjourneys.example  link=yes tenant=set
+Guide           Nika Kvaratskhelia     ph=+995 577 62 90 18  em=—                             link=yes tenant=set
+```
+
+Both rows linked (`personId` set) and `tenantId` set on both — the two things
+[[MaintenanceNotes]] #30 and finding F1 both cared about. Chunk 10 is now fully proven, not
+partially. The test order was left in the dev database (same call as Chunk 9's).
 
 **Resume point:** —
 

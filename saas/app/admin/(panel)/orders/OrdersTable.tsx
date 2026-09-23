@@ -96,10 +96,11 @@ type Order = {
   hotDishMeat: string | null
   foodNotes: string | null
   nationalities: string[]
-  company: { name: string; identificationCode: string | null; representatives: { id: string; name: string; email: string | null }[] } | null
+  company: { name: string; identificationCode: string | null } | null
   requestedCompanyName: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
+  contacts: { roleKey: string; roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
 }
 
 /** The subset the flow-line needs - every order row already satisfies it. */
@@ -643,9 +644,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   function invoiceRecipientOptions(order: Order): { label: string; email: string }[] {
     const options: { label: string; email: string }[] = []
     if (order.email) options.push({ label: at('orders.emailModal.guestEmail'), email: order.email })
-    for (const rep of order.company?.representatives ?? []) {
-      if (rep.email) options.push({ label: rep.name, email: rep.email })
-    }
     return options
   }
 

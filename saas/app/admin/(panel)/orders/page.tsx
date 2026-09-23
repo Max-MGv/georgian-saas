@@ -170,9 +170,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       ...paymentFilterWhere(params.payment),
     },
     include: {
-      company: { include: { representatives: true } },
+      company: { select: { id: true, name: true, identificationCode: true } },
       masterclassLines: { include: { masterclassItem: true } },
       extras: true,
+      contacts: { include: { role: true } },
     },
     orderBy: { date: 'desc' },
   })) : []
@@ -286,7 +287,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             hotDishMeat: o.hotDishMeat,
             foodNotes: o.foodNotes,
             nationalities: o.nationalities,
-            company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode, representatives: o.company.representatives } : null,
+            company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
             requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(l => ({
               name: l.masterclassItem.name,
@@ -294,6 +295,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               pricePerUnit: l.pricePerUnit,
             })),
             extras: o.extras.map(e => ({ label: e.label, amount: e.amount })),
+            contacts: o.contacts.map(c => ({
+              roleKey: c.role.key,
+              roleLabelEn: c.role.labelEn,
+              roleLabelKa: c.role.labelKa,
+              name: c.nameSnapshot,
+              phone: c.phoneSnapshot,
+              email: c.emailSnapshot,
+            })),
           }))} payment={payment} />
 
           <div className="mt-4 flex justify-end">

@@ -28,6 +28,7 @@ export default async function OrderDetailPage({
           orderBy: { id: 'asc' },
         },
         extras: { orderBy: { id: 'asc' } },
+        contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
       },
     })),
     // For the "link this to a company" control (Feature 180) — the
@@ -139,6 +140,13 @@ export default async function OrderDetailPage({
             id: e.id,
             label: e.label,
             amount: e.amount,
+          })),
+          contacts: order.contacts.map(c => ({
+            roleLabelEn: c.role.labelEn,
+            roleLabelKa: c.role.labelKa,
+            name: c.nameSnapshot,
+            phone: c.phoneSnapshot,
+            email: c.emailSnapshot,
           })),
         }}
         menuItems={menuItems.map(i => ({
