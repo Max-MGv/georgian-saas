@@ -52,17 +52,17 @@ async function hasLivePayment(tx: TxClient, ref: OrderRef): Promise<boolean> {
  * No-op when the order already has a live payment, so this is safe to call on
  * every "mark as paid" without checking first.
  *
- * `method` is MANUAL rather than CASH or BANK_TRANSFER because the admin was
- * not asked how the money arrived. Those values exist for when a picker is
- * added; guessing on the admin's behalf would put a fact in the ledger that
- * nobody asserted.
+ * `method` defaults to MANUAL — the admin was not asked how the money arrived
+ * — but the "Paid" picker now lets them say BANK_TRANSFER or CASH, which is
+ * passed straight through. Guessing one on the admin's behalf when they
+ * weren't asked would put a fact in the ledger that nobody asserted.
  */
 export async function recordManualPayment(
   tx: TxClient,
   // `amount` is TETRI. Typed `number` until 2026-09-18 — no live bug behind it,
   // but it was the last unbranded money parameter in the codebase, and bug #45
   // is what an unbranded one costs when someone wires a lari field to it.
-  input: OrderRef & { tenantId: string | null; amount: Tetri; at: Date }
+  input: OrderRef & { tenantId: string | null; amount: Tetri; at: Date; method?: 'BANK_TRANSFER' | 'CASH' }
 ): Promise<void> {
   if (await hasLivePayment(tx, input)) return
 
@@ -72,7 +72,7 @@ export async function recordManualPayment(
       orderId: input.orderId ?? null,
       wineOrderId: input.wineOrderId ?? null,
       provider: MANUAL_PROVIDER,
-      method: 'MANUAL',
+      method: input.method ?? 'MANUAL',
       // The gateway's verbatim string has no meaning here; this says plainly
       // where the row came from.
       status: 'recorded',

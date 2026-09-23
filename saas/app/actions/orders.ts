@@ -727,6 +727,7 @@ export async function changeBookingStatus(
           if (change.value) {
             await recordManualPayment(tx, {
               tenantId, orderId, amount: asTetri(current.totalPrice ?? 0), at: now,
+              method: change.method,
             })
           } else {
             await reverseManualPayments(tx, { orderId, at: now })

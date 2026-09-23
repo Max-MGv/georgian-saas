@@ -30,6 +30,15 @@ export default async function OrderDetailPage({
         extras: { orderBy: { id: 'asc' } },
         contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
         invoicesSent: { orderBy: { sentAt: 'desc' } },
+        // How the money actually arrived, for the Paid indicator below — the
+        // live (settled, not reversed) payment row, newest first in case a
+        // reversed one was ever replaced by a second.
+        payments: {
+          where: { settledAt: { not: null }, reversedAt: null },
+          orderBy: { settledAt: 'desc' },
+          take: 1,
+          select: { method: true },
+        },
       },
     })),
     // For the "link this to a company" control (Feature 180) — the
@@ -85,6 +94,7 @@ export default async function OrderDetailPage({
           completedAt: order.completedAt,
           invoiceSentAt: order.invoiceSentAt,
           paidAt: order.paidAt,
+          paymentMethod: order.payments[0]?.method ?? null,
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,

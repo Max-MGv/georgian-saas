@@ -70,6 +70,7 @@ export async function changeWineOrderStatus(
           if (change.value) {
             await recordManualPayment(tx, {
               tenantId, wineOrderId: id, amount: asTetri(current.totalAmount ?? 0), at: now,
+              method: change.method,
             })
           } else {
             await reverseManualPayments(tx, { wineOrderId: id, at: now })

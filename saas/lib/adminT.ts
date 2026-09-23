@@ -351,6 +351,15 @@ const en: Translations = {
   'orders.status.completed': 'Completed',
   'orders.status.cancelled': 'Cancelled',
 
+  // Payment method picker — shown when an admin marks something paid by hand.
+  // CARD never appears here; it's only ever set by a real Flitt settlement.
+  'paymentMethod.howPaid': 'How was this paid?',
+  'paymentMethod.bankTransfer': 'Bank transfer',
+  'paymentMethod.cash': 'Cash',
+  'paymentMethod.cancel': 'Cancel',
+  'paymentMethod.card': 'Card',
+  'paymentMethod.manual': 'Marked paid',
+
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
   'orders.visit.tastingLunch': 'Tasting + Lunch',
@@ -1592,6 +1601,13 @@ const ka: Translations = {
   'orders.status.unpaid': 'გადაუხდელი',
   'orders.status.completed': 'დასრულებული',
   'orders.status.cancelled': 'გაუქმებული',
+
+  'paymentMethod.howPaid': 'როგორ გადაიხადა?',
+  'paymentMethod.bankTransfer': 'საბანკო გადარიცხვა',
+  'paymentMethod.cash': 'ნაღდი ფული',
+  'paymentMethod.cancel': 'გაუქმება',
+  'paymentMethod.card': 'ბარათი',
+  'paymentMethod.manual': 'აღინიშნა როგორც გადახდილი',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',

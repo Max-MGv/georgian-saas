@@ -167,15 +167,21 @@ export function seedStageColumns(kind: 'booking' | 'wineOrder', stage: string, a
  *
  * `restore` is the way back out of the abandoned list, for someone who never
  * completed card checkout and then paid another way or turned up anyway.
+ *
+ * `method` only applies when `value` is true — how the admin says the money
+ * actually arrived (CARD is never hand-picked; that's only ever set by a real
+ * Flitt settlement, see lib/payments/settle.ts). Omitted, it falls back to
+ * MANUAL in recordManualPayment — for a caller that was never asked how the
+ * money arrived.
  */
 export type BookingStatusChange =
   | { kind: 'stage'; stage: string }
-  | { kind: 'paid'; value: boolean }
+  | { kind: 'paid'; value: boolean; method?: 'BANK_TRANSFER' | 'CASH' }
   | { kind: 'invoiceSent'; value: boolean }
   | { kind: 'restore' }
 
 /** The wine-order equivalent. No invoice-send flow exists for wine orders. */
 export type WineOrderStatusChange =
   | { kind: 'stage'; stage: string }
-  | { kind: 'paid'; value: boolean }
+  | { kind: 'paid'; value: boolean; method?: 'BANK_TRANSFER' | 'CASH' }
   | { kind: 'restore' }

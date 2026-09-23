@@ -81,7 +81,7 @@ export default function BugReportWidget({
 }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const [type, setType] = useState<ReportType>('BUG')
+  const [type, setType] = useState<ReportType>('FEATURE')
   const [comment, setComment] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export default function BugReportWidget({
   const panelRef = useRef<HTMLDivElement>(null)
 
   function reset() {
-    setType('BUG')
+    setType('FEATURE')
     setComment('')
     clearImage()
     setSubmitting(false)

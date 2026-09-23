@@ -106,7 +106,22 @@ function InvoiceSentMark({ locale }: { locale: string }) {
  * duplicating that as click targets would give the same action two places to
  * disagree.
  */
-function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; locale: string }) {
+/** How the money arrived, for the small parenthetical beside a done "Paid" step. */
+function paymentMethodLabel(method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null, locale: string) {
+  if (!method) return null
+  const key = method === 'CARD' ? 'paymentMethod.card'
+    : method === 'BANK_TRANSFER' ? 'paymentMethod.bankTransfer'
+    : method === 'CASH' ? 'paymentMethod.cash'
+    : 'paymentMethod.manual'
+  return adminT(locale, key)
+}
+
+function FlowLine({ steps, locale, paymentMethod }: {
+  steps: ReturnType<typeof buildFlowLine>
+  locale: string
+  /** Shown beside a done "Paid" step only — see paymentMethodLabel. */
+  paymentMethod?: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null
+}) {
   return (
     <div className="flex items-center flex-wrap gap-x-1 gap-y-1.5 mb-4">
       {steps.map((step, i) => (
@@ -126,6 +141,9 @@ function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; 
               </svg>
             )}
             {labelFor(locale, step.code)}
+            {step.code === 'PAID' && step.done && paymentMethod && (
+              <span style={{ opacity: 0.75, fontWeight: 400 }}>· {paymentMethodLabel(paymentMethod, locale)}</span>
+            )}
           </span>
           {i < steps.length - 1 && (
             <span style={{ color: step.done && steps[i + 1].done ? C.wine : C.border, fontSize: '0.75rem' }}>→</span>
@@ -174,6 +192,8 @@ type OrderProp = {
   completedAt: Date | string | null
   invoiceSentAt: Date | string | null
   paidAt: Date | string | null
+  /** How the money arrived — the live Payment row's method, null if unpaid. */
+  paymentMethod: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null
   date: Date
   timeSlot: string
   bookingType: string
@@ -351,6 +371,10 @@ export default function OrderDetail({
     paidAt: order.paidAt,
   })
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  // The 'paid' step swaps the menu to this picker instead of firing right
+  // away, so the ledger records Bank transfer / Cash rather than a guessed
+  // MANUAL. CARD never appears here — only a real Flitt settlement sets it.
+  const [pickingPaymentMethod, setPickingPaymentMethod] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
   const [printReady, setPrintReady] = useState(false)
@@ -358,7 +382,7 @@ export default function OrderDetail({
 
   useEffect(() => {
     if (!statusMenuOpen) return
-    function close() { setStatusMenuOpen(false) }
+    function close() { setStatusMenuOpen(false); setPickingPaymentMethod(false) }
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [statusMenuOpen])
@@ -408,6 +432,21 @@ export default function OrderDetail({
     setStatusMenuOpen(false)
     applyLocally(change)
     await changeBookingStatus(order.id, change)
+  }
+
+  /** A menu step was clicked — 'paid' opens the method picker instead of
+   * firing immediately; everything else behaves as before. */
+  function handleStepClick(step: { code: string; change: BookingStatusChange }) {
+    if (step.code === 'paid') {
+      setPickingPaymentMethod(true)
+      return
+    }
+    handleStatusChange(step.change)
+  }
+
+  function handlePaymentMethodChosen(method: 'BANK_TRANSFER' | 'CASH') {
+    setPickingPaymentMethod(false)
+    handleStatusChange({ kind: 'paid', value: true, method })
   }
 
   async function handleSendInvoice() {
@@ -686,10 +725,28 @@ export default function OrderDetail({
                 style={{ minWidth: 150, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                 onClick={e => e.stopPropagation()}
               >
-                {menuSteps.map(step => (
+                {pickingPaymentMethod ? (
+                  <div className="px-3 py-2">
+                    <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
+                    <div className="flex flex-col gap-1">
+                      <button onClick={() => handlePaymentMethodChosen('BANK_TRANSFER')}
+                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                        {at('paymentMethod.bankTransfer')}
+                      </button>
+                      <button onClick={() => handlePaymentMethodChosen('CASH')}
+                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                        {at('paymentMethod.cash')}
+                      </button>
+                      <button onClick={() => setPickingPaymentMethod(false)}
+                        className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
+                        {at('paymentMethod.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                ) : menuSteps.map(step => (
                   <button
                     key={step.code}
-                    onClick={() => handleStatusChange(step.change)}
+                    onClick={() => handleStepClick(step)}
                     className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
                     style={{ color: C.text }}
                   >
@@ -743,7 +800,7 @@ export default function OrderDetail({
           pill because it is the whole story of the order, and the pill is only
           its current position. */}
       {!isCancelled(flow) && (
-        <FlowLine steps={flowSteps} locale={locale} />
+        <FlowLine steps={flowSteps} locale={locale} paymentMethod={order.paymentMethod} />
       )}
 
       {/* Print portal */}

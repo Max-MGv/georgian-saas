@@ -8,7 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (newest) — Contact Roles chunk 14: close-out — vault writeups, the `createTenant()` fix, a blind audit
+## 2026-09-23 (newest) — Three small admin fixes: onboarding banner, payment method picker, bug-widget default
+
+Three unrelated small requests from Max, unrelated to the just-finished Contact Roles work, handled
+in one pass:
+
+1. **Onboarding "Finish setting up your account" banner stuck forever for a live tenant.** Root
+   cause: `paymentInfoStepDone` (`app/actions/onboarding.ts`) only checked for a bank-transfer IBAN,
+   so a tenant fully live on Flitt card payments — with no reason to ever fill in an IBAN — saw the
+   banner permanently, even mid-real-bookings. Fixed by OR-ing in `isPaymentConfigured()` (module on
+   + both Flitt credentials present) as an equally valid "payment step done" signal.
+2. **Bug report widget now defaults to "Feature request", not "Bug."** Max: most submissions were
+   feature ideas. One-line change (`BugReportWidget.tsx`'s initial `type` state and its `reset()`).
+3. **Payment method picker (Bank transfer / Cash) for manual "mark as paid."** `Payment.method`
+   already had these values in the schema (#197) but no UI ever asked — every hand-recorded payment
+   landed as generic `MANUAL`. Clicking "Paid" now opens "How was this paid?" instead of firing
+   immediately, everywhere that step exists: orders table (mobile card + desktop portal dropdown),
+   order detail page, wine-orders board/table/card flow-line (reusing its existing pending-confirm
+   pattern), and the abandoned-orders restore-and-pay flow. `CARD` is never offered — only a real
+   Flitt settlement sets that (`lib/payments/settle.ts`, unchanged). Threaded via a new optional
+   `method` field on `BookingStatusChange`/`WineOrderStatusChange` (`lib/statusWrite.ts`) through
+   `changeBookingStatus`/`changeWineOrderStatus` to `recordManualPayment`
+   (`lib/payments/manualPayment.ts`). Order detail page also now shows the method beside a done
+   "Paid" step ("Paid · Bank transfer") — a new `payments` include in that page's query, the live
+   settled/non-reversed row only.
+   **Bug caught during browser verification, fixed same session:** the method label wasn't
+   rendering on the order detail page at all — `FlowLine`'s steps come from `buildFlowLine`, whose
+   Paid step code is the `PAID` constant (uppercase), not the lowercase `'paid'` used by the
+   *dropdown's* own step list (`menuSteps()`) — two different namespaces that happen to look
+   similar. Fixed the comparison; confirmed live afterward.
+
+Verified live against the local dev server (dev DB, tenant "Staging Winery" — never production):
+watched the picker appear and commit on an orders-table row (`changeBookingStatus(...,
+{"kind":"paid","method":"BANK_TRANSFER","value":true})` in the server log), on a wine order
+(`changeWineOrderStatus(..., {"kind":"paid","method":"CASH","value":true})`), and on an abandoned
+booking's restore flow (cancelled before committing, to leave that test row alone). Confirmed the
+bug widget opens with "Feature request" pre-selected. Did not test the onboarding-banner fix
+against a live "Flitt-configured, no IBAN" tenant — no such tenant existed to click through; the
+fix is a straightforward boolean OR, covered by `tsc --noEmit` (0 errors) and code review.
+`tsc --noEmit` clean throughout.
+
+[[FeatureLog]] rows #205 (payment method picker), #206 (onboarding banner fix), #207 (bug widget
+default) added, all ✅ Done / Claude tested ✅ / user tested ❌ pending Max's own click-through.
+**Not committed or pushed** — Max hasn't asked for a commit this session; still on branch
+`staging` (unverified whether ahead of `e6a37a2`, the last chunk 14 push — check `git status`
+before committing).
+
+---
+
+## 2026-09-23 — Contact Roles chunk 14: close-out — vault writeups, the `createTenant()` fix, a blind audit
 
 > **STATE ON EXIT.**
 >
@@ -86,89 +134,7 @@ whether to run the optional blind review. Both answered yes.
 
 ---
 
-## 2026-09-23 — Contact Roles chunk 13: Playwright tests for the role-driven picker, replacing the guide-only specs
-
-> **STATE ON EXIT.**
->
-> - Branch **`staging`**, HEAD `80de9af` (Chunk 12's commit) when this session started — this
->   session's changes not yet committed or pushed (not asked for).
-> - **tsc 0** (unchanged). Parity 173/173 + 1109/1109 (unchanged). `test-order-contacts.ts` 36/36
->   (unchanged) — this chunk added tests, it didn't touch app code.
-> - New `tests/tier2-core-flows/contact-role-picker.spec.ts` (5 tests) and
->   `tests/tier2-core-flows/contact-orphan-safety.spec.ts` (1 test, the F2 proof), replacing
->   `company-guide-code.spec.ts` + `guide-picker.spec.ts`. All 6 new tests pass, each run twice,
->   confirmed no leftover rows in the dev DB directly (not just by re-passing).
->
-> **Next:** [[Plan-ContactRoles]] **Chunk 14** — close-out: vault writeups, the `createTenant()`
-> ContactRole-seeding gap, rewriting [[MaintenanceNotes]] #26, and the production cutover
-> pre-flight (§9c) before `staging` → `master`. Two unrelated issues found while running the full
-> `tests/tier2-core-flows/` suite were spawned as a separate background task rather than fixed
-> here — see below.
-
-Picked up via a pasted handoff prompt, verified against the actual repo before acting on it (per
-the prompt's own instruction not to trust it blindly) — branch, HEAD, and the "chunks 0–12 of 14
-done" claim all checked out exactly. Read the handoff's named files in order
-(`ClaudeInstructions.md`; `Plan-ContactRoles.md` §1/§2/Chunk 13/H11/H12/H13/H14/H19;
-`MaintenanceNotes.md`, skimmed — nothing chunk-13-specific; `SessionLog.md`'s exit state), then read
-the actual current code (`useContactSelection.ts`, `ContactPickerPopupView.tsx`,
-`contactResolution.ts`, `BookingForm.tsx`, `NewOrderForm.tsx`, `CompaniesClient.tsx`) and queried
-the dev DB directly for the Silk Road Journeys / Kakheti Wine Routes fixtures' actual current
-shape, rather than trusting the old specs' or the handoff's comments about them — both had drifted
-since Chunk 7/12.
-
-**Two real design changes found this way, not from the old specs:** the picker's title is now
-tenant-editable copy ("Who should we put on this booking?", not the old hardcoded "Who is bringing
-the group?"), and "I am not on this list" no longer falls back to a company-level contact — Contact
-Person is itself a per-order role now, so skipping it just leaves it blank. Also found: a matched
-person only fills the classic First/Last Name fields when the matched role IS Contact Person; a
-guide's own code fills the Guide role's own block instead. Recorded as new hurdle **H20**.
-
-Stated the concrete plan (two new spec files, what each covers, the file split) and got Max's
-go-ahead before writing any test code, per Rule 8.
-
-**`contact-role-picker.spec.ts`** — role-driven, against Silk Road Journeys (now 2 Contact Persons
-+ 2 Guides, not 1+2 as the old spec's comments assumed): codes off asks about each role in turn and
-fills the right fields per role (asserting the picker buttons' `aria-label`, H14), "not on this
-list" leaves a role blank, a wrong code is still rejected, and with codes on a person's own code
-skips the picker while a company code is accepted but the picker never opens — the whole file
-toggles the shared `person_codes_enabled` setting mid-run, so it's wrapped in
-`test.describe.serial()` to survive Playwright's default `fullyParallel` config, with the original
-setting value read once and restored in `afterAll`.
-
-**`contact-orphan-safety.spec.ts`** — the one Chunk 13's own checklist called out as what this
-design most needs: proves F2 (deleting a person leaves a past order's Contacts card reading from
-the snapshot, not a live join). Admin adds a throwaway guide to Kakheti Wine Routes (deliberately a
-company that already has people in both roles, not a fresh throwaway one — closer to real use, and
-rules out `NewOrderForm`'s auto-pick-if-exactly-one masking the actual thing under test), creates a
-real order picking them from the role dropdown, deletes them from the company, reloads the order —
-name still there.
-
-**Two real bugs found by actually running the new specs, not by writing them:** a URL-match regex
-that also matched the literal `/admin/orders/new` path (since "new" is alphabetic), so an
-unsubmitted form read as a created order; and a delete-confirmation race where checking the
-person's name had disappeared from the row proved nothing about whether the server call had
-actually finished (the row hides the name the instant "Delete" is clicked, client-side, before the
-request even starts) — fixed by waiting for the confirm row's own "Yes" button to disappear
-instead. Also found and worked around: running the whole test file (or the whole
-`tests/tier2-core-flows/` directory) at Playwright's default parallelism overloads the one
-`next dev` process badly enough that admin logins across unrelated spec files start timing out
-together — confirmed by re-running with `--workers=1` and getting clean, repeatable results both
-times.
-
-**Ran the full `tests/tier2-core-flows/` suite**, not just the new specs, since Chunk 12 touched
-shared seed/fixture data other tiers read (per the handoff's own suggestion). Found 3 pre-existing
-failures, none caused by this chunk: `booking-enhanced.spec.ts` and
-`company-nationality-tagging.spec.ts` both depend on a company named "Test Company # 1" that no
-longer exists in the dev DB, and `wine-catalogue-order.spec.ts` found that a freshly-abandoned wine
-order is written correctly (`abandonedAt` set, confirmed via direct query) but never appears on
-`/admin/abandoned`. Left the dev DB clean regardless — deleted the two stray `WineOrder` rows that
-spec's own cleanup routine couldn't find (same underlying bug). Spawned the abandoned-orders
-finding as a separate background task rather than investigating it here, since it's unrelated to
-Contact Roles.
-
-Vault updated: [[Plan-ContactRoles]] Chunk 13 marked ✅ Done with the full writeup, new hurdle H20
-added, §7's status table and resume line updated. [[FeatureLog]] Feature 202 row appended. **Not
-yet committed** — Max hasn't asked for a commit this session.
+## 2026-09-23 — Contact Roles chunk 13: Playwright tests for the role-driven picker (`contact-role-picker.spec.ts`, `contact-orphan-safety.spec.ts`), replacing the guide-only specs; found H20 (matched-person field-fill depends on role) and two test bugs along the way (a URL-match regex, a delete-confirm race).
 
 ---
 
