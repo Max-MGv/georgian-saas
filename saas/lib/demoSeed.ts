@@ -592,7 +592,12 @@ export async function seedDemoTenant(
   // would only drift from this one.
   const seedAccessCodes = slug !== DEMO_SLUG
 
-  const bookingCompanies: (BookingCompanySpec & { id: string })[] = []
+  // Each seeded person's id is kept alongside the company so the order-writing loops below can
+  // attribute a real OrderContact row to them, instead of just copying names onto the order's
+  // own denormalised columns and leaving `OrderContact` empty (a real gap found by a 2026-09-23
+  // blind audit — see [[Plan-ContactRoles]] Chunk 14 / [[KnownBugs]]).
+  type SeededPerson = { id: string; name: string; phone: string | null; email: string | null }
+  const bookingCompanies: (BookingCompanySpec & { id: string; contactPerson: SeededPerson; guidePeople: SeededPerson[] })[] = []
   for (const c of BOOKING_COMPANIES) {
     const row = await db.company.create({
       data: {
@@ -607,25 +612,32 @@ export async function seedDemoTenant(
     // contact and each representative are all 'contact_person' rows —
     // Plan-ContactRoles decision 2 folds "representative" into "contact
     // person". Guides are their own role, tagged on each PersonSpec.
-    await db.companyPerson.create({
+    const contactPersonRow = await db.companyPerson.create({
       data: {
         companyId: row.id, roleId: roleIdFor('contact_person'),
         name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
       },
     })
+    const guidePeople: SeededPerson[] = []
     for (const p of [...c.representatives, ...c.guides]) {
-      await db.companyPerson.create({
+      const personRow = await db.companyPerson.create({
         data: {
           companyId: row.id, roleId: roleIdFor(p.role), name: p.name,
           phone: p.phone ?? null, email: p.email ?? null,
           code: seedAccessCodes ? p.code : null,
         },
       })
+      if (p.role === 'guide') {
+        guidePeople.push({ id: personRow.id, name: p.name, phone: p.phone ?? null, email: p.email ?? null })
+      }
     }
-    bookingCompanies.push({ ...c, id: row.id })
+    bookingCompanies.push({
+      ...c, id: row.id, guidePeople,
+      contactPerson: { id: contactPersonRow.id, name: c.contactName, phone: c.contactPhone, email: c.contactEmail },
+    })
   }
 
-  const wineCompanies: (WineCompanySpec & { id: string })[] = []
+  const wineCompanies: (WineCompanySpec & { id: string; contactPerson: SeededPerson })[] = []
   for (const c of WINE_COMPANIES) {
     const row = await db.company.create({
       data: {
@@ -635,13 +647,16 @@ export async function seedDemoTenant(
         wineDiscountPercent: c.discount,
       },
     })
-    await db.companyPerson.create({
+    const contactPersonRow = await db.companyPerson.create({
       data: {
         companyId: row.id, roleId: roleIdFor('contact_person'),
         name: c.contactName, phone: c.contactPhone, email: c.contactEmail, code: null,
       },
     })
-    wineCompanies.push({ ...c, id: row.id })
+    wineCompanies.push({
+      ...c, id: row.id,
+      contactPerson: { id: contactPersonRow.id, name: c.contactName, phone: c.contactPhone, email: c.contactEmail },
+    })
   }
 
   await db.menuItem.createMany({
@@ -739,6 +754,26 @@ export async function seedDemoTenant(
         ? { confirmedAt: null, completedAt: null, invoiceSentAt: null, paidAt: null, abandonedAt: createdAt }
         : bookingDates(stage, createdAt, date)
 
+      // OrderContact rows — company bookings only, mirroring what the real booking form/admin
+      // screens write (decision 4: `Order.name/surname/phone/email` and the `contact_person`
+      // OrderContact row must agree, so this uses the SAME person the columns above are copied
+      // from, not a separately-rolled name). A guide row is added too when the company has one,
+      // since that is exactly the attribution the picker exists to record.
+      const contactRows: { tenantId: string; roleId: string; personId: string; nameSnapshot: string; phoneSnapshot: string | null; emailSnapshot: string | null }[] = []
+      if (company) {
+        contactRows.push({
+          tenantId: tid, roleId: contactPersonRole.id, personId: company.contactPerson.id,
+          nameSnapshot: company.contactPerson.name, phoneSnapshot: company.contactPerson.phone, emailSnapshot: company.contactPerson.email,
+        })
+        if (company.guidePeople.length > 0) {
+          const guide = pick(company.guidePeople)
+          contactRows.push({
+            tenantId: tid, roleId: guideRole.id, personId: guide.id,
+            nameSnapshot: guide.name, phoneSnapshot: guide.phone, emailSnapshot: guide.email,
+          })
+        }
+      }
+
       const orderData = {
           tenantId: tid, stage, bookingType, visitType, date,
           timeSlot: pick(TIME_SLOTS), guestCount,
@@ -758,6 +793,7 @@ export async function seedDemoTenant(
           registrationFeeSnapshot: priced?.registrationFee ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
+          contacts: contactRows.length ? { create: contactRows } : undefined,
       }
       orderWrites.push(() => db.order.create({ data: orderData }))
     }
@@ -812,6 +848,14 @@ export async function seedDemoTenant(
           discountPercent: buyer.discount, totalAmount, stage, createdAt,
           ...dates,
           wineItems: { create: items },
+          // Same reasoning as the booking loop above — the contact_person row must mirror the
+          // `contactName/Phone/Email` columns written just above, not a separately-rolled name.
+          contacts: {
+            create: [{
+              tenantId: tid, roleId: contactPersonRole.id, personId: buyer.contactPerson.id,
+              nameSnapshot: buyer.contactPerson.name, phoneSnapshot: buyer.contactPerson.phone, emailSnapshot: buyer.contactPerson.email,
+            }],
+          },
       }
       wineWrites.push(() => db.wineOrder.create({ data: wineData }))
     }

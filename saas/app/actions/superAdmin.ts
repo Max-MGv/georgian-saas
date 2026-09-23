@@ -128,6 +128,15 @@ export async function createTenant(data: {
       db.siteContent.create({ data: { key, section: 'legal', label: LEGAL_LABELS[key], locale: 'ka', value: LEGAL_CONTENT_KA[key], tenantId: tenant.id } }),
     ])
   )
+  // Seed the two system ContactRole rows every tenant is expected to have
+  // (Plan-ContactRoles Chunk 0/1 — demoSeed.ts throws if either is missing).
+  // Same values the Chunk 1 migration back-filled onto every pre-existing tenant.
+  await db.contactRole.createMany({
+    data: [
+      { tenantId: tenant.id, key: 'contact_person', labelEn: 'Contact Person', labelKa: 'საკონტაქტო პირი', scope: 'PER_ORDER', appliesTo: 'BOTH', sortOrder: 10, isActive: true, isSystem: true },
+      { tenantId: tenant.id, key: 'guide', labelEn: 'Guide', labelKa: 'გიდი', scope: 'PER_ORDER', appliesTo: 'BOOKING', sortOrder: 20, isActive: true, isSystem: true },
+    ],
+  })
   revalidatePath('/super-admin/tenants')
   return { id: tenant.id }
 }

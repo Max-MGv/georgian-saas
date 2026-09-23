@@ -120,11 +120,13 @@ withTenantDb(tenantId, tx => ...)
 | SiteContent | ✅ direct | simple | same |
 | Setting | ✅ direct | simple | same |
 | Price | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) |
-| CompanyGuide | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) — Plan-CompanyGuidesAndReps |
-| CompanyRepresentative | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) — Plan-CompanyGuidesAndReps |
 | OrderMasterclass | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | OrderExtra | ❌ via Order | JOIN | EXISTS (Order where tenantId = ...) |
 | WineOrderItem | ❌ via WineOrder | JOIN | EXISTS (WineOrder where tenantId = ...) |
+| ContactRole | ✅ direct | simple | same — Plan-ContactRoles Chunk 2. Own `tenantId`; a role belongs to the winery, not to one company |
+| CompanyPerson | ❌ via Company | JOIN | EXISTS (Company where tenantId = ...) — Plan-ContactRoles Chunk 2, same shape as `Price`. Replaces `CompanyGuide`/`CompanyRepresentative` (dropped, Chunk 1) |
+| OrderContact | ✅ direct | simple | same — Plan-ContactRoles Chunk 2. Polymorphic over `Order`/`WineOrder` (exactly one FK set), carries its own `tenantId` rather than joining through either parent, same shape as `OrderEvent`/`Payment` |
+| InvoiceSent | ✅ direct | simple | same — Feature 203 |
 | Tenant | N/A | no RLS | Read by proxy.ts as superuser before tenant context exists |
 | BugReport | ✅ direct, nullable | **no RLS, deliberate** | Same treatment as `Tenant`, not an oversight — the super-admin bug-report inbox must read every tenant's reports (plus anonymous public-site submissions with `tenantId = null`) in one query, which a `tenant_isolation` policy would block. Access control is enforced entirely in server actions instead: `requireSuperAdmin()` gates the inbox (read/write all), a narrower "must be this admin's own report" filter (`submitterUserId = current user`) gates the tenant-admin status view. Not in `setup-rls.ts`'s `writableTables`. See `Plan-BugReportWidget.md` Phase 1. |
 
@@ -136,7 +138,7 @@ withTenantDb(tenantId, tx => ...)
 CREATE ROLE app_user NOLOGIN;
 GRANT app_user TO postgres;           -- allows postgres to SET ROLE app_user
 GRANT USAGE ON SCHEMA public TO app_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON <all 14 tables> TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON <all 21 tables in setup-rls.ts's writableTables> TO app_user;
 GRANT SELECT ON "Tenant" TO app_user; -- read-only on Tenant
 ```
 

@@ -470,11 +470,13 @@ fields a match fills depends on which role matched, not just on "was something m
 | **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ✅ Done |
 | **12** | Demo seed, onboarding, test fixtures | ✅ Done (2026-09-23) |
 | **13** | Tests | ✅ Done (2026-09-23) |
-| **14** | Vault + close-out | ⬜ Not started |
+| **14** | Vault + close-out | 🚧 In progress (2026-09-23) |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–13 (and 11a) all done (2026-09-23). Chunk 14 is next.
+**Overall resume point:** Chunks 0–13 (and 11a) all done (2026-09-23). Chunk 14's vault writeups,
+the `createTenant()` fix, and the blind-audit launch are done; the production pre-flight and the
+`staging` → `master` merge itself are still pending Max's go-ahead.
 **Chunk 11a done** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
 spotted the Contact Person's info rendering twice on a real order page. Investigation confirmed
 `Order.name/surname/phone/email` are pure legacy weight for company bookings now that Chunk 9
@@ -1854,23 +1856,68 @@ Road Journeys' company order shows Phone/Email once, under Contacts, correctly l
 > on the first booking.
 
 
-**Status:** ⬜ Not started
+**Status:** 🚧 In progress (2026-09-23)
 
-- [ ] `SessionLog.md`, `FeatureLog.md`, `Roadmap.md` per Rules 1 and 4
-- [ ] `Features/Feature NNN - Contact Roles.md` per Rule 9
-- [ ] **Decide what to do about `createTenant()` never seeding the two system `ContactRole` rows
-      for a new tenant** (found in Chunk 12, deferred — see that chunk's checklist). A one-line
-      fix (create both roles right after `db.tenant.create()`, same shape as the legal-content
-      seed a few lines below it) if Max wants it closed before this plan is called done.
-- [ ] **Rewrite [[MaintenanceNotes]] #26** — the two-places-resolve-codes coupling is gone. The
-      new couplings to document: the `Order.name/surname` mirror (decision 4), the snapshot rule
-      that makes person deletion safe, and **H18** (`setup-rls.ts`'s two lists)
-- [ ] `RLS-Architecture.md` table list extended; guides/reps rows removed (deferred from Chunk 2)
-- [ ] Mark [[Plan-CompanyGuidesAndReps]] superseded; close [[KnownBugs]] #55, #56, #57
-- [ ] Retire `Features/Feature 185` and `Feature 201` as history
-- [ ] Optional, and Max often asks for it: a **blind second opinion** on the finished diff — a
-      context-free subagent review with the vault fenced off, so it cannot read these
-      conclusions back to us
+- [x] `SessionLog.md` (this session's entry), `FeatureLog.md`, `Roadmap.md` per Rules 1 and 4
+- [x] `Features/Feature 202 - Contact Roles.md` per Rule 9
+- [x] **`createTenant()` fixed** — Max chose to close it now rather than defer. One line added
+      right after `db.tenant.create()` in `app/actions/superAdmin.ts`, same shape as the
+      legal-content seed a few lines below it: seeds the `contact_person`/`guide` `ContactRole`
+      rows with the same literal values the Chunk 1 migration back-filled onto every
+      pre-existing tenant. `tsc` unchanged at 0. Not independently browser-verified (would need
+      a super-admin login Claude does not type) — the migration's own identical `INSERT` is the
+      precedent that the values are valid.
+- [x] **Rewrote [[MaintenanceNotes]] #26** — replaced the two-resolvers-disagree story (gone,
+      collapsed into one resolver in Chunk 3) with the three couplings that actually exist now:
+      the `Order.name/surname` mirror (decision 4, `syncOrderContactPerson()`), the
+      `OrderContact` snapshot/`SetNull` guarantee that makes person-deletion safe, and H18
+      (`setup-rls.ts`'s two lists).
+- [x] `RLS-Architecture.md` table list extended — `CompanyGuide`/`CompanyRepresentative` rows
+      removed, `ContactRole`/`CompanyPerson`/`OrderContact` added. Found two more pre-existing
+      gaps in passing while getting the GRANT count right (18 by hand count, 21 actual —
+      `InvoiceSent` was also missing and got added here; `Payment`/`DemoEvent`/`OrderEvent` are
+      missing too but out of scope for this plan, spawned as a separate follow-up task).
+- [x] [[Plan-CompanyGuidesAndReps]] was already marked superseded (done when this plan started) —
+      no further edit needed. Retired `Features/Feature 185` and `Feature 201` with the same
+      superseded-banner pattern, folded into the new Feature 202 note as history.
+- [ ] Close [[KnownBugs]] #55, #56, #57 — **#55 already fully resolved. #56 and #57 both
+      correctly say "closes fully when staging reaches master" already; left as-is, to be
+      flipped to fully Resolved only once the real merge happens, not before.**
+- [x] **Blind second opinion** — launched as a background subagent, `vault/`, git log and commit
+      messages explicitly fenced off, given the brief and the ten decisions inline rather than
+      by reading the plan. **Result: 9 of 10 decisions and 3 of 4 "don't break" checks CONFIRMED
+      solid** (roles-as-dimension-table, the one `CompanyPerson`/`OrderContact` collapse, wine
+      orders getting the full treatment, `person_codes_enabled` default-off/tenant-wide, no order
+      backfill with company data carried across codes-verbatim, the `(orderId, roleId)`/
+      `(wineOrderId, roleId)` DB-level uniqueness, the one shared resolver/picker/hook across all
+      four forms, the delete-loses-link-not-facts snapshot guarantee, no access code ever reaching
+      an unauthenticated client, the server-side gate surviving a direct crafted-payload bypass
+      attempt, and admin components never over-fetching codes when the setting is off). **One real
+      defect found, fixed the same day — see below and [[KnownBugs]] #59.**
+- [x] **[[KnownBugs]] #59 — the audit's one real finding, fixed same day.** `lib/demoSeed.ts`
+      wrote `Order`/`WineOrder`'s denormalised contact columns directly from the seed spec but
+      never wrote a matching `OrderContact` row — a fourth, silent write site decision 4 didn't
+      account for. Confirmed on the dev DB (0 of 125 demo company bookings, 0 of 45 demo wine
+      orders had any `OrderContact` row before the fix) — user-visible on the public sales demo,
+      not just a dev gap. Fixed by capturing each seeded person's id alongside the company/
+      wine-company spec and attaching a nested `contacts: { create: [...] }` to both order-writing
+      loops, using the SAME person the denormalised columns are copied from (so the two can't
+      drift, per decision 4). Re-seeded the dev demo tenant for real to verify, not just typechecked:
+      135/135 company bookings now carry a `contact_person` row (135/135 also carry a `guide` row —
+      every company has one since chunk 12), 45/45 wine orders carry one, 258/258 individual
+      bookings correctly carry none, 0 dangling `personId`s, a spot-checked order's
+      `Order.name/surname/phone/email` match its `OrderContact` snapshot exactly. `tsc` 0, parity
+      173/173+1109/1109, `test-order-contacts.ts` 36/36, `audit-money.ts` clean — all unchanged.
+- [x] **§9c's five production pre-flight checks — run and clean.** Initially blocked by this
+      session's own sandbox refusing all production-database reads at the tooling level; Max
+      dropped the session to default permission mode so the attempt surfaced as a normal approval
+      prompt instead, approved it, and the checks ran cleanly against the real production DB:
+      **0** duplicate access codes across `Company`/`CompanyGuide`/`CompanyRepresentative` (and 0
+      cross-source collisions), **0** companies with a NULL `tenantId`, **0** orders with a
+      `guideId` set. RLS (check 1) isn't checkable until right after `migrate deploy` — the three
+      new tables don't exist on production yet. Production volume for context: 16 companies, 393
+      orders, 2 tenants.
 - [ ] Verify on `staging`, then get Max's go-ahead for the `staging` → `master` merge (Rule 0)
 
-**Resume point:** —
+**Resume point:** §9c is clear. Only the `staging` → `master` merge itself remains, and it needs
+Max's explicit go-ahead separately from everything else in this chunk (Rule 0). Everything else in this chunk is done.

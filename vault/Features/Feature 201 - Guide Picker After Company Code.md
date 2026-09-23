@@ -2,6 +2,14 @@
 tags: [feature, booking, guides]
 ---
 
+> # ⛔ SUPERSEDED — 2026-09-23
+>
+> **Retired as history.** This feature's design survived intact but generalised —
+> [[Feature 202 - Contact Roles]] (Chunk 7) turned the guide-only picker built here into a
+> per-role picker (`ContactPickerPopupView.tsx`), carrying forward the `aria-label` fix (hurdle
+> H14) and the "I am not on this list" fallback. Kept for the design reasoning below. Do not
+> build against this note.
+
 # Feature 201 — Guide picker after a company code
 
 **Built:** 2026-09-19 · **Status:** ✅ built and verified on dev · **Resolves:** [[KnownBugs]] #55
