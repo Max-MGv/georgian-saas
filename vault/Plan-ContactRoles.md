@@ -418,24 +418,23 @@ A `null` in the `polname` column is the bug.
 | **8** | Both wine order forms (public + admin manual) | ✅ Done |
 | **9** | Write path — `OrderContact` rows + snapshots | ✅ Done |
 | **10** | Admin order surfaces — finally display contacts | ✅ Done |
-| **11** | Emails — invoice recipient from roles | ⬜ Not started |
+| **11** | Emails — invoice recipient from roles | ✅ Done |
 | **12** | Demo seed, onboarding, test fixtures | ⬜ Not started |
 | **13** | Tests | ⬜ Not started |
 | **14** | Vault + close-out | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–10 all done (2026-09-23).
-**Chunk 11 next — emails**, where the invoice recipient moves from `company.representatives`
-(gone) to people in billing-capable roles. `sendOrderInvoice` is still down; all nine of
-`app/actions/orders.ts`'s remaining type errors are inside it.
+**Overall resume point:** Chunks 0–11 all done (2026-09-23).
+**Chunk 12 next — demo seed, onboarding, test fixtures.** All 22 remaining type errors are in
+files that chunk owns.
 
-**31 type errors remain**, none in a file Chunks 7–10 own:
-`app/actions/orders.ts` (9, **all nine in `sendOrderInvoice`** — Chunk 11),
-`scripts/backfill-test-fixtures.ts` (8, Chunk 12), `app/admin/onboarding/page.tsx` (5,
-Chunk 12), `app/actions/onboarding.ts` (5, Chunk 12), `lib/demoSeed.ts` (4, Chunk 12).
+**22 type errors remain**, all Chunk 12's:
+`scripts/backfill-test-fixtures.ts` (8), `app/admin/onboarding/page.tsx` (5),
+`app/actions/onboarding.ts` (5), `lib/demoSeed.ts` (4).
 
-Running total: 65 → 54 → 49 (Chunk 7) → 43 (Chunk 8) → 40 (Chunk 9) → 31 (Chunk 10).
+Running total: 65 → 54 → 49 (Chunk 7) → 43 (Chunk 8) → 40 (Chunk 9) → 31 (Chunk 10) →
+22 (Chunk 11).
 
 *(This plan previously filed `orders.ts` under "Chunks 9/11". Opening it showed all nine
 errors are the invoice recipient's `company.representatives` include — squarely Chunk 11.
@@ -1543,14 +1542,46 @@ partially. The test order was left in the dev database (same call as Chunk 9's).
 
 ## Chunk 11 — Emails
 
-**Status:** ⬜ Not started · **Read H1**
+**Status:** ✅ Done (2026-09-23) · tsc 31 → 22 (all nine `orders.ts` errors, all in
+`sendOrderInvoice`, gone) · parity 1107/1107 (unchanged) · RLS 19/19 · resolver 26/26 ·
+write path 36/36 (unchanged — read-path chunk, correctly moved nothing)
 
-- [ ] `invoiceRecipientOptions()` in `OrdersTable.tsx` reads people in billing-capable roles
-      instead of `company.representatives`
-- [ ] `sendOrderInvoice()`'s server-side re-validation of a client-sent recipient follows
-- [ ] No DB calls inside `lib/emails/templates/*` — [[MaintenanceNotes]] #23
-- [ ] Any new email goes through `sendTenantEmail()`, never Resend directly — #11
-- [ ] ⚠️ This is the file whose behaviour the old plan got wrong **twice** (H1). Read it first
+- [x] **What "billing-capable roles" turned out to mean.** Not a schema flag — Max's call:
+      *"contact person is the company representative, and they are the target for the email.
+      but pass the role and dont hardcode anything... keeping it flexible."* Clarified further:
+      the flexibility wanted is for a **future superadmin-level** setting, not a per-tenant admin
+      toggle now. Built as one constant instead — `INVOICE_RECIPIENT_ROLE_KEYS` in
+      `lib/contactResolution.ts`, currently `['contact_person']` — plus one shared function,
+      `invoiceRecipientsFor(tenantId, companyIds[])`, that both call sites use. Changing which
+      role(s) qualify is a one-line edit to the array; the plural case ("contact person + x")
+      falls out of the same array for free. The tenant-configurable version of this is recorded
+      as a future want, not built: `vault/SuperAdminPlans/InvoiceRecipientRoles.md`
+- [x] `invoiceRecipientOptions()` in `OrdersTable.tsx` reads `order.invoiceRecipients` (people in
+      `INVOICE_RECIPIENT_ROLE_KEYS`, batched per company by `orders/page.tsx`) instead of the
+      dropped `company.representatives`
+- [x] `sendOrderInvoice()`'s server-side re-validation of a client-sent recipient now calls
+      `invoiceRecipientsFor()` too, rather than trusting the client-sent email — same crash as
+      Chunk 10's `orders/page.tsx` (`company: { include: { representatives: true } }`), found in
+      the same file H1 already flagged as wrong twice
+- [x] No DB calls inside `lib/emails/templates/*` — confirmed unaffected, grepped clean
+- [x] No new email added, so `sendTenantEmail()` / #11 doesn't apply this chunk
+
+### A real bug the live check caught — duplicate recipient options
+
+Silk Road Journeys' test order (Chunk 10's) has its Contact Person's email **identical** to the
+order's own guest email — she is who was picked. `invoiceRecipientOptions()` offered both
+anyway: "Guest's own email" and "Keti Dolidze", same address twice, and React logged a duplicate-
+`key` console error (`<option key={opt.email}>` collided). Fixed by de-duplicating on email
+inside `invoiceRecipientOptions()` itself — one option per distinct address, whichever label got
+there first. Re-verified live: the dropdown now shows exactly two entries (Guest / Mariam
+Dolidze), not three.
+
+### Verified live, down to the DOM
+
+Selecting a company order's "Send invoice by email" button now shows a real dropdown: both of
+Silk Road Journeys' Contact Persons appear as separate options (the plural case Max asked for),
+each with its own email. An individual (no-company) order correctly shows no dropdown at all —
+just the guest's own email, matching the existing `length > 1 ? <select> : <p>` branch.
 
 **Resume point:** —
 

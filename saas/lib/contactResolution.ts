@@ -382,3 +382,45 @@ export async function companyLevelContactsFor(tenantId: string, companyId: strin
       }))
   })
 }
+
+/**
+ * Role keys whose people are offered as invoice-email recipients (Plan-ContactRoles Chunk 11).
+ *
+ * Max's call, 2026-09-23: *"contact person is the company representative, and they are the
+ * target for the email. but pass the role and dont hardcode anything... keeping it flexible."*
+ * A single constant, checked in one place, **is** that flexibility for now — swapping which
+ * role(s) receive invoices, or adding a second, is a one-line change here. A per-tenant version
+ * of this (a superadmin setting) is a real future want, not built yet — see
+ * `vault/SuperAdminPlans/InvoiceRecipientRoles.md`.
+ */
+export const INVOICE_RECIPIENT_ROLE_KEYS: readonly string[] = ['contact_person']
+
+export type InvoiceRecipient = { id: string; companyId: string; name: string; email: string }
+
+/**
+ * Every active person, across the given companies, in an invoice-recipient role, with an email
+ * on file. Takes an array and is batched by company id so a list screen (`orders/page.tsx`)
+ * makes one query for every order on the page rather than one per row — the same shape as
+ * `getDistinctOrderNationalities`'s "only show what's in use" batching.
+ *
+ * Never selects `code` — a credential, and this shape reaches a client component (H17 / F3/F4).
+ */
+export async function invoiceRecipientsFor(
+  tenantId: string,
+  companyIds: string[]
+): Promise<InvoiceRecipient[]> {
+  if (companyIds.length === 0) return []
+  return withTenantDb(tenantId, async tx => {
+    const people = await tx.companyPerson.findMany({
+      where: {
+        companyId: { in: companyIds },
+        isActive: true,
+        email: { not: null },
+        role: { tenantId, key: { in: [...INVOICE_RECIPIENT_ROLE_KEYS] } },
+      },
+      select: { id: true, companyId: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    })
+    return people.map(p => ({ id: p.id, companyId: p.companyId, name: p.name, email: p.email! }))
+  })
+}

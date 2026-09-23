@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–10 OF 14 BUILT
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–11 OF 14 BUILT
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -414,7 +414,10 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
 - [x] Chunk 10 — admin order surfaces; the Contacts card, the print sheet's Guide column, the
       `/admin/orders` crash fix (F4), and the admin booking form's new per-role pickers all
       verified live, the last one down to the database via `inspect-order-contacts.ts`
-- [ ] Chunk 11 — emails, invoice recipient from roles
+- [x] Chunk 11 — emails; invoice recipient moved off the dropped `company.representatives` onto
+      one shared `invoiceRecipientsFor()`, driven by a single role-key constant rather than a
+      new schema flag (Max's call — the tenant-configurable version is a recorded future want,
+      not built: `vault/SuperAdminPlans/InvoiceRecipientRoles.md`)
 - [ ] Chunk 12 — demo seed, onboarding, fixtures
 - [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge

@@ -2,6 +2,7 @@
 
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
+import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, toMajor, type Tetri } from '@/lib/money'
@@ -353,9 +354,9 @@ export async function sendOrderInvoice(
   orderId: string,
   customMessage: string,
   locale: 'en' | 'ka' = 'ka',
-  // Lets the admin pick a company Representative's email as the recipient instead of the
-  // order's own (Plan-CompanyGuidesAndReps Chunk 9) — falls back to order.email when omitted.
-  // Re-checked against the order's own company's representatives below, not trusted as-is.
+  // Lets the admin pick a company person's email as the recipient instead of the order's own
+  // (Plan-ContactRoles Chunk 11) — falls back to order.email when omitted. Re-checked against
+  // lib/contactResolution.ts's invoiceRecipientsFor() below, not trusted as-is.
   recipientEmail?: string
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
@@ -365,7 +366,7 @@ export async function sendOrderInvoice(
       tx.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
-          company: { include: { representatives: true } },
+          company: { select: { id: true, name: true, identificationCode: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
         },
@@ -375,8 +376,8 @@ export async function sendOrderInvoice(
     if (!order) return { error: 'Order not found.' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
-      const validRep = order.company?.representatives.some(r => r.email === recipientEmail)
-      if (!validRep) return { error: 'That recipient is not valid for this order.' }
+      const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []
+      if (!eligible.some(p => p.email === recipientEmail)) return { error: 'That recipient is not valid for this order.' }
       recipient = recipientEmail
     }
     if (!recipient) return { error: 'This order has no email address.' }

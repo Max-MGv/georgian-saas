@@ -6,6 +6,7 @@ import { BOOKING_STAGES } from '@/lib/statusFlow'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { getDistinctOrderNationalities } from '@/app/actions/orders'
+import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { DEFAULT_INVOICE_MESSAGE_EN, DEFAULT_INVOICE_MESSAGE_KA } from '@/lib/emails/templates/invoiceEmailTemplate'
 import { requireBookingModule } from '@/lib/requireModule'
 import { headers } from 'next/headers'
@@ -178,6 +179,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     orderBy: { date: 'desc' },
   })) : []
 
+  // Invoice-email recipients, one query for every company on the page rather than one per
+  // order (Plan-ContactRoles Chunk 11) — batched the same way getDistinctOrderNationalities is.
+  const invoiceRecipients = await invoiceRecipientsFor(
+    tenantId,
+    [...new Set(orders.map(o => o.companyId).filter((id): id is string => id != null))]
+  )
+  const invoiceRecipientsByCompany = new Map<string, typeof invoiceRecipients>()
+  for (const r of invoiceRecipients) {
+    const list = invoiceRecipientsByCompany.get(r.companyId) ?? []
+    list.push(r)
+    invoiceRecipientsByCompany.set(r.companyId, list)
+  }
+
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)
 
   // ── Revenue strip ─────────────────────────────────────────────────
@@ -288,6 +302,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             foodNotes: o.foodNotes,
             nationalities: o.nationalities,
             company: o.company ? { name: o.company.name, identificationCode: o.company.identificationCode } : null,
+            invoiceRecipients: (o.companyId ? invoiceRecipientsByCompany.get(o.companyId) : undefined)
+              ?.map(r => ({ id: r.id, name: r.name, email: r.email })) ?? [],
             requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(l => ({
               name: l.masterclassItem.name,

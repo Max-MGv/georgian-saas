@@ -8,6 +8,66 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-23 (later) — Contact Roles chunk 11: invoice recipients, without a schema change
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**. Chunk 11 not yet committed — see note below.
+> - **22 TypeScript errors** (was 31), all in Chunk 12's four files. Running total
+>   65 → 54 → 49 → 43 → 40 → 31 → 22.
+> - The "Send Invoice" email button's recipient dropdown works again, verified live.
+> - RLS 19/19 · resolver 26/26 · write path 36/36 (unchanged) · parity 1107/1107 (unchanged).
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, test fixtures. All 22
+> remaining type errors are in files that chunk owns; `staging.vineworks.ge` comes back once it
+> lands.
+
+### What "billing-capable roles" turned out to mean
+
+The plan's own three-bullet Chunk 11 stub didn't say. First pass proposed a real schema flag —
+`ContactRole.canReceiveInvoices`, a migration, an admin toggle. Max's actual answer was
+simpler and different: *"contact person is the company representative, and they are the target
+for the email. but pass the role and dont hardcode anything... keeping it flexible... in case
+another role becomes the destination, or plural."* And then, once it was clear the first
+proposal had over-read "flexible" as a tenant-admin-facing control: *"by keeping it flexible i
+meant it for us as superadmins... for normal admins, just pass the contact person as the
+default... keep it simple in the code to change."*
+
+Built accordingly: one exported constant, `INVOICE_RECIPIENT_ROLE_KEYS` (currently
+`['contact_person']`), and one shared function, `invoiceRecipientsFor()`, both in
+`lib/contactResolution.ts`. `orders/page.tsx` batches it once per page load across every company
+on the page (not per order); `sendOrderInvoice()` calls it again server-side to re-validate a
+client-sent recipient rather than trusting it — the exact same crash Chunk 10 fixed in
+`orders/page.tsx` (`company: { include: { representatives: true } }`) was still sitting in this
+file too, which is the second time H1's warning about this exact file proved right.
+
+The superadmin-configurable version of "flexible" is recorded, not built:
+`vault/SuperAdminPlans/InvoiceRecipientRoles.md` — a new folder, per Max's ask, for platform-side
+feature ideas that aren't scheduled.
+
+### A real bug the live check caught
+
+Silk Road Journeys' Chunk-10 test order has its Contact Person's email identical to the order's
+own guest email (she was who got picked). The recipient dropdown offered both anyway — same
+address twice — and React logged a duplicate-`key` console error on the `<option>` list.
+De-duplicated by email inside `invoiceRecipientOptions()`. Caught only because verification went
+all the way to actually opening the dropdown and reading its options, not just checking `tsc`.
+
+### Verified live, down to the DOM
+
+The desktop table layout needed a wider viewport than the pane's default, and the resize/click
+tooling had enough coordinate friction in this session that direct DOM inspection
+(`document.querySelectorAll` + `.click()` + reading `<option>` text) was faster and more
+reliable than screenshot-driven clicking — used here for verification only, not to implement
+anything. Confirmed: a company order's dropdown lists each eligible Contact Person as a separate
+option (Silk Road Journeys has two — the plural case Max asked about), de-duplicated against the
+guest email; an individual order with no company shows no dropdown at all, just the guest's own
+address, unchanged.
+
+**Not committed.** Ready for `git add` + commit + push to `staging` once confirmed.
+
+---
+
 ## 2026-09-23 — Contact Roles chunk 10: admin order surfaces, and F1 finally reaches the admin
 
 > **STATE ON EXIT.**
