@@ -18,6 +18,7 @@ this order.**
 | 1 | **[[Dependencies]]** | 🔴 **Read before touching money columns.** The blast radius: which files break, which break loudly, which break silently. Written before any code changed. |
 | 2 | [[Definitions]] | ✅ The vocabulary that stops the errors we found on 2026-09-18 recurring: what a row in `Order` actually means, what "revenue" counts, and the grain rules. |
 | 3 | [[Research-OrderStatusPatterns]] | How Shopify / Magento / Saleor / Medusa / WooCommerce model order status. The grounding for keeping enums instead of status tables. |
+| 4 | [[Reference-SnapshotVsLive]] | 📌 **Look-up reference, not a plan.** Table by table: which fields are live pointers, which are frozen snapshots, which are both — and what happens if you edit one. Written 2026-09-23 alongside the `InvoiceSent` fix; update it whenever a new field could plausibly be either. |
 
 **Related, outside this folder:**
 - `vault/Plan-StatusModel.md` — the status redesign that led here. Chunks 1–5. Its chunk 5 (enums + milestone dates) is the shape this work builds on.

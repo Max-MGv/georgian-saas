@@ -491,6 +491,9 @@ const en: Translations = {
   'orderDetail.contacts.title': 'Contacts',
   'orderDetail.contacts.none': 'No contacts recorded.',
 
+  'orderDetail.invoiceHistory.title': 'Invoice History',
+  'orderDetail.invoiceHistory.none': 'No invoices sent yet.',
+
   'orderDetail.guestBreakdown.title': 'Guest Breakdown & Dishes',
   'orderDetail.guestBreakdown.noTiers': 'No price tiers found for {name}.',
   'orderDetail.guestBreakdown.noTiersDetail': 'Guest counts cannot affect the total without rates.',
@@ -1733,6 +1736,10 @@ const ka: Translations = {
   // Drafted, not native-reviewed (Plan-ContactRoles) — flag for Max.
   'orderDetail.contacts.title': 'კონტაქტები',
   'orderDetail.contacts.none': 'კონტაქტები არ არის ჩაწერილი.',
+
+  // Drafted, not native-reviewed — flag for Max.
+  'orderDetail.invoiceHistory.title': 'ინვოისის ისტორია',
+  'orderDetail.invoiceHistory.none': 'ინვოისი ჯერ არ გაგზავნილა.',
 
   'orderDetail.guestBreakdown.title': 'სტუმრების დაყოფა და კერძები',
   'orderDetail.guestBreakdown.noTiers': '{name}-ს ფასების კატეგორია არ მოიძებნა.',

@@ -40,6 +40,10 @@ async function main() {
     // company), CompanyPerson is JOIN-to-Company like Price, and OrderContact carries its
     // own tenantId like OrderEvent despite being a child of Order/WineOrder.
     'ContactRole', 'CompanyPerson', 'OrderContact',
+    // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
+    // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
+    // child of Order. See MaintenanceNotes on why this exists.
+    'InvoiceSent',
     // Demo analytics (2026-09-12). Only ever holds the demo tenant's rows, and
     // the server action refuses any other tenant — but it carries a tenantId and
     // goes through the same GRANT + policy as everything else, because a table
@@ -89,7 +93,7 @@ async function main() {
     //
     // Both tenantId columns are nullable, and NULL compares as NULL — never true — so a row
     // written without one is invisible to every tenant. The write path must always set it.
-    'ContactRole', 'OrderContact',
+    'ContactRole', 'OrderContact', 'InvoiceSent',
   ]
 
   for (const t of tenantedTables) {

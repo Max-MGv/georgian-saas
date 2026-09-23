@@ -981,3 +981,43 @@ crafted request cannot ask for it. **Never change that to a spread.** Admin scre
   Playwright traps and journeys: [[Playwright/Notes-ContactRoles]].
 
 ---
+
+## 31. `InvoiceSent` is the one place an invoice's actual content survives — write through it, don't rebuild it from the live order
+
+**What the dependency is:**
+`sendOrderInvoice()` (`saas/app/actions/orders.ts`) builds the invoice email **live, at send
+time**, from the order's *current* data — current price, current guest counts, current
+masterclass lines. That was the only behavior until 2026-09-23: nothing about what was actually
+billed was ever saved, only `Order.invoiceSentAt`, a bare timestamp with no content. Edit the
+order's price after sending and reprint/resend, and there was no way to tell what the first send
+actually said.
+
+**The fix:** `InvoiceSent`, an append-only table — one row per send, never updated — recording
+the recipient, amount, guest/visit breakdown, line items, custom message and locale exactly as
+they were at that moment. A resend after a correction is its own new row, matching `Payment`'s
+shape for money actually *received*; this is the equivalent for money actually *billed*. Full
+reasoning and the field-by-field rationale: [[DataModel/Reference-SnapshotVsLive]].
+
+**What this means in practice:**
+- If you add a second way to send or regenerate an invoice (a bulk-send feature, a "resend from
+  the orders list" shortcut, anything that calls `sendInvoiceEmail()`), write an `InvoiceSent`
+  row alongside it. Don't let a second call site rebuild the email from the live order and skip
+  the snapshot — that's exactly the shape `MaintenanceNotes` #22 and #26 warn about: one job,
+  implemented twice, drifting silently.
+- **Don't update an `InvoiceSent` row after the fact.** If a bug is found in what was recorded,
+  fix the write path and let future sends be correct — editing a snapshot row defeats the reason
+  it exists.
+- The tenant's banking details (IBAN, bank name, recipient name) are deliberately **not**
+  snapshotted here — they're the winery's own identity, essentially static, and duplicating them
+  on every row would be low-value bulk. If banking details ever became genuinely
+  per-invoice-variable, revisit that.
+- New tenanted table: it's in both `writableTables` and `tenantedTables` in
+  `scripts/setup-rls.ts` (H18 — a table in only one list silently default-denies every row).
+  Direct `tenantId` column, following `OrderContact`/`Payment`'s shape rather than a JOIN, since
+  the caller always has `tenantId` in scope at write time.
+
+**Files involved:** `saas/prisma/schema.prisma` (`InvoiceSent` model), `saas/app/actions/orders.ts`
+(`sendOrderInvoice`), `saas/app/admin/(panel)/orders/[id]/page.tsx` and `OrderDetail.tsx` (the
+Invoice History card), `saas/scripts/setup-rls.ts`.
+
+---

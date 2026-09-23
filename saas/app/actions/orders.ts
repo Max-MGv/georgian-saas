@@ -423,20 +423,52 @@ export async function sendOrderInvoice(
       locale,
     })
 
-    // Sending an invoice stamps a date and nothing else. It records that we
-    // have asked for money, which says nothing about whether the visit has
-    // happened — so it does not touch `stage`, and it is recorded whatever
-    // stage the booking is at, including a completed one being billed after
-    // the fact. Under the previous design this was a rung on a payment ladder,
-    // which is why marking such an order paid used to erase it.
-    if (order.invoiceSentAt == null) {
-      await withTenantDb(tenantId, tx =>
-        tx.order.update({
+    await withTenantDb(tenantId, async tx => {
+      // The permanent record of what this invoice actually said — see InvoiceSent's schema
+      // comment. sendOrderInvoice() builds the email live from the order's current data every
+      // time it's called, so without this row a later edit to price/guests/masterclass lines
+      // leaves no trace of what was originally billed. One row per send, never updated.
+      await tx.invoiceSent.create({
+        data: {
+          tenantId,
+          orderId,
+          recipientEmail: recipient,
+          recipientName: `${order.name} ${order.surname}`.trim(),
+          companyName: order.company?.name ?? null,
+          totalPrice: order.totalPrice ?? 0,
+          guestCount: order.guestCount,
+          tastingGuestCount: order.tastingGuestCount,
+          lunchGuestCount: order.lunchGuestCount,
+          freeGuestCount: order.freeGuestCount,
+          visitType: order.visitType,
+          masterclassLines: order.masterclassLines.map(l => ({
+            name: l.masterclassItem.name,
+            quantity: l.quantity,
+            pricePerUnit: l.pricePerUnit,
+          })),
+          extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
+          customMessage,
+          locale,
+        },
+      })
+
+      // Sending an invoice stamps a date and nothing else. It records that we
+      // have asked for money, which says nothing about whether the visit has
+      // happened — so it does not touch `stage`, and it is recorded whatever
+      // stage the booking is at, including a completed one being billed after
+      // the fact. Under the previous design this was a rung on a payment ladder,
+      // which is why marking such an order paid used to erase it.
+      //
+      // Only stamped once — a resend does not move this date — but the InvoiceSent
+      // row above is written on every send regardless, same as Payment being
+      // append-only for every payment event.
+      if (order.invoiceSentAt == null) {
+        await tx.order.update({
           where: { id: orderId },
           data: invoiceSentPatch(true, toCurrentDates(order), new Date()),
         })
-      )
-    }
+      }
+    })
 
     revalidatePath('/admin/orders')
     return { success: true }

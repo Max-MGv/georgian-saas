@@ -209,6 +209,7 @@ type OrderProp = {
   masterclassLines: MasterclassLine[]
   extras: ExtraRow[]
   contacts: { roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
+  invoicesSent: { id: string; sentAt: Date | string; recipientEmail: string; totalPrice: number }[]
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -856,6 +857,22 @@ export default function OrderDetail({
               key={i}
               label={locale === 'ka' ? c.roleLabelKa : c.roleLabelEn}
               value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')}
+            />
+          ))
+        )}
+      </Card>
+
+      {/* ── Invoice history — a permanent record of what was actually billed, since the
+          email itself is rebuilt live from current order data on every send ── */}
+      <Card title={at('orderDetail.invoiceHistory.title')}>
+        {order.invoicesSent.length === 0 ? (
+          <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.invoiceHistory.none')}</p>
+        ) : (
+          order.invoicesSent.map(inv => (
+            <InfoRow
+              key={inv.id}
+              label={`${formatDate(new Date(inv.sentAt))} · ${new Date(inv.sentAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`}
+              value={`${inv.recipientEmail} · ${formatTetri(asTetri(inv.totalPrice))}`}
             />
           ))
         )}

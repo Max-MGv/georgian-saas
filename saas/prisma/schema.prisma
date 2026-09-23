@@ -217,6 +217,44 @@ model OrderContact {
   @@index([tenantId, wineOrderId])
 }
 
+/// A permanent record of what an invoice email actually said, at the moment it was sent.
+///
+/// `sendOrderInvoice()` builds the email live from the order's *current* data on every call —
+/// price, guest counts and masterclass lines can all change after a send. Without this table
+/// the only trace an invoice was ever sent is `Order.invoiceSentAt`, a bare timestamp with no
+/// content: reprint or resend after an edit and there is no way to tell what was actually
+/// billed the first time. Same reasoning as `OrderContact`/`WineOrderItem`'s snapshots, and the
+/// same shape `Payment` already uses for money actually received — this is the equivalent for
+/// money actually billed.
+///
+/// Append-only, one row per send. A resend after a correction is its own event, not an
+/// overwrite — `Payment`'s pattern, not an update-in-place.
+model InvoiceSent {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sentAt            DateTime @default(now())
+  recipientEmail    String
+  /// Copied at send time — Order.name/surname can differ from this by the time anyone looks
+  /// back, since decision 4 (Plan-ContactRoles) keeps that column synced to whichever contact
+  /// is linked *today*, not to who was billed.
+  recipientName     String
+  companyName       String?
+  totalPrice        Int
+  guestCount        Int
+  tastingGuestCount Int
+  lunchGuestCount   Int
+  freeGuestCount    Int
+  visitType         String
+  masterclassLines  Json
+  extras            Json
+  customMessage     String
+  locale            String
+
+  @@index([tenantId, orderId])
+}
+
 model Order {
   id                      String             @id @default(cuid())
   // Where the booking is, and nothing about money (Feature 191). Its own enum
@@ -314,6 +352,7 @@ model Order {
   extras                  OrderExtra[]
   payments                Payment[]
   orderEvents             OrderEvent[]
+  invoicesSent            InvoiceSent[]
 
   // Every query here is tenant-scoped by RLS, and the admin list/calendar both
   // filter-and-order by date while the board and its filter pills group by

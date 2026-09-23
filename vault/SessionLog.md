@@ -8,18 +8,26 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (latest) — Contact Roles chunk 11a: the duplication is fixed
+## 2026-09-23 (latest) — Contact Roles chunk 11a fixed, then a database walkthrough surfaced a real invoice gap and closed it
 
 > **STATE ON EXIT.**
 >
-> - Branch **`staging`**, HEAD `e99f8a8` at session start, clean tree. Chunk 11a's edit made and
->   verified; not yet committed/pushed this turn.
-> - **22 TypeScript errors** (unchanged — all Chunk 12's). Parity 173/173 + 1107/1107 (unchanged).
->   `test-order-contacts.ts` 36/36 (unchanged). Display-only chunk, confirmed by nothing moving.
-> - Booking Info's Phone/Email rows on `OrderDetail.tsx` now hidden for company bookings.
+> - Branch **`staging`**. Chunk 11a committed and pushed (`0c8fa88`). `InvoiceSent` work
+>   (schema + RLS + write path + Invoice History card + vault) made and verified this same
+>   session, **not yet committed** — next action.
+> - **22 TypeScript errors** (unchanged all session — every change so far has been additive or
+>   display-only). Parity 173/173 + 1109/1109 (was 1107; two new invoice-history keys, EN+KA).
+>   `test-order-contacts.ts` 36/36 (unchanged).
+> - Booking Info's Phone/Email rows on `OrderDetail.tsx` hidden for company bookings.
+> - New table `InvoiceSent` (migration `20260923072201_add_invoice_sent`, dev DB only), RLS
+>   applied and verified with `check-rls.ts`, write path live in `sendOrderInvoice()`, a new
+>   "Invoice History" card on the order detail page. Live-verified: two real sends on the same
+>   order produced two separate rows, not an overwrite.
 >
-> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, fixtures (the 22
-> remaining type errors all live there).
+> **Next:** commit + push the `InvoiceSent` work to `staging`. Then [[Plan-ContactRoles]]
+> **Chunk 12** — demo seed, onboarding, fixtures (the 22 remaining type errors all live there).
+> Production still needs `prisma migrate deploy` + `setup-rls.ts` for `InvoiceSent` whenever
+> `staging` → `master` next happens (same pre-flight shape as §9c).
 
 Investigated before touching any display code, per the handoff's two-part sequencing. **Part 1:**
 re-grepped every read of `Order.name/surname/phone/email` — 13 files now (was ~16 on 2026-09-19,
@@ -40,7 +48,45 @@ order now shows Phone/Email once, correctly labelled "Contact Person" under Cont
 "Pricing Testcase" individual order still shows Phone/Email under Booking Info, unchanged.
 
 Vault updated: [[Plan-ContactRoles]] Chunk 11a marked ✅ Done with the full writeup,
-[[FeatureLog]] Feature 202 row appended. **Not yet committed to `staging`** — next action.
+[[FeatureLog]] Feature 202 row appended. Committed and pushed to `staging` (`0c8fa88`).
+
+### Then a general database walkthrough, and a real gap it found
+
+Max asked for a plain-language overview of how the database handles bookings, and specifically
+how "snapshot" data (a frozen copy) differs from "live" data (a pointer that reads the current
+row). Answered from the actual schema rather than from memory — walked `Order`, `OrderContact`,
+`WineOrderItem` and `OrderMasterclass` to show where the two patterns are and aren't paired up.
+Max then asked directly whether invoices worked the same way. They didn't: `sendOrderInvoice()`
+rebuilds the invoice email **live, from the order's current data**, on every call — the only
+permanent trace an invoice was ever sent was `Order.invoiceSentAt`, a bare timestamp with no
+content. Edit an order's price after sending, then reprint or resend, and nothing recorded what
+the first send actually said.
+
+**Feature 203, built the same session, on Max's go-ahead.** New append-only table `InvoiceSent`
+— one row per send, never updated, recording recipient/amount/guest breakdown/line items/message/
+locale at the moment of each send — the same shape `Payment` already uses for money actually
+*received*, now built for money actually *billed*. Migration `20260923072201_add_invoice_sent`
+against dev. Added to **both** lists in `scripts/setup-rls.ts` (H18's exact trap — a table in
+`writableTables` alone silently default-denies every row) and verified with `check-rls.ts`
+showing a real policy on `InvoiceSent`, not just RLS-enabled. Write path added inside
+`sendOrderInvoice()`'s existing transaction. New "Invoice History" card on the order detail page,
+under Contacts — two new i18n keys (EN+KA, parity 1109/1109).
+
+**Hit H12 again getting there** — a freshly-started dev server 404'd on `/admin/orders`
+immediately after the schema change; `rm -rf .next` + restart fixed it, same remedy the plan
+already had on file.
+
+**Verified live, not just by type-checking:** sent two real invoices on Silk Road Journeys'
+order in the same browser session. Two separate `InvoiceSent` rows appeared (₾208 each, correct
+recipient), confirming append-only behaviour — the second send did not overwrite the first — and
+the "Invoice Sent" stage badge stamped once, not twice, on the first send only.
+
+**Vault:** the general "what's live vs. snapshot" answer, plus the invoice section, written up at
+[[DataModel/Reference-SnapshotVsLive]] (new file, linked from `DataModel-README.md`) — the
+natural home Max asked for so this is findable later without re-deriving it. New coupling note
+[[MaintenanceNotes]] #31: any future second way to send/regenerate an invoice must write an
+`InvoiceSent` row too, and never update one after the fact. [[FeatureLog]] Feature 203 added.
+**Not yet committed to `staging`** — next action.
 
 ---
 
