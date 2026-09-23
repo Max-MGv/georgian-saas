@@ -380,7 +380,7 @@ a single linear status column cannot express "delivered but not yet paid".
 
 ---
 
-## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–11 OF 14 BUILT
+## v1.13 — Contact Roles (company people, generalised) 🚧 CHUNKS 0–13 OF 14 BUILT
 
 Full tracking: [[Plan-ContactRoles]] — **supersedes [[Plan-CompanyGuidesAndReps]]**, which
 shipped the version this replaces. Max's original brief is preserved verbatim as §1 of that
@@ -418,16 +418,16 @@ roles from company-level ones) + `CompanyPerson` (replaces `CompanyGuide`,
       one shared `invoiceRecipientsFor()`, driven by a single role-key constant rather than a
       new schema flag (Max's call — the tenant-configurable version is a recorded future want,
       not built: `vault/SuperAdminPlans/InvoiceRecipientRoles.md`)
-- [ ] Chunk 11a — **new, not in the original 14**: the Contact Person's phone/email render twice
+- [x] Chunk 11a — **new, not in the original 14**: the Contact Person's phone/email rendered twice
       on the order detail page (once unlabeled in Booking Info, once labeled in Contacts).
-      Starts with re-investigating whether `Order.name/surname/phone/email` are still needed at
-      all now that `OrderContact` exists, before touching the display fix (hide those two fields
-      from Booking Info for company bookings only)
-- [ ] Chunk 12 — demo seed, onboarding, fixtures
-- [ ] Chunk 13 — tests, including one that proves deleting a person does not erase history
+      Investigated whether `Order.name/surname/phone/email` were still needed at all now that
+      `OrderContact` exists (yes, for individual bookings), then hid those two Booking Info
+      fields for company bookings only
+- [x] Chunk 12 — demo seed, onboarding, fixtures
+- [x] Chunk 13 — tests, including one that proves deleting a person does not erase history
 - [ ] Chunk 14 — vault close-out, staging verification, merge
 
-**Status 2026-09-22:** chunks 0–9 built and pushed to `staging`, then **audited by a fenced-off subagent** which found four real defects — including an unauthenticated action that returned any company's staff directory without its access code. All four fixed and pushed the same day ([[Plan-ContactRoles]] §9b). The production cutover pre-flight is written up in §9c and chunk 14 points at it. The migration has run on the **dev** database only; production is untouched. ✅ **Every route renders again** — `/`, `/wines`, `/about`, `/contact` and `/admin/login` all return 200, and both booking and wine-order pickers were walked end to end in a browser. The admin screens were walked too (Max signed in, Claude drove). [[KnownBugs]] #57 (every company's access code in the public HTML) is fixed on `staging`, still live on `master` until chunk 14. ⚠️ `/admin/orders` still 500s — chunk 10's file, and unlike the old `/wines` problem it does not affect any other route.
+**Status 2026-09-23:** chunks 0–13 built, verified, and pushed to `staging` (chunk 13's own tests not yet committed — Max hasn't asked). tsc 0, i18n parity 173/173+1109/1109, `test-order-contacts.ts` 36/36. Chunk 7 was **audited by a fenced-off subagent** which found four real defects — including an unauthenticated action that returned any company's staff directory without its access code — all fixed and pushed the same day ([[Plan-ContactRoles]] §9b). The production cutover pre-flight is written up in §9c and chunk 14 points at it. The migration has run on the **dev** database only; production is untouched. ✅ **Every route renders again**, `/admin/orders` included since chunk 10. [[KnownBugs]] #57 (every company's access code in the public HTML) and #56 (deleting a guide erasing order history, now regression-tested) are fixed on `staging`, still live on `master` until chunk 14. Only chunk 14 (vault close-out + the staging → master cutover) remains.
 
 **Decisions locked (2026-09-19):** wine orders get the full treatment, not structure-only ·
 access codes become a tenant setting, default off, **tenant-wide only** · codes on suppresses

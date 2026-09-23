@@ -8,7 +8,93 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (newest) — Contact Roles chunk 12: the seed/onboarding/fixtures build fix, picked up from a handoff prompt
+## 2026-09-23 (newest) — Contact Roles chunk 13: Playwright tests for the role-driven picker, replacing the guide-only specs
+
+> **STATE ON EXIT.**
+>
+> - Branch **`staging`**, HEAD `80de9af` (Chunk 12's commit) when this session started — this
+>   session's changes not yet committed or pushed (not asked for).
+> - **tsc 0** (unchanged). Parity 173/173 + 1109/1109 (unchanged). `test-order-contacts.ts` 36/36
+>   (unchanged) — this chunk added tests, it didn't touch app code.
+> - New `tests/tier2-core-flows/contact-role-picker.spec.ts` (5 tests) and
+>   `tests/tier2-core-flows/contact-orphan-safety.spec.ts` (1 test, the F2 proof), replacing
+>   `company-guide-code.spec.ts` + `guide-picker.spec.ts`. All 6 new tests pass, each run twice,
+>   confirmed no leftover rows in the dev DB directly (not just by re-passing).
+>
+> **Next:** [[Plan-ContactRoles]] **Chunk 14** — close-out: vault writeups, the `createTenant()`
+> ContactRole-seeding gap, rewriting [[MaintenanceNotes]] #26, and the production cutover
+> pre-flight (§9c) before `staging` → `master`. Two unrelated issues found while running the full
+> `tests/tier2-core-flows/` suite were spawned as a separate background task rather than fixed
+> here — see below.
+
+Picked up via a pasted handoff prompt, verified against the actual repo before acting on it (per
+the prompt's own instruction not to trust it blindly) — branch, HEAD, and the "chunks 0–12 of 14
+done" claim all checked out exactly. Read the handoff's named files in order
+(`ClaudeInstructions.md`; `Plan-ContactRoles.md` §1/§2/Chunk 13/H11/H12/H13/H14/H19;
+`MaintenanceNotes.md`, skimmed — nothing chunk-13-specific; `SessionLog.md`'s exit state), then read
+the actual current code (`useContactSelection.ts`, `ContactPickerPopupView.tsx`,
+`contactResolution.ts`, `BookingForm.tsx`, `NewOrderForm.tsx`, `CompaniesClient.tsx`) and queried
+the dev DB directly for the Silk Road Journeys / Kakheti Wine Routes fixtures' actual current
+shape, rather than trusting the old specs' or the handoff's comments about them — both had drifted
+since Chunk 7/12.
+
+**Two real design changes found this way, not from the old specs:** the picker's title is now
+tenant-editable copy ("Who should we put on this booking?", not the old hardcoded "Who is bringing
+the group?"), and "I am not on this list" no longer falls back to a company-level contact — Contact
+Person is itself a per-order role now, so skipping it just leaves it blank. Also found: a matched
+person only fills the classic First/Last Name fields when the matched role IS Contact Person; a
+guide's own code fills the Guide role's own block instead. Recorded as new hurdle **H20**.
+
+Stated the concrete plan (two new spec files, what each covers, the file split) and got Max's
+go-ahead before writing any test code, per Rule 8.
+
+**`contact-role-picker.spec.ts`** — role-driven, against Silk Road Journeys (now 2 Contact Persons
++ 2 Guides, not 1+2 as the old spec's comments assumed): codes off asks about each role in turn and
+fills the right fields per role (asserting the picker buttons' `aria-label`, H14), "not on this
+list" leaves a role blank, a wrong code is still rejected, and with codes on a person's own code
+skips the picker while a company code is accepted but the picker never opens — the whole file
+toggles the shared `person_codes_enabled` setting mid-run, so it's wrapped in
+`test.describe.serial()` to survive Playwright's default `fullyParallel` config, with the original
+setting value read once and restored in `afterAll`.
+
+**`contact-orphan-safety.spec.ts`** — the one Chunk 13's own checklist called out as what this
+design most needs: proves F2 (deleting a person leaves a past order's Contacts card reading from
+the snapshot, not a live join). Admin adds a throwaway guide to Kakheti Wine Routes (deliberately a
+company that already has people in both roles, not a fresh throwaway one — closer to real use, and
+rules out `NewOrderForm`'s auto-pick-if-exactly-one masking the actual thing under test), creates a
+real order picking them from the role dropdown, deletes them from the company, reloads the order —
+name still there.
+
+**Two real bugs found by actually running the new specs, not by writing them:** a URL-match regex
+that also matched the literal `/admin/orders/new` path (since "new" is alphabetic), so an
+unsubmitted form read as a created order; and a delete-confirmation race where checking the
+person's name had disappeared from the row proved nothing about whether the server call had
+actually finished (the row hides the name the instant "Delete" is clicked, client-side, before the
+request even starts) — fixed by waiting for the confirm row's own "Yes" button to disappear
+instead. Also found and worked around: running the whole test file (or the whole
+`tests/tier2-core-flows/` directory) at Playwright's default parallelism overloads the one
+`next dev` process badly enough that admin logins across unrelated spec files start timing out
+together — confirmed by re-running with `--workers=1` and getting clean, repeatable results both
+times.
+
+**Ran the full `tests/tier2-core-flows/` suite**, not just the new specs, since Chunk 12 touched
+shared seed/fixture data other tiers read (per the handoff's own suggestion). Found 3 pre-existing
+failures, none caused by this chunk: `booking-enhanced.spec.ts` and
+`company-nationality-tagging.spec.ts` both depend on a company named "Test Company # 1" that no
+longer exists in the dev DB, and `wine-catalogue-order.spec.ts` found that a freshly-abandoned wine
+order is written correctly (`abandonedAt` set, confirmed via direct query) but never appears on
+`/admin/abandoned`. Left the dev DB clean regardless — deleted the two stray `WineOrder` rows that
+spec's own cleanup routine couldn't find (same underlying bug). Spawned the abandoned-orders
+finding as a separate background task rather than investigating it here, since it's unrelated to
+Contact Roles.
+
+Vault updated: [[Plan-ContactRoles]] Chunk 13 marked ✅ Done with the full writeup, new hurdle H20
+added, §7's status table and resume line updated. [[FeatureLog]] Feature 202 row appended. **Not
+yet committed** — Max hasn't asked for a commit this session.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 12: the seed/onboarding/fixtures build fix, picked up from a handoff prompt
 
 > **STATE ON EXIT.**
 >
@@ -81,89 +167,7 @@ updated (chunks 0–12 of 14 done). Committed and pushed to `staging`.
 
 ---
 
-## 2026-09-23 — Contact Roles chunk 11a fixed, then a database walkthrough surfaced a real invoice gap and closed it
-
-> **STATE ON EXIT.**
->
-> - Branch **`staging`**. Chunk 11a committed and pushed (`0c8fa88`). `InvoiceSent` work
->   (schema + RLS + write path + Invoice History card + vault) committed and pushed (`c371559`).
-> - **22 TypeScript errors** (unchanged all session — every change so far has been additive or
->   display-only). Parity 173/173 + 1109/1109 (was 1107; two new invoice-history keys, EN+KA).
->   `test-order-contacts.ts` 36/36 (unchanged).
-> - Booking Info's Phone/Email rows on `OrderDetail.tsx` hidden for company bookings.
-> - New table `InvoiceSent` (migration `20260923072201_add_invoice_sent`, dev DB only), RLS
->   applied and verified with `check-rls.ts`, write path live in `sendOrderInvoice()`, a new
->   "Invoice History" card on the order detail page. Live-verified: two real sends on the same
->   order produced two separate rows, not an overwrite.
->
-> - **Feature 204 recorded, not built:** Max wants "Send Invoice" to ask *"View invoice already
->   sent"* vs. *"Send new invoice"* once `order.invoicesSent.length > 0`, instead of always
->   firing a new email. Logged in [[FeatureLog]] as 📋 Planned per his ask — `InvoiceSent`
->   already carries every field a view would need, so no schema work, just UI.
->
-> **Next:** [[Plan-ContactRoles]] **Chunk 12** — demo seed, onboarding, fixtures (the 22
-> remaining type errors all live there). Production still needs `prisma migrate deploy` +
-> `setup-rls.ts` for `InvoiceSent` whenever `staging` → `master` next happens (same pre-flight
-> shape as §9c). Feature 204 whenever Max wants it built.
-
-Investigated before touching any display code, per the handoff's two-part sequencing. **Part 1:**
-re-grepped every read of `Order.name/surname/phone/email` — 13 files now (was ~16 on 2026-09-19,
-some folded onto `OrderContact` since Chunk 9). Confirmed all four order-creation paths guarantee
-a synced `contact_person` `OrderContact` row for every company booking (`writeOrderContacts()`'s
-`fallbackContactPerson`, gated on `companyId`), kept in step on edit by `syncOrderContactPerson()`
-(called from `updateOrder()`). So the four columns are pure legacy weight for company-booking
-*display*, while remaining the only record that exists at all for individual bookings — decision
-4 confirmed still correct, not reopened. **Part 2:** `BookingSheetPrint.tsx`/`InvoicePrint.tsx`
-take `order` as an independent prop, no shared state; the only edit path for these four columns is
-`OrdersTable.tsx`'s slide-over (`updateOrder()`), a different page — `OrderDetail.tsx` never had
-an inline edit for them, so nothing was at risk of being hidden alongside the display.
-
-Findings reported to Max in plain language before editing (Rule 8), confirmed, then the fix:
-`order.bookingType !== 'COMPANY'` gates the two `InfoRow`s in `OrderDetail.tsx`. Verified live in
-the browser (already-logged-in admin session, no password typed): Silk Road Journeys' company
-order now shows Phone/Email once, correctly labelled "Contact Person" under Contacts; the
-"Pricing Testcase" individual order still shows Phone/Email under Booking Info, unchanged.
-
-Vault updated: [[Plan-ContactRoles]] Chunk 11a marked ✅ Done with the full writeup,
-[[FeatureLog]] Feature 202 row appended. Committed and pushed to `staging` (`0c8fa88`).
-
-### Then a general database walkthrough, and a real gap it found
-
-Max asked for a plain-language overview of how the database handles bookings, and specifically
-how "snapshot" data (a frozen copy) differs from "live" data (a pointer that reads the current
-row). Answered from the actual schema rather than from memory — walked `Order`, `OrderContact`,
-`WineOrderItem` and `OrderMasterclass` to show where the two patterns are and aren't paired up.
-Max then asked directly whether invoices worked the same way. They didn't: `sendOrderInvoice()`
-rebuilds the invoice email **live, from the order's current data**, on every call — the only
-permanent trace an invoice was ever sent was `Order.invoiceSentAt`, a bare timestamp with no
-content. Edit an order's price after sending, then reprint or resend, and nothing recorded what
-the first send actually said.
-
-**Feature 203, built the same session, on Max's go-ahead.** New append-only table `InvoiceSent`
-— one row per send, never updated, recording recipient/amount/guest breakdown/line items/message/
-locale at the moment of each send — the same shape `Payment` already uses for money actually
-*received*, now built for money actually *billed*. Migration `20260923072201_add_invoice_sent`
-against dev. Added to **both** lists in `scripts/setup-rls.ts` (H18's exact trap — a table in
-`writableTables` alone silently default-denies every row) and verified with `check-rls.ts`
-showing a real policy on `InvoiceSent`, not just RLS-enabled. Write path added inside
-`sendOrderInvoice()`'s existing transaction. New "Invoice History" card on the order detail page,
-under Contacts — two new i18n keys (EN+KA, parity 1109/1109).
-
-**Hit H12 again getting there** — a freshly-started dev server 404'd on `/admin/orders`
-immediately after the schema change; `rm -rf .next` + restart fixed it, same remedy the plan
-already had on file.
-
-**Verified live, not just by type-checking:** sent two real invoices on Silk Road Journeys'
-order in the same browser session. Two separate `InvoiceSent` rows appeared (₾208 each, correct
-recipient), confirming append-only behaviour — the second send did not overwrite the first — and
-the "Invoice Sent" stage badge stamped once, not twice, on the first send only.
-
-**Vault:** the general "what's live vs. snapshot" answer, plus the invoice section, written up at
-[[DataModel/Reference-SnapshotVsLive]] (new file, linked from `DataModel-README.md`) — the
-natural home Max asked for so this is findable later without re-deriving it. New coupling note
-[[MaintenanceNotes]] #31: any future second way to send/regenerate an invoice must write an
-`InvoiceSent` row too, and never update one after the fact. [[FeatureLog]] Feature 203 added.
-**Not yet committed to `staging`** — next action.
+## 2026-09-23 — Contact Roles chunk 11a fixed (`OrderDetail.tsx`'s duplicate Contact Person display), then a database walkthrough with Max surfaced that invoices had no permanent record and Feature 203 (`InvoiceSent` table, append-only, RLS'd, Invoice History card) was built and verified live the same session. Committed and pushed to `staging` (`0c8fa88`, `c371559`).
 
 ---
 

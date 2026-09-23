@@ -428,6 +428,27 @@ Playwright suite actually types into the form.
 this same constant. Nobody does that today, so it wasn't fixed — flagging it here rather than
 guessing at a fix nobody asked for.
 
+### H20 — The picker/autofill design changed twice since Feature 201, and old tests silently assumed the earlier shape
+
+Found in Chunk 13, writing role-driven Playwright coverage against specs (`company-guide-code.spec.ts`,
+`guide-picker.spec.ts`) written before Chunk 7. Two concrete differences, both found by reading the
+current code rather than trusting the old specs' own comments:
+
+1. **"Not on this list" no longer falls back to a company-level contact.** Under the pre-Chunk-7
+   design there was exactly one set of contact fields on the form and a fixed company contact to
+   fall back to (`Company.contactName` et al.). Since Chunk 7, Contact Person is itself a
+   `PER_ORDER` role like Guide — skipping it just leaves that role's fields blank, same as
+   skipping any other role.
+2. **A matched person only fills the classic First/Last Name fields when the matched role IS
+   Contact Person.** `applyPickedPerson` (`BookingForm.tsx`/`NewOrderForm.tsx`) has an
+   early-return guard on this. A guide's own code fills the Guide role's own block
+   (`Guide — Name`/`Guide — Phone`) instead, and leaves First/Last Name untouched. The old
+   guide-picker test's assumption that any match fills the same fields predates that guard.
+
+**Suggestion:** when writing a test against a picker/autofill flow in this codebase, verify the
+exact role → field mapping live (or via a direct DB/code read) before asserting on it — which
+fields a match fills depends on which role matched, not just on "was something matched".
+
 ---
 
 ## 7. Current status
@@ -448,12 +469,12 @@ guessing at a fix nobody asked for.
 | **11** | Emails — invoice recipient from roles | ✅ Done |
 | **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ✅ Done |
 | **12** | Demo seed, onboarding, test fixtures | ✅ Done (2026-09-23) |
-| **13** | Tests | ⬜ Not started |
+| **13** | Tests | ✅ Done (2026-09-23) |
 | **14** | Vault + close-out | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–11 and 11a all done (2026-09-23). Chunk 12 is next.
+**Overall resume point:** Chunks 0–13 (and 11a) all done (2026-09-23). Chunk 14 is next.
 **Chunk 11a done** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
 spotted the Contact Person's info rendering twice on a real order page. Investigation confirmed
 `Order.name/surname/phone/email` are pure legacy weight for company bookings now that Chunk 9
@@ -1755,24 +1776,73 @@ Road Journeys' company order shows Phone/Email once, under Contacts, correctly l
 
 ## Chunk 13 — Tests
 
-**Status:** ⬜ Not started · **Read H11, H12, H14**
+**Status:** ✅ Done (2026-09-23) · **Read H11, H12, H14, H20 (new)**
 
-- [ ] Replace `company-guide-code.spec.ts` + `guide-picker.spec.ts` with role-driven coverage:
-      picker with codes off, code path with codes on, **picker suppressed with codes on**,
-      "not on this list", wrong code
-- [ ] **The one this design most needs:** delete a person who is on a past order, assert the
-      order still shows their name from the snapshot (F2). Nothing else proves the orphan fix
-- [ ] Assert on the picker buttons' `aria-label` so H14 cannot regress silently
-- [ ] Check `booking-enhanced.spec.ts`, `payment-label-precedence.spec.ts`,
-      `payment-amount-integrity.spec.ts`, `tests/helpers/payments.ts`,
-      `tests/helpers/bookingForm.ts`
-- [ ] Use the index-matching approach for the company edit panel, not `payments.ts`'s xpath
-      helper (H11)
-- [ ] Run each new spec **twice** and confirm no leftover rows — writing a spec is not the same
-      as it passing
-- [ ] If a run hangs at login, check `curl -D - http://localhost:3000/admin/login` first (H12)
+- [x] Replaced `company-guide-code.spec.ts` + `guide-picker.spec.ts` (written for the
+      pre-Chunk-7 guide-only design) with `tests/tier2-core-flows/contact-role-picker.spec.ts`,
+      role-driven against the Silk Road Journeys fixture — **verified live against the dev DB
+      first**, not trusted from the old specs' own comments, since Chunk 1/12 changed what those
+      rows are (it now has 2 Contact Persons and 2 Guides, not 1+2): picker with codes off (each
+      role asked in turn, aria-label asserted per H14), "not on this list" (leaves the role
+      blank — see H20, no more company-level fallback), a wrong code still rejected, a person's
+      own code with codes on (skips the picker — see H20, fills the *matched role's* fields, not
+      always the classic ones), and the picker suppressed entirely with codes on but the company
+      code still accepted.
+- [x] **The one this design most needs:** new `tests/tier2-core-flows/contact-orphan-safety.spec.ts`
+      — admin adds a throwaway guide to Kakheti Wine Routes, creates a real order picking them
+      from `/admin/orders/new`'s role dropdown, deletes the guide from the company, reloads the
+      order, and the Contacts card still shows their name from the snapshot (F2). Deliberately
+      used a company that already had people in both roles, not a fresh throwaway one, so the
+      new person is never the only one in its role — closer to how this admin action gets used
+      for real, and it rules out `NewOrderForm`'s auto-pick-if-exactly-one behaviour standing in
+      for the thing actually under test.
+- [x] Asserted on the picker buttons' `aria-label` (H14) — folded into the Contact Person step of
+      the codes-off picker test rather than a separate test, since it needs no separate setup.
+- [x] Checked `booking-enhanced.spec.ts`, `payment-label-precedence.spec.ts`,
+      `payment-amount-integrity.spec.ts`, `tests/helpers/payments.ts`, `tests/helpers/bookingForm.ts`
+      — none reference guides, representatives, or the old contact shape (grepped for
+      Guide/Representative/contactName/guideId/Contact Person). Nothing needed changing. Added
+      two small exported helpers to `payments.ts` (`readPersonCodesToggle`/`setPersonCodesToggle`)
+      for the new spec, following the file's existing `setShowCompanyPriceToggle` pattern.
+- [x] Used the index-matching approach for the company edit panel (H11), copied from
+      `booking-enhanced.spec.ts`'s variant, not `payments.ts`'s xpath helper.
+- [x] Ran each new spec **twice**; checked the dev DB directly afterward for leftover
+      `CompanyPerson`/`Order`/`OrderContact` rows both times — none. Two real bugs surfaced by
+      actually running the specs, not by writing them (H20):
+      1. A URL-match regex (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matches the literal
+         `/admin/orders/new` path, since "new" is alphabetic — a submit that hadn't actually
+         completed yet read as a created order. Fixed by requiring 10+ characters, well past a
+         cuid-suffix but nowhere near "new"'s length.
+      2. `deleteGuideIfPresent()` checked that the person's name had disappeared from the row as
+         its "deletion is done" signal — but the row hides the name the instant "Delete" is first
+         clicked (a client-side state flip), before the server call even starts. Racing ahead of
+         it left the confirm row's own small "Cancel" button in the DOM at the same time as the
+         panel's own "Cancel" footer button, and an unscoped click hit a strict-mode 2-match
+         error. Fixed by waiting for the confirm row's own "Yes" button to disappear instead —
+         that only happens once `handleDelete`'s server round trip actually resolves.
+- [x] Dev server needed a cold start this session (H12) — no route-404 hang once warm, so H12
+      itself didn't recur, but a related trap did: running the whole suite with Playwright's
+      default parallelism (`fullyParallel: true`) hammers this one `next dev` process hard enough
+      that admin logins across *unrelated* spec files started timing out together — not a code
+      bug, confirmed by re-running the exact same specs with `--workers=1` and getting clean,
+      repeatable results. **Suggestion for future sessions:** verify a suite-wide failure isn't
+      just worker contention before chasing it as a regression — rerun narrower or with
+      `--workers=1` first.
+- [x] Ran the full `tests/tier2-core-flows/` suite (not just the new specs) since Chunk 12
+      touched shared seed/fixture data other tiers read, per the handoff's own suggestion — with
+      `--workers=1` (see above). **3 pre-existing, unrelated failures found, not fixed here:**
+      `booking-enhanced.spec.ts` and `company-nationality-tagging.spec.ts` both depend on a
+      company named "Test Company # 1" that no longer exists in the dev DB (confirmed via direct
+      query — not a Contact Roles regression, that company is simply gone); and
+      `wine-catalogue-order.spec.ts` found that a freshly-abandoned wine order is created
+      correctly (`abandonedAt` set, confirmed via direct query) but never appears on
+      `/admin/abandoned` — flagged as a separate background task rather than investigated here,
+      since it's unrelated to this plan's scope. Left the dev DB clean either way: deleted the
+      two stray `WineOrder` rows that spec's own broken cleanup routine couldn't find and remove.
+- [x] tsc 0 (unchanged), parity 173/173 + 1109/1109 (unchanged),
+      `scripts/test-order-contacts.ts` 36/36 (unchanged).
 
-**Resume point:** —
+**Resume point:** Chunk 14 (Close-out).
 
 ---
 
