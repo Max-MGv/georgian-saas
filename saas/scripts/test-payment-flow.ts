@@ -87,19 +87,19 @@ async function main() {
 
     // 2. Forged approval — right payment_id, wrong signature. The exact attack
     //    the old site allowed.
-    const r1 = await postCallback({ payment_id: pid, order_status: 'approved', amount: 20000, currency: 'GEL', signature: 'a'.repeat(40) })
+    const r1 = await postCallback({ payment_id: pid, order_status: 'approved', amount: 200, currency: 'GEL', signature: 'a'.repeat(40) })
     check('forged signature is rejected', r1.json?.status === 'rejected')
     let o = await db.order.findUnique({ where: { id: order.id } })
     check('order untouched after forged callback', o?.paidAt === null && o?.abandonedAt !== null, `paidAt=${o?.paidAt} abandonedAt=${o?.abandonedAt}`)
 
-    // 3. Valid signature, tampered amount (1 tetri instead of 20000).
+    // 3. Valid signature, tampered amount (1 tetri instead of 200).
     const r2 = await postCallback(signedBody({ payment_id: pid, order_status: 'approved', amount: 1, currency: 'GEL' }, SECRET))
     check('amount mismatch is rejected', r2.json?.status === 'rejected')
     o = await db.order.findUnique({ where: { id: order.id } })
     check('order untouched after tampered amount', o?.paidAt === null && o?.abandonedAt !== null)
 
     // 4. Genuine approval.
-    const good = signedBody({ payment_id: pid, order_status: 'approved', amount: 20000, currency: 'GEL' }, SECRET)
+    const good = signedBody({ payment_id: pid, order_status: 'approved', amount: 200, currency: 'GEL' }, SECRET)
     const r3 = await postCallback(good)
     check('genuine callback settles', r3.json?.status === 'ok' && r3.json?.outcome === 'settled', JSON.stringify(r3.json))
     o = await db.order.findUnique({ where: { id: order.id } })
@@ -120,7 +120,7 @@ async function main() {
     const pid2 = pid + '-form'
     const order2 = await db.order.create({ data: { abandonedAt: new Date(), visitType: 'TASTING', date: new Date('2030-01-02'), timeSlot: '11:00', guestCount: 4, name: 'ZZ', surname: 'Test2', totalPrice: 50, tenantId } })
     await db.payment.create({ data: { tenantId, orderId: order2.id, provider: 'flitt', providerPaymentId: pid2, amount: 50, status: 'created' } })
-    const fields = signedBody({ payment_id: pid2, order_status: 'approved', amount: 5000, currency: 'GEL' }, SECRET)
+    const fields = signedBody({ payment_id: pid2, order_status: 'approved', amount: 50, currency: 'GEL' }, SECRET)
     const form = new URLSearchParams(Object.entries(fields).map(([k, v]) => [k, String(v)]))
     const res = await fetch(`${BASE}/api/payments/flitt/callback`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() })
     const j = await res.json().catch(() => null) as { outcome?: string } | null
@@ -145,7 +145,7 @@ async function main() {
     })
     const pid3 = pid + '-wine'
     await db.payment.create({ data: { tenantId, wineOrderId: wo.id, provider: 'flitt', providerPaymentId: pid3, amount: 120, status: 'created' } })
-    const r5 = await postCallback(signedBody({ payment_id: pid3, order_status: 'approved', amount: 12000, currency: 'GEL' }, SECRET))
+    const r5 = await postCallback(signedBody({ payment_id: pid3, order_status: 'approved', amount: 120, currency: 'GEL' }, SECRET))
     check('wine order callback settles', r5.json?.outcome === 'settled', JSON.stringify(r5.json))
     const woAfter = await db.wineOrder.findUnique({ where: { id: wo.id } })
     check('wine order records the payment', woAfter?.paidAt != null, `paidAt=${woAfter?.paidAt}`)
@@ -161,10 +161,10 @@ async function main() {
     })
     const pidD = pid + '-declined'
     await db.payment.create({ data: { tenantId, wineOrderId: woDeclined.id, provider: 'flitt', providerPaymentId: pidD, amount: 60, status: 'created' } })
-    await postCallback(signedBody({ payment_id: pidD, order_status: 'processing', amount: 6000, currency: 'GEL' }, SECRET))
+    await postCallback(signedBody({ payment_id: pidD, order_status: 'processing', amount: 60, currency: 'GEL' }, SECRET))
     let wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
     check("'processing' leaves the order unpaid and incomplete", wd?.paidAt === null && wd?.abandonedAt !== null, `paidAt=${wd?.paidAt}`)
-    await postCallback(signedBody({ payment_id: pidD, order_status: 'declined', amount: 6000, currency: 'GEL' }, SECRET))
+    await postCallback(signedBody({ payment_id: pidD, order_status: 'declined', amount: 60, currency: 'GEL' }, SECRET))
     wd = await db.wineOrder.findUnique({ where: { id: woDeclined.id } })
     check("'declined' leaves the order unpaid and incomplete", wd?.paidAt === null && wd?.abandonedAt !== null, `paidAt=${wd?.paidAt}`)
     const declinedPayment = await db.payment.findFirst({ where: { providerPaymentId: pidD } })
@@ -182,7 +182,7 @@ async function main() {
     const pid4 = pid + '-cross'
     await db.payment.create({ data: { tenantId: OTHER, wineOrderId: woOther.id, provider: 'flitt', providerPaymentId: pid4, amount: 90, status: 'created' } })
     // Signed with THIS tenant's secret, aimed at the other tenant's payment.
-    const r6 = await postCallback(signedBody({ payment_id: pid4, order_status: 'approved', amount: 9000, currency: 'GEL' }, SECRET))
+    const r6 = await postCallback(signedBody({ payment_id: pid4, order_status: 'approved', amount: 90, currency: 'GEL' }, SECRET))
     check('cross-tenant callback is rejected', r6.json?.status === 'rejected', JSON.stringify(r6.json))
     const woOtherAfter = await db.wineOrder.findUnique({ where: { id: woOther.id } })
     check("other tenant's wine order untouched", woOtherAfter?.paidAt === null && woOtherAfter?.abandonedAt !== null, `paidAt=${woOtherAfter?.paidAt}`)
