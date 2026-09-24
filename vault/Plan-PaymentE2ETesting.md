@@ -565,7 +565,9 @@ live-verified against real staging (1/1 passing). Full writeup: `playwright/note
   clipped by its own card's `overflow-hidden` once it has enough menu items — confirmed via
   `document.elementFromPoint()` at the "Paid" button's own layout coordinates resolving to the
   *next card* instead. Flagged as its own follow-up task (`KnownBugs.md` #62, out of scope for
-  this chunk's bug).
+  this chunk's bug). **Fixed 2026-09-24, commit `7926231` on `staging`** — the mobile trigger now
+  shares the desktop table's own `toggleStatusMenu()` + portal path instead of its own inline
+  dropdown; see `KnownBugs.md` #62 for the full before/after verification.
 - **Independently re-verified against the dev DB directly** — the automated spec deletes its
   own order as part of a passing run, before there was a chance to inspect the DB mid-flight, so
   a second, separate manual pass through the same UI flow was queried directly: `Order.paidAt`

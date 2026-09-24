@@ -8,7 +8,35 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-24 (newest) — Payment E2E Chunk 4: book & pay later, plus a real "Paid" picker bug fixed
+## 2026-09-24 (newest) — Fixed KnownBugs #62: mobile orders card status dropdown clipped
+
+The mobile-only bug flagged (not fixed) during Payment E2E Chunk 4, below — closed as its own
+follow-up.
+
+- `OrdersTable.tsx`'s mobile card list (`<768px`) rendered its status dropdown as a plain
+  `position: absolute` sibling inside each card's own `overflow-hidden` box, instead of a portal
+  like the desktop table/list/board views' shared dropdown further down the same file. For a
+  short card early in its lifecycle (5 menu rows, or the "Bank Transfer/Cash" sub-picker after
+  clicking "Paid"), the dropdown's real height could exceed the card and get invisibly clipped.
+- **Fix:** the mobile trigger now calls the same `toggleStatusMenu()` the desktop views already
+  use, which sets `statusMenuRect` from the trigger's own `getBoundingClientRect()` and renders
+  through the one shared `createPortal(..., document.body)` — the separate mobile-only inline
+  dropdown was deleted, not patched.
+- **Verified live on `staging.vineworks.ge` at a 375px viewport, before and after.** Before the
+  fix, `document.elementFromPoint()` at the "Paid" button's own coordinates resolved to the next
+  card, reproducing the bug exactly. After: same check resolves to the "Paid" button itself,
+  two DOM levels from `<body>`. Clicked "Paid," confirmed the Bank Transfer/Cash sub-picker also
+  renders fully via the portal and is genuinely clickable, then clicked "Bank transfer" for real
+  and confirmed against the dev DB directly: `Order.paidAt` set, `Payment{ provider: 'manual',
+  method: 'BANK_TRANSFER', status: 'recorded', settledAt` set, amount matching `totalPrice` `}`.
+  Desktop table/list/board dropdowns and the order-detail page's own dropdown re-checked live,
+  unaffected. Test order and its `Payment`/`OrderEvent` rows deleted after, confirmed gone.
+- `tsc --noEmit` clean. Committed and pushed to `staging` (`7926231`). `KnownBugs.md` #62 marked
+  resolved; `FeatureLog.md` #205 and `Plan-PaymentE2ETesting.md` Chunk 4 both note the fix.
+
+---
+
+## 2026-09-24 — Payment E2E Chunk 4: book & pay later, plus a real "Paid" picker bug fixed
 
 Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–3 already done). Closed Chunk 4 — the
 reservation → invoice → manual bank-transfer loop, full cross-view check.
