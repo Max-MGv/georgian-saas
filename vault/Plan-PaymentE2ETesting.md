@@ -30,7 +30,7 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 | **1** | One live, manual proof-of-loop on staging before writing any test code | ✅ Done (2026-09-24) |
 | **2** | Scaffolding: `playwright.staging.config.ts`, `tier5-payment-e2e/` | ✅ Done (2026-09-24) |
 | **3** | Book & Pay Now — approved + declined, full cross-view check | ✅ Done (2026-09-24) |
-| **4** | Book & Pay Later — reservation → invoice → manual bank transfer, full cross-view check | ⬜ Not started |
+| **4** | Book & Pay Later — reservation → invoice → manual bank transfer, full cross-view check | ✅ Done (2026-09-24) |
 | **5** | Admin-created order — parity with guest orders, then manual payment | ⬜ Not started |
 | **6** | Edit after the fact — stale-money check on an already-paid order | ⬜ Not started |
 | **7** | Idempotency, forged callback, tampered amount — driven through the real staging route | ⬜ Not started |
@@ -38,14 +38,16 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Chunks 0–3 are done. The real settle loop is proven live
+**Overall resume point:** 🔜 Chunks 0–4 are done. The real settle loop is proven live
 on staging (see Chunk 1's result log below), the race-condition it surfaced is fixed and
 verified (see "Incident and fix" below), Staging Winery runs **permanently** on Flitt's public
 test merchant (`1549901`/`test` — see Ground Rule 1), the shared scaffolding (staging
 config + `flittPayment.ts` helper) is built and live-verified (see Chunk 2's result log below),
-and Chunk 3 has closed the single biggest gap from §3 — a real approved settlement and a real
-decline, both checked across every §4 surface (see Chunk 3's result log below).
-**Chunk 4 (Book & Pay Later) is next**, and per [[ClaudeInstructions]] Rule 8 still
+Chunk 3 closed the single biggest gap from §3 — a real approved settlement and a real
+decline, both checked across every §4 surface (see Chunk 3's result log below) — and Chunk 4
+closed the "book & pay later" loop, finding and fixing a real, standing app bug along the way
+(the manual-payment "Paid" picker closing itself instantly — see Chunk 4's result log below).
+**Chunk 5 (Admin-created order) is next**, and per [[ClaudeInstructions]] Rule 8 still
 gets called out for confirmation as it comes up, not assumed from this plan alone.
 
 ### Incident and fix (2026-09-24) — read before touching credentials again
@@ -524,7 +526,7 @@ individual full check, company + wine order light checks) and `payment-declined-
 ## Chunk 4 — Book & Pay Later
 
 **Goal:** the reservation → invoice → manual-payment loop, end to end.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done (2026-09-24).
 
 - Submit a reservation-only booking (payment section off, or hidden price, or a company's
   "Always skip" — pick whichever is simplest to set up cleanly).
@@ -534,6 +536,47 @@ individual full check, company + wine order light checks) and `payment-declined-
   row (method `BANK_TRANSFER`) agree, and every §4 surface reflects it.
 - Note in the spec's own note file: this is confirming the *actual* pay-later flow (invoice +
   manual transfer) — not a resumed Flitt checkout, which doesn't exist (§2b).
+
+**Result log (2026-09-24):** `tests/tier5-payment-e2e/payment-book-later.spec.ts` built and
+live-verified against real staging (1/1 passing). Full writeup: `playwright/notes/15-payment-book-later.md`.
+
+- **A real, standing app bug found and fixed, independent of this plan.** Clicking an order's
+  "Paid" status option is supposed to open a "Bank Transfer or Cash?" picker
+  (`recordManualPayment` in `lib/payments/manualPayment.ts` already supported both methods) —
+  but the picker closed itself the instant it opened, on both `/admin/orders`
+  (`OrdersTable.tsx`) and an order's own detail page (`OrderDetail.tsx`). Root cause, confirmed
+  live by patching `Element.prototype.closest` to log its own calls during a real click (not
+  assumed from reading the code): Next's App Router hydrates React at `document`, so the
+  outside-click-closes-the-menu listener and React's own delegated click listener are two
+  independent listeners on that same node. Clicking "Paid" mounts the picker in place of the
+  step list, and React flushes that swap synchronously while dispatching the click to its own
+  (earlier-registered) bubble listener — *before* the outside-click handler's turn — so by then
+  the clicked button is already detached from the DOM and a bubble-phase containment check on
+  it (`e.target.closest(...)`) finds nothing and wrongly closes what the click had just opened.
+  A first fix attempt (the containment check alone, still on the bubble phase) was **not**
+  enough for exactly this reason, confirmed by the same `closest` patch showing
+  `isConnected: false` at the moment the check ran. The real fix: move the listener to the
+  **capture** phase, which runs top-down before the click reaches its target, so the
+  containment check sees the DOM exactly as clicked. Fixed in both files (commits `b58e9cc`
+  then `ac47541` correcting it, `staging`) — `OrdersTable.tsx` was independently confirmed
+  broken the same way live, not assumed from `OrderDetail.tsx`'s fix by code similarity.
+- **A second, unrelated bug found and deliberately not fixed here.** Live-testing the fix on
+  `/admin/orders`' mobile card list (viewport <768px) found the inline status dropdown can be
+  clipped by its own card's `overflow-hidden` once it has enough menu items — confirmed via
+  `document.elementFromPoint()` at the "Paid" button's own layout coordinates resolving to the
+  *next card* instead. Flagged as its own follow-up task (`KnownBugs.md` #62, out of scope for
+  this chunk's bug).
+- **Independently re-verified against the dev DB directly** — the automated spec deletes its
+  own order as part of a passing run, before there was a chance to inspect the DB mid-flight, so
+  a second, separate manual pass through the same UI flow was queried directly: `Order.paidAt`
+  and `Order.invoiceSentAt` both set and independent of each other, `Payment` row with
+  `provider='manual'`, `method='BANK_TRANSFER'`, `status='recorded'`, `settledAt` set, `amount`
+  matching `totalPrice` exactly. Both this manual-verification order and the automated spec's
+  own order swept to zero afterward. The "Individual bookings" toggle confirmed back at its
+  documented resting value (off), both via the spec's own restore and independently via a live
+  DOM read (`translateX(2px)` on the Toggle's thumb span).
+
+**Resume point:** Chunk 4 fully closed out. Chunk 5 (Admin-created order) is next.
 
 ## Chunk 5 — Admin-created order
 

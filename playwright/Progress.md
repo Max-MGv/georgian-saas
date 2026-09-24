@@ -294,3 +294,33 @@ not just trusted on a green Playwright run — see each note's own "Independent 
 section. All test data swept to zero afterward, including via direct SQL for the wine-order
 scenario (Wine Orders admin still has no delete action — same accepted debris shape the rest
 of this suite already lives with there).
+
+## 2026-09-24 (continued) — Chunk 4, one spec added, a real app bug found and fixed
+
+`payment-book-later.spec.ts` — 1/1 passing. Covers the "book & pay later" loop: reservation-only
+booking → invoice email → manual bank-transfer payment, full cross-view check. Confirmed this is
+genuinely not a resumed Flitt checkout (§2b of the plan) — nothing in the scenario ever reaches
+`pay.flitt.com`.
+
+Building the manual-payment step reproduced a real, standing app bug, independent of this
+testing plan: the admin "Paid" status option's Bank Transfer/Cash picker closed itself the
+instant it opened, on both `/admin/orders` and an order's own detail page. Root cause (confirmed
+live, not just read from the code): Next's App Router hydrates React at `document`, so the
+"close menu on outside click" listener and React's own delegated click listener are two
+independent listeners on the same node — clicking "Paid" mounts the picker and React flushes
+that swap synchronously *before* the outside-click listener's turn, so by the time it runs, the
+clicked button is already detached and a plain containment check on it fails. Fixed by moving
+the outside-click listener to the capture phase in both `OrderDetail.tsx` and `OrdersTable.tsx`
+(commits `b58e9cc`/`ac47541`, `staging`) — full story in
+[[15-payment-book-later]].
+
+A second, unrelated bug was found live-testing the fix on the mobile card list (a status
+dropdown clipped by its own card's `overflow-hidden`) and flagged as its own follow-up rather
+than fixed here.
+
+Independently re-verified against the dev DB directly (a second manual pass through the UI,
+since the automated spec deletes its own row before cleanup could be inspected mid-flight):
+`Order.paidAt`/`invoiceSentAt` both set and independent, `Payment` row with
+`provider='manual'`, `method='BANK_TRANSFER'`, `settledAt` set, correct amount. All test data
+swept to zero afterward; the "Individual bookings" toggle confirmed back at its resting value
+(off) both via the spec's own restore and a separate live DOM read.

@@ -48,3 +48,24 @@ export function findMatchingEmail(
     r => r.to.includes(toEmail) && subjectPattern.test(r.subject) && new Date(r.created_at).getTime() >= since
   )
 }
+
+/**
+ * Fetches one email's full body — the list endpoint above deliberately returns
+ * only metadata (id/to/from/subject/created_at/last_event), no content, so
+ * confirming what an email actually *said* (Chunk 4, Plan-PaymentE2ETesting.md
+ * — the invoice's bank details/amount, not just "an email went out") needs
+ * this separate `GET /emails/:id` call. Confirmed live 2026-09-24: the single-
+ * email endpoint returns `html`/`text` fields the list endpoint omits.
+ */
+export type ResendEmailBody = { html: string | null; text: string | null }
+
+export async function fetchResendEmailBody(apiKey: string, id: string): Promise<ResendEmailBody> {
+  const res = await fetch(`https://api.resend.com/emails/${id}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  if (!res.ok) {
+    throw new Error(`Resend API error: ${res.status} ${res.statusText}`)
+  }
+  const body = await res.json()
+  return { html: body.html ?? null, text: body.text ?? null }
+}
