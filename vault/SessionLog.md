@@ -8,7 +8,42 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-24 (newest) — Payment E2E Chunk 3: real approved + declined Flitt settlements, full cross-view check
+## 2026-09-24 (newest) — Payment E2E Chunk 4: book & pay later, plus a real "Paid" picker bug fixed
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–3 already done). Closed Chunk 4 — the
+reservation → invoice → manual bank-transfer loop, full cross-view check.
+
+- **Real, standing app bug found and fixed, independent of the testing plan.** Clicking an
+  order's "Paid" status option was supposed to open a "Bank Transfer or Cash?" picker (built
+  2026-09-23, see that session's entry below) but the picker closed itself instantly, on both
+  `/admin/orders` (`OrdersTable.tsx`) and the order detail page (`OrderDetail.tsx`). Root cause,
+  confirmed live by patching `Element.prototype.closest` to log its own calls during a real
+  click: Next's App Router hydrates React at `document`, so the "close menu on outside click"
+  listener and React's own delegated click listener are two independent listeners on that same
+  node — clicking "Paid" mounts the picker and React flushes that swap synchronously *before*
+  the outside-click listener's turn, so by then the clicked button is already detached and a
+  plain containment check on it finds nothing and wrongly closes what was just opened. A first
+  fix attempt (bubble-phase containment check) wasn't enough for exactly this reason; the real
+  fix moves the listener to the **capture** phase, which runs before the click reaches its
+  target at all. Fixed in both files, `staging` commits `b58e9cc`/`ac47541`, confirmed live with
+  real browser clicks on both screens (not assumed from code similarity).
+- **A second, unrelated bug found and flagged, not fixed:** the mobile card list's status
+  dropdown can be clipped by its own card's `overflow-hidden` once it has enough menu items — a
+  real tap on "Paid" there can hit the wrong element. `KnownBugs.md` #62.
+- `tests/tier5-payment-e2e/payment-book-later.spec.ts` built and green (1/1) against real
+  staging. Independently re-verified the manual-payment DB write via a second live pass (the
+  automated spec deletes its own row before cleanup can be inspected mid-flight):
+  `Order.paidAt`/`invoiceSentAt` both set and independent, `Payment` row
+  `provider=manual`/`method=BANK_TRANSFER`/`settledAt` set/correct amount. All test data swept
+  to zero; "Individual bookings" toggle confirmed back at its resting value (off).
+- Also committed two pre-existing, already-reviewed vault-only changes that were sitting
+  uncommitted from an earlier session (`KnownBugs.md` #61, the webhook-priority architecture
+  decision in `Plan-PaymentE2ETesting.md`) as their own separate commit, so the history stays
+  honest about what changed when.
+- `tsc --noEmit` clean. Three commits, pushed to `staging`. `Plan-PaymentE2ETesting.md` Chunk 4
+  marked ✅ Done with its own result log; Chunk 5 (Admin-created order) is next.
+
+## 2026-09-24 — Payment E2E Chunk 3: real approved + declined Flitt settlements, full cross-view check
 
 Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–2 already done). Built the first two real
 tests in `tests/tier5-payment-e2e/`, run against `staging.vineworks.ge` (real Flitt hosted
@@ -41,51 +76,7 @@ checkout, dev DB):
 
 ---
 
-## 2026-09-23 — Three small admin fixes: onboarding banner, payment method picker, bug-widget default
-
-Three unrelated small requests from Max, unrelated to the just-finished Contact Roles work, handled
-in one pass:
-
-1. **Onboarding "Finish setting up your account" banner stuck forever for a live tenant.** Root
-   cause: `paymentInfoStepDone` (`app/actions/onboarding.ts`) only checked for a bank-transfer IBAN,
-   so a tenant fully live on Flitt card payments — with no reason to ever fill in an IBAN — saw the
-   banner permanently, even mid-real-bookings. Fixed by OR-ing in `isPaymentConfigured()` (module on
-   + both Flitt credentials present) as an equally valid "payment step done" signal.
-2. **Bug report widget now defaults to "Feature request", not "Bug."** Max: most submissions were
-   feature ideas. One-line change (`BugReportWidget.tsx`'s initial `type` state and its `reset()`).
-3. **Payment method picker (Bank transfer / Cash) for manual "mark as paid."** `Payment.method`
-   already had these values in the schema (#197) but no UI ever asked — every hand-recorded payment
-   landed as generic `MANUAL`. Clicking "Paid" now opens "How was this paid?" instead of firing
-   immediately, everywhere that step exists: orders table (mobile card + desktop portal dropdown),
-   order detail page, wine-orders board/table/card flow-line (reusing its existing pending-confirm
-   pattern), and the abandoned-orders restore-and-pay flow. `CARD` is never offered — only a real
-   Flitt settlement sets that (`lib/payments/settle.ts`, unchanged). Threaded via a new optional
-   `method` field on `BookingStatusChange`/`WineOrderStatusChange` (`lib/statusWrite.ts`) through
-   `changeBookingStatus`/`changeWineOrderStatus` to `recordManualPayment`
-   (`lib/payments/manualPayment.ts`). Order detail page also now shows the method beside a done
-   "Paid" step ("Paid · Bank transfer") — a new `payments` include in that page's query, the live
-   settled/non-reversed row only.
-   **Bug caught during browser verification, fixed same session:** the method label wasn't
-   rendering on the order detail page at all — `FlowLine`'s steps come from `buildFlowLine`, whose
-   Paid step code is the `PAID` constant (uppercase), not the lowercase `'paid'` used by the
-   *dropdown's* own step list (`menuSteps()`) — two different namespaces that happen to look
-   similar. Fixed the comparison; confirmed live afterward.
-
-Verified live against the local dev server (dev DB, tenant "Staging Winery" — never production):
-watched the picker appear and commit on an orders-table row (`changeBookingStatus(...,
-{"kind":"paid","method":"BANK_TRANSFER","value":true})` in the server log), on a wine order
-(`changeWineOrderStatus(..., {"kind":"paid","method":"CASH","value":true})`), and on an abandoned
-booking's restore flow (cancelled before committing, to leave that test row alone). Confirmed the
-bug widget opens with "Feature request" pre-selected. Did not test the onboarding-banner fix
-against a live "Flitt-configured, no IBAN" tenant — no such tenant existed to click through; the
-fix is a straightforward boolean OR, covered by `tsc --noEmit` (0 errors) and code review.
-`tsc --noEmit` clean throughout.
-
-[[FeatureLog]] rows #205 (payment method picker), #206 (onboarding banner fix), #207 (bug widget
-default) added, all ✅ Done / Claude tested ✅ / user tested ❌ pending Max's own click-through.
-**Not committed or pushed** — Max hasn't asked for a commit this session; still on branch
-`staging` (unverified whether ahead of `e6a37a2`, the last chunk 14 push — check `git status`
-before committing).
+## 2026-09-23 — Three small admin fixes: onboarding banner stuck for Flitt-only tenants (fixed), bug-widget default flipped to "Feature request" (fixed), and the payment method picker (Bank transfer/Cash) for manual "mark as paid" built for the first time (#205–207) — verified only via the server log that session, not a real click-through, which is how the picker's outside-click bug (fixed 2026-09-24, see Chunk 4 above) went unnoticed for a day.
 
 ---
 
