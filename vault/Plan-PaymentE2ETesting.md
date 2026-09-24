@@ -86,6 +86,45 @@ through the UI, the only real backup is the plaintext itself, held only in worki
 never printed — anything less is a false sense of safety that fails at the exact moment it's
 needed.
 
+**Continuation (2026-09-24) — the first fix (`45f8629`) had its own bug, now corrected.**
+That fix closed the concurrent-double-callback race by gating the atomic claim on
+`status: 'created'`. That gate was wrong: `status` is flipped away from `'created'` by the
+*first* callback of *any* kind, including a non-final `processing` one — and Flitt can
+legitimately send `processing` before the real, final `approved`/`declined` callback (this
+file's own comment on `processing`, further down `settle.ts`, already said it "is still in
+flight and may yet approve"). Under that gate, a first `processing` callback permanently
+claimed the row, and a later genuine final callback was silently rejected as
+`already-settled` — a customer who actually paid could have their order stuck unpaid
+forever, with nothing anywhere surfacing that this happened. This was **not** caught by
+inspection; it was caught by Chunk 3's own live decline test observing Flitt report
+`status: 'processing'` for a card that should decline immediately — a non-terminal value
+where a clean one was expected, which is what prompted a re-read of the whole gate's logic.
+
+**Corrected fix (commit `46cf7c2`, 2026-09-24, on `staging`):** the claim's `where` clause is
+now `{ id: payment.id, settledAt: null }` instead of `{ id: payment.id, status: 'created' }`.
+`settledAt` is the one fact that actually needs to be atomic — "has this payment ever truly,
+finally succeeded" — set exactly once, only on approval. A `processing` callback never sets
+it, so a later genuine `approved`/`declined` callback still passes the gate; two truly
+simultaneous `approved` deliveries still can't both win, since Postgres serializes the
+concurrent `updateMany`s on the same row and the loser finds `settledAt` already non-null —
+closing the *original* race this gate exists for, same as before. Full reasoning, written
+into the code comment at the claim site in `saas/lib/payments/settle.ts`, including the one
+accepted trade-off (a genuine duplicate of the same *non-final* status in the same race
+window can still double-write an `OrderEvent` — cosmetic, audit-log only, pre-existing, not
+solved here). Also logged as `KnownBugs.md` #60.
+
+Verified two ways, both required for a logic change like this: (a) a deterministic
+sequential script (`npx tsx`, not committed) — a signed `processing` callback followed by a
+signed `approved` callback for one fresh `Order`+`Payment` on Staging Winery's dev DB —
+confirming the `approved` call actually settles (`outcome: 'settled'`, not
+`'already-settled'`), `Order.paidAt` gets set, and exactly one `OrderEvent(PAID)` exists;
+this is the regression test the first fix would have failed. (b) the same concurrency test
+the first fix was verified with — two simultaneous `approved` calls for one fresh payment —
+re-run against the corrected gate: exactly one `'settled'` + one `'already-settled'`, exactly
+one `OrderEvent(PAID)`, confirming the correction didn't reopen the original race while
+closing the new one. Both scripts' throwaway rows were deleted and a follow-up query
+confirmed zero left behind.
+
 ---
 
 ## Ground rules for every chunk
