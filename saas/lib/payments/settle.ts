@@ -98,14 +98,42 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // commits. Checking `payment.settledAt` from the read above is not enough —
     // both concurrent calls would see it still null and both would proceed. The
     // fix is to make the claim itself atomic: this conditional update is the
-    // idempotency gate, not a check before one. `status: 'created'` is the
-    // default every Payment row starts with and the only value it holds before
-    // settlePayment ever touches it (checked: nothing else in the codebase
-    // writes Payment.status after creation), so it means "no prior settlePayment
-    // call has finalized this row yet" for both the approved and declined case —
-    // unlike `settledAt`, which a decline never sets at all.
+    // idempotency gate, not a check before one.
+    //
+    // Gated on `settledAt: null`, not `status: 'created'`. An earlier version of
+    // this fix (commit 45f8629, 2026-09-24) gated on `status: 'created'` and was
+    // wrong: Flitt can legitimately send a non-final `processing` callback before
+    // the real, final `approved`/`declined` one (see the `processing` comment
+    // further down — a card can be "still in flight and may yet approve"). The
+    // FIRST callback of ANY kind flips `status` away from `'created'` permanently,
+    // so under that gate a `processing` callback would claim the row and the
+    // later genuine final callback would be silently rejected as
+    // "already-settled" — a customer who actually paid could have their order
+    // stuck unpaid forever, with nothing surfacing the loss.
+    //
+    // `settledAt` is the one fact that actually needs to be atomic: "has this
+    // payment ever truly, finally succeeded." It is set exactly once, only on an
+    // approval, and once set nothing should ever act on this payment again. That
+    // is exactly what this `where` clause guarantees — a `processing` callback
+    // leaves `settledAt` null, so a later `approved`/`declined` callback still
+    // passes the gate, while two truly simultaneous `approved` deliveries for the
+    // same row still can't both win: Postgres serializes the concurrent
+    // `updateMany`s, the second one finds `settledAt` already non-null, and
+    // `claim.count === 0` correctly reports it as already-settled. That closes
+    // the original race this gate exists for.
+    //
+    // Accepted trade-off, deliberately not solved here: if Flitt ever delivers
+    // the exact same NON-final status twice in the same race window (e.g. two
+    // simultaneous `processing` or two simultaneous `declined` pings), both
+    // still pass this gate (`settledAt` stays null both times) and both would
+    // record an `OrderEvent` — a duplicate audit-log row. Nothing in this app
+    // reads or acts on that event count; it's human-readable history only, and
+    // this exact weakness already existed, unremarked, before either fix touched
+    // this function. Closing it would add real complexity for a cosmetic
+    // property — this gate is deliberately as small as it can be while being
+    // provably correct about the property that actually matters: money.
     const claim = await tx.payment.updateMany({
-      where: { id: payment.id, status: 'created' },
+      where: { id: payment.id, settledAt: null },
       data: {
         status: orderStatus || 'unknown',
         rawResponse: body as object,
