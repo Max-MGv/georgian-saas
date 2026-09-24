@@ -122,18 +122,24 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // `claim.count === 0` correctly reports it as already-settled. That closes
     // the original race this gate exists for.
     //
-    // Accepted trade-off, deliberately not solved here: if Flitt ever delivers
-    // the exact same NON-final status twice in the same race window (e.g. two
-    // simultaneous `processing` or two simultaneous `declined` pings), both
-    // still pass this gate (`settledAt` stays null both times) and both would
-    // record an `OrderEvent` — a duplicate audit-log row. Nothing in this app
-    // reads or acts on that event count; it's human-readable history only, and
-    // this exact weakness already existed, unremarked, before either fix touched
-    // this function. Closing it would add real complexity for a cosmetic
-    // property — this gate is deliberately as small as it can be while being
-    // provably correct about the property that actually matters: money.
+    // Refinement (2026-09-24, following an independent audit of the fix above —
+    // see KnownBugs.md #60's follow-up): the trade-off this comment used to
+    // accept turned out to be closeable for free. Two simultaneous deliveries of
+    // the exact same NON-final status (two `processing` pings, or two genuine
+    // `declined` pings) both used to pass the `settledAt: null` gate and both
+    // recorded a duplicate `OrderEvent` row. Adding `status: { not: orderStatus
+    // || 'unknown' }` closes that: Postgres still serializes the two concurrent
+    // `updateMany`s on the same row, and the second one now additionally
+    // requires the row's *current* `status` to differ from the status it's
+    // trying to write. For two identical pings that's false the second time
+    // (the first one already wrote that same status), so `claim.count === 0`
+    // and the duplicate is correctly dropped. A genuine `processing → approved`
+    // sequence is untouched — the statuses differ, so the second call still
+    // passes both conditions and settles normally. This is additive to the
+    // `settledAt` condition, not a replacement for it: `settledAt` is still what
+    // guarantees a payment can never be un-settled or re-settled once approved.
     const claim = await tx.payment.updateMany({
-      where: { id: payment.id, settledAt: null },
+      where: { id: payment.id, settledAt: null, status: { not: orderStatus || 'unknown' } },
       data: {
         status: orderStatus || 'unknown',
         rawResponse: body as object,
@@ -147,17 +153,35 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     }
 
     if (!approved) {
-      // A refusal is real history. The Payment row keeps the gateway's verbatim
-      // status; this puts the same fact on the order's own timeline, where
-      // anyone looking at the order will actually see it.
-      await recordOrderEvent(tx, {
-        tenantId,
-        orderId: payment.orderId,
-        wineOrderId: payment.wineOrderId,
-        type: 'PAYMENT_DECLINED',
-        actorType: 'GATEWAY',
-        payload: { provider: payment.provider, status: orderStatus || 'unknown', amount: payment.amount },
-      })
+      // Refinement (2026-09-24, same audit as the WHERE clause above): only
+      // record `OrderEvent(PAYMENT_DECLINED)` for a genuine terminal
+      // non-approval, not for `processing`. `processing` means the payment is
+      // still in flight and may yet approve — it is not a decline, and until
+      // now this branch recorded one anyway for *any* non-`approved` status.
+      // A `processing → approved` sequence (a real, legitimate Flitt pattern —
+      // see the gate comment above) used to write a `PAYMENT_DECLINED` event
+      // followed shortly by a `PAID` event, leaving a false "declined, then
+      // somehow paid" line on the order's own timeline. There is deliberately
+      // no new `OrderEventType` for "still processing" here — that needs a
+      // Prisma migration, a separate, bigger workflow per
+      // vault/ClaudeInstructions.md Rule 10, out of scope for this fix. Skipping
+      // the event entirely for an in-flight ping is the simplest honest choice:
+      // no event is a more accurate record than a wrong one. The `Payment` row's
+      // `status`/`rawResponse` above still update unconditionally either way —
+      // only whether an `OrderEvent` gets written is conditional here.
+      if (orderStatus !== 'processing') {
+        // A refusal is real history. The Payment row keeps the gateway's verbatim
+        // status; this puts the same fact on the order's own timeline, where
+        // anyone looking at the order will actually see it.
+        await recordOrderEvent(tx, {
+          tenantId,
+          orderId: payment.orderId,
+          wineOrderId: payment.wineOrderId,
+          type: 'PAYMENT_DECLINED',
+          actorType: 'GATEWAY',
+          payload: { provider: payment.provider, status: orderStatus || 'unknown', amount: payment.amount },
+        })
+      }
 
       // A declined card needs nothing written onto the order any more. It was
       // already marked incomplete when the guest was sent to the gateway, and
@@ -166,8 +190,11 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
       // the Payment row, which keeps the gateway's own verbatim status.
       //
       // `processing` was the reason this used to branch — it is still in flight
-      // and may yet approve — and that distinction now costs nothing, because
-      // neither case writes to the order.
+      // and may yet approve — and that distinction now costs nothing for the
+      // order's own fields, because neither case writes to the order. It does
+      // still matter for the `OrderEvent` above, which is why that part stayed
+      // conditional even after this comment originally said the distinction
+      // "costs nothing."
       return 'not-approved' as const
     }
 
