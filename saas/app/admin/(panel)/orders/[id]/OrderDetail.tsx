@@ -387,19 +387,27 @@ export default function OrderDetail({
     // descendant of it. Calling `e.stopPropagation()` inside the menu (below)
     // only stops the event bubbling to further *ancestors*; it cannot stop a
     // second, independently-registered listener on that same `document` node
-    // from also running, which is exactly what this one is. So instead of
-    // relying on stopPropagation to keep this handler from seeing the click at
-    // all, this checks whether the click actually landed inside the control —
-    // the trigger pill or the open menu (including the payment-method
-    // sub-picker) — and only closes when it didn't. Without this, clicking
-    // "Paid" fired this handler right after `handleStepClick` opened the
-    // picker, closing it in the same tick.
+    // from also running, which is exactly what this one is.
+    //
+    // A plain containment check (`e.target.closest('[data-status-menu]')`) on
+    // a *bubble*-phase listener is not enough, and this was confirmed live,
+    // not assumed: clicking "Paid" swaps the menu's content (the step list
+    // unmounts, the Bank Transfer/Cash picker mounts in its place), and React
+    // flushes that synchronously as part of dispatching the click to its own
+    // (earlier-registered) bubble listener — *before* this listener's turn on
+    // the same `document` node. By the time this ran, `e.target` (the old
+    // "Paid" button) had already been removed from the DOM, so
+    // `.closest()` on a detached node found nothing and this handler
+    // wrongly concluded the click was "outside" and closed what the click had
+    // just opened. Running in the *capture* phase fixes this: capture fires
+    // top-down before the click ever reaches the target, so the containment
+    // check runs while the DOM is still exactly as the user clicked it.
     function close(e: MouseEvent) {
       if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
       setStatusMenuOpen(false); setPickingPaymentMethod(false)
     }
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
+    document.addEventListener('click', close, true)
+    return () => document.removeEventListener('click', close, true)
   }, [statusMenuOpen])
 
   useEffect(() => {

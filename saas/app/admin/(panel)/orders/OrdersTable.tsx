@@ -626,22 +626,30 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     // `onClick={e => e.stopPropagation()}` wrappers around the menu (and the
     // mobile inline picker) only stop the event bubbling to further
     // *ancestors*; they cannot stop this second, independently-registered
-    // `document` listener from also running for the same click. So rather than
-    // relying on stopPropagation to keep this handler from seeing the click at
-    // all, check whether the click actually landed inside the control (the
-    // portal-rendered menu, or the mobile inline one, both marked
-    // `data-status-menu`) and only close when it didn't. Without this,
-    // clicking "Paid" fired this handler right after `handleStepClick` opened
-    // the Bank Transfer/Cash picker, closing it in the same tick.
+    // `document` listener from also running for the same click.
+    //
+    // A plain containment check (`e.target.closest('[data-status-menu]')`) on
+    // a *bubble*-phase listener is not enough either, confirmed live: clicking
+    // "Paid" swaps the menu's content (the step list unmounts, the Bank
+    // Transfer/Cash picker mounts in its place), and React flushes that
+    // synchronously while dispatching the click to its own (earlier-
+    // registered) bubble listener — before this listener's turn on the same
+    // `document` node. By then `e.target` (the old "Paid" button) had already
+    // been removed from the DOM, so `.closest()` on a detached node found
+    // nothing and this handler wrongly concluded the click was "outside" and
+    // closed what the click had just opened. Running in the *capture* phase
+    // fixes this: capture fires top-down before the click ever reaches the
+    // target, so the containment check runs while the DOM is still exactly as
+    // the user clicked it.
     function handleClick(e: MouseEvent) {
       if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
       setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
     }
     function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
-    document.addEventListener('click', handleClick)
+    document.addEventListener('click', handleClick, true)
     document.addEventListener('scroll', handleScroll, true)
     return () => {
-      document.removeEventListener('click', handleClick)
+      document.removeEventListener('click', handleClick, true)
       document.removeEventListener('scroll', handleScroll, true)
     }
   }, [statusMenuId])
