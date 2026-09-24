@@ -8,7 +8,40 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (newest) — Three small admin fixes: onboarding banner, payment method picker, bug-widget default
+## 2026-09-24 (newest) — Payment E2E Chunk 3: real approved + declined Flitt settlements, full cross-view check
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–2 already done). Built the first two real
+tests in `tests/tier5-payment-e2e/`, run against `staging.vineworks.ge` (real Flitt hosted
+checkout, dev DB):
+
+- `payment-approved-settlement.spec.ts` (3/3: individual full 5-surface check, company + wine
+  order light checks) and `payment-declined-settlement.spec.ts` (1/1) — both run repeatedly and
+  green, both independently re-verified against the dev DB directly afterward (`Payment`/
+  `Order`/`OrderEvent` match what each spec asserted; exactly one `PAID`/`PAYMENT_DECLINED`
+  event each, no duplicates).
+- **Real app bug found and logged:** the settlement confirmation email never reaches Resend at
+  all (checked via Resend's own send-log list endpoint) — `KnownBugs.md` #53, root cause
+  suspected (a fire-and-forget send in `settle.ts` with no `waitUntil()`), not yet fixed.
+- **Real test-merchant finding, fixed in shared infra:** the non-3DS decline test card never
+  redirects back to the site — Flitt shows an inline "Declined" dialog with no way back to the
+  merchant. `tests/helpers/flittPayment.ts`'s `payAtFlittCheckout` now returns
+  `outcome: 'redirected' | 'declined-inline'` instead of assuming every card redirects.
+- Several test-building bugs found and fixed along the way (a company's access code can open
+  more than one blocking contact-role picker; `.isVisible({ timeout })` doesn't poll; a required
+  wine-order email field failed HTML5 validation silently; a live per-company wine discount
+  broke two different amount-parsing attempts before landing on a correct one) — full detail in
+  `playwright/notes/13-payment-approved-settlement.md` and `14-payment-declined-settlement.md`.
+- All test data cleaned up: individual/company orders via the real admin delete action; the
+  paid wine-order test settlements via direct SQL (Wine Orders admin has no delete action at
+  all — standing, already-documented limitation). Every toggle/override read before touching,
+  restored after, verified via a fresh DB read.
+- `tsc --noEmit` clean. Committed and pushed to `staging` (this session's own commit — see git
+  log for the hash). `vault/Plan-PaymentE2ETesting.md` Chunk 3 marked ✅ Done with its own result
+  log; Chunk 4 (Book & Pay Later) is next.
+
+---
+
+## 2026-09-23 — Three small admin fixes: onboarding banner, payment method picker, bug-widget default
 
 Three unrelated small requests from Max, unrelated to the just-finished Contact Roles work, handled
 in one pass:

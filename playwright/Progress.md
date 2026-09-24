@@ -263,3 +263,34 @@ loads, per KNOWN-ISSUES; a server restart does not help.
 `locale-integrity` (5/5), `payment-label-precedence`, `guide-picker` (4/4), and both booking tests
 in `payment-amount-integrity`. `payment-amount-integrity`'s wine test fixed but **not re-run since
 the fix**. Three specs still unrepointed (table above). Nothing committed, nothing pushed.
+
+---
+
+## 2026-09-24 — Tier 5 (real Flitt payment E2E) starts — Chunk 3, two specs added
+
+Not a new numbered Phase here — `vault/Plan-PaymentE2ETesting.md` is Tier 5's own tracker
+(Chunks 0–8), and its own Chunk 8 is where this file gets properly folded in with a real
+"Phase 5" section, run instructions, and the two-config split documented in `ARCHITECTURE.md`.
+This is a short pointer entry only, so this file doesn't go stale in the meantime.
+
+Chunk 3 added the first two specs under `tests/tier5-payment-e2e/` (own config,
+`playwright.staging.config.ts`, targets `https://staging.vineworks.ge` — the real deployed
+staging site, not localhost, since Flitt's callback needs a publicly reachable host):
+
+- `payment-approved-settlement.spec.ts` — 3/3 passing (individual booking, full 5-surface
+  check; company booking and a wine order, lighter checks). Real finding: the settlement
+  email never reaches Resend at all (`KnownBugs.md` #53, root cause suspected — a
+  fire-and-forget send with no `waitUntil()`), independently confirmed via Resend's own send
+  log across every run. Full writeup: [[13-payment-approved-settlement]].
+- `payment-declined-settlement.spec.ts` — 1/1 passing. Real finding: the non-3DS decline test
+  card never redirects back to the site at all — Flitt shows an inline "Declined" dialog with
+  no way back to the merchant, fixed in `helpers/flittPayment.ts` (`payAtFlittCheckout` now
+  returns `outcome: 'redirected' | 'declined-inline'`) rather than worked around locally, since
+  later chunks (7, forged/duplicate callbacks) will also drive declines. Full writeup:
+  [[14-payment-declined-settlement]].
+
+Both independently re-verified against the dev DB directly (`Payment`/`Order`/`OrderEvent`),
+not just trusted on a green Playwright run — see each note's own "Independent verification"
+section. All test data swept to zero afterward, including via direct SQL for the wine-order
+scenario (Wine Orders admin still has no delete action — same accepted debris shape the rest
+of this suite already lives with there).

@@ -29,7 +29,7 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 | **0** | Research — scenario matrix, coverage gaps, dependency map, Flitt product research (test merchant, Pay by Link, reversals), live-verified `createCheckout()` against the test merchant | ✅ Done (2026-09-24) |
 | **1** | One live, manual proof-of-loop on staging before writing any test code | ✅ Done (2026-09-24) |
 | **2** | Scaffolding: `playwright.staging.config.ts`, `tier5-payment-e2e/` | ✅ Done (2026-09-24) |
-| **3** | Book & Pay Now — approved + declined, full cross-view check | ⬜ Not started |
+| **3** | Book & Pay Now — approved + declined, full cross-view check | ✅ Done (2026-09-24) |
 | **4** | Book & Pay Later — reservation → invoice → manual bank transfer, full cross-view check | ⬜ Not started |
 | **5** | Admin-created order — parity with guest orders, then manual payment | ⬜ Not started |
 | **6** | Edit after the fact — stale-money check on an already-paid order | ⬜ Not started |
@@ -38,12 +38,14 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Chunks 0, 1, and 2 are done. The real settle loop is proven live
+**Overall resume point:** 🔜 Chunks 0–3 are done. The real settle loop is proven live
 on staging (see Chunk 1's result log below), the race-condition it surfaced is fixed and
 verified (see "Incident and fix" below), Staging Winery runs **permanently** on Flitt's public
-test merchant (`1549901`/`test` — see Ground Rule 1), and the shared scaffolding (staging
-config + `flittPayment.ts` helper) is built and live-verified (see Chunk 2's result log below).
-**Chunk 3 (Book & Pay Now scenarios) is next**, and per [[ClaudeInstructions]] Rule 8 still
+test merchant (`1549901`/`test` — see Ground Rule 1), the shared scaffolding (staging
+config + `flittPayment.ts` helper) is built and live-verified (see Chunk 2's result log below),
+and Chunk 3 has closed the single biggest gap from §3 — a real approved settlement and a real
+decline, both checked across every §4 surface (see Chunk 3's result log below).
+**Chunk 4 (Book & Pay Later) is next**, and per [[ClaudeInstructions]] Rule 8 still
 gets called out for confirmation as it comes up, not assumed from this plan alone.
 
 ### Incident and fix (2026-09-24) — read before touching credentials again
@@ -344,8 +346,10 @@ site, not written from guesswork.
 **Goal:** close the single biggest gap from §3 — an actual settlement, and an actual decline.
 **Status:** ⬜ Not started.
 
-- Approved: non-3DS card first (simpler to automate), then the 3DS card with the `111111`
-  OTP step, for an individual booking.
+- Approved: non-3DS card first (simpler to automate), then the 3DS card — Chunk 2 found this
+  merchant's "3DS" challenge is actually a same-origin iframe with a "Continue" button, not an
+  OTP field (`flittPayment.ts`'s `payAtFlittCheckout` already handles both shapes) — for an
+  individual booking.
 - Declined: non-3DS decline card — confirm the order is **not** mis-read as paid anywhere,
   stays on `/admin/abandoned`, no settlement email sent.
 - Both checked across every surface in §4: admin orders table, order detail, `/admin/abandoned`,
@@ -353,6 +357,61 @@ site, not written from guesswork.
 - Repeat once for a company booking and once for a wine order, reusing the same helper —
   these three share `startCheckout()`, so one thorough individual-booking spec plus two
   lighter confirmation passes is proportionate, not three full rebuilds.
+
+**Result log (2026-09-24):** Both specs built and live-verified against real staging, not
+written from guesswork — `tests/tier5-payment-e2e/payment-approved-settlement.spec.ts` (3/3:
+individual full check, company + wine order light checks) and `payment-declined-settlement.spec.ts`
+(1/1). Full writeups: `playwright/notes/13-payment-approved-settlement.md`,
+`playwright/notes/14-payment-declined-settlement.md`.
+
+- **The settlement email question from Chunk 1 is now answered, not left inconclusive.** It
+  never reaches Resend at all — checked via `GET api.resend.com/emails` (Resend's send-log
+  **list** endpoint, undocumented anywhere in this repo before now, confirmed live) both across
+  this whole suite's entire history and freshly after every one of today's approved-settlement
+  runs: zero attempts, not even a bounced one, for a "Payment received —" subject. Root cause
+  suspected via code reading, not yet proven or fixed: `settle.ts`'s `sendSettlementEmail()` is
+  fired `void ...().catch(...)` after the response has already gone out, with no `waitUntil()`/
+  `unstable_after()` keeping the serverless function alive — and unlike `createBooking.ts`'s own
+  fire-and-forget confirmation email (a single-hop send that reliably shows up, bounced, in the
+  same log), this one needs several sequential DB round trips before it ever reaches Resend's
+  API, giving the function far more chances to be torn down first. Logged as `KnownBugs.md` #53.
+  The spec's own check is deliberately a loud diagnostic (console line + test annotation), not a
+  hard `expect()` — see the spec file's header comment for why a permanently-red assertion for an
+  already-tracked, separately-owned bug would be worse than useful here.
+- **Real, load-bearing finding about the test merchant itself, fixed in shared infra:** the
+  non-3DS decline card never redirects back to the site — Flitt shows an inline "Declined"
+  dialog on its own page with no way back to the merchant at all (confirmed via a full
+  accessibility-tree dump). `flittPayment.ts`'s `payAtFlittCheckout` now returns
+  `outcome: 'redirected' | 'declined-inline'` instead of assuming every card eventually
+  redirects — worth having correct in shared infrastructure before Chunk 7 (forged/duplicate
+  callbacks) also needs to drive a decline. The order still settles correctly regardless, since
+  Flitt's server-to-server webhook fires independently of what the browser shows.
+- **A second, smaller finding:** Flitt's own webhook body reports this decline's `order_status`
+  as `"processing"`, not literally `"declined"` — `settle.ts` handles it correctly regardless
+  (anything not `'approved'` is not-approved), but anyone reading `Payment`/`OrderEvent` rows
+  later should not expect to see the literal word "declined" for this card.
+- **Independently re-verified against the dev DB directly**, not just a green Playwright run:
+  approved case — `Payment.status='approved'`, `settledAt` set, `Order.paidAt` set, exactly one
+  `OrderEvent(PAID)` (no duplicate — the Chunk-2 idempotency fix still holds); declined case —
+  `Payment.status='processing'`, `Order.paidAt` null/`abandonedAt` set, exactly one
+  `OrderEvent(PAYMENT_DECLINED)`, no `PAID` event anywhere. Both rows deleted after verifying.
+- **Several test-building findings, not app bugs**, fully written up in the two note files:
+  confirming a company's access code can open more than one blocking contact-role picker (one
+  per role with real people on file — Caucasus Vine Travel has two); `.isVisible({ timeout })`
+  does not poll and silently no-ops if the awaited state doesn't exist yet; a required
+  `contactEmail` field on the wine-order form fails HTML5 validation with zero visible error;
+  and a live per-company wine discount broke two different amount-parsing assumptions before
+  landing on a correct one.
+- **Cleanup:** individual and company orders deleted via the real admin UI in every run,
+  regardless of pass/fail. Wine-order settlements have no delete action at all (standing,
+  already-documented admin limitation) — swept via direct SQL as part of closing out this
+  chunk; the same manual sweep will be needed after any future run. All ZZ-marker rows
+  independently confirmed at zero afterward. Every toggle and company override read before
+  being touched and restored after, verified via a fresh DB read post-cleanup (`Individual
+  bookings`=false, `Company bookings`=false, `Wine orders`=true — matching what was live
+  before this chunk started; both fixture companies' overrides back to `null`/Default).
+
+**Resume point:** Chunk 3 fully closed out. Chunk 4 (Book & Pay Later) is next.
 
 ## Chunk 4 — Book & Pay Later
 

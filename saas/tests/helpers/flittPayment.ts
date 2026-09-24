@@ -14,6 +14,11 @@ import { Page, Locator } from '@playwright/test';
 // 3DS-challenge paths — see payAtFlittCheckout's own comment for what the
 // "3DS" cards actually do here). Any expiry/CVV is accepted by the sandbox;
 // payAtFlittCheckout defaults both if the caller doesn't care.
+//
+// `declineNo3DS` behaves differently from the other three in a way that
+// tripped up the first version of payAtFlittCheckout built around it
+// (Chunk 3, 2026-09-24): it never redirects back to our own site at all — see
+// FlittCheckoutResult's 'declined-inline' outcome for the full story.
 export const FLITT_TEST_CARDS = {
   approveNo3DS: '4444555511116666',
   declineNo3DS: '4444111155556666',
@@ -62,10 +67,37 @@ export interface FlittTestCard {
 }
 
 export interface FlittCheckoutResult {
-  /** page.url() once Flitt has redirected back to our own domain. */
+  /**
+   * page.url() once settlement is done — this is only our own domain when
+   * `outcome === 'redirected'`. For `'declined-inline'` it is still
+   * pay.flitt.com; see that field's own comment.
+   */
   finalUrl: string;
   /** Whether a 3DS/OTP-style challenge actually appeared for this card. */
   challengeAppeared: boolean;
+  /**
+   * `'redirected'` — Flitt sent the browser back to our own domain
+   * (`/api/payments/flitt/return`), the shape every card was assumed to
+   * follow until this was actually checked live for a decline.
+   *
+   * `'declined-inline'` — real finding, 2026-09-24 (Chunk 3 of
+   * vault/Plan-PaymentE2ETesting.md): the non-3DS DECLINE card
+   * (`4444111155556666`) never redirects at all. Flitt shows a same-page
+   * dialog (`role="dialog"`, heading "Declined", reason code "2000 Payment
+   * declined by issuing bank...") with only a Close (×) button, which
+   * reopens the card form for a retry — there is no "back to merchant" link
+   * anywhere on the page, confirmed by a full accessibility-tree dump. The
+   * browser is stuck on pay.flitt.com until the guest manually navigates
+   * away (closes the tab, presses back) — exactly the "closed tab, no
+   * callback" case the plan's §2c already documents as indistinguishable
+   * from a decline on the ORDER's side. The order itself still settles
+   * correctly: Flitt's server-to-server webhook (`server_callback_url`)
+   * fires independently of what the browser shows, so `settlePayment()` still
+   * records `PAYMENT_DECLINED` — a test asserting on this outcome should
+   * verify against the admin/DB side, not wait for a redirect that will
+   * never come for this card.
+   */
+  outcome: 'redirected' | 'declined-inline';
 }
 
 /**
@@ -151,9 +183,30 @@ export async function payAtFlittCheckout(page: Page, card: FlittTestCard): Promi
     });
   }
 
-  // Whether or not a challenge fired, Flitt redirects back to our own site
-  // once settlement finishes — approved or declined both redirect, only the
-  // destination's own content differs.
-  await page.waitForURL((url) => url.host !== 'pay.flitt.com', { timeout: 25_000 });
-  return { finalUrl: page.url(), challengeAppeared };
+  // Whether or not a challenge fired, an APPROVED payment redirects back to
+  // our own site. A DECLINED non-3DS payment does not — see FlittCheckoutResult's
+  // 'declined-inline' comment for the live finding this races against. Racing
+  // both rather than trying the redirect first and falling back on timeout:
+  // waiting out the full 25s on every decline would make this helper's
+  // slowest, most certain path (a card this merchant always declines) also
+  // its slowest to detect.
+  const declinedDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Declined' }) });
+  const redirected = page
+    .waitForURL((url) => url.host !== 'pay.flitt.com', { timeout: 25_000 })
+    .then(() => true as const);
+  const declinedInline = declinedDialog
+    .waitFor({ state: 'visible', timeout: 25_000 })
+    .then(() => false as const);
+  // Whichever loses the race still rejects on its own 25s timeout later —
+  // swallowed here (as a separate consumer, not altering the race itself) so
+  // it doesn't surface as an unhandled rejection after this function returns.
+  redirected.catch(() => {});
+  declinedInline.catch(() => {});
+  const wasRedirected = await Promise.race([redirected, declinedInline]);
+
+  return {
+    finalUrl: page.url(),
+    challengeAppeared,
+    outcome: wasRedirected ? 'redirected' : 'declined-inline',
+  };
 }
