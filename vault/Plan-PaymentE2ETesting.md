@@ -125,6 +125,52 @@ one `OrderEvent(PAID)`, confirming the correction didn't reopen the original rac
 closing the new one. Both scripts' throwaway rows were deleted and a follow-up query
 confirmed zero left behind.
 
+**Continuation (2026-09-24) — an independent audit, not another incident.** After the
+corrected fix (`46cf7c2`) landed, an independent audit reviewed the current state of
+`settle.ts`'s idempotency gate — the `tx.payment.updateMany({ where: { id: payment.id,
+settledAt: null }, ... })` claim described above — and **confirmed the core
+exactly-once-settlement guarantee is correct.** It found two additional, narrowly-scoped
+things worth fixing, not a redesign:
+
+1. **The remaining duplicate-event race, now closed.** The trade-off this doc accepted
+   above — two simultaneous deliveries of the exact same *non-final* status (two
+   `processing` pings, or two genuine `declined` pings) both passing the `settledAt: null`
+   gate and both writing a duplicate `OrderEvent` — is fixed by adding `status: { not:
+   orderStatus || 'unknown' }` to the claim's `where` clause. A `processing → approved`
+   sequence is unaffected (the statuses differ); two identical concurrent pings now have
+   their second call find the row's `status` already equal to what it's trying to write,
+   so `claim.count === 0` and the duplicate is dropped.
+2. **`processing` no longer mislabeled as a decline.** The `!approved` branch used to
+   record `OrderEvent(PAYMENT_DECLINED)` for *any* non-approved status, including
+   `processing` — which means "still in flight, may yet approve," not an actual decline.
+   A `processing → approved` sequence therefore wrote a false "declined, then somehow
+   paid" line onto the order's own timeline. Fixed by skipping the `OrderEvent` write
+   entirely when `orderStatus === 'processing'` — no new `OrderEventType` added (that
+   needs a Prisma migration, a separate workflow per [[ClaudeInstructions]] Rule 10, out
+   of scope here). The `Payment` row's `status`/`rawResponse` still update
+   unconditionally either way; only the `OrderEvent` recording is conditional.
+
+Both changes made together in commit `317a144`, `staging`. Verified with three scenarios
+against Staging Winery's dev DB (throwaway Order+Payment rows per scenario, real signed
+callback bodies, `npx tsx` script deleted after use, cleanup confirmed by a follow-up
+query showing zero rows left): **(A)** two concurrent identical `processing` calls write
+zero `OrderEvent` rows, and a following `approved` call still settles normally
+(`outcome: 'settled'`, exactly one `OrderEvent(PAID)`); **(B)** two concurrent identical
+genuine `declined` calls now write exactly **one** `OrderEvent(PAYMENT_DECLINED)`, not
+two — the actual proof the new `WHERE` condition closes the race; **(C)** two concurrent
+identical `approved` calls still produce exactly one `settled` + one `already-settled` +
+one `OrderEvent(PAID)` — confirming neither change reopened the original race. `tsc
+--noEmit` clean.
+
+**Also flagged by the same audit, deliberately not fixed here — a separate, undecided
+feature question:** a genuine gateway-side `reversed` (refund/chargeback) callback would
+currently still be silently discarded by the `settledAt: null` gate, since **nothing in
+this app reacts to a `reversed` status at all.** This is the same gap §1b above already
+documents ("Flitt does support refunds — and our app has no idea when one happens") —
+still open, still Max's call whether to build real reversal handling or accept manual
+reconciliation (admin refunds in Flitt, then manually un-pays the order here too). Not
+duplicated as a new finding; linked here so it isn't lost between the two write-ups.
+
 ---
 
 ## Ground rules for every chunk
