@@ -578,8 +578,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   }, [])
 
   // Status menu — menu itself renders in a portal (see bottom of component) so it
-  // can't be clipped by the table's sticky columns / scroll container; position is
-  // captured from the trigger button's rect when opened.
+  // can't be clipped by an ancestor's overflow (the table's sticky columns / scroll
+  // container, or the mobile card list's own `overflow-hidden` — #62); position is
+  // captured from the trigger element's rect when opened.
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
   const [statusMenuRect, setStatusMenuRect] = useState<{ top: number; bottom: number; left: number } | null>(null)
   // Set instead of firing the 'paid' change immediately when its step is
@@ -624,7 +625,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     // Next's App Router hydrates at `document`, so React's own delegated click
     // listener lives on that same node — not a descendant of it. The nested
     // `onClick={e => e.stopPropagation()}` wrappers around the menu (and the
-    // mobile inline picker) only stop the event bubbling to further
+    // mobile card's trigger div) only stop the event bubbling to further
     // *ancestors*; they cannot stop this second, independently-registered
     // `document` listener from also running for the same click.
     //
@@ -765,7 +766,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     await changeBookingStatus(orderId, change)
   }
 
-  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
+  // Typed HTMLElement, not HTMLButtonElement — the mobile card list's trigger is
+  // the wrapping div (see #17's hit-area note), not the button itself, so this
+  // needs to accept a rect from either.
+  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLElement>) {
     if (statusMenuId === orderId) {
       setStatusMenuId(null)
       setStatusMenuRect(null)
@@ -889,7 +893,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <div
                     className="relative flex-shrink-0 py-2 -my-2"
                     data-status-menu
-                    onClick={e => { e.stopPropagation(); setStatusMenuId(statusMenuId === order.id ? null : order.id) }}
+                    onClick={e => { e.stopPropagation(); toggleStatusMenu(order.id, e) }}
                   >
                     <button
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
@@ -897,43 +901,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     >
                       {labelFor(locale, order.stage)} ▾
                     </button>
-                    {statusMenuId === order.id && (
-                      <div
-                        className="absolute right-0 z-30 rounded-xl shadow-lg border py-1 mt-1"
-                        style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {payingOrderId === order.id ? (
-                          <div className="px-4 py-2.5">
-                            <p className="text-xs mb-2" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-                            <div className="flex flex-col gap-1.5">
-                              <button onClick={() => handlePaymentMethodChosen(order.id, 'BANK_TRANSFER')}
-                                className="text-left text-sm px-2 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                                {at('paymentMethod.bankTransfer')}
-                              </button>
-                              <button onClick={() => handlePaymentMethodChosen(order.id, 'CASH')}
-                                className="text-left text-sm px-2 py-1.5 rounded-lg font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                                {at('paymentMethod.cash')}
-                              </button>
-                              <button onClick={() => setPayingOrderId(null)}
-                                className="text-left text-xs px-2 py-1" style={{ color: C.muted }}>
-                                {at('paymentMethod.cancel')}
-                              </button>
-                            </div>
-                          </div>
-                        ) : menuSteps(order).map(step => (
-                          <button
-                            key={step.code}
-                            onClick={() => handleStepClick(order.id, step)}
-                            className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors active:bg-amber-100"
-                            style={{ color: C.text }}
-                          >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
-                            {labelFor(locale, step.code)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* Menu itself renders in the shared portal at the bottom of this
+                        component (#62) — same trigger→toggleStatusMenu→statusMenuRect
+                        path the desktop table/list/board views use, so it can't be
+                        clipped by this card's own overflow-hidden. */}
                   </div>
                 </div>
 
