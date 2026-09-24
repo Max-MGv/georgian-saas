@@ -324,3 +324,35 @@ since the automated spec deletes its own row before cleanup could be inspected m
 `provider='manual'`, `method='BANK_TRANSFER'`, `settledAt` set, correct amount. All test data
 swept to zero afterward; the "Individual bookings" toggle confirmed back at its resting value
 (off) both via the spec's own restore and a separate live DOM read.
+
+## 2026-09-24 (continued) — Chunk 5, one spec added, no app divergence found — two real test bugs found instead
+
+`payment-admin-order.spec.ts` — 1/1 passing. Covers the admin-created-order gap: an order typed
+directly into `/admin/orders/new` (never `startCheckout()`, per the plan's §2d) checked for
+parity with a guest-created one across every §4 surface, then paid via the same manual
+bank-transfer path Chunk 4 proved works. **No real parity divergence found** — same
+`OrdersTable`/`OrderDetail`/CSV code paths a guest order renders through, confirmed
+value-for-value and format-for-format against what Chunk 4 established for a guest order in
+the same paid+invoiced end state. Full writeup: [[16-payment-admin-order]].
+
+Two real bugs surfaced while *building* this spec, both in the test itself, not the app:
+1. A URL-match regex (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matched its own starting page
+   (`/admin/orders/new` — "new" is alphanumeric), so the post-creation redirect check passed
+   instantly without ever waiting for the real navigation, silently capturing the wrong URL for
+   every later "detail page" check. Looked exactly like a data bug at first (the same order,
+   opened directly, rendered its correct total) until an HTML dump of the failing page showed
+   it was still the blank New Order form. Fixed with a negative lookahead excluding that one
+   literal segment.
+2. A small, systematic clock-skew between this machine and Resend's send pipeline (~380ms)
+   made an unbuffered `>=` timestamp comparison fail consistently, not intermittently — no
+   amount of polling fixes a systematic bias. Fixed with a 10-second safety margin on the
+   comparison's start time.
+
+Independently re-verified against the dev DB directly (cleanup temporarily disabled for one
+run to inspect the final state before deleting via the normal admin UI): `Order.paidAt`/
+`invoiceSentAt` both set and independent, `abandonedAt` null throughout, `Payment` row with
+`provider='manual'`, `method='BANK_TRANSFER'`, `settledAt` set, correct amount, and
+`OrderEvent(CREATED).actorType='ADMIN'` (vs. `'GUEST'` for a guest order — the one difference,
+invisible to every UI surface checked, exactly as designed). All test/debug data swept to zero
+afterward. This spec never touches the "Individual bookings" toggle at all — `createOrderAdmin`
+doesn't consult it — so no restore step was needed.

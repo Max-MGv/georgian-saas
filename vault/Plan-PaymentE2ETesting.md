@@ -31,23 +31,26 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 | **2** | Scaffolding: `playwright.staging.config.ts`, `tier5-payment-e2e/` | ✅ Done (2026-09-24) |
 | **3** | Book & Pay Now — approved + declined, full cross-view check | ✅ Done (2026-09-24) |
 | **4** | Book & Pay Later — reservation → invoice → manual bank transfer, full cross-view check | ✅ Done (2026-09-24) |
-| **5** | Admin-created order — parity with guest orders, then manual payment | ⬜ Not started |
+| **5** | Admin-created order — parity with guest orders, then manual payment | ✅ Done (2026-09-24) |
 | **6** | Edit after the fact — stale-money check on an already-paid order | ⬜ Not started |
 | **7** | Idempotency, forged callback, tampered amount — driven through the real staging route | ⬜ Not started |
 | **8** | Docs: `playwright/README.md`/`ARCHITECTURE.md`, `Progress.md`, vault entries for the reversal-sync gap and the Pay-by-Link idea | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Chunks 0–4 are done. The real settle loop is proven live
+**Overall resume point:** 🔜 Chunks 0–5 are done. The real settle loop is proven live
 on staging (see Chunk 1's result log below), the race-condition it surfaced is fixed and
 verified (see "Incident and fix" below), Staging Winery runs **permanently** on Flitt's public
 test merchant (`1549901`/`test` — see Ground Rule 1), the shared scaffolding (staging
 config + `flittPayment.ts` helper) is built and live-verified (see Chunk 2's result log below),
 Chunk 3 closed the single biggest gap from §3 — a real approved settlement and a real
-decline, both checked across every §4 surface (see Chunk 3's result log below) — and Chunk 4
+decline, both checked across every §4 surface (see Chunk 3's result log below) — Chunk 4
 closed the "book & pay later" loop, finding and fixing a real, standing app bug along the way
-(the manual-payment "Paid" picker closing itself instantly — see Chunk 4's result log below).
-**Chunk 5 (Admin-created order) is next**, and per [[ClaudeInstructions]] Rule 8 still
+(the manual-payment "Paid" picker closing itself instantly — see Chunk 4's result log below),
+and Chunk 5 confirmed an admin-created order has genuine parity with a guest-created one
+across every §4 surface once both are paid, finding no app divergence but two real bugs in
+the test itself along the way (see Chunk 5's result log below).
+**Chunk 6 (Edit after the fact) is next**, and per [[ClaudeInstructions]] Rule 8 still
 gets called out for confirmation as it comes up, not assumed from this plan alone.
 
 ### Incident and fix (2026-09-24) — read before touching credentials again
@@ -583,11 +586,65 @@ live-verified against real staging (1/1 passing). Full writeup: `playwright/note
 ## Chunk 5 — Admin-created order
 
 **Goal:** parity between an admin-created order and a guest-created one, then getting it paid.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done (2026-09-24).
 
 - `createOrderAdmin` never touches Flitt (§2d) — create one, confirm it renders identically
   to a guest order on every §4 surface, then run it through the same manual-payment step as
   Chunk 4.
+
+**Result log (2026-09-24):** `tests/tier5-payment-e2e/payment-admin-order.spec.ts` built and
+live-verified against real staging (1/1 passing). Full writeup: `playwright/notes/16-payment-admin-order.md`.
+
+- Created an individual order directly through `/admin/orders/new` (date/party size/name/
+  phone/email plus a manual "Tasting only ₾/pp" rate — an individual order always shows this,
+  since there's no company tier to fall back on). Confirmed absent from `/admin/abandoned` and
+  unpaid/un-invoiced on the admin orders table and CSV **immediately** on creation — a
+  genuinely different resting state than a guest order that got declined or abandoned at the
+  gateway (Chunk 3), since this order never went anywhere to be incomplete from.
+- **Parity checked across every §4 surface at three points (just-created, invoiced, paid)** —
+  admin orders table, the order's own detail view, and CSV export — using the exact same
+  assertions, text, and formatting Chunk 4 already established for a guest-created order in
+  the same end states. **No real divergence found.** Independently confirmed via direct SQL
+  after a run with cleanup temporarily disabled: `Order.paidAt`/`invoiceSentAt` both set and
+  independent, `abandonedAt` null throughout, `Payment{ provider: 'manual', method:
+  'BANK_TRANSFER', status: 'recorded', settledAt` set, `amount` matching `totalPrice` exactly
+  `}` — byte-for-byte the same shape Chunk 4 found for a guest order. The one actual
+  difference — `OrderEvent(CREATED).actorType = 'ADMIN'` vs. `'GUEST'` — is invisible to every
+  UI surface checked, exactly as the app's design intends (§4: "CSV/table have no created-by
+  column").
+- **Two real bugs found and fixed, both in this test, not the app** — worth carrying into
+  future chunks:
+  1. A URL-match regex reused from this tier's own established pattern
+     (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matched its own starting page — `/admin/orders/new`
+     itself, since "new" is alphanumeric — so the post-creation redirect assertion passed
+     instantly, before the real client-side redirect happened, silently capturing the wrong
+     URL for every later "detail page" check. This produced a very convincing false app-bug
+     signal (the order's real detail page, opened directly, rendered its correct 200₾ total;
+     the test's own `page.goto(detailUrl)` showed a stark "0.00₾" for "the same order") that
+     took a full debug pass — dumping the failing page's actual HTML — to trace to the test
+     re-visiting a blank New Order form, not `OrderDetail.tsx` at all. Fixed with a negative
+     lookahead (`/\/admin\/orders\/(?!new$)[a-zA-Z0-9]+$/`). Worth checking if any other chunk's
+     spec reuses the un-anchored version of this regex starting from a URL where "new" (or any
+     other literal alphanumeric route segment) is reachable.
+  2. A small, systematic clock-skew (~380ms) between this machine's local clock and the
+     timestamp Resend's send pipeline stamps `created_at` with made an unbuffered `>=`
+     timestamp comparison in the Resend-email-content check fail consistently, not
+     intermittently — confirmed live via the target email appearing in every single poll's own
+     debug output while the comparison still failed. A systematic bias, unlike jitter, cannot
+     be fixed by retrying/polling longer. Fixed with a 10-second safety margin on the
+     comparison's start time (`new Date(Date.now() - 10_000)`) — costs nothing real, since
+     `fetchRecentResendEmails`'s own `limit=100` already scopes the list to "recent sends."
+- This spec never touches the "Individual bookings" payment-section toggle at all —
+  `createOrderAdmin` doesn't call `shouldTakePayment()`, so the toggle is irrelevant here — and
+  is therefore safe to run alongside the other three tier5 specs, not just sequentially with
+  them.
+- **Cleanup:** the automated spec deletes its own order via the normal admin UI in every run,
+  regardless of pass/fail. One extra run had cleanup temporarily disabled on purpose to inspect
+  the final paid-state DB row directly (see above); that row was then deleted the same way
+  (admin UI), and a follow-up direct-SQL query confirmed zero `Order`/`Payment` rows remain
+  matching the `ZZPaymentE2EAdminOrder%` marker.
+
+**Resume point:** Chunk 5 fully closed out. Chunk 6 (Edit after the fact) is next.
 
 ## Chunk 6 — Edit after the fact (the stale-money check)
 

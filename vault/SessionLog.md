@@ -8,6 +8,46 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-09-24 (newest) — Payment E2E Chunk 5: admin-created order parity, no app divergence found
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–4 already done). Closed Chunk 5 — an
+order created directly through `/admin/orders/new` (never touches `startCheckout()`, per §2d)
+checked for parity with a guest-created one across every §4 surface, then paid via the same
+manual bank-transfer path Chunk 4 proved works.
+
+- **No real app divergence found.** `tests/tier5-payment-e2e/payment-admin-order.spec.ts`
+  (1/1 passing) checked the admin orders table, the order's own detail view, and the CSV
+  export at three points (just-created, invoiced, paid), using the exact same assertions
+  Chunk 4 used for a guest order in the same end states — all passed. Independently confirmed
+  via direct SQL: same `Order`/`Payment`/`InvoiceSent` shape as a guest order, with the one
+  actual difference (`OrderEvent(CREATED).actorType='ADMIN'` vs `'GUEST'`) invisible to every
+  UI surface, exactly as designed.
+- **Two real bugs found and fixed, both in the test, not the app.** (1) A URL-match regex this
+  tier's own established pattern uses (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matched its own
+  starting page, `/admin/orders/new` — "new" is alphanumeric — so the post-creation redirect
+  check passed instantly before the real navigation happened, silently capturing the wrong URL
+  for every later check. Produced a very convincing false app-bug signal (the same order,
+  opened directly, rendered correctly; the test's own reload of "it" showed a stark "0.00₾")
+  before an HTML dump of the failing page traced it to the blank New Order form, not
+  `OrderDetail.tsx`. Fixed with a negative lookahead. (2) A small, systematic clock-skew
+  (~380ms) between this machine and Resend's send pipeline made an unbuffered timestamp
+  comparison in the email-content check fail consistently — a systematic bias, not jitter, so
+  no amount of polling could have fixed it. Fixed with a 10-second safety margin.
+- This spec never touches the "Individual bookings" payment toggle at all — `createOrderAdmin`
+  doesn't call `shouldTakePayment()` — so it's safe to run alongside the other three tier5
+  specs, not just sequentially.
+- Cleanup: automated spec deletes its own order via the admin UI every run; one extra run had
+  cleanup temporarily disabled on purpose to inspect the final paid-state DB row directly, then
+  deleted the same way. Follow-up SQL confirmed zero rows left.
+- Also found and committed, separately: a small pre-existing uncommitted vault-only change
+  (`KnownBugs.md` #63, a documented-but-deferred mobile tap-target trade-off from the #62 fix)
+  that was sitting from an earlier session turn — verified as exactly what the file already
+  showed, committed as its own housekeeping commit rather than folded into this chunk's work.
+- `tsc --noEmit` clean, `eslint` clean. Pushed to `staging`. `Plan-PaymentE2ETesting.md` Chunk 5
+  marked ✅ Done with its own result log; Chunk 6 (Edit after the fact) is next.
+
+---
+
 ## 2026-09-24 (newest) — Fixed KnownBugs #62: mobile orders card status dropdown clipped
 
 The mobile-only bug flagged (not fixed) during Payment E2E Chunk 4, below — closed as its own
