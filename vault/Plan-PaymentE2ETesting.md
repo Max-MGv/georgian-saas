@@ -171,6 +171,29 @@ still open, still Max's call whether to build real reversal handling or accept m
 reconciliation (admin refunds in Flitt, then manually un-pays the order here too). Not
 duplicated as a new finding; linked here so it isn't lost between the two write-ups.
 
+**Architecture question raised and closed (2026-09-24): should the webhook be prioritized
+over the browser redirect, rather than treating both as an equal race with an atomic
+tiebreaker?** Max's own instinct was that the webhook — not dependent on the guest's own
+browser/connection — should be treated as primary and the redirect as a backup. Both my own
+review and a separate independent audit reached the same conclusion: **no** — both channels
+carry the identical signature-verified proof once received (this isn't the "don't trust the
+client" scenario the industry's usual webhook-over-redirect advice is actually about, since
+Flitt's redirect payload is server-signed, not a client claim), so there's nothing genuine to
+prioritize. Deliberately trying to prefer one would mean either disabling the redirect's
+ability to settle at all (removing real resilience — a customer whose confirmation email
+depends on a webhook that's delayed for minutes/hours would wait needlessly) or adding an
+artificial wait/verify step (new latency and failure surface, for a race that's already
+correctly resolved). **Decision: kept the current symmetric design, no change made.**
+
+The audit's one genuinely new finding from this pass — a real gap neither "keep as-is" nor
+"prioritize the webhook" would have caught — is logged as **`KnownBugs.md` #61**: if *both*
+channels fail for independent reasons in the same window (rare, no observed instance), a
+paid order could sit unresolved indefinitely, since Flitt's own 24-hour webhook retry window
+and the redirect's independence from it are the only two safety nets, and there's currently
+no third one (e.g. a periodic reconciliation check against Flitt's own status endpoint) for
+the case where both are simultaneously unlucky. **Max's call: correct as low priority,
+deliberately deferred — not fixed as part of this plan.**
+
 ---
 
 ## Ground rules for every chunk
