@@ -621,7 +621,22 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // (the menu is a fixed-position portal, so it won't track the trigger button on scroll)
   useEffect(() => {
     if (!statusMenuId) return
-    function handleClick() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
+    // Next's App Router hydrates at `document`, so React's own delegated click
+    // listener lives on that same node — not a descendant of it. The nested
+    // `onClick={e => e.stopPropagation()}` wrappers around the menu (and the
+    // mobile inline picker) only stop the event bubbling to further
+    // *ancestors*; they cannot stop this second, independently-registered
+    // `document` listener from also running for the same click. So rather than
+    // relying on stopPropagation to keep this handler from seeing the click at
+    // all, check whether the click actually landed inside the control (the
+    // portal-rendered menu, or the mobile inline one, both marked
+    // `data-status-menu`) and only close when it didn't. Without this,
+    // clicking "Paid" fired this handler right after `handleStepClick` opened
+    // the Bank Transfer/Cash picker, closing it in the same tick.
+    function handleClick(e: MouseEvent) {
+      if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
+      setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
+    }
     function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
     document.addEventListener('click', handleClick)
     document.addEventListener('scroll', handleScroll, true)
@@ -865,6 +880,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                       changes. Card list = the phone view of /admin/orders. */}
                   <div
                     className="relative flex-shrink-0 py-2 -my-2"
+                    data-status-menu
                     onClick={e => { e.stopPropagation(); setStatusMenuId(statusMenuId === order.id ? null : order.id) }}
                   >
                     <button
@@ -1256,6 +1272,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         return createPortal(
           <div
             className="rounded-lg shadow-lg border py-1"
+            data-status-menu
             style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >

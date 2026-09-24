@@ -382,7 +382,22 @@ export default function OrderDetail({
 
   useEffect(() => {
     if (!statusMenuOpen) return
-    function close() { setStatusMenuOpen(false); setPickingPaymentMethod(false) }
+    // Next's App Router hydrates at `document`, so React's own delegated click
+    // listener lives on the same node this effect adds its listener to — not a
+    // descendant of it. Calling `e.stopPropagation()` inside the menu (below)
+    // only stops the event bubbling to further *ancestors*; it cannot stop a
+    // second, independently-registered listener on that same `document` node
+    // from also running, which is exactly what this one is. So instead of
+    // relying on stopPropagation to keep this handler from seeing the click at
+    // all, this checks whether the click actually landed inside the control —
+    // the trigger pill or the open menu (including the payment-method
+    // sub-picker) — and only closes when it didn't. Without this, clicking
+    // "Paid" fired this handler right after `handleStepClick` opened the
+    // picker, closing it in the same tick.
+    function close(e: MouseEvent) {
+      if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
+      setStatusMenuOpen(false); setPickingPaymentMethod(false)
+    }
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [statusMenuOpen])
@@ -705,7 +720,7 @@ export default function OrderDetail({
         {/* Action bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Status dropdown */}
-          <div className="relative flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="relative flex items-center gap-1.5" data-status-menu onClick={e => e.stopPropagation()}>
             {(() => {
               const cfg = styleFor(displayCode)
               return (
