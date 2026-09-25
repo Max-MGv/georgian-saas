@@ -119,15 +119,20 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 | **1** | Lock price-affecting order fields once `paidAt` is set | ✅ Done |
 | **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ✅ Done |
 | **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ✅ Done |
-| **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ⬜ Not started |
+| **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ✅ Done |
 | **5** | Fix the order-detail page's multi-payment display (finding 4) | ⬜ Not started |
 | **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ⬜ Not started |
 | **7** | Docs: close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 3 done and verified live on `staging.vineworks.ge`, commit `9e64241`.
-Chunk 4 next (card-link top-up).
+**Resume point:** Chunk 4 done and verified live on `staging.vineworks.ge`, commit `d331c66`.
+Chunk 5 next (fix the multi-payment display) — **read Chunk 4's Result section first**: live
+verification surfaced a real, previously-unknown bug in `settle.ts` (now `KnownBugs.md` #65)
+where a second real settlement on an order still in stage `NEW` drags `Order.paidAt` forward to
+the newest payment's time, not the first. Not fixed in Chunk 4 (out of scope, and `settle.ts` is
+the shared, heavily-hardened file behind bug #60) — worth fixing before or alongside Chunk 5,
+since Chunk 5 is already touching the same "more than one payment landed" territory.
 
 ---
 
@@ -556,7 +561,7 @@ against the dev database only, verified by an existing precedent migration doing
 ## Chunk 4 — Card-link top-up
 
 **Goal:** let a guest pay their own balance by card, without the admin handling it.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25. Commit `d331c66` on `staging`.
 
 - Decouple `createCheckout()`/`startCheckout()`'s Flitt-facing reference from
   `Payment.orderId` (finding 3) — mint a fresh string per checkout attempt (e.g. tied to a
@@ -572,6 +577,202 @@ against the dev database only, verified by an existing precedent migration doing
   pay it (test card), confirm settlement, confirm the balance recomputes to zero, confirm the
   original payment is untouched, confirm `settle.ts` handled the second callback correctly
   (it already should, per finding 3 — re-confirm through the real UI path, not just a script).
+
+### Result (2026-09-25)
+
+**What was built.** `startCheckout()` (`saas/lib/payments/startCheckout.ts`) gained an optional
+`flittOrderId` override — when omitted, behaviour is byte-for-byte what it always was
+(`input.orderId`/`input.wineOrderId` sent straight through as Flitt's own `order_id`, exactly
+as every existing booking/wine-order checkout still does); only a caller that supplies one gets
+different behaviour. `Payment.orderId` is untouched by this — it's set separately, a few lines
+below, from `input.orderId` alone, same as before. A new file,
+`saas/lib/payments/topUpCheckout.ts`, is the one caller that supplies an override:
+`mintTopUpFlittOrderId(orderId)` returns `` `${orderId}-topup-${Date.now().toString(36)}-${random 6 chars}` ``
+— traceable by eye back to the real order, guaranteed distinct from both the original checkout's
+own reference (which is just the plain order id, never suffixed) and any earlier top-up attempt
+for the same order (timestamp + random). `startTopUpCheckout()` in that file does the actual
+work: validates the requested amount against a fresh read of the balance
+(`balanceDue(totalPrice, settled sum)`, same arithmetic as Chunk 3's `recordAdditionalPayment`,
+duplicated rather than shared — see "scope decisions" below), reads Flitt credentials directly
+off `Tenant` (not through `shouldTakePayment()`/`isPaymentConfigured()`, per ground rule 5 — no
+module toggle, no section toggle, no company override applies), then calls `startCheckout()`
+with the minted override. Confirmed before writing any of this, by reading the `Payment` model
+in `schema.prisma` in full: nothing in the schema stores Flitt's own `order_id` string anywhere
+— only `providerPaymentId`, which Flitt generates and returns — so this decoupling really does
+cost nothing structurally, exactly as finding 3 said.
+
+Two new server actions in `saas/app/actions/orders.ts`:
+- `startOrderTopUpCheckout(orderId, { amount })` — `requireAdmin`, builds an `orderDesc` from
+  the real order's name/date/time, calls `startTopUpCheckout()`, returns the checkout URL and
+  the new `Payment` row's id. No `revalidatePath` — nothing display-relevant changes until the
+  checkout actually settles through the real Flitt callback, same as any other checkout.
+- `sendOrderTopUpCheckoutEmail(orderId, paymentId, locale)` — looks the `Payment` row up by the
+  id the previous action returned (never trusts a client-supplied checkout URL or amount, same
+  reasoning as `startTopUpCheckout()`'s own re-read of its just-created row), then calls
+  `sendTopUpCheckoutEmail()` (`saas/lib/emails/topUpCheckoutEmail.ts`), a thin wrapper around
+  `sendTenantEmail()` — same sender/suppression infrastructure `sendInvoiceEmail` uses, new
+  `fromLocalPart: 'payments'`. The template, `saas/lib/emails/templates/topUpCheckoutEmailTemplate.ts`,
+  is bilingual (en/ka) and structurally modelled on `invoiceEmailTemplate.ts` (same theme
+  resolution, same header/footer wrapper) but deliberately much shorter — one amount, one
+  "Pay now" button, one fallback plain-text link — since a top-up has one job, unlike a full
+  itemised invoice.
+
+**Decision: checkout generation and emailing are two separate actions, not one blind
+"generate and send" click.** The plan's own wording ("generates... and it's emailed") reads as
+one step. Built as two for two reasons, one architectural and one about this task's own
+verification boundary: (1) a real Flitt API call that creates a real `Payment` row and a real
+email send to a guest are different kinds of action with different blast radii — separating them
+lets the admin see and copy the real link before deciding to email it (or hand it to the guest
+some other way — WhatsApp, SMS, read aloud on the phone), rather than an unreviewable one-click
+send; (2) this task's own hard boundary on real email sends required generating a checkout to be
+independently testable from sending mail, so the two could not be one inseparable server action
+without either violating the boundary or leaving the checkout-generation half unverified. UI:
+clicking "Send card-payment link" (gated identically to Chunk 3's "Record payment" —
+`isPaid && balance > 0`) reveals an amount field prefilled with the full balance (editable down,
+matching Chunk 3's partial-collection UX below); "Generate link" calls the first action and, on
+success, swaps the field for the real checkout URL (read-only, selectable) plus "Copy link"
+(`navigator.clipboard`), "Email to guest" (hidden if the order has no email address, with an
+explanatory line instead), and "Done".
+
+**Decision: partial collection by card is supported, matching Chunk 3.** The plan flagged this
+as open ("decide"). Went with "yes, support it" for the same reason Chunk 3 did: an admin who
+can only collect part of the balance right now (a guest paying for their own top-up but not a
+companion's) shouldn't be blocked or forced into a full-balance link, and the validation is the
+identical one check Chunk 3 already proved sufficient (`0 < amount <= balance`, reject anything
+else with an error naming the real balance). No new reasoning needed — same shape as Chunk 3's
+own amount box, prefilled with the full balance and editable down.
+
+**Scope decision: balance validation duplicated, not shared with `recordAdditionalPayment`.**
+Chunk 3's balance check runs inside a single atomic DB transaction alongside the payment write
+it guards. This chunk's "write" is an external HTTP call to Flitt's checkout API, which cannot
+itself run inside a database transaction — so `startTopUpCheckout()` reads the balance fresh
+immediately before calling `startCheckout()`, same arithmetic, but as a plain read-then-call, not
+a transaction. This is a best-effort UX guard, not the final authority on what gets collected —
+Flitt's own signed settlement callback through `settle.ts` remains the one place that decides
+what actually happens to the guest's money, exactly as it already was for the original checkout
+flow (which never wrapped `shouldTakePayment()` + `startCheckout()` in a transaction either).
+Chunk 3's `recordAdditionalPayment` was left completely untouched (not refactored to share this
+logic) — same reasoning as Chunk 3's own "byte-for-byte unchanged" discipline for
+`manualPayment.ts`: a small amount of duplicated arithmetic is cheaper than adding a shared
+dependency between a DB-transaction path and an external-API path that fail in different ways.
+
+**Verification — done live on `staging.vineworks.ge` against the dev DB, not just read from
+code:**
+1. `npx tsc --noEmit` clean. `scripts/check-i18n-parity.ts`: 1132/1132 both languages (9 new
+   `orderDetail.topUpCheckout.*` keys per locale).
+2. Created a throwaway individual order on Staging Winery (`cmuh3evgv0000jy04q88csx69`,
+   "ZZChunk4Test PostPaymentCardLink", 4 guests × ₾100 tasting rate = ₾400, with a real
+   `zzchunk4test@example.invalid` email address so the "has email" UI path could be exercised)
+   through the real `/admin/orders/new` form, marked it Paid · Bank transfer through the real
+   status-picker UI, then added a real ₾150 extra ("2 additional guests") — Total ₾550, Balance
+   due ₾150, both buttons ("Record payment", "Send card-payment link") visible side by side as
+   designed.
+3. **First card-link top-up, ₾100 of the ₾150 balance:** clicked "Send card-payment link",
+   changed the prefilled amount from ₾150 down to ₾100, clicked "Generate link" — a real
+   checkout URL came back (`pay.flitt.com/merchants/6aa79957f6f8336b820e6c82b7634f0c/...`,
+   `token=38f3638a...`). **Independent direct SQL read** (dev project `jpbkkngpgtvqmsocitjx`, via
+   `mcp__a9e48394-...`) immediately after, before paying anything: a new `Payment` row
+   (`provider: 'flitt', method: 'CARD', status: 'created', amount: 10000` tetri,
+   `providerPaymentId: '1017624934'`, `checkoutUrl` matching what the UI showed,
+   `orderId: 'cmuh3evgv0000jy04q88csx69'` — **the real internal order id**, not Flitt's minted
+   reference), sitting alongside the original manual `Payment` row completely unchanged
+   (`amount: 40000, method: BANK_TRANSFER, status: 'recorded'`, same `settledAt` as before this
+   chunk's action ran). Nothing in the `Payment` row or anywhere else in the schema stores the
+   Flitt-facing `order_id` string itself — by design (finding 3) — so the URL's own `token` value
+   and the two checkouts never colliding is the direct evidence the mint worked, not a stored
+   column read.
+4. **Actually paid the first checkout for real**, via the browser tools, using Flitt's real
+   hosted checkout page and the non-3DS approve test card from `Plan-PaymentE2ETesting.md`
+   (`4444555511116666`, expiry/CVV left at the sandbox's own pre-filled `09/26`/`111`) — a real
+   end-to-end payment, not a simulated callback. Redirected back to
+   `staging.vineworks.ge/payment/result?status=success`. **Direct SQL confirmed real settlement:**
+   the new `Payment` row's `status` flipped to `'approved'`, `settledAt` set — and the original
+   manual `Payment` row still exactly as it was (`40000`, `recorded`, unchanged `settledAt`,
+   `reversedAt: null`), byte-for-byte. Balance due on the real page recomputed live to ₾50.00.
+5. **Second card-link top-up, the remaining ₾50 — the crux test for finding 3.** Clicked "Send
+   card-payment link" again; typed ₾100 first (more than the ₾50 balance) and got the real
+   rejection message verbatim: *"That's more than the outstanding balance of 50.00₾. Generate a
+   link for at most the balance due — if more than that is genuinely owed, add it as an extra
+   first."* Then generated for exactly ₾50 — **a second real Flitt checkout succeeded with no
+   "Duplicate order" rejection**, a different `token` in its URL from the first. This is the
+   direct, repeated-not-just-once proof finding 3 asked for: two genuinely separate checkout
+   attempts for the *same* order, each minting its own Flitt-facing reference, neither colliding
+   with the other or with anything before it. Paid this one too, same test card, same real
+   redirect-back confirmation. **Final direct SQL read:** three `Payment` rows total —
+   `40000` (manual, untouched throughout), `10000` (flitt, approved, `providerPaymentId
+   1017624934`), `5000` (flitt, approved, `providerPaymentId 1017626556` — genuinely distinct) —
+   summing to exactly `55000`, `Order.totalPrice`. The live order-detail page showed no
+   "Balance due" row and neither top-up section at all (both gates correctly go false at exactly
+   zero, same as Chunk 3's own boundary case), Total still correctly ₾550.00.
+6. **Chunk 1's lock and Chunk 3's manual-payment path reconfirmed intact:** the page's own text
+   after all of this still read "This order is already paid. Guest counts, the tasting/lunch
+   split, rates, and food details are locked..." (Chunk 1), and "Record payment" remained present
+   and correctly gated alongside "Send card-payment link" throughout every step above (Chunk 3's
+   own code path — `recordAdditionalPayment`/`recordTopUpPayment` — was not touched by this
+   chunk's diff at all, confirmed by the diff itself, not re-tested live end to end since nothing
+   in it changed).
+7. **Live-confirmed, not just reasoned about: finding 4 (the order-detail page's "Paid · method"
+   label) really does flip.** The flow-line read "Paid · Card" after the two Flitt top-ups landed
+   — this order's *first* payment was Bank transfer, but the page's single-newest-payment query
+   (unchanged by this chunk) now shows the newest method instead. This is exactly what
+   Plan-PaymentE2ETesting's design spike predicted from reading the code but had not actually
+   observed rendering (its own two-payment test happened to use CARD both times). Confirms
+   Chunk 5's job is real and unstarted, not already incidentally fixed by anything in this chunk.
+8. **A new, real, previously-unknown bug found live — not fixed here, logged as `KnownBugs.md`
+   #65.** While reading `Order.paidAt` after each top-up to confirm the balance/UI figures, found
+   that it had moved: after the ₾100 top-up, `paidAt` read the *first* top-up's settlement
+   timestamp, not the original manual payment's; after the ₾50 top-up, it moved again to the
+   *second* top-up's timestamp. Root cause, read in `settle.ts`: the write that sets `paidAt` is
+   guarded on `tx.order.updateMany({ where: { id, stage: 'NEW' }, data: { paidAt: settledAt, ... } })`
+   — gated on booking **stage**, not on whether `paidAt` was already set. This throwaway order's
+   stage was never advanced past `NEW` (an ordinary, ungimmicked case — nothing in this chunk's
+   test deliberately induced it), so every real settlement, first or later, satisfied the guard
+   and rewrote `paidAt` to its own time. The design spike behind this whole plan
+   (Plan-PaymentE2ETesting.md, "Design spike (2026-09-25)" §3) tested a second settlement too and
+   reported "no misfire observed" — true only because that spike deliberately advanced the
+   order's stage to `CONFIRMED` first, specifically to test this exact guard, which is what made
+   the guard correctly block the second write *there*. It's the same class of lesson bug #60's
+   own writeup names directly: a guard has to gate on the one fact that actually must never
+   change twice — here that fact is `paidAt` itself, not `stage`, which protects a different,
+   real concern (a human-advanced order shouldn't be dragged backwards by a late callback) that
+   just happens to share one `updateMany` call with this one. Not fixed in this chunk: `settle.ts`
+   is the shared, heavily-hardened settlement file behind bug #60's whole saga, and a fix here
+   deserves the same dedicated care and its own live verification, not a rushed addition to this
+   commit. Full detail in `KnownBugs.md` #65; flagged in this plan's "Resume point" above so
+   Chunk 5 (already working in this exact "more than one payment landed" territory) sees it
+   before starting.
+9. **Email content verified by calling the real, deployed `renderTopUpCheckoutEmail()` function
+    directly** with this order's real second-top-up data (₾50.00, the real second checkout URL)
+    via a throwaway `npx tsx` script, in both `en` and `ka` — chosen over an actual send for the
+    same reason Chunk 2's invoice-email verification was, and because this task's own hard
+    boundary explicitly required it: **no real email send was performed at any point in this
+    chunk's verification** — the "Email to guest" button was never clicked. The rendered HTML in
+    both locales correctly showed the amount ("Amount due — 50.00 ₾" / "გადასახდელი თანხა —
+    50.00 ₾"), a working "Pay now"/"გადახდა ახლავე" button linking to the real checkout URL, and
+    a plain-text fallback link identical to the button's href. The throwaway script
+    (`scripts/_tmp-render-topup-email.ts`) was deleted immediately after and never committed.
+    **This means the actual send path — `sendTenantEmail()`'s wiring, the `fromLocalPart:
+    'payments'` sender address, Resend delivery itself — is unverified**, exactly the same
+    documented gap Chunk 2 left for the invoice email's own send path, not a new or different
+    limitation. Flagging this explicitly, as instructed: if Max wants proof the email actually
+    arrives (headers and all), it's a short follow-up using the account's own address.
+10. **Cleanup:** deleted the throwaway order's 3 `Payment` rows, 4 `OrderEvent` rows (`CREATED`,
+    `PAID` ×2 — one per real settlement, matching finding 3's own observation that this is
+    expected, not a bug — and `EXTRA_ADDED`), 1 `OrderExtra` row, and the `Order` row itself via
+    direct SQL; a follow-up query confirmed all four tables at 0 rows for this order id. No
+    throwaway scripts remain on disk.
+
+**Deviations from the plan worth recording:** (1) the email-send boundary above — deliberate,
+required by this task's own instructions, and the same shape as Chunk 2's own documented
+deviation. (2) Discovering and not fixing `KnownBugs.md` #65 — a real bug this chunk's own
+verification surfaced live, in a file (`settle.ts`) explicitly out of this chunk's scope to edit;
+logged rather than silently worked around or ignored. (3) The plan's verification bullet says
+"confirm `settle.ts` handled the second callback correctly... it already should, per finding 3" —
+it handled the **money** correctly (both settlements, both correct `Payment` rows, original
+untouched, balance reaching zero) but did *not* handle `Order.paidAt` correctly, which finding 3's
+own spike had not actually proven either way (its setup avoided the exact condition that
+triggers it). This chunk's verification is more thorough than the finding it was built on, which
+is the point of live-testing rather than trusting a prior read.
 
 ## Chunk 5 — Fix the multi-payment display
 

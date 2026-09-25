@@ -8,7 +8,69 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 3 built: a real second manual payment, closing bug #64 finding 1
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 4 built: card-link top-up, plus a new bug found live (#65)
+
+Built Chunk 4 of `vault/Plan-PostPaymentExtras.md` — the card-paying sibling of Chunk 3's manual
+top-up. `startCheckout()` (`saas/lib/payments/startCheckout.ts`) gained an optional
+`flittOrderId` override (every existing caller omits it and is byte-for-byte unchanged); a new
+file, `saas/lib/payments/topUpCheckout.ts`, is the one caller that supplies one —
+`mintTopUpFlittOrderId()` mints a fresh, traceable-by-eye string per checkout attempt
+(`${orderId}-topup-${timestamp}-${random}`), closing bug #64 finding 3 (Flitt rejects a second
+checkout that reuses the same `order_id`). `Payment.orderId` always carries the real internal
+order id regardless of what was sent to Flitt — confirmed nothing in `schema.prisma` stores
+Flitt's own `order_id` anywhere before relying on that. Two new admin server actions in
+`saas/app/actions/orders.ts`: `startOrderTopUpCheckout` (validates the amount against a fresh
+balance read, calls Flitt, returns the checkout URL) and `sendOrderTopUpCheckoutEmail` (looks
+the `Payment` row up by id, sends via a new bilingual template,
+`topUpCheckoutEmailTemplate.ts`, modelled on the invoice email's own conventions). Deliberately
+two separate actions, not one blind "generate and send": lets the admin see/copy the real link
+before deciding to email it, and kept checkout-generation independently testable from the email
+send. Neither consults `shouldTakePayment()` (ground rule 5). Partial collection by card is
+supported, matching Chunk 3's own reasoning. New i18n keys both languages, parity 1132/1132.
+`tsc --noEmit` clean.
+
+Verified live on `staging.vineworks.ge` against the dev DB and Flitt's real test merchant: a
+throwaway order paid manually (₾400, Bank transfer) then given a ₾150 extra (balance ₾150) was
+topped up twice by real card-link checkout — ₾100 then the remaining ₾50 — each generating a
+genuinely distinct Flitt checkout (different `token`, no "Duplicate order" rejection on the
+second attempt, directly proving finding 3's fix holds across repeated attempts, not just once).
+Both were **actually paid** via the browser tools using Flitt's real hosted checkout and the
+non-3DS approve test card (`4444555511116666`), both redirected back to
+`/payment/result?status=success`, both settled for real. Direct SQL after each step confirmed:
+the new `Payment` rows (`provider: 'flitt', status: 'approved'`, correct amounts, distinct
+`providerPaymentId`s, `orderId` = the real internal id) and the original manual payment
+completely untouched throughout (`40000`, `recorded`, same `settledAt`). Balance recomputed
+correctly to ₾50 then to zero on the real page; over-amount was rejected with the same class of
+message Chunk 3 already proved. Chunk 1's lock and Chunk 3's own code path reconfirmed intact
+(diff-clean). Finding 4 (the "Paid · method" label) was live-confirmed to actually flip — it now
+reads "Paid · Card" — closing the one part of that finding the design spike had only reasoned
+about, not observed. Email content verified by calling `renderTopUpCheckoutEmail()` directly
+with real data in both locales (no real send — the hard boundary on this session explicitly
+required that; "Email to guest" was never clicked). Cleaned up all throwaway rows, confirmed
+0/0/0/0 by direct SQL.
+
+**A new, real, previously-unknown bug was found live during this verification, not fixed here:**
+`settle.ts`'s `paidAt`-setting write is guarded on `stage: 'NEW'`, not on `paidAt: null` — so a
+second real settlement on an order still sitting in stage `NEW` (an ordinary case, not
+contrived) silently drags `Order.paidAt` forward to the newest payment's time instead of the
+first. Confirmed twice in this session's own test (paidAt moved after both the ₾100 and the ₾50
+top-up). The design spike behind this plan had tested a second settlement too but happened to
+advance the order's stage to `CONFIRMED` first, which is exactly what avoided exposing this.
+Logged as `KnownBugs.md` #65, not fixed here — `settle.ts` is the shared, heavily-hardened file
+behind bug #60's saga and deserves its own dedicated fix and verification, not a rushed addition
+to this chunk's commit. Flagged prominently in `Plan-PostPaymentExtras.md`'s "Resume point" for
+whoever picks up Chunk 5, since Chunk 5 is already working in this same "more than one payment
+landed" territory.
+
+Committed `d331c66` on `staging`, pushed. Full write-up (all verification steps, the two UX
+decisions — two-step generate/email, partial-by-card supported — and the new bug's full
+narrative) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 4 Result section. **Next: Chunk 5**
+(fix the multi-payment display) — **read Chunk 4's Result section and `KnownBugs.md` #65
+first.**
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 3 built: a real second manual payment, closing bug #64 finding 1
 
 Built Chunk 3 of `vault/Plan-PostPaymentExtras.md`. `recordManualPayment`/`hasLivePayment`
 (`saas/lib/payments/manualPayment.ts`) correctly no-op a second "mark as paid" toggle so the
