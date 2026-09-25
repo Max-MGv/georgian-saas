@@ -8,7 +8,40 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-24 (newest) — Payment E2E Chunk 5: admin-created order parity, no app divergence found
+## 2026-09-25 (newest) — Bug #64 found (edit-after-payment stale money) + Plan-PostPaymentExtras designed
+
+Continues `vault/Plan-PaymentE2ETesting.md`. Closed **Chunk 6**: took a real Flitt-settled
+order and edited its guest count afterward — `Order.totalPrice` moved on every screen (admin
+table, order detail, CSV, a re-sent invoice) while the actual `Payment.amount` stayed frozen,
+with nothing anywhere flagging the mismatch. Logged as **`KnownBugs.md` #64**, not fixed per
+Rule 8 (this chunk's job was to test and document).
+
+Discussed the right fix with Max: lock price-affecting fields once an order is paid, and
+handle a legitimate need to charge more afterward (e.g. two more guests at the door) as an
+`OrderExtra` plus a genuinely separate `Payment` row, rather than editing the original. Ran a
+**stress-test spike** (not a build) against Staging Winery's dev DB before committing to that
+design — found three real, previously-unknown obstacles: `recordManualPayment`'s duplicate-
+payment guard silently swallows a second, legitimate payment too; `addOrderExtra` already
+reprices a paid order's total today with zero gate, a second door to the same bug; and Flitt
+itself rejects a second checkout that reuses the same `order_id`, needing a distinct
+Flitt-facing reference per attempt. Also found the order detail page's "Paid · method" label
+only ever reads the single most-recently-settled payment, so a second payment with a
+different method would silently mislabel the first. All findings logged in
+`Plan-PaymentE2ETesting.md`'s "Design spike (2026-09-25)" section.
+
+Max wants the card-payment option kept in scope (a guest may only have a card, not cash) —
+worked through the mechanics (Flitt's settlement logic is already payment-row-scoped, not
+order-scoped, so multiple real payments per order need no changes there; the only real gap is
+decoupling Flitt's own reference string from our internal order id). Wrote the full 7-chunk
+build plan as its own document: **`vault/Plan-PostPaymentExtras.md`** — lock price fields,
+turn extras into a visible balance-due instead of a silent reprice, a real second manual
+payment, a real card-link top-up emailed to the guest, fix the mislabeling, then a full
+regression test. Linked from `KnownBugs.md` #64. Nothing built yet — next session starts at
+that plan's Chunk 1.
+
+---
+
+## 2026-09-24 — Payment E2E Chunk 5: admin-created order parity, no app divergence found
 
 Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–4 already done). Closed Chunk 5 — an
 order created directly through `/admin/orders/new` (never touches `startCheckout()`, per §2d)
