@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
+import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
@@ -513,6 +513,13 @@ export default function OrderDetail({
   const [newExtraAmount, setNewExtraAmount] = useState('')
   const [extraLoading, setExtraLoading] = useState(false)
 
+  // ── Record an additional payment (Plan-PostPaymentExtras Chunk 3,
+  // KnownBugs #64) ────────────────────────────────────────────────────────────
+  const [recordingPayment, setRecordingPayment] = useState(false)
+  const [recordAmount, setRecordAmount] = useState('')
+  const [recordLoading, setRecordLoading] = useState(false)
+  const [recordMsg, setRecordMsg] = useState('')
+
   // ── Pricing calculations ───────────────────────────────────────────────────
   const prices = order.company?.prices ?? []
   const payingGuests = tastingGuests + lunchGuests
@@ -704,6 +711,32 @@ export default function OrderDetail({
     await removeOrderExtra(extraId, order.id)
     setExtras(prev => prev.filter(e => e.id !== extraId))
     setExtraLoading(false)
+  }
+
+  // ── Record an additional payment ───────────────────────────────────────────
+  // Reads through as major units (₾) the same way the extras amount field
+  // does, then converts at the boundary (bug #45's lesson) — the server is
+  // still the one source of truth for "does this exceed the balance", this
+  // is only what gates whether the buttons are clickable at all.
+  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH') {
+    const amount = fromMajor(parseFloat(recordAmount) || 0)
+    if (amount <= 0) return
+    setRecordLoading(true)
+    setRecordMsg('')
+    const result = await recordTopUpPayment(order.id, { amount, method })
+    setRecordLoading(false)
+    if ('error' in result) {
+      setRecordMsg(result.error)
+      return
+    }
+    setRecordingPayment(false)
+    setRecordAmount('')
+    setRecordMsg(at('orderDetail.recordPayment.savedOk'))
+    setTimeout(() => setRecordMsg(''), 3000)
+    // `paymentsSettledTotal` comes from the server component's own read of
+    // every settled Payment row — a fresh one, not a locally-patched guess,
+    // is what re-renders the balance-due figure correctly after this.
+    router.refresh()
   }
 
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
@@ -1638,6 +1671,78 @@ export default function OrderDetail({
             <span className="text-base font-bold" style={{ color: balance > 0 ? '#92400e' : C.muted }}>
               {formatTetri(asTetri(Math.abs(balance)), { decimals: true })}
             </span>
+          </div>
+        )}
+
+        {/* Record an additional payment (Plan-PostPaymentExtras Chunk 3,
+            KnownBugs #64) — only offered once there is a real, positive
+            balance to collect. A credit (balance < 0) has nothing to record
+            a payment against; that case is display-only. */}
+        {isPaid && balance > 0 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {!recordingPayment ? (
+              <button
+                onClick={() => {
+                  setRecordingPayment(true)
+                  setRecordAmount(String(toMajor(balance)))
+                  setRecordMsg('')
+                }}
+                className="text-sm font-medium"
+                style={{ color: C.wine }}
+              >
+                {at('orderDetail.recordPayment.button')}
+              </button>
+            ) : (
+              <div className="flex items-end gap-2 flex-wrap">
+                <div style={{ width: 110 }}>
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                    {at('orderDetail.extras.amount')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={toMajor(balance)}
+                    step="0.01"
+                    value={recordAmount}
+                    onChange={e => setRecordAmount(e.target.value)}
+                    style={inputStyle}
+                    disabled={recordLoading}
+                  />
+                </div>
+                <div style={{ flex: '1 1 160px' }}>
+                  <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => handleRecordPayment('BANK_TRANSFER')}
+                      disabled={recordLoading || !((parseFloat(recordAmount) || 0) > 0)}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {at('paymentMethod.bankTransfer')}
+                    </button>
+                    <button
+                      onClick={() => handleRecordPayment('CASH')}
+                      disabled={recordLoading || !((parseFloat(recordAmount) || 0) > 0)}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {at('paymentMethod.cash')}
+                    </button>
+                    <button
+                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg('') }}
+                      disabled={recordLoading}
+                      className="text-xs px-2 py-1.5"
+                      style={{ color: C.muted }}
+                    >
+                      {at('paymentMethod.cancel')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {recordMsg && (
+              <p className="text-xs mt-2" style={{ color: C.faint }}>{recordMsg}</p>
+            )}
           </div>
         )}
       </Card>

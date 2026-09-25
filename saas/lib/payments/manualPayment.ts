@@ -20,7 +20,7 @@
  * Making `paidAt` a derived query would put a join on the hot path for no gain.
  */
 import type { TxClient } from '@/lib/db'
-import type { Tetri } from '@/lib/money'
+import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 
 /** Rows this module writes, as opposed to the gateway's own. */
 const MANUAL_PROVIDER = 'manual'
@@ -106,4 +106,88 @@ export async function reverseManualPayments(
     },
     data: { reversedAt: input.at },
   })
+}
+
+/**
+ * Record a genuine *additional* payment — a real top-up against the balance
+ * due, not the same payment being recorded twice (Plan-PostPaymentExtras
+ * Chunk 3, KnownBugs #64 finding 1).
+ *
+ * `recordManualPayment`/`hasLivePayment` exist to make "mark as paid" safe to
+ * call repeatedly — a no-op once the order already has a settled payment, so
+ * toggling the status picker never double-records the *same* charge. That
+ * guard is correct for its own job and is deliberately left untouched here
+ * (ground rule 1): this is a new, separate function that **always** writes a
+ * new `Payment` row, because a post-payment extra creates a second, genuinely
+ * different charge that the first guard would otherwise silently swallow.
+ *
+ * Only supports a real `orderId` — not the `wineOrderId` half of this
+ * module's usual `OrderRef` shape. Balance-due (Chunk 2) was only ever wired
+ * up for bookings; a wine order has no `balanceDue()` call site anywhere in
+ * the app, so accepting one here would validate against a concept that does
+ * not exist for it. Extending this to wine orders is out of scope until
+ * Chunk 2's balance concept itself is.
+ *
+ * The amount is validated against the current balance due, computed fresh
+ * inside this same transaction from a real read of `Order.totalPrice` and a
+ * real sum of every settled, non-reversed `Payment` row already on the order
+ * — never a value the caller computed before the transaction opened, so two
+ * concurrent top-up attempts cannot both be validated against a balance that
+ * was only ever correct for the first of them.
+ *
+ * An amount of zero or less is rejected outright. An amount greater than the
+ * current balance is also rejected outright, rather than silently clamped to
+ * the balance: clamping would record an amount the admin never actually
+ * typed, without telling them, and letting the top-up path itself create a
+ * negative/overpaid-looking balance is exactly the kind of "screen disagrees
+ * with reality" gap this whole plan exists to close, just with the money
+ * moving the other way. Partial collection (recording less than the full
+ * balance) is fully supported and is not an error.
+ */
+export async function recordAdditionalPayment(
+  tx: TxClient,
+  input: {
+    orderId: string
+    tenantId: string | null
+    amount: Tetri
+    at: Date
+    method: 'BANK_TRANSFER' | 'CASH'
+  }
+): Promise<{ success: true; paymentId: string } | { error: string }> {
+  if (input.amount <= 0) {
+    return { error: 'Enter an amount greater than zero.' }
+  }
+
+  const order = await tx.order.findFirst({
+    where: { id: input.orderId, tenantId: input.tenantId },
+    select: { totalPrice: true },
+  })
+  if (!order) return { error: 'Order not found.' }
+
+  const settled = await tx.payment.aggregate({
+    where: { orderId: input.orderId, settledAt: { not: null }, reversedAt: null },
+    _sum: { amount: true },
+  })
+  const currentBalance = balanceDue(order.totalPrice, settled._sum.amount ?? 0)
+
+  if (input.amount > currentBalance) {
+    return {
+      error:
+        `That's more than the outstanding balance of ${formatTetri(currentBalance, { decimals: true })}. ` +
+        `Record at most the balance due — if more than that is genuinely owed, add it as an extra first.`,
+    }
+  }
+
+  const created = await tx.payment.create({
+    data: {
+      tenantId: input.tenantId,
+      orderId: input.orderId,
+      provider: MANUAL_PROVIDER,
+      method: input.method,
+      status: 'recorded',
+      amount: input.amount,
+      settledAt: input.at,
+    },
+  })
+  return { success: true, paymentId: created.id }
 }

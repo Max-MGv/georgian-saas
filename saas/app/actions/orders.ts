@@ -3,7 +3,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
-import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
@@ -809,4 +809,53 @@ export async function changeBookingStatus(
   } catch {
     return { error: 'Failed to update status.' }
   }
+}
+
+/**
+ * Collect part or all of the balance due on an already-paid order as a real,
+ * independent second payment (Plan-PostPaymentExtras Chunk 3, KnownBugs #64
+ * finding 1) — an extra reprices `Order.totalPrice` immediately (Chunk 2),
+ * but nothing before this action could actually record what the guest paid
+ * for the difference without either silently doing nothing
+ * (`recordManualPayment`'s existing guard, correctly protecting its own
+ * different job) or editing the original, already-collected payment.
+ *
+ * Admin-initiated and deliberate: does not consult `shouldTakePayment()` —
+ * no module toggle, section toggle, or company override applies to a top-up
+ * the admin themselves chose to record after the fact (ground rule 5).
+ */
+export async function recordTopUpPayment(
+  orderId: string,
+  data: { amount: Tetri; method: 'BANK_TRANSFER' | 'CASH' }
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async tx => {
+    const recorded = await recordAdditionalPayment(tx, {
+      orderId,
+      tenantId,
+      amount: data.amount,
+      method: data.method,
+      at: new Date(),
+    })
+    if ('error' in recorded) return recorded
+    // Same transaction as the payment it describes, so history can never
+    // claim a top-up that got rolled back (matches changeBookingStatus's own
+    // PAID/UNPAID event, and addOrderExtra's EXTRA_ADDED/EXTRA_REMOVED).
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId,
+      type: 'ADDITIONAL_PAYMENT_RECORDED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      payload: { amount: data.amount, method: data.method },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+
+  revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${orderId}`)
+  return result
 }

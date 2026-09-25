@@ -420,6 +420,10 @@ enum OrderEventType {
   PAYMENT_DECLINED
   EXTRA_ADDED
   EXTRA_REMOVED
+  // A genuine second Payment row collected against an already-paid order's
+  // balance due (Plan-PostPaymentExtras Chunk 3, KnownBugs #64). Distinct from
+  // PAID, which marks the order's own paidAt milestone the first time.
+  ADDITIONAL_PAYMENT_RECORDED
 }
 
 enum ActorType {

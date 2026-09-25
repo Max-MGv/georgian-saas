@@ -577,6 +577,8 @@ const en: Translations = {
   'orderDetail.total.livePreview': 'Live preview — click "Save changes" above to persist.',
   'orderDetail.total.balanceDue': 'Balance due',
   'orderDetail.total.credit': 'Credit (overpaid)',
+  'orderDetail.recordPayment.button': 'Record payment',
+  'orderDetail.recordPayment.savedOk': 'Payment recorded ✓',
 
   // Companies page
   'companies.summary.booking': 'booking',
@@ -1837,6 +1839,8 @@ const ka: Translations = {
   'orderDetail.total.livePreview': 'ცოცხალი გადახედვა — დააჭირეთ „ცვლილებების შენახვას“ ზემოთ შესანახად.',
   'orderDetail.total.balanceDue': 'გადასახდელი ნაშთი',
   'orderDetail.total.credit': 'ზედმეტად გადახდილი',
+  'orderDetail.recordPayment.button': 'გადახდის დაფიქსირება',
+  'orderDetail.recordPayment.savedOk': 'გადახდა დაფიქსირდა ✓',
 
   // Companies page
   'companies.summary.booking': 'ჯავშანი',
