@@ -116,7 +116,7 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 
 | Chunk | What | Status |
 |---|---|---|
-| **1** | Lock price-affecting order fields once `paidAt` is set | ⬜ Not started |
+| **1** | Lock price-affecting order fields once `paidAt` is set | ✅ Done |
 | **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ⬜ Not started |
 | **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ⬜ Not started |
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ⬜ Not started |
@@ -126,7 +126,8 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Nothing started yet. Chunk 1 first.
+**Resume point:** Chunk 1 done and verified live on `staging.vineworks.ge`, commit `f2149e7`.
+Chunk 2 next (extras become a visible balance, not silent repricing).
 
 ---
 
@@ -161,7 +162,7 @@ Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 ## Chunk 1 — Lock price-affecting fields once paid
 
 **Goal:** close bug #64's original path.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25. Commit `f2149e7` on `staging`.
 
 - In `updateOrderEnhanced` (`saas/app/actions/orders.ts`), reject changes to guest count, the
   tasting/lunch split, rate fields, and hot-dish selections when `Order.paidAt` is not null.
@@ -172,6 +173,79 @@ Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 - Verify: attempt an edit via the UI and via a direct action call on a paid order; confirm
   both are correctly blocked, and that a *matching* wine-order flow (if one exists — check)
   gets the same treatment or is confirmed out of scope.
+
+### Result (2026-09-25)
+
+**What was built.** `updateOrderEnhanced` now checks `order.paidAt` immediately after fetching
+the order, before any of its pricing/repricing logic runs, and returns
+`{ error: '...' }` unconditionally when the order is already paid — every field this
+function's `data` parameter accepts (`guestCount`, `tastingGuestCount`/`lunchGuestCount`/
+`freeGuestCount`, `hotDishVegetable`/`hotDishMeat`, `foodNotes`, `manualTastingRate`/
+`manualLunchRate`) is one of the fields the plan says to lock, so there is nothing left for
+this action to safely do once paid — an unconditional reject is the correct, simplest
+interpretation, not a partial field-by-field diff. The error text is written for an admin to
+read directly (Rule 2 spirit): it names what's locked and points at "add an extra" as the
+alternative. In `OrderDetail.tsx`, a new `isPaid` flag (`order.paidAt != null`) disables the
+party-size input, the three split inputs, the "Edit rates" button and both manual rate inputs,
+both hot-dish selects, the food-notes textarea, and the Save button itself, and a yellow note
+("This order is already paid…") renders at the top of the Guest Breakdown & Dishes card. Two
+new i18n keys (`orderDetail.guestBreakdown.lockedTitle`/`lockedDetail`) added in both `en` and
+`ka`, parity confirmed by `scripts/check-i18n-parity.ts` (1117/1117 both languages).
+
+**Wine orders confirmed out of scope.** Read `saas/app/actions/wineOrders.ts` in full: it
+exports only `changeWineOrderStatus` (stage/paid toggles, no price fields) and
+`createWineOrderAdmin` (creation only). There is no action anywhere that edits an existing wine
+order's line items or price after creation, so there is nothing to lock on that side — matches
+the prior session's read.
+
+**Verification — done live on `staging.vineworks.ge` against the dev DB, not just read from
+code:**
+1. `npx tsc --noEmit` clean before and after.
+2. Created a throwaway individual order on Staging Winery (`cmugvom6j0000jy04hblzs97a`,
+   "ZZChunk1Test PostPaymentLock", 4 guests × ₾100 tasting rate = ₾400).
+3. **Unpaid regression check, real UI:** edited party size 4 → 5 through the actual admin
+   detail page while unpaid — "Saved ✓", total recalculated live to ₾500 once the tasting
+   split was populated, confirming ordinary edits are completely unaffected by this change.
+4. Marked the order Paid · Bank transfer through the real status-picker UI (the manual-payment
+   flow bug #62 already fixed), which wrote a real `Payment` row (`amount: 40000` tetri,
+   `status: 'recorded'`, `settledAt` set) and `Order.paidAt`.
+5. **UI lock confirmed by direct DOM inspection, not a screenshot guess:** after the deploy
+   landed on staging, a JS check of every input/select/textarea/button inside the Guest
+   Breakdown card confirmed all 9 are `disabled: true`, and the yellow lock note is present.
+6. **Server-side rejection confirmed with a real request, not a script standing in for one.**
+   Attempting to defeat the *client-side* disabled state by flipping the raw DOM `disabled`
+   attribute and dispatching clicks did **not** work — discovered live that React's own event
+   system tracks `disabled` from its last committed render (not the live DOM attribute) and
+   refuses to dispatch synthetic click handlers to an element it believes is disabled, an
+   extra layer of protection beyond styling that wasn't specifically designed for but is a
+   welcome side effect. Worked around this for a true test by reading the button's real
+   `onClick` handler off its React fiber props (`element[reactPropsKey].onClick`) and invoking
+   it directly with the party size and tasting-guest count changed to 123/77 — this runs the
+   exact same `handleSave()` a genuinely-enabled button would, through the real authenticated
+   session, hitting the real deployed server. **Server response, captured via a `fetch`
+   interceptor:** `{"error":"This order has already been paid, so its guest count,
+   tasting/lunch split, rates, and food details are locked — changing them here would silently
+   disagree with the amount already charged to the guest. To bill for something that changed
+   (e.g. extra guests joining after payment), add it as an extra on this order instead."}` —
+   the exact string written into `orders.ts`. The UI's `saveMsg` rendered this same text.
+7. **Independent DB read after the rejected attempt** (direct Prisma query against the dev
+   project, not the action's return value): `guestCount` still `5` (not `123`),
+   `tastingGuestCount` still `0` (not `77`), `totalPrice` still `40000`, and the `Payment` row
+   completely untouched (`amount: 40000`, `status: 'recorded'`, same `settledAt`) — proving the
+   reject happened before any write, not just that the response said so.
+8. **Cleanup:** deleted the throwaway order's 2 `OrderEvent` rows, 1 `Payment` row, and the
+   `Order` row itself; a follow-up query confirmed all three gone. Throwaway scripts
+   (`scripts/_tmp-check-chunk1-order.ts`, `scripts/_tmp-cleanup-chunk1-order.ts`) were deleted
+   from disk, never committed.
+
+**Deviation from the plan worth recording:** the plan's own verification bullet says "attempt
+an edit via... a direct action call" as if that's a simple standalone-script affair. In
+practice `updateOrderEnhanced` depends on `next/headers` (`getTenantId`) and a real Supabase
+auth cookie (`requireAdmin`), both of which only exist inside a live Next.js request — a bare
+`npx tsx` script cannot construct that context. The real equivalent that still proves the
+server (not just the UI) enforces the lock turned out to be invoking the action through the
+live browser session while bypassing React's own click-dispatch gate, as described above. Future
+chunks that want a "call the action directly" check should expect the same constraint.
 
 ## Chunk 2 — Extras become visible balance, not silent repricing
 

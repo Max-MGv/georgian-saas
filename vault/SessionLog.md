@@ -8,7 +8,44 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Bug #64 found (edit-after-payment stale money) + Plan-PostPaymentExtras designed
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 1 built: price-affecting order fields locked once paid
+
+Built Chunk 1 of `vault/Plan-PostPaymentExtras.md`, closing the original path of `KnownBugs.md`
+#64 (extras remain the second, still-open path — that's Chunk 2). `updateOrderEnhanced`
+(`saas/app/actions/orders.ts`) now checks `order.paidAt` immediately after fetching the order
+and, if set, returns an explicit error instead of touching guest count, the tasting/lunch
+split, rates, hot-dish selections or food notes — every field that action accepts is one of
+the ones the plan says to lock, so an unconditional reject once paid is correct rather than a
+per-field diff. `OrderDetail.tsx`'s Guest Breakdown & Dishes card disables the matching
+inputs/buttons and shows a yellow note once paid, pointing at "add an extra" as the
+alternative. New i18n keys added both languages, parity 1117/1117. Confirmed by reading
+`wineOrders.ts` in full that no matching "edit an existing wine order" action exists — out of
+scope, as the prior session's read predicted.
+
+Verified live on `staging.vineworks.ge` against the dev DB, not just read from code: created a
+throwaway order on Staging Winery, edited it normally while unpaid (regression check — still
+works), marked it Paid · Bank transfer through the real manual-payment flow, then confirmed the
+Guest Breakdown card's 9 inputs/buttons are genuinely `disabled` via direct DOM inspection.
+Tried to defeat the client-side lock by flipping the raw `disabled` DOM attribute and firing
+clicks — didn't work, and the reason turned out to be a genuine extra safety net: React tracks
+`disabled` from its own last render (not the live DOM attribute) and refuses to dispatch a
+synthetic click to an element it still considers disabled. Got a true test anyway by reading
+the button's real `onClick` off its React fiber props and invoking it directly with the party
+size/tasting count changed to 123/77 — this hits the actual deployed server through the real
+session. Server response (captured via a `fetch` interceptor): the exact locked-order error
+string written into `orders.ts`. A follow-up direct Prisma read against the dev project
+confirmed `guestCount`/`tastingGuestCount`/`totalPrice` and the original `Payment` row were all
+completely unchanged. Cleaned up the throwaway order/payment/events afterward, confirmed gone.
+`tsc --noEmit` clean throughout. Committed `f2149e7` on `staging`, pushed.
+
+Full write-up (including the deviation from the plan's "call the action directly via a script"
+wording — `next/headers`/`requireAdmin` need a real request context a bare script can't
+provide) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 1 Result section. **Next: Chunk 2**
+(extras become a visible balance-due instead of a silent reprice).
+
+---
+
+## 2026-09-25 — Bug #64 found (edit-after-payment stale money) + Plan-PostPaymentExtras designed
 
 Continues `vault/Plan-PaymentE2ETesting.md`. Closed **Chunk 6**: took a real Flitt-settled
 order and edited its guest count afterward — `Order.totalPrice` moved on every screen (admin
