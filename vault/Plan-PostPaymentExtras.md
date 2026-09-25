@@ -118,7 +118,7 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 |---|---|---|
 | **1** | Lock price-affecting order fields once `paidAt` is set | ✅ Done |
 | **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ✅ Done |
-| **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ⬜ Not started |
+| **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ✅ Done |
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ⬜ Not started |
 | **5** | Fix the order-detail page's multi-payment display (finding 4) | ⬜ Not started |
 | **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ⬜ Not started |
@@ -126,8 +126,8 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 2 done and verified live on `staging.vineworks.ge`, commit `763a2f1`.
-Chunk 3 next (a real second manual payment).
+**Resume point:** Chunk 3 done and verified live on `staging.vineworks.ge`, commit `9e64241`.
+Chunk 4 next (card-link top-up).
 
 ---
 
@@ -394,7 +394,7 @@ report anything that deviated.
 ## Chunk 3 — A real second manual payment
 
 **Goal:** make the manual side of "collect the balance" actually work (finding 1).
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25. Commit `9e64241` on `staging`.
 
 - New function alongside (not inside) `recordManualPayment` — e.g. `recordAdditionalPayment`
   — that always creates a new `Payment` row for a specified amount/method, independent of
@@ -406,6 +406,152 @@ report anything that deviated.
 - Verify: full path — pay an order, add an extra, record a manual top-up payment, confirm the
   balance recomputes correctly (to zero for a full payment, to a smaller nonzero value for a
   partial one), confirm the original `Payment` row is completely untouched.
+
+### Result (2026-09-25)
+
+**What was built.** `recordAdditionalPayment` (`lib/payments/manualPayment.ts`) is a new,
+standalone function appended after `reverseManualPayments` — `hasLivePayment`,
+`recordManualPayment` and `reverseManualPayments` are **byte-for-byte unchanged** (confirmed by
+`git diff` between the Chunk 2 and Chunk 3 commits; only the import line at the top of the file
+changed, to pull in `balanceDue`/`formatTetri`). It always creates a new `Payment` row — no
+`hasLivePayment` check anywhere in it — and validates the requested amount against the current
+balance due, computed **fresh inside the same transaction**: a real `tx.order.findFirst` for
+`totalPrice` and a real `tx.payment.aggregate` sum of every settled, non-reversed payment
+already on the order, fed through Chunk 2's own `balanceDue()` helper rather than re-deriving
+the arithmetic. Reading the balance inside the transaction rather than trusting a value the
+caller computed earlier matters for exactly the case this chunk exists for: two top-ups
+recorded in quick succession must each be checked against the balance as it stood at that
+moment, not both against the balance from before either of them landed.
+
+**Amount validation, and the reasoning behind it.** An amount of zero or less is rejected
+outright with `"Enter an amount greater than zero."`. An amount **greater than the current
+balance** is also rejected outright — deliberately not silently clamped to the balance. Clamping
+would record an amount the admin never actually typed without telling them, and letting the
+top-up path itself manufacture an overpaid-looking balance would recreate a version of bug #64
+with the money moving the other way (a screen — the ledger, this time — disagreeing with what
+was actually collected). The error text names the real balance and points at the alternative
+("add it as an extra first" if more is genuinely owed) rather than just saying no. **Partial
+collection needed no special-casing at all** — any amount `0 < amount <= balance` is accepted
+unconditionally, which is what makes recording less than the full balance not an error case to
+avoid but simply the normal path through the same one check.
+
+**Scope decision: real orders only, not the module's usual `wineOrderId` half of `OrderRef`.**
+Every other function in `manualPayment.ts` accepts either half of `OrderRef` (an order or a
+wine order). `recordAdditionalPayment` only accepts a real `orderId: string`. Reason: it
+validates against `balanceDue()`, and Chunk 2 never wired a balance-due concept up for wine
+orders anywhere in the app — accepting a `wineOrderId` here would silently validate against a
+concept that doesn't exist for that order type (in practice, `tx.order.findFirst` would simply
+never match a wine order's id and every call would fail with "Order not found," which is honest
+but not a real feature). Extending this to wine orders is out of scope until Chunk 2's balance
+concept itself is.
+
+**UI decision: order detail page only, not the orders table.** The order detail page is where
+Chunk 2's balance-due figure already lives and where extras are added — the natural place for a
+multi-field action (amount entry, then a payment-method choice) that doesn't fit the orders
+table's already-dense row layout, especially after bug #63's documented mobile row-size
+trade-off. A "Record payment" link appears under the balance-due row, shown only when
+`isPaid && balance > 0` (never for the rarer credit/overpaid case — there's nothing to collect a
+payment against there); clicking it reveals an amount field prefilled with the full balance
+(editable down for a partial top-up) and reuses the exact "How was this paid? Bank transfer /
+Cash" picker component pattern from bug #62/Feature 205, both buttons submitting directly with
+no separate confirm step, matching that picker's own UX. On success the page calls
+`router.refresh()` rather than patching local state to reflect the new payment — the same
+pattern `assignOrderCompany`'s handler already uses in this file — so the balance the admin sees
+next always comes from a fresh server read of every settled payment, not a client-side running
+total that could drift from it.
+
+**`OrderEvent`: new enum value, real migration needed.** Added `ADDITIONAL_PAYMENT_RECORDED` to
+the `OrderEventType` enum, matching the `addOrderExtra`/`removeOrderExtra` pattern of recording
+one event per meaningful money-affecting action, inside the same transaction as the payment it
+describes (via a new `recordTopUpPayment` server action in `orders.ts` that wraps
+`recordAdditionalPayment` + `recordOrderEvent` in one `withTenantDb` call). Checked the schema
+before assuming a migration was needed: Prisma maps a schema `enum` to a **native Postgres
+enum type**, not a `CHECK` constraint or a string column, so adding a value is a real DDL change
+(`ALTER TYPE "OrderEventType" ADD VALUE 'ADDITIONAL_PAYMENT_RECORDED';`) — confirmed by finding
+the exact same pattern in an existing migration (`20260729131800_add_online_payment` added
+`OrderStatus.PENDING_PAYMENT` the same way). Ran `npx prisma migrate dev` against the dev
+database only (`jpbkkngpgtvqmsocitjx`, matching `saas/.env`'s `DATABASE_URL`), after confirming
+no local dev server was running (Rule 10) — produced migration
+`20260925123830_add_additional_payment_event_type`, applied cleanly, Prisma Client regenerated.
+
+**Verification — done live on `staging.vineworks.ge` against the dev DB, not just read from
+code:**
+1. `npx tsc --noEmit` clean (after the migration — the enum value doesn't exist in the
+   generated client until `prisma migrate dev`/`generate` runs, so this failed with a real type
+   error first, confirming the check wasn't a no-op). `scripts/check-i18n-parity.ts`: 1123/1123
+   both languages (2 new keys per locale: `orderDetail.recordPayment.button`/`savedOk`; the
+   amount field and the "How was this paid?"/"Bank transfer"/"Cash"/"Cancel" copy were
+   deliberately **reused** from `orderDetail.extras.amount` and the existing `paymentMethod.*`
+   keys rather than duplicated, per the plan's own instruction to reuse the established
+   convention).
+2. Created a throwaway individual order on Staging Winery (`cmugyb0fs0000jr046zb9jfyd`,
+   "ZZChunk3Test PostPaymentTopUp", 4 guests × ₾100 tasting rate = ₾400) through the real
+   `/admin/orders/new` form, marked it Paid · Bank transfer through the real status-picker UI.
+3. Added a real ₾240 extra ("2 additional guests") through the actual "+ Add extra charge"
+   form — Total ₾640, Balance due ₾240, matching Chunk 2's already-verified behaviour.
+4. **Partial top-up, real UI:** clicked "Record payment" (prefilled ₾240), changed the amount
+   to ₾100, clicked "Bank transfer". Balance due recomputed live to ₾140.00 and "Payment
+   recorded ✓" appeared. **Independent direct SQL read** against the dev project
+   (`jpbkkngpgtvqmsocitjx`, via `mcp__a9e48394-...`) confirmed **two** `Payment` rows for this
+   order: the original (`amount: 40000, method: BANK_TRANSFER, status: recorded, settledAt`
+   unchanged from before this chunk's action ran, `reversedAt: null`) completely untouched, and
+   a genuinely new second row (`amount: 10000, method: BANK_TRANSFER, settledAt` a minute
+   later, `reversedAt: null`).
+5. **Second top-up for the rest, a different method (Cash) to also exercise that path:**
+   recorded the remaining ₾140. Balance due and the entire "Balance due"/"Record payment"
+   section **disappeared** from the page (the `balance > 0`/`balance !== 0` gates both correctly
+   go false at exactly zero) — Total still correctly read ₾640.00 at this point (the ₾50 extra
+   below came after). Direct SQL confirmed **three** `Payment` rows
+   (₾400 + ₾100 + ₾140 = ₾640, exactly `Order.totalPrice`), all settled, none reversed, the
+   original still byte-for-byte unchanged.
+6. **Over-payment rejection, verified live:** added a further ₾50 extra ("Late checkout fee",
+   Total → ₾690, Balance due → ₾50), clicked "Record payment", typed ₾100 (more than the ₾50
+   balance), clicked "Bank transfer". The page rendered, verbatim: *"That's more than the
+   outstanding balance of 50.00₾. Record at most the balance due — if more than that is
+   genuinely owed, add it as an extra first."* Balance due stayed at ₾50.00. **Direct SQL
+   confirmed no new row was created** — still exactly 3 `Payment` rows summing to ₾640, not 4.
+7. **Boundary case — exactly the balance:** recorded exactly ₾50 (Bank transfer). Succeeded;
+   balance/record-payment section disappeared again. Final direct SQL read: **four** `Payment`
+   rows (₾400 + ₾100 + ₾140 + ₾50 = ₾690, exactly `Order.totalPrice`), all `settledAt` set,
+   all `reversedAt` null. `OrderEvent` history read back in order: `CREATED`, `PAID`,
+   `EXTRA_ADDED` (₾240), `ADDITIONAL_PAYMENT_RECORDED` (₾100, BANK_TRANSFER),
+   `ADDITIONAL_PAYMENT_RECORDED` (₾140, CASH), `EXTRA_ADDED` (₾50),
+   `ADDITIONAL_PAYMENT_RECORDED` (₾50, BANK_TRANSFER) — exactly one event per successful
+   top-up, **none** for the rejected over-payment attempt, each payload carrying the right
+   amount and method.
+8. **Chunk 1's lock reconfirmed intact:** a live DOM check of every input/select/textarea in
+   the Guest Breakdown card (7 elements) read `disabled: true` for all of them, after all of
+   this chunk's payments and extras had been recorded on the same order.
+9. **The unrelated "mark as paid" toggle — sanity-checked, with a documented limitation.**
+   Tried to reach a live re-toggle of "Paid" on this already-paid order through both the order
+   detail page's status dropdown and the orders table's own dropdown; neither exposes an
+   "un-pay" action once the Paid step is already reached (`menuSteps` only offers *unreached*
+   steps — a pre-existing UI shape, not something this chunk touched or needs to). Lacking a
+   live path to force a second `recordManualPayment` call through the UI, verified this the
+   other rigorous way available: `git diff e78f1a1 9e64241 -- saas/lib/payments/manualPayment.ts`
+   and `-- saas/app/actions/orders.ts` show `hasLivePayment`/`recordManualPayment`/
+   `reverseManualPayments` and all of `changeBookingStatus` (the function that calls them)
+   **completely unchanged** — the only edits in either file are one import line and a new
+   function appended after the existing code, never inside it. Flagging this per the task's own
+   instruction to report anything that deviated from the letter of the verification plan: this
+   is a diff-based sanity check, not a live behavioural one, because the live path doesn't exist
+   in the current UI to exercise.
+10. **Cleanup:** deleted the throwaway order's 7 `OrderEvent` rows, 4 `Payment` rows, 2
+    `OrderExtra` rows and the `Order` row itself (direct SQL, since by this point the row counts
+    were verification subjects in their own right); a follow-up query confirmed all four tables
+    at 0 rows for this order id, and the order no longer appears in the live `/admin/orders`
+    list. No throwaway scripts were written to disk this session (all verification used the
+    live browser session plus direct SQL reads).
+
+**Deviations from the plan worth recording:** (1) item 9 above — the "mark as paid" sanity
+check ended up diff-based rather than a live UI toggle, because no live path to re-trigger
+"Paid" on an already-paid order exists in the current admin UI (an existing constraint, not one
+this chunk introduced or needs to fix). (2) The plan's own Chunk 3 bullets didn't call out an
+`OrderEvent`/migration decision explicitly (Chunk 2's bullets didn't either, for a different
+reason — it added no enum value) — recorded here since the task instructions asked for it:
+yes, a migration was needed, because Prisma enums are native Postgres types, and it was run
+against the dev database only, verified by an existing precedent migration doing the identical
+`ALTER TYPE ... ADD VALUE` for a different enum.
 
 ## Chunk 4 — Card-link top-up
 

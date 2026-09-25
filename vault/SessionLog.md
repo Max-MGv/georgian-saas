@@ -8,7 +8,64 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 2 built: computed balance-due, closing bug #64's second path
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 3 built: a real second manual payment, closing bug #64 finding 1
+
+Built Chunk 3 of `vault/Plan-PostPaymentExtras.md`. `recordManualPayment`/`hasLivePayment`
+(`saas/lib/payments/manualPayment.ts`) correctly no-op a second "mark as paid" toggle so the
+same charge is never double-recorded — but that guard also silently swallowed a genuine
+top-up after a post-payment extra, which is bug #64 finding 1. Left that guard completely
+untouched (byte-for-byte, confirmed by diff) and added a new, separate function,
+`recordAdditionalPayment`, that always writes a new `Payment` row. It validates the requested
+amount against `balanceDue()` computed fresh inside the same transaction (a real read of
+`Order.totalPrice` and a real sum of settled payments, not a value trusted from before the
+transaction opened) — rejects zero/negative outright, rejects more than the current balance
+outright (clamping would silently record an amount the admin never typed), and fully supports
+partial collection. Only supports a real `orderId`, not the module's usual `wineOrderId` half
+of `OrderRef` — Chunk 2's balance-due concept was never wired up for wine orders, so accepting
+one here would validate against a concept that doesn't exist for it.
+
+Wired into the order detail page via a new `recordTopUpPayment` server action
+(`saas/app/actions/orders.ts`), gated on a positive balance due, reusing the existing
+"How was this paid? Bank transfer / Cash" picker convention from bug #62 rather than
+inventing a new one. Admin-initiated and deliberate — does not consult `shouldTakePayment()`,
+per ground rule 5. Records a new `ADDITIONAL_PAYMENT_RECORDED` `OrderEventType` (new enum
+value; needed a real migration since Prisma enums are native Postgres enums —
+`20260925123830_add_additional_payment_event_type`, applied against the dev DB only), matching
+the `addOrderExtra`/`removeOrderExtra` event pattern. New i18n keys added both languages,
+parity 1123/1123.
+
+Verified live on `staging.vineworks.ge` against the dev DB: a throwaway ₾400 order marked
+Paid · Bank transfer, given a real ₾240 extra (balance due ₾240), then a real ₾100 partial
+top-up through the actual UI — balance recomputed to ₾140 live, and a direct SQL read
+confirmed two genuinely independent `Payment` rows (₾400 original untouched byte-for-byte:
+same amount/status/settledAt; ₾100 new, both settled, neither reversed). A second ₾140 top-up
+(Cash this time) brought the balance to exactly zero — three `Payment` rows total, summing to
+the ₾640 total exactly, "Record payment" correctly disappearing once the balance hit zero.
+Added a further ₾50 extra to re-open a balance, then confirmed live that requesting ₾100
+against a ₾50 balance is rejected with `"That's more than the outstanding balance of 50.00₾.
+Record at most the balance due — if more than that is genuinely owed, add it as an extra
+first."` and creates no row (DB read: still 3 rows, same total) — then recorded exactly ₾50
+to close it, confirming the exact-balance boundary succeeds. `OrderEvent` history read back
+correctly: CREATED, PAID, EXTRA_ADDED ×2, ADDITIONAL_PAYMENT_RECORDED ×3 (one per successful
+top-up, none for the rejected attempt), each payload carrying the right amount/method.
+Chunk 1's lock reconfirmed intact (all 7 guest-breakdown inputs still `disabled: true`).
+The unrelated "mark as paid" toggle was sanity-checked by diff rather than a live toggle — the
+order-detail page's status dropdown only offers *unreached* steps, so there was no live path to
+re-trigger "Paid" on an already-paid order to click through; `git diff` between the Chunk 2 and
+Chunk 3 commits confirms `hasLivePayment`/`recordManualPayment`/`reverseManualPayments` and
+`changeBookingStatus` are unchanged except for one import line, with only new code appended.
+`tsc --noEmit` clean throughout. Cleaned up the throwaway order/payments/extras/events
+afterward, confirmed gone (0/0/0/0) by direct SQL and absent from the live orders list.
+Committed `9e64241` on `staging`, pushed.
+
+Full write-up (all verification steps, the partial/over-payment reasoning, and the
+OrderEvent/migration decision) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 3 Result section.
+**Next: Chunk 4** (card-link top-up — decouple Flitt's `order_id` from `Payment.orderId`, new
+admin action, email delivery).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 2 built: computed balance-due, closing bug #64's second path
 
 Built Chunk 2 of `vault/Plan-PostPaymentExtras.md`. `addOrderExtra` (`saas/app/actions/orderExtras.ts`)
 already repriced a paid order's `totalPrice` with zero payment attached and nothing anywhere
