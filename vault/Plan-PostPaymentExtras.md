@@ -117,7 +117,7 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 | Chunk | What | Status |
 |---|---|---|
 | **1** | Lock price-affecting order fields once `paidAt` is set | ✅ Done |
-| **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ⬜ Not started |
+| **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ✅ Done |
 | **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ⬜ Not started |
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ⬜ Not started |
 | **5** | Fix the order-detail page's multi-payment display (finding 4) | ⬜ Not started |
@@ -126,8 +126,8 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 1 done and verified live on `staging.vineworks.ge`, commit `f2149e7`.
-Chunk 2 next (extras become a visible balance, not silent repricing).
+**Resume point:** Chunk 2 done and verified live on `staging.vineworks.ge`, commit `763a2f1`.
+Chunk 3 next (a real second manual payment).
 
 ---
 
@@ -250,7 +250,7 @@ chunks that want a "call the action directly" check should expect the same const
 ## Chunk 2 — Extras become visible balance, not silent repricing
 
 **Goal:** close bug #64's second path (finding 2), and introduce the balance-due concept.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25. Commit `763a2f1` on `staging`.
 
 - `addOrderExtra` keeps updating `Order.totalPrice` immediately (per the agreed design) —
   no change needed there structurally.
@@ -261,6 +261,135 @@ chunks that want a "call the action directly" check should expect the same const
   amount, confirm nothing else in the app silently treats the order as "fully collected" when
   it isn't (re-check CSV export and invoice content for anything that needs the same
   treatment).
+
+### Result (2026-09-25)
+
+**What was built.** A single new helper, `balanceDue(totalPrice, settledPaid)` in
+`lib/money.ts`, computes `totalPrice − settledPaid` and returns it branded as `Tetri`. It does
+no DB reads itself — every call site sums its own `Payment` rows (`where: settledAt not null,
+reversedAt: null`) and passes the sum in — so the exact same arithmetic runs in a server
+component, a client component, the CSV export and an email template, with no risk of the
+five call sites drifting into disagreement with each other. **No new stored column**, per
+ground rule 2 — confirmed no performance reason has shown up to justify one.
+
+Shown in five places, all gated the same way (`paidAt != null` **and** the balance is
+nonzero — an order that's never been paid has a "balance" equal to its whole total, which
+the existing Total figure already says, so repeating it would be noise, not new information):
+
+1. **Order detail page** (`OrderDetail.tsx`) — a row under the Total card, amber "Balance due"
+   for the ordinary case (owes more), muted "Credit (overpaid)" for the rarer case where a
+   post-payment extra was added then removed. Uses `computedTotal ?? order.totalPrice`, the
+   same fallback the Total row itself uses, so the balance can never disagree with the total
+   displayed right above it.
+2. **Admin orders table** (`OrdersTable.tsx`) — a new `BalanceDueMark` component, styled exactly
+   like the existing `PaymentMark` (`Mark` component, same amber palette used for "Invoice
+   Sent"), placed next to every one of the five existing `PaymentMark` call sites: the desktop
+   list view, the board/kanban card, the mobile card, the desktop table row, and the
+   hover-preview card (which also gained its own "Balance due" line in its itemised amount
+   breakdown, after Total). `page.tsx`'s main orders query now also fetches each order's
+   settled/non-reversed payments (`select: { amount: true }` only — cheap, same `include`
+   shape the query already had for `extras`).
+3. **CSV export** (`exportOrdersCsv` in `orders.ts`) — a new "Balance Due (GEL)" column, right
+   after "Total (GEL)", blank for every unpaid or fully-reconciled row.
+4. **Invoice email** (`sendOrderInvoice` → `renderInvoiceEmail`) — a new optional
+   `paymentsSettledTotal` field on `InvoiceEmailData` (defaults to 0, so every pre-existing
+   call site is unaffected). Only when it's nonzero does the email say anything extra: a
+   "Paid so far" row, then "Balance due" (or "Credit") if the two don't fully reconcile. This
+   is exactly bug #64's own live-reproduced scenario — a re-sent invoice after a post-payment
+   extra — so it was the one piece of "invoice content" that genuinely needed the same
+   treatment, not just the CSV.
+5. **On-page printable invoice** (`InvoicePrint.tsx`, used both from `OrderDetail.tsx`'s Print
+   button and `OrdersTable.tsx`'s print/email preview) — the same balance line as the email,
+   gated on `paymentsSettledTotal > 0` (this component isn't given `paidAt`, so "has actually
+   been paid something" stands in for it).
+
+**Decision: admin orders table gets the indicator.** The plan's own bug #64 write-up names the
+orders table as one of the screens that disagreed with reality, and threading a `paymentsSettledTotal`
+sum through the existing `include` was genuinely cheap (one extra relation select, no N+1,
+no new query). Reused the codebase's own established pattern instead of inventing a new one —
+`BalanceDueMark` is structurally identical to `PaymentMark`.
+
+**Decision: CSV and invoice email both got the treatment; the `InvoiceSent` audit table and
+Calendar view did not.** CSV and the invoice email are named directly in the plan's own
+verification bullet, and both are real customer/accountant-facing money statements — leaving
+them silent would recreate exactly the "screen disagrees with reality" problem bug #64 is
+about. The `InvoiceSent` table (Feature 203) stores a historical snapshot of what an invoice
+said *at send time*; giving it a `paymentsSettledTotal` column too would be a schema
+migration and a materially bigger change than "add a computed display value" — out of scope
+for this chunk, not attempted, and not blocking (the live email/print at send time is
+correct; only a *later* look-back at that historical row wouldn't show the balance that
+existed at the time). Calendar view (`CalendarView.tsx`) shows `totalPrice` in a compact day-hover
+card with no room budgeted for a second money figure and wasn't named in the plan's bug
+write-up or its Chunk 2 bullet — left untouched.
+
+**Verification — done live on `staging.vineworks.ge` against the dev DB, not just read from
+code:**
+1. `npx tsc --noEmit` clean. `scripts/check-i18n-parity.ts`: 1121/1121 both languages (4 new
+   keys per locale: `orderDetail.total.balanceDue`/`credit`, `orders.balanceDue`/`credit`).
+2. Created a throwaway individual order on Staging Winery (`cmugxbq7z0000k004z84agvz6`,
+   "ZZChunk2Test PostPaymentBalance", 4 guests × ₾100 tasting rate = ₾400) through the real
+   `/admin/orders/new` form.
+3. Marked it Paid · Bank transfer through the real status-picker UI, then added a real
+   ₾240 extra ("2 additional guests") through the actual admin UI's "+ Add extra charge"
+   form — not a script.
+4. **Order detail page, read live, not guessed from a screenshot:** the page text after
+   adding the extra read `...Total 640.00₾ Balance due 240.00₾` — the exact figure a
+   ₾400-paid, ₾640-total order should show.
+5. **Orders table mark, confirmed by reading the DOM's actual `title` attributes** (not a
+   screenshot guess): `{"text":"⚠","title":"Balance due: 240.00₾"}` sitting next to
+   `{"text":"₾✓","title":"Paid"}` on the real table row.
+6. **CSV export, read from the real network response**, not trusted from the button existing:
+   clicked "Export CSV" for real and read the actual response body via the browser's network
+   inspector rather than saving the file — the row for this order read
+   `...,640,240,NEW,paid,25/09/2026,,,,` (Total 640, Balance Due 240), while every other,
+   fully-reconciled paid row on the page had an empty Balance Due cell as designed.
+7. **Invoice email content verified by calling the real, deployed `renderInvoiceEmail()`
+   function directly** with this order's real numbers (total 64000, settled 40000, one extra
+   of 24000) via a throwaway `npx tsx` script — chose this over an actual `sendOrderInvoice()`
+   send because sending a real email is outside what this verification pass needed to
+   settle (the shared `balanceDue()` arithmetic was already proven correct against the DB in
+   step 9, and this exercises the exact same production template code, just without a
+   network send); the rendered HTML's amount section read exactly `Total amount: 640.00 ₾
+   Paid so far 400.00 ₾ Balance due: 240.00 ₾`. The throwaway script was deleted immediately
+   after and never committed. **Flagging this as a deviation worth a second look:** the plan's
+   own instruction was to "generate/send one for this order" — an actual send through the
+   real UI to a real inbox was deliberately not done this session; if Max wants that specific
+   proof (the email as it actually arrives, headers and all) it's a five-minute follow-up
+   using the account's own address, which Resend's sandbox mode already permits.
+8. **On-page printable invoice, read from the live rendered DOM** (clicked the real "Print
+   invoice" button, then read the print portal's `innerText` rather than relying on the print
+   dialog rendering): `...ჯამური თანხა: 640.00 ₾ გადასახდელი ნაშთი: 240.00 ₾` — Total then
+   Balance due, both correct.
+9. **Independent DB read**, direct SQL against the dev Supabase project (`jpbkkngpgtvqmsocitjx`,
+   via `mcp__a9e48394-...`, not the generic `mcp__supabase__*` tool): `Order.totalPrice` =
+   64000, one `Payment` row (`amount: 40000, status: 'recorded', settledAt` set,
+   `reversedAt: null`), one `OrderExtra` (`amount: 24000`) — 64000 − 40000 = 24000, reconciling
+   exactly with every UI/CSV/email figure above.
+10. **Chunk 1's lock reconfirmed unaffected:** after adding the extra to this same paid order,
+    a live DOM check of the party-size input read `disabled: true` — the guest-count lock is
+    untouched by this chunk's changes, as expected (genuinely separate code paths, per the
+    plan's finding 5).
+11. **Nothing found silently treating a partial collection as full.** `paymentStateOf()`
+    (the function behind the "Paid"/"Invoiced"/"Unpaid" tag everywhere) still keys off
+    `paidAt` alone, which is correct for "has this order been paid *something*" — it's now
+    paired with the balance-due mark rather than replaced by it, exactly the "flag it, don't
+    hide it" design. No other `paidAt`-gated logic was found in this chunk's scope that
+    assumes full collection; Chunks 3–4 (a real second payment) are the ones that will need to
+    consult the balance rather than just `paidAt` when deciding whether more can be collected.
+12. **Cleanup:** deleted the throwaway order's 3 `OrderEvent` rows, 1 `Payment` row, 1
+    `OrderExtra` row and the `Order` row itself; a follow-up query confirmed all four tables at
+    0 rows for this order id, and the order no longer appears in the live `/admin/orders` list.
+    The throwaway invoice-render script was deleted from disk, never committed.
+
+**Deviation from the plan worth recording:** step 7 above — an actual email send was skipped
+in favor of exercising the real template function directly. This proves the content is
+correct but not that `sendOrderInvoice()`'s wiring (the new `payments` include, the
+`paymentsSettledTotal` sum, passing it through) is connected correctly end to end in
+production. That wiring *was* read and is structurally identical to the CSV export's (already
+live-verified end to end via the real "Export CSV" button), so confidence is high, but this is
+the one place in this chunk where "live-verified" means "the template's output was proven
+right," not "an email was proven to arrive right." Flagged per the task's own instruction to
+report anything that deviated.
 
 ## Chunk 3 — A real second manual payment
 

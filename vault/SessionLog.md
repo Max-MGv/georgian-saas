@@ -8,7 +8,53 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 1 built: price-affecting order fields locked once paid
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 2 built: computed balance-due, closing bug #64's second path
+
+Built Chunk 2 of `vault/Plan-PostPaymentExtras.md`. `addOrderExtra` (`saas/app/actions/orderExtras.ts`)
+already repriced a paid order's `totalPrice` with zero payment attached and nothing anywhere
+said so — deliberate per the plan's design (an extra is the legitimate way to describe a
+post-payment change), not itself the bug. The fix: a new `balanceDue()` helper in
+`saas/lib/money.ts` (`totalPrice` minus the sum of settled, non-reversed `Payment.amount` —
+computed, never a stored column) shown wherever the total already shows, once an order has
+been paid at least once and the two numbers disagree.
+
+Touched five surfaces, all gated the same way (paid + nonzero balance): the order detail
+page (a row under Total), the admin orders table (a new `BalanceDueMark`, styled like the
+existing `PaymentMark`, threaded through all five of that mark's call sites — list/board/
+mobile/table/hover-preview), the CSV export (new "Balance Due (GEL)" column), the invoice
+email (`renderInvoiceEmail` — a "Paid so far" + balance line once something's settled, the
+exact scenario bug #64 was first caught live in — a re-sent invoice after a post-payment
+edit), and the on-page printable invoice (`InvoicePrint.tsx`, shared by both the order-detail
+Print button and the orders-table print/email preview). Deliberately left untouched: Calendar
+view (not named in the plan, no room budgeted for a second money figure) and the `InvoiceSent`
+audit table (would need its own schema migration to snapshot a historical balance — bigger
+than this chunk). New i18n keys added both languages, parity 1121/1121.
+
+Verified live on `staging.vineworks.ge` against the dev DB: created a throwaway ₾400 order,
+marked it Paid · Bank transfer through the real UI, added a real ₾240 extra through the real
+"+ Add extra charge" form. Order detail page read "Total 640.00₾ / Balance due 240.00₾"; the
+orders table's DOM carried a `title="Balance due: 240.00₾"` mark next to the existing "Paid"
+one; a real click on "Export CSV" produced a response (read from the network tab, not a saved
+file) with `640` / `240` in the new columns; the printable invoice's rendered DOM read the same
+figures in Georgian. Independent direct SQL against the dev project (`jpbkkngpgtvqmsocitjx`)
+confirmed `totalPrice` 64000, one settled `Payment` of 40000, one `OrderExtra` of 24000 —
+64000 − 40000 = 24000, reconciling exactly. Chunk 1's lock reconfirmed unaffected (party-size
+input still `disabled: true` after the extra). The invoice **email** content was verified by
+calling the real `renderInvoiceEmail()` function directly with this order's numbers rather
+than sending an actual email to an inbox — flagged as a deviation from the plan's literal
+"generate/send one" wording; the template output was correct, but this doesn't prove
+`sendOrderInvoice()`'s new plumbing end to end the way an actual send would. `tsc --noEmit`
+clean throughout. Cleaned up the throwaway order/payment/extra/events afterward, confirmed
+gone (0/0/0/0). Committed `763a2f1` on `staging`, pushed.
+
+Full write-up (all 12 verification steps, the orders-table/CSV/invoice scope decisions and
+their reasoning) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 2 Result section. **Next:
+Chunk 3** (a real second manual payment — `recordManualPayment`'s duplicate-payment guard
+needs a new, separate function alongside it, not a patch).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 1 built: price-affecting order fields locked once paid
 
 Built Chunk 1 of `vault/Plan-PostPaymentExtras.md`, closing the original path of `KnownBugs.md`
 #64 (extras remain the second, still-open path — that's Chunk 2). `updateOrderEnhanced`
