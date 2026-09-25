@@ -127,7 +127,7 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
 **Resume point:** Chunk 6 done and verified live against `staging.vineworks.ge` (6/6 consecutive
-passing runs), commit TBD (see this chunk's Result section). Chunk 7 next (documentation —
+passing runs), commit `7cb45ab` on `staging`. Chunk 7 next (documentation —
 close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md`). `KnownBugs.md` #65 (`settle.ts`
 dragging `Order.paidAt` forward on a second settlement while stage stays `NEW`) is still open —
 Chunk 6's spec deliberately advances the order's stage to Confirmed before its second real
