@@ -116,12 +116,28 @@ function paymentMethodLabel(method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL'
   return adminT(locale, key)
 }
 
-function FlowLine({ steps, locale, paymentMethod }: {
+/** One settled, non-reversed payment, as passed down from page.tsx. */
+type PaymentRow = { method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL'; amount: number; settledAt: Date | string }
+
+function FlowLine({ steps, locale, payments }: {
   steps: ReturnType<typeof buildFlowLine>
   locale: string
-  /** Shown beside a done "Paid" step only — see paymentMethodLabel. */
-  paymentMethod?: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null
+  /**
+   * Every settled, non-reversed payment for this order, newest first.
+   *
+   * Only ever shown inline beside a done "Paid" step when there is exactly
+   * one — that's the overwhelming majority of orders, and it renders
+   * identically to how this line always has (Plan-PostPaymentExtras Chunk 5).
+   * Two or more payments are deliberately NOT collapsed into this single
+   * label any more: doing that used to silently relabel how the *original*
+   * charge was paid the moment a top-up settled with a different method
+   * (KnownBugs #64 finding 4) — e.g. a card booking topped up with cash would
+   * flip this to "Paid · Cash", implying the whole order was paid in cash.
+   * The real, itemised list renders separately in the Total card instead.
+   */
+  payments?: PaymentRow[]
 }) {
+  const singlePaymentMethod = payments && payments.length === 1 ? payments[0].method : null
   return (
     <div className="flex items-center flex-wrap gap-x-1 gap-y-1.5 mb-4">
       {steps.map((step, i) => (
@@ -141,8 +157,8 @@ function FlowLine({ steps, locale, paymentMethod }: {
               </svg>
             )}
             {labelFor(locale, step.code)}
-            {step.code === 'PAID' && step.done && paymentMethod && (
-              <span style={{ opacity: 0.75, fontWeight: 400 }}>· {paymentMethodLabel(paymentMethod, locale)}</span>
+            {step.code === 'PAID' && step.done && singlePaymentMethod && (
+              <span style={{ opacity: 0.75, fontWeight: 400 }}>· {paymentMethodLabel(singlePaymentMethod, locale)}</span>
             )}
           </span>
           {i < steps.length - 1 && (
@@ -192,8 +208,10 @@ type OrderProp = {
   completedAt: Date | string | null
   invoiceSentAt: Date | string | null
   paidAt: Date | string | null
-  /** How the money arrived — the live Payment row's method, null if unpaid. */
-  paymentMethod: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null
+  /** Every settled, non-reversed payment for this order, newest first —
+   *  empty if unpaid. See FlowLine's own comment for why this is a list, not
+   *  a single method (Plan-PostPaymentExtras Chunk 5, KnownBugs #64 finding 4). */
+  payments: PaymentRow[]
   date: Date
   timeSlot: string
   bookingType: string
@@ -943,7 +961,7 @@ export default function OrderDetail({
           pill because it is the whole story of the order, and the pill is only
           its current position. */}
       {!isCancelled(flow) && (
-        <FlowLine steps={flowSteps} locale={locale} paymentMethod={order.paymentMethod} />
+        <FlowLine steps={flowSteps} locale={locale} payments={order.payments} />
       )}
 
       {/* Print portal */}
@@ -1723,6 +1741,32 @@ export default function OrderDetail({
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
             {at('orderDetail.total.livePreview')}
           </p>
+        )}
+
+        {/* Itemised payments (Plan-PostPaymentExtras Chunk 5, KnownBugs #64
+            finding 4) — only once there's more than one, so the single-payment
+            case (the overwhelming majority of orders) keeps rendering exactly
+            as it always has: just the flow-line's "Paid · <method>" above,
+            with nothing repeated down here. Two or more payments get a real,
+            dated breakdown instead of the old single collapsed label, so a
+            differently-paid top-up can never again be mistaken for how the
+            original, larger charge was made. */}
+        {order.payments.length > 1 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: C.muted }}>
+              {at('orderDetail.total.paymentsTitle')}
+            </p>
+            <div className="space-y-1">
+              {order.payments.map((p, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <span style={{ color: C.muted }}>
+                    {paymentMethodLabel(p.method, locale)} · {formatDate(new Date(p.settledAt))}
+                  </span>
+                  <span style={{ color: C.text }}>{formatTetri(asTetri(p.amount), { decimals: true })}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only

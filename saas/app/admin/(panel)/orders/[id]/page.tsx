@@ -33,16 +33,16 @@ export default async function OrderDetailPage({
         // How the money actually arrived, for the Paid indicator below, and
         // what's actually settled, for the balance-due figure
         // (Plan-PostPaymentExtras Chunk 2). Every live (settled, not
-        // reversed) row, newest first — `payments[0]` still gives the Paid
-        // indicator its method unchanged, and summing `amount` across all of
-        // them gives the true collected total. This does NOT yet fix the
-        // "second payment misrepresents the first" finding from that plan
-        // (a different method on payments[0] would still relabel the Paid
-        // indicator) — that's Chunk 5's job, tracked separately.
+        // reversed) row, newest first. `settledAt` is fetched (not just used
+        // for ordering) so OrderDetail can render a real date per payment —
+        // Chunk 5 stopped collapsing this list down to `payments[0]`'s
+        // method, which used to relabel how the *original* payment was made
+        // the moment a differently-paid top-up settled (KnownBugs #64
+        // finding 4).
         payments: {
           where: { settledAt: { not: null }, reversedAt: null },
           orderBy: { settledAt: 'desc' },
-          select: { method: true, amount: true },
+          select: { method: true, amount: true, settledAt: true },
         },
       },
     })),
@@ -102,7 +102,16 @@ export default async function OrderDetailPage({
           completedAt: order.completedAt,
           invoiceSentAt: order.invoiceSentAt,
           paidAt: order.paidAt,
-          paymentMethod: order.payments[0]?.method ?? null,
+          // Every settled, non-reversed payment, newest first — see the
+          // query's own comment above (Plan-PostPaymentExtras Chunk 5).
+          payments: order.payments.map(p => ({
+            method: p.method,
+            amount: p.amount,
+            // The query's own `where: { settledAt: { not: null } }` guarantees
+            // this is never actually null — Prisma's generated type just
+            // doesn't narrow on a `where` clause.
+            settledAt: p.settledAt!,
+          })),
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,
