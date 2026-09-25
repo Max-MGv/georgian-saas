@@ -8,7 +8,57 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 6 built: end-to-end Playwright regression, all five prior chunks proven to compose
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 7 built: documentation, closing bug #64 and the whole 7-chunk plan
+
+Built Chunk 7 (documentation only, no app code) of `vault/Plan-PostPaymentExtras.md` — the final
+chunk. This closes the arc that started with `KnownBugs.md` #64, found 2026-09-25 live while
+testing an unrelated payment flow: editing an already-paid order silently detached its displayed
+total from the amount actually charged, with nothing anywhere able to tell.
+
+**`KnownBugs.md` #64 marked 🟢 Resolved**, after rereading its original description in full
+against all 6 build chunks' own Result sections — a real sanity check, not busywork, since the
+task asked specifically to confirm nothing about the original scope was left open. It wasn't:
+the guest-count/rate-edit path (the entry's main, live-reproduced scenario) is closed by Chunk 1
+(`f2149e7`, locks price-affecting fields once `paidAt` is set); the extras path is closed by
+Chunk 2 (`763a2f1`, a computed, always-visible balance-due everywhere the total is shown); Chunks
+3 (`9e64241`) and 4 (`d331c66`) supply the actual mechanism to collect that balance for real, as a
+genuine second `Payment` row, manually or by card-link checkout with Flitt's `order_id` decoupled
+from `Payment.orderId`; Chunk 5 (`9dff238`) fixes the one display regression a second payment
+would otherwise cause (a top-up in a different method silently relabeling how the *original*
+charge was paid); Chunk 6 (`7cb45ab`/`5f1dc57`) proved the whole chain end to end, 6 consecutive
+real runs against Flitt's real test merchant, no new app bug. The resolution text on #64 links
+all 6 chunks' commits and `[[Plan-PostPaymentExtras]]`. **`KnownBugs.md` #65** — the separate,
+unrelated `settle.ts` bug Chunk 4 found live (`Order.paidAt` drags forward on a second settlement
+while stage stays `NEW`) — was deliberately left untouched, still open, per the task's own
+instruction.
+
+**`FeatureLog.md`** gained one new consolidated row, #213, alongside the existing per-chunk rows
+#208–#212 (added by Chunks 1–5) — added because Chunk 6, the end-to-end Playwright regression,
+built no application code and so had no row of its own under the usual convention; without a
+summary row its test coverage would have been invisible from `FeatureLog.md` alone. The new row
+points at the per-chunk rows rather than repeating their content.
+
+**`Roadmap.md`** was searched for any mention of this work or bug #64 — found nothing. This plan
+document (`vault/Plan-PostPaymentExtras.md`) was the only tracker for it; nothing was invented to
+fill a gap that was never really there.
+
+**`playwright/README.md`/`ARCHITECTURE.md`** already carry the tier5
+`--config=playwright.staging.config.ts` convention note Chunk 6 added when it hit that exact
+environment trap live — reread both in full, found complete, added nothing further.
+
+**The whole `Plan-PostPaymentExtras.md` plan is now closed** — all 7 chunks ✅, resume point
+updated to say there is nothing left to resume. A genuinely satisfying close: this plan exists
+because bug #64 was a real, live-verified money-integrity gap (a real customer's charged amount
+and displayed total silently disagreeing, symmetrically in either direction, with no screen able
+to catch it) — seven chunks later, that gap has a deliberate, visible, fully-tested replacement:
+locked originals, visible balances, two legitimate ways to collect a top-up, correct multi-payment
+display, and one real end-to-end test run six times against real money movement through Flitt's
+sandbox. `KnownBugs.md` #65 remains the one open thread from this work, logged and out of scope,
+ready to be picked up on its own.
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 6 built: end-to-end Playwright regression, all five prior chunks proven to compose
 
 Built Chunk 6 of `vault/Plan-PostPaymentExtras.md` — one real Playwright spec,
 `saas/tests/tier5-payment-e2e/payment-post-payment-extras.spec.ts`, proving Chunks 1–5 work

@@ -122,17 +122,27 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ✅ Done |
 | **5** | Fix the order-detail page's multi-payment display (finding 4) | ✅ Done |
 | **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ✅ Done |
-| **7** | Docs: close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md` | ⬜ Not started |
+| **7** | Docs: close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md` | ✅ Done |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 6 done and verified live against `staging.vineworks.ge` (6/6 consecutive
-passing runs), commit `7cb45ab` on `staging`. Chunk 7 next (documentation —
-close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md`). `KnownBugs.md` #65 (`settle.ts`
-dragging `Order.paidAt` forward on a second settlement while stage stays `NEW`) is still open —
-Chunk 6's spec deliberately advances the order's stage to Confirmed before its second real
-settlement specifically to avoid triggering it (see that chunk's Result section), the same
-avoidance the design spike used; #65 itself is still unfixed and out of scope here.
+> **Plan complete, 2026-09-25.** All 7 chunks built and verified. `KnownBugs.md` #64 is marked
+> **🟢 Resolved** — both of its original paths (guest-count/rate edits via Chunk 1, extras via
+> Chunk 2) are closed, with Chunks 3–5 providing the actual mechanism to collect a legitimate
+> top-up and fixing the one display regression a second payment would otherwise cause. See #64's
+> own entry for the full path-by-path closure and all 7 commit hashes.
+> `FeatureLog.md` gained a consolidated row (#213) alongside the existing per-chunk rows
+> (#208–#212), covering Chunk 6 (which built no app code and had no row of its own). `Roadmap.md`
+> does not track this work or bug #64 anywhere — this plan document was the only tracker, so
+> nothing there needed ticking off. `playwright/README.md`/`ARCHITECTURE.md` already carry the
+> tier5-config convention note Chunk 6 added; no further documentation gap was found.
+> `KnownBugs.md` #65 (`settle.ts` dragging `Order.paidAt` forward on a second settlement while
+> stage stays `NEW`, found live during Chunk 4) remains **open and untouched** — separate,
+> unrelated, out of scope for this plan.
+
+**Resume point:** Nothing to resume — this plan is complete. `KnownBugs.md` #64 resolved
+2026-09-25 ([[Plan-PostPaymentExtras]] Chunks 1–6). If picking up related work next, it's
+`KnownBugs.md` #65, a still-open, separate bug in `settle.ts` found during Chunk 4.
 
 ---
 
@@ -1040,10 +1050,52 @@ it was discovered while doing this chunk's own required verification, not as sep
 ## Chunk 7 — Documentation
 
 **Goal:** leave this discoverable, close the loop on the bug that started it.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25.
 
 - `vault/KnownBugs.md` #64 — mark resolved, link the fix commits and this plan.
 - `vault/FeatureLog.md` — new row for post-payment extras/top-up payments.
 - `vault/Roadmap.md` — tick off if it's tracked there.
 - `playwright/README.md`/`ARCHITECTURE.md` — mention the new spec if it needs any convention
   note beyond what's already documented for tier5.
+
+### Result (2026-09-25)
+
+**`KnownBugs.md` #64 marked 🟢 Resolved.** Reread the entry's original description in full
+against Chunks 1–6's own Result sections before writing anything, per this chunk's own
+instruction to treat that as a real sanity check rather than busywork. Both of the bug's named
+paths are genuinely closed: the guest-count/rate-edit path (the entry's main narrative and
+live-reproduced scenario) by Chunk 1's unconditional lock on price-affecting fields once
+`Order.paidAt` is set; the extras path (finding 2) by Chunk 2's computed, always-visible
+balance-due. Chunks 3–4 supply the mechanism the design called for to actually collect that
+balance as a genuine second `Payment` row (manual or card-link), and Chunk 5 closes the one
+display regression a second payment would otherwise cause (finding 4, the mislabeled "Paid ·
+method" flow-line). Chunk 6 proved the whole chain end to end, 6 consecutive real runs, no new
+app bug. Nothing in the original description was found to still be open — the resolution text
+links all 6 chunks' commits (`f2149e7`, `763a2f1`, `9e64241`, `d331c66`, `9dff238`, `7cb45ab`/
+`5f1dc57`) and `[[Plan-PostPaymentExtras]]`. `KnownBugs.md` #65 was read but not touched, per this
+chunk's explicit instruction — it's a separate, still-open bug this plan's own Chunk 4 happened
+to surface.
+
+**`FeatureLog.md`.** Judgment call: added one consolidated row (#213) rather than leaving the
+existing per-chunk rows (#208–#212) as the only record, because Chunk 6 (the end-to-end
+Playwright regression) built no application code and so never got a row of its own under the
+existing convention — without a summary row, the feature's test coverage would have been
+undiscoverable from `FeatureLog.md` alone. The new row is explicit that it doesn't repeat the
+per-chunk content, only points at it and adds what Chunk 6 contributed.
+
+**`Roadmap.md`.** Searched for any mention of this work, bug #64, "post-payment", "top-up
+payment", or "balance due" — found nothing. This plan document was the only tracker for this
+work; nothing was invented in `Roadmap.md` to fill that gap, per this chunk's own instruction to
+say so rather than add a speculative entry.
+
+**`playwright/README.md`/`ARCHITECTURE.md`.** Both already carry the tier5
+`--config=playwright.staging.config.ts` convention note, added by Chunk 6 itself when it
+discovered the gap live (the environment trap that cost that chunk its debugging time). Re-read
+both files in full for this chunk — the note is accurate and complete for what a future session
+needs to know about running a tier5 spec; nothing further was added. `playwright/notes/
+18-payment-post-payment-extras.md` also already exists, following the established one-note-per-
+spec convention.
+
+**No application code touched in this chunk**, per its own scope and `[[ClaudeInstructions]]`
+Rule 8 — this is a documentation-only chunk, and no confirmation-then-edit cycle for app code was
+needed.
