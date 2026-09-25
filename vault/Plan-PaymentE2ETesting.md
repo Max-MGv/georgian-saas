@@ -32,13 +32,13 @@ chunks 3/4/5/6 (tetri, rate snapshots, OrderEvent, Payment-as-ledger), `playwrig
 | **3** | Book & Pay Now — approved + declined, full cross-view check | ✅ Done (2026-09-24) |
 | **4** | Book & Pay Later — reservation → invoice → manual bank transfer, full cross-view check | ✅ Done (2026-09-24) |
 | **5** | Admin-created order — parity with guest orders, then manual payment | ✅ Done (2026-09-24) |
-| **6** | Edit after the fact — stale-money check on an already-paid order | ⬜ Not started |
+| **6** | Edit after the fact — stale-money check on an already-paid order | ✅ Done (2026-09-25) — real bug found, `KnownBugs.md` #64 |
 | **7** | Idempotency, forged callback, tampered amount — driven through the real staging route | ⬜ Not started |
 | **8** | Docs: `playwright/README.md`/`ARCHITECTURE.md`, `Progress.md`, vault entries for the reversal-sync gap and the Pay-by-Link idea | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** 🔜 Chunks 0–5 are done. The real settle loop is proven live
+**Overall resume point:** 🔜 Chunks 0–6 are done. The real settle loop is proven live
 on staging (see Chunk 1's result log below), the race-condition it surfaced is fixed and
 verified (see "Incident and fix" below), Staging Winery runs **permanently** on Flitt's public
 test merchant (`1549901`/`test` — see Ground Rule 1), the shared scaffolding (staging
@@ -49,9 +49,14 @@ closed the "book & pay later" loop, finding and fixing a real, standing app bug 
 (the manual-payment "Paid" picker closing itself instantly — see Chunk 4's result log below),
 and Chunk 5 confirmed an admin-created order has genuine parity with a guest-created one
 across every §4 surface once both are paid, finding no app divergence but two real bugs in
-the test itself along the way (see Chunk 5's result log below).
-**Chunk 6 (Edit after the fact) is next**, and per [[ClaudeInstructions]] Rule 8 still
-gets called out for confirmation as it comes up, not assumed from this plan alone.
+the test itself along the way (see Chunk 5's result log below). **Chunk 6 (Edit after the
+fact) is done and found the real bug this whole plan flagged as likely** — editing an
+already-paid order's guest count reprices `Order.totalPrice` everywhere while `Payment.amount`
+stays frozen at the original charge, with nothing anywhere surfacing the disagreement. Logged
+as `KnownBugs.md` #64, not fixed (see Chunk 6's result log below).
+**Chunk 7 (Idempotency, forged callback, tampered amount) is next**, and per
+[[ClaudeInstructions]] Rule 8 still gets called out for confirmation as it comes up, not
+assumed from this plan alone.
 
 ### Incident and fix (2026-09-24) — read before touching credentials again
 
@@ -649,7 +654,7 @@ live-verified against real staging (1/1 passing). Full writeup: `playwright/note
 ## Chunk 6 — Edit after the fact (the stale-money check)
 
 **Goal:** find out whether editing an already-paid order leaves anything showing a stale number.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done (2026-09-25).
 
 - Take a Chunk 3 order through to `paidAt` set, then use `updateOrderEnhanced` to change
   guest count/extras.
@@ -659,6 +664,90 @@ live-verified against real staging (1/1 passing). Full writeup: `playwright/note
   explicitly going in expecting to find a real discrepancy, not just confirming there isn't one.
 - Whatever is found gets written up as a `KnownBugs.md` entry, not just a failing assertion
   quietly adjusted to match reality.
+
+**Result log (2026-09-25):** `tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts` built
+and live-verified against real staging (1/1 passing). Full writeup:
+`playwright/notes/17-payment-edit-after-payment.md`. **This is the situation the chunk's own
+brief called out as the one to expect: a real, previously-undocumented bug, not a clean bill of
+health.**
+
+- **Read `updateOrderEnhanced` in full before writing anything**, per this chunk's own
+  instruction. Confirmed statically: the function recomputes `totalPrice` and the three rate
+  snapshots, but contains no `tx.payment` reference anywhere. `Payment.amount` is written
+  exactly once, at `startCheckout()` time (`createBooking.ts`), and afterward is only ever
+  *read* — `settle.ts`'s amount-equality gate, checked once, against the *original* settlement
+  callback, never re-checked against a later edit.
+- **Live-verified, not just read from the code.** A real individual booking (Tasting + Lunch,
+  4 guests) went through an actual Flitt settlement on Staging Winery's permanent test
+  merchant: `Payment{ provider: 'flitt', method: 'CARD', status: 'approved' }`, `amount` =
+  48000 tetri (480₾), agreeing exactly with `Order.totalPrice`. The order's own admin detail
+  page was then used to raise the party size and the Tasting+Lunch split from 4 to 6 — the
+  ordinary "add two more guests, same agreed rate" edit, not an edge case — and saved.
+  Afterward: `Order.totalPrice` = 72000 tetri (720₾) on **every UI surface checked** (admin
+  orders table, the order's own "Order Total" card, CSV export, and a freshly re-sent invoice
+  email), while the same `Payment` row's `amount` stayed exactly 48000 tetri, `status`/
+  `settledAt` byte-for-byte unchanged. **Nothing anywhere flags the ₾240 disagreement** — there
+  is no payments-list screen in this app (re-confirmed while investigating: the only UI-adjacent
+  read of `Payment` is indirect, via `Order.paidAt`), no reconciliation check, no warning
+  banner.
+- **This chunk's own note about the guard, found while reading the function, worth carrying
+  forward:** `updateOrderEnhanced` only recomputes `totalPrice` when `totalPayingGuests > 0`
+  (i.e. the tasting/lunch split is actually filled in). A booking created via the *simple*
+  (non-enhanced) form starts with that split at 0/0, so raising only the party-size field with
+  the split left at 0/0 silently does **not** reprice at all — the spec had to fill both the
+  party size and the split for the edit to take effect, which is itself a real, separate
+  nuance of this function's behaviour worth knowing, not a bug this chunk is asserting on.
+- **New helper, reusable by future chunks needing a fact with no UI surface:**
+  `tests/helpers/orderMoneyDb.ts` — a plain, read-only `PrismaClient` against the same
+  `DATABASE_URL` the app itself uses (same pattern as `scripts/audit-money.ts`), because
+  `Payment.amount` has no UI surface anywhere to assert against through Playwright alone. The
+  spec's own assertions on `Payment.amount` being frozen are therefore a genuine, reproducible
+  proof, not an inference from reading the code.
+- **The spec's assertions are written against the actual, confirmed behaviour** (`Payment.amount`
+  frozen, every UI surface showing the new total, the two disagreeing) — passing, not failing,
+  per this chunk's own instruction not to assert on an idealized fix that doesn't exist yet.
+- **Four runs before a clean pass — two real test bugs found, not app bugs or flakiness — and
+  each failed run independently re-confirmed the finding via direct SQL before either cause was
+  found:**
+  1. **Runs 1–2 (200s, then 300s timeout, no diagnostic timing yet).** Both hit
+     `test.setTimeout` with no useful signal beyond "not a hang" (direct SQL each time showed the
+     edit and reprice to 720₾ had already succeeded). Root cause, found once `mark()` timing was
+     added: `exportOrdersCsvViaUi`'s own internal `page.goto('/admin/orders')` (run for the
+     second, post-edit CSV export) left `page` there, but the very next step tried to click
+     "Send Invoice" — a button that only exists on the order's own detail page. Playwright's
+     default action timeout is unbounded when neither `use.actionTimeout` nor a per-call
+     `timeout` is set (it inherits the *test's own remaining budget*, not a fixed ~30s), so that
+     click just retried silently against a button that would never appear, for the rest of the
+     run. Fixed with an explicit `await page.goto(detailUrl)` before the invoice section.
+  2. **Run 3 (400s timeout, `mark()` timing in place, first bug fixed).** The timings now showed
+     every real step finishing by +41s, including the invoice re-send — then nothing. Same
+     unbounded-timeout failure shape, different locator: `rowAfter` was built while `page` was on
+     `/admin/orders`, but by the time it was read again (deep in the final assertion block)
+     `page` had since navigated to the detail page for the invoice re-send in step 1's fix.
+     `rowAfter.textContent()` against a `<tr>` that no longer existed on the current page
+     silently retried for the rest of the run, identical in shape to bug 1 — which is exactly why
+     the `mark()` timings mattered: without them, "some step near the end is slow" and "a stale
+     locator on the wrong page is hanging forever" are indistinguishable from the outside. Fixed
+     by moving that read to the one point `page` is actually still on `/admin/orders` (right
+     after the second CSV export, before the detail-page navigation for the invoice).
+  3. **Run 4 — clean pass, both fixes in place.** 1/1 passing in **45.4s** end to end (login →
+     real Flitt settlement → edit → both CSV exports → invoice re-send/Resend check → all
+     assertions → cleanup) — confirming the earlier "needs 5+ minutes" assumption from runs 1–3
+     was itself wrong; the scenario was always fast, those runs were burning their whole budget
+     on one broken locator each, not genuine cumulative latency. `test.setTimeout` trimmed back
+     down to a still-generous 200 000ms (not tuned to the literal 45s, in case network conditions
+     vary).
+  Every leftover order and the "Individual bookings" toggle from runs 1–3 were cleaned up by
+  hand between attempts — via the real admin UI's delete action and the real Settings toggle,
+  the same mechanism the spec's own `finally` block uses — each confirmed via a follow-up
+  direct-SQL query before the next run started.
+- **Cleanup:** the passing run's own `finally` block deleted the order via the normal admin UI
+  and restored the "Individual bookings" toggle to its documented resting value (off), both
+  independently confirmed via a follow-up direct-SQL query — zero `Order`/`Payment` rows
+  matching the `ZZPaymentE2EEditAfterPay%` marker, `Tenant.paymentEnabledIndividuals = false`.
+
+**Resume point:** Chunk 6 fully closed out. Chunk 7 (Idempotency, forged callback, tampered
+amount) is next.
 
 ## Chunk 7 — Idempotency, forged callback, tampered amount
 

@@ -356,3 +356,42 @@ run to inspect the final state before deleting via the normal admin UI): `Order.
 invisible to every UI surface checked, exactly as designed). All test/debug data swept to zero
 afterward. This spec never touches the "Individual bookings" toggle at all — `createOrderAdmin`
 doesn't consult it — so no restore step was needed.
+
+## 2026-09-25 — Chunk 6, one spec added, a real bug found (this one was expected)
+
+`payment-edit-after-payment.spec.ts` — 1/1 passing. Covers the "edit after the fact" gap the
+plan's own research flagged from the start: does editing an already-paid order's guest count
+leave `Payment.amount` and `Order.totalPrice` agreeing? **No — confirmed live, not just read
+from the code.** `updateOrderEnhanced` (`app/actions/orders.ts`) recomputes `Order.totalPrice`
+on an edit but never touches `Payment` at all; `Payment.amount` is written once, at checkout,
+and never revisited.
+
+Live-verified: a real Flitt-settled individual booking (4 guests, ₾480) had its guest count
+raised to 6 through the real admin "Guest Breakdown" panel, at the *same* per-person rate it
+was already sold at. Afterward, every UI surface — admin orders table, order detail, CSV
+export, a freshly re-sent invoice — showed the new ₾720 total, while the `Payment` row
+(read directly via a new helper, `tests/helpers/orderMoneyDb.ts`, since this fact has no UI
+surface anywhere in the app) still showed exactly ₾480, `status='approved'`, `settledAt`
+unchanged. Nothing anywhere in the app flags the disagreement. Logged as `KnownBugs.md` #64,
+not fixed here per [[ClaudeInstructions]] Rule 8 — this chunk's job was to test and document.
+
+Two non-app snags while building this, both about a `Locator` outliving a page navigation —
+took 3 failed runs (200s, 300s, 400s `test.setTimeout`, each independently re-confirming the
+same app behaviour above via direct SQL before its leftover data was cleaned up by hand) to
+find both:
+1. **Runs 1–2:** a CSV-export helper's own internal nav left `page` on `/admin/orders` right
+   before the next step tried to click "Send Invoice" — a button that only exists on the
+   detail page. Playwright's default action timeout is unbounded without an explicit
+   `use.actionTimeout`, so the click just retried silently for the whole run instead of
+   failing fast. Fixed with an explicit nav back to the detail page.
+2. **Run 3:** identical failure shape, one step later — a `rowAfter` locator read again after
+   `page` had since navigated away for the invoice re-send. `mark()` timing (added after run 1)
+   is what made this visible at all: every real step finished by +41s, then nothing, which is
+   indistinguishable from "a step got slow" without per-step timestamps. Fixed by capturing that
+   read at the one point `page` was still actually on `/admin/orders`.
+
+Run 4 passed clean in **45.4s** — confirming the scenario itself was always fast; the first
+three runs were each burning their whole budget on one broken locator. `test.setTimeout` is
+200 000ms in the committed version.
+
+Full writeup: [[17-payment-edit-after-payment]].
