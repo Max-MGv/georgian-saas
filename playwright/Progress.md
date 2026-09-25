@@ -395,3 +395,52 @@ three runs were each burning their whole budget on one broken locator. `test.set
 200 000ms in the committed version.
 
 Full writeup: [[17-payment-edit-after-payment]].
+
+## 2026-09-25 — Chunk 6 of Plan-PostPaymentExtras, one spec added, the pieces compose
+
+`payment-post-payment-extras.spec.ts` — 6/6 consecutive passing after fixing two real test bugs
+and rediscovering (the hard way) that tier5 specs need `--config=playwright.staging.config.ts`.
+One order, the whole flow Chunks 1–5 of `Plan-PostPaymentExtras.md` built and verified in
+isolation: real Flitt settlement → Chunk 1's lock confirmed → a real extra → Chunk 3's manual
+top-up (partial) → stage advanced to Confirmed (avoids `KnownBugs.md` #65) → Chunk 4's real
+card-link top-up (the rest) → Chunk 5's itemised "Payments received" list, three distinct
+payments, balance reaching exactly zero → CSV export and a re-sent invoice both reflecting the
+final reconciled state. DB reads via `orderMoneyDb.ts` at every step, not just the end, checked
+against the VERY FIRST snapshot each time (not against the previous check), so a bug that only
+shows up on the second comparison couldn't hide.
+
+**A real environment trap, not a code bug, cost the most time here.** The first two runs used
+the default `npx playwright test` (no `--config`) and both hung the full test timeout inside
+`payAtFlittCheckout`, reporting `net::ERR_CONNECTION_TIMED_OUT` on the redirect off
+`pay.flitt.com` — indistinguishable from a dead sandbox (a direct `curl` to the same failing
+host independently timed out too). Root cause, found via a throwaway debug spec that polled the
+page every 2s after clicking Pay: the checkout's card-submission POST goes to
+`secure-redirect.cloudipsp.com/submit/`, which cannot complete a real approval when the
+merchant's configured callback is `localhost` (the default config's `baseURL`) — a real
+settlement needs a publicly reachable callback, exactly why `playwright.staging.config.ts`
+exists. Switching config fixed it immediately. Documented in `ARCHITECTURE.md` ("Tier 5 runs
+against real staging, not localhost") and `README.md` so this isn't rediscovered from scratch.
+
+Two further real test bugs, both fixed:
+1. **Run 3 (first run under the correct config):** hung again, this time inside the Chunk 1
+   lock-check — `partySizeInput.fill(...)` on a genuinely `disabled` field, wrapped in
+   `.catch(() => {})`, hung forever because Playwright's `.fill()` actionability wait has no
+   timeout of its own by default and `.catch()` never fires without a rejection to catch (the
+   same unbounded-action-timeout shape `17-payment-edit-after-payment.md` already documents).
+   Fixed with an explicit `{ timeout: 3_000 }`.
+2. **Run 5:** a genuine race, not flakiness — `handleRecordPayment` sets its "Payment recorded
+   ✓" confirmation synchronously but calls `router.refresh()` separately, and a one-shot balance
+   read right after the confirmation text sometimes ran before the refreshed server props
+   landed (`Received: "100.00₾"` instead of `"60.00₾"`, once). Fixed by switching to a polling
+   `expect(locator).toHaveText(...)` instead of a one-shot `.textContent()` compare.
+
+Independently re-verified against the dev DB directly (`mcp__a9e48394-...`, cleanup temporarily
+disabled for one run to inspect the live row before deleting it by hand): three `Payment` rows
+summing to exactly `Order.totalPrice`, and — the `KnownBugs.md` #65 regression guard —
+`Order.paidAt` pinned to the FIRST settlement's timestamp, not the second real settlement's,
+confirming the stage-advance step actually worked. All test/debug data (including two earlier
+runs' leftover unpaid throwaway orders, from before the config fix) swept to zero afterward,
+confirmed by follow-up `count(*)` queries. The "Individual bookings" toggle was already at its
+default (`true`) throughout — no `Setting` row was ever written, confirmed by direct query.
+
+Full writeup: [[18-payment-post-payment-extras]].

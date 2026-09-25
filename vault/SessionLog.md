@@ -8,7 +8,59 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 5 built: fixed the multi-payment display, closing bug #64 finding 4
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 6 built: end-to-end Playwright regression, all five prior chunks proven to compose
+
+Built Chunk 6 of `vault/Plan-PostPaymentExtras.md` — one real Playwright spec,
+`saas/tests/tier5-payment-e2e/payment-post-payment-extras.spec.ts`, proving Chunks 1–5 work
+together on a single order, not just in isolation on their own throwaway orders. Reused every
+existing tier5 helper (`auth.ts`, `payments.ts`, `bookingForm.ts`, `flittPayment.ts`,
+`credentials.ts`, `resendCheck.ts`, `orderMoneyDb.ts`) — no new helper needed. The scenario: a
+real Flitt settlement → Chunk 1's lock confirmed (disabled fields, a genuinely bounded edit
+attempt that has no effect) → a real ₾100 extra with balance-due confirmed on both the order
+detail page and the orders table → the booking stage deliberately advanced to Confirmed
+(avoiding `KnownBugs.md` #65 — see below) → a real ₾40 partial manual top-up (Chunk 3) → a real
+card-link checkout for the remaining ₾60, generated and paid through Flitt's actual hosted
+checkout (Chunk 4) → Chunk 5's itemised "Payments received" list (three distinct payments,
+balance reaching exactly zero, bare "Paid" with no method suffix) → a CSV export and a re-sent
+invoice both reflecting the final, fully-reconciled state. Five separate direct-DB reads run
+through the scenario, each re-checking the original payment against its very first snapshot, not
+just the previous check.
+
+**Deliberately avoided KnownBugs #65, not accidentally.** The spec's second real settlement (the
+card-link top-up) would otherwise drag `Order.paidAt` forward per bug #65's own documented shape
+— fixed by advancing the order's stage to Confirmed before that settlement, the same avoidance
+the design spike used. The spec's final DB read explicitly confirms `Order.paidAt` stayed pinned
+to the FIRST settlement's timestamp, live evidence the avoidance actually worked.
+
+**A real environment trap cost the most debugging time, and it wasn't an app bug.** The first two
+runs used the default `npx playwright test` config (localhost) and both hung for the full test
+timeout inside the Flitt-checkout helper with a `net::ERR_CONNECTION_TIMED_OUT` that looked
+exactly like a dead third-party sandbox. Root cause, found via a throwaway debug spec: a real
+Flitt approval needs a publicly reachable callback URL, which `localhost` can never be — tier5
+specs have always needed `--config=playwright.staging.config.ts` (targets the real
+`staging.vineworks.ge`, still the dev DB), a requirement that turned out to be undocumented
+anywhere in `playwright/README.md` or `playwright/ARCHITECTURE.md`. Both files now carry a clear
+note about it, closing a real gap for future sessions. Two further real test bugs were found and
+fixed along the way (an unbounded `.fill()` action timeout on a disabled field, and a genuine
+UI-refresh race on the manual top-up's balance read) — neither was an application bug; everything
+Chunks 1–5 built worked correctly together on the first run under the correct config.
+
+**Verified for real:** 6 consecutive passing runs against `staging.vineworks.ge` (per the task's
+own instruction to run more than once for a real-money-flow scenario), `tsc --noEmit` clean, and
+an independent direct-SQL check (dev project `jpbkkngpgtvqmsocitjx`, via `mcp__a9e48394-...`) —
+one run's cleanup was temporarily skipped specifically to confirm the live row matched the
+spec's own assertions exactly, then cleaned up by hand. All test/debug data (including two
+leftover unpaid throwaway orders from the pre-config-fix runs) swept to zero, confirmed by
+follow-up queries. No new application bug was found.
+
+Full write-up (all verification steps, both test-bug fixes, the environment-trap narrative, the
+independent SQL results) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 6 Result section and
+`playwright/notes/18-payment-post-payment-extras.md`. **Next: Chunk 7** (documentation — close
+out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md`).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 5 built: fixed the multi-payment display, closing bug #64 finding 4
 
 Built Chunk 5 of `vault/Plan-PostPaymentExtras.md` — the display fix that finding 4 (surfaced
 live during Chunk 4) was waiting on. `saas/app/admin/(panel)/orders/[id]/page.tsx`'s `payments`

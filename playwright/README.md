@@ -46,6 +46,11 @@ Before running the suite:
 1. `cd saas && npm run dev` (leave running)
 2. In another terminal: `cd saas && PLAYWRIGHT_HTML_OPEN=never npx playwright test`
 
+**One exception: `saas/tests/tier5-payment-e2e/`.** These specs run against the real deployed `https://staging.vineworks.ge` (still the dev database, never production) via a **separate config file**, `saas/playwright.staging.config.ts` — not the default `playwright.config.ts` above, and not `localhost`. Real Flitt settlements need a publicly reachable callback URL, which `localhost` can never be; running a tier5 spec with the default (localhost) config doesn't error cleanly, it hangs mid-checkout instead (see `ARCHITECTURE.md`'s "Tier 5 runs against real staging" note for the exact failure shape this produces if you get it wrong). Run tier5 specs with:
+```
+npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/<file>.spec.ts --workers=1
+```
+
 ## Test data policy (short version)
 
 Any test that creates data cleans it up afterward, regardless of pass/fail. Tests never touch Staging Winery's pre-existing real data. There's one confirmed exception (Wine Orders has no delete action, so its test's cleanup can only mark "Cancelled") and one deliberate one (the onboarding-wizard tenant needs a manual reset before each run, not after) — both explained in full in `KNOWN-ISSUES.md`, not repeated here.

@@ -121,16 +121,18 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 | **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ✅ Done |
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ✅ Done |
 | **5** | Fix the order-detail page's multi-payment display (finding 4) | ✅ Done |
-| **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ⬜ Not started |
+| **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ✅ Done |
 | **7** | Docs: close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 5 done and verified live on `staging.vineworks.ge`, commit `9dff238`.
-Chunk 6 next (end-to-end Playwright regression). `KnownBugs.md` #65 (`settle.ts` dragging
-`Order.paidAt` forward on a second settlement while stage stays `NEW`) is still open — deliberately
-not touched in Chunk 5 either, since it's out of scope for a display-only fix and deserves its own
-dedicated pass, per Chunk 4's Result section and the bug's own entry.
+**Resume point:** Chunk 6 done and verified live against `staging.vineworks.ge` (6/6 consecutive
+passing runs), commit TBD (see this chunk's Result section). Chunk 7 next (documentation —
+close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md`). `KnownBugs.md` #65 (`settle.ts`
+dragging `Order.paidAt` forward on a second settlement while stage stays `NEW`) is still open —
+Chunk 6's spec deliberately advances the order's stage to Confirmed before its second real
+settlement specifically to avoid triggering it (see that chunk's Result section), the same
+avoidance the design spike used; #65 itself is still unfixed and out of scope here.
 
 ---
 
@@ -894,7 +896,7 @@ conscious scope choice rather than a shortfall.
 ## Chunk 6 — End-to-end regression test
 
 **Goal:** one real Playwright scenario proving the whole flow, extending the existing tier.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25.
 
 - New spec under `saas/tests/tier5-payment-e2e/`, reusing `flittPayment.ts`/`payments.ts`/
   `resendCheck.ts` helpers already built during `Plan-PaymentE2ETesting.md`'s Chunks 2–5.
@@ -909,6 +911,131 @@ conscious scope choice rather than a shortfall.
   not the generic `mcp__supabase__*` one, which has been found scoped to an unrelated account
   in this session before; falling back to an `npx tsx` script against `saas/.env`'s real
   `DATABASE_URL` is an equally valid alternative if needed).
+
+### Result (2026-09-25)
+
+**What was built.** One new spec, `saas/tests/tier5-payment-e2e/payment-post-payment-extras.spec.ts`,
+reusing every existing tier5 helper (`auth.ts`, `payments.ts`, `bookingForm.ts`, `flittPayment.ts`,
+`credentials.ts`, `resendCheck.ts`, `orderMoneyDb.ts`) with no new helper needed. One order runs
+the entire chain in the order a real admin would hit it: a real Flitt settlement (Tasting+Lunch,
+4 guests) → Chunk 1's lock confirmed (disabled fields, a genuine bounded-timeout edit attempt
+that has no effect) → a real ₾100 extra, balance-due confirmed on both the order detail page and
+the admin orders table's `BalanceDueMark` → the booking stage deliberately advanced to Confirmed
+(see "Avoiding KnownBugs #65" below) → a real ₾40 partial manual top-up (Chunk 3) → a real
+card-link checkout for the remaining ₾60, generated and paid through Flitt's actual hosted
+checkout in a second browser tab (Chunk 4) → Chunk 5's itemised "Payments received" list (three
+distinct payments — Card, Bank transfer, Card — balance reaching exactly zero, the flow-line
+correctly showing bare "Paid" with no method suffix) → CSV export and a re-sent invoice both
+reflecting the final, fully-reconciled state. Five separate direct-DB reads via `orderMoneyDb.ts`
+run through the whole scenario (not just one at the end), each one re-checking the ORIGINAL
+payment's `amount`/`method`/`status`/`settledAt` against its very first captured snapshot — not
+against the previous check — so a bug that only shows up on the second comparison couldn't hide
+behind the first one happening to agree.
+
+**Avoiding KnownBugs #65 deliberately, not accidentally.** This scenario's own second real
+settlement (the card-link top-up) would trigger bug #65 (`settle.ts` drags `Order.paidAt`
+forward on a second settlement while the order's booking `stage` is still `NEW`) if the order
+were left in stage `NEW` throughout, exactly as Chunk 4's own verification found live. Per this
+task's instructions and the bug's own entry, the spec advances the order's stage to Confirmed
+(via the real status-dropdown UI) after the manual top-up and before generating the card-link
+checkout — the same avoidance the design spike behind this whole plan used. This is not a
+workaround for a regression the spec itself introduces; it sidesteps an already-logged,
+out-of-scope bug so a real, unrelated flow isn't misread as a new failure. The spec's final DB
+read explicitly asserts `Order.paidAt` stays pinned to the FIRST settlement's timestamp through
+the second one — a live, reproducible confirmation that the avoidance actually worked, not an
+assumption.
+
+**Email boundary respected.** The card-link top-up is paid by navigating a second browser tab
+directly to the generated checkout URL, never by clicking "Email to guest" — that button fires a
+real Resend send for Chunk 4's own template, and this task's instructions ask that such a button
+not be clicked without explicit chat confirmation. The checkout link itself needs no email to be
+paid, so the scenario is fully exercised without that click. The invoice re-send (for the CSV/
+invoice check) uses the pre-existing "Send Invoice" feature with an `@example.invalid` address —
+not new to this plan, and the same pattern `payment-edit-after-payment.spec.ts` already
+established as safe (Resend logs the send; nothing reaches a real inbox). No app bug was found
+that would have required deciding this differently.
+
+**A real environment trap, not a code bug, cost the most debugging time.** The first two runs
+used the default `npx playwright test` (no `--config` flag) and both hung the full test timeout
+inside `payAtFlittCheckout`, reporting `net::ERR_CONNECTION_TIMED_OUT` on the redirect off
+`pay.flitt.com` — indistinguishable at first from a dead third-party sandbox (a direct `curl` to
+the same failing host, `secure-redirect.cloudipsp.com`, independently timed out too, which
+initially pointed further in the wrong direction). Root cause, found via a throwaway debug spec
+that filled the real card fields, clicked Pay, and polled the page every 2s logging URL/console/
+failed-requests: Flitt's checkout page POSTs the actual card submission to
+`secure-redirect.cloudipsp.com/submit/`, which cannot complete a real approval when the
+merchant's configured callback is `localhost` (the default `playwright.config.ts`'s `baseURL`) —
+a real settlement needs a publicly reachable callback URL, exactly why
+`saas/playwright.staging.config.ts` (targeting the real `https://staging.vineworks.ge`, still the
+dev DB) exists for this tier. Switching config fixed it on the very next run. Documented in
+`playwright/ARCHITECTURE.md` ("Tier 5 runs against real staging, not localhost") and
+`playwright/README.md` so this isn't rediscovered from scratch in a future session.
+
+**Two further real test bugs, both fixed, neither an app bug:**
+1. A genuine hang inside the Chunk 1 lock-check step: `partySizeInput.fill(...)` on a
+   genuinely `disabled` field, wrapped in `.catch(() => {})`, hung forever because Playwright's
+   `.fill()` actionability wait has no timeout of its own by default and `.catch()` never fires
+   without a rejection to catch — the identical unbounded-action-timeout shape
+   `playwright/notes/17-payment-edit-after-payment.md` already documents for a different
+   locator. Fixed with an explicit `{ timeout: 3_000 }`, so a genuinely-disabled field fails
+   FAST — itself the intended proof of the lock, not something to wait out.
+2. A genuine race, not flakiness in the infrastructure sense: `handleRecordPayment`
+   (`OrderDetail.tsx`) sets its "Payment recorded ✓" confirmation text synchronously but calls
+   `router.refresh()` separately — a one-shot balance read immediately after seeing that
+   confirmation text raced the refresh and once read the STALE pre-top-up balance
+   (`Received: "100.00₾"` instead of `"60.00₾"`). Fixed by replacing the one-shot
+   `.textContent()` compare with a polling `expect(locator).toHaveText(...)`, which waits out
+   exactly that race instead of sampling the DOM once.
+
+**Verification — done for real against `staging.vineworks.ge` (via `playwright.staging.config.ts`,
+not localhost, per the finding above), not just read from code.**
+1. `npx tsc --noEmit` clean.
+2. **Six consecutive passing runs** after the two test fixes above (the task's own instruction to
+   run more than once for a real-money-flow scenario) — each run is a fresh real Flitt
+   settlement, a fresh real card-link top-up settlement, a fresh CSV export, and a fresh real
+   invoice send, not a cached or mocked replay.
+3. **Independent SQL verification**, direct against the dev project (`jpbkkngpgtvqmsocitjx`, via
+   `mcp__a9e48394-...`, not the generic `mcp__supabase__*` tool): one run's cleanup was
+   temporarily commented out specifically to inspect the live row before deleting it by hand.
+   Confirmed, matching the spec's own assertions exactly: `Order.totalPrice = 58000` (₾580 =
+   ₾480 original + ₾100 extra), `stage = 'CONFIRMED'`; three `Payment` rows —
+   `{flitt, CARD, approved, 48000, settledAt 16:25:52.808}`,
+   `{manual, BANK_TRANSFER, recorded, 4000, settledAt 16:26:09.181}`,
+   `{flitt, CARD, approved, 6000, settledAt 16:26:15.67}` — summing to exactly `58000`;
+   `Order.paidAt = 16:25:52.808`, exactly the FIRST payment's `settledAt`, not the second real
+   settlement's — the #65 regression guard, independently confirmed via raw SQL rather than
+   just the spec's own Prisma-based read.
+4. **All test/debug data cleaned up.** Both pre-config-fix runs' leftover unpaid throwaway
+   orders (created before the redirect failed, `Payment{status:'created'}`, never settled) were
+   deleted by hand via direct SQL, since the test's own `finally` cleanup needs a live `page`
+   that the timeout had already torn down. The one run used for independent SQL verification was
+   also cleaned up by hand immediately after that check. Every normal (non-timed-out) run's own
+   `finally` block cleaned up correctly on its own, confirmed by a follow-up `count(*)` query
+   showing zero matching orders after the suite of runs. The "Individual bookings" payment
+   toggle was already at its tenant default (`true`) throughout every run — no `Setting` row was
+   ever written, confirmed by direct query — so no restore was ever actually needed, though the
+   spec's own toggle-restore logic ran correctly every time regardless.
+5. **No new app bug found.** Everything Chunks 1–5 built worked correctly together on the first
+   run that used the correct config — every failure along the way was in the test itself (a
+   config choice, an unbounded action timeout, a UI-refresh race), not in `updateOrderEnhanced`,
+   `addOrderExtra`, `recordAdditionalPayment`, `startTopUpCheckout`, or the order-detail
+   rendering. `KnownBugs.md` #65 was deliberately avoided per its own documented shape, not
+   newly triggered.
+
+**Deviations from the plan worth recording:** (1) the plan's own instruction to "confirm you're
+using the correct MCP tool... falling back to an `npx tsx` script... if needed" — the direct
+`mcp__a9e48394-...` SQL tool worked throughout and no `npx tsx` fallback script was needed.
+(2) The independent SQL verification required a temporary, deliberate edit to skip the spec's own
+cleanup for exactly one run (reverted immediately afterward, confirmed by a subsequent clean run
+with real cleanup restored) — this is the same approach Chunks 3–5 used for their own "read the
+row before deleting it" verification steps, applied here to a spec file rather than an ad hoc
+browser session. (3) Two real, unrelated documentation gaps were found and closed as part of
+getting this chunk verified — `playwright/README.md` and `playwright/ARCHITECTURE.md` neither
+mentioned that tier5 specs require `playwright.staging.config.ts` at all, despite this being the
+one thing that made the first two runs fail in a confusing, sandbox-outage-shaped way. Both files
+now carry a clear note. This is exactly the kind of "convention note beyond what's already
+documented for tier5" Chunk 7 anticipated might be needed — done here rather than deferred, since
+it was discovered while doing this chunk's own required verification, not as separate scope.
 
 ## Chunk 7 — Documentation
 
