@@ -30,6 +30,25 @@ export async function startCheckout(input: {
   amount: Tetri
   orderDesc: string
   locale?: string
+  /**
+   * Override for the string sent to Flitt as ITS OWN `order_id` parameter —
+   * distinct from `input.orderId`/`input.wineOrderId`, which is what
+   * `Payment.orderId`/`Payment.wineOrderId` below always carry regardless of
+   * what was sent here.
+   *
+   * Flitt treats `order_id` as a permanent, per-merchant-unique reference: a
+   * second checkout that reuses one is rejected outright
+   * (`Payment provider rejected the checkout: Duplicate order <id> for
+   * merchant <id>`), confirmed live regardless of the first checkout's
+   * settlement state (Plan-PostPaymentExtras Chunk 4, KnownBugs #64 finding
+   * 3). Every ordinary first-time checkout omits this and keeps today's
+   * exact behaviour (Flitt's order_id === our own order id) — only a second
+   * or later checkout attempt for the SAME order (a card-link top-up) needs
+   * a fresh one per attempt. Costs nothing structurally: nothing in the
+   * schema stores Flitt's own order_id anywhere, only `providerPaymentId`,
+   * which Flitt generates and returns.
+   */
+  flittOrderId?: string
 }): Promise<string | null> {
   // The tenant's real domain for this request — never hardcoded. The old site
   // pinned https://www.nikalasmarani.ge/ in the controller, which broke the
@@ -46,7 +65,7 @@ export async function startCheckout(input: {
   const result = await createCheckout({
     merchantId: input.merchantId,
     password: input.secretKey,
-    orderId: input.orderId ?? input.wineOrderId ?? '',
+    orderId: input.flittOrderId ?? input.orderId ?? input.wineOrderId ?? '',
     amount: input.amount,
     orderDesc: input.orderDesc,
     responseUrl: `${base}/api/payments/flitt/return`,

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment } from '@/app/actions/orders'
+import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
@@ -520,6 +520,20 @@ export default function OrderDetail({
   const [recordLoading, setRecordLoading] = useState(false)
   const [recordMsg, setRecordMsg] = useState('')
 
+  // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) ───────
+  // Two steps, not one blind "generate and send" click: generating a real
+  // Flitt checkout and emailing a guest are different actions with different
+  // blast radii, so the admin sees/can copy the real link before choosing to
+  // email it (or send it some other way entirely).
+  const [startingLink, setStartingLink] = useState(false)
+  const [linkAmount, setLinkAmount] = useState('')
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [linkMsg, setLinkMsg] = useState('')
+  const [generatedLink, setGeneratedLink] = useState<{ checkoutUrl: string; paymentId: string } | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+
   // ── Pricing calculations ───────────────────────────────────────────────────
   const prices = order.company?.prices ?? []
   const payingGuests = tastingGuests + lunchGuests
@@ -737,6 +751,61 @@ export default function OrderDetail({
     // every settled Payment row — a fresh one, not a locally-patched guess,
     // is what re-renders the balance-due figure correctly after this.
     router.refresh()
+  }
+
+  // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4) ──────────────────────
+  // Same major-unit-in-the-field, tetri-at-the-boundary pattern as the manual
+  // record-payment field above. No router.refresh() after generating: the
+  // balance-due figure only moves once this checkout actually settles via
+  // the real Flitt callback, not when it's merely created.
+  async function handleGenerateLink() {
+    const amount = fromMajor(parseFloat(linkAmount) || 0)
+    if (amount <= 0) return
+    setLinkLoading(true)
+    setLinkMsg('')
+    const result = await startOrderTopUpCheckout(order.id, { amount })
+    setLinkLoading(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
+    setLinkCopied(false)
+    setEmailSent(false)
+  }
+
+  async function handleCopyLink() {
+    if (!generatedLink) return
+    try {
+      await navigator.clipboard.writeText(generatedLink.checkoutUrl)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 3000)
+    } catch {
+      // Clipboard permission can be denied — the link is still shown as
+      // selectable text, so there's a fallback even if this silently fails.
+    }
+  }
+
+  async function handleEmailLink() {
+    if (!generatedLink) return
+    setEmailSending(true)
+    setLinkMsg('')
+    const result = await sendOrderTopUpCheckoutEmail(order.id, generatedLink.paymentId, locale === 'ka' ? 'ka' : 'en')
+    setEmailSending(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setEmailSent(true)
+  }
+
+  function handleCloseLinkPanel() {
+    setStartingLink(false)
+    setLinkAmount('')
+    setLinkMsg('')
+    setGeneratedLink(null)
+    setLinkCopied(false)
+    setEmailSent(false)
   }
 
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
@@ -1742,6 +1811,107 @@ export default function OrderDetail({
             )}
             {recordMsg && (
               <p className="text-xs mt-2" style={{ color: C.faint }}>{recordMsg}</p>
+            )}
+          </div>
+        )}
+
+        {/* Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) —
+            the guest's own card, alongside the manual entry above. Same gate
+            as "Record payment": only offered against a real, positive
+            balance. */}
+        {isPaid && balance > 0 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {!startingLink ? (
+              <button
+                onClick={() => {
+                  setStartingLink(true)
+                  setLinkAmount(String(toMajor(balance)))
+                  setLinkMsg('')
+                }}
+                className="text-sm font-medium"
+                style={{ color: C.wine }}
+              >
+                {at('orderDetail.topUpCheckout.button')}
+              </button>
+            ) : !generatedLink ? (
+              <div className="flex items-end gap-2 flex-wrap">
+                <div style={{ width: 110 }}>
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                    {at('orderDetail.extras.amount')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={toMajor(balance)}
+                    step="0.01"
+                    value={linkAmount}
+                    onChange={e => setLinkAmount(e.target.value)}
+                    style={inputStyle}
+                    disabled={linkLoading}
+                  />
+                </div>
+                <button
+                  onClick={handleGenerateLink}
+                  disabled={linkLoading || !((parseFloat(linkAmount) || 0) > 0)}
+                  className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                  style={{ backgroundColor: '#16a34a' }}
+                >
+                  {at('orderDetail.topUpCheckout.generate')}
+                </button>
+                <button
+                  onClick={handleCloseLinkPanel}
+                  disabled={linkLoading}
+                  className="text-xs px-2 py-1.5"
+                  style={{ color: C.muted }}
+                >
+                  {at('paymentMethod.cancel')}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                  {at('orderDetail.topUpCheckout.linkLabel')}
+                </label>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedLink.checkoutUrl}
+                    onFocus={e => e.currentTarget.select()}
+                    style={{ ...inputStyle, width: 260, fontSize: '0.75rem' }}
+                  />
+                  <button
+                    onClick={handleCopyLink}
+                    className="text-xs px-2 py-1.5 rounded font-medium"
+                    style={{ border: `1px solid ${C.border}`, color: C.text }}
+                  >
+                    {linkCopied ? at('orderDetail.topUpCheckout.copied') : at('orderDetail.topUpCheckout.copy')}
+                  </button>
+                  {order.email ? (
+                    <button
+                      onClick={handleEmailLink}
+                      disabled={emailSending}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {emailSent ? at('orderDetail.topUpCheckout.emailSent') : at('orderDetail.topUpCheckout.emailButton')}
+                    </button>
+                  ) : null}
+                  <button
+                    onClick={handleCloseLinkPanel}
+                    className="text-xs px-2 py-1.5"
+                    style={{ color: C.muted }}
+                  >
+                    {at('orderDetail.topUpCheckout.done')}
+                  </button>
+                </div>
+                {!order.email && (
+                  <p className="text-xs" style={{ color: C.faint }}>{at('orderDetail.topUpCheckout.noEmail')}</p>
+                )}
+              </div>
+            )}
+            {linkMsg && (
+              <p className="text-xs mt-2" style={{ color: C.faint }}>{linkMsg}</p>
             )}
           </div>
         )}

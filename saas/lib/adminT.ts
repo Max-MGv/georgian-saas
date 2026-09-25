@@ -579,6 +579,15 @@ const en: Translations = {
   'orderDetail.total.credit': 'Credit (overpaid)',
   'orderDetail.recordPayment.button': 'Record payment',
   'orderDetail.recordPayment.savedOk': 'Payment recorded ✓',
+  'orderDetail.topUpCheckout.button': 'Send card-payment link',
+  'orderDetail.topUpCheckout.generate': 'Generate link',
+  'orderDetail.topUpCheckout.linkLabel': 'Checkout link',
+  'orderDetail.topUpCheckout.copy': 'Copy link',
+  'orderDetail.topUpCheckout.copied': 'Copied ✓',
+  'orderDetail.topUpCheckout.emailButton': 'Email to guest',
+  'orderDetail.topUpCheckout.emailSent': 'Link emailed ✓',
+  'orderDetail.topUpCheckout.noEmail': 'This order has no email address — copy the link instead.',
+  'orderDetail.topUpCheckout.done': 'Done',
 
   // Companies page
   'companies.summary.booking': 'booking',
@@ -1841,6 +1850,15 @@ const ka: Translations = {
   'orderDetail.total.credit': 'ზედმეტად გადახდილი',
   'orderDetail.recordPayment.button': 'გადახდის დაფიქსირება',
   'orderDetail.recordPayment.savedOk': 'გადახდა დაფიქსირდა ✓',
+  'orderDetail.topUpCheckout.button': 'ბარათით გადახდის ბმულის გაგზავნა',
+  'orderDetail.topUpCheckout.generate': 'ბმულის შექმნა',
+  'orderDetail.topUpCheckout.linkLabel': 'გადახდის ბმული',
+  'orderDetail.topUpCheckout.copy': 'ბმულის კოპირება',
+  'orderDetail.topUpCheckout.copied': 'დაკოპირდა ✓',
+  'orderDetail.topUpCheckout.emailButton': 'სტუმრისთვის გაგზავნა ელფოსტით',
+  'orderDetail.topUpCheckout.emailSent': 'ბმული გაიგზავნა ✓',
+  'orderDetail.topUpCheckout.noEmail': 'ამ შეკვეთას არ აქვს ელფოსტის მისამართი — ბმული დააკოპირეთ.',
+  'orderDetail.topUpCheckout.done': 'დასრულდა',
 
   // Companies page
   'companies.summary.booking': 'ჯავშანი',

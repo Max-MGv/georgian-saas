@@ -4,6 +4,8 @@ import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
+import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
@@ -858,4 +860,105 @@ export async function recordTopUpPayment(
   revalidatePath('/admin/orders')
   revalidatePath(`/admin/orders/${orderId}`)
   return result
+}
+
+/**
+ * Start a real Flitt checkout for part or all of the balance due, so the
+ * guest can pay it themselves by card (Plan-PostPaymentExtras Chunk 4,
+ * KnownBugs #64) — the card-paying sibling of `recordTopUpPayment` above.
+ *
+ * Deliberately returns the checkout URL to the caller rather than emailing
+ * it itself: generating a real checkout (a real Payment row, a real Flitt
+ * API call) and sending mail to a guest are two different kinds of action
+ * with two different blast radii, and keeping them separate lets the admin
+ * see/copy the link before deciding to email it (or send it some other way
+ * entirely — WhatsApp, SMS) rather than an unreviewable one-click send.
+ * `sendOrderTopUpCheckoutEmail` below is the follow-up step.
+ *
+ * Admin-initiated and deliberate: does not consult `shouldTakePayment()` —
+ * see `startTopUpCheckout`'s own doc comment (ground rule 5).
+ */
+export async function startOrderTopUpCheckout(
+  orderId: string,
+  data: { amount: Tetri }
+): Promise<{ success: true; checkoutUrl: string; paymentId: string } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { name: true, surname: true, date: true, timeSlot: true },
+  }))
+  if (!order) return { error: 'Order not found.' }
+
+  const dateStr = order.date.toLocaleDateString('en-GB')
+  const result = await startTopUpCheckout({
+    orderId,
+    tenantId,
+    amount: data.amount,
+    orderDesc: `Balance top-up, ${order.name} ${order.surname}, ${dateStr} ${order.timeSlot}`,
+  })
+  if ('error' in result) return result
+
+  // Nothing display-relevant changes yet — the balance only moves once this
+  // checkout actually settles, through the real Flitt callback (settle.ts),
+  // same as any other checkout. No revalidatePath needed here.
+  return result
+}
+
+/**
+ * Email a previously-generated top-up checkout link to the guest (Plan-
+ * PostPaymentExtras Chunk 4) — reuses the existing email-sending
+ * infrastructure the same way `sendOrderInvoice` does (same sender config
+ * via `sendTenantEmail`, same tenant-theme/address lookups).
+ *
+ * Looks the Payment row up by id rather than trusting a caller-supplied
+ * checkoutUrl/amount pair — the same reasoning `startTopUpCheckout` uses for
+ * why it re-reads its own just-created row: the server is the one source of
+ * truth for what a guest is being asked to pay, never the browser.
+ */
+export async function sendOrderTopUpCheckoutEmail(
+  orderId: string,
+  paymentId: string,
+  locale: 'en' | 'ka' = 'ka'
+): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { name: true, surname: true, email: true, date: true, timeSlot: true },
+  }))
+  if (!order) return { error: 'Order not found.' }
+  if (!order.email) return { error: 'This order has no email address.' }
+
+  const payment = await withTenantDb(tenantId, tx => tx.payment.findFirst({
+    where: { id: paymentId, orderId, tenantId, provider: 'flitt' },
+    select: { checkoutUrl: true, amount: true },
+  }))
+  if (!payment || !payment.checkoutUrl) return { error: 'Checkout link not found.' }
+
+  const [wineryAddress, wineryEmail, tenant] = await Promise.all([
+    getSetting('contact_address'),
+    getSetting('contact_email'),
+    db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
+  ])
+
+  await sendTopUpCheckoutEmail({
+    tenantId,
+    name: order.name,
+    surname: order.surname,
+    email: order.email,
+    date: order.date,
+    timeSlot: order.timeSlot,
+    amount: payment.amount,
+    checkoutUrl: payment.checkoutUrl,
+    wineryName: tenant?.displayName ?? tenant?.name ?? '',
+    wineryAddress,
+    wineryEmail,
+    theme: resolveTenantTheme(tenant?.theme ?? null),
+    locale,
+  })
+
+  return { success: true }
 }
