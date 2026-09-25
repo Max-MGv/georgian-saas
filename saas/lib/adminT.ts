@@ -504,6 +504,8 @@ const en: Translations = {
   'orderDetail.invoiceHistory.none': 'No invoices sent yet.',
 
   'orderDetail.guestBreakdown.title': 'Guest Breakdown & Dishes',
+  'orderDetail.guestBreakdown.lockedTitle': 'This order is already paid.',
+  'orderDetail.guestBreakdown.lockedDetail': 'Guest counts, the tasting/lunch split, rates, and food details are locked so they can never disagree with the amount already charged. To bill for something that changed, add it as an extra below instead.',
   'orderDetail.guestBreakdown.noTiers': 'No price tiers found for {name}.',
   'orderDetail.guestBreakdown.noTiersDetail': 'Guest counts cannot affect the total without rates.',
   'orderDetail.guestBreakdown.addTiersLink': 'Add price tiers in Companies admin',
@@ -1758,6 +1760,8 @@ const ka: Translations = {
   'orderDetail.invoiceHistory.none': 'ინვოისი ჯერ არ გაგზავნილა.',
 
   'orderDetail.guestBreakdown.title': 'სტუმრების დაყოფა და კერძები',
+  'orderDetail.guestBreakdown.lockedTitle': 'ეს შეკვეთა უკვე გადახდილია.',
+  'orderDetail.guestBreakdown.lockedDetail': 'სტუმრების რაოდენობა, დეგუსტაცია/სადილის დაყოფა, ტარიფები და კვების დეტალები დაბლოკილია, რათა არასდროს დაუპირისპირდეს უკვე ჩამოჭრილ თანხას. თუ რამე შეიცვალა, დაამატეთ ის დამატებით ხარჯად (Extra) ქვემოთ.',
   'orderDetail.guestBreakdown.noTiers': '{name}-ს ფასების კატეგორია არ მოიძებნა.',
   'orderDetail.guestBreakdown.noTiersDetail': 'სტუმრების რაოდენობა ვერ იმოქმედებს ჯამზე ტარიფების გარეშე.',
   'orderDetail.guestBreakdown.addTiersLink': 'დაამატეთ ფასების კატეგორია კომპანიების ადმინში',

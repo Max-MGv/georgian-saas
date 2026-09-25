@@ -329,6 +329,13 @@ export default function OrderDetail({
   // The party size. Editable since 2026-09-19 because it, not the split, picks
   // the price tier — and because it used to drift from the split on every edit
   // (#54), leaving the invoice and the price describing different bookings.
+  // Once paid, `updateOrderEnhanced` rejects any edit to guest counts/split/
+  // rates/hot-dish/food-notes outright (Chunk 1, KnownBugs #64) — the original
+  // charged amount must stay a fixed historical fact. Every input this card
+  // renders is disabled from here on; "add an extra" is the only way left to
+  // change what's owed on a paid order.
+  const isPaid = order.paidAt != null
+  const lockedInputStyle = { ...inputStyle, opacity: 0.6, cursor: 'not-allowed' } as const
   const [guestCountStr, setGuestCountStr] = useState(String(order.guestCount))
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
   const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
@@ -960,6 +967,16 @@ export default function OrderDetail({
 
       {/* ── Guest Breakdown & Dishes ── */}
       <Card title={at('orderDetail.guestBreakdown.title')}>
+        {isPaid && (
+          <div
+            className="text-xs rounded-lg p-3 mb-4"
+            style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
+          >
+            <strong>{at('orderDetail.guestBreakdown.lockedTitle')}</strong>{' '}
+            {at('orderDetail.guestBreakdown.lockedDetail')}
+          </div>
+        )}
+
         {order.bookingType === 'COMPANY' && prices.length === 0 && (
           <div
             className="text-xs rounded-lg p-3 mb-4"
@@ -986,7 +1003,8 @@ export default function OrderDetail({
             value={guestCountStr}
             onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
             onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
-            style={inputStyle}
+            disabled={isPaid}
+            style={isPaid ? lockedInputStyle : inputStyle}
           />
           <p className="text-xs mt-1" style={{ color: C.faint }}>
             {at('orderDetail.guestBreakdown.partySizeHint')}
@@ -1012,7 +1030,8 @@ export default function OrderDetail({
               value={tastingGuestsStr}
               onChange={e => setTastingGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setTastingGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
           </div>
           <div>
@@ -1026,7 +1045,8 @@ export default function OrderDetail({
               value={lunchGuestsStr}
               onChange={e => setLunchGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setLunchGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
           </div>
           <div>
@@ -1040,7 +1060,8 @@ export default function OrderDetail({
               value={freeGuestsStr}
               onChange={e => setFreeGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setFreeGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
               {at('orderDetail.guestBreakdown.freeGuestsHint')}
@@ -1067,8 +1088,9 @@ export default function OrderDetail({
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
+                  disabled={isPaid}
                   className="text-xs px-3 py-1 rounded-lg font-medium text-white"
-                  style={{ backgroundColor: C.wine }}
+                  style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
                 >
                   {at('orderDetail.guestBreakdown.editRates')}
                 </button>
@@ -1102,7 +1124,8 @@ export default function OrderDetail({
                       value={manualTastingRateStr}
                       onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
                       onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                      style={inputStyle}
+                      disabled={isPaid}
+                      style={isPaid ? lockedInputStyle : inputStyle}
                     />
                   </div>
                   <div>
@@ -1113,7 +1136,8 @@ export default function OrderDetail({
                         value={manualLunchRateStr}
                         onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
                         onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                        style={inputStyle}
+                        disabled={isPaid}
+                        style={isPaid ? lockedInputStyle : inputStyle}
                       />
                     </div>
                 </div>
@@ -1131,7 +1155,8 @@ export default function OrderDetail({
             <select
               value={hotDishVeg}
               onChange={e => setHotDishVeg(e.target.value)}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {vegItems.map(i => (
@@ -1149,7 +1174,8 @@ export default function OrderDetail({
             <select
               value={hotDishMeat}
               onChange={e => setHotDishMeat(e.target.value)}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {meatItems.map(i => (
@@ -1178,17 +1204,18 @@ export default function OrderDetail({
             value={foodNotes}
             onChange={e => setFoodNotes(e.target.value)}
             rows={2}
+            disabled={isPaid}
             placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
-            style={{ ...inputStyle, resize: 'vertical' }}
+            style={{ ...(isPaid ? lockedInputStyle : inputStyle), resize: 'vertical' }}
           />
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || isPaid}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: C.wine }}
+            style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
           >
             {saving ? at('orderDetail.guestBreakdown.saving') : at('orderDetail.guestBreakdown.saveChanges')}
           </button>

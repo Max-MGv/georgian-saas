@@ -120,6 +120,27 @@ export async function updateOrderEnhanced(
     })
     if (!order) return { error: 'Order not found' } as const
 
+    // Bug #64: once real money has been charged (`Order.paidAt` set), the
+    // guest count, tasting/lunch split, rates and food details this function
+    // touches must become read-only historical facts. Before this check,
+    // saving here silently moved `Order.totalPrice` (and the rate snapshots)
+    // while the already-settled `Payment.amount` never moved — every screen
+    // agreed with itself but not with what the gateway actually charged, with
+    // nothing anywhere flagging the gap. Every field this function's `data`
+    // accepts is one of the locked ones, so once paid there is nothing left
+    // for it to safely do — see vault/Plan-PostPaymentExtras.md Chunk 1. Use
+    // "add an extra" (`addOrderExtra`) to describe what changed instead.
+    if (order.paidAt) {
+      return {
+        error:
+          'This order has already been paid, so its guest count, tasting/lunch split, ' +
+          'rates, and food details are locked — changing them here would silently ' +
+          'disagree with the amount already charged to the guest. To bill for something ' +
+          'that changed (e.g. extra guests joining after payment), add it as an extra on ' +
+          'this order instead.',
+      } as const
+    }
+
     // The three buckets are subsets of the party, never more than it. Nothing
     // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
     // guests while every document it produced still said 10.
