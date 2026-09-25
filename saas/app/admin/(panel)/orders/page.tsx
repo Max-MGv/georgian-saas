@@ -175,6 +175,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       masterclassLines: { include: { masterclassItem: true } },
       extras: true,
       contacts: { include: { role: true } },
+      // Every live (settled, not reversed) payment — the balance-due figure
+      // (Plan-PostPaymentExtras Chunk 2) needs the true collected total, not
+      // just whether *a* payment exists.
+      payments: {
+        where: { settledAt: { not: null }, reversedAt: null },
+        select: { amount: true },
+      },
     },
     orderBy: { date: 'desc' },
   })) : []
@@ -297,6 +304,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             phone: o.phone,
             notes: o.notes,
             totalPrice: o.totalPrice,
+            paymentsSettledTotal: o.payments.reduce((sum, p) => sum + p.amount, 0),
             hotDishVegetable: o.hotDishVegetable,
             hotDishMeat: o.hotDishMeat,
             foodNotes: o.foodNotes,

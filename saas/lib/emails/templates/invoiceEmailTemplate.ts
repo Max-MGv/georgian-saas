@@ -1,5 +1,5 @@
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
-import { asTetri, formatTetri, multiplyTetri } from '@/lib/money'
+import { asTetri, balanceDue, formatTetri, multiplyTetri } from '@/lib/money'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 /**
@@ -25,6 +25,7 @@ const LABELS: Record<InvoiceLocale, {
   invoice: string; company: string; name: string; idCode: string
   guests: string; tasting: string; lunch: string; free: string; total: string; lunchTasting: string
   masterclass: string; amount: string; totalAmount: string
+  paidSoFar: string; balanceDue: string; credit: string
   paymentDetails: string; recipientName: string; personalNumber: string; bank: string; bankCode: string; account: string
   person: string
 }> = {
@@ -32,6 +33,7 @@ const LABELS: Record<InvoiceLocale, {
     invoice: 'ინვოისი', company: 'კომპანია', name: 'დასახელება', idCode: 'საიდენტიფიკაციო კოდი',
     guests: 'სტუმრები', tasting: 'დეგუსტაცია', lunch: 'სადილი', free: 'თავისუფალი (გიდი/მძღოლი)', total: 'სულ', lunchTasting: 'სადილი + დეგუსტაცია',
     masterclass: 'მასტერკლასი', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
+    paidSoFar: 'უკვე გადახდილი', balanceDue: 'გადასახდელი ნაშთი', credit: 'ზედმეტად გადახდილი',
     paymentDetails: 'გადახდის რეკვიზიტები', recipientName: 'მიმღების სახელი', personalNumber: 'პირადი ნომერი', bank: 'მიმღები ბანკი', bankCode: 'ბანკის კოდი', account: 'მიმღების ანგარიში',
     person: 'კაცი',
   },
@@ -39,6 +41,7 @@ const LABELS: Record<InvoiceLocale, {
     invoice: 'Invoice', company: 'Company', name: 'Name', idCode: 'ID code',
     guests: 'Guests', tasting: 'Tasting', lunch: 'Lunch', free: 'Free (guide/driver)', total: 'Total', lunchTasting: 'Lunch + Tasting',
     masterclass: 'Masterclass', amount: 'Amount', totalAmount: 'Total amount',
+    paidSoFar: 'Paid so far', balanceDue: 'Balance due', credit: 'Credit (overpaid)',
     paymentDetails: 'Payment Details', recipientName: 'Recipient name', personalNumber: 'Personal number', bank: 'Bank', bankCode: 'Bank code', account: 'Account (IBAN)',
     person: 'guest',
   },
@@ -58,6 +61,18 @@ export type InvoiceEmailData = {
   lunchGuestCount: number
   freeGuestCount: number
   totalPrice: number
+  /**
+   * Sum of this order's settled, non-reversed Payment.amount rows.
+   *
+   * Optional and defaults to 0 (unpaid) for every call site that predates it.
+   * Only when this is nonzero does the email say anything about it — an
+   * invoice for a not-yet-paid order has nothing to reconcile and should
+   * read exactly as it always has. Plan-PostPaymentExtras Chunk 2 /
+   * KnownBugs #64: a re-sent invoice on an order that had already collected
+   * something used to restate the (possibly now higher) total with no
+   * mention that part of it was already in hand.
+   */
+  paymentsSettledTotal?: number
   companyName: string | null
   identificationCode: string | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
@@ -142,6 +157,19 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   }
   amountContent += `<tr><td colspan="2" style="padding:4px 0;border-top:1px solid ${th.border};"></td></tr>`
   amountContent += `<tr><td colspan="2" style="text-align:right;font-size:15px;font-weight:bold;color:${th.brand} !important;padding-top:6px;">${L.totalAmount}: ${formatTetri(asTetri(data.totalPrice), { space: true, decimals: true })}</td></tr>`
+
+  // Balance due — only once something has actually settled (see
+  // paymentsSettledTotal's doc comment above). Silent otherwise, so this is a
+  // no-op for the overwhelmingly common "first invoice, nothing paid yet" case.
+  const paymentsSettledTotal = data.paymentsSettledTotal ?? 0
+  if (paymentsSettledTotal > 0) {
+    const balance = balanceDue(data.totalPrice, paymentsSettledTotal)
+    amountContent += tableRow(th, L.paidSoFar, formatTetri(asTetri(paymentsSettledTotal), { space: true, decimals: true }))
+    if (balance !== 0) {
+      const balanceLabel = balance > 0 ? L.balanceDue : L.credit
+      amountContent += `<tr><td colspan="2" style="text-align:right;font-size:14px;font-weight:bold;color:#92400e !important;padding-top:4px;">${balanceLabel}: ${formatTetri(asTetri(Math.abs(balance)), { space: true, decimals: true })}</td></tr>`
+    }
+  }
 
   const customMessageHtml = data.customMessage.trim()
     ? `<p style="font-size:15px;color:${th.text} !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`

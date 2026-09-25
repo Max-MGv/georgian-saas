@@ -5,7 +5,7 @@ import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
-import { asTetri, toMajor, type Tetri } from '@/lib/money'
+import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -390,6 +390,15 @@ export async function sendOrderInvoice(
           company: { select: { id: true, name: true, identificationCode: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
+          // A re-sent invoice on an order that's already been paid something
+          // must say so — Plan-PostPaymentExtras Chunk 2 / KnownBugs #64's own
+          // live repro was exactly this: a freshly re-sent invoice stating
+          // the new, higher total with no mention that part of it was
+          // already collected.
+          payments: {
+            where: { settledAt: { not: null }, reversedAt: null },
+            select: { amount: true },
+          },
         },
       })
     )
@@ -427,6 +436,9 @@ export async function sendOrderInvoice(
       lunchGuestCount: order.lunchGuestCount,
       freeGuestCount: order.freeGuestCount,
       totalPrice: order.totalPrice ?? 0,
+      // Only meaningful once something has actually settled — see this
+      // field's doc comment on InvoiceEmailData.
+      paymentsSettledTotal: order.payments.reduce((sum, p) => sum + p.amount, 0),
       companyName: order.company?.name ?? null,
       identificationCode: order.company?.identificationCode ?? null,
       masterclassLines: order.masterclassLines.map(l => ({
@@ -551,7 +563,19 @@ export async function exportOrdersCsv(filters: {
       ...paymentFilterWhere(filters.payment),
       ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
-    include: { company: true },
+    include: {
+      company: true,
+      // Every live (settled, not reversed) payment — Balance Due (GEL) below
+      // needs the true collected total, per Plan-PostPaymentExtras Chunk 2 /
+      // KnownBugs #64: a CSV that only ever showed "Total (GEL)" is exactly
+      // the kind of screen that bug describes, since an accountant reading it
+      // has no way to know a post-payment extra moved the total without
+      // moving what was actually charged.
+      payments: {
+        where: { settledAt: { not: null }, reversedAt: null },
+        select: { amount: true },
+      },
+    },
     orderBy: { date: 'desc' },
   }))
 
@@ -559,8 +583,15 @@ export async function exportOrdersCsv(filters: {
   // exports as indistinguishable from a paid one. Invoice Sent gets its own
   // date rather than collapsing into Payment, since an order can be both
   // invoiced and paid — which the old payment ladder could not represent.
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
-  const rows = orders.map(o => [
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
+  const rows = orders.map(o => {
+    // Only populated once the order has actually been paid something —
+    // otherwise "balance due" is just the whole total, which the Total (GEL)
+    // column already says, and repeating it on every unpaid row would be
+    // noise rather than the flag this column exists to raise.
+    const paymentsSettledTotal = o.payments.reduce((sum, p) => sum + p.amount, 0)
+    const balance = o.paidAt ? balanceDue(o.totalPrice, paymentsSettledTotal) : 0
+    return [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
     o.name,
@@ -575,6 +606,7 @@ export async function exportOrdersCsv(filters: {
     // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
     // it text and break the column's arithmetic.
     o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
+    o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
@@ -582,7 +614,8 @@ export async function exportOrdersCsv(filters: {
     o.email ?? '',
     o.phone ?? '',
     o.notes ?? '',
-  ])
+    ]
+  })
 
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
 }

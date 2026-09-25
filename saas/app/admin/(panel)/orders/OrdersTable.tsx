@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
@@ -92,6 +92,9 @@ type Order = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  /** Sum of this order's settled, non-reversed Payment.amount rows — the
+   *  other half of the balance-due figure (Plan-PostPaymentExtras Chunk 2). */
+  paymentsSettledTotal: number
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
@@ -216,6 +219,27 @@ function PaymentMark({ order, locale }: {
     return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
   }
   return null
+}
+
+/**
+ * The row-level flag for KnownBugs #64 / Plan-PostPaymentExtras Chunk 2: once
+ * an order has been paid, its total and what actually settled can now
+ * legitimately disagree (an extra added after payment moves the total; the
+ * original Payment row never moves) — and the whole point of this chunk is
+ * that the disagreement is never silent. Only renders once paid; an unpaid
+ * order's "balance" is its whole total, which the Total column already says.
+ */
+function BalanceDueMark({ order, locale }: {
+  order: { paidAt: Date | string | null; totalPrice: number | null; paymentsSettledTotal: number }
+  locale: string
+}) {
+  if (order.paidAt == null) return null
+  const balance = balanceDue(order.totalPrice, order.paymentsSettledTotal)
+  if (balance === 0) return null
+  const label = `${adminT(locale, balance > 0 ? 'orders.balanceDue' : 'orders.credit')}: ${formatTetri(asTetri(Math.abs(balance)), { decimals: true })}`
+  return balance > 0
+    ? <Mark label={label} glyph="⚠" bg="#fef3c7" color="#92400e" />
+    : <Mark label={label} glyph="↺" bg="#e0e7ff" color="#3730a3" />
 }
 
 type Payment = {
@@ -363,6 +387,7 @@ function OrdersListRows({
                   {labelFor(locale, order.stage)} ▾
                 </button>
                 <PaymentMark order={order} locale={locale} />
+                <BalanceDueMark order={order} locale={locale} />
               </div>
 
               <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
@@ -498,6 +523,7 @@ function OrdersBoardColumns({
                           <div className="flex items-center gap-1.5">
                             <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
                             <PaymentMark order={order} locale={locale} />
+                            <BalanceDueMark order={order} locale={locale} />
                           </div>
                           <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
                         </div>
@@ -883,6 +909,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
                     <PaymentMark order={order} locale={locale} />
+                    <BalanceDueMark order={order} locale={locale} />
                   </span>
                   {/* The click handler is on this wrapper, not the pill, so
                       padding here buys hit area for free: the badge still reads
@@ -1163,6 +1190,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                         )
                       })()}
                       <PaymentMark order={order} locale={locale} />
+                      <BalanceDueMark order={order} locale={locale} />
                     </div>
                   </td>
                 )}
@@ -1605,6 +1633,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, o.stage)}</span>
                   <PaymentMark order={o} locale={locale} />
+                  <BalanceDueMark order={o} locale={locale} />
                 </span>
               </div>
               <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(locale, o.visitType)}</div>
@@ -1639,6 +1668,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <PRow key={i} label={e.label} value={formatTetri(asTetri(e.amount))} />
                 ))}
                 <PRow label={at('orders.col.total')} value={formatTetriOrDash(asTetriOrNull(o.totalPrice))} bold wine />
+                {/* Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — same
+                    "only once paid, only when nonzero" gate as everywhere else it's shown. */}
+                {o.paidAt != null && balanceDue(o.totalPrice, o.paymentsSettledTotal) !== 0 && (
+                  <PRow
+                    label={at(balanceDue(o.totalPrice, o.paymentsSettledTotal) > 0 ? 'orders.balanceDue' : 'orders.credit')}
+                    value={formatTetri(asTetri(Math.abs(balanceDue(o.totalPrice, o.paymentsSettledTotal))))}
+                    bold
+                  />
+                )}
               </div>
 
               {/* Contact */}

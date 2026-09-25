@@ -350,6 +350,8 @@ const en: Translations = {
   'orders.status.unpaid': 'Unpaid',
   'orders.status.completed': 'Completed',
   'orders.status.cancelled': 'Cancelled',
+  'orders.balanceDue': 'Balance due',
+  'orders.credit': 'Credit (overpaid)',
 
   // Payment method picker — shown when an admin marks something paid by hand.
   // CARD never appears here; it's only ever set by a real Flitt settlement.
@@ -573,6 +575,8 @@ const en: Translations = {
   'orderDetail.total.basePriceOriginal': 'Base price (original)',
   'orderDetail.total.totalLabel': 'Total',
   'orderDetail.total.livePreview': 'Live preview — click "Save changes" above to persist.',
+  'orderDetail.total.balanceDue': 'Balance due',
+  'orderDetail.total.credit': 'Credit (overpaid)',
 
   // Companies page
   'companies.summary.booking': 'booking',
@@ -1603,6 +1607,8 @@ const ka: Translations = {
   'orders.status.unpaid': 'გადაუხდელი',
   'orders.status.completed': 'დასრულებული',
   'orders.status.cancelled': 'გაუქმებული',
+  'orders.balanceDue': 'გადასახდელი ნაშთი',
+  'orders.credit': 'ზედმეტად გადახდილი',
 
   'paymentMethod.howPaid': 'როგორ გადაიხადა?',
   'paymentMethod.bankTransfer': 'საბანკო გადარიცხვა',
@@ -1829,6 +1835,8 @@ const ka: Translations = {
   'orderDetail.total.basePriceOriginal': 'საბაზისო ფასი (თავდაპირველი)',
   'orderDetail.total.totalLabel': 'ჯამი',
   'orderDetail.total.livePreview': 'ცოცხალი გადახედვა — დააჭირეთ „ცვლილებების შენახვას“ ზემოთ შესანახად.',
+  'orderDetail.total.balanceDue': 'გადასახდელი ნაშთი',
+  'orderDetail.total.credit': 'ზედმეტად გადახდილი',
 
   // Companies page
   'companies.summary.booking': 'ჯავშანი',

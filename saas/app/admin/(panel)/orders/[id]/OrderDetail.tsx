@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri } from '@/lib/money'
+import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
@@ -211,6 +211,9 @@ type OrderProp = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  /** Sum of this order's settled, non-reversed Payment.amount rows — the
+   *  other half of the balance-due figure (Plan-PostPaymentExtras Chunk 2). */
+  paymentsSettledTotal: number
   // The rates this order was actually sold at. The page's query already loaded
   // them (it uses `include`), but its prop literal listed fields one by one and
   // never passed these three down — so this screen had no way to know what the
@@ -587,6 +590,14 @@ export default function OrderDetail({
       )
     : null
 
+  // What's still owed, once this order has ever been paid — the balance-due
+  // figure from Plan-PostPaymentExtras Chunk 2 (KnownBugs #64). Uses
+  // computedTotal when there is one (it's the same figure a Save would
+  // persist), falling back to the stored total exactly like the display
+  // above does, so this never disagrees with what's shown as "Total".
+  const displayedTotal = computedTotal ?? order.totalPrice
+  const balance = balanceDue(displayedTotal, order.paymentsSettledTotal)
+
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
   const isFlatUnit = selectedMcItem?.unitType === 'FLAT'
@@ -849,6 +860,7 @@ export default function OrderDetail({
               name: order.name,
               surname: order.surname,
               totalPrice: order.totalPrice,
+              paymentsSettledTotal: order.paymentsSettledTotal,
               company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
               masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
               extras: extras.map(e => ({ label: e.label, amount: e.amount })),
@@ -1609,6 +1621,24 @@ export default function OrderDetail({
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
             {at('orderDetail.total.livePreview')}
           </p>
+        )}
+
+        {/* Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only
+            once this order has been paid at least once. An unpaid order's
+            "balance" is just its whole total, which the Total row above
+            already says; repeating it here would be noise, not information. */}
+        {isPaid && balance !== 0 && (
+          <div
+            className="mt-2 pt-2 flex justify-between items-center border-t"
+            style={{ borderColor: C.border }}
+          >
+            <span className="text-sm font-semibold" style={{ color: balance > 0 ? '#92400e' : C.muted }}>
+              {balance > 0 ? at('orderDetail.total.balanceDue') : at('orderDetail.total.credit')}
+            </span>
+            <span className="text-base font-bold" style={{ color: balance > 0 ? '#92400e' : C.muted }}>
+              {formatTetri(asTetri(Math.abs(balance)), { decimals: true })}
+            </span>
+          </div>
         )}
       </Card>
     </div>

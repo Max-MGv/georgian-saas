@@ -30,14 +30,19 @@ export default async function OrderDetailPage({
         extras: { orderBy: { id: 'asc' } },
         contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
         invoicesSent: { orderBy: { sentAt: 'desc' } },
-        // How the money actually arrived, for the Paid indicator below — the
-        // live (settled, not reversed) payment row, newest first in case a
-        // reversed one was ever replaced by a second.
+        // How the money actually arrived, for the Paid indicator below, and
+        // what's actually settled, for the balance-due figure
+        // (Plan-PostPaymentExtras Chunk 2). Every live (settled, not
+        // reversed) row, newest first — `payments[0]` still gives the Paid
+        // indicator its method unchanged, and summing `amount` across all of
+        // them gives the true collected total. This does NOT yet fix the
+        // "second payment misrepresents the first" finding from that plan
+        // (a different method on payments[0] would still relabel the Paid
+        // indicator) — that's Chunk 5's job, tracked separately.
         payments: {
           where: { settledAt: { not: null }, reversedAt: null },
           orderBy: { settledAt: 'desc' },
-          take: 1,
-          select: { method: true },
+          select: { method: true, amount: true },
         },
       },
     })),
@@ -68,6 +73,9 @@ export default async function OrderDetailPage({
 
   if (!order) notFound()
   const locale = adminLanguage || 'en'
+  // Sum of every settled, non-reversed payment — the other half of the
+  // balance-due figure (Plan-PostPaymentExtras Chunk 2).
+  const paymentsSettledTotal = order.payments.reduce((sum, p) => sum + p.amount, 0)
   // The fulfilment vocabulary for the flow-line and the status dropdown.
   return (
     <div className="max-w-2xl">
@@ -112,6 +120,7 @@ export default async function OrderDetailPage({
           phone: order.phone,
           notes: order.notes,
           totalPrice: order.totalPrice,
+          paymentsSettledTotal,
           // The rates this order was sold at. Fetched all along (the query uses
           // `include`) but never passed down, which is why OrderDetail could not
           // tell what the order cost and invented ₾50 instead (#50/#52).

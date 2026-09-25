@@ -193,3 +193,27 @@ export function applyPercent(t: Tetri, percent: number): Tetri {
   }
   return Math.round(t * (1 - percent / 100)) as Tetri
 }
+
+/**
+ * What's still owed on an order, given what has actually settled.
+ *
+ * `Order.totalPrice` moves the moment an admin adds or removes an extra —
+ * even on an already-paid order, by deliberate design (Plan-PostPaymentExtras
+ * Chunk 2, KnownBugs #64) — while `Payment.amount` never moves once written.
+ * This is the gap between the two, computed fresh every time rather than
+ * stored: there is no column for it, so it can never itself drift out of
+ * sync with the two numbers it's built from.
+ *
+ * Positive: the guest owes more than they've paid — the ordinary case of an
+ * extra added after payment. Negative: they've paid more than the current
+ * total (e.g. a post-payment extra was added, then removed). Zero: fully
+ * reconciled.
+ *
+ * `settledPaid` is the caller's sum of this order's settled, non-reversed
+ * `Payment.amount` rows — this function does no DB reads itself, so the same
+ * arithmetic runs identically in a server component, a client component, an
+ * email template and the CSV export.
+ */
+export function balanceDue(totalPrice: number | null, settledPaid: number): Tetri {
+  return asTetri((totalPrice ?? 0) - settledPaid)
+}
