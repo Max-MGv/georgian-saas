@@ -749,6 +749,130 @@ health.**
 **Resume point:** Chunk 6 fully closed out. Chunk 7 (Idempotency, forged callback, tampered
 amount) is next.
 
+## Design spike (2026-09-25) — stress-testing the proposed bug #64 fix, not building it
+
+**Not one of the numbered chunks above — a research spike** run to check five assumptions
+behind the two-part fix design for `KnownBugs.md` #64 (lock price fields once `paidAt` is
+set; charge a legitimate post-payment top-up as a second, independent `Payment` row against
+the same order) before either part gets built. Nothing was fixed, no Playwright spec was
+written. Every finding below is from live evidence against Staging Winery's dev DB — a
+throwaway `npx tsx` script using the real `recordManualPayment`/`createCheckout`/
+`settlePayment` functions and real signed Flitt callbacks, deleted after use, all rows
+confirmed swept to zero afterward.
+
+1. **`recordManualPayment` does silently swallow a second, legitimate payment — confirmed.**
+   `hasLivePayment()` (`lib/payments/manualPayment.ts`) checks "does this order have *any*
+   settled, non-reversed payment," not "does this specific charge already exist." Took a
+   throwaway order through a 48000-tetri manual payment (`BANK_TRANSFER`), then called
+   `recordManualPayment` again for a *different*, legitimate 24000-tetri top-up
+   (`CASH`, "two more guests at the door"). Result: **still exactly 1 `Payment` row, still
+   48000 tetri** — no error, no new row, the second payment vanishes with no trace anywhere.
+   This is also what the existing "Paid" picker in the admin UI would do if used a second
+   time on the same order — `changeBookingStatus`'s `kind: 'paid'` branch calls the same
+   `recordManualPayment`, and `paidPatch` doesn't re-stamp `paidAt` either. **The manual side
+   of the "second payment" design does not work today and needs `hasLivePayment` (or its
+   caller) changed to reason about a specific charge, not "has this order ever been paid."**
+
+2. **Adding an `OrderExtra` to an already-paid order succeeds today, completely unblocked —
+   and immediately reprices `Order.totalPrice` with no gate of any kind.** The mechanism
+   already exists (`app/actions/orderExtras.ts`'s `addOrderExtra`, wired to a real "Add
+   extra" control in `OrderDetail.tsx`) — this is not a "needs to be built from scratch"
+   gap. Live-verified: on an order with `paidAt` already set, adding a 24000-tetri
+   `OrderExtra` row went straight through `recalcOrderTotal` and moved `Order.totalPrice`
+   from 48000 to 72000 tetri, no different from adding one before payment. **This is the
+   same bug #64 already documents (a stale `Payment.amount` vs. a moving `totalPrice`), just
+   reachable through the extras path instead of the guest-count path** — and it means
+   `addOrderExtra` itself needs new post-payment behaviour (route the extra's amount through
+   the new second-`Payment` mechanism instead of silently folding it into `totalPrice`), not
+   just "leave it alone because it's a separate action from `updateOrderEnhanced`."
+
+3. **`startCheckout()` cannot literally be scripted outside a real Next.js request — and
+   Flitt itself refuses a second checkout that reuses the same `order_id`, a real, previously
+   unknown obstacle.** Calling `startCheckout()` from a plain script throws immediately
+   (``headers` was called outside a request scope`) — not a design problem, since the real
+   built feature would always run from an actual admin server action with real request
+   context, but it means this one specific function can't be spike-tested by a bare script;
+   the lower-level `createCheckout()` was used directly instead, which is what
+   `startCheckout()` calls internally. **The real finding:** `createCheckout()` passes
+   `input.orderId` straight through as Flitt's own `order_id` parameter — and Flitt's live
+   test-merchant API **rejected a second checkout for the same order_id outright**, even
+   though the order's own `payment_id`/status was irrelevant to the rejection:
+   `Payment provider rejected the checkout: Duplicate order <id> for merchant 1549901`. This
+   happened whether or not the first checkout had already settled — Flitt appears to treat
+   `order_id` as a permanent unique reference per merchant, not "one in flight at a time."
+   **`startCheckout()`/`createCheckout()` cannot be called a second time for the same order
+   unchanged — it needs a distinct Flitt-facing `order_id` per checkout attempt** (nothing in
+   our own schema stores Flitt's `order_id` anywhere — only `providerPaymentId`, which Flitt
+   generates itself — so minting one, e.g. `${orderId}-2`, costs nothing structurally). Once
+   that one change was made (retried with `${orderId}-extra1`), the rest of the round trip
+   worked cleanly: a real second Flitt checkout, a real second signed `approved` callback via
+   `settlePayment()`, a second genuine `Payment` row (`providerPaymentId` distinct, no
+   `@@unique([provider, providerPaymentId])` collision), `status: 'approved'`, its own
+   `settledAt`. The order's `stage` was manually advanced to `CONFIRMED` first (simulating an
+   admin having moved the booking along before the door-charge arrived) specifically to test
+   the `stage: 'NEW'` guard mentioned in the brief — **the guard turned out to be irrelevant
+   to recording the second payment correctly**: `OrderEvent(PAID)` was written unconditionally
+   both times (2 `PAID` events on the order's timeline after two settlements — a correct,
+   if slightly more repetitive, record, not a bug), and the guarded `Order.paidAt`/
+   `abandonedAt` write was skipped on the second settlement only because `paidAt` was already
+   correctly set from the first — no misfire observed. **What the second-payment mechanism by
+   itself does *not* do:** `Order.totalPrice` stayed at 48000 tetri throughout — nothing
+   about creating or settling a second `Payment` row touches `totalPrice`. After both real
+   Payment rows existed, the order genuinely collected 72000 tetri total while every
+   totalPrice-reading surface still said 48000 — meaning the second-payment mechanism *must*
+   be paired with something that also moves `totalPrice` (the `OrderExtra` path from finding
+   2, deliberately, once it has its own post-payment handling) or the fix trades one
+   discrepancy for a different one.
+
+4. **A second real `Payment` row is genuinely invisible almost everywhere — with one
+   concrete exception, found live.** Confirmed again: `OrdersTable.tsx`'s `PaymentMark` and
+   the CSV export (`exportOrdersCsv`) both derive their "paid" indicator purely from
+   `Order.paidAt`/`invoiceSentAt` — the CSV query doesn't even `include` `payments` — so
+   neither surface changes at all with one settled payment or two. **The order detail page
+   is the one place it does show, and it shows the wrong thing.**
+   `app/admin/(panel)/orders/[id]/page.tsx` deliberately queries
+   `payments: { where: { settledAt: { not: null }, reversedAt: null }, orderBy: { settledAt:
+   'desc' }, take: 1, select: { method: true } }` — the comment says this is "the live
+   (settled, not reversed) payment row, newest first in case a reversed one was ever replaced
+   by a second," written before any code path could create a *second real, unreversed*
+   payment. `OrderDetail.tsx`'s flow-line renders `"Paid · <method>"` from exactly that one
+   row. On the two-payment order from finding 3, both settlements happened to be CARD (both
+   went through Flitt), so the label itself did not visibly change in that run — this part
+   is confirmed by reading the query and component in full, not by observing the label flip
+   on screen. But the query's own behaviour is unambiguous: `take: 1` on `orderBy: {
+   settledAt: 'desc' }` means whichever payment settled *most recently* is the only one ever
+   read, with no aggregation and no "×2" of any kind. The moment a second payment settles
+   with a *different* method than the first (the realistic case this whole design exists
+   for — a card booking topped up with cash or a bank transfer at the door), the order detail
+   page's "Paid · ___" label will silently flip from the method that paid the original,
+   larger amount to the method that paid the smaller top-up, with nothing indicating there
+   were two payments or two methods at all. Worth a targeted follow-up check (force two
+   *different* methods and read the rendered label) before treating this as fully closed,
+   but the code path leaves no other outcome possible.
+
+5. **"Edit guest count" and "add an extra" are already two genuinely separate server
+   actions today — confirmed by reading both in full.** `updateOrderEnhanced`
+   (`app/actions/orders.ts`) only ever writes guest-count/split fields, `hotDish*`/
+   `foodNotes`, `totalPrice`, and the three rate snapshots — it reads `order.extras` only to
+   fold `extrasAmt` into its own total calculation, never creates/edits/deletes an
+   `OrderExtra` row. `addOrderExtra`/`removeOrderExtra` (`app/actions/orderExtras.ts`) are a
+   wholly separate file, separate exports, wired to a separate "Add extra" control in
+   `OrderDetail.tsx`. **Locking `updateOrderEnhanced`'s price-affecting fields once `paidAt`
+   is set is a clean, independent change that would not need to touch the extras action at
+   all.** The remaining work is entirely on the extras side (finding 2 above): `addOrderExtra`
+   itself has no post-payment behaviour yet and needs it, not a split that doesn't already
+   exist.
+
+**Net effect on the two-part design:** part 1 (lock price fields on `updateOrderEnhanced`
+once paid) has no code-level obstacle — the action is already cleanly separable from extras.
+Part 2 (second `Payment` row for a post-payment top-up) has three real, fixable obstacles
+found here that the original design didn't anticipate: `hasLivePayment` blocks a second
+manual payment outright, `createCheckout`/`startCheckout` need a distinct Flitt-facing
+`order_id` per attempt, and `addOrderExtra` needs to stop unconditionally repricing
+`totalPrice` once `paidAt` is set. None of these are large changes, but "`Order.payments` is
+already one-to-many so this needs no migration" undersold how much of the actual blocking
+logic (not the schema) still needs to change.
+
 ## Chunk 7 — Idempotency, forged callback, tampered amount
 
 **Goal:** drive `settle.ts`'s existing defenses (§2c) through the real staging route, not
