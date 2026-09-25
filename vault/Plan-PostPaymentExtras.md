@@ -120,19 +120,17 @@ against real Flitt settlements on Staging Winery's dev tenant. Full evidence is 
 | **2** | Decouple `addOrderExtra` from a free total bump; add computed balance-due | ✅ Done |
 | **3** | New function for a genuine additional manual payment (don't touch `hasLivePayment`) | ✅ Done |
 | **4** | Card-link top-up: decouple Flitt's `order_id`, new admin action, email delivery | ✅ Done |
-| **5** | Fix the order-detail page's multi-payment display (finding 4) | ⬜ Not started |
+| **5** | Fix the order-detail page's multi-payment display (finding 4) | ✅ Done |
 | **6** | End-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/` | ⬜ Not started |
 | **7** | Docs: close out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md` | ⬜ Not started |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Resume point:** Chunk 4 done and verified live on `staging.vineworks.ge`, commit `d331c66`.
-Chunk 5 next (fix the multi-payment display) — **read Chunk 4's Result section first**: live
-verification surfaced a real, previously-unknown bug in `settle.ts` (now `KnownBugs.md` #65)
-where a second real settlement on an order still in stage `NEW` drags `Order.paidAt` forward to
-the newest payment's time, not the first. Not fixed in Chunk 4 (out of scope, and `settle.ts` is
-the shared, heavily-hardened file behind bug #60) — worth fixing before or alongside Chunk 5,
-since Chunk 5 is already touching the same "more than one payment landed" territory.
+**Resume point:** Chunk 5 done and verified live on `staging.vineworks.ge`, commit `9dff238`.
+Chunk 6 next (end-to-end Playwright regression). `KnownBugs.md` #65 (`settle.ts` dragging
+`Order.paidAt` forward on a second settlement while stage stays `NEW`) is still open — deliberately
+not touched in Chunk 5 either, since it's out of scope for a display-only fix and deserves its own
+dedicated pass, per Chunk 4's Result section and the bug's own entry.
 
 ---
 
@@ -777,7 +775,7 @@ is the point of live-testing rather than trusting a prior read.
 ## Chunk 5 — Fix the multi-payment display
 
 **Goal:** close finding 4 — stop a second payment from misrepresenting the first.
-**Status:** ⬜ Not started.
+**Status:** ✅ Done, 2026-09-25. Commit `9dff238` on `staging`.
 
 - Replace `app/admin/(panel)/orders/[id]/page.tsx`'s single-newest-payment query with a real
   list of every settled, non-reversed payment for the order.
@@ -787,6 +785,111 @@ is the point of live-testing rather than trusting a prior read.
 - **Verify with two genuinely different methods** (e.g. original CARD via Flitt, top-up CASH)
   — the spike's own two-payment test happened to use the same method both times, so this
   exact scenario was never actually observed rendering, only reasoned about from the query.
+
+### Result (2026-09-25)
+
+**What was built.** `page.tsx`'s `payments` query (already narrowed to settled, non-reversed
+rows by Chunk 2) now also selects `settledAt`, not just `method`/`amount`, and passes the whole
+list down instead of collapsing it to `order.payments[0]?.method` — the exact line finding 4
+named. `OrderDetail.tsx`'s `OrderProp.paymentMethod: Method | null` became
+`payments: PaymentRow[]` (`{ method, amount, settledAt }`), and `FlowLine` takes that list
+instead of a single method. **The single/multi split, and the reasoning behind it:**
+
+- **Exactly one payment** (the overwhelming majority of orders) — the flow-line's "Paid" step
+  shows the inline "· <method>" suffix exactly as it always has, with nothing else added. This
+  was a deliberate choice over the plan's own illustrative example ("Paid · Card · 25/09/2026",
+  i.e. with a date). Adding a date would have been a small, defensible enhancement, but the
+  plan's own wording — "the single-payment case must render essentially as it does today" — is
+  most literally satisfied by *no visual change at all* for the common case, which is also the
+  version with zero regression risk to weigh against a cosmetic gain. Recorded here since the
+  task explicitly asked this judgment call be decided and documented, not left implicit.
+- **Two or more payments** — the flow-line's "Paid" step now shows bare "Paid", no method at
+  all, because there is no single correct method to show and showing any one of them is exactly
+  the bug. A new "Payments received" block appears in the Total card instead (only when
+  `payments.length > 1`, so it never duplicates the single-payment case): each payment on its
+  own line, `<method> · <date>` on the left (reusing the existing `paymentMethodLabel()` helper
+  and the file's own `formatDate()` — the same `'en-GB'`-locale, day-first formatter already
+  used for the invoice-history list, deliberately not locale-sensitive per `KnownBugs.md` #37's
+  lesson about `ka-GE` silently reordering fields on this Vercel deployment's ICU data), amount
+  on the right via the existing `formatTetri`. New `orderDetail.total.paymentsTitle` key, both
+  locales ("Payments received" / "მიღებული გადახდები").
+
+**Why the Total card, not somewhere new.** The itemised list is money detail, and the Total
+card already holds every other money-detail addition this plan has made (Chunk 2's balance-due
+row, Chunk 3's "Record payment", Chunk 4's "Send card-payment link") — adding a fourth,
+differently-located card for one more money fact would fragment a screen that already reads
+top-to-bottom as "what this costs → what's been collected → what's still owed → how to collect
+it." Placed directly under the Total row/live-preview note and above Balance due, so the
+reading order is Total → Payments received → Balance due → collection actions.
+
+**Verification — done live on `staging.vineworks.ge` against the dev DB, not just read from
+code:**
+1. `npx tsc --noEmit` clean (needed one fix along the way: the `payments` query's own
+   `where: { settledAt: { not: null } }` guarantees `settledAt` is never actually null at that
+   point, but Prisma's generated type doesn't narrow on a `where` clause, so `page.tsx` asserts
+   it non-null with `p.settledAt!` and a comment explaining why). `scripts/check-i18n-parity.ts`:
+   1133/1133 both languages (1 new key/locale). `eslint` on both touched files: the only findings
+   (2 pre-existing `react/no-unescaped-entities` errors elsewhere in `OrderDetail.tsx`, 1
+   pre-existing unused-import warning in `page.tsx`) confirmed unchanged by diffing against a
+   `git stash` of this chunk's changes — none introduced by this chunk.
+2. **Single-payment regression check, real UI, not just reasoned about:** created a throwaway
+   individual order on Staging Winery (`cmuh4bhyg0000jq04f6gfbkcb`, "ZZChunk5Test SinglePayment",
+   4 guests × ₾100 = ₾400) through the real `/admin/orders/new` form, marked Paid · Bank transfer
+   through the real status-picker UI. Read the live rendered page text afterward: flow-line read
+   exactly `Paid · Bank transfer`, no "Payments received" section anywhere on the page, Total
+   card showed only `Base price (original) 400.00₾ / Total 400.00₾` — byte-for-byte what this
+   screen showed before this chunk, confirming no regression for the common case. Independent
+   direct SQL (dev project `jpbkkngpgtvqmsocitjx`, via `mcp__a9e48394-...`) confirmed exactly one
+   `Payment` row (`amount: 40000, method: BANK_TRANSFER, status: recorded, settledAt` set,
+   `reversedAt: null`), matching the rendered label exactly.
+3. **The actual bug fix, with two genuinely different methods — the plan's own required test.**
+   Created a second throwaway individual order (`cmuh4dbua0007jq0469swiwqi`, "ZZChunk5Test
+   TwoMethods", same ₾400 base), marked Paid · **Bank transfer** through the real UI, added a
+   real ₾150 extra ("2 additional guests", Total → ₾550, Balance due → ₾150), then used Chunk 3's
+   real "Record payment" UI to collect the full ₾150 balance in **Cash** — a genuinely different
+   method from the original, unlike the design spike's own two-payment test (which used CARD
+   both times) and Chunk 4's own two-payment test (both CARD via Flitt). **Live page read
+   immediately after, not a screenshot guess:** the flow-line read bare `Paid` (no method
+   suffix) followed by `→ Confirmed → Completed`, and a new "Payments received" section listed
+   both lines exactly: `Cash · 25 Sept 2026 — 150.00₾` then `Bank transfer · 25 Sept 2026 —
+   400.00₾` (newest first, matching the query's `orderBy: settledAt desc`). The Balance due row
+   and both "Record payment"/"Send card-payment link" affordances had correctly disappeared
+   (balance reached exactly zero). Critically: **the original Bank transfer payment's amount/
+   method/date rendered correctly and were completely unaffected by the later Cash payment
+   existing** — the exact property finding 4 said was broken.
+4. **Independent direct DB read**, confirming the rendered page matches the real `Payment` rows
+   exactly (dev project `jpbkkngpgtvqmsocitjx`, via `mcp__a9e48394-...`, not the generic
+   `mcp__supabase__*` tool): two rows for the second order — `{ method: BANK_TRANSFER, amount:
+   40000, status: recorded, settledAt: 15:32:42, reversedAt: null }` and `{ method: CASH,
+   amount: 15000, status: recorded, settledAt: 15:33:21, reversedAt: null }` — summing to 55000
+   tetri, exactly `Order.totalPrice` (55000). Both rows' `settledAt` timestamps matched the dates
+   shown on-screen (same calendar day, so `formatDate`'s day-granularity display was consistent
+   with both).
+5. **Quick sanity check that Chunks 1/3/4 are all still intact** (not a full re-verification):
+   both throwaway orders showed the Chunk 1 lock note ("This order is already paid...") with the
+   Guest Breakdown fields disabled; Chunk 3's "Record payment" button was used successfully and
+   for real on the second order; Chunk 4's "Send card-payment link" button rendered correctly
+   alongside it (not clicked — no need to re-exercise a real Flitt checkout for a sanity check
+   this narrow). Nothing in this chunk's diff touches any of `updateOrderEnhanced`,
+   `recordManualPayment`, `recordAdditionalPayment`, `startCheckout`, or `settle.ts` — confirmed
+   by the diff itself, which touches only `page.tsx`, `OrderDetail.tsx`, and `adminT.ts`.
+6. **Cleanup:** deleted both throwaway orders' `OrderEvent` rows (2 + 4), `Payment` rows (1 + 2),
+   `OrderExtra` rows (0 + 1) and the `Order` rows themselves via direct SQL; a follow-up query
+   confirmed all four tables at 0 rows for both order ids, and navigating directly to the second
+   order's old URL rendered nothing (the page's own `notFound()` firing). No throwaway scripts
+   were written to disk this session — all verification used the live browser session, direct
+   SQL, and the deployed Vercel API to confirm the build had actually gone live before testing.
+
+**Deviations from the plan worth recording:** (1) the single-payment rendering decision above —
+the plan's own example included a date, this chunk deliberately did not add one, for the reason
+given. (2) The plan's verification bullet suggested "e.g. original CARD via Flitt, top-up CASH";
+this chunk used Bank transfer → Cash instead (both via Chunk 3's manual path) rather than
+exercising Chunk 4's real Flitt checkout again — the property under test (two *different*
+methods correctly both rendering, independently) doesn't depend on which two methods, or on one
+of them being a real gateway call, and Chunk 4 already proved the Flitt-specific mechanics
+(minted `order_id`, no collision, real settlement) in its own verification; re-running a real
+card payment here would have re-tested Chunk 4 rather than Chunk 5. Flagging this as a
+conscious scope choice rather than a shortfall.
 
 ## Chunk 6 — End-to-end regression test
 

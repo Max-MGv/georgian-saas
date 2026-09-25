@@ -8,7 +8,53 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 4 built: card-link top-up, plus a new bug found live (#65)
+## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 5 built: fixed the multi-payment display, closing bug #64 finding 4
+
+Built Chunk 5 of `vault/Plan-PostPaymentExtras.md` — the display fix that finding 4 (surfaced
+live during Chunk 4) was waiting on. `saas/app/admin/(panel)/orders/[id]/page.tsx`'s `payments`
+query (already narrowed to settled, non-reversed rows by Chunk 2) now also selects `settledAt`
+and passes the whole list to `OrderDetail.tsx` instead of collapsing it to
+`order.payments[0]?.method` — the exact line that let a top-up with a different method than the
+original charge silently relabel how the whole order was paid. `OrderDetail.tsx`'s `FlowLine`
+now takes the full `payments` list: with **exactly one** payment (the overwhelming majority of
+orders) it renders precisely as it always has — "Paid · <method>" — a deliberate choice over
+also adding a date, on the reasoning that "must render essentially as it does today" is most
+literally satisfied by no visual change at all for the common case. With **two or more**
+payments, the flow-line shows bare "Paid" (no method — there's no single correct one to show),
+and a new "Payments received" section appears in the Total card with a real, dated line per
+payment (`<method> · <date>` via the existing `paymentMethodLabel()`/`formatDate()` helpers,
+amount via `formatTetri`). New `orderDetail.total.paymentsTitle` key, both languages, parity
+1133/1133. `tsc --noEmit` clean (one nullability assertion needed on `settledAt`, since the
+query's own `where` guarantees it non-null but Prisma's type doesn't narrow on that).
+
+Verified live on `staging.vineworks.ge` against the dev DB. **Single-payment regression check:**
+a throwaway ₾400 order marked Paid · Bank transfer rendered exactly as before this chunk — flow
+-line "Paid · Bank transfer", no itemised section anywhere, confirmed by reading the live page
+text, DB read confirming the one `Payment` row matches. **The actual bug fix, with two genuinely
+different methods** (unlike the design spike's and Chunk 4's own two-payment tests, which each
+happened to use the same method twice): a second throwaway order paid ₾400 **Bank transfer**,
+given a ₾150 extra (balance ₾150), then topped up the full balance in **Cash** via Chunk 3's real
+UI. Live page read afterward: flow-line read bare "Paid", and "Payments received" listed both —
+`Cash · 25 Sept 2026 — 150.00₾` then `Bank transfer · 25 Sept 2026 — 400.00₾` (newest first) —
+with the original Bank transfer entry completely unaffected by the later Cash payment, exactly
+the property finding 4 said was broken. Direct SQL confirmed both `Payment` rows exactly
+(40000 BANK_TRANSFER + 15000 CASH = 55000 tetri = `Order.totalPrice`), matching the rendered
+page. Chunks 1/3/4 sanity-checked intact (lock note present, "Record payment" used successfully,
+"Send card-payment link" rendered correctly) — confirmed by the diff itself that nothing in
+`updateOrderEnhanced`, `recordManualPayment`, `recordAdditionalPayment`, `startCheckout`, or
+`settle.ts` was touched. Both throwaway orders and every child row cleaned up, confirmed gone
+(0/0/0/0) by direct SQL and a `notFound()` on the old URL.
+
+Committed `9dff238` on `staging`, pushed. Full write-up (the single/multi rendering decision and
+reasoning, all verification steps, both deviations from the plan's own suggested test) is in
+`vault/Plan-PostPaymentExtras.md`'s Chunk 5 Result section. `KnownBugs.md` #65 (`settle.ts`
+dragging `Order.paidAt` forward on a second settlement while stage stays `NEW`) remains open,
+deliberately untouched again — out of scope for a display-only fix. **Next: Chunk 6**
+(end-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/`).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 4 built: card-link top-up, plus a new bug found live (#65)
 
 Built Chunk 4 of `vault/Plan-PostPaymentExtras.md` — the card-paying sibling of Chunk 3's manual
 top-up. `startCheckout()` (`saas/lib/payments/startCheckout.ts`) gained an optional
