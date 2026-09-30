@@ -8,7 +8,93 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-25 (newest) — Plan-PostPaymentExtras Chunk 7 built: documentation, closing bug #64 and the whole 7-chunk plan
+## 2026-09-29 (newest) — Four open bugs verified live, four fixed: #65, #53, #61, #19
+
+Went through every `KnownBugs.md` 🔴 Open entry one by one and tried to actually reproduce each,
+rather than trust the log. Two turned out to already be resolved with no fix commit to explain
+why (#30 — nightly demo reseed, confirmed via direct prod DB query: no trace of the stale
+hand-made booking, counts match a fresh seed exactly; #58 — abandoned wine orders not showing on
+`/admin/abandoned`, confirmed live on Staging Winery's real admin panel with a genuine
+Flitt-abandoned row). Both marked resolved with the caveat that root cause was never found, so
+nothing guarantees either won't recur. #41 (test-rls false alarm) and #63 (mobile dropdown tap
+targets) confirmed still exactly as documented, code unchanged. That left four genuinely open,
+fixable bugs, tackled one at a time — each built by a dispatched subagent, independently
+re-verified afterward (diff read, tsc, re-run their regression evidence myself, direct DB checks)
+rather than taking the implementer's word for it.
+
+**#65 — `Order.paidAt` drags forward on a second settlement.** One-line-conceptually fix:
+`paidAt: null` added to `settle.ts`'s existing `stage: 'NEW'` guard on both `Order` and
+`WineOrder` writes. Verified independently by re-running the reproduction: before the fix, a
+second real settlement moved `paidAt` to its own timestamp; after, it stays at the first. 11/11
+on the regression script both when the subagent ran it and when I reran it myself.
+
+**#53 — settlement confirmation email never reached Resend's send log.** The obvious fix (wrap
+the existing fire-and-forget call in `after()`, right where it stood inside `settlePayment()`)
+would have been wrong — `after()` throws outside a real Next.js request context, and
+`settlePayment()` is also called directly by two standalone scripts including #65's own new
+regression test. Fixed by moving the `after()`-wrapped call out to both Route Handlers
+(`callback/route.ts`, `return/route.ts`), which are always genuinely inside a request;
+`settlePayment()` itself now just reports `orderId`/`wineOrderId` and stays callable from
+anywhere. Verified independently with my own real HTTP POST straight at the running dev server —
+`200 {"status":"ok","outcome":"settled"}`, no notification-failed log line, no request-scope
+error.
+
+**#61 — no reconciliation if both Flitt channels fail.** Built the reconciliation job the bug
+entry itself had proposed: a daily cron (`/api/cron/reconcile-payments`, Vercel Hobby only allows
+once-a-day) that asks Flitt's real status API about anything stuck with zero callback for 1h–7d,
+and hands a confirmed approval straight into the same, unmodified `settlePayment()` — no
+duplicated settlement logic. Two decisions checked with Max before building rather than assumed:
+auto-settle (not flag-for-review) and daily cadence is acceptable. Verified against Flitt's real
+test merchant, not simulated: one round trip on an untouched checkout, and one where a real
+completed payment was deliberately reset to "as if neither channel ever told us" and the job
+correctly found and re-settled it — the same run also found a genuinely pre-existing, unrelated
+stuck payment from 2026-09-22 and correctly skipped it without crashing. Known, stated gap: a
+stuck *second* checkout attempt on an already-paid order (the post-payment top-up flow) can't be
+reconciled today because Flitt's own order_id for that attempt is never persisted anywhere —
+would need a schema migration, deliberately left open rather than folded in here.
+
+**#19 — no rate limiting anywhere.** Turned out to be a narrower question than it first looked:
+`StressTest-2026-08-12.md`'s actual incident was mostly a page-view burst exhausting the DB
+connection ceiling, which a form-submission rate limiter alone was never going to stop — but that
+report's own top recommendation was still to build the limiter first anyway, with connection-pool
+tuning as a separate, deferred piece. Checked scope and thresholds with Max before building.
+Generalized the demo-only limiter (`lib/demoRateLimit.ts`, a documented no-op for every real
+tenant) into `lib/writeRateLimit.ts`: every tenant's booking/wine-order forms are now throttled,
+demo keeps 5/10min, real tenants get a looser 20/10min sized not to catch a legitimate coach party
+or shared office network. The subagent building it caught and fixed a real correctness gap that
+wasn't explicitly specified — bucket keys needed to become tenant-scoped, or two different
+wineries' visitors sharing an IP would wrongly throttle each other now that every tenant shares
+the same map. Verified live through the real public booking form, not a bypassed function call —
+the exact rendered rejection message, no "shared demo" text, no order created for the rejected
+attempt. **Still open, deliberately:** the read-path/connection-pool half of the original bug —
+a pure page-view traffic spike with no form submissions involved is still unprotected.
+
+All four fixes are on `staging`, uncommitted — nothing pushed, nothing merged to `master`, per
+usual. `KnownBugs.md` updated for all six entries (#65, #53, #61, #19 resolved; #30, #58 resolved
+with the "root cause never confirmed" caveat stated plainly); #41 and #63 left open as-is, nothing
+changed about them.
+
+**Same-day follow-up, on request ("let's do it now, i want to close all bugs"):** #61's own
+stated gap — a stuck *second* Flitt checkout attempt (the post-payment top-up flow) couldn't be
+reconciled, because the `order_id` actually sent to Flitt for that attempt was never persisted
+anywhere — closed with a small migration, `Payment.flittOrderId String?`
+(`20260929112047_add_payment_flitt_order_id`). `startCheckout()` now writes it on every checkout,
+override or not; the reconciliation job reads it directly instead of guessing. Dev server stopped
+before the migration and restarted after, per Rule 10. Verified independently after the fact: the
+column confirmed live on the dev DB by direct query, and a real booking driven through Staging
+Winery's actual public form (browser, not a bypassed call) confirmed `flittOrderId` lands
+correctly on the resulting `Payment` row. Both payment regression scripts reconfirmed clean.
+**Where the eight bugs that were 🔴 Open this morning stand now:** six fixed or found
+already-resolved today (#65, #53, #61, #19, #30, #58). Two are still genuinely open, deliberately
+— **not closed, and this entry should not be read as claiming otherwise**: #41 (`test-rls.ts`'s
+false-alarm risk on an empty `Order` table — code unchanged, just not currently triggering because
+the table isn't empty right now) and #63 (mobile status-dropdown tap size — Max's own explicit
+"record for later, revisit when convenient" call, not a defect). Both remain 🔴 in `KnownBugs.md`,
+correctly.
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 7 built: documentation, closing bug #64 and the whole 7-chunk plan
 
 Built Chunk 7 (documentation only, no app code) of `vault/Plan-PostPaymentExtras.md` — the final
 chunk. This closes the arc that started with `KnownBugs.md` #64, found 2026-09-25 live while
