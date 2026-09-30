@@ -7,7 +7,7 @@ import { writeOrderContacts } from '@/lib/orderContacts'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
-import { checkDemoRateLimit, DEMO_WINE_ORDER_LIMIT } from '@/lib/demoRateLimit'
+import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
 
 export type WineSelection = {
@@ -69,12 +69,12 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
 
   const tenantId = await getTenantId()
 
-  // Guard: abuse on the public demo sandbox. A no-op for real tenants —
-  // see lib/demoRateLimit.ts for why this is deliberately demo-only.
-  const rate = await checkDemoRateLimit(tenantId, 'wine-order', DEMO_WINE_ORDER_LIMIT)
+  // Guard: abuse on public write actions. Every tenant is throttled — see
+  // lib/writeRateLimit.ts for the demo-vs-real thresholds.
+  const rate = await checkWriteRateLimit(tenantId, 'wine-order')
   if (rate.limited) {
     return {
-      error: `That's a lot of orders in a short time. This is a shared demo, so it caps how fast orders can be placed — try again in about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s).`,
+      error: `That's a lot of orders in a short time — please wait about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s) and try again.`,
     }
   }
 
