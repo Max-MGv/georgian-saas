@@ -3,9 +3,11 @@ import Link from 'next/link'
 import TenantsClient from './TenantsClient'
 import ResetDemoCard from './ResetDemoCard'
 import { demoTenantExists } from '@/app/actions/demoReset'
+import ClearStagingDataCard from './ClearStagingDataCard'
+import { stagingTenantExists } from '@/app/actions/stagingWipe'
 
 export default async function TenantsPage() {
-  const [tenants, demo] = await Promise.all([getTenants(), demoTenantExists()])
+  const [tenants, demo, staging] = await Promise.all([getTenants(), demoTenantExists(), stagingTenantExists()])
 
   return (
     <div>
@@ -30,6 +32,9 @@ export default async function TenantsPage() {
       {/* Only on the database that actually hosts the demo — Plan-DemoFlowFixes
           Chunk 8 task 8.2. */}
       {demo && <ResetDemoCard tenantName={demo.name} />}
+
+      {/* Only on the database that actually hosts Staging Winery (dev DB). */}
+      {staging && <ClearStagingDataCard tenantName={staging.name} />}
     </div>
   )
 }
