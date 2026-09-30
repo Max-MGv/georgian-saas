@@ -1,4 +1,5 @@
-import { settlePayment } from '@/lib/payments/settle'
+import { after } from 'next/server'
+import { settlePayment, sendSettlementEmail } from '@/lib/payments/settle'
 import { readCallbackBody } from '@/lib/payments/readCallbackBody'
 
 /**
@@ -27,6 +28,17 @@ export async function POST(request: Request) {
     status = 'failed'
   } else {
     status = 'success'
+  }
+
+  // Scheduled with `after()`, not awaited: a mail failure must not delay or
+  // change the redirect below (KnownBugs.md #53). `after()` is safe to call
+  // here specifically because this is a real Route Handler request.
+  if (result.ok && result.outcome === 'settled') {
+    after(() =>
+      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId).catch(err =>
+        console.error('[flitt:return] notification failed —', err instanceof Error ? err.message : err)
+      )
+    )
   }
 
   // 303 so the browser follows with a GET — a 307/308 would replay the POST

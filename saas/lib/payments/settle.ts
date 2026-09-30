@@ -28,7 +28,19 @@ import { formatLongDate } from '@/lib/emails/templates/dateFormat'
  */
 
 export type SettleResult =
-  | { ok: true; outcome: 'settled' | 'already-settled' | 'not-approved'; tenantId: string }
+  | {
+      ok: true
+      outcome: 'settled' | 'already-settled' | 'not-approved'
+      tenantId: string
+      // Carried so a caller can fire `sendSettlementEmail` itself once it knows
+      // it's genuinely inside a Route Handler request (see that function's own
+      // comment for why settlePayment can't just do this internally). A caller
+      // outside a request context — the two settlePayment test scripts — has no
+      // legal way to schedule the send anyway, so it should ignore these and
+      // leave the notification alone.
+      orderId: string | null
+      wineOrderId: string | null
+    }
   | { ok: false; reason: string }
 
 /** Flitt's terminal success value. Anything else is not a paid order. */
@@ -218,14 +230,32 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // backwards by a late callback. `stage: 'NEW'` says exactly that, which is
     // what the old `status IN (NEW, PENDING_PAYMENT)` guard was reaching for
     // through a column that mixed the two ideas together.
+    //
+    // Also guarded on `paidAt: null` (KnownBugs.md #65, found 2026-09-25): the
+    // `stage: 'NEW'` guard alone answers "has a human moved this order along",
+    // not "has this order already been paid once" — and those are different
+    // facts. An order can collect a second, real, independent payment while
+    // still sitting in stage NEW (ordinary — not every booking gets its stage
+    // dropdown advanced): a manual deposit followed by a card top-up for the
+    // balance, or two separate Flitt payments, both shipped flows (see
+    // Plan-PostPaymentExtras.md chunks 3/4). Without this second condition,
+    // that second settlement's `updateMany` still matched on `stage: 'NEW'`
+    // alone and silently overwrote `paidAt` with the second payment's
+    // timestamp — so the order's "first paid" fact quietly moved forward on
+    // every subsequent real settlement, with nothing anywhere flagging the
+    // change. `paidAt: null` closes that: once the first settlement has set
+    // it, no later settlement's `updateMany` can match this row again, so
+    // `paidAt` is written exactly once. The `Payment` row for that second
+    // payment still settles normally either way (see the idempotency gate
+    // above) — only the order's own `paidAt` is protected here.
     if (payment.orderId) {
       await tx.order.updateMany({
-        where: { id: payment.orderId, stage: 'NEW' },
+        where: { id: payment.orderId, stage: 'NEW', paidAt: null },
         data: paidColumns,
       })
     } else if (payment.wineOrderId) {
       await tx.wineOrder.updateMany({
-        where: { id: payment.wineOrderId, stage: 'NEW' },
+        where: { id: payment.wineOrderId, stage: 'NEW', paidAt: null },
         data: paidColumns,
       })
     }
@@ -234,22 +264,20 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   })
 
   // ── Notification ───────────────────────────────────────────────────────────
-  // Deliberately here: one shared path, reached by both the webhook and the
-  // browser return, and only past the idempotency gate above so a retried
-  // callback can't double-send. Never awaited into the response — a mail
-  // failure must not make the callback look failed to Flitt, which would earn
-  // a retry for a payment that already settled correctly. Gated on the
-  // transaction's own outcome (the winner of the atomic claim above), not on
-  // `approved` alone — the loser of a concurrent race must never send this.
-  if (outcome === 'settled') {
-    void sendSettlementEmail(tenantId, payment.orderId, payment.wineOrderId).catch(err =>
-      // Logged loudly rather than swallowed: the money moved, so a missing
-      // receipt is a real support issue someone has to chase manually.
-      console.error('[flitt:settle] notification failed —', err instanceof Error ? err.message : err)
-    )
-  }
-
-  return { ok: true, outcome, tenantId }
+  // NOT fired from here. It used to be a bare `void sendSettlementEmail(...)`
+  // fire-and-forget call at this exact spot (KnownBugs.md #53) — on Vercel's
+  // serverless platform, once the caller's HTTP response goes out the function
+  // instance can be frozen/torn down at any point, and confirmed live: this
+  // email lost that race on every checked settlement, never once reaching
+  // Resend's send log. `after()` is the real fix, but it throws when called
+  // outside an active Next.js request context, and this function is also
+  // called directly from scripts/test-settle-double-payment.ts and
+  // scripts/test-payment-flow.ts, neither of which is a request. So the two
+  // Route Handlers that ARE always genuinely inside a request — callback and
+  // return — call `sendSettlementEmail` themselves via `after()`, using the
+  // `orderId`/`wineOrderId` returned below. This function only reports the
+  // outcome.
+  return { ok: true, outcome, tenantId, orderId: payment.orderId, wineOrderId: payment.wineOrderId }
 }
 
 /**
@@ -259,8 +287,15 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
  * the latter resolves the tenant from request headers, and on this path the
  * authoritative tenant is the payment's own, which need not match the host that
  * received the callback.
+ *
+ * Exported so the two Flitt Route Handlers can schedule it via `after()` once
+ * `settlePayment` reports `outcome: 'settled'` — see the comment at the end of
+ * `settlePayment` above. Don't call this directly from anywhere that isn't
+ * genuinely inside a request (a script, a cron job, a queue worker): there is
+ * no `after()` to schedule it with out there, so it would go right back to
+ * being an unguaranteed fire-and-forget call — the exact bug this split fixed.
  */
-async function sendSettlementEmail(
+export async function sendSettlementEmail(
   tenantId: string,
   orderId: string | null,
   wineOrderId: string | null
