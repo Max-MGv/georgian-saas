@@ -44,9 +44,9 @@ export async function startCheckout(input: {
    * 3). Every ordinary first-time checkout omits this and keeps today's
    * exact behaviour (Flitt's order_id === our own order id) — only a second
    * or later checkout attempt for the SAME order (a card-link top-up) needs
-   * a fresh one per attempt. Costs nothing structurally: nothing in the
-   * schema stores Flitt's own order_id anywhere, only `providerPaymentId`,
-   * which Flitt generates and returns.
+   * a fresh one per attempt. Whatever value is actually sent — override or
+   * default — is persisted verbatim on `Payment.flittOrderId` below, so the
+   * reconciliation cron (KnownBugs.md #61) never has to guess it back.
    */
   flittOrderId?: string
 }): Promise<string | null> {
@@ -62,10 +62,12 @@ export async function startCheckout(input: {
   const proto = h.get('x-forwarded-proto') ?? 'https'
   const base = `${proto}://${host}`
 
+  const flittOrderId = input.flittOrderId ?? input.orderId ?? input.wineOrderId ?? ''
+
   const result = await createCheckout({
     merchantId: input.merchantId,
     password: input.secretKey,
-    orderId: input.flittOrderId ?? input.orderId ?? input.wineOrderId ?? '',
+    orderId: flittOrderId,
     amount: input.amount,
     orderDesc: input.orderDesc,
     responseUrl: `${base}/api/payments/flitt/return`,
@@ -90,6 +92,7 @@ export async function startCheckout(input: {
         provider: 'flitt',
         providerPaymentId: result.paymentId,
         checkoutUrl: result.checkoutUrl,
+        flittOrderId,
         status: 'created',
         amount: input.amount,
       },

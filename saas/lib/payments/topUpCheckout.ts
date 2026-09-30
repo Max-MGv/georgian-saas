@@ -21,11 +21,11 @@
  * "Design spike (2026-09-25)" §3). `startCheckout()` grew an optional
  * `flittOrderId` override for exactly this — this module is the one caller
  * that supplies one, minted fresh per attempt via `mintTopUpFlittOrderId`.
- * `Payment.orderId` still always carries the real internal order id; nothing
- * in the schema stores Flitt's own order_id anywhere (only
- * `providerPaymentId`, which Flitt generates and returns), so this
- * decoupling costs nothing structurally — confirmed by reading the `Payment`
- * model in schema.prisma before writing this.
+ * `Payment.orderId` still always carries the real internal order id; the
+ * minted value handed to Flitt as `order_id` is persisted separately on
+ * `Payment.flittOrderId` (schema.prisma), so this decoupling costs nothing —
+ * the reconciliation cron (KnownBugs.md #61) reads that column rather than
+ * guessing.
  *
  * ## Not gated by shouldTakePayment()
  *
