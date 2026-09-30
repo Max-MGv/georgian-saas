@@ -1,4 +1,4 @@
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 
 type Order = {
   id: string
@@ -12,6 +12,12 @@ type Order = {
   name: string
   surname: string
   totalPrice: number | null
+  /** Sum of this order's settled, non-reversed Payment.amount rows. Used only
+   *  to decide whether this printed invoice needs a balance-due line
+   *  (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — a printed invoice for
+   *  an order that's already been paid something must not silently restate
+   *  the full total as if nothing had been collected yet. */
+  paymentsSettledTotal: number
   company: { name: string; identificationCode: string | null } | null
   masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
   extras: { label: string; amount: number }[]
@@ -62,6 +68,21 @@ export default function InvoicePrint({ order, payment, detailed = false, display
   const mcAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
   const bookingAmt = totalPrice - mcAmt - extrasAmt
+
+  // Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only shown
+  // once something has actually been collected, same gate as everywhere else
+  // this figure appears. `paymentsSettledTotal > 0` stands in for "has been
+  // paid at least once" here since this component isn't given `paidAt`.
+  const balance = balanceDue(order.totalPrice, order.paymentsSettledTotal)
+  const showBalance = order.paymentsSettledTotal > 0 && balance !== 0
+  const balanceLabel = balance > 0 ? 'გადასახდელი ნაშთი' : 'ზედმეტად გადახდილი'
+  const balanceRow = showBalance ? (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+      <strong style={{ fontSize: 13, color: balance > 0 ? '#92400e' : '#1c1008' }}>
+        {balanceLabel}: {formatTetri(asTetri(Math.abs(balance)), { space: true, decimals: true })}
+      </strong>
+    </div>
+  ) : null
 
   // Determine if this order has split guest counts
   const hasSplitCounts = order.tastingGuestCount > 0 || order.lunchGuestCount > 0 || order.freeGuestCount > 0
@@ -132,6 +153,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
             <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
           </div>
+          {balanceRow}
         </Section>
 
         <div style={{ border: '1px solid #e8e0d0', borderRadius: 8, padding: 16, marginTop: 8 }}>
@@ -233,6 +255,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
         </div>
+        {balanceRow}
       </Section>
 
       {/* Payment details */}

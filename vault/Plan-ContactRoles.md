@@ -470,13 +470,12 @@ fields a match fills depends on which role matched, not just on "was something m
 | **11a** | Booking Info's Contact Person duplication — investigate the legacy columns first, then hide the display for company bookings | ✅ Done |
 | **12** | Demo seed, onboarding, test fixtures | ✅ Done (2026-09-23) |
 | **13** | Tests | ✅ Done (2026-09-23) |
-| **14** | Vault + close-out | 🚧 In progress (2026-09-23) |
+| **14** | Vault + close-out | ✅ Done (2026-09-23) |
 
 Status values: ⬜ Not started · 🚧 In progress · ✅ Done · ⏸ Paused
 
-**Overall resume point:** Chunks 0–13 (and 11a) all done (2026-09-23). Chunk 14's vault writeups,
-the `createTenant()` fix, and the blind-audit launch are done; the production pre-flight and the
-`staging` → `master` merge itself are still pending Max's go-ahead.
+**Overall resume point: all 14 chunks (and 11a) done. `staging` merged to `master` and live on
+production, 2026-09-23. Plan complete.**
 **Chunk 11a done** — not part of the original 14-chunk plan, recorded 2026-09-23 after Max
 spotted the Contact Person's info rendering twice on a real order page. Investigation confirmed
 `Order.name/surname/phone/email` are pure legacy weight for company bookings now that Chunk 9
@@ -1917,7 +1916,14 @@ Road Journeys' company order shows Phone/Email once, under Contacts, correctly l
       `guideId` set. RLS (check 1) isn't checkable until right after `migrate deploy` — the three
       new tables don't exist on production yet. Production volume for context: 16 companies, 393
       orders, 2 tenants.
-- [ ] Verify on `staging`, then get Max's go-ahead for the `staging` → `master` merge (Rule 0)
+- [x] **Verified on `staging`, Max's go-ahead given, merged `staging` → `master` and pushed
+      (`e6a37a2`) 2026-09-23.** Immediately after: `prisma migrate deploy` applied both pending
+      migrations (`20260922101500_contact_roles`, `20260923072201_add_invoice_sent`) to
+      **production**, then `scripts/setup-rls.ts` run against production (21 tables policied,
+      confirmed via the H18 `pg_class`/`pg_policy` query — no `null` polname on any of the four
+      new tables). Verified live: `nikalasmarani.vercel.app` homepage and `/wines` render real
+      tenant content correctly, `/admin/login` returns 200 with the correct route matched, no
+      console errors, no failed network requests besides one benign aborted prefetch.
 
-**Resume point:** §9c is clear. Only the `staging` → `master` merge itself remains, and it needs
-Max's explicit go-ahead separately from everything else in this chunk (Rule 0). Everything else in this chunk is done.
+**Resume point: Chunk 14 is complete. The whole 14-chunk Contact Roles plan is done and live on
+production.** Everything else in this chunk is done.

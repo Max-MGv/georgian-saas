@@ -1,4 +1,5 @@
-import { settlePayment } from '@/lib/payments/settle'
+import { after } from 'next/server'
+import { settlePayment, sendSettlementEmail } from '@/lib/payments/settle'
 import { readCallbackBody } from '@/lib/payments/readCallbackBody'
 
 /**
@@ -29,6 +30,18 @@ export async function POST(request: Request) {
     // duplicates. The log line is the alert.
     console.error('[flitt:callback] rejected —', result.reason)
     return Response.json({ status: 'rejected' }, { status: 200 })
+  }
+
+  // Scheduled with `after()`, not awaited: a mail failure must not delay or
+  // fail this response, which would earn a retry from Flitt for a payment
+  // that already settled correctly (KnownBugs.md #53). `after()` is safe to
+  // call here specifically because this is a real Route Handler request.
+  if (result.outcome === 'settled') {
+    after(() =>
+      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId).catch(err =>
+        console.error('[flitt:callback] notification failed —', err instanceof Error ? err.message : err)
+      )
+    )
   }
 
   return Response.json({ status: 'ok', outcome: result.outcome }, { status: 200 })

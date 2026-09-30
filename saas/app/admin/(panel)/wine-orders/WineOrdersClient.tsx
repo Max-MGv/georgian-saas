@@ -260,11 +260,14 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
  * restaurant that will settle its invoice in a month. One line either way —
  * not a fulfilment stepper with a payment badge beside it.
  */
-function FlowLine({ order, onRequestChange, pendingLabel, onConfirm, onCancel, locale }: {
+function FlowLine({ order, onRequestChange, pendingLabel, pendingIsPaid, onConfirm, onCancel, locale }: {
   order: WineOrder
   onRequestChange: (change: WineOrderStatusChange, label: string) => void
   pendingLabel?: string
-  onConfirm: () => void
+  /** True when the pending change is 'paid' — swaps the plain ✓ for the
+   * bank-transfer/cash picker below (see confirmChange). */
+  pendingIsPaid?: boolean
+  onConfirm: (method?: 'BANK_TRANSFER' | 'CASH') => void
   onCancel: () => void
   locale: string
 }) {
@@ -345,11 +348,22 @@ function FlowLine({ order, onRequestChange, pendingLabel, onConfirm, onCancel, l
         </div>
       )}
       {pendingLabel && (
-        <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
-          <span style={{ color: C.muted, flex: 1 }}>→ {pendingLabel}?</span>
-          <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
-          <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
-        </div>
+        pendingIsPaid ? (
+          <div className="mt-2 pt-2 border-t flex flex-col gap-1 text-xs" style={{ borderColor: C.border }}>
+            <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
+              <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
+              <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
+            <span style={{ color: C.muted, flex: 1 }}>→ {pendingLabel}?</span>
+            <button onClick={() => onConfirm()} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
+            <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
+          </div>
+        )
       )}
     </div>
   )
@@ -470,7 +484,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
   orders: WineOrder[]
   pendingChange: PendingChange | null
   onRequestChange: (orderId: string, change: WineOrderStatusChange, label: string) => void
-  onConfirm: () => void
+  onConfirm: (method?: 'BANK_TRANSFER' | 'CASH') => void
   onCancel: () => void
   locale: string
 }) {
@@ -584,12 +598,24 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         ))}
                       </div>
                     )}
-                    {isPending && (
+                    {isPending && pendingChange.change.kind === 'paid' ? (
+                      <div className="flex flex-col gap-1 mt-1.5 text-xs">
+                        <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white"
+                            style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
+                          <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white"
+                            style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
+                          <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white"
+                            style={{ backgroundColor: '#dc2626' }}>✗</button>
+                        </div>
+                      </div>
+                    ) : isPending && (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                         <span style={{ color: C.muted }}>
                           → {pendingChange.label}?
                         </span>
-                        <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white"
+                        <button onClick={() => onConfirm()} className="px-2 py-0.5 rounded font-bold text-white"
                           style={{ backgroundColor: '#16a34a' }}>✓</button>
                         <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white"
                           style={{ backgroundColor: '#dc2626' }}>✗</button>
@@ -634,7 +660,7 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
   orders: WineOrder[]
   pendingChange: PendingChange | null
   onRequestChange: (orderId: string, change: WineOrderStatusChange, label: string) => void
-  onConfirm: () => void
+  onConfirm: (method?: 'BANK_TRANSFER' | 'CASH') => void
   onCancel: () => void
   locale: string
 }) {
@@ -748,12 +774,21 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         >
                           {labelFor(locale, columnOf(order))} ▾
                         </button>
-                        {isPending && (
+                        {isPending && pendingChange.change.kind === 'paid' ? (
+                          <div className="flex flex-col gap-1 mt-1.5 text-xs">
+                            <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
+                              <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
+                              <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
+                            </div>
+                          </div>
+                        ) : isPending && (
                           <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                             <span style={{ color: C.muted }}>
                               → {pendingChange.label}?
                             </span>
-                            <button onClick={onConfirm} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
+                            <button onClick={() => onConfirm()} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
                             <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
                           </div>
                         )}
@@ -1019,10 +1054,16 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     timerRef.current = setTimeout(() => setPendingChange(null), 5000)
   }
 
-  function confirmChange() {
+  // `method` only means anything for a 'paid' change — the picker below only
+  // ever passes one alongside that kind. Falls through as MANUAL server-side
+  // (recordManualPayment) for a plain confirm with no method chosen.
+  function confirmChange(method?: 'BANK_TRANSFER' | 'CASH') {
     if (!pendingChange) return
     if (timerRef.current) clearTimeout(timerRef.current)
-    handleUpdate(pendingChange.orderId, pendingChange.change)
+    const change = pendingChange.change.kind === 'paid' && method
+      ? { ...pendingChange.change, method }
+      : pendingChange.change
+    handleUpdate(pendingChange.orderId, change)
     setPendingChange(null)
   }
 
@@ -1171,6 +1212,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     order={order}
                     onRequestChange={(change: WineOrderStatusChange, label: string) => requestChange(order.id, change, label)}
                     pendingLabel={isPending ? pendingChange.label : undefined}
+                    pendingIsPaid={isPending ? pendingChange.change.kind === 'paid' : undefined}
                     onConfirm={confirmChange}
                     onCancel={cancelChange}
                     locale={locale}

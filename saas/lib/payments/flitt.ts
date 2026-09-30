@@ -15,8 +15,11 @@ import type { Tetri } from '@/lib/money'
  */
 
 const FLITT_CHECKOUT_URL = 'https://pay.flitt.com/api/checkout/url'
+const FLITT_STATUS_URL = 'https://pay.flitt.com/api/status/order_id'
 const DEFAULT_CURRENCY = 'GEL'
 const REQUEST_TIMEOUT_MS = 15000
+/** The only version docs.flitt.com documents for this endpoint. */
+const STATUS_API_VERSION = '1.0.1'
 
 /**
  * Fields that arrive on a callback but were not part of what the merchant
@@ -255,4 +258,93 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<Create
   }
 
   return { checkoutUrl, paymentId }
+}
+
+export type CheckOrderStatusInput = {
+  merchantId: string | number
+  password: string
+  /**
+   * Flitt's OWN `order_id` for the checkout being queried — not necessarily
+   * `Payment.id`. For an ordinary first checkout attempt this is
+   * `Payment.orderId ?? Payment.wineOrderId` (see startCheckout.ts). Callers
+   * are responsible for reconstructing the right value; this function just
+   * asks Flitt about whatever order_id it's given.
+   */
+  orderId: string
+}
+
+export type CheckOrderStatusResult =
+  | { response: Record<string, unknown> }
+  | { error: string }
+
+/**
+ * Ask Flitt for a checkout's current status by `order_id` (KnownBugs.md #61 —
+ * the reconciliation job for payments that never got a callback of any kind).
+ *
+ * Deliberately thin and honest: sign the request, send it, unwrap the
+ * `{response:{...}}` envelope, hand back whatever Flitt said. This does NOT
+ * verify the response's own signature — that stays `settlePayment()`'s job.
+ * The response object's field set (`payment_id`, `order_status`, `amount`,
+ * `currency`, `signature`, `response_signature_string`) is exactly the same
+ * shape as an inbound callback body, so the caller is expected to pass it
+ * straight into `settlePayment()` rather than this function duplicating any
+ * of that trust logic — same "one function settles" rule `settle.ts`'s own
+ * header comment states.
+ *
+ * Never throws — mirrors `createCheckout`'s error conventions above: network
+ * failures, non-200s, unparseable JSON, and a missing `response` object all
+ * come back as `{ error }` rather than a thrown exception.
+ */
+export async function checkOrderStatus(input: CheckOrderStatusInput): Promise<CheckOrderStatusResult> {
+  if (!input.password) return { error: 'Flitt merchant password is not configured' }
+
+  const params: Record<string, string> = {
+    order_id: input.orderId,
+    merchant_id: String(input.merchantId ?? '').trim(),
+    version: STATUS_API_VERSION,
+  }
+
+  if (!params.order_id) return { error: 'Missing required Flitt parameter: order_id' }
+  if (!params.merchant_id) return { error: 'Missing required Flitt parameter: merchant_id' }
+
+  const signature = buildSignature(params, input.password)
+
+  let response: Response
+  try {
+    response = await fetch(FLITT_STATUS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request: { ...params, signature } }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (e) {
+    // Deliberately logs the reason only — the request body carries the merchant
+    // signature and must never reach the logs.
+    const reason = e instanceof Error ? e.message : String(e)
+    console.error('[flitt] status request failed:', reason)
+    return { error: 'Could not reach the payment provider' }
+  }
+
+  const text = await response.text().catch(() => '')
+
+  if (!response.ok) {
+    console.error(`[flitt] status returned HTTP ${response.status}`)
+    return { error: `Payment provider returned HTTP ${response.status}` }
+  }
+
+  let parsed: { response?: Record<string, unknown> }
+  try {
+    parsed = JSON.parse(text) as { response?: Record<string, unknown> }
+  } catch {
+    console.error('[flitt] status returned a non-JSON body')
+    return { error: 'Unreadable response from the payment provider' }
+  }
+
+  const payload = parsed?.response
+  if (!payload || typeof payload !== 'object') {
+    console.error('[flitt] status response missing a response object')
+    return { error: 'Payment provider returned no status data' }
+  }
+
+  return { response: payload }
 }

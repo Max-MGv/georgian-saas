@@ -263,3 +263,184 @@ loads, per KNOWN-ISSUES; a server restart does not help.
 `locale-integrity` (5/5), `payment-label-precedence`, `guide-picker` (4/4), and both booking tests
 in `payment-amount-integrity`. `payment-amount-integrity`'s wine test fixed but **not re-run since
 the fix**. Three specs still unrepointed (table above). Nothing committed, nothing pushed.
+
+---
+
+## 2026-09-24 — Tier 5 (real Flitt payment E2E) starts — Chunk 3, two specs added
+
+Not a new numbered Phase here — `vault/Plan-PaymentE2ETesting.md` is Tier 5's own tracker
+(Chunks 0–8), and its own Chunk 8 is where this file gets properly folded in with a real
+"Phase 5" section, run instructions, and the two-config split documented in `ARCHITECTURE.md`.
+This is a short pointer entry only, so this file doesn't go stale in the meantime.
+
+Chunk 3 added the first two specs under `tests/tier5-payment-e2e/` (own config,
+`playwright.staging.config.ts`, targets `https://staging.vineworks.ge` — the real deployed
+staging site, not localhost, since Flitt's callback needs a publicly reachable host):
+
+- `payment-approved-settlement.spec.ts` — 3/3 passing (individual booking, full 5-surface
+  check; company booking and a wine order, lighter checks). Real finding: the settlement
+  email never reaches Resend at all (`KnownBugs.md` #53, root cause suspected — a
+  fire-and-forget send with no `waitUntil()`), independently confirmed via Resend's own send
+  log across every run. Full writeup: [[13-payment-approved-settlement]].
+- `payment-declined-settlement.spec.ts` — 1/1 passing. Real finding: the non-3DS decline test
+  card never redirects back to the site at all — Flitt shows an inline "Declined" dialog with
+  no way back to the merchant, fixed in `helpers/flittPayment.ts` (`payAtFlittCheckout` now
+  returns `outcome: 'redirected' | 'declined-inline'`) rather than worked around locally, since
+  later chunks (7, forged/duplicate callbacks) will also drive declines. Full writeup:
+  [[14-payment-declined-settlement]].
+
+Both independently re-verified against the dev DB directly (`Payment`/`Order`/`OrderEvent`),
+not just trusted on a green Playwright run — see each note's own "Independent verification"
+section. All test data swept to zero afterward, including via direct SQL for the wine-order
+scenario (Wine Orders admin still has no delete action — same accepted debris shape the rest
+of this suite already lives with there).
+
+## 2026-09-24 (continued) — Chunk 4, one spec added, a real app bug found and fixed
+
+`payment-book-later.spec.ts` — 1/1 passing. Covers the "book & pay later" loop: reservation-only
+booking → invoice email → manual bank-transfer payment, full cross-view check. Confirmed this is
+genuinely not a resumed Flitt checkout (§2b of the plan) — nothing in the scenario ever reaches
+`pay.flitt.com`.
+
+Building the manual-payment step reproduced a real, standing app bug, independent of this
+testing plan: the admin "Paid" status option's Bank Transfer/Cash picker closed itself the
+instant it opened, on both `/admin/orders` and an order's own detail page. Root cause (confirmed
+live, not just read from the code): Next's App Router hydrates React at `document`, so the
+"close menu on outside click" listener and React's own delegated click listener are two
+independent listeners on the same node — clicking "Paid" mounts the picker and React flushes
+that swap synchronously *before* the outside-click listener's turn, so by the time it runs, the
+clicked button is already detached and a plain containment check on it fails. Fixed by moving
+the outside-click listener to the capture phase in both `OrderDetail.tsx` and `OrdersTable.tsx`
+(commits `b58e9cc`/`ac47541`, `staging`) — full story in
+[[15-payment-book-later]].
+
+A second, unrelated bug was found live-testing the fix on the mobile card list (a status
+dropdown clipped by its own card's `overflow-hidden`) and flagged as its own follow-up rather
+than fixed here.
+
+Independently re-verified against the dev DB directly (a second manual pass through the UI,
+since the automated spec deletes its own row before cleanup could be inspected mid-flight):
+`Order.paidAt`/`invoiceSentAt` both set and independent, `Payment` row with
+`provider='manual'`, `method='BANK_TRANSFER'`, `settledAt` set, correct amount. All test data
+swept to zero afterward; the "Individual bookings" toggle confirmed back at its resting value
+(off) both via the spec's own restore and a separate live DOM read.
+
+## 2026-09-24 (continued) — Chunk 5, one spec added, no app divergence found — two real test bugs found instead
+
+`payment-admin-order.spec.ts` — 1/1 passing. Covers the admin-created-order gap: an order typed
+directly into `/admin/orders/new` (never `startCheckout()`, per the plan's §2d) checked for
+parity with a guest-created one across every §4 surface, then paid via the same manual
+bank-transfer path Chunk 4 proved works. **No real parity divergence found** — same
+`OrdersTable`/`OrderDetail`/CSV code paths a guest order renders through, confirmed
+value-for-value and format-for-format against what Chunk 4 established for a guest order in
+the same paid+invoiced end state. Full writeup: [[16-payment-admin-order]].
+
+Two real bugs surfaced while *building* this spec, both in the test itself, not the app:
+1. A URL-match regex (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matched its own starting page
+   (`/admin/orders/new` — "new" is alphanumeric), so the post-creation redirect check passed
+   instantly without ever waiting for the real navigation, silently capturing the wrong URL for
+   every later "detail page" check. Looked exactly like a data bug at first (the same order,
+   opened directly, rendered its correct total) until an HTML dump of the failing page showed
+   it was still the blank New Order form. Fixed with a negative lookahead excluding that one
+   literal segment.
+2. A small, systematic clock-skew between this machine and Resend's send pipeline (~380ms)
+   made an unbuffered `>=` timestamp comparison fail consistently, not intermittently — no
+   amount of polling fixes a systematic bias. Fixed with a 10-second safety margin on the
+   comparison's start time.
+
+Independently re-verified against the dev DB directly (cleanup temporarily disabled for one
+run to inspect the final state before deleting via the normal admin UI): `Order.paidAt`/
+`invoiceSentAt` both set and independent, `abandonedAt` null throughout, `Payment` row with
+`provider='manual'`, `method='BANK_TRANSFER'`, `settledAt` set, correct amount, and
+`OrderEvent(CREATED).actorType='ADMIN'` (vs. `'GUEST'` for a guest order — the one difference,
+invisible to every UI surface checked, exactly as designed). All test/debug data swept to zero
+afterward. This spec never touches the "Individual bookings" toggle at all — `createOrderAdmin`
+doesn't consult it — so no restore step was needed.
+
+## 2026-09-25 — Chunk 6, one spec added, a real bug found (this one was expected)
+
+`payment-edit-after-payment.spec.ts` — 1/1 passing. Covers the "edit after the fact" gap the
+plan's own research flagged from the start: does editing an already-paid order's guest count
+leave `Payment.amount` and `Order.totalPrice` agreeing? **No — confirmed live, not just read
+from the code.** `updateOrderEnhanced` (`app/actions/orders.ts`) recomputes `Order.totalPrice`
+on an edit but never touches `Payment` at all; `Payment.amount` is written once, at checkout,
+and never revisited.
+
+Live-verified: a real Flitt-settled individual booking (4 guests, ₾480) had its guest count
+raised to 6 through the real admin "Guest Breakdown" panel, at the *same* per-person rate it
+was already sold at. Afterward, every UI surface — admin orders table, order detail, CSV
+export, a freshly re-sent invoice — showed the new ₾720 total, while the `Payment` row
+(read directly via a new helper, `tests/helpers/orderMoneyDb.ts`, since this fact has no UI
+surface anywhere in the app) still showed exactly ₾480, `status='approved'`, `settledAt`
+unchanged. Nothing anywhere in the app flags the disagreement. Logged as `KnownBugs.md` #64,
+not fixed here per [[ClaudeInstructions]] Rule 8 — this chunk's job was to test and document.
+
+Two non-app snags while building this, both about a `Locator` outliving a page navigation —
+took 3 failed runs (200s, 300s, 400s `test.setTimeout`, each independently re-confirming the
+same app behaviour above via direct SQL before its leftover data was cleaned up by hand) to
+find both:
+1. **Runs 1–2:** a CSV-export helper's own internal nav left `page` on `/admin/orders` right
+   before the next step tried to click "Send Invoice" — a button that only exists on the
+   detail page. Playwright's default action timeout is unbounded without an explicit
+   `use.actionTimeout`, so the click just retried silently for the whole run instead of
+   failing fast. Fixed with an explicit nav back to the detail page.
+2. **Run 3:** identical failure shape, one step later — a `rowAfter` locator read again after
+   `page` had since navigated away for the invoice re-send. `mark()` timing (added after run 1)
+   is what made this visible at all: every real step finished by +41s, then nothing, which is
+   indistinguishable from "a step got slow" without per-step timestamps. Fixed by capturing that
+   read at the one point `page` was still actually on `/admin/orders`.
+
+Run 4 passed clean in **45.4s** — confirming the scenario itself was always fast; the first
+three runs were each burning their whole budget on one broken locator. `test.setTimeout` is
+200 000ms in the committed version.
+
+Full writeup: [[17-payment-edit-after-payment]].
+
+## 2026-09-25 — Chunk 6 of Plan-PostPaymentExtras, one spec added, the pieces compose
+
+`payment-post-payment-extras.spec.ts` — 6/6 consecutive passing after fixing two real test bugs
+and rediscovering (the hard way) that tier5 specs need `--config=playwright.staging.config.ts`.
+One order, the whole flow Chunks 1–5 of `Plan-PostPaymentExtras.md` built and verified in
+isolation: real Flitt settlement → Chunk 1's lock confirmed → a real extra → Chunk 3's manual
+top-up (partial) → stage advanced to Confirmed (avoids `KnownBugs.md` #65) → Chunk 4's real
+card-link top-up (the rest) → Chunk 5's itemised "Payments received" list, three distinct
+payments, balance reaching exactly zero → CSV export and a re-sent invoice both reflecting the
+final reconciled state. DB reads via `orderMoneyDb.ts` at every step, not just the end, checked
+against the VERY FIRST snapshot each time (not against the previous check), so a bug that only
+shows up on the second comparison couldn't hide.
+
+**A real environment trap, not a code bug, cost the most time here.** The first two runs used
+the default `npx playwright test` (no `--config`) and both hung the full test timeout inside
+`payAtFlittCheckout`, reporting `net::ERR_CONNECTION_TIMED_OUT` on the redirect off
+`pay.flitt.com` — indistinguishable from a dead sandbox (a direct `curl` to the same failing
+host independently timed out too). Root cause, found via a throwaway debug spec that polled the
+page every 2s after clicking Pay: the checkout's card-submission POST goes to
+`secure-redirect.cloudipsp.com/submit/`, which cannot complete a real approval when the
+merchant's configured callback is `localhost` (the default config's `baseURL`) — a real
+settlement needs a publicly reachable callback, exactly why `playwright.staging.config.ts`
+exists. Switching config fixed it immediately. Documented in `ARCHITECTURE.md` ("Tier 5 runs
+against real staging, not localhost") and `README.md` so this isn't rediscovered from scratch.
+
+Two further real test bugs, both fixed:
+1. **Run 3 (first run under the correct config):** hung again, this time inside the Chunk 1
+   lock-check — `partySizeInput.fill(...)` on a genuinely `disabled` field, wrapped in
+   `.catch(() => {})`, hung forever because Playwright's `.fill()` actionability wait has no
+   timeout of its own by default and `.catch()` never fires without a rejection to catch (the
+   same unbounded-action-timeout shape `17-payment-edit-after-payment.md` already documents).
+   Fixed with an explicit `{ timeout: 3_000 }`.
+2. **Run 5:** a genuine race, not flakiness — `handleRecordPayment` sets its "Payment recorded
+   ✓" confirmation synchronously but calls `router.refresh()` separately, and a one-shot balance
+   read right after the confirmation text sometimes ran before the refreshed server props
+   landed (`Received: "100.00₾"` instead of `"60.00₾"`, once). Fixed by switching to a polling
+   `expect(locator).toHaveText(...)` instead of a one-shot `.textContent()` compare.
+
+Independently re-verified against the dev DB directly (`mcp__a9e48394-...`, cleanup temporarily
+disabled for one run to inspect the live row before deleting it by hand): three `Payment` rows
+summing to exactly `Order.totalPrice`, and — the `KnownBugs.md` #65 regression guard —
+`Order.paidAt` pinned to the FIRST settlement's timestamp, not the second real settlement's,
+confirming the stage-advance step actually worked. All test/debug data (including two earlier
+runs' leftover unpaid throwaway orders, from before the config fix) swept to zero afterward,
+confirmed by follow-up `count(*)` queries. The "Individual bookings" toggle was already at its
+default (`true`) throughout — no `Setting` row was ever written, confirmed by direct query.
+
+Full writeup: [[18-payment-post-payment-extras]].

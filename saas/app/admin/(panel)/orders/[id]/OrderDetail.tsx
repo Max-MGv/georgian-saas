@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri } from '@/lib/money'
+import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany } from '@/app/actions/orders'
+import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
@@ -106,7 +106,38 @@ function InvoiceSentMark({ locale }: { locale: string }) {
  * duplicating that as click targets would give the same action two places to
  * disagree.
  */
-function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; locale: string }) {
+/** How the money arrived, for the small parenthetical beside a done "Paid" step. */
+function paymentMethodLabel(method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL' | null, locale: string) {
+  if (!method) return null
+  const key = method === 'CARD' ? 'paymentMethod.card'
+    : method === 'BANK_TRANSFER' ? 'paymentMethod.bankTransfer'
+    : method === 'CASH' ? 'paymentMethod.cash'
+    : 'paymentMethod.manual'
+  return adminT(locale, key)
+}
+
+/** One settled, non-reversed payment, as passed down from page.tsx. */
+type PaymentRow = { method: 'CARD' | 'BANK_TRANSFER' | 'CASH' | 'MANUAL'; amount: number; settledAt: Date | string }
+
+function FlowLine({ steps, locale, payments }: {
+  steps: ReturnType<typeof buildFlowLine>
+  locale: string
+  /**
+   * Every settled, non-reversed payment for this order, newest first.
+   *
+   * Only ever shown inline beside a done "Paid" step when there is exactly
+   * one — that's the overwhelming majority of orders, and it renders
+   * identically to how this line always has (Plan-PostPaymentExtras Chunk 5).
+   * Two or more payments are deliberately NOT collapsed into this single
+   * label any more: doing that used to silently relabel how the *original*
+   * charge was paid the moment a top-up settled with a different method
+   * (KnownBugs #64 finding 4) — e.g. a card booking topped up with cash would
+   * flip this to "Paid · Cash", implying the whole order was paid in cash.
+   * The real, itemised list renders separately in the Total card instead.
+   */
+  payments?: PaymentRow[]
+}) {
+  const singlePaymentMethod = payments && payments.length === 1 ? payments[0].method : null
   return (
     <div className="flex items-center flex-wrap gap-x-1 gap-y-1.5 mb-4">
       {steps.map((step, i) => (
@@ -126,6 +157,9 @@ function FlowLine({ steps, locale }: { steps: ReturnType<typeof buildFlowLine>; 
               </svg>
             )}
             {labelFor(locale, step.code)}
+            {step.code === 'PAID' && step.done && singlePaymentMethod && (
+              <span style={{ opacity: 0.75, fontWeight: 400 }}>· {paymentMethodLabel(singlePaymentMethod, locale)}</span>
+            )}
           </span>
           {i < steps.length - 1 && (
             <span style={{ color: step.done && steps[i + 1].done ? C.wine : C.border, fontSize: '0.75rem' }}>→</span>
@@ -174,6 +208,10 @@ type OrderProp = {
   completedAt: Date | string | null
   invoiceSentAt: Date | string | null
   paidAt: Date | string | null
+  /** Every settled, non-reversed payment for this order, newest first —
+   *  empty if unpaid. See FlowLine's own comment for why this is a list, not
+   *  a single method (Plan-PostPaymentExtras Chunk 5, KnownBugs #64 finding 4). */
+  payments: PaymentRow[]
   date: Date
   timeSlot: string
   bookingType: string
@@ -191,6 +229,9 @@ type OrderProp = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  /** Sum of this order's settled, non-reversed Payment.amount rows — the
+   *  other half of the balance-due figure (Plan-PostPaymentExtras Chunk 2). */
+  paymentsSettledTotal: number
   // The rates this order was actually sold at. The page's query already loaded
   // them (it uses `include`), but its prop literal listed fields one by one and
   // never passed these three down — so this screen had no way to know what the
@@ -309,6 +350,13 @@ export default function OrderDetail({
   // The party size. Editable since 2026-09-19 because it, not the split, picks
   // the price tier — and because it used to drift from the split on every edit
   // (#54), leaving the invoice and the price describing different bookings.
+  // Once paid, `updateOrderEnhanced` rejects any edit to guest counts/split/
+  // rates/hot-dish/food-notes outright (Chunk 1, KnownBugs #64) — the original
+  // charged amount must stay a fixed historical fact. Every input this card
+  // renders is disabled from here on; "add an extra" is the only way left to
+  // change what's owed on a paid order.
+  const isPaid = order.paidAt != null
+  const lockedInputStyle = { ...inputStyle, opacity: 0.6, cursor: 'not-allowed' } as const
   const [guestCountStr, setGuestCountStr] = useState(String(order.guestCount))
   const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
   const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
@@ -351,6 +399,10 @@ export default function OrderDetail({
     paidAt: order.paidAt,
   })
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  // The 'paid' step swaps the menu to this picker instead of firing right
+  // away, so the ledger records Bank transfer / Cash rather than a guessed
+  // MANUAL. CARD never appears here — only a real Flitt settlement sets it.
+  const [pickingPaymentMethod, setPickingPaymentMethod] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
   const [printReady, setPrintReady] = useState(false)
@@ -358,9 +410,32 @@ export default function OrderDetail({
 
   useEffect(() => {
     if (!statusMenuOpen) return
-    function close() { setStatusMenuOpen(false) }
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
+    // Next's App Router hydrates at `document`, so React's own delegated click
+    // listener lives on the same node this effect adds its listener to — not a
+    // descendant of it. Calling `e.stopPropagation()` inside the menu (below)
+    // only stops the event bubbling to further *ancestors*; it cannot stop a
+    // second, independently-registered listener on that same `document` node
+    // from also running, which is exactly what this one is.
+    //
+    // A plain containment check (`e.target.closest('[data-status-menu]')`) on
+    // a *bubble*-phase listener is not enough, and this was confirmed live,
+    // not assumed: clicking "Paid" swaps the menu's content (the step list
+    // unmounts, the Bank Transfer/Cash picker mounts in its place), and React
+    // flushes that synchronously as part of dispatching the click to its own
+    // (earlier-registered) bubble listener — *before* this listener's turn on
+    // the same `document` node. By the time this ran, `e.target` (the old
+    // "Paid" button) had already been removed from the DOM, so
+    // `.closest()` on a detached node found nothing and this handler
+    // wrongly concluded the click was "outside" and closed what the click had
+    // just opened. Running in the *capture* phase fixes this: capture fires
+    // top-down before the click ever reaches the target, so the containment
+    // check runs while the DOM is still exactly as the user clicked it.
+    function close(e: MouseEvent) {
+      if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
+      setStatusMenuOpen(false); setPickingPaymentMethod(false)
+    }
+    document.addEventListener('click', close, true)
+    return () => document.removeEventListener('click', close, true)
   }, [statusMenuOpen])
 
   useEffect(() => {
@@ -410,6 +485,21 @@ export default function OrderDetail({
     await changeBookingStatus(order.id, change)
   }
 
+  /** A menu step was clicked — 'paid' opens the method picker instead of
+   * firing immediately; everything else behaves as before. */
+  function handleStepClick(step: { code: string; change: BookingStatusChange }) {
+    if (step.code === 'paid') {
+      setPickingPaymentMethod(true)
+      return
+    }
+    handleStatusChange(step.change)
+  }
+
+  function handlePaymentMethodChosen(method: 'BANK_TRANSFER' | 'CASH') {
+    setPickingPaymentMethod(false)
+    handleStatusChange({ kind: 'paid', value: true, method })
+  }
+
   async function handleSendInvoice() {
     setSending(true)
     setSendMsg('')
@@ -440,6 +530,27 @@ export default function OrderDetail({
   const [newExtraLabel, setNewExtraLabel] = useState('')
   const [newExtraAmount, setNewExtraAmount] = useState('')
   const [extraLoading, setExtraLoading] = useState(false)
+
+  // ── Record an additional payment (Plan-PostPaymentExtras Chunk 3,
+  // KnownBugs #64) ────────────────────────────────────────────────────────────
+  const [recordingPayment, setRecordingPayment] = useState(false)
+  const [recordAmount, setRecordAmount] = useState('')
+  const [recordLoading, setRecordLoading] = useState(false)
+  const [recordMsg, setRecordMsg] = useState('')
+
+  // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) ───────
+  // Two steps, not one blind "generate and send" click: generating a real
+  // Flitt checkout and emailing a guest are different actions with different
+  // blast radii, so the admin sees/can copy the real link before choosing to
+  // email it (or send it some other way entirely).
+  const [startingLink, setStartingLink] = useState(false)
+  const [linkAmount, setLinkAmount] = useState('')
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [linkMsg, setLinkMsg] = useState('')
+  const [generatedLink, setGeneratedLink] = useState<{ checkoutUrl: string; paymentId: string } | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
 
   // ── Pricing calculations ───────────────────────────────────────────────────
   const prices = order.company?.prices ?? []
@@ -517,6 +628,14 @@ export default function OrderDetail({
         { masterclass: masterclassAmt, extras: extrasAmt },
       )
     : null
+
+  // What's still owed, once this order has ever been paid — the balance-due
+  // figure from Plan-PostPaymentExtras Chunk 2 (KnownBugs #64). Uses
+  // computedTotal when there is one (it's the same figure a Save would
+  // persist), falling back to the stored total exactly like the display
+  // above does, so this never disagrees with what's shown as "Total".
+  const displayedTotal = computedTotal ?? order.totalPrice
+  const balance = balanceDue(displayedTotal, order.paymentsSettledTotal)
 
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -626,6 +745,87 @@ export default function OrderDetail({
     setExtraLoading(false)
   }
 
+  // ── Record an additional payment ───────────────────────────────────────────
+  // Reads through as major units (₾) the same way the extras amount field
+  // does, then converts at the boundary (bug #45's lesson) — the server is
+  // still the one source of truth for "does this exceed the balance", this
+  // is only what gates whether the buttons are clickable at all.
+  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH') {
+    const amount = fromMajor(parseFloat(recordAmount) || 0)
+    if (amount <= 0) return
+    setRecordLoading(true)
+    setRecordMsg('')
+    const result = await recordTopUpPayment(order.id, { amount, method })
+    setRecordLoading(false)
+    if ('error' in result) {
+      setRecordMsg(result.error)
+      return
+    }
+    setRecordingPayment(false)
+    setRecordAmount('')
+    setRecordMsg(at('orderDetail.recordPayment.savedOk'))
+    setTimeout(() => setRecordMsg(''), 3000)
+    // `paymentsSettledTotal` comes from the server component's own read of
+    // every settled Payment row — a fresh one, not a locally-patched guess,
+    // is what re-renders the balance-due figure correctly after this.
+    router.refresh()
+  }
+
+  // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4) ──────────────────────
+  // Same major-unit-in-the-field, tetri-at-the-boundary pattern as the manual
+  // record-payment field above. No router.refresh() after generating: the
+  // balance-due figure only moves once this checkout actually settles via
+  // the real Flitt callback, not when it's merely created.
+  async function handleGenerateLink() {
+    const amount = fromMajor(parseFloat(linkAmount) || 0)
+    if (amount <= 0) return
+    setLinkLoading(true)
+    setLinkMsg('')
+    const result = await startOrderTopUpCheckout(order.id, { amount })
+    setLinkLoading(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
+    setLinkCopied(false)
+    setEmailSent(false)
+  }
+
+  async function handleCopyLink() {
+    if (!generatedLink) return
+    try {
+      await navigator.clipboard.writeText(generatedLink.checkoutUrl)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 3000)
+    } catch {
+      // Clipboard permission can be denied — the link is still shown as
+      // selectable text, so there's a fallback even if this silently fails.
+    }
+  }
+
+  async function handleEmailLink() {
+    if (!generatedLink) return
+    setEmailSending(true)
+    setLinkMsg('')
+    const result = await sendOrderTopUpCheckoutEmail(order.id, generatedLink.paymentId, locale === 'ka' ? 'ka' : 'en')
+    setEmailSending(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setEmailSent(true)
+  }
+
+  function handleCloseLinkPanel() {
+    setStartingLink(false)
+    setLinkAmount('')
+    setLinkMsg('')
+    setGeneratedLink(null)
+    setLinkCopied(false)
+    setEmailSent(false)
+  }
+
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
   const meatItems = menuItems.filter(i => i.type === 'MEAT')
 
@@ -666,7 +866,7 @@ export default function OrderDetail({
         {/* Action bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Status dropdown */}
-          <div className="relative flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="relative flex items-center gap-1.5" data-status-menu onClick={e => e.stopPropagation()}>
             {(() => {
               const cfg = styleFor(displayCode)
               return (
@@ -686,10 +886,28 @@ export default function OrderDetail({
                 style={{ minWidth: 150, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
                 onClick={e => e.stopPropagation()}
               >
-                {menuSteps.map(step => (
+                {pickingPaymentMethod ? (
+                  <div className="px-3 py-2">
+                    <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
+                    <div className="flex flex-col gap-1">
+                      <button onClick={() => handlePaymentMethodChosen('BANK_TRANSFER')}
+                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                        {at('paymentMethod.bankTransfer')}
+                      </button>
+                      <button onClick={() => handlePaymentMethodChosen('CASH')}
+                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                        {at('paymentMethod.cash')}
+                      </button>
+                      <button onClick={() => setPickingPaymentMethod(false)}
+                        className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
+                        {at('paymentMethod.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                ) : menuSteps.map(step => (
                   <button
                     key={step.code}
-                    onClick={() => handleStatusChange(step.change)}
+                    onClick={() => handleStepClick(step)}
                     className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-amber-50"
                     style={{ color: C.text }}
                   >
@@ -743,7 +961,7 @@ export default function OrderDetail({
           pill because it is the whole story of the order, and the pill is only
           its current position. */}
       {!isCancelled(flow) && (
-        <FlowLine steps={flowSteps} locale={locale} />
+        <FlowLine steps={flowSteps} locale={locale} payments={order.payments} />
       )}
 
       {/* Print portal */}
@@ -762,6 +980,7 @@ export default function OrderDetail({
               name: order.name,
               surname: order.surname,
               totalPrice: order.totalPrice,
+              paymentsSettledTotal: order.paymentsSettledTotal,
               company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
               masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
               extras: extras.map(e => ({ label: e.label, amount: e.amount })),
@@ -880,6 +1099,16 @@ export default function OrderDetail({
 
       {/* ── Guest Breakdown & Dishes ── */}
       <Card title={at('orderDetail.guestBreakdown.title')}>
+        {isPaid && (
+          <div
+            className="text-xs rounded-lg p-3 mb-4"
+            style={{ backgroundColor: '#fef3c7', color: '#92400e' }}
+          >
+            <strong>{at('orderDetail.guestBreakdown.lockedTitle')}</strong>{' '}
+            {at('orderDetail.guestBreakdown.lockedDetail')}
+          </div>
+        )}
+
         {order.bookingType === 'COMPANY' && prices.length === 0 && (
           <div
             className="text-xs rounded-lg p-3 mb-4"
@@ -906,7 +1135,8 @@ export default function OrderDetail({
             value={guestCountStr}
             onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
             onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
-            style={inputStyle}
+            disabled={isPaid}
+            style={isPaid ? lockedInputStyle : inputStyle}
           />
           <p className="text-xs mt-1" style={{ color: C.faint }}>
             {at('orderDetail.guestBreakdown.partySizeHint')}
@@ -932,7 +1162,8 @@ export default function OrderDetail({
               value={tastingGuestsStr}
               onChange={e => setTastingGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setTastingGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
           </div>
           <div>
@@ -946,7 +1177,8 @@ export default function OrderDetail({
               value={lunchGuestsStr}
               onChange={e => setLunchGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setLunchGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
           </div>
           <div>
@@ -960,7 +1192,8 @@ export default function OrderDetail({
               value={freeGuestsStr}
               onChange={e => setFreeGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={e => setFreeGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             />
             <p className="text-xs mt-0.5" style={{ color: C.faint }}>
               {at('orderDetail.guestBreakdown.freeGuestsHint')}
@@ -987,8 +1220,9 @@ export default function OrderDetail({
                 </span>
                 <button
                   onClick={() => setCustomRates(true)}
+                  disabled={isPaid}
                   className="text-xs px-3 py-1 rounded-lg font-medium text-white"
-                  style={{ backgroundColor: C.wine }}
+                  style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
                 >
                   {at('orderDetail.guestBreakdown.editRates')}
                 </button>
@@ -1022,7 +1256,8 @@ export default function OrderDetail({
                       value={manualTastingRateStr}
                       onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
                       onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                      style={inputStyle}
+                      disabled={isPaid}
+                      style={isPaid ? lockedInputStyle : inputStyle}
                     />
                   </div>
                   <div>
@@ -1033,7 +1268,8 @@ export default function OrderDetail({
                         value={manualLunchRateStr}
                         onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
                         onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                        style={inputStyle}
+                        disabled={isPaid}
+                        style={isPaid ? lockedInputStyle : inputStyle}
                       />
                     </div>
                 </div>
@@ -1051,7 +1287,8 @@ export default function OrderDetail({
             <select
               value={hotDishVeg}
               onChange={e => setHotDishVeg(e.target.value)}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {vegItems.map(i => (
@@ -1069,7 +1306,8 @@ export default function OrderDetail({
             <select
               value={hotDishMeat}
               onChange={e => setHotDishMeat(e.target.value)}
-              style={inputStyle}
+              disabled={isPaid}
+              style={isPaid ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {meatItems.map(i => (
@@ -1098,17 +1336,18 @@ export default function OrderDetail({
             value={foodNotes}
             onChange={e => setFoodNotes(e.target.value)}
             rows={2}
+            disabled={isPaid}
             placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
-            style={{ ...inputStyle, resize: 'vertical' }}
+            style={{ ...(isPaid ? lockedInputStyle : inputStyle), resize: 'vertical' }}
           />
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || isPaid}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: C.wine }}
+            style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
           >
             {saving ? at('orderDetail.guestBreakdown.saving') : at('orderDetail.guestBreakdown.saveChanges')}
           </button>
@@ -1502,6 +1741,223 @@ export default function OrderDetail({
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
             {at('orderDetail.total.livePreview')}
           </p>
+        )}
+
+        {/* Itemised payments (Plan-PostPaymentExtras Chunk 5, KnownBugs #64
+            finding 4) — only once there's more than one, so the single-payment
+            case (the overwhelming majority of orders) keeps rendering exactly
+            as it always has: just the flow-line's "Paid · <method>" above,
+            with nothing repeated down here. Two or more payments get a real,
+            dated breakdown instead of the old single collapsed label, so a
+            differently-paid top-up can never again be mistaken for how the
+            original, larger charge was made. */}
+        {order.payments.length > 1 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            <p className="text-xs font-semibold mb-1.5" style={{ color: C.muted }}>
+              {at('orderDetail.total.paymentsTitle')}
+            </p>
+            <div className="space-y-1">
+              {order.payments.map((p, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <span style={{ color: C.muted }}>
+                    {paymentMethodLabel(p.method, locale)} · {formatDate(new Date(p.settledAt))}
+                  </span>
+                  <span style={{ color: C.text }}>{formatTetri(asTetri(p.amount), { decimals: true })}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only
+            once this order has been paid at least once. An unpaid order's
+            "balance" is just its whole total, which the Total row above
+            already says; repeating it here would be noise, not information. */}
+        {isPaid && balance !== 0 && (
+          <div
+            className="mt-2 pt-2 flex justify-between items-center border-t"
+            style={{ borderColor: C.border }}
+          >
+            <span className="text-sm font-semibold" style={{ color: balance > 0 ? '#92400e' : C.muted }}>
+              {balance > 0 ? at('orderDetail.total.balanceDue') : at('orderDetail.total.credit')}
+            </span>
+            <span className="text-base font-bold" style={{ color: balance > 0 ? '#92400e' : C.muted }}>
+              {formatTetri(asTetri(Math.abs(balance)), { decimals: true })}
+            </span>
+          </div>
+        )}
+
+        {/* Record an additional payment (Plan-PostPaymentExtras Chunk 3,
+            KnownBugs #64) — only offered once there is a real, positive
+            balance to collect. A credit (balance < 0) has nothing to record
+            a payment against; that case is display-only. */}
+        {isPaid && balance > 0 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {!recordingPayment ? (
+              <button
+                onClick={() => {
+                  setRecordingPayment(true)
+                  setRecordAmount(String(toMajor(balance)))
+                  setRecordMsg('')
+                }}
+                className="text-sm font-medium"
+                style={{ color: C.wine }}
+              >
+                {at('orderDetail.recordPayment.button')}
+              </button>
+            ) : (
+              <div className="flex items-end gap-2 flex-wrap">
+                <div style={{ width: 110 }}>
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                    {at('orderDetail.extras.amount')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={toMajor(balance)}
+                    step="0.01"
+                    value={recordAmount}
+                    onChange={e => setRecordAmount(e.target.value)}
+                    style={inputStyle}
+                    disabled={recordLoading}
+                  />
+                </div>
+                <div style={{ flex: '1 1 160px' }}>
+                  <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => handleRecordPayment('BANK_TRANSFER')}
+                      disabled={recordLoading || !((parseFloat(recordAmount) || 0) > 0)}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {at('paymentMethod.bankTransfer')}
+                    </button>
+                    <button
+                      onClick={() => handleRecordPayment('CASH')}
+                      disabled={recordLoading || !((parseFloat(recordAmount) || 0) > 0)}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {at('paymentMethod.cash')}
+                    </button>
+                    <button
+                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg('') }}
+                      disabled={recordLoading}
+                      className="text-xs px-2 py-1.5"
+                      style={{ color: C.muted }}
+                    >
+                      {at('paymentMethod.cancel')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {recordMsg && (
+              <p className="text-xs mt-2" style={{ color: C.faint }}>{recordMsg}</p>
+            )}
+          </div>
+        )}
+
+        {/* Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) —
+            the guest's own card, alongside the manual entry above. Same gate
+            as "Record payment": only offered against a real, positive
+            balance. */}
+        {isPaid && balance > 0 && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {!startingLink ? (
+              <button
+                onClick={() => {
+                  setStartingLink(true)
+                  setLinkAmount(String(toMajor(balance)))
+                  setLinkMsg('')
+                }}
+                className="text-sm font-medium"
+                style={{ color: C.wine }}
+              >
+                {at('orderDetail.topUpCheckout.button')}
+              </button>
+            ) : !generatedLink ? (
+              <div className="flex items-end gap-2 flex-wrap">
+                <div style={{ width: 110 }}>
+                  <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                    {at('orderDetail.extras.amount')}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={toMajor(balance)}
+                    step="0.01"
+                    value={linkAmount}
+                    onChange={e => setLinkAmount(e.target.value)}
+                    style={inputStyle}
+                    disabled={linkLoading}
+                  />
+                </div>
+                <button
+                  onClick={handleGenerateLink}
+                  disabled={linkLoading || !((parseFloat(linkAmount) || 0) > 0)}
+                  className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                  style={{ backgroundColor: '#16a34a' }}
+                >
+                  {at('orderDetail.topUpCheckout.generate')}
+                </button>
+                <button
+                  onClick={handleCloseLinkPanel}
+                  disabled={linkLoading}
+                  className="text-xs px-2 py-1.5"
+                  style={{ color: C.muted }}
+                >
+                  {at('paymentMethod.cancel')}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                  {at('orderDetail.topUpCheckout.linkLabel')}
+                </label>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedLink.checkoutUrl}
+                    onFocus={e => e.currentTarget.select()}
+                    style={{ ...inputStyle, width: 260, fontSize: '0.75rem' }}
+                  />
+                  <button
+                    onClick={handleCopyLink}
+                    className="text-xs px-2 py-1.5 rounded font-medium"
+                    style={{ border: `1px solid ${C.border}`, color: C.text }}
+                  >
+                    {linkCopied ? at('orderDetail.topUpCheckout.copied') : at('orderDetail.topUpCheckout.copy')}
+                  </button>
+                  {order.email ? (
+                    <button
+                      onClick={handleEmailLink}
+                      disabled={emailSending}
+                      className="text-xs px-2 py-1.5 rounded font-medium text-white disabled:opacity-50"
+                      style={{ backgroundColor: '#16a34a' }}
+                    >
+                      {emailSent ? at('orderDetail.topUpCheckout.emailSent') : at('orderDetail.topUpCheckout.emailButton')}
+                    </button>
+                  ) : null}
+                  <button
+                    onClick={handleCloseLinkPanel}
+                    className="text-xs px-2 py-1.5"
+                    style={{ color: C.muted }}
+                  >
+                    {at('orderDetail.topUpCheckout.done')}
+                  </button>
+                </div>
+                {!order.email && (
+                  <p className="text-xs" style={{ color: C.faint }}>{at('orderDetail.topUpCheckout.noEmail')}</p>
+                )}
+              </div>
+            )}
+            {linkMsg && (
+              <p className="text-xs mt-2" style={{ color: C.faint }}>{linkMsg}</p>
+            )}
+          </div>
         )}
       </Card>
     </div>

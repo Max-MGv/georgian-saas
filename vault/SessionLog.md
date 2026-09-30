@@ -8,7 +8,616 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-23 (newest) — Contact Roles chunk 14: close-out — vault writeups, the `createTenant()` fix, a blind audit
+## 2026-09-29 (newest) — Four open bugs verified live, four fixed: #65, #53, #61, #19
+
+Went through every `KnownBugs.md` 🔴 Open entry one by one and tried to actually reproduce each,
+rather than trust the log. Two turned out to already be resolved with no fix commit to explain
+why (#30 — nightly demo reseed, confirmed via direct prod DB query: no trace of the stale
+hand-made booking, counts match a fresh seed exactly; #58 — abandoned wine orders not showing on
+`/admin/abandoned`, confirmed live on Staging Winery's real admin panel with a genuine
+Flitt-abandoned row). Both marked resolved with the caveat that root cause was never found, so
+nothing guarantees either won't recur. #41 (test-rls false alarm) and #63 (mobile dropdown tap
+targets) confirmed still exactly as documented, code unchanged. That left four genuinely open,
+fixable bugs, tackled one at a time — each built by a dispatched subagent, independently
+re-verified afterward (diff read, tsc, re-run their regression evidence myself, direct DB checks)
+rather than taking the implementer's word for it.
+
+**#65 — `Order.paidAt` drags forward on a second settlement.** One-line-conceptually fix:
+`paidAt: null` added to `settle.ts`'s existing `stage: 'NEW'` guard on both `Order` and
+`WineOrder` writes. Verified independently by re-running the reproduction: before the fix, a
+second real settlement moved `paidAt` to its own timestamp; after, it stays at the first. 11/11
+on the regression script both when the subagent ran it and when I reran it myself.
+
+**#53 — settlement confirmation email never reached Resend's send log.** The obvious fix (wrap
+the existing fire-and-forget call in `after()`, right where it stood inside `settlePayment()`)
+would have been wrong — `after()` throws outside a real Next.js request context, and
+`settlePayment()` is also called directly by two standalone scripts including #65's own new
+regression test. Fixed by moving the `after()`-wrapped call out to both Route Handlers
+(`callback/route.ts`, `return/route.ts`), which are always genuinely inside a request;
+`settlePayment()` itself now just reports `orderId`/`wineOrderId` and stays callable from
+anywhere. Verified independently with my own real HTTP POST straight at the running dev server —
+`200 {"status":"ok","outcome":"settled"}`, no notification-failed log line, no request-scope
+error.
+
+**#61 — no reconciliation if both Flitt channels fail.** Built the reconciliation job the bug
+entry itself had proposed: a daily cron (`/api/cron/reconcile-payments`, Vercel Hobby only allows
+once-a-day) that asks Flitt's real status API about anything stuck with zero callback for 1h–7d,
+and hands a confirmed approval straight into the same, unmodified `settlePayment()` — no
+duplicated settlement logic. Two decisions checked with Max before building rather than assumed:
+auto-settle (not flag-for-review) and daily cadence is acceptable. Verified against Flitt's real
+test merchant, not simulated: one round trip on an untouched checkout, and one where a real
+completed payment was deliberately reset to "as if neither channel ever told us" and the job
+correctly found and re-settled it — the same run also found a genuinely pre-existing, unrelated
+stuck payment from 2026-09-22 and correctly skipped it without crashing. Known, stated gap: a
+stuck *second* checkout attempt on an already-paid order (the post-payment top-up flow) can't be
+reconciled today because Flitt's own order_id for that attempt is never persisted anywhere —
+would need a schema migration, deliberately left open rather than folded in here.
+
+**#19 — no rate limiting anywhere.** Turned out to be a narrower question than it first looked:
+`StressTest-2026-08-12.md`'s actual incident was mostly a page-view burst exhausting the DB
+connection ceiling, which a form-submission rate limiter alone was never going to stop — but that
+report's own top recommendation was still to build the limiter first anyway, with connection-pool
+tuning as a separate, deferred piece. Checked scope and thresholds with Max before building.
+Generalized the demo-only limiter (`lib/demoRateLimit.ts`, a documented no-op for every real
+tenant) into `lib/writeRateLimit.ts`: every tenant's booking/wine-order forms are now throttled,
+demo keeps 5/10min, real tenants get a looser 20/10min sized not to catch a legitimate coach party
+or shared office network. The subagent building it caught and fixed a real correctness gap that
+wasn't explicitly specified — bucket keys needed to become tenant-scoped, or two different
+wineries' visitors sharing an IP would wrongly throttle each other now that every tenant shares
+the same map. Verified live through the real public booking form, not a bypassed function call —
+the exact rendered rejection message, no "shared demo" text, no order created for the rejected
+attempt. **Still open, deliberately:** the read-path/connection-pool half of the original bug —
+a pure page-view traffic spike with no form submissions involved is still unprotected.
+
+All four fixes are on `staging`, uncommitted — nothing pushed, nothing merged to `master`, per
+usual. `KnownBugs.md` updated for all six entries (#65, #53, #61, #19 resolved; #30, #58 resolved
+with the "root cause never confirmed" caveat stated plainly); #41 and #63 left open as-is, nothing
+changed about them.
+
+**Same-day follow-up, on request ("let's do it now, i want to close all bugs"):** #61's own
+stated gap — a stuck *second* Flitt checkout attempt (the post-payment top-up flow) couldn't be
+reconciled, because the `order_id` actually sent to Flitt for that attempt was never persisted
+anywhere — closed with a small migration, `Payment.flittOrderId String?`
+(`20260929112047_add_payment_flitt_order_id`). `startCheckout()` now writes it on every checkout,
+override or not; the reconciliation job reads it directly instead of guessing. Dev server stopped
+before the migration and restarted after, per Rule 10. Verified independently after the fact: the
+column confirmed live on the dev DB by direct query, and a real booking driven through Staging
+Winery's actual public form (browser, not a bypassed call) confirmed `flittOrderId` lands
+correctly on the resulting `Payment` row. Both payment regression scripts reconfirmed clean.
+**Where the eight bugs that were 🔴 Open this morning stand now:** six fixed or found
+already-resolved today (#65, #53, #61, #19, #30, #58). Two are still genuinely open, deliberately
+— **not closed, and this entry should not be read as claiming otherwise**: #41 (`test-rls.ts`'s
+false-alarm risk on an empty `Order` table — code unchanged, just not currently triggering because
+the table isn't empty right now) and #63 (mobile status-dropdown tap size — Max's own explicit
+"record for later, revisit when convenient" call, not a defect). Both remain 🔴 in `KnownBugs.md`,
+correctly.
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 7 built: documentation, closing bug #64 and the whole 7-chunk plan
+
+Built Chunk 7 (documentation only, no app code) of `vault/Plan-PostPaymentExtras.md` — the final
+chunk. This closes the arc that started with `KnownBugs.md` #64, found 2026-09-25 live while
+testing an unrelated payment flow: editing an already-paid order silently detached its displayed
+total from the amount actually charged, with nothing anywhere able to tell.
+
+**`KnownBugs.md` #64 marked 🟢 Resolved**, after rereading its original description in full
+against all 6 build chunks' own Result sections — a real sanity check, not busywork, since the
+task asked specifically to confirm nothing about the original scope was left open. It wasn't:
+the guest-count/rate-edit path (the entry's main, live-reproduced scenario) is closed by Chunk 1
+(`f2149e7`, locks price-affecting fields once `paidAt` is set); the extras path is closed by
+Chunk 2 (`763a2f1`, a computed, always-visible balance-due everywhere the total is shown); Chunks
+3 (`9e64241`) and 4 (`d331c66`) supply the actual mechanism to collect that balance for real, as a
+genuine second `Payment` row, manually or by card-link checkout with Flitt's `order_id` decoupled
+from `Payment.orderId`; Chunk 5 (`9dff238`) fixes the one display regression a second payment
+would otherwise cause (a top-up in a different method silently relabeling how the *original*
+charge was paid); Chunk 6 (`7cb45ab`/`5f1dc57`) proved the whole chain end to end, 6 consecutive
+real runs against Flitt's real test merchant, no new app bug. The resolution text on #64 links
+all 6 chunks' commits and `[[Plan-PostPaymentExtras]]`. **`KnownBugs.md` #65** — the separate,
+unrelated `settle.ts` bug Chunk 4 found live (`Order.paidAt` drags forward on a second settlement
+while stage stays `NEW`) — was deliberately left untouched, still open, per the task's own
+instruction.
+
+**`FeatureLog.md`** gained one new consolidated row, #213, alongside the existing per-chunk rows
+#208–#212 (added by Chunks 1–5) — added because Chunk 6, the end-to-end Playwright regression,
+built no application code and so had no row of its own under the usual convention; without a
+summary row its test coverage would have been invisible from `FeatureLog.md` alone. The new row
+points at the per-chunk rows rather than repeating their content.
+
+**`Roadmap.md`** was searched for any mention of this work or bug #64 — found nothing. This plan
+document (`vault/Plan-PostPaymentExtras.md`) was the only tracker for it; nothing was invented to
+fill a gap that was never really there.
+
+**`playwright/README.md`/`ARCHITECTURE.md`** already carry the tier5
+`--config=playwright.staging.config.ts` convention note Chunk 6 added when it hit that exact
+environment trap live — reread both in full, found complete, added nothing further.
+
+**The whole `Plan-PostPaymentExtras.md` plan is now closed** — all 7 chunks ✅, resume point
+updated to say there is nothing left to resume. A genuinely satisfying close: this plan exists
+because bug #64 was a real, live-verified money-integrity gap (a real customer's charged amount
+and displayed total silently disagreeing, symmetrically in either direction, with no screen able
+to catch it) — seven chunks later, that gap has a deliberate, visible, fully-tested replacement:
+locked originals, visible balances, two legitimate ways to collect a top-up, correct multi-payment
+display, and one real end-to-end test run six times against real money movement through Flitt's
+sandbox. `KnownBugs.md` #65 remains the one open thread from this work, logged and out of scope,
+ready to be picked up on its own.
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 6 built: end-to-end Playwright regression, all five prior chunks proven to compose
+
+Built Chunk 6 of `vault/Plan-PostPaymentExtras.md` — one real Playwright spec,
+`saas/tests/tier5-payment-e2e/payment-post-payment-extras.spec.ts`, proving Chunks 1–5 work
+together on a single order, not just in isolation on their own throwaway orders. Reused every
+existing tier5 helper (`auth.ts`, `payments.ts`, `bookingForm.ts`, `flittPayment.ts`,
+`credentials.ts`, `resendCheck.ts`, `orderMoneyDb.ts`) — no new helper needed. The scenario: a
+real Flitt settlement → Chunk 1's lock confirmed (disabled fields, a genuinely bounded edit
+attempt that has no effect) → a real ₾100 extra with balance-due confirmed on both the order
+detail page and the orders table → the booking stage deliberately advanced to Confirmed
+(avoiding `KnownBugs.md` #65 — see below) → a real ₾40 partial manual top-up (Chunk 3) → a real
+card-link checkout for the remaining ₾60, generated and paid through Flitt's actual hosted
+checkout (Chunk 4) → Chunk 5's itemised "Payments received" list (three distinct payments,
+balance reaching exactly zero, bare "Paid" with no method suffix) → a CSV export and a re-sent
+invoice both reflecting the final, fully-reconciled state. Five separate direct-DB reads run
+through the scenario, each re-checking the original payment against its very first snapshot, not
+just the previous check.
+
+**Deliberately avoided KnownBugs #65, not accidentally.** The spec's second real settlement (the
+card-link top-up) would otherwise drag `Order.paidAt` forward per bug #65's own documented shape
+— fixed by advancing the order's stage to Confirmed before that settlement, the same avoidance
+the design spike used. The spec's final DB read explicitly confirms `Order.paidAt` stayed pinned
+to the FIRST settlement's timestamp, live evidence the avoidance actually worked.
+
+**A real environment trap cost the most debugging time, and it wasn't an app bug.** The first two
+runs used the default `npx playwright test` config (localhost) and both hung for the full test
+timeout inside the Flitt-checkout helper with a `net::ERR_CONNECTION_TIMED_OUT` that looked
+exactly like a dead third-party sandbox. Root cause, found via a throwaway debug spec: a real
+Flitt approval needs a publicly reachable callback URL, which `localhost` can never be — tier5
+specs have always needed `--config=playwright.staging.config.ts` (targets the real
+`staging.vineworks.ge`, still the dev DB), a requirement that turned out to be undocumented
+anywhere in `playwright/README.md` or `playwright/ARCHITECTURE.md`. Both files now carry a clear
+note about it, closing a real gap for future sessions. Two further real test bugs were found and
+fixed along the way (an unbounded `.fill()` action timeout on a disabled field, and a genuine
+UI-refresh race on the manual top-up's balance read) — neither was an application bug; everything
+Chunks 1–5 built worked correctly together on the first run under the correct config.
+
+**Verified for real:** 6 consecutive passing runs against `staging.vineworks.ge` (per the task's
+own instruction to run more than once for a real-money-flow scenario), `tsc --noEmit` clean, and
+an independent direct-SQL check (dev project `jpbkkngpgtvqmsocitjx`, via `mcp__a9e48394-...`) —
+one run's cleanup was temporarily skipped specifically to confirm the live row matched the
+spec's own assertions exactly, then cleaned up by hand. All test/debug data (including two
+leftover unpaid throwaway orders from the pre-config-fix runs) swept to zero, confirmed by
+follow-up queries. No new application bug was found.
+
+Full write-up (all verification steps, both test-bug fixes, the environment-trap narrative, the
+independent SQL results) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 6 Result section and
+`playwright/notes/18-payment-post-payment-extras.md`. **Next: Chunk 7** (documentation — close
+out `KnownBugs.md` #64, `FeatureLog.md`, `Roadmap.md`).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 5 built: fixed the multi-payment display, closing bug #64 finding 4
+
+Built Chunk 5 of `vault/Plan-PostPaymentExtras.md` — the display fix that finding 4 (surfaced
+live during Chunk 4) was waiting on. `saas/app/admin/(panel)/orders/[id]/page.tsx`'s `payments`
+query (already narrowed to settled, non-reversed rows by Chunk 2) now also selects `settledAt`
+and passes the whole list to `OrderDetail.tsx` instead of collapsing it to
+`order.payments[0]?.method` — the exact line that let a top-up with a different method than the
+original charge silently relabel how the whole order was paid. `OrderDetail.tsx`'s `FlowLine`
+now takes the full `payments` list: with **exactly one** payment (the overwhelming majority of
+orders) it renders precisely as it always has — "Paid · <method>" — a deliberate choice over
+also adding a date, on the reasoning that "must render essentially as it does today" is most
+literally satisfied by no visual change at all for the common case. With **two or more**
+payments, the flow-line shows bare "Paid" (no method — there's no single correct one to show),
+and a new "Payments received" section appears in the Total card with a real, dated line per
+payment (`<method> · <date>` via the existing `paymentMethodLabel()`/`formatDate()` helpers,
+amount via `formatTetri`). New `orderDetail.total.paymentsTitle` key, both languages, parity
+1133/1133. `tsc --noEmit` clean (one nullability assertion needed on `settledAt`, since the
+query's own `where` guarantees it non-null but Prisma's type doesn't narrow on that).
+
+Verified live on `staging.vineworks.ge` against the dev DB. **Single-payment regression check:**
+a throwaway ₾400 order marked Paid · Bank transfer rendered exactly as before this chunk — flow
+-line "Paid · Bank transfer", no itemised section anywhere, confirmed by reading the live page
+text, DB read confirming the one `Payment` row matches. **The actual bug fix, with two genuinely
+different methods** (unlike the design spike's and Chunk 4's own two-payment tests, which each
+happened to use the same method twice): a second throwaway order paid ₾400 **Bank transfer**,
+given a ₾150 extra (balance ₾150), then topped up the full balance in **Cash** via Chunk 3's real
+UI. Live page read afterward: flow-line read bare "Paid", and "Payments received" listed both —
+`Cash · 25 Sept 2026 — 150.00₾` then `Bank transfer · 25 Sept 2026 — 400.00₾` (newest first) —
+with the original Bank transfer entry completely unaffected by the later Cash payment, exactly
+the property finding 4 said was broken. Direct SQL confirmed both `Payment` rows exactly
+(40000 BANK_TRANSFER + 15000 CASH = 55000 tetri = `Order.totalPrice`), matching the rendered
+page. Chunks 1/3/4 sanity-checked intact (lock note present, "Record payment" used successfully,
+"Send card-payment link" rendered correctly) — confirmed by the diff itself that nothing in
+`updateOrderEnhanced`, `recordManualPayment`, `recordAdditionalPayment`, `startCheckout`, or
+`settle.ts` was touched. Both throwaway orders and every child row cleaned up, confirmed gone
+(0/0/0/0) by direct SQL and a `notFound()` on the old URL.
+
+Committed `9dff238` on `staging`, pushed. Full write-up (the single/multi rendering decision and
+reasoning, all verification steps, both deviations from the plan's own suggested test) is in
+`vault/Plan-PostPaymentExtras.md`'s Chunk 5 Result section. `KnownBugs.md` #65 (`settle.ts`
+dragging `Order.paidAt` forward on a second settlement while stage stays `NEW`) remains open,
+deliberately untouched again — out of scope for a display-only fix. **Next: Chunk 6**
+(end-to-end Playwright regression, extending `saas/tests/tier5-payment-e2e/`).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 4 built: card-link top-up, plus a new bug found live (#65)
+
+Built Chunk 4 of `vault/Plan-PostPaymentExtras.md` — the card-paying sibling of Chunk 3's manual
+top-up. `startCheckout()` (`saas/lib/payments/startCheckout.ts`) gained an optional
+`flittOrderId` override (every existing caller omits it and is byte-for-byte unchanged); a new
+file, `saas/lib/payments/topUpCheckout.ts`, is the one caller that supplies one —
+`mintTopUpFlittOrderId()` mints a fresh, traceable-by-eye string per checkout attempt
+(`${orderId}-topup-${timestamp}-${random}`), closing bug #64 finding 3 (Flitt rejects a second
+checkout that reuses the same `order_id`). `Payment.orderId` always carries the real internal
+order id regardless of what was sent to Flitt — confirmed nothing in `schema.prisma` stores
+Flitt's own `order_id` anywhere before relying on that. Two new admin server actions in
+`saas/app/actions/orders.ts`: `startOrderTopUpCheckout` (validates the amount against a fresh
+balance read, calls Flitt, returns the checkout URL) and `sendOrderTopUpCheckoutEmail` (looks
+the `Payment` row up by id, sends via a new bilingual template,
+`topUpCheckoutEmailTemplate.ts`, modelled on the invoice email's own conventions). Deliberately
+two separate actions, not one blind "generate and send": lets the admin see/copy the real link
+before deciding to email it, and kept checkout-generation independently testable from the email
+send. Neither consults `shouldTakePayment()` (ground rule 5). Partial collection by card is
+supported, matching Chunk 3's own reasoning. New i18n keys both languages, parity 1132/1132.
+`tsc --noEmit` clean.
+
+Verified live on `staging.vineworks.ge` against the dev DB and Flitt's real test merchant: a
+throwaway order paid manually (₾400, Bank transfer) then given a ₾150 extra (balance ₾150) was
+topped up twice by real card-link checkout — ₾100 then the remaining ₾50 — each generating a
+genuinely distinct Flitt checkout (different `token`, no "Duplicate order" rejection on the
+second attempt, directly proving finding 3's fix holds across repeated attempts, not just once).
+Both were **actually paid** via the browser tools using Flitt's real hosted checkout and the
+non-3DS approve test card (`4444555511116666`), both redirected back to
+`/payment/result?status=success`, both settled for real. Direct SQL after each step confirmed:
+the new `Payment` rows (`provider: 'flitt', status: 'approved'`, correct amounts, distinct
+`providerPaymentId`s, `orderId` = the real internal id) and the original manual payment
+completely untouched throughout (`40000`, `recorded`, same `settledAt`). Balance recomputed
+correctly to ₾50 then to zero on the real page; over-amount was rejected with the same class of
+message Chunk 3 already proved. Chunk 1's lock and Chunk 3's own code path reconfirmed intact
+(diff-clean). Finding 4 (the "Paid · method" label) was live-confirmed to actually flip — it now
+reads "Paid · Card" — closing the one part of that finding the design spike had only reasoned
+about, not observed. Email content verified by calling `renderTopUpCheckoutEmail()` directly
+with real data in both locales (no real send — the hard boundary on this session explicitly
+required that; "Email to guest" was never clicked). Cleaned up all throwaway rows, confirmed
+0/0/0/0 by direct SQL.
+
+**A new, real, previously-unknown bug was found live during this verification, not fixed here:**
+`settle.ts`'s `paidAt`-setting write is guarded on `stage: 'NEW'`, not on `paidAt: null` — so a
+second real settlement on an order still sitting in stage `NEW` (an ordinary case, not
+contrived) silently drags `Order.paidAt` forward to the newest payment's time instead of the
+first. Confirmed twice in this session's own test (paidAt moved after both the ₾100 and the ₾50
+top-up). The design spike behind this plan had tested a second settlement too but happened to
+advance the order's stage to `CONFIRMED` first, which is exactly what avoided exposing this.
+Logged as `KnownBugs.md` #65, not fixed here — `settle.ts` is the shared, heavily-hardened file
+behind bug #60's saga and deserves its own dedicated fix and verification, not a rushed addition
+to this chunk's commit. Flagged prominently in `Plan-PostPaymentExtras.md`'s "Resume point" for
+whoever picks up Chunk 5, since Chunk 5 is already working in this same "more than one payment
+landed" territory.
+
+Committed `d331c66` on `staging`, pushed. Full write-up (all verification steps, the two UX
+decisions — two-step generate/email, partial-by-card supported — and the new bug's full
+narrative) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 4 Result section. **Next: Chunk 5**
+(fix the multi-payment display) — **read Chunk 4's Result section and `KnownBugs.md` #65
+first.**
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 3 built: a real second manual payment, closing bug #64 finding 1
+
+Built Chunk 3 of `vault/Plan-PostPaymentExtras.md`. `recordManualPayment`/`hasLivePayment`
+(`saas/lib/payments/manualPayment.ts`) correctly no-op a second "mark as paid" toggle so the
+same charge is never double-recorded — but that guard also silently swallowed a genuine
+top-up after a post-payment extra, which is bug #64 finding 1. Left that guard completely
+untouched (byte-for-byte, confirmed by diff) and added a new, separate function,
+`recordAdditionalPayment`, that always writes a new `Payment` row. It validates the requested
+amount against `balanceDue()` computed fresh inside the same transaction (a real read of
+`Order.totalPrice` and a real sum of settled payments, not a value trusted from before the
+transaction opened) — rejects zero/negative outright, rejects more than the current balance
+outright (clamping would silently record an amount the admin never typed), and fully supports
+partial collection. Only supports a real `orderId`, not the module's usual `wineOrderId` half
+of `OrderRef` — Chunk 2's balance-due concept was never wired up for wine orders, so accepting
+one here would validate against a concept that doesn't exist for it.
+
+Wired into the order detail page via a new `recordTopUpPayment` server action
+(`saas/app/actions/orders.ts`), gated on a positive balance due, reusing the existing
+"How was this paid? Bank transfer / Cash" picker convention from bug #62 rather than
+inventing a new one. Admin-initiated and deliberate — does not consult `shouldTakePayment()`,
+per ground rule 5. Records a new `ADDITIONAL_PAYMENT_RECORDED` `OrderEventType` (new enum
+value; needed a real migration since Prisma enums are native Postgres enums —
+`20260925123830_add_additional_payment_event_type`, applied against the dev DB only), matching
+the `addOrderExtra`/`removeOrderExtra` event pattern. New i18n keys added both languages,
+parity 1123/1123.
+
+Verified live on `staging.vineworks.ge` against the dev DB: a throwaway ₾400 order marked
+Paid · Bank transfer, given a real ₾240 extra (balance due ₾240), then a real ₾100 partial
+top-up through the actual UI — balance recomputed to ₾140 live, and a direct SQL read
+confirmed two genuinely independent `Payment` rows (₾400 original untouched byte-for-byte:
+same amount/status/settledAt; ₾100 new, both settled, neither reversed). A second ₾140 top-up
+(Cash this time) brought the balance to exactly zero — three `Payment` rows total, summing to
+the ₾640 total exactly, "Record payment" correctly disappearing once the balance hit zero.
+Added a further ₾50 extra to re-open a balance, then confirmed live that requesting ₾100
+against a ₾50 balance is rejected with `"That's more than the outstanding balance of 50.00₾.
+Record at most the balance due — if more than that is genuinely owed, add it as an extra
+first."` and creates no row (DB read: still 3 rows, same total) — then recorded exactly ₾50
+to close it, confirming the exact-balance boundary succeeds. `OrderEvent` history read back
+correctly: CREATED, PAID, EXTRA_ADDED ×2, ADDITIONAL_PAYMENT_RECORDED ×3 (one per successful
+top-up, none for the rejected attempt), each payload carrying the right amount/method.
+Chunk 1's lock reconfirmed intact (all 7 guest-breakdown inputs still `disabled: true`).
+The unrelated "mark as paid" toggle was sanity-checked by diff rather than a live toggle — the
+order-detail page's status dropdown only offers *unreached* steps, so there was no live path to
+re-trigger "Paid" on an already-paid order to click through; `git diff` between the Chunk 2 and
+Chunk 3 commits confirms `hasLivePayment`/`recordManualPayment`/`reverseManualPayments` and
+`changeBookingStatus` are unchanged except for one import line, with only new code appended.
+`tsc --noEmit` clean throughout. Cleaned up the throwaway order/payments/extras/events
+afterward, confirmed gone (0/0/0/0) by direct SQL and absent from the live orders list.
+Committed `9e64241` on `staging`, pushed.
+
+Full write-up (all verification steps, the partial/over-payment reasoning, and the
+OrderEvent/migration decision) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 3 Result section.
+**Next: Chunk 4** (card-link top-up — decouple Flitt's `order_id` from `Payment.orderId`, new
+admin action, email delivery).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 2 built: computed balance-due, closing bug #64's second path
+
+Built Chunk 2 of `vault/Plan-PostPaymentExtras.md`. `addOrderExtra` (`saas/app/actions/orderExtras.ts`)
+already repriced a paid order's `totalPrice` with zero payment attached and nothing anywhere
+said so — deliberate per the plan's design (an extra is the legitimate way to describe a
+post-payment change), not itself the bug. The fix: a new `balanceDue()` helper in
+`saas/lib/money.ts` (`totalPrice` minus the sum of settled, non-reversed `Payment.amount` —
+computed, never a stored column) shown wherever the total already shows, once an order has
+been paid at least once and the two numbers disagree.
+
+Touched five surfaces, all gated the same way (paid + nonzero balance): the order detail
+page (a row under Total), the admin orders table (a new `BalanceDueMark`, styled like the
+existing `PaymentMark`, threaded through all five of that mark's call sites — list/board/
+mobile/table/hover-preview), the CSV export (new "Balance Due (GEL)" column), the invoice
+email (`renderInvoiceEmail` — a "Paid so far" + balance line once something's settled, the
+exact scenario bug #64 was first caught live in — a re-sent invoice after a post-payment
+edit), and the on-page printable invoice (`InvoicePrint.tsx`, shared by both the order-detail
+Print button and the orders-table print/email preview). Deliberately left untouched: Calendar
+view (not named in the plan, no room budgeted for a second money figure) and the `InvoiceSent`
+audit table (would need its own schema migration to snapshot a historical balance — bigger
+than this chunk). New i18n keys added both languages, parity 1121/1121.
+
+Verified live on `staging.vineworks.ge` against the dev DB: created a throwaway ₾400 order,
+marked it Paid · Bank transfer through the real UI, added a real ₾240 extra through the real
+"+ Add extra charge" form. Order detail page read "Total 640.00₾ / Balance due 240.00₾"; the
+orders table's DOM carried a `title="Balance due: 240.00₾"` mark next to the existing "Paid"
+one; a real click on "Export CSV" produced a response (read from the network tab, not a saved
+file) with `640` / `240` in the new columns; the printable invoice's rendered DOM read the same
+figures in Georgian. Independent direct SQL against the dev project (`jpbkkngpgtvqmsocitjx`)
+confirmed `totalPrice` 64000, one settled `Payment` of 40000, one `OrderExtra` of 24000 —
+64000 − 40000 = 24000, reconciling exactly. Chunk 1's lock reconfirmed unaffected (party-size
+input still `disabled: true` after the extra). The invoice **email** content was verified by
+calling the real `renderInvoiceEmail()` function directly with this order's numbers rather
+than sending an actual email to an inbox — flagged as a deviation from the plan's literal
+"generate/send one" wording; the template output was correct, but this doesn't prove
+`sendOrderInvoice()`'s new plumbing end to end the way an actual send would. `tsc --noEmit`
+clean throughout. Cleaned up the throwaway order/payment/extra/events afterward, confirmed
+gone (0/0/0/0). Committed `763a2f1` on `staging`, pushed.
+
+Full write-up (all 12 verification steps, the orders-table/CSV/invoice scope decisions and
+their reasoning) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 2 Result section. **Next:
+Chunk 3** (a real second manual payment — `recordManualPayment`'s duplicate-payment guard
+needs a new, separate function alongside it, not a patch).
+
+---
+
+## 2026-09-25 — Plan-PostPaymentExtras Chunk 1 built: price-affecting order fields locked once paid
+
+Built Chunk 1 of `vault/Plan-PostPaymentExtras.md`, closing the original path of `KnownBugs.md`
+#64 (extras remain the second, still-open path — that's Chunk 2). `updateOrderEnhanced`
+(`saas/app/actions/orders.ts`) now checks `order.paidAt` immediately after fetching the order
+and, if set, returns an explicit error instead of touching guest count, the tasting/lunch
+split, rates, hot-dish selections or food notes — every field that action accepts is one of
+the ones the plan says to lock, so an unconditional reject once paid is correct rather than a
+per-field diff. `OrderDetail.tsx`'s Guest Breakdown & Dishes card disables the matching
+inputs/buttons and shows a yellow note once paid, pointing at "add an extra" as the
+alternative. New i18n keys added both languages, parity 1117/1117. Confirmed by reading
+`wineOrders.ts` in full that no matching "edit an existing wine order" action exists — out of
+scope, as the prior session's read predicted.
+
+Verified live on `staging.vineworks.ge` against the dev DB, not just read from code: created a
+throwaway order on Staging Winery, edited it normally while unpaid (regression check — still
+works), marked it Paid · Bank transfer through the real manual-payment flow, then confirmed the
+Guest Breakdown card's 9 inputs/buttons are genuinely `disabled` via direct DOM inspection.
+Tried to defeat the client-side lock by flipping the raw `disabled` DOM attribute and firing
+clicks — didn't work, and the reason turned out to be a genuine extra safety net: React tracks
+`disabled` from its own last render (not the live DOM attribute) and refuses to dispatch a
+synthetic click to an element it still considers disabled. Got a true test anyway by reading
+the button's real `onClick` off its React fiber props and invoking it directly with the party
+size/tasting count changed to 123/77 — this hits the actual deployed server through the real
+session. Server response (captured via a `fetch` interceptor): the exact locked-order error
+string written into `orders.ts`. A follow-up direct Prisma read against the dev project
+confirmed `guestCount`/`tastingGuestCount`/`totalPrice` and the original `Payment` row were all
+completely unchanged. Cleaned up the throwaway order/payment/events afterward, confirmed gone.
+`tsc --noEmit` clean throughout. Committed `f2149e7` on `staging`, pushed.
+
+Full write-up (including the deviation from the plan's "call the action directly via a script"
+wording — `next/headers`/`requireAdmin` need a real request context a bare script can't
+provide) is in `vault/Plan-PostPaymentExtras.md`'s Chunk 1 Result section. **Next: Chunk 2**
+(extras become a visible balance-due instead of a silent reprice).
+
+---
+
+## 2026-09-25 — Bug #64 found (edit-after-payment stale money) + Plan-PostPaymentExtras designed
+
+Continues `vault/Plan-PaymentE2ETesting.md`. Closed **Chunk 6**: took a real Flitt-settled
+order and edited its guest count afterward — `Order.totalPrice` moved on every screen (admin
+table, order detail, CSV, a re-sent invoice) while the actual `Payment.amount` stayed frozen,
+with nothing anywhere flagging the mismatch. Logged as **`KnownBugs.md` #64**, not fixed per
+Rule 8 (this chunk's job was to test and document).
+
+Discussed the right fix with Max: lock price-affecting fields once an order is paid, and
+handle a legitimate need to charge more afterward (e.g. two more guests at the door) as an
+`OrderExtra` plus a genuinely separate `Payment` row, rather than editing the original. Ran a
+**stress-test spike** (not a build) against Staging Winery's dev DB before committing to that
+design — found three real, previously-unknown obstacles: `recordManualPayment`'s duplicate-
+payment guard silently swallows a second, legitimate payment too; `addOrderExtra` already
+reprices a paid order's total today with zero gate, a second door to the same bug; and Flitt
+itself rejects a second checkout that reuses the same `order_id`, needing a distinct
+Flitt-facing reference per attempt. Also found the order detail page's "Paid · method" label
+only ever reads the single most-recently-settled payment, so a second payment with a
+different method would silently mislabel the first. All findings logged in
+`Plan-PaymentE2ETesting.md`'s "Design spike (2026-09-25)" section.
+
+Max wants the card-payment option kept in scope (a guest may only have a card, not cash) —
+worked through the mechanics (Flitt's settlement logic is already payment-row-scoped, not
+order-scoped, so multiple real payments per order need no changes there; the only real gap is
+decoupling Flitt's own reference string from our internal order id). Wrote the full 7-chunk
+build plan as its own document: **`vault/Plan-PostPaymentExtras.md`** — lock price fields,
+turn extras into a visible balance-due instead of a silent reprice, a real second manual
+payment, a real card-link top-up emailed to the guest, fix the mislabeling, then a full
+regression test. Linked from `KnownBugs.md` #64. Nothing built yet — next session starts at
+that plan's Chunk 1.
+
+---
+
+## 2026-09-24 — Payment E2E Chunk 5: admin-created order parity, no app divergence found
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–4 already done). Closed Chunk 5 — an
+order created directly through `/admin/orders/new` (never touches `startCheckout()`, per §2d)
+checked for parity with a guest-created one across every §4 surface, then paid via the same
+manual bank-transfer path Chunk 4 proved works.
+
+- **No real app divergence found.** `tests/tier5-payment-e2e/payment-admin-order.spec.ts`
+  (1/1 passing) checked the admin orders table, the order's own detail view, and the CSV
+  export at three points (just-created, invoiced, paid), using the exact same assertions
+  Chunk 4 used for a guest order in the same end states — all passed. Independently confirmed
+  via direct SQL: same `Order`/`Payment`/`InvoiceSent` shape as a guest order, with the one
+  actual difference (`OrderEvent(CREATED).actorType='ADMIN'` vs `'GUEST'`) invisible to every
+  UI surface, exactly as designed.
+- **Two real bugs found and fixed, both in the test, not the app.** (1) A URL-match regex this
+  tier's own established pattern uses (`/\/admin\/orders\/[a-zA-Z0-9]+$/`) also matched its own
+  starting page, `/admin/orders/new` — "new" is alphanumeric — so the post-creation redirect
+  check passed instantly before the real navigation happened, silently capturing the wrong URL
+  for every later check. Produced a very convincing false app-bug signal (the same order,
+  opened directly, rendered correctly; the test's own reload of "it" showed a stark "0.00₾")
+  before an HTML dump of the failing page traced it to the blank New Order form, not
+  `OrderDetail.tsx`. Fixed with a negative lookahead. (2) A small, systematic clock-skew
+  (~380ms) between this machine and Resend's send pipeline made an unbuffered timestamp
+  comparison in the email-content check fail consistently — a systematic bias, not jitter, so
+  no amount of polling could have fixed it. Fixed with a 10-second safety margin.
+- This spec never touches the "Individual bookings" payment toggle at all — `createOrderAdmin`
+  doesn't call `shouldTakePayment()` — so it's safe to run alongside the other three tier5
+  specs, not just sequentially.
+- Cleanup: automated spec deletes its own order via the admin UI every run; one extra run had
+  cleanup temporarily disabled on purpose to inspect the final paid-state DB row directly, then
+  deleted the same way. Follow-up SQL confirmed zero rows left.
+- Also found and committed, separately: a small pre-existing uncommitted vault-only change
+  (`KnownBugs.md` #63, a documented-but-deferred mobile tap-target trade-off from the #62 fix)
+  that was sitting from an earlier session turn — verified as exactly what the file already
+  showed, committed as its own housekeeping commit rather than folded into this chunk's work.
+- `tsc --noEmit` clean, `eslint` clean. Pushed to `staging`. `Plan-PaymentE2ETesting.md` Chunk 5
+  marked ✅ Done with its own result log; Chunk 6 (Edit after the fact) is next.
+
+---
+
+## 2026-09-24 (newest) — Fixed KnownBugs #62: mobile orders card status dropdown clipped
+
+The mobile-only bug flagged (not fixed) during Payment E2E Chunk 4, below — closed as its own
+follow-up.
+
+- `OrdersTable.tsx`'s mobile card list (`<768px`) rendered its status dropdown as a plain
+  `position: absolute` sibling inside each card's own `overflow-hidden` box, instead of a portal
+  like the desktop table/list/board views' shared dropdown further down the same file. For a
+  short card early in its lifecycle (5 menu rows, or the "Bank Transfer/Cash" sub-picker after
+  clicking "Paid"), the dropdown's real height could exceed the card and get invisibly clipped.
+- **Fix:** the mobile trigger now calls the same `toggleStatusMenu()` the desktop views already
+  use, which sets `statusMenuRect` from the trigger's own `getBoundingClientRect()` and renders
+  through the one shared `createPortal(..., document.body)` — the separate mobile-only inline
+  dropdown was deleted, not patched.
+- **Verified live on `staging.vineworks.ge` at a 375px viewport, before and after.** Before the
+  fix, `document.elementFromPoint()` at the "Paid" button's own coordinates resolved to the next
+  card, reproducing the bug exactly. After: same check resolves to the "Paid" button itself,
+  two DOM levels from `<body>`. Clicked "Paid," confirmed the Bank Transfer/Cash sub-picker also
+  renders fully via the portal and is genuinely clickable, then clicked "Bank transfer" for real
+  and confirmed against the dev DB directly: `Order.paidAt` set, `Payment{ provider: 'manual',
+  method: 'BANK_TRANSFER', status: 'recorded', settledAt` set, amount matching `totalPrice` `}`.
+  Desktop table/list/board dropdowns and the order-detail page's own dropdown re-checked live,
+  unaffected. Test order and its `Payment`/`OrderEvent` rows deleted after, confirmed gone.
+- `tsc --noEmit` clean. Committed and pushed to `staging` (`7926231`). `KnownBugs.md` #62 marked
+  resolved; `FeatureLog.md` #205 and `Plan-PaymentE2ETesting.md` Chunk 4 both note the fix.
+
+---
+
+## 2026-09-24 — Payment E2E Chunk 4: book & pay later, plus a real "Paid" picker bug fixed
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–3 already done). Closed Chunk 4 — the
+reservation → invoice → manual bank-transfer loop, full cross-view check.
+
+- **Real, standing app bug found and fixed, independent of the testing plan.** Clicking an
+  order's "Paid" status option was supposed to open a "Bank Transfer or Cash?" picker (built
+  2026-09-23, see that session's entry below) but the picker closed itself instantly, on both
+  `/admin/orders` (`OrdersTable.tsx`) and the order detail page (`OrderDetail.tsx`). Root cause,
+  confirmed live by patching `Element.prototype.closest` to log its own calls during a real
+  click: Next's App Router hydrates React at `document`, so the "close menu on outside click"
+  listener and React's own delegated click listener are two independent listeners on that same
+  node — clicking "Paid" mounts the picker and React flushes that swap synchronously *before*
+  the outside-click listener's turn, so by then the clicked button is already detached and a
+  plain containment check on it finds nothing and wrongly closes what was just opened. A first
+  fix attempt (bubble-phase containment check) wasn't enough for exactly this reason; the real
+  fix moves the listener to the **capture** phase, which runs before the click reaches its
+  target at all. Fixed in both files, `staging` commits `b58e9cc`/`ac47541`, confirmed live with
+  real browser clicks on both screens (not assumed from code similarity).
+- **A second, unrelated bug found and flagged, not fixed:** the mobile card list's status
+  dropdown can be clipped by its own card's `overflow-hidden` once it has enough menu items — a
+  real tap on "Paid" there can hit the wrong element. `KnownBugs.md` #62.
+- `tests/tier5-payment-e2e/payment-book-later.spec.ts` built and green (1/1) against real
+  staging. Independently re-verified the manual-payment DB write via a second live pass (the
+  automated spec deletes its own row before cleanup can be inspected mid-flight):
+  `Order.paidAt`/`invoiceSentAt` both set and independent, `Payment` row
+  `provider=manual`/`method=BANK_TRANSFER`/`settledAt` set/correct amount. All test data swept
+  to zero; "Individual bookings" toggle confirmed back at its resting value (off).
+- Also committed two pre-existing, already-reviewed vault-only changes that were sitting
+  uncommitted from an earlier session (`KnownBugs.md` #61, the webhook-priority architecture
+  decision in `Plan-PaymentE2ETesting.md`) as their own separate commit, so the history stays
+  honest about what changed when.
+- `tsc --noEmit` clean. Three commits, pushed to `staging`. `Plan-PaymentE2ETesting.md` Chunk 4
+  marked ✅ Done with its own result log; Chunk 5 (Admin-created order) is next.
+
+## 2026-09-24 — Payment E2E Chunk 3: real approved + declined Flitt settlements, full cross-view check
+
+Continues `vault/Plan-PaymentE2ETesting.md` (Chunks 0–2 already done). Built the first two real
+tests in `tests/tier5-payment-e2e/`, run against `staging.vineworks.ge` (real Flitt hosted
+checkout, dev DB):
+
+- `payment-approved-settlement.spec.ts` (3/3: individual full 5-surface check, company + wine
+  order light checks) and `payment-declined-settlement.spec.ts` (1/1) — both run repeatedly and
+  green, both independently re-verified against the dev DB directly afterward (`Payment`/
+  `Order`/`OrderEvent` match what each spec asserted; exactly one `PAID`/`PAYMENT_DECLINED`
+  event each, no duplicates).
+- **Real app bug found and logged:** the settlement confirmation email never reaches Resend at
+  all (checked via Resend's own send-log list endpoint) — `KnownBugs.md` #53, root cause
+  suspected (a fire-and-forget send in `settle.ts` with no `waitUntil()`), not yet fixed.
+- **Real test-merchant finding, fixed in shared infra:** the non-3DS decline test card never
+  redirects back to the site — Flitt shows an inline "Declined" dialog with no way back to the
+  merchant. `tests/helpers/flittPayment.ts`'s `payAtFlittCheckout` now returns
+  `outcome: 'redirected' | 'declined-inline'` instead of assuming every card redirects.
+- Several test-building bugs found and fixed along the way (a company's access code can open
+  more than one blocking contact-role picker; `.isVisible({ timeout })` doesn't poll; a required
+  wine-order email field failed HTML5 validation silently; a live per-company wine discount
+  broke two different amount-parsing attempts before landing on a correct one) — full detail in
+  `playwright/notes/13-payment-approved-settlement.md` and `14-payment-declined-settlement.md`.
+- All test data cleaned up: individual/company orders via the real admin delete action; the
+  paid wine-order test settlements via direct SQL (Wine Orders admin has no delete action at
+  all — standing, already-documented limitation). Every toggle/override read before touching,
+  restored after, verified via a fresh DB read.
+- `tsc --noEmit` clean. Committed and pushed to `staging` (this session's own commit — see git
+  log for the hash). `vault/Plan-PaymentE2ETesting.md` Chunk 3 marked ✅ Done with its own result
+  log; Chunk 4 (Book & Pay Later) is next.
+
+---
+
+## 2026-09-23 — Three small admin fixes: onboarding banner stuck for Flitt-only tenants (fixed), bug-widget default flipped to "Feature request" (fixed), and the payment method picker (Bank transfer/Cash) for manual "mark as paid" built for the first time (#205–207) — verified only via the server log that session, not a real click-through, which is how the picker's outside-click bug (fixed 2026-09-24, see Chunk 4 above) went unnoticed for a day.
+
+---
+
+## 2026-09-23 — Contact Roles chunk 14: close-out — vault writeups, the `createTenant()` fix, a blind audit
 
 > **STATE ON EXIT.**
 >
@@ -60,8 +669,16 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 >   RLS isn't checkable until right after `migrate deploy` (the tables don't exist yet on
 >   production). Production volume for context: 16 companies, 393 orders, 2 tenants.
 >
-> **Next:** the `staging` → `master` merge itself is the only thing left in this whole 14-chunk
-> arc — needs Max's explicit go-ahead, separately from everything else in this chunk (Rule 0).
+> - **Merged to `master` and live on production, same session.** Max approved the merge; committed
+>   and pushed Chunk 14 to `staging` (`c897aa3`) first, then `staging` → `master` (`e6a37a2`).
+>   Immediately after the push: `prisma migrate deploy` applied both pending migrations to
+>   **production**, then `scripts/setup-rls.ts` (21 tables policied, confirmed via the H18 query —
+>   no `null` polname on any of the four new tables). Verified live:
+>   `nikalasmarani.vercel.app` homepage and `/wines` render real content, `/admin/login` returns
+>   200 with the correct route matched, no console errors, no failed requests besides one benign
+>   aborted prefetch. [[KnownBugs]] #56 and #57 flipped to fully 🟢 Resolved.
+>
+> **The whole 14-chunk Contact Roles plan is complete.** Nothing left — this is the exit state.
 
 Picked up via a pasted handoff prompt for Chunk 14 (everything in it verified against the actual
 repo before acting on it, per the prompt's own instruction not to trust it blindly — branch, HEAD,
@@ -78,89 +695,7 @@ whether to run the optional blind review. Both answered yes.
 
 ---
 
-## 2026-09-23 — Contact Roles chunk 13: Playwright tests for the role-driven picker, replacing the guide-only specs
-
-> **STATE ON EXIT.**
->
-> - Branch **`staging`**, HEAD `80de9af` (Chunk 12's commit) when this session started — this
->   session's changes not yet committed or pushed (not asked for).
-> - **tsc 0** (unchanged). Parity 173/173 + 1109/1109 (unchanged). `test-order-contacts.ts` 36/36
->   (unchanged) — this chunk added tests, it didn't touch app code.
-> - New `tests/tier2-core-flows/contact-role-picker.spec.ts` (5 tests) and
->   `tests/tier2-core-flows/contact-orphan-safety.spec.ts` (1 test, the F2 proof), replacing
->   `company-guide-code.spec.ts` + `guide-picker.spec.ts`. All 6 new tests pass, each run twice,
->   confirmed no leftover rows in the dev DB directly (not just by re-passing).
->
-> **Next:** [[Plan-ContactRoles]] **Chunk 14** — close-out: vault writeups, the `createTenant()`
-> ContactRole-seeding gap, rewriting [[MaintenanceNotes]] #26, and the production cutover
-> pre-flight (§9c) before `staging` → `master`. Two unrelated issues found while running the full
-> `tests/tier2-core-flows/` suite were spawned as a separate background task rather than fixed
-> here — see below.
-
-Picked up via a pasted handoff prompt, verified against the actual repo before acting on it (per
-the prompt's own instruction not to trust it blindly) — branch, HEAD, and the "chunks 0–12 of 14
-done" claim all checked out exactly. Read the handoff's named files in order
-(`ClaudeInstructions.md`; `Plan-ContactRoles.md` §1/§2/Chunk 13/H11/H12/H13/H14/H19;
-`MaintenanceNotes.md`, skimmed — nothing chunk-13-specific; `SessionLog.md`'s exit state), then read
-the actual current code (`useContactSelection.ts`, `ContactPickerPopupView.tsx`,
-`contactResolution.ts`, `BookingForm.tsx`, `NewOrderForm.tsx`, `CompaniesClient.tsx`) and queried
-the dev DB directly for the Silk Road Journeys / Kakheti Wine Routes fixtures' actual current
-shape, rather than trusting the old specs' or the handoff's comments about them — both had drifted
-since Chunk 7/12.
-
-**Two real design changes found this way, not from the old specs:** the picker's title is now
-tenant-editable copy ("Who should we put on this booking?", not the old hardcoded "Who is bringing
-the group?"), and "I am not on this list" no longer falls back to a company-level contact — Contact
-Person is itself a per-order role now, so skipping it just leaves it blank. Also found: a matched
-person only fills the classic First/Last Name fields when the matched role IS Contact Person; a
-guide's own code fills the Guide role's own block instead. Recorded as new hurdle **H20**.
-
-Stated the concrete plan (two new spec files, what each covers, the file split) and got Max's
-go-ahead before writing any test code, per Rule 8.
-
-**`contact-role-picker.spec.ts`** — role-driven, against Silk Road Journeys (now 2 Contact Persons
-+ 2 Guides, not 1+2 as the old spec's comments assumed): codes off asks about each role in turn and
-fills the right fields per role (asserting the picker buttons' `aria-label`, H14), "not on this
-list" leaves a role blank, a wrong code is still rejected, and with codes on a person's own code
-skips the picker while a company code is accepted but the picker never opens — the whole file
-toggles the shared `person_codes_enabled` setting mid-run, so it's wrapped in
-`test.describe.serial()` to survive Playwright's default `fullyParallel` config, with the original
-setting value read once and restored in `afterAll`.
-
-**`contact-orphan-safety.spec.ts`** — the one Chunk 13's own checklist called out as what this
-design most needs: proves F2 (deleting a person leaves a past order's Contacts card reading from
-the snapshot, not a live join). Admin adds a throwaway guide to Kakheti Wine Routes (deliberately a
-company that already has people in both roles, not a fresh throwaway one — closer to real use, and
-rules out `NewOrderForm`'s auto-pick-if-exactly-one masking the actual thing under test), creates a
-real order picking them from the role dropdown, deletes them from the company, reloads the order —
-name still there.
-
-**Two real bugs found by actually running the new specs, not by writing them:** a URL-match regex
-that also matched the literal `/admin/orders/new` path (since "new" is alphabetic), so an
-unsubmitted form read as a created order; and a delete-confirmation race where checking the
-person's name had disappeared from the row proved nothing about whether the server call had
-actually finished (the row hides the name the instant "Delete" is clicked, client-side, before the
-request even starts) — fixed by waiting for the confirm row's own "Yes" button to disappear
-instead. Also found and worked around: running the whole test file (or the whole
-`tests/tier2-core-flows/` directory) at Playwright's default parallelism overloads the one
-`next dev` process badly enough that admin logins across unrelated spec files start timing out
-together — confirmed by re-running with `--workers=1` and getting clean, repeatable results both
-times.
-
-**Ran the full `tests/tier2-core-flows/` suite**, not just the new specs, since Chunk 12 touched
-shared seed/fixture data other tiers read (per the handoff's own suggestion). Found 3 pre-existing
-failures, none caused by this chunk: `booking-enhanced.spec.ts` and
-`company-nationality-tagging.spec.ts` both depend on a company named "Test Company # 1" that no
-longer exists in the dev DB, and `wine-catalogue-order.spec.ts` found that a freshly-abandoned wine
-order is written correctly (`abandonedAt` set, confirmed via direct query) but never appears on
-`/admin/abandoned`. Left the dev DB clean regardless — deleted the two stray `WineOrder` rows that
-spec's own cleanup routine couldn't find (same underlying bug). Spawned the abandoned-orders
-finding as a separate background task rather than investigating it here, since it's unrelated to
-Contact Roles.
-
-Vault updated: [[Plan-ContactRoles]] Chunk 13 marked ✅ Done with the full writeup, new hurdle H20
-added, §7's status table and resume line updated. [[FeatureLog]] Feature 202 row appended. **Not
-yet committed** — Max hasn't asked for a commit this session.
+## 2026-09-23 — Contact Roles chunk 13: Playwright tests for the role-driven picker (`contact-role-picker.spec.ts`, `contact-orphan-safety.spec.ts`), replacing the guide-only specs; found H20 (matched-person field-fill depends on role) and two test bugs along the way (a URL-match regex, a delete-confirm race).
 
 ---
 

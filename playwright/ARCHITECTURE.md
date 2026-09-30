@@ -39,6 +39,18 @@ Two accessors, matching the two logins this project actually uses:
 
 `gotoWithFreshTheme(page, url)` exists alongside it for the (currently unused, since `theme-colors.spec.ts` was redesigned around a caching gap — see `KNOWN-ISSUES.md`) case of needing a hard reload after a theme change, since Next.js treats `page.goto()` to a URL it's already on as a soft client-side nav that can silently reuse a stale RSC payload.
 
+## Tier 5 runs against real staging, not localhost
+
+Every other tier in this suite runs against `localhost:3000` via `playwright.config.ts`'s default `webServer` block. `saas/tests/tier5-payment-e2e/` is the one exception: it targets the real deployed `https://staging.vineworks.ge` (still the dev database — never production) through a dedicated config, `saas/playwright.staging.config.ts`, with no `webServer` block at all. This is not a style choice — a real Flitt settlement redirects the browser away to Flitt's hosted checkout and then, on approval, needs to call back to a **publicly reachable** URL to settle; `localhost` can never be that, so a tier5 spec run under the default `playwright.config.ts` cannot complete a real approved settlement.
+
+**The failure shape if you get this wrong is a silent hang, not a clean error.** Found live building Chunk 6 of `Plan-PostPaymentExtras.md` (2026-09-25): running a tier5 spec with the default config gets as far as filling in the real test card and clicking "Pay" on Flitt's genuine hosted checkout page — Flitt's own page loads fine, since `pay.flitt.com` itself doesn't care what our callback URL is — but the actual card-submission POST (to `secure-redirect.cloudipsp.com/submit/`, a different host Flitt's checkout script posts to internally) times out, because whatever that submission triggers server-side eventually tries to reach back to the merchant's configured `localhost` callback and can't. The browser sits on `pay.flitt.com` until Playwright's own action timeout fires 25s later, which reads exactly like a flaky network condition (`net::ERR_CONNECTION_TIMED_OUT`) rather than "wrong config file" — it is worth checking `--config` first before assuming Flitt's sandbox itself is down.
+
+Always run tier5 specs with:
+```
+npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/<file>.spec.ts --workers=1
+```
+`--workers=1` matters independently of the config: these specs mutate shared tenant settings (the "Individual bookings" payment toggle, most often) and create/settle real money against the one live Staging Winery tenant, so two tier5 specs racing each other is a real hazard the default `fullyParallel: true` doesn't protect against.
+
 ## The two-tenant strategy
 
 Almost every test runs against **Staging Winery** (`cmrxb85wo0000vlc0d964nzf8`), which `localhost:3000` resolves to automatically via `saas/.env`'s `DEFAULT_TENANT_ID` (see `saas/proxy.ts`'s `isLocal` branch — on localhost there's no per-request domain routing, unlike a real deployed preview URL).

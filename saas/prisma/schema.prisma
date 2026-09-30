@@ -420,6 +420,10 @@ enum OrderEventType {
   PAYMENT_DECLINED
   EXTRA_ADDED
   EXTRA_REMOVED
+  // A genuine second Payment row collected against an already-paid order's
+  // balance due (Plan-PostPaymentExtras Chunk 3, KnownBugs #64). Distinct from
+  // PAID, which marks the order's own paidAt milestone the first time.
+  ADDITIONAL_PAYMENT_RECORDED
 }
 
 enum ActorType {
@@ -599,6 +603,17 @@ model Payment {
   reversedAt        DateTime?
   providerPaymentId String?
   checkoutUrl       String?
+  /// The exact `order_id` string this app sent Flitt for this checkout
+  /// attempt — NOT necessarily `orderId`/`wineOrderId`. Ordinarily the two
+  /// match, but `startCheckout()`'s `flittOrderId` override (a card-link
+  /// top-up's second checkout attempt on an already-paid order, since Flitt
+  /// rejects a reused `order_id`) sends something else. Stored so the
+  /// reconciliation cron (KnownBugs.md #61) can look a stuck payment up by
+  /// Flitt's own status API without guessing which value was actually sent.
+  /// No unique constraint: Flitt itself already guarantees uniqueness per
+  /// merchant, nothing in our own DB needs to enforce it. No index: nothing
+  /// queries BY this column, only reads it per-row.
+  flittOrderId      String?
   /// The gateway's own status string, stored verbatim (created/approved/declined/…).
   /// Not an enum: it belongs to the provider, and coercing it would lose detail
   /// that matters in a dispute.

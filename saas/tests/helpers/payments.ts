@@ -108,6 +108,42 @@ export async function setFlittMerchantId(page: Page, value: string): Promise<voi
   await expect(async () => expect(await input.inputValue()).toBe(value)).toPass({ timeout: 10_000 });
 }
 
+// ── Bank-transfer invoice details (/admin/settings, "Payment details") ──────
+// Read-only accessor for Chunk 4 (Plan-PaymentE2ETesting.md) — sendOrderInvoice()
+// pulls these five fields straight from Setting and prints them verbatim into
+// the invoice email (invoiceEmailTemplate.ts), so a test confirming that email's
+// content needs the real live values, not hardcoded ones that could drift.
+// Deliberately reads the plain DISPLAY text (SettingsClient.tsx renders each
+// field as a <span> when not being edited) rather than opening the row's own
+// Edit control — a test that reads settings should never risk leaving one of
+// them mid-edit for the next thing to load this page.
+export type PaymentBankDetails = {
+  recipientName: string;
+  personalNumber: string;
+  bankName: string;
+  bankCode: string;
+  iban: string;
+};
+
+const PAYMENT_DETAIL_LABELS: Record<keyof PaymentBankDetails, string> = {
+  recipientName: 'Recipient name',
+  personalNumber: 'Personal ID number',
+  bankName: 'Recipient bank',
+  bankCode: 'Bank code',
+  iban: 'Recipient IBAN',
+};
+
+export async function readPaymentBankDetails(page: Page): Promise<PaymentBankDetails> {
+  await page.goto('/admin/settings');
+  const result = {} as PaymentBankDetails;
+  for (const [field, label] of Object.entries(PAYMENT_DETAIL_LABELS) as [keyof PaymentBankDetails, string][]) {
+    const row = page.locator('label', { hasText: label }).locator('xpath=following-sibling::div[1]');
+    await row.waitFor();
+    result[field] = ((await row.textContent()) ?? '').trim();
+  }
+  return result;
+}
+
 // ── Per-company payment override (/admin/companies, #148) ───────────────────
 // CompaniesClient.tsx's Edit panel sits behind a known, reproducible lost-
 // click bug (nested-button hydration mismatch — see notes/09-companies-crud.md):

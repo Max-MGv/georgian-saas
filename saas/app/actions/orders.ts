@@ -3,9 +3,11 @@
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
-import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
+import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
-import { asTetri, toMajor, type Tetri } from '@/lib/money'
+import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -119,6 +121,27 @@ export async function updateOrderEnhanced(
       },
     })
     if (!order) return { error: 'Order not found' } as const
+
+    // Bug #64: once real money has been charged (`Order.paidAt` set), the
+    // guest count, tasting/lunch split, rates and food details this function
+    // touches must become read-only historical facts. Before this check,
+    // saving here silently moved `Order.totalPrice` (and the rate snapshots)
+    // while the already-settled `Payment.amount` never moved — every screen
+    // agreed with itself but not with what the gateway actually charged, with
+    // nothing anywhere flagging the gap. Every field this function's `data`
+    // accepts is one of the locked ones, so once paid there is nothing left
+    // for it to safely do — see vault/Plan-PostPaymentExtras.md Chunk 1. Use
+    // "add an extra" (`addOrderExtra`) to describe what changed instead.
+    if (order.paidAt) {
+      return {
+        error:
+          'This order has already been paid, so its guest count, tasting/lunch split, ' +
+          'rates, and food details are locked — changing them here would silently ' +
+          'disagree with the amount already charged to the guest. To bill for something ' +
+          'that changed (e.g. extra guests joining after payment), add it as an extra on ' +
+          'this order instead.',
+      } as const
+    }
 
     // The three buckets are subsets of the party, never more than it. Nothing
     // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
@@ -369,6 +392,15 @@ export async function sendOrderInvoice(
           company: { select: { id: true, name: true, identificationCode: true } },
           masterclassLines: { include: { masterclassItem: true } },
           extras: true,
+          // A re-sent invoice on an order that's already been paid something
+          // must say so — Plan-PostPaymentExtras Chunk 2 / KnownBugs #64's own
+          // live repro was exactly this: a freshly re-sent invoice stating
+          // the new, higher total with no mention that part of it was
+          // already collected.
+          payments: {
+            where: { settledAt: { not: null }, reversedAt: null },
+            select: { amount: true },
+          },
         },
       })
     )
@@ -406,6 +438,9 @@ export async function sendOrderInvoice(
       lunchGuestCount: order.lunchGuestCount,
       freeGuestCount: order.freeGuestCount,
       totalPrice: order.totalPrice ?? 0,
+      // Only meaningful once something has actually settled — see this
+      // field's doc comment on InvoiceEmailData.
+      paymentsSettledTotal: order.payments.reduce((sum, p) => sum + p.amount, 0),
       companyName: order.company?.name ?? null,
       identificationCode: order.company?.identificationCode ?? null,
       masterclassLines: order.masterclassLines.map(l => ({
@@ -530,7 +565,19 @@ export async function exportOrdersCsv(filters: {
       ...paymentFilterWhere(filters.payment),
       ...(filters.nationality ? { nationalities: { has: filters.nationality } } : {}),
     },
-    include: { company: true },
+    include: {
+      company: true,
+      // Every live (settled, not reversed) payment — Balance Due (GEL) below
+      // needs the true collected total, per Plan-PostPaymentExtras Chunk 2 /
+      // KnownBugs #64: a CSV that only ever showed "Total (GEL)" is exactly
+      // the kind of screen that bug describes, since an accountant reading it
+      // has no way to know a post-payment extra moved the total without
+      // moving what was actually charged.
+      payments: {
+        where: { settledAt: { not: null }, reversedAt: null },
+        select: { amount: true },
+      },
+    },
     orderBy: { date: 'desc' },
   }))
 
@@ -538,8 +585,15 @@ export async function exportOrdersCsv(filters: {
   // exports as indistinguishable from a paid one. Invoice Sent gets its own
   // date rather than collapsing into Payment, since an order can be both
   // invoiced and paid — which the old payment ladder could not represent.
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
-  const rows = orders.map(o => [
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
+  const rows = orders.map(o => {
+    // Only populated once the order has actually been paid something —
+    // otherwise "balance due" is just the whole total, which the Total (GEL)
+    // column already says, and repeating it on every unpaid row would be
+    // noise rather than the flag this column exists to raise.
+    const paymentsSettledTotal = o.payments.reduce((sum, p) => sum + p.amount, 0)
+    const balance = o.paidAt ? balanceDue(o.totalPrice, paymentsSettledTotal) : 0
+    return [
     o.date.toLocaleDateString('en-GB'),
     o.timeSlot,
     o.name,
@@ -554,6 +608,7 @@ export async function exportOrdersCsv(filters: {
     // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
     // it text and break the column's arithmetic.
     o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
+    o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
@@ -561,7 +616,8 @@ export async function exportOrdersCsv(filters: {
     o.email ?? '',
     o.phone ?? '',
     o.notes ?? '',
-  ])
+    ]
+  })
 
   return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
 }
@@ -727,6 +783,7 @@ export async function changeBookingStatus(
           if (change.value) {
             await recordManualPayment(tx, {
               tenantId, orderId, amount: asTetri(current.totalPrice ?? 0), at: now,
+              method: change.method,
             })
           } else {
             await reverseManualPayments(tx, { orderId, at: now })
@@ -754,4 +811,154 @@ export async function changeBookingStatus(
   } catch {
     return { error: 'Failed to update status.' }
   }
+}
+
+/**
+ * Collect part or all of the balance due on an already-paid order as a real,
+ * independent second payment (Plan-PostPaymentExtras Chunk 3, KnownBugs #64
+ * finding 1) — an extra reprices `Order.totalPrice` immediately (Chunk 2),
+ * but nothing before this action could actually record what the guest paid
+ * for the difference without either silently doing nothing
+ * (`recordManualPayment`'s existing guard, correctly protecting its own
+ * different job) or editing the original, already-collected payment.
+ *
+ * Admin-initiated and deliberate: does not consult `shouldTakePayment()` —
+ * no module toggle, section toggle, or company override applies to a top-up
+ * the admin themselves chose to record after the fact (ground rule 5).
+ */
+export async function recordTopUpPayment(
+  orderId: string,
+  data: { amount: Tetri; method: 'BANK_TRANSFER' | 'CASH' }
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async tx => {
+    const recorded = await recordAdditionalPayment(tx, {
+      orderId,
+      tenantId,
+      amount: data.amount,
+      method: data.method,
+      at: new Date(),
+    })
+    if ('error' in recorded) return recorded
+    // Same transaction as the payment it describes, so history can never
+    // claim a top-up that got rolled back (matches changeBookingStatus's own
+    // PAID/UNPAID event, and addOrderExtra's EXTRA_ADDED/EXTRA_REMOVED).
+    await recordOrderEvent(tx, {
+      tenantId,
+      orderId,
+      type: 'ADDITIONAL_PAYMENT_RECORDED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      payload: { amount: data.amount, method: data.method },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+
+  revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${orderId}`)
+  return result
+}
+
+/**
+ * Start a real Flitt checkout for part or all of the balance due, so the
+ * guest can pay it themselves by card (Plan-PostPaymentExtras Chunk 4,
+ * KnownBugs #64) — the card-paying sibling of `recordTopUpPayment` above.
+ *
+ * Deliberately returns the checkout URL to the caller rather than emailing
+ * it itself: generating a real checkout (a real Payment row, a real Flitt
+ * API call) and sending mail to a guest are two different kinds of action
+ * with two different blast radii, and keeping them separate lets the admin
+ * see/copy the link before deciding to email it (or send it some other way
+ * entirely — WhatsApp, SMS) rather than an unreviewable one-click send.
+ * `sendOrderTopUpCheckoutEmail` below is the follow-up step.
+ *
+ * Admin-initiated and deliberate: does not consult `shouldTakePayment()` —
+ * see `startTopUpCheckout`'s own doc comment (ground rule 5).
+ */
+export async function startOrderTopUpCheckout(
+  orderId: string,
+  data: { amount: Tetri }
+): Promise<{ success: true; checkoutUrl: string; paymentId: string } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { name: true, surname: true, date: true, timeSlot: true },
+  }))
+  if (!order) return { error: 'Order not found.' }
+
+  const dateStr = order.date.toLocaleDateString('en-GB')
+  const result = await startTopUpCheckout({
+    orderId,
+    tenantId,
+    amount: data.amount,
+    orderDesc: `Balance top-up, ${order.name} ${order.surname}, ${dateStr} ${order.timeSlot}`,
+  })
+  if ('error' in result) return result
+
+  // Nothing display-relevant changes yet — the balance only moves once this
+  // checkout actually settles, through the real Flitt callback (settle.ts),
+  // same as any other checkout. No revalidatePath needed here.
+  return result
+}
+
+/**
+ * Email a previously-generated top-up checkout link to the guest (Plan-
+ * PostPaymentExtras Chunk 4) — reuses the existing email-sending
+ * infrastructure the same way `sendOrderInvoice` does (same sender config
+ * via `sendTenantEmail`, same tenant-theme/address lookups).
+ *
+ * Looks the Payment row up by id rather than trusting a caller-supplied
+ * checkoutUrl/amount pair — the same reasoning `startTopUpCheckout` uses for
+ * why it re-reads its own just-created row: the server is the one source of
+ * truth for what a guest is being asked to pay, never the browser.
+ */
+export async function sendOrderTopUpCheckoutEmail(
+  orderId: string,
+  paymentId: string,
+  locale: 'en' | 'ka' = 'ka'
+): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
+    where: { id: orderId, tenantId },
+    select: { name: true, surname: true, email: true, date: true, timeSlot: true },
+  }))
+  if (!order) return { error: 'Order not found.' }
+  if (!order.email) return { error: 'This order has no email address.' }
+
+  const payment = await withTenantDb(tenantId, tx => tx.payment.findFirst({
+    where: { id: paymentId, orderId, tenantId, provider: 'flitt' },
+    select: { checkoutUrl: true, amount: true },
+  }))
+  if (!payment || !payment.checkoutUrl) return { error: 'Checkout link not found.' }
+
+  const [wineryAddress, wineryEmail, tenant] = await Promise.all([
+    getSetting('contact_address'),
+    getSetting('contact_email'),
+    db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
+  ])
+
+  await sendTopUpCheckoutEmail({
+    tenantId,
+    name: order.name,
+    surname: order.surname,
+    email: order.email,
+    date: order.date,
+    timeSlot: order.timeSlot,
+    amount: payment.amount,
+    checkoutUrl: payment.checkoutUrl,
+    wineryName: tenant?.displayName ?? tenant?.name ?? '',
+    wineryAddress,
+    wineryEmail,
+    theme: resolveTenantTheme(tenant?.theme ?? null),
+    locale,
+  })
+
+  return { success: true }
 }

@@ -350,6 +350,17 @@ const en: Translations = {
   'orders.status.unpaid': 'Unpaid',
   'orders.status.completed': 'Completed',
   'orders.status.cancelled': 'Cancelled',
+  'orders.balanceDue': 'Balance due',
+  'orders.credit': 'Credit (overpaid)',
+
+  // Payment method picker — shown when an admin marks something paid by hand.
+  // CARD never appears here; it's only ever set by a real Flitt settlement.
+  'paymentMethod.howPaid': 'How was this paid?',
+  'paymentMethod.bankTransfer': 'Bank transfer',
+  'paymentMethod.cash': 'Cash',
+  'paymentMethod.cancel': 'Cancel',
+  'paymentMethod.card': 'Card',
+  'paymentMethod.manual': 'Marked paid',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
@@ -495,6 +506,8 @@ const en: Translations = {
   'orderDetail.invoiceHistory.none': 'No invoices sent yet.',
 
   'orderDetail.guestBreakdown.title': 'Guest Breakdown & Dishes',
+  'orderDetail.guestBreakdown.lockedTitle': 'This order is already paid.',
+  'orderDetail.guestBreakdown.lockedDetail': 'Guest counts, the tasting/lunch split, rates, and food details are locked so they can never disagree with the amount already charged. To bill for something that changed, add it as an extra below instead.',
   'orderDetail.guestBreakdown.noTiers': 'No price tiers found for {name}.',
   'orderDetail.guestBreakdown.noTiersDetail': 'Guest counts cannot affect the total without rates.',
   'orderDetail.guestBreakdown.addTiersLink': 'Add price tiers in Companies admin',
@@ -562,6 +575,20 @@ const en: Translations = {
   'orderDetail.total.basePriceOriginal': 'Base price (original)',
   'orderDetail.total.totalLabel': 'Total',
   'orderDetail.total.livePreview': 'Live preview — click "Save changes" above to persist.',
+  'orderDetail.total.balanceDue': 'Balance due',
+  'orderDetail.total.credit': 'Credit (overpaid)',
+  'orderDetail.total.paymentsTitle': 'Payments received',
+  'orderDetail.recordPayment.button': 'Record payment',
+  'orderDetail.recordPayment.savedOk': 'Payment recorded ✓',
+  'orderDetail.topUpCheckout.button': 'Send card-payment link',
+  'orderDetail.topUpCheckout.generate': 'Generate link',
+  'orderDetail.topUpCheckout.linkLabel': 'Checkout link',
+  'orderDetail.topUpCheckout.copy': 'Copy link',
+  'orderDetail.topUpCheckout.copied': 'Copied ✓',
+  'orderDetail.topUpCheckout.emailButton': 'Email to guest',
+  'orderDetail.topUpCheckout.emailSent': 'Link emailed ✓',
+  'orderDetail.topUpCheckout.noEmail': 'This order has no email address — copy the link instead.',
+  'orderDetail.topUpCheckout.done': 'Done',
 
   // Companies page
   'companies.summary.booking': 'booking',
@@ -1592,6 +1619,15 @@ const ka: Translations = {
   'orders.status.unpaid': 'გადაუხდელი',
   'orders.status.completed': 'დასრულებული',
   'orders.status.cancelled': 'გაუქმებული',
+  'orders.balanceDue': 'გადასახდელი ნაშთი',
+  'orders.credit': 'ზედმეტად გადახდილი',
+
+  'paymentMethod.howPaid': 'როგორ გადაიხადა?',
+  'paymentMethod.bankTransfer': 'საბანკო გადარიცხვა',
+  'paymentMethod.cash': 'ნაღდი ფული',
+  'paymentMethod.cancel': 'გაუქმება',
+  'paymentMethod.card': 'ბარათი',
+  'paymentMethod.manual': 'აღინიშნა როგორც გადახდილი',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',
@@ -1742,6 +1778,8 @@ const ka: Translations = {
   'orderDetail.invoiceHistory.none': 'ინვოისი ჯერ არ გაგზავნილა.',
 
   'orderDetail.guestBreakdown.title': 'სტუმრების დაყოფა და კერძები',
+  'orderDetail.guestBreakdown.lockedTitle': 'ეს შეკვეთა უკვე გადახდილია.',
+  'orderDetail.guestBreakdown.lockedDetail': 'სტუმრების რაოდენობა, დეგუსტაცია/სადილის დაყოფა, ტარიფები და კვების დეტალები დაბლოკილია, რათა არასდროს დაუპირისპირდეს უკვე ჩამოჭრილ თანხას. თუ რამე შეიცვალა, დაამატეთ ის დამატებით ხარჯად (Extra) ქვემოთ.',
   'orderDetail.guestBreakdown.noTiers': '{name}-ს ფასების კატეგორია არ მოიძებნა.',
   'orderDetail.guestBreakdown.noTiersDetail': 'სტუმრების რაოდენობა ვერ იმოქმედებს ჯამზე ტარიფების გარეშე.',
   'orderDetail.guestBreakdown.addTiersLink': 'დაამატეთ ფასების კატეგორია კომპანიების ადმინში',
@@ -1809,6 +1847,20 @@ const ka: Translations = {
   'orderDetail.total.basePriceOriginal': 'საბაზისო ფასი (თავდაპირველი)',
   'orderDetail.total.totalLabel': 'ჯამი',
   'orderDetail.total.livePreview': 'ცოცხალი გადახედვა — დააჭირეთ „ცვლილებების შენახვას“ ზემოთ შესანახად.',
+  'orderDetail.total.balanceDue': 'გადასახდელი ნაშთი',
+  'orderDetail.total.paymentsTitle': 'მიღებული გადახდები',
+  'orderDetail.total.credit': 'ზედმეტად გადახდილი',
+  'orderDetail.recordPayment.button': 'გადახდის დაფიქსირება',
+  'orderDetail.recordPayment.savedOk': 'გადახდა დაფიქსირდა ✓',
+  'orderDetail.topUpCheckout.button': 'ბარათით გადახდის ბმულის გაგზავნა',
+  'orderDetail.topUpCheckout.generate': 'ბმულის შექმნა',
+  'orderDetail.topUpCheckout.linkLabel': 'გადახდის ბმული',
+  'orderDetail.topUpCheckout.copy': 'ბმულის კოპირება',
+  'orderDetail.topUpCheckout.copied': 'დაკოპირდა ✓',
+  'orderDetail.topUpCheckout.emailButton': 'სტუმრისთვის გაგზავნა ელფოსტით',
+  'orderDetail.topUpCheckout.emailSent': 'ბმული გაიგზავნა ✓',
+  'orderDetail.topUpCheckout.noEmail': 'ამ შეკვეთას არ აქვს ელფოსტის მისამართი — ბმული დააკოპირეთ.',
+  'orderDetail.topUpCheckout.done': 'დასრულდა',
 
   // Companies page
   'companies.summary.booking': 'ჯავშანი',

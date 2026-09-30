@@ -21,7 +21,7 @@ import { formatLongDate } from '@/lib/emails/templates/dateFormat'
 import { getTenantId } from '@/lib/tenant'
 import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
-import { checkDemoRateLimit, DEMO_BOOKING_LIMIT } from '@/lib/demoRateLimit'
+import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
@@ -135,14 +135,14 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return str
     }
 
-    // Guard: abuse on the public demo sandbox. A no-op for real tenants —
-    // see lib/demoRateLimit.ts for why this is deliberately demo-only. Not
-    // localized/editable, deliberately — demo-only, never a real customer.
-    const rate = await checkDemoRateLimit(tenantId, 'booking', DEMO_BOOKING_LIMIT)
+    // Guard: abuse on public write actions. Every tenant is throttled — see
+    // lib/writeRateLimit.ts for the demo-vs-real thresholds. Not
+    // localized/editable, deliberately — this is a backstop, not a UX surface.
+    const rate = await checkWriteRateLimit(tenantId, 'booking')
     if (rate.limited) {
       return {
         success: false,
-        error: `That's a lot of bookings in a short time. This is a shared demo, so it caps how fast bookings can be made — try again in about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s).`,
+        error: `That's a lot of bookings in a short time — please wait about ${Math.ceil(rate.retryAfterSeconds / 60)} minute(s) and try again.`,
       }
     }
 

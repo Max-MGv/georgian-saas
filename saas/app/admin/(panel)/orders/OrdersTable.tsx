@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
@@ -92,6 +92,9 @@ type Order = {
   phone: string | null
   notes: string | null
   totalPrice: number | null
+  /** Sum of this order's settled, non-reversed Payment.amount rows — the
+   *  other half of the balance-due figure (Plan-PostPaymentExtras Chunk 2). */
+  paymentsSettledTotal: number
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
@@ -216,6 +219,27 @@ function PaymentMark({ order, locale }: {
     return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
   }
   return null
+}
+
+/**
+ * The row-level flag for KnownBugs #64 / Plan-PostPaymentExtras Chunk 2: once
+ * an order has been paid, its total and what actually settled can now
+ * legitimately disagree (an extra added after payment moves the total; the
+ * original Payment row never moves) — and the whole point of this chunk is
+ * that the disagreement is never silent. Only renders once paid; an unpaid
+ * order's "balance" is its whole total, which the Total column already says.
+ */
+function BalanceDueMark({ order, locale }: {
+  order: { paidAt: Date | string | null; totalPrice: number | null; paymentsSettledTotal: number }
+  locale: string
+}) {
+  if (order.paidAt == null) return null
+  const balance = balanceDue(order.totalPrice, order.paymentsSettledTotal)
+  if (balance === 0) return null
+  const label = `${adminT(locale, balance > 0 ? 'orders.balanceDue' : 'orders.credit')}: ${formatTetri(asTetri(Math.abs(balance)), { decimals: true })}`
+  return balance > 0
+    ? <Mark label={label} glyph="⚠" bg="#fef3c7" color="#92400e" />
+    : <Mark label={label} glyph="↺" bg="#e0e7ff" color="#3730a3" />
 }
 
 type Payment = {
@@ -363,6 +387,7 @@ function OrdersListRows({
                   {labelFor(locale, order.stage)} ▾
                 </button>
                 <PaymentMark order={order} locale={locale} />
+                <BalanceDueMark order={order} locale={locale} />
               </div>
 
               <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
@@ -498,6 +523,7 @@ function OrdersBoardColumns({
                           <div className="flex items-center gap-1.5">
                             <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={heading}>{heading}</div>
                             <PaymentMark order={order} locale={locale} />
+                            <BalanceDueMark order={order} locale={locale} />
                           </div>
                           <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }} title={subheading}>{subheading}</div>
                         </div>
@@ -578,10 +604,17 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   }, [])
 
   // Status menu — menu itself renders in a portal (see bottom of component) so it
-  // can't be clipped by the table's sticky columns / scroll container; position is
-  // captured from the trigger button's rect when opened.
+  // can't be clipped by an ancestor's overflow (the table's sticky columns / scroll
+  // container, or the mobile card list's own `overflow-hidden` — #62); position is
+  // captured from the trigger element's rect when opened.
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null)
   const [statusMenuRect, setStatusMenuRect] = useState<{ top: number; bottom: number; left: number } | null>(null)
+  // Set instead of firing the 'paid' change immediately when its step is
+  // clicked — the menu stays open and swaps to a "how was this paid?" picker
+  // (Bank transfer / Cash) so the ledger records what the admin actually
+  // asserted rather than a guessed MANUAL. CARD is never offered here — it's
+  // only ever set by a real Flitt settlement (lib/payments/settle.ts).
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
 
   // Hover preview
   const [hoverOrder, setHoverOrder] = useState<Order | null>(null)
@@ -615,12 +648,35 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // (the menu is a fixed-position portal, so it won't track the trigger button on scroll)
   useEffect(() => {
     if (!statusMenuId) return
-    function handleClick() { setStatusMenuId(null); setStatusMenuRect(null) }
-    function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null) }
-    document.addEventListener('click', handleClick)
+    // Next's App Router hydrates at `document`, so React's own delegated click
+    // listener lives on that same node — not a descendant of it. The nested
+    // `onClick={e => e.stopPropagation()}` wrappers around the menu (and the
+    // mobile card's trigger div) only stop the event bubbling to further
+    // *ancestors*; they cannot stop this second, independently-registered
+    // `document` listener from also running for the same click.
+    //
+    // A plain containment check (`e.target.closest('[data-status-menu]')`) on
+    // a *bubble*-phase listener is not enough either, confirmed live: clicking
+    // "Paid" swaps the menu's content (the step list unmounts, the Bank
+    // Transfer/Cash picker mounts in its place), and React flushes that
+    // synchronously while dispatching the click to its own (earlier-
+    // registered) bubble listener — before this listener's turn on the same
+    // `document` node. By then `e.target` (the old "Paid" button) had already
+    // been removed from the DOM, so `.closest()` on a detached node found
+    // nothing and this handler wrongly concluded the click was "outside" and
+    // closed what the click had just opened. Running in the *capture* phase
+    // fixes this: capture fires top-down before the click ever reaches the
+    // target, so the containment check runs while the DOM is still exactly as
+    // the user clicked it.
+    function handleClick(e: MouseEvent) {
+      if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
+      setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
+    }
+    function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
+    document.addEventListener('click', handleClick, true)
     document.addEventListener('scroll', handleScroll, true)
     return () => {
-      document.removeEventListener('click', handleClick)
+      document.removeEventListener('click', handleClick, true)
       document.removeEventListener('scroll', handleScroll, true)
     }
   }, [statusMenuId])
@@ -736,15 +792,35 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     await changeBookingStatus(orderId, change)
   }
 
-  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLButtonElement>) {
+  // Typed HTMLElement, not HTMLButtonElement — the mobile card list's trigger is
+  // the wrapping div (see #17's hit-area note), not the button itself, so this
+  // needs to accept a rect from either.
+  function toggleStatusMenu(orderId: string, e: React.MouseEvent<HTMLElement>) {
     if (statusMenuId === orderId) {
       setStatusMenuId(null)
       setStatusMenuRect(null)
+      setPayingOrderId(null)
       return
     }
     const rect = e.currentTarget.getBoundingClientRect()
     setStatusMenuRect({ top: rect.top, bottom: rect.bottom, left: rect.left })
     setStatusMenuId(orderId)
+    setPayingOrderId(null)
+  }
+
+  /** A step was clicked in the menu — 'paid' swaps to the method picker
+   * instead of firing right away; everything else fires immediately as before. */
+  function handleStepClick(orderId: string, step: MenuStep) {
+    if (step.code === 'paid') {
+      setPayingOrderId(orderId)
+      return
+    }
+    handleStatusChange(orderId, step.change)
+  }
+
+  function handlePaymentMethodChosen(orderId: string, method: 'BANK_TRANSFER' | 'CASH') {
+    setPayingOrderId(null)
+    handleStatusChange(orderId, { kind: 'paid', value: true, method })
   }
 
   function openEdit(order: Order) {
@@ -833,6 +909,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
                     {order.name} {order.surname}
                     <PaymentMark order={order} locale={locale} />
+                    <BalanceDueMark order={order} locale={locale} />
                   </span>
                   {/* The click handler is on this wrapper, not the pill, so
                       padding here buys hit area for free: the badge still reads
@@ -842,7 +919,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                       changes. Card list = the phone view of /admin/orders. */}
                   <div
                     className="relative flex-shrink-0 py-2 -my-2"
-                    onClick={e => { e.stopPropagation(); setStatusMenuId(statusMenuId === order.id ? null : order.id) }}
+                    data-status-menu
+                    onClick={e => { e.stopPropagation(); toggleStatusMenu(order.id, e) }}
                   >
                     <button
                       className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
@@ -850,25 +928,10 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                     >
                       {labelFor(locale, order.stage)} ▾
                     </button>
-                    {statusMenuId === order.id && (
-                      <div
-                        className="absolute right-0 z-30 rounded-xl shadow-lg border py-1 mt-1"
-                        style={{ minWidth: 160, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {menuSteps(order).map(step => (
-                          <button
-                            key={step.code}
-                            onClick={() => handleStatusChange(order.id, step.change)}
-                            className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors active:bg-amber-100"
-                            style={{ color: C.text }}
-                          >
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
-                            {labelFor(locale, step.code)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* Menu itself renders in the shared portal at the bottom of this
+                        component (#62) — same trigger→toggleStatusMenu→statusMenuRect
+                        path the desktop table/list/board views use, so it can't be
+                        clipped by this card's own overflow-hidden. */}
                   </div>
                 </div>
 
@@ -1127,6 +1190,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                         )
                       })()}
                       <PaymentMark order={order} locale={locale} />
+                      <BalanceDueMark order={order} locale={locale} />
                     </div>
                   </td>
                 )}
@@ -1204,7 +1268,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         if (!order) return null
         const menuW = 140
         const steps = menuSteps(order)
-        const menuH = steps.length * 33 + 8
+        const choosingPayment = payingOrderId === order.id
+        const menuH = choosingPayment ? 110 : steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
         const left = Math.min(statusMenuRect.left, vw - menuW - 8)
@@ -1214,13 +1279,32 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         return createPortal(
           <div
             className="rounded-lg shadow-lg border py-1"
+            data-status-menu
             style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
-            {steps.map(step => (
+            {choosingPayment ? (
+              <div className="px-3 py-2">
+                <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
+                <div className="flex flex-col gap-1">
+                  <button onClick={() => handlePaymentMethodChosen(order.id, 'BANK_TRANSFER')}
+                    className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                    {at('paymentMethod.bankTransfer')}
+                  </button>
+                  <button onClick={() => handlePaymentMethodChosen(order.id, 'CASH')}
+                    className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                    {at('paymentMethod.cash')}
+                  </button>
+                  <button onClick={() => setPayingOrderId(null)}
+                    className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
+                    {at('paymentMethod.cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : steps.map(step => (
               <button
                 key={step.code}
-                onClick={() => handleStatusChange(order.id, step.change)}
+                onClick={() => handleStepClick(order.id, step)}
                 className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
                 style={{ color: C.text }}
               >
@@ -1549,6 +1633,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ fontSize: 11, fontFamily: 'sans-serif', backgroundColor: cfg.bg, color: cfg.color, borderRadius: 99, padding: '1px 8px', fontWeight: 600 }}>{labelFor(locale, o.stage)}</span>
                   <PaymentMark order={o} locale={locale} />
+                  <BalanceDueMark order={o} locale={locale} />
                 </span>
               </div>
               <div style={{ color: C.faint, fontSize: 12 }}>{visitLabel(locale, o.visitType)}</div>
@@ -1583,6 +1668,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   <PRow key={i} label={e.label} value={formatTetri(asTetri(e.amount))} />
                 ))}
                 <PRow label={at('orders.col.total')} value={formatTetriOrDash(asTetriOrNull(o.totalPrice))} bold wine />
+                {/* Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — same
+                    "only once paid, only when nonzero" gate as everywhere else it's shown. */}
+                {o.paidAt != null && balanceDue(o.totalPrice, o.paymentsSettledTotal) !== 0 && (
+                  <PRow
+                    label={at(balanceDue(o.totalPrice, o.paymentsSettledTotal) > 0 ? 'orders.balanceDue' : 'orders.credit')}
+                    value={formatTetri(asTetri(Math.abs(balanceDue(o.totalPrice, o.paymentsSettledTotal))))}
+                    bold
+                  />
+                )}
               </div>
 
               {/* Contact */}

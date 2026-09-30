@@ -38,3 +38,26 @@ export function getSuperAdminCredentials(): Credential {
   // switching, onboarding wizard on a separate test tenant).
   return extractBlock(text, 'Super-admin login (Supabase Auth — dev project ONLY, for /super-admin testing):');
 }
+
+/**
+ * Resend's API key, read the same way as everything else in this file — never
+ * copied into a fixture/.env. Added for tier5-payment-e2e's settlement-email
+ * check (Chunk 3, Plan-PaymentE2ETesting.md): the only way to independently
+ * confirm whether `settle.ts`'s fire-and-forget settlement email actually
+ * reached Resend is to query Resend's own send log directly
+ * (`GET api.resend.com/emails`), the same account/key documented in
+ * credentials.txt's "RESEND — Transactional Email" block.
+ */
+export function getResendApiKey(): string {
+  const text = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
+  const headerIndex = text.indexOf('RESEND — Transactional Email');
+  if (headerIndex === -1) {
+    throw new Error('credentials.txt: "RESEND — Transactional Email" block not found');
+  }
+  const section = text.slice(headerIndex, headerIndex + 600);
+  const match = section.match(/RESEND_API_KEY[^\n]*\n(\S+)/);
+  if (!match) {
+    throw new Error('credentials.txt: could not parse RESEND_API_KEY under the RESEND block');
+  }
+  return match[1];
+}

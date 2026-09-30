@@ -30,6 +30,20 @@ export default async function OrderDetailPage({
         extras: { orderBy: { id: 'asc' } },
         contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
         invoicesSent: { orderBy: { sentAt: 'desc' } },
+        // How the money actually arrived, for the Paid indicator below, and
+        // what's actually settled, for the balance-due figure
+        // (Plan-PostPaymentExtras Chunk 2). Every live (settled, not
+        // reversed) row, newest first. `settledAt` is fetched (not just used
+        // for ordering) so OrderDetail can render a real date per payment —
+        // Chunk 5 stopped collapsing this list down to `payments[0]`'s
+        // method, which used to relabel how the *original* payment was made
+        // the moment a differently-paid top-up settled (KnownBugs #64
+        // finding 4).
+        payments: {
+          where: { settledAt: { not: null }, reversedAt: null },
+          orderBy: { settledAt: 'desc' },
+          select: { method: true, amount: true, settledAt: true },
+        },
       },
     })),
     // For the "link this to a company" control (Feature 180) — the
@@ -59,6 +73,9 @@ export default async function OrderDetailPage({
 
   if (!order) notFound()
   const locale = adminLanguage || 'en'
+  // Sum of every settled, non-reversed payment — the other half of the
+  // balance-due figure (Plan-PostPaymentExtras Chunk 2).
+  const paymentsSettledTotal = order.payments.reduce((sum, p) => sum + p.amount, 0)
   // The fulfilment vocabulary for the flow-line and the status dropdown.
   return (
     <div className="max-w-2xl">
@@ -85,6 +102,16 @@ export default async function OrderDetailPage({
           completedAt: order.completedAt,
           invoiceSentAt: order.invoiceSentAt,
           paidAt: order.paidAt,
+          // Every settled, non-reversed payment, newest first — see the
+          // query's own comment above (Plan-PostPaymentExtras Chunk 5).
+          payments: order.payments.map(p => ({
+            method: p.method,
+            amount: p.amount,
+            // The query's own `where: { settledAt: { not: null } }` guarantees
+            // this is never actually null — Prisma's generated type just
+            // doesn't narrow on a `where` clause.
+            settledAt: p.settledAt!,
+          })),
           date: order.date,
           timeSlot: order.timeSlot,
           bookingType: order.bookingType,
@@ -102,6 +129,7 @@ export default async function OrderDetailPage({
           phone: order.phone,
           notes: order.notes,
           totalPrice: order.totalPrice,
+          paymentsSettledTotal,
           // The rates this order was sold at. Fetched all along (the query uses
           // `include`) but never passed down, which is why OrderDetail could not
           // tell what the order cost and invented ₾50 instead (#50/#52).

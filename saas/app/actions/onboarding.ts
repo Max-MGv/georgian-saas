@@ -19,6 +19,7 @@ import { getSetting, updateSetting } from './settings'
 import { createCompany, deleteCompany } from './companies'
 import { createPrice, setDisplayPrice } from './prices'
 import { createWine, createVintage, deleteWine } from './wines'
+import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
 import type { WineType, Sweetness } from '@prisma/client'
 
 export type OnboardingStatus = {
@@ -54,7 +55,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
     raw, companyCount, individualsPriceCount, wineCount,
     enhancedBookingRaw, offersFoodRaw, offersMasterclassRaw, menuItemCount, masterclassItemCount,
     paymentIban, contactPhone, contactEmail, contactAddress, mapsEmbedUrl,
-    tenant, heroBg, launchedAt,
+    tenant, heroBg, launchedAt, flittConfigured,
   ] = await Promise.all([
     getSetting('onboarding_works_with_companies'),
     withTenantDb(tenantId, tx => tx.company.count({ where: { tenantId, isIndividual: false } })),
@@ -79,6 +80,9 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
     db.tenant.findUnique({ where: { id: tenantId }, select: { logoUrl: true } }),
     getSetting('home_hero_bg_path'),
     getSetting('onboarding_launched_at'),
+    // A tenant with card payments fully live has a real way to get paid and
+    // needs no bank-transfer IBAN to be "done" — see paymentInfoStepDone below.
+    isPaymentConfigured(tenantId),
   ])
 
   const worksWithCompanies = raw === 'yes' ? 'yes' : raw === 'no' ? 'no' : null
@@ -96,11 +100,15 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   const masterclassesDone = offersMasterclasses === 'no' || (offersMasterclasses === 'yes' && masterclassItemCount > 0)
   const bookingDetailsStepDone = !enhancedBookingOn || (foodAddonsDone && masterclassesDone)
 
-  // Only the IBAN gates the step/readyToLaunch — it's the one field that makes a
-  // bank transfer actually possible. The other four matter for a complete invoice
-  // but are tracked separately (see getFinishDetailsStatus's paymentPartial).
+  // The IBAN is the one field that makes a bank transfer actually possible, so
+  // it alone used to gate this step. That left a tenant taking real card
+  // payments through Flitt — fully live, no bank transfer needed — stuck on
+  // "finish setting up your account" forever, since they had no reason to ever
+  // fill in an IBAN. Either a working payout method counts as done now. The
+  // IBAN's other four sibling fields still matter for a complete invoice, but
+  // are tracked separately (see getFinishDetailsStatus's paymentPartial).
   const paymentIbanSet = Boolean(paymentIban)
-  const paymentInfoStepDone = paymentIbanSet
+  const paymentInfoStepDone = paymentIbanSet || flittConfigured
 
   const contactInfoStepDone = Boolean(contactPhone || contactEmail || contactAddress)
   const mapsEmbedSet = Boolean(mapsEmbedUrl)
