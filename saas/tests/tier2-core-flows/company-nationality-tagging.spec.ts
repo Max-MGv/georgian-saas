@@ -155,8 +155,10 @@ test.describe.serial('Company booking nationality tagging', () => {
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
     await page.getByRole('combobox').last().selectOption({ index: 1 });
     await page.getByText('Tasting', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
-    await page.getByRole('textbox', { name: 'First Name' }).fill('Nationality');
-    await page.getByRole('textbox', { name: 'Last Name' }).fill('TestGuest');
+    // Contact Person merged First/Last Name into one Name field 2026-09-30
+    // (MaintenanceNotes.md §1); exact: true since a company with a guide
+    // also has a "Guide — Name" field.
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Nationality TestGuest');
     await page.getByRole('textbox', { name: 'Phone' }).fill(TEST_PHONE);
     await page.getByRole('textbox', { name: 'Email' }).fill(TEST_EMAIL);
     await page.getByRole('button', { name: /Request Booking|Confirm & Request Booking/ }).click();

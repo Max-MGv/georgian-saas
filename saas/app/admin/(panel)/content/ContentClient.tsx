@@ -74,8 +74,10 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'form_date',                  label: 'Date label',                 fallback: 'Date' },
     { key: 'form_time_slot',             label: 'Time Slot label',            fallback: 'Time Slot' },
     { key: 'form_num_guests',            label: 'Number of Guests label',     fallback: 'Number of Guests' },
-    { key: 'form_first_name',            label: 'First Name label',           fallback: 'First Name' },
-    { key: 'form_last_name',             label: 'Last Name label',            fallback: 'Last Name' },
+    // form_first_name / form_last_name removed 2026-09-30: the Contact Person
+    // section merged into one Name field (matching the per-contact-type blocks
+    // below it), so a separate "First Name label" / "Last Name label" no longer
+    // corresponds to anything on the page. See MaintenanceNotes.md §1.
     { key: 'form_phone',                 label: 'Phone label',                fallback: 'Phone' },
     { key: 'form_email',                 label: 'Email label',                fallback: 'Email' },
     { key: 'form_food_notes',            label: 'Food Notes label',           fallback: 'Food Notes' },

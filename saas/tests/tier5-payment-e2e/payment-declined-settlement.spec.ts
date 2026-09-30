@@ -82,8 +82,9 @@ test.describe('Individual booking — declined settlement, never mis-read as pai
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow))
       await formPage.getByRole('combobox').selectOption({ index: 1 })
       await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4')
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentE2E')
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker)
+      // Contact Person merged First/Last Name into one Name field 2026-09-30
+      // (MaintenanceNotes.md §1).
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentE2E ${marker}`)
       await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000051')
       await formPage.getByRole('textbox', { name: 'Email' }).fill(email)
 

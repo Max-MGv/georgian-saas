@@ -25,7 +25,15 @@ function companyNameButton(page: Page): Locator {
 }
 
 function companyRow(page: Page): Locator {
-  return companyNameButton(page).locator('xpath=..');
+  // xpath=../.. — two levels, not one. The name button sits in its own
+  // wrapper div (added by KnownBugs.md #15's nested-button fix, 2026-09-12,
+  // which pulled the "needs details" HelpHint out from inside this button
+  // to sit beside it instead); Edit/Delete live one level further up, in
+  // the row's outer flex container, as a sibling of that wrapper. Real
+  // drift caught 2026-09-30 — `xpath=..` alone silently scoped to a div
+  // that could never contain Edit/Delete, so clickUntil retried for its
+  // full timeout against a target that was never going to appear.
+  return companyNameButton(page).locator('xpath=../..');
 }
 
 // Real finding, the central one this test exists to guard against: on this

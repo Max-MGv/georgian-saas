@@ -112,6 +112,58 @@ These come from running this suite (or the app in general) hard, not from any si
 
 **Fix:** `Stop-Process` the dev server, `rm -rf .next` (Turbopack's dev cache — a forceful `-Force` kill has corrupted this once, manifesting as `/admin/login` returning a stale 404), then `npm run dev` fresh. Cheap and reliably fixes this specific pattern — distinguish it from the DB pool issue above (that one a restart does *not* fix).
 
+**Reconfirmed 2026-09-30, a second real instance, different route:** after a ~90-minute session
+running the full suite plus several isolated reruns, `/admin/orders/new` started returning a
+genuine 404 — reproduced directly in a browser (not just in a test), confirmed live that no
+`notFound()` call exists anywhere in that route's own code, then cleared immediately by the same
+fix (`rm -rf .next` + restart). This one fix cleared 4 unrelated test failures in the same run
+(`theme-colors`, `booking-simple`, `contact-orphan-safety`, `admin-orders`) — a useful shape to
+recognize: several *seemingly unrelated* failures clearing together after one cache wipe is a
+strong signal this pattern was the cause, not four separate regressions.
+
+**Trade-off worth knowing:** running tests immediately after a fresh `rm -rf .next` is itself
+slower for a while — every route's *first* Turbopack compile after the wipe costs several extra
+seconds, and a test doing many sequential admin-page loads can stack that into a timeout that
+looks like a new bug. If a test times out on something completely ordinary (a settings toggle,
+a page load) right after a cache wipe, check whether it's just uncompiled-route latency before
+concluding it's a real regression.
+
+### Two real, confirmed test-locator bugs found 2026-09-30 (not app bugs)
+
+Both found by getting a full run's failures to actually pass in isolation, then reading the
+diff between the test's assumption and the app's current DOM/UI rather than accepting "still
+red" as one bug.
+
+1. **`payment-amount-integrity.spec.ts`'s company-booking scenario** used
+   `getByRole('textbox', { name: 'Phone' })` / `'Email'` with no `exact: true`. The Contact
+   Roles guide picker now renders a "Guide — Phone"/"Guide — Email" field on this scenario's
+   company, so the un-exact match resolved to two elements. Real drift — this test predates
+   the picker appearing on this company. Fixed with `exact: true` on both locators.
+2. **`companies-crud.spec.ts`'s `companyRow()` helper** scoped one DOM level too shallow.
+   `KnownBugs.md` #15's nested-button fix (2026-09-12) wrapped the row's name-button in its own
+   wrapper div to pull the "needs details" `HelpHint` out from inside it; `xpath=..` used to
+   land on the row's outer flex container (which holds Edit/Delete) but now stops one level
+   short. Confirmed by direct DOM inspection before fixing (`parentElement` does not contain an
+   Edit button, `parentElement.parentElement` does). Fixed with `xpath=../..`. This test has
+   likely been silently broken since the #15 fix landed on 2026-09-12, with `clickUntil`'s
+   20-second retry budget absorbing the failure as apparent slowness until this session.
+
+Also fixed the same day, same root shape: **`wine-catalogue-order.spec.ts`** checked
+`/admin/abandoned` for its test row without ever clicking the "Wine orders" tab
+(`AbandonedClient.tsx` splits Bookings/Wine orders into two tabs, Bookings shown by default).
+The wine order was written correctly the whole time (confirmed via direct DB read,
+`abandonedAt` set ~2s after `createdAt`) — the test was looking at the wrong tab, not a missing
+row.
+
+**Two new leads from the same session, not yet resolved:** after the tab fix above,
+`wine-catalogue-order.spec.ts` now reaches a later step — clicking "Restore without payment" —
+and is blocked there by `<div class="fixed inset-0 z-50 ...">` intercepting the click,
+reproduced identically twice including once right after a clean restart (argues against pure
+load noise). Separately, `companies-crud.spec.ts` now hangs waiting on a form field inside the
+Edit panel while Playwright's own trace shows unexpected navigation between `/admin/orders` and
+`/admin/companies` — looks like a real client-side navigation firing, not ordinary slowness.
+Neither is root-caused yet.
+
 ### A silently stale `DEFAULT_TENANT_ID`
 
 **Symptom:** every test in the suite quietly runs against the wrong tenant — no errors, just wrong data, wrong assumptions, everything "passing" against a tenant nobody meant to test.

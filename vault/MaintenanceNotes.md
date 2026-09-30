@@ -46,19 +46,51 @@ section, so the two don't drift into duplicate or conflicting sources of truth f
 
 **Since Plan-ContactRoles Chunk 7 (2026-09-22):** the detailed variant has a **fourth**
 section — one contact-details block (Name / Phone / Email) per contact role other than
-`contact_person`, which keeps the existing First Name / Last Name / Phone / Email fields. It has
-**no `FIELDS.form` entry**, and that is this note's own test applied rather than an oversight:
-each block's heading is a role's `labelEn`/`labelKa` from the `ContactRole` table, managed at
-Settings → Contact Types, so it is other admin data like the `MenuItem`/`MasterclassItem` rows —
-not SiteContent. The sub-labels are plain `t()` keys (`form.contact_role_name/_phone/_email`),
-matching how the guest sub-labels above them are handled. `BookingFormVisualPanel.tsx` mirrors
-it as a static illustrative block, the same way it mirrors a masterclass row.
+`contact_person`. It has **no `FIELDS.form` entry**, and that is this note's own test applied
+rather than an oversight: each block's heading is a role's `labelEn`/`labelKa` from the
+`ContactRole` table, managed at Settings → Contact Types, so it is other admin data like the
+`MenuItem`/`MasterclassItem` rows — not SiteContent. The sub-labels are plain `t()` keys
+(`form.contact_role_name/_phone/_email`). `BookingFormVisualPanel.tsx` mirrors it as a static
+illustrative block, the same way it mirrors a masterclass row.
 
 The blocks are driven by the tenant's **role list** (`orderRolesFor()`, passed as `bookingRoles`
 from `app/(site)/page.tsx`), not by which people the selected company happens to have — so the
 form's shape stays put as the dropdown changes, and a company with no guides still offers
 somewhere to type one. Adding a contact type in the admin panel adds a block here with no code
 change; that is the requirement the whole rework exists for.
+
+**Since 2026-09-30 (Max's request, visual consistency with the blocks above):** the
+`contact_person` role's own fields — previously separate First Name / Last Name boxes, styled
+differently from every other role's block — merged into a single **Name** field and moved to the
+same one-row, placeholder-style layout the other roles already use. `Order.name`/`surname` stay
+two DB columns (the orders CSV export keeps them separate for the winery's own accounting), so
+`components/BookingForm.tsx`'s `splitFullName()` splits the guest's typed full name into them at
+submit time only — first word → `name`, the rest → `surname`. There is no "must contain a space"
+validation anywhere: `createBooking.ts` never required `surname` to be non-empty even before this
+change, so a one-word name is accepted with an empty `surname` rather than blocked.
+
+**What actually changed, concretely:**
+- `form_first_name`/`form_last_name` are **gone** from `FIELDS.form` (`ContentClient.tsx`),
+  `seed-ka.ts`, and `lib/t.ts`'s `form.first_name`/`form.last_name` fallbacks — there is no
+  tenant-editable label for this field any more, same as every other role's Name field.
+- The section's **title** ("Contact Person") is no longer a `FIELDS.form` label at all — it now
+  reads the `contact_person` role's own live `labelEn`/`labelKa` (`contactPersonRole` in
+  `BookingForm.tsx`, already computed there for the contact picker), the exact same mechanism
+  the "Guide" block's title uses. A tenant renaming the role at Settings → Contact Types renames
+  this heading too, automatically.
+- Phone/Email **keep** their `form_phone`/`form_email` `FIELDS.form` entries and stay
+  tenant-editable — only *where* that text renders changed, from a `<label>` above the box to
+  `placeholder`/`aria-label` text inside it (matching the other roles' fields). Their accessible
+  name is unchanged either way, so nothing downstream that reads it needed to change.
+- `BookingFormVisualPanel.tsx` and `MessagesPanel.tsx`'s confirm-sheet preview were both updated
+  to match — see each file's own comment for why the title is hardcoded/bilingual-inline there
+  instead of reading a live role, since neither has real tenant data to read it from.
+- **10 Playwright spec files** targeted `getByRole('textbox', { name: 'First Name' })`/
+  `'Last Name'` and needed updating to a single `'Name'` field (`exact: true`, for the same
+  reason Phone/Email already needed it on a company with a guide — see
+  `playwright/KNOWN-ISSUES.md`). `contact-role-picker.spec.ts`'s assertions on auto-fill/clear
+  behavior needed real semantic changes, not just a locator swap, since `applyPickedPerson` no
+  longer splits a picked person's name before writing it.
 
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled

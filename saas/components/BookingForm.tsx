@@ -129,6 +129,19 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
+/** Same split convention this form already used for a picked person's name
+ * (see the old `applyPickedPerson` first-word/rest split) — now also used to
+ * turn the guest's own single Name field back into `Order.name`/`surname`
+ * at submit time, since those stay two DB columns (the orders CSV export
+ * keeps them separate for the winery's own accounting). No "both required"
+ * check exists on the server for this path (`createBooking.ts` never
+ * validates `surname`), so a one-word name is accepted with an empty
+ * surname rather than blocked. */
+function splitFullName(full: string): { name: string; surname: string } {
+  const parts = full.trim().split(' ')
+  return { name: parts[0] ?? '', surname: parts.slice(1).join(' ') }
+}
+
 export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
@@ -176,8 +189,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [confirmedPendingNewCompany, setConfirmedPendingNewCompany] = useState(false)
 
   // Auto-fill fields (controlled so we can populate them from company profile)
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
+  const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   /** Which company the four fields above were last filled from — see the effect below. */
@@ -206,20 +218,17 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn,
     [locale]
   )
+  const contactPersonTitle = contactPersonRole ? roleLabel(contactPersonRole) : 'Contact Person'
 
   /**
    * Put a picked person's details into the form.
    *
    * Only the contact_person role touches the form's own inputs; every other role is
-   * rendered straight out of the hook's own state, so there is nothing to copy. The
-   * hook stays form-agnostic precisely because this function, not the hook, knows that
-   * this particular form splits a name into two boxes.
+   * rendered straight out of the hook's own state, so there is nothing to copy.
    */
   const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
     if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
-    const parts = person.name.trim().split(' ')
-    setFirstName(parts[0] ?? '')
-    setLastName(parts.slice(1).join(' '))
+    setFullName(person.name)
     if (person.phone) setPhone(person.phone)
     if (person.email) setEmail(person.email)
   }, [contactPersonRole])
@@ -355,7 +364,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
      * details first and only then chose a company does not watch them vanish.
      */
     if (prevCompanyIdRef.current && prevCompanyIdRef.current !== companyId) {
-      setFirstName(''); setLastName(''); setPhone(''); setEmail('')
+      setFullName(''); setPhone(''); setEmail('')
     }
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
@@ -428,7 +437,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCode('')
     setDirectCodeError('')
     resetContacts()
-    setFirstName(''); setLastName(''); setPhone(''); setEmail('')
+    setFullName(''); setPhone(''); setEmail('')
   }
 
   async function handleNewCompanySubmit() {
@@ -468,7 +477,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setConfirmedPendingNewCompany(true)
       setShowNewCompanyPopup(false)
       setStatus('success')
-      dispatchDemoBooked({ name: firstName, surname: lastName })
+      dispatchDemoBooked(splitFullName(fullName))
     } else {
       setNewCoStatus('error')
     }
@@ -493,7 +502,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
     const contactPerson = contactPersonRole
       ? (() => {
-          const name = `${firstName} ${lastName}`.trim()
+          const name = fullName.trim()
           if (!name) return null
           return {
             roleId: contactPersonRole.roleId,
@@ -532,8 +541,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,
-      name: firstName,
-      surname: lastName,
+      ...splitFullName(fullName),
       email,
       phone,
       ...(isEnhanced ? {
@@ -637,14 +645,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         ...(lunchGuests > 0 ? [{ label: t(locale, 'form.guests_lunch'), value: String(lunchGuests) }] : []),
         ...(freeGuests > 0 ? [{ label: t(locale, 'form.guests_free'), value: String(freeGuests) }] : []),
         { label: t(locale, 'form.total'), value: String(totalGuests) },
-        { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
+        { label: contactPersonTitle, value: fullName.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
         ...nationalityReviewRows,
       ]
     : [
         { label: fc('form_num_guests', 'form.num_guests'), value: String(guestCount) },
-        { label: fc('form_first_name', 'form.first_name') + ' ' + fc('form_last_name', 'form.last_name'), value: `${firstName} ${lastName}`.trim() },
+        { label: contactPersonTitle, value: fullName.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
         ...nationalityReviewRows,
@@ -682,7 +690,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     if (!phone && !email) {
       contactWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      contactWrapRef.current?.querySelector('input')?.focus()
+      // #phone specifically, not the first input in this ref's subtree — that's now
+      // the merged Name field, not Phone, since this wrapper grew a third field.
+      contactWrapRef.current?.querySelector<HTMLInputElement>('#phone')?.focus()
       return
     }
     if (!timeSlot || !availableSlots.includes(timeSlot)) {
@@ -708,7 +718,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setNewCompanyIncludesBooking(true)
       setNewCoStatus('idle')
       setNewCoName('')
-      setNewCoContact(`${firstName} ${lastName}`.trim())
+      setNewCoContact(fullName.trim())
       setNewCoPhone(phone)
       setNewCoEmail(email)
       setShowNewCompanyPopup(true)
@@ -742,7 +752,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setConfirmedPendingNewCompany(false)
       setStatus('success')
       // Name is carried so the live mirror can highlight this exact row.
-      dispatchDemoBooked({ name: firstName, surname: lastName }) // no-op outside the demo tenant — see lib/demoEvents.ts
+      dispatchDemoBooked(splitFullName(fullName)) // no-op outside the demo tenant — see lib/demoEvents.ts
     } else {
       setShowConfirm(false)
       setStatus('error')
@@ -1229,35 +1239,33 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           )
         })}
 
-        {/* Name & surname */}
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="name" style={labelStyle}>{fc('form_first_name', 'form.first_name')}</label>
-            <input id="name" name="name" required value={firstName} onChange={e => setFirstName(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label htmlFor="surname" style={labelStyle}>{fc('form_last_name', 'form.last_name')}</label>
-            <input id="surname" name="surname" required value={lastName} onChange={e => setLastName(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
-          </div>
-        </div>
-
-        {/* Contact */}
+        {/* Contact Person — Name/Phone/Email in one row, styled to match the
+            per-role blocks above (Guide etc.) rather than two separate
+            2-column grids (2026-09-30, Max's request for visual consistency).
+            Title is the contact_person role's own live label (Settings →
+            Contact Types) — same mechanism the role blocks above use, since
+            this is that same role, just the one every tenant has always had.
+            Name has no FIELDS.form entry any more (was form_first_name/
+            form_last_name) — merging two boxes into one made a "First Name"
+            label meaningless, and its placeholder now matches the role
+            blocks' own fixed "Name" wording instead. Phone/Email keep their
+            existing tenant-editable SiteContent text, just moved from a
+            label above the box to placeholder text inside it. See
+            MaintenanceNotes.md §1. */}
         <div ref={contactWrapRef}>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="phone" style={labelStyle}>{fc('form_phone', 'form.phone')}</label>
-              <input id="phone" name="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
-            </div>
-            <div>
-              <label htmlFor="email" style={labelStyle}>{fc('form_email', 'form.email')}</label>
-              <input id="email" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
-            </div>
+          <label style={{ ...labelStyle, marginBottom: 6, display: 'block' }}>{contactPersonTitle}</label>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <input id="name" name="name" required value={fullName} onChange={e => setFullName(e.target.value)}
+              type="text" aria-label={t(locale, 'form.contact_role_name')} placeholder={t(locale, 'form.contact_role_name')}
+              className="rounded-lg border px-3 py-2.5 text-sm" style={inputStyle} />
+            <input id="phone" name="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              aria-label={fc('form_phone', 'form.phone')} placeholder={fc('form_phone', 'form.phone')}
+              className="rounded-lg border px-3 py-2.5 text-sm"
+              style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
+            <input id="email" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+              aria-label={fc('form_email', 'form.email')} placeholder={fc('form_email', 'form.email')}
+              className="rounded-lg border px-3 py-2.5 text-sm"
+              style={{ ...inputStyle, borderColor: contactHasError ? STATUS.errorBorder : inputStyle.borderColor }} />
           </div>
           {contactHasError && (
             <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_contact', 'form.err_contact')}</p>

@@ -161,8 +161,9 @@ test.describe('Booking form — simple/individual variant', () => {
     await timeSlot.selectOption('13:00');
 
     // 2. Fill name, email, phone fields with valid test values.
-    await page.getByRole('textbox', { name: 'First Name' }).fill('Playwright');
-    await page.getByRole('textbox', { name: 'Last Name' }).fill('SimpleTest');
+    // Contact Person merged First/Last Name into one Name field 2026-09-30
+    // (MaintenanceNotes.md §1).
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Playwright SimpleTest');
     await page.getByRole('textbox', { name: 'Phone' }).fill('+995500000001');
     await page.getByRole('textbox', { name: 'Email' }).fill(TEST_EMAIL);
 

@@ -158,27 +158,20 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         </div>
       )}
 
-      {/* Name */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label style={labelStyle}><ET k="form_first_name" fb="First Name" /></label>
-          <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: 'transparent' }}>—</div>
-        </div>
-        <div>
-          <label style={labelStyle}><ET k="form_last_name" fb="Last Name" /></label>
-          <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: 'transparent' }}>—</div>
-        </div>
-      </div>
-
-      {/* Contact */}
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <label style={labelStyle}><ET k="form_phone" fb="Phone" /></label>
-          <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: 'transparent' }}>—</div>
-        </div>
-        <div>
-          <label style={labelStyle}><ET k="form_email" fb="Email" /></label>
-          <div className="w-full rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: 'transparent' }}>—</div>
+      {/* Contact Person — merged into one Name/Phone/Email row (2026-09-30),
+          matching the "Guide" block's style above it. Title is illustrative
+          here, same as "Guide" — the real page reads it from the
+          contact_person role's own label (Settings → Contact Types). Name
+          has no admin-editable label any more (see FIELDS.form's removed
+          form_first_name/form_last_name entries, ContentClient.tsx); Phone/
+          Email stay real ET-editable text, now shown as the box's own
+          content instead of a label above it. */}
+      <div>
+        <label style={labelStyle}>Contact Person</label>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div className="rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: C.faint }}>Name</div>
+          <div className="rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: C.faint }}><ET k="form_phone" fb="Phone" /></div>
+          <div className="rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputShell, color: C.faint }}><ET k="form_email" fb="Email" /></div>
         </div>
       </div>
 

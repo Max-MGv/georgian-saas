@@ -158,8 +158,9 @@ test.describe('Individual booking — approved settlement, full cross-view check
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow))
       await formPage.getByRole('combobox').selectOption({ index: 1 })
       await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4')
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentE2E')
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker)
+      // Contact Person merged First/Last Name into one Name field 2026-09-30
+      // (MaintenanceNotes.md §1).
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentE2E ${marker}`)
       await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000041')
       await formPage.getByRole('textbox', { name: 'Email' }).fill(email)
 
@@ -274,8 +275,11 @@ test.describe('Company booking — approved settlement, light check (shares star
       tomorrow.setDate(tomorrow.getDate() + 1)
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow))
       await formPage.getByRole('spinbutton').first().fill('4')
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentE2E')
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker)
+      // Contact Person merged First/Last Name into one Name field 2026-09-30
+      // (MaintenanceNotes.md §1); exact: true for the same reason Phone/Email
+      // below already needed it — this company's "Guide" role adds its own
+      // "Guide — Name/Phone/Email" fields to this form.
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentE2E ${marker}`)
       // exact: true — this company has a "Guide" contact role configured
       // (Plan-ContactRoles), which adds its own "Guide — Phone"/"Guide —
       // Email" fields to this form. Non-exact matching on 'Phone'/'Email'

@@ -163,6 +163,12 @@ test.describe('Wine catalogue → order', () => {
     // incomplete order, not a wine order — it is on /admin/abandoned and
     // deliberately nowhere on /admin/wine-orders (Feature 191).
     await admin.goto('/admin/abandoned');
+    // Real drift caught 2026-09-30: this screen splits Bookings/Wine orders
+    // into two tabs (AbandonedClient.tsx's <Tab>), Bookings shown by
+    // default. The wine order was always written correctly (confirmed via
+    // direct DB read — abandonedAt set within ~2s of createdAt) — this test
+    // was just never looking at the tab that shows it.
+    await admin.getByRole('button', { name: /^Wine orders/ }).click();
     const incomplete = admin.locator('div').filter({ hasText: TEST_BUSINESS_NAME }).last();
     await expect(incomplete).toBeVisible({ timeout: 20_000 });
 

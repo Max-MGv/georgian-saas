@@ -8,7 +8,118 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-29 (newest) — Four open bugs verified live, four fixed: #65, #53, #61, #19
+## 2026-09-30 (newest) — Playwright suite: ran it for real, found the `.next` cache pattern was live, fixed two real test-locator bugs
+
+Not new feature work — Max asked what's in progress, then asked to explore the Playwright
+suite. Corrected one wrong assumption first: the four bug fixes reported pending on
+2026-09-29 (#65, #53, #61, #19) were **already merged to `master`** that same day
+(`6b838dc`) — git history confirmed it, nothing was actually pending. What *is* still ahead
+of `master` on `staging` is unrelated new work (a "Clear staging data" super-admin button),
+left alone.
+
+**Ran the full tier1–4 suite for real** (35 tests, localhost, serial) — first clean run in
+weeks. 22 passed, 11 failed. Reran every failure in isolation, one spec at a time, per the
+suite's own documented method for telling a real regression from load noise — 6 of 11
+cleared on isolation alone (pure full-suite contention, not app or test bugs).
+
+**Root cause found for the rest, live-verified, not just read from the code:** `/admin/orders/new`
+was genuinely 404ing — reproduced directly in a browser, confirmed no `notFound()` call exists
+in the route's own code, then fixed with `rm -rf .next` + a clean dev-server restart. This is
+`playwright/KNOWN-ISSUES.md`'s documented Turbopack dev-cache-corruption pattern (same shape as
+a past `/admin/login` 404 incident) — confirmed live for the first time this session rather than
+assumed. That single fix cleared 4 more tests (`theme-colors`, `booking-simple`,
+`contact-orphan-safety`, `admin-orders`).
+
+**Two real, confirmed test bugs found and fixed** (not app bugs — the app behaves correctly in
+both cases):
+1. `payment-amount-integrity.spec.ts`'s company-booking scenario used
+   `getByRole('textbox', { name: 'Phone' })` / `'Email'` with no `exact: true`. Since the
+   Contact Roles guide picker now renders a "Guide — Phone"/"Guide — Email" field on this
+   scenario's company, the un-exact role match resolved to two elements and threw. Real drift,
+   not noise — this test predates the picker appearing here. Fixed with `exact: true` on both.
+2. `companies-crud.spec.ts`'s `companyRow()` helper scoped one DOM level too shallow.
+   `KnownBugs.md` #15's nested-button fix (2026-09-12) wrapped the row's name-button in its own
+   div to pull the HelpHint out from inside it — `xpath=..` used to reach the row's outer flex
+   container (which holds Edit/Delete) but now stops one level short, at a div containing only
+   the name button. Confirmed by direct DOM inspection (`parentHasEditButton: false,
+   grandparentHasEditButton: true`), not guessed. Fixed with `xpath=../..`. This test has
+   likely been silently broken since the #15 fix landed, absorbed by `clickUntil`'s generous
+   retry budget until now.
+
+**Also fixed, same root cause as the finding above:** `wine-catalogue-order.spec.ts` checked
+`/admin/abandoned` for its test row without ever clicking the "Wine orders" tab
+(`AbandonedClient.tsx` splits Bookings/Wine orders into two tabs, Bookings shown by default).
+Confirmed via direct DB read the wine order was written correctly the whole time
+(`abandonedAt` set within ~2s of `createdAt`) — the data was never the problem, the test was
+looking at the wrong tab.
+
+**Two new leads surfaced, not yet resolved — worth a dedicated look, not chased further here
+given time already spent:**
+- `wine-catalogue-order.spec.ts`: after the tab fix, a later click on "Restore without payment"
+  is now blocked twice in a row by `<div class="fixed inset-0 z-50 ...">...intercepts pointer
+  events` — a modal/backdrop not clearing. Reproduced identically on two separate runs
+  (including one right after a clean dev-server restart), which argues against pure load noise,
+  but not fully triaged.
+- `companies-crud.spec.ts`: after the Edit panel opens, the test hangs 120s waiting on a form
+  field while Playwright's own trace shows unexpected navigation between `/admin/orders` and
+  `/admin/companies` — looks like a real client-side navigation firing, not ordinary slowness.
+  Not yet root-caused.
+- `payment-amount-integrity.spec.ts`'s individual scenario timed out once on a plain settings
+  toggle POST immediately after a fresh restart — most likely first-compile latency stacking
+  across several sequential admin-page loads (each route's first Turbopack compile costs
+  several seconds right after a cache wipe), not a real bug — a manual check moments later
+  showed the same settings toggle responding in 325ms.
+
+Nothing committed — all three fixes sit uncommitted in the working tree pending Max's review.
+
+**Same-day follow-up — public booking form: Contact Person merged into the Guide-style layout.**
+Max flagged a visual mismatch: the "Guide" contact block (Plan-ContactRoles Chunk 7) has a title
+and three placeholder-style boxes in one row; the older Contact Person section above it (the
+form's own First Name / Last Name / Phone / Email) was two separate 2-column grids with labels
+above each box. Asked to make the old one match the new one.
+
+**One real decision along the way, checked with Max rather than assumed:** matching "3 bars"
+literally meant merging First/Last Name into one Name field, not just restyling two boxes —
+`Order.name`/`surname` stay two DB columns because the orders CSV export keeps them separate for
+accounting (`app/actions/orders.ts:599-600`), a genuine reason to ask rather than guess. Max's
+call: merge to one field, split server-side. Implemented as a client-side split at submit time
+(`BookingForm.tsx`'s new `splitFullName()`, first word → `name`, rest → `surname`) rather than
+touching `createBooking.ts` at all — it already never required `surname` non-empty, so there was
+nothing to relax.
+
+**Second real decision, surfaced before touching code:** merging breaks the "First Name"/"Last
+Name" locators in 10 Playwright spec files, including 4 real-payment tier5 specs — checked with
+Max before starting rather than silently leaving the suite red or silently taking on unscoped
+work. Max's call: fix the app and all 10 specs in the same pass.
+
+**What shipped:** `BookingForm.tsx`'s Contact Person block now reads its title from the
+`contact_person` role's own live label (`contactPersonRole` — already computed in the file for
+the contact picker, not a new lookup) — the exact same mechanism the "Guide" block's title uses,
+so a tenant renaming the role at Settings → Contact Types renames this heading too. Name has no
+tenant-editable label any more (`form_first_name`/`form_last_name` removed from `FIELDS.form`,
+`seed-ka.ts`, and `lib/t.ts`), matching how every other role's Name field already worked. Phone/
+Email keep their existing tenant-editable text, just moved from a label-above-the-box to
+placeholder-inside-the-box, with no accessible-name change. `BookingFormVisualPanel.tsx` and
+`MessagesPanel.tsx`'s confirm-sheet preview updated to match. Full detail: `MaintenanceNotes.md`
+§1's new "Since 2026-09-30" paragraph.
+
+**All 10 spec files updated**, not just locator swaps — `contact-role-picker.spec.ts`'s
+assertions on auto-fill/clear behavior needed real semantic changes, since `applyPickedPerson` no
+longer splits a picked person's name before writing it (now just `setFullName(person.name)`
+directly). Verified live, not just by reading the diff: `contact-role-picker.spec.ts` (the
+spec most directly exercising the new merge/split logic) ran clean, 5/5. `booking-simple.spec.ts`
+got as far as creating the order correctly with the right merged/split name and finding it in the
+admin table, then failed on an unrelated row-click-doesn't-navigate flake;
+`payment-amount-integrity.spec.ts` failed even earlier, on a plain settings-toggle POST that never
+resolved. Traced both to a real, live-confirmed cause: the shared dev DB's connection pool was
+genuinely exhausted at that moment (`P2028`, "Unable to start a transaction in the given time",
+confirmed directly in the dev server's own error log) — the exact environmental pattern
+`playwright/KNOWN-ISSUES.md` already documents, unrelated to this change. `tsc --noEmit` clean
+throughout. Committed to `staging` (never `master` directly, per Rule 0).
+
+---
+
+## 2026-09-29 — Four open bugs verified live, four fixed: #65, #53, #61, #19
 
 Went through every `KnownBugs.md` 🔴 Open entry one by one and tried to actually reproduce each,
 rather than trust the log. Two turned out to already be resolved with no fix commit to explain

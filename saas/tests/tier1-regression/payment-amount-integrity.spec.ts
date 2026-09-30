@@ -150,8 +150,10 @@ test.describe('Individual booking — payment on/off carries the correct amount 
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
       await formPage.getByRole('combobox').selectOption({ index: 1 });
       await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4');
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentIntegrity');
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker);
+      // Contact Person merged First/Last Name into one Name field 2026-09-30
+      // (MaintenanceNotes.md §1) — exact: true, same reason as the Phone/Email
+      // fix below: a company with a guide also has a "Guide — Name" field.
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentIntegrity ${marker}`);
       await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000021');
       await formPage.getByRole('textbox', { name: 'Email' }).fill(email);
 
@@ -276,10 +278,16 @@ test.describe('Company booking — section × per-company override × hidden-pri
       // touch it explicitly at all — leave it at that default instead of
       // guessing which combobox is which.
       await formPage.getByRole('spinbutton').first().fill('4'); // Tasting guest count
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentIntegrity');
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker);
-      await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000023');
-      await formPage.getByRole('textbox', { name: 'Email' }).fill(`zz-${marker.toLowerCase()}-${Date.now()}@example.invalid`);
+      // exact: true throughout — once a company has a guide, the picker's own
+      // "Guide — Name/Phone/Email" fields are also named "Name"/"Phone"/"Email"
+      // as a substring, so an un-exact role match resolves to two elements
+      // each. Real drift caught 2026-09-30 when the Contact Roles picker
+      // started appearing on this scenario's company (Name gained the same
+      // exposure on the same day First/Last merged into one field); see
+      // playwright/KNOWN-ISSUES.md.
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentIntegrity ${marker}`);
+      await formPage.getByRole('textbox', { name: 'Phone', exact: true }).fill('+995500000023');
+      await formPage.getByRole('textbox', { name: 'Email', exact: true }).fill(`zz-${marker.toLowerCase()}-${Date.now()}@example.invalid`);
 
       const submitBtn = formPage.getByRole('button', { name: /^(Book & Pay|Request Booking)$/ });
       const reviewHeading = formPage.getByRole('heading', { name: 'Review your visit' });

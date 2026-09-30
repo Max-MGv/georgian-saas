@@ -168,8 +168,11 @@ test.describe('Booking form — enhanced/company variant', () => {
     // accepted is the company's saved contact profile auto-filling the name
     // field (applyProfile() in BookingForm.tsx), so that's what this checks.
     await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
-    const firstNameInput = page.getByRole('textbox', { name: 'First Name' });
-    await expect(firstNameInput).not.toHaveValue('');
+    // exact: true — Contact Person merged First/Last Name into one "Name"
+    // field 2026-09-30 (MaintenanceNotes.md §1); a company with a guide also
+    // has a "Guide — Name" field, which an un-exact match would also hit.
+    const nameInput = page.getByRole('textbox', { name: 'Name', exact: true });
+    await expect(nameInput).not.toHaveValue('');
 
     // Switch to Tasting + Lunch so the Lunch guest field and Hot Dish
     // Selection block render (both are conditional on visitType === 'TASTING_LUNCH').
@@ -217,8 +220,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     // fegiufe") — pinned to today's exact live data, not curated names.
     await page.getByRole('checkbox', { name: 'khinkali10₾/pc' }).check();
 
-    await page.getByRole('textbox', { name: 'First Name' }).fill('Enhanced');
-    await page.getByRole('textbox', { name: 'Last Name' }).fill('TestGuest');
+    await nameInput.fill('Enhanced TestGuest');
     await page.getByRole('textbox', { name: 'Phone' }).fill('+995500000002');
     await page.getByRole('textbox', { name: 'Email' }).fill(TEST_EMAIL);
     await page.getByRole('textbox', { name: /Food Notes/ }).fill('Playwright test notes');

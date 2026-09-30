@@ -101,8 +101,10 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
     await expect(contactButton).toBeVisible();
     await contactButton.click();
 
-    await expect(contactField(page, 'First Name')).toHaveValue('Mariam');
-    await expect(contactField(page, 'Last Name')).toHaveValue('Dolidze');
+    // Contact Person merged First/Last Name into one Name field 2026-09-30
+    // (MaintenanceNotes.md §1) — applyPickedPerson now writes person.name
+    // straight into it rather than splitting across two boxes.
+    await expect(contactField(page, 'Name')).toHaveValue(CONTACT_NAME);
     await expect(contactField(page, 'Phone')).toHaveValue(CONTACT_PHONE);
 
     // ── Guide role next (sortOrder 20) — the popup re-opens itself for the next role in the
@@ -117,7 +119,7 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
     // is on for this tenant), never the First/Last Name fields, which stay Mariam's.
     await expect(contactField(page, 'Guide — Name')).toHaveValue(GUIDE_NAME);
     await expect(contactField(page, 'Guide — Phone')).toHaveValue(GUIDE_PHONE);
-    await expect(contactField(page, 'First Name')).toHaveValue('Mariam');
+    await expect(contactField(page, 'Name')).toHaveValue(CONTACT_NAME);
   });
 
   test('codes off: "I am not on this list" leaves the role\'s fields blank for the guest to fill in', async ({ page, context }) => {
@@ -134,8 +136,7 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
     // Under the current design Contact Person is itself a pickable role — there is no separate
     // "company's own contact" left to fall back to (that was the dropped Company.contactName
     // column, decision 2). Skipping just means nobody was picked for this role.
-    await expect(contactField(page, 'First Name')).toHaveValue('');
-    await expect(contactField(page, 'Last Name')).toHaveValue('');
+    await expect(contactField(page, 'Name')).toHaveValue('');
     await expect(contactField(page, 'Phone')).toHaveValue('');
 
     // The queue advances to the Guide role on its own.
@@ -188,7 +189,7 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
     // Contact Person became a role like any other.
     await expect(contactField(page, 'Guide — Name')).toHaveValue(GUIDE_NAME);
     await expect(contactField(page, 'Guide — Phone')).toHaveValue(GUIDE_PHONE);
-    await expect(contactField(page, 'First Name')).toHaveValue('');
+    await expect(contactField(page, 'Name')).toHaveValue('');
   });
 
   test('codes on: the company code is still accepted, but the picker never opens', async ({ page, context }) => {
@@ -204,7 +205,7 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
 
     // The colleague list is exactly what person codes exist to hide (decision 6) — the fields
     // are present, empty, ready for the guest to type into themselves.
-    await expect(contactField(page, 'First Name')).toHaveValue('');
+    await expect(contactField(page, 'Name')).toHaveValue('');
     await expect(contactField(page, 'Phone')).toHaveValue('');
     await expect(contactField(page, 'Guide — Name')).toHaveValue('');
   });

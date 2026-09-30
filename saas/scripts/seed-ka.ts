@@ -53,8 +53,7 @@ const rows = [
   { key: 'form_date',                   section: 'form', label: 'Date label',                 locale: 'ka', value: 'თარიღი' },
   { key: 'form_time_slot',              section: 'form', label: 'Time Slot label',            locale: 'ka', value: 'დრო' },
   { key: 'form_num_guests',             section: 'form', label: 'Number of Guests label',     locale: 'ka', value: 'სტუმრების რაოდენობა' },
-  { key: 'form_first_name',             section: 'form', label: 'First Name label',           locale: 'ka', value: 'სახელი' },
-  { key: 'form_last_name',              section: 'form', label: 'Last Name label',            locale: 'ka', value: 'გვარი' },
+  // form_first_name / form_last_name removed 2026-09-30 — see ContentClient.tsx's FIELDS.form.
   { key: 'form_phone',                  section: 'form', label: 'Phone label',                locale: 'ka', value: 'ტელეფონი' },
   { key: 'form_email',                  section: 'form', label: 'Email label',                locale: 'ka', value: 'ელ-ფოსტა' },
   { key: 'form_food_notes',             section: 'form', label: 'Food Notes label',           locale: 'ka', value: 'შენიშვნები კვებაზე' },
