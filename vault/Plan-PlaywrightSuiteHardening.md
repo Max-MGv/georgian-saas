@@ -4,7 +4,7 @@ tags: [plan, playwright, testing]
 
 # Plan — Playwright Suite Hardening
 
-**Status: 🚧 Not started.** Written 2026-10-01 after a session that ran the full suite for
+**Status: 🚧 In progress.** Written 2026-10-01 after a session that ran the full suite for
 the first time in weeks, fixed several real bugs in the tests themselves, merged a form
 field (requiring 10 spec-file updates), and had an independent subagent review confirm the
 fixes but surface one structural gap and doc staleness. Full narrative: `vault/SessionLog.md`
@@ -25,6 +25,12 @@ that needs Max's explicit go-ahead, separately, after he's looked at `staging`.
 
 ---
 
+**Execution note (2026-10-01, fresh session):** this session is the subagent executing the
+plan, deliberately with no memory of the session that wrote it, per the ground rule above.
+Working in an isolated git worktree based on the real `staging` tip (`6213146`, which the
+writing session's own HEAD was — note `origin/staging` was 2 commits behind that at the time;
+pushed from local `staging`, not `origin/staging`, to pick those up too).
+
 ## Chunk 0 — Close the tier5 safety gap (do this first, it's small and high-value)
 
 `saas/playwright.config.ts` has no exclusion for `tests/tier5-payment-e2e/`. The suite's own
@@ -35,16 +41,33 @@ cleanly, it hangs for ~25s per test waiting on a settlement callback `localhost`
 receive. Nothing enforces the documented workaround (`--config=playwright.staging.config.ts`,
 tier5 only) except a human remembering it.
 
-- [ ] Add a `testIgnore` (or equivalent) to the default `playwright.config.ts` excluding
+- [x] Add a `testIgnore` (or equivalent) to the default `playwright.config.ts` excluding
       `tests/tier5-payment-e2e/**`.
-- [ ] Verify: `npx playwright test --list` from `saas/` no longer lists any tier5 spec.
-- [ ] Verify the existing documented tier5 invocation still works unchanged:
+- [x] Verify: `npx playwright test --list` from `saas/` no longer lists any tier5 spec.
+- [x] Verify the existing documented tier5 invocation still works unchanged:
       `npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/<file>.spec.ts --list`
       should still list that file's tests normally.
-- [ ] Confirm this doesn't silently break `npm run test` or any CI-adjacent script if one
+- [x] Confirm this doesn't silently break `npm run test` or any CI-adjacent script if one
       exists (grep `package.json` for a `test` script before assuming there isn't one).
 
-**Resume point:** not started.
+**Resume point:** Done.
+
+**Result (2026-10-01):** Added `testIgnore: ['tests/tier5-payment-e2e/**']` to
+`saas/playwright.config.ts` (next to `testDir`), with a comment explaining why and pointing at
+this plan. Verified: default `npx playwright test --list` went from 43 tests/23 files to 35
+tests/17 files, 0 matches for `tier5` in the listing. The staging config
+(`npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/payment-declined-settlement.spec.ts --list`)
+still lists that file's one test normally — unaffected, since `testIgnore` is a property of
+`playwright.config.ts` only, not shared by `playwright.staging.config.ts` (which has its own,
+separate `testDir` scoped to tier5 already). `package.json` (`saas/package.json`) has no
+`test` script at all — only `dev`, `build`, `start`, `lint`, `seed`, `set-admin`,
+`create-super-admin-dev` — so nothing CI-adjacent references the old unscoped command.
+
+One correction to this plan's own framing: tier5 is **6** spec files (`payment-admin-order`,
+`payment-approved-settlement` [3 tests], `payment-book-later`, `payment-declined-settlement`,
+`payment-edit-after-payment`, `payment-post-payment-extras`), 8 tests total — not "5 real-Flitt-
+payment specs" as this plan's intro states. Doesn't change anything about the fix, just noting
+the count was off when this was written.
 
 ---
 

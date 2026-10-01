@@ -16,6 +16,16 @@ export default defineConfig({
   // saas/'s node_modules tree) — each one is documented by a matching note in
   // the repo-root playwright/notes/ folder. See playwright/README.md.
   testDir: './tests',
+  // tier5-payment-e2e hits a real Flitt merchant and needs a publicly
+  // reachable settlement callback, which localhost can never provide — it
+  // only runs via the separate playwright.staging.config.ts, against the
+  // deployed staging site. Without this exclusion, the suite's own
+  // documented default command (`npx playwright test`, see
+  // playwright/README.md) sweeps these specs in and they hang for ~25s each
+  // waiting on a callback that will never arrive (playwright/ARCHITECTURE.md,
+  // "Tier 5 runs against real staging"). See
+  // vault/Plan-PlaywrightSuiteHardening.md Chunk 0.
+  testIgnore: ['tests/tier5-payment-e2e/**'],
   outputDir: '../playwright/test-results',
   /* Run tests in files in parallel */
   fullyParallel: true,
