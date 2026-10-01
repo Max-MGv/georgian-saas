@@ -187,13 +187,44 @@ row.
    filter) — there is no delete action at all (see "Recurring cleanup" below, this is *why* that
    debris accumulates). Changed to assert the row's status pill now reads "Cancelled ▾" instead.
 
-**One lead from the same session, not yet resolved:** `companies-crud.spec.ts` hangs waiting on
-a form field inside the Edit panel while Playwright's own trace shows unexpected navigation
-between `/admin/orders` and `/admin/companies` — looks like a real client-side navigation
-firing, not ordinary slowness. Not root-caused yet — see
-`vault/Plan-PlaywrightSuiteHardening.md` Chunk 2.
+4. **`companies-crud.spec.ts`'s step 8 (Chunk 2, Plan-PlaywrightSuiteHardening, 2026-10-01).**
+   This plan's own text guessed the "navigation between `/admin/orders` and `/admin/companies`"
+   Playwright's trace showed was a real, unexplained client-side navigation firing mid-edit.
+   **That guess was wrong too, and for an interesting reason this time: the navigation was real,
+   but unrelated to the hang.** Reproduced live with a fresh trace and read the raw before/after
+   event stream directly: the `fill()` call on `getByRole('textbox', { name: 'First and last
+   name' })` has exactly one "waiting for..." log line and never resolves — no overlay, no
+   retries, nothing. It just polls forever, because **that accessible name doesn't exist
+   anywhere on the page.** `'First and last name'`, `'+995 5XX XXX XXX'` and `'contact@company.ge'`
+   (the three strings this step filled) were the **old company-level contact columns** —
+   `MaintenanceNotes.md` §1 and `Plan-ContactRoles` Chunk 1 removed them in favor of a People
+   list per contact role, and this test was never updated to match. Confirmed live via the
+   accessibility tree that the current "Add Contact Person" form's three fields (Name/Phone/
+   Email) have **no accessible name at all** — `SmallInput`'s `<label>` is a plain sibling,
+   never `htmlFor`-linked to its `<input>` — the same already-documented gap as the price-tier
+   spinbuttons a few lines later in this same test (entry 4's "Fourth real finding" in
+   `notes/09-companies-crud.md`), and the same shared component underneath both.
 
-### A silently stale `DEFAULT_TENANT_ID`
+   The navigation itself really did happen — just not as part of the stuck `fill()`. Once the
+   outer `test.setTimeout(120_000)` fired with that `fill()` still pending, `afterEach` ran its
+   own `ensureAdminLoggedIn()` (→ `page.goto('/admin/orders')`, a real navigation) and
+   `deleteTestCompanyIfPresent()` (→ `page.goto('/admin/companies')`, another one) **on the same
+   `page` object**. Playwright's trace attributes a frame's navigation events to whichever
+   action's wait was still open when they fired, which is exactly `fill()`'s — so the error
+   report's own "waiting for ... navigation to finish ... navigated to ..." text, read without
+   the raw trace, looks exactly like the hang caused the navigation. It didn't; the two are
+   independent, confirmed by their timestamps (the stuck `fill()` started at ~102s into the
+   trace; the first `goto('/admin/orders')` doesn't start until ~127s, 25s later — matching
+   `test.setTimeout`'s own budget, not anything downstream of the fill).
+
+   Fixed by replacing the three stale fills with the real flow: click "+ Add Contact Person",
+   then target its three unlabeled fields positionally via
+   `input[type="text"]:not([placeholder])` (the three `field()`-based panel inputs above it all
+   resolve a real accessible name from their own `placeholder`, so this scopes cleanly without
+   needing a fragile DOM-depth traversal — the exact mistake entry 3 above just documented).
+   Verified: two isolated reruns from a clean shell, both green (1.6m and 1.7m — both close to
+   the 120s budget on a loaded dev server, see "Dev server process bloat" above, but comfortably
+   inside it).
 
 **Symptom:** every test in the suite quietly runs against the wrong tenant — no errors, just wrong data, wrong assumptions, everything "passing" against a tenant nobody meant to test.
 

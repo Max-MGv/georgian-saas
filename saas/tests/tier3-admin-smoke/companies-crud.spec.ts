@@ -222,9 +222,55 @@ test.describe('Companies CRUD', () => {
       () => expect(editPanelHeading).toBeVisible({ timeout: 2_000 })
     );
     await page.getByRole('textbox', { name: 'Optional' }).fill('PW-CRUD-123'); // Identification code
-    await page.getByRole('textbox', { name: 'First and last name' }).fill('PW Contact Test');
-    await page.getByRole('textbox', { name: '+995 5XX XXX XXX' }).fill('+995500000098');
-    await page.getByRole('textbox', { name: 'contact@company.ge' }).fill('pw-crud-contact@example.com');
+
+    // Real finding (Chunk 2, Plan-PlaywrightSuiteHardening, 2026-10-01): the three
+    // fills this step used to do here — 'First and last name' / '+995 5XX XXX XXX' /
+    // 'contact@company.ge' — targeted the OLD company-level contact columns.
+    // Plan-ContactRoles Chunk 1 (MaintenanceNotes.md §1) removed them in favor of a
+    // People list per contact role; none of those three strings exist anywhere on
+    // the current page (confirmed live via the accessibility tree), so the fill
+    // just hung forever waiting for an element that could never appear — this is
+    // what the plan's own "unexplained navigation between /admin/orders and
+    // /admin/companies" symptom actually was. That navigation was real but
+    // unrelated: once the fill's wait outlived the outer test timeout, `afterEach`
+    // ran its own `ensureAdminLoggedIn()` + `deleteTestCompanyIfPresent()` on the
+    // SAME `page` object, and Playwright's trace attributes any navigation that
+    // happens on a frame to whichever wait was still open when it fired — so the
+    // unrelated cleanup hook's real goto() calls got logged against the original,
+    // already-doomed fill(). Confirmed by reading the raw trace's before/after
+    // event stream directly: the fill's own `before` event has exactly one
+    // "waiting for ..." log line and no "locator resolved to" follow-up, and the
+    // goto() calls that appear afterward have their own independent before/after
+    // pairs starting ~25s later — a separate action, not a side effect of the
+    // first one.
+    //
+    // The current UI adds a contact via the People section instead: "+ Add
+    // Contact Person" reveals a 3-field form (Name/Phone/Email, in that DOM
+    // order). Those three inputs have no accessible name at all —
+    // `SmallInput`'s `<label>` is a plain sibling, never `htmlFor`-linked to its
+    // `<input>` (confirmed live: the accessibility tree reports three bare
+    // `textbox`es with no name) — the same already-documented gap as the
+    // price-tier spinbuttons further down this test, and the same component
+    // underneath both. Scoped via `input[type="text"]:not([placeholder])` rather
+    // than position-in-page-order alone, since the three `field()`-based panel
+    // inputs above (Company name/ID/Address) all resolve a real accessible name
+    // from their own `placeholder`, which is how 'Optional' worked one line up.
+    const personInputs = page.locator('input[type="text"]:not([placeholder])');
+    await clickUntil(
+      page.getByRole('button', { name: /^\+ Add Contact Person/ }),
+      () => expect(personInputs.first()).toBeVisible({ timeout: 2_000 })
+    );
+    await personInputs.nth(0).fill('PW Contact Test');
+    await personInputs.nth(1).fill('+995500000098');
+    await personInputs.nth(2).fill('pw-crud-contact@example.com');
+    // This form's own "Save" persists the person immediately via its own server
+    // action (createPerson) — separate from, and unaffected by, the panel's
+    // "Save changes" button below, which only covers the company-level fields.
+    await clickUntil(
+      page.getByRole('button', { name: 'Save', exact: true }),
+      () => expect(page.getByText('PW Contact Test', { exact: true })).toBeVisible({ timeout: 2_000 })
+    );
+
     // Save changes is disabled while the update request is in flight, same
     // double-submit protection as the create Save above.
     await clickUntil(

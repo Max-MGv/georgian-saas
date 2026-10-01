@@ -167,7 +167,7 @@ field inside that panel — but Playwright's own trace shows navigation between
 `/admin/orders` and `/admin/companies` happening in that window, which should not be
 possible once the Edit panel is already open and the test isn't calling `page.goto()` again.
 
-- [ ] Reproduce live: run the spec with tracing/video on (already configured — `video:
+- [x] Reproduce live: run the spec with tracing/video on (already configured — `video:
       'retain-on-failure'` in `playwright.config.ts`), or drive the exact same sequence by
       hand in a browser (create a test company, open its Edit panel, watch network/console).
       Look for: a client-side redirect firing from somewhere unexpected, a stale `router`
@@ -175,12 +175,65 @@ possible once the Edit panel is already open and the test isn't calling `page.go
       bug than it first looks like (the two "real findings" pattern from today's session —
       companies-crud's `xpath` fix revealed a second problem once the first was out of the
       way; this could be the same shape).
-- [ ] Determine real vs. test cause, same bar as Chunk 1.
-- [ ] Fix whichever it is.
-- [ ] Verify: isolated rerun, twice in a row, clean state each time.
-- [ ] Update `playwright/KNOWN-ISSUES.md` to match.
+- [x] Determine real vs. test cause, same bar as Chunk 1.
+- [x] Fix whichever it is.
+- [x] Verify: isolated rerun, twice in a row, clean state each time.
+- [x] Update `playwright/KNOWN-ISSUES.md` to match.
 
-**Resume point:** not started.
+**Resume point:** Done.
+
+**Result (2026-10-01):** This plan's own framing of the symptom was real but misleading — the
+"unexpected navigation between `/admin/orders` and `/admin/companies`" genuinely happened, just
+not as part of the stuck step. Reproduced live with `--trace=on` and read the raw trace events
+directly (same technique as Chunk 1, since the trace-viewer UI still wouldn't load in this
+session's browser). The actual hang: `getByRole('textbox', { name: 'First and last name' })`
+never resolves — one "waiting for..." log line, then nothing, for the rest of the test. That
+accessible name doesn't exist anywhere on the page. It, `'+995 5XX XXX XXX'`, and
+`'contact@company.ge'` were the **old company-level contact columns**, removed by
+Plan-ContactRoles Chunk 1 (`MaintenanceNotes.md` §1) in favor of a People list per contact
+role — this test was never updated to match, and has presumably been dead on this exact step
+since that refactor landed.
+
+The navigation was a separate, real event from a separate cause: once the outer
+`test.setTimeout(120_000)` fired with the `fill()` still pending, `afterEach` ran its own
+`ensureAdminLoggedIn()` and `deleteTestCompanyIfPresent()` — each does a real `page.goto()` — on
+the *same* `page` object the stuck `fill()` was still waiting on. Playwright's trace (and its
+own error-report text) attributes a frame's navigation events to whichever wait was open when
+they fired, so the report reads as if the hang caused the navigation. Confirmed it didn't by
+timestamp: the `fill()` started ~102s into the trace; the first `goto('/admin/orders')` doesn't
+start until ~127s — a 25s gap matching `test.setTimeout`'s own budget, not anything the fill()
+triggered. Worth remembering for future trace debugging in this suite: **a trace's "navigation"
+log line attached to a stuck action is not proof the action caused it** — check the actual
+timestamps against the test's own timeout budget before concluding they're related.
+
+Confirmed live via the accessibility tree (not just reading the component source) that the
+*current* "Add Contact Person" form's three fields (Name/Phone/Email) have no accessible name
+at all — `SmallInput`'s `<label>` is a plain sibling, never `htmlFor`-linked to its `<input>`.
+This is the exact same gap `playwright/notes/09-companies-crud.md`'s own "Fourth real finding"
+already documented for the price-tier spinbuttons a few lines later in this same test — same
+shared component, so the same workaround applies. Fixed by clicking "+ Add Contact Person" and
+targeting its three fields positionally via `input[type="text"]:not([placeholder])` (the panel's
+other three fields — Company name/ID/Address — all resolve a real accessible name from their own
+`placeholder`, so this scopes cleanly without a fragile DOM-depth traversal, learning directly
+from Chunk 1's `.last()` mistake rather than repeating its shape).
+
+Verified: two isolated reruns from a clean shell, both green (1.6m and 1.7m — close to the 120s
+test budget on a dev server under this session's cumulative load, including one single-route
+cold-compile that alone took 44s, but comfortably inside it both times). One self-inflicted
+false failure along the way, worth recording honestly: the *first* attempted verification run
+failed on an unrelated booking-count assertion (`expected 10, received 9`) because this session
+was deleting 4 unrelated leftover debris companies through the live admin UI *while* that run
+was mid-flight on the same shared tenant — a real race this session caused, not a bug. Confirmed
+by re-running in isolation with no concurrent interference immediately after; both reruns that
+actually count are clean.
+
+Also cleaned up: 4 `Playwright CRUD Test Co <timestamp>` companies left on the dev tenant from
+the *original* investigation session (2026-09-30/10-01, before this plan existed) — all
+pre-dated this session's own runs, deleted via the live admin UI.
+
+Full detail: `playwright/KNOWN-ISSUES.md`'s "Real, confirmed test-locator bugs" section, entry 4.
+Changed files: `saas/tests/tier3-admin-smoke/companies-crud.spec.ts`,
+`playwright/KNOWN-ISSUES.md`.
 
 ---
 
