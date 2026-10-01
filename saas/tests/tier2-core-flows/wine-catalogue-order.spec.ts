@@ -41,6 +41,33 @@ function wineCard(page: Page, name: string, year: string): Locator {
     .filter({ hasText: year });
 }
 
+// Real finding (Chunk 1, Plan-PlaywrightSuiteHardening, 2026-10-01): scopes to
+// the Abandoned page's own row container — AbandonedClient.tsx's `Row`
+// renders the business-name text and the "Restore without payment"/"They
+// paid" buttons as SIBLING divs (text in one child div, buttons in another),
+// not one nested inside the other. A loose `div.filter({hasText}).last()`
+// (what this test used before) resolves to the DEEPEST matching div in
+// document order, which is the *text-only* child div — it does not contain
+// either button, so a chained `.getByRole('button', ...)` under it can never
+// match anything and `.click()` hangs for the full test timeout, silently
+// (confirmed live: Playwright's own trace showed the click's "before" event
+// with no matching "after" for the full 120s budget, zero repeated
+// actionability-retry log lines — consistent with a locator that never
+// resolves, not an overlay intercepting a real target). `.first()` is just
+// as wrong the other way: the first div matching `hasText` in document order
+// is `<div className="min-h-screen">`, the entire page wrapper. Pin directly
+// to the Row's own class list instead, the same pattern wineCard() above
+// uses for a different page. Verified live via direct DOM query
+// (document.elementFromPoint-style check) before writing this fix: of the
+// divs matching a real abandoned order's business name, exactly one carries
+// this exact class combination, and it is the only one that contains both
+// the text and the two action buttons.
+function abandonedRow(page: Page, text: string): Locator {
+  return page
+    .locator('div.rounded-xl.border.p-4.flex.flex-wrap.items-start.justify-between.gap-3')
+    .filter({ hasText: text });
+}
+
 test.describe('Wine catalogue → order', () => {
   test.afterEach(async ({ context }, testInfo) => {
     // The test body's own step 7 already cancels the order it created as
@@ -61,7 +88,7 @@ test.describe('Wine catalogue → order', () => {
     // Real finding: a cold Next.js dev-server compile on a route's first
     // visit can outlast the 5s default assertion timeout (see booking-simple.spec.ts).
     await page.locator('table, [class*="grid"], div').first().waitFor({ timeout: 15_000 }).catch(() => {});
-    const incomplete = page.locator('div').filter({ hasText: TEST_BUSINESS_NAME }).last();
+    const incomplete = abandonedRow(page, TEST_BUSINESS_NAME);
     if (await incomplete.count() > 0) {
       await incomplete.getByRole('button', { name: 'Restore without payment' }).click();
     }
@@ -74,8 +101,19 @@ test.describe('Wine catalogue → order', () => {
       // the confirm (✓/✗) auto-dismisses after 5s (WineOrdersClient.tsx,
       // `requestChange`'s setTimeout) — click Cancelled then ✓ back-to-back,
       // no intervening awaits, well inside that window.
-      await card.getByRole('button', { name: 'Cancelled', exact: true }).click();
-      await card.getByRole('button', { name: '✓' }).click();
+      //
+      // Second real finding (Chunk 1, Plan-PlaywrightSuiteHardening,
+      // 2026-10-01): the page's default view (Cards) never exposes a
+      // "Cancelled" control at all — lib/statusFlow.ts's flowSpine()
+      // deliberately excludes CANCELLED from the card's FlowLine ("a real
+      // stage and the dropdown needs it", its own comment); only the
+      // Table/Board views' status-pill dropdown (menuSteps()) offers it.
+      // Switch to Table first.
+      await page.getByRole('button', { name: 'Table', exact: true }).click();
+      const row = page.getByRole('row').filter({ hasText: TEST_BUSINESS_NAME });
+      await row.getByRole('button', { name: /▾$/ }).click();
+      await row.getByRole('button', { name: 'Cancelled', exact: true }).click();
+      await row.getByRole('button', { name: '✓', exact: true }).click();
     }
     await page.close();
   });
@@ -169,7 +207,7 @@ test.describe('Wine catalogue → order', () => {
     // direct DB read — abandonedAt set within ~2s of createdAt) — this test
     // was just never looking at the tab that shows it.
     await admin.getByRole('button', { name: /^Wine orders/ }).click();
-    const incomplete = admin.locator('div').filter({ hasText: TEST_BUSINESS_NAME }).last();
+    const incomplete = abandonedRow(admin, TEST_BUSINESS_NAME);
     await expect(incomplete).toBeVisible({ timeout: 20_000 });
 
     // Restore it to check the frozen wine-name snapshot below, which renders
@@ -195,9 +233,30 @@ test.describe('Wine catalogue → order', () => {
 
     // 7. Cleanup: mark the order Cancelled (see afterEach — Wine Orders has
     // no delete action, only status transitions).
-    await card.getByRole('button', { name: 'Cancelled', exact: true }).click();
-    await card.getByRole('button', { name: '✓' }).click();
-    await expect(admin.getByText(TEST_BUSINESS_NAME, { exact: true })).toHaveCount(0);
+    //
+    // Real finding (Chunk 1, Plan-PlaywrightSuiteHardening, 2026-10-01): the
+    // default Cards view never exposes a "Cancelled" control at all —
+    // lib/statusFlow.ts's flowSpine() deliberately excludes CANCELLED from
+    // the card's FlowLine ("a real stage and the dropdown needs it", its own
+    // comment); only the Table/Board views' status-pill dropdown
+    // (menuSteps()) offers it. This was never caught before because the
+    // "Restore without payment" hang (fixed above) blocked every previous
+    // run from ever reaching this step — the exact "fixing one bug reveals
+    // the next" risk this plan's own Chunk 1 called out in advance.
+    await admin.getByRole('button', { name: 'Table', exact: true }).click();
+    const row = admin.getByRole('row').filter({ hasText: TEST_BUSINESS_NAME });
+    await row.getByRole('button', { name: /▾$/ }).click();
+    await row.getByRole('button', { name: 'Cancelled', exact: true }).click();
+    await row.getByRole('button', { name: '✓', exact: true }).click();
+    // expect: the row's own status pill now reads Cancelled. Not
+    // toHaveCount(0) on the business name — cancelling a wine order doesn't
+    // remove it from the list (no delete action exists at all, see
+    // KNOWN-ISSUES.md "Wine Orders test debris" — this is *why* that debris
+    // accumulates), it only dims it (WineOrdersClient.tsx's isInactiveOrder
+    // opacity, not a filter). Confirmed live: the business name text is
+    // still on the page after cancelling, dimmed, with every other seeded
+    // "Playwright Wine Test" row above it on /admin/abandoned's history.
+    await expect(row.getByRole('button', { name: /^Cancelled ▾$/ })).toBeVisible({ timeout: 10_000 });
     await admin.close();
   });
 });

@@ -81,7 +81,7 @@ repeatedly, for the full 120s budget. Reproduced once mid-session and once again
 a clean dev-server restart, which argues against pure load noise but was never confirmed
 either way.
 
-- [ ] Reproduce live, by hand, in a browser: get a real wine order onto `/admin/abandoned`
+- [x] Reproduce live, by hand, in a browser: get a real wine order onto `/admin/abandoned`
       (either drive the real public checkout flow once, or use an existing abandoned row if
       one is already on Staging Winery), click "Restore without payment", and watch what
       actually happens. Does a modal/backdrop genuinely stay mounted after an action that
@@ -89,20 +89,73 @@ either way.
       an overlay back up a beat later? Check the DOM directly (`document.elementFromPoint()`
       at the button's own coordinates, same technique `KnownBugs.md` #62 used) rather than
       guessing from the error message alone.
-- [ ] Determine: is this a real app bug (a backdrop not clearing — in which case it's a
+- [x] Determine: is this a real app bug (a backdrop not clearing — in which case it's a
       `KnownBugs.md`-worthy finding, fix the app) or a test problem (the test's own locator
       resolving to something stale, or not waiting for an animation/transition to finish —
       in which case fix the spec, and say why in a comment, matching this file's existing
       style of documenting real findings inline).
-- [ ] Fix whichever it turns out to be.
-- [ ] Verify: rerun `wine-catalogue-order.spec.ts` in isolation, serial, **twice in a row**
+- [x] Fix whichever it turns out to be.
+- [x] Verify: rerun `wine-catalogue-order.spec.ts` in isolation, serial, **twice in a row**
       from a clean state (not back-to-back reusing debris from the first run — clean up
       between runs). Both must pass. A single green run is not enough given this already
       looked intermittently different across two attempts.
-- [ ] Update `playwright/KNOWN-ISSUES.md`: move this out of "not yet resolved" into either
+- [x] Update `playwright/KNOWN-ISSUES.md`: move this out of "not yet resolved" into either
       the standing-app-bugs section (if it was real) or the test note and commit history.
 
-**Resume point:** not started.
+**Resume point:** Done.
+
+**Result (2026-10-01):** This plan's own guess (an overlay intercepting the click) was wrong —
+confirmed by reproducing live. First, ran the spec with `--trace=on` and inspected the raw trace
+events directly (`0-trace.trace`, since Playwright's own trace-viewer UI couldn't load in this
+session's browser pane — its service worker failed to register, likely a sandbox constraint):
+the click's `before` event had no matching `after` for the full 120s budget, and critically
+**zero repeated actionability-retry log lines** — real overlay-interception shows up as repeated
+"element is outside of the viewport" / intercepted-click retries; this showed none, which is the
+signature of a locator that never resolves to any element at all, not one that resolves but is
+covered.
+
+Reproduced the real mechanism live in a browser (manual checkout → abandoned order → direct DOM
+query, `document.elementFromPoint`-equivalent): `AbandonedClient.tsx`'s `Row` renders the
+business-name text and the two action buttons as **sibling** child divs of the row container, not
+one nested in the other. The test's own locator, `page.locator('div').filter({ hasText:
+BUSINESS_NAME }).last()`, matches every ancestor div containing that text (6 of them on a real
+row, verified via `document.querySelectorAll`) and `.last()` resolves to the **deepest** one in
+document order — the text-only child div, which has no button as a descendant. The chained
+`.getByRole('button', { name: 'Restore without payment' })` therefore can never match anything,
+and `.click()` polls silently forever. `.first()` would have been just as wrong the other way —
+verified it resolves to `<div className="min-h-screen">`, the entire page body wrapper.
+
+Fixed by adding an `abandonedRow()` helper pinned to the Row's actual class list (the same
+pattern `wineCard()` already used in this file, just for a different page), replacing both
+occurrences of the broken `.last()` pattern (test body + `afterEach`). This is a genuine test
+locator bug, not an app bug — `AbandonedClient.tsx`'s structure is unremarkable.
+
+**A second, previously-masked bug surfaced immediately once this one was fixed** (the exact
+"fixing one bug reveals the next" shape this chunk's own text called out as a real risk, citing
+`companies-crud.spec.ts`'s history as precedent): the test's cleanup step (mark the restored
+order Cancelled) assumed a "Cancelled" button exists on whichever view `/admin/wine-orders`
+defaults to. It doesn't — the default **Cards** view's `FlowLine` deliberately excludes
+`CANCELLED` from its steps (`lib/statusFlow.ts`'s `flowSpine()`, own comment: "a real stage and
+the dropdown needs it") — only the **Table**/Board views' status-pill dropdown (`menuSteps()`)
+offers it. This was never caught before because the first bug blocked every prior run from ever
+reaching this step. Fixed by switching to Table view first, then using the status-pill dropdown
+(confirmed working manually in a live browser session before writing the spec fix). Also fixed a
+stale final assertion in the same step: the test expected the business name to vanish entirely
+after cancelling (`toHaveCount(0)`) — it doesn't, cancelling only dims the row
+(`isInactiveOrder` opacity, not a list filter); there's no delete action at all, which is *why*
+Wine Orders test debris accumulates (documented separately in `KNOWN-ISSUES.md`). Changed to
+assert the status pill now reads "Cancelled ▾".
+
+Verified: two isolated reruns from a clean shell, both green (47.0s and 47.1s — effectively
+identical, no flakiness). Full detail and the exact trace evidence:
+`playwright/KNOWN-ISSUES.md`'s "Real, confirmed test-locator bugs" section, entry 3.
+
+Also cleaned up: 4 wine orders this session's own reproduction work left on the dev tenant
+(1 manual repro + 3 from repeated spec runs while diagnosing) — all restored and marked
+Cancelled via the live admin UI, not left as debris.
+
+Changed files: `saas/tests/tier2-core-flows/wine-catalogue-order.spec.ts`,
+`playwright/KNOWN-ISSUES.md`.
 
 ---
 

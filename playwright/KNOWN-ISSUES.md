@@ -128,7 +128,7 @@ looks like a new bug. If a test times out on something completely ordinary (a se
 a page load) right after a cache wipe, check whether it's just uncompiled-route latency before
 concluding it's a real regression.
 
-### Two real, confirmed test-locator bugs found 2026-09-30 (not app bugs)
+### Real, confirmed test-locator bugs found 2026-09-30 and 2026-10-01 (not app bugs)
 
 Both found by getting a full run's failures to actually pass in isolation, then reading the
 diff between the test's assumption and the app's current DOM/UI rather than accepting "still
@@ -155,14 +155,43 @@ The wine order was written correctly the whole time (confirmed via direct DB rea
 `abandonedAt` set ~2s after `createdAt`) — the test was looking at the wrong tab, not a missing
 row.
 
-**Two new leads from the same session, not yet resolved:** after the tab fix above,
-`wine-catalogue-order.spec.ts` now reaches a later step — clicking "Restore without payment" —
-and is blocked there by `<div class="fixed inset-0 z-50 ...">` intercepting the click,
-reproduced identically twice including once right after a clean restart (argues against pure
-load noise). Separately, `companies-crud.spec.ts` now hangs waiting on a form field inside the
-Edit panel while Playwright's own trace shows unexpected navigation between `/admin/orders` and
-`/admin/companies` — looks like a real client-side navigation firing, not ordinary slowness.
-Neither is root-caused yet.
+3. **`wine-catalogue-order.spec.ts`'s "Restore without payment" click (Chunk 1,
+   Plan-PlaywrightSuiteHardening, 2026-10-01).** The 2026-09-30 entry above guessed this was an
+   overlay (`<div class="fixed inset-0 z-50 ...">`) intercepting the click for the full 120s
+   budget. **That guess was wrong** — reproduced live with a fresh trace and confirmed via direct
+   DOM query (`document.elementFromPoint`-equivalent checks in a real browser session) that no
+   overlay exists at the time of the click. The real cause: `AbandonedClient.tsx`'s `Row`
+   component renders the business-name text and the action buttons ("Restore without payment"/
+   "They paid") as **sibling** divs, not one nested inside the other. The test's own locator —
+   `page.locator('div').filter({ hasText: BUSINESS_NAME }).last()` — resolves to the *deepest*
+   matching div in document order, which is the **text-only** child div; it never contains either
+   button, so the chained `.getByRole('button', ...)` can never match anything and `.click()`
+   polls forever with no error, matching the observed silent 120s hang exactly (confirmed via the
+   trace's own event log: the click's `before` event has no matching `after`, and zero repeated
+   actionability-retry log lines — consistent with a locator that never resolves to any element,
+   not one that resolves but is covered). `.first()` would have been just as wrong the other way
+   — the first matching div in document order is `<div className="min-h-screen">`, the entire
+   page wrapper. Fixed by pinning to the Row's own class list instead (a new `abandonedRow()`
+   helper in the spec file, the same pattern `wineCard()` already used in this file for a
+   different page). Verified: isolated reruns, twice in a row, clean state, both green (47s each).
+   **A second, previously-masked bug surfaced once this one was fixed** — exactly the shape
+   flagged as a risk when this chunk was planned: the test's cleanup step (marking the order
+   Cancelled) assumed a "Cancelled" button exists directly on whatever view `/admin/wine-orders`
+   defaults to. It doesn't — `lib/statusFlow.ts`'s `flowSpine()` deliberately excludes `CANCELLED`
+   from the Cards view's `FlowLine` ("a real stage and the dropdown needs it", its own comment);
+   only the Table/Board views' status-pill dropdown (`menuSteps()`) offers it. This was never
+   caught before because the first bug blocked every run from ever reaching this step. Fixed by
+   switching to Table view before the cancel flow. Also fixed a stale assertion in the same step:
+   the test expected the business name to disappear entirely after cancelling
+   (`toHaveCount(0)`), but cancelling a wine order only dims it (`isInactiveOrder` opacity, not a
+   filter) — there is no delete action at all (see "Recurring cleanup" below, this is *why* that
+   debris accumulates). Changed to assert the row's status pill now reads "Cancelled ▾" instead.
+
+**One lead from the same session, not yet resolved:** `companies-crud.spec.ts` hangs waiting on
+a form field inside the Edit panel while Playwright's own trace shows unexpected navigation
+between `/admin/orders` and `/admin/companies` — looks like a real client-side navigation
+firing, not ordinary slowness. Not root-caused yet — see
+`vault/Plan-PlaywrightSuiteHardening.md` Chunk 2.
 
 ### A silently stale `DEFAULT_TENANT_ID`
 
