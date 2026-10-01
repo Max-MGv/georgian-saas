@@ -8,7 +8,33 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-01 (newest) — Independent review of yesterday's Playwright work, then a hardening plan
+## 2026-10-01 (later) — Hardening plan execution: Chunks 0–4 done and pushed to `staging`, Chunks 5–6 remain
+
+The implementing subagent (deliberately separate, per the bias-hygiene ask) hit a session
+rate limit mid-Chunk-3 and was resumed from its own worktree with full context rather than
+restarted — nothing lost. By this pause point it had pushed `8e3c4b6`..`484f772` to
+`origin/staging` directly: **Chunks 0–4 of [[Plan-PlaywrightSuiteHardening]] are done,
+verified, and on `staging`.**
+
+Both "real bugs" from Chunks 1–2 turned out to be test-locator bugs, not app bugs, and **not**
+what the plan guessed — see the plan file's own Result notes for the full trace-level
+evidence: `wine-catalogue-order.spec.ts` was matching the wrong div entirely (`.last()` on a
+filter that matched 6 ancestors); `companies-crud.spec.ts` was targeting form fields an
+unrelated refactor had already deleted weeks ago, and the "mystery navigation" was just
+`afterEach` cleanup running late on the same stuck `page`, misattributed by the trace viewer.
+Chunk 3 repointed both remaining `Test Company # 1` specs onto a shared, verified-safe company.
+Chunk 4 refreshed the stale docs.
+
+**Still to do, unstarted as of this pause:** Chunk 5 (push confirmed — already done as a side
+effect of the above; still need to actually run the 4 tier5 real-payment specs against deployed
+staging) and Chunk 6 (the actual goal — one clean, full, end-to-end suite run, confirming the
+dev DB pool is healthy first). The agent may still be running in the background; check
+`vault/Plan-PlaywrightSuiteHardening.md`'s own checkboxes/Result notes for the current state
+before assuming anything is further along than this entry says.
+
+---
+
+## 2026-10-01 — Independent review of yesterday's Playwright work, then a hardening plan
 
 Max asked for a status update on yesterday's Playwright session, then for a second opinion
 from a subagent deliberately fenced off from yesterday's own notes (the project's standing
