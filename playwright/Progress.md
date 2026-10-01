@@ -102,6 +102,38 @@ This file is the chronological record — what was built, when, and what was fou
 3. **A `.next` Turbopack cache corruption**, matching `KNOWN-ISSUES.md`'s dev-server-bloat pattern exactly: the dev server had to be started fresh for this session, and its first boot served a literal 404 for every route (including `/admin/login`) despite `x-resolved-tenant` resolving correctly. Fixed by the documented recovery: stop, `rm -rf .next`, restart clean.
 4. **A severe, sustained `KnownBugs.md`/`KNOWN-ISSUES.md`-pattern DB pool exhaustion (`P1001`/`P2028`) blocked full-suite reconfirmation in the original build session.** The new test passed cleanly and repeatably in isolation, but every attempt to run the complete 22-test suite that session — 2 attempts at the default parallel workers, 2 attempts fully serial (`--workers=1`) — came back with widespread failures (8-15 tests failing per run) hitting tests with **no relation to this change** (`popover-clipping`, `booking-simple`/`booking-enhanced`, `companies-crud`, `admin-login`, `onboarding-wizard` — all previously-green Phase 1-3 tests). Real recovery attempts were made between runs, following the documented protocol exactly: genuine idle waits, polling an ordinary page load every 30-60s for consecutive clean reads before retrying (confirmed clean 2-4 times across attempts), not just a fixed sleep or a bare restart. Each time, the pool exhausted again within seconds of resuming test traffic, and even single isolated health-check requests occasionally errored during otherwise-idle wait windows — evidence this was likely external load on the shared `georgian-saas-dev` project (per `KNOWN-ISSUES.md`: "combined test volume from more than one session"), not something this session's own test traffic alone was causing or something more local waiting would fix. **Not treated as a regression** — verified live via `playwright-cli` that Staging Winery's admin panel language is correctly `en` (not stuck in Georgian from the interrupted runs).
 
+## Phase 5 — Tier 5: Real Flitt payment E2E — ✅ COMPLETE (6 specs, 8 tests)
+
+Added later than the numbering above suggests — `vault/Plan-PaymentE2ETesting.md` tracked this
+work in its own chunks (0–8) rather than as a numbered Phase here, and its own Chunk 8 noted
+this file was meant to get "a real Phase 5 section" once the work landed. That section never
+got added until now (Plan-PlaywrightSuiteHardening Chunk 4, 2026-10-01) — this entry is that
+section, pointing at the existing narrative below rather than rewriting it.
+
+**Runs against the real deployed staging site** (`https://staging.vineworks.ge`, dev DB), never
+localhost — Flitt's settlement callback needs a publicly reachable host. Its own config,
+`saas/playwright.staging.config.ts`; run with
+`npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e --workers=1`
+(see `README.md`). Excluded from the default `npx playwright test` command by `testIgnore` in
+`playwright.config.ts` (Plan-PlaywrightSuiteHardening Chunk 0, 2026-10-01) — before that fix,
+nothing stopped the default command from sweeping these in and hanging ~25s per test on a
+callback `localhost` can never receive.
+
+| Spec | Tests | Covers | Status |
+|---|---|---|---|
+| `payment-approved-settlement.spec.ts` | 3 | individual (full 5-surface check), company, wine order | ✅ |
+| `payment-declined-settlement.spec.ts` | 1 | a real Flitt decline never mis-read as paid | ✅ |
+| `payment-book-later.spec.ts` | 1 | reservation → invoice → manual bank transfer | ✅ |
+| `payment-admin-order.spec.ts` | 1 | admin-created order parity with a guest order | ✅ |
+| `payment-edit-after-payment.spec.ts` | 1 | editing a paid order never touches frozen `Payment.amount` (`KnownBugs.md` #64) | ✅ |
+| `payment-post-payment-extras.spec.ts` | 1 | lock → extra → manual top-up → card-link top-up → itemised payments, `Plan-PostPaymentExtras` | ✅ |
+
+Full build narrative, every real app bug found (the settlement email fire-and-forget gap
+#53, the declined-checkout inline-dialog case, the Paid-status picker's outside-click
+listener race, two editing-related bugs, and `KnownBugs.md` #64 itself) and every test bug
+fixed along the way: see the dated entries below, **"2026-09-24 — Tier 5 (real Flitt payment
+E2E) starts"** through **"2026-09-25 — Chunk 6 of Plan-PostPaymentExtras"**.
+
 ### 2026-08-12 — full-suite reconfirmation, clean 22/22
 
 Ran once the dev DB was no longer under contention (`pg_stat_activity`: 21 idle / 29 total connections, no `P1001`/`P2028`). First `--workers=1` run came back **19/22** — a real, unrelated bug caught, not pool exhaustion recurring:

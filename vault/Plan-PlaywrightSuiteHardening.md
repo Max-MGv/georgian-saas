@@ -333,20 +333,46 @@ tests" and don't mention `tier4-locale` being built or any of the 5 `tier5-payme
 specs existing at all. Actual current count: 23 spec files (confirm exact test count via
 `npx playwright test --list` once Chunks 0–3 land, since that count will have moved).
 
-- [ ] Update `playwright/README.md`'s "Current status" section with the real, current test
+- [x] Update `playwright/README.md`'s "Current status" section with the real, current test
       count and tier breakdown.
-- [ ] Prominently document Chunk 0's `testIgnore` fix in the README's "how to run" section —
+- [x] Prominently document Chunk 0's `testIgnore` fix in the README's "how to run" section —
       the whole point is that a reader should no longer need the tier5 warning to be
       something they remember; make it hard to miss anyway, in case the config is ever
       changed back.
-- [ ] Update `playwright/Progress.md`'s Phase tracker to reflect Phase 4 (locale) and the
+- [x] Update `playwright/Progress.md`'s Phase tracker to reflect Phase 4 (locale) and the
       tier5 Flitt E2E work as actually complete, pointing at the existing chronological
       entries lower in that file rather than rewriting history.
-- [ ] Do **not** touch `playwright/ARCHITECTURE.md` or `playwright/KNOWN-ISSUES.md`'s
+- [x] Do **not** touch `playwright/ARCHITECTURE.md` or `playwright/KNOWN-ISSUES.md`'s
       existing content beyond what Chunks 1–3 already require — those were not flagged as
       stale.
 
-**Resume point:** not started.
+**Resume point:** Done.
+
+**Result (2026-10-01):** Confirmed the real current count live rather than trusting the plan's
+own "23 spec files" figure blindly: `npx playwright test --list` → 35 tests / 17 files (default,
+localhost config) + `npx playwright test --config=playwright.staging.config.ts --list` → 8 tests
+/ 6 files (tier5, staging config) = **43 tests across 23 files** total, confirming the plan's
+estimate was exactly right.
+
+`README.md`: replaced the stale "17 of 18 planned tests... Phase 4 not started" line with the
+real count and a tier-by-tier table (files + one-line description per tier). Added a visible
+callout right under the tier5 run command stating the `testIgnore` fix is enforced, not just
+documented, and what to check first if the symptom it fixed ever comes back.
+
+`Progress.md`: Phase 4 (locale integrity) was **already** accurately marked "✅ COMPLETE" in its
+own section (2026-08-12) — no change needed there, the plan's framing of it as entirely
+undocumented wasn't quite right by the time this chunk ran, likely just not surfaced by
+README.md's own separate staleness. What was genuinely missing, exactly as the plan predicted:
+tier5 had no "Phase 5" structural heading at all — its own 2026-09-24 entry literally says
+"Chunk 8 is where this file gets properly folded in with a real 'Phase 5' section," and that
+never happened until now. Added a `## Phase 5` section with a summary table (6 specs, 8 tests,
+one line each) and pointers to the existing 2026-09-24/2026-09-25 narrative entries below it —
+no history rewritten, per this chunk's own instruction.
+
+Did not touch `ARCHITECTURE.md` or add anything to `KNOWN-ISSUES.md` beyond what Chunks 1–3
+already required.
+
+Changed files: `playwright/README.md`, `playwright/Progress.md`.
 
 ---
 

@@ -36,7 +36,22 @@ Test **output** (HTML report, trace files) is still redirected here via `playwri
 
 ## Current status
 
-**17 of 18 planned tests built and passing** (Phases 0–3 complete; Phase 4 — locale integrity, 1 test — not started). Every "done" state here has been independently re-verified (full-suite reruns from a clean shell, plus direct SQL spot-checks of real tenant data), not just taken from a single run's output. Full breakdown: `Progress.md`.
+**43 tests across 23 spec files, all tiers complete** (Phases 0–5 — regression, core flows, admin
+smoke, locale integrity, and real Flitt payment E2E — confirmed current via
+`npx playwright test --list` + `npx playwright test --config=playwright.staging.config.ts --list`,
+2026-10-01). Every "done" state here has been independently re-verified (full-suite reruns from a
+clean shell, plus direct SQL spot-checks of real tenant data), not just taken from a single run's
+output. Full breakdown: `Progress.md`.
+
+| Tier | Files | What |
+|---|---|---|
+| 1 — regression | 5 | recurring bug shapes (mobile/locale overflow, popover clipping, theme colors, payment-label precedence) |
+| 2 — core flows | 6 | booking (simple/enhanced), wine catalogue, contact roles/nationality |
+| 3 — admin smoke | 4 | login, orders, companies CRUD, onboarding wizard |
+| 4 — locale integrity | 1 | EN/KA parity across 5 pages |
+| 5 — real Flitt payment E2E | 6 | settlement, decline, book-later, admin-created orders, post-payment edits/extras — **staging only, see below** |
+
+(Plus `tests/seed.spec.ts`, a standalone smoke check not tied to a tier.)
 
 ## Target environment
 
@@ -50,6 +65,13 @@ Before running the suite:
 ```
 npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/<file>.spec.ts --workers=1
 ```
+
+> ⚠️ **This is enforced, not just documented.** `playwright.config.ts` has had a `testIgnore`
+> for `tests/tier5-payment-e2e/**` since Plan-PlaywrightSuiteHardening Chunk 0 (2026-10-01) —
+> the default `npx playwright test` command above genuinely cannot sweep tier5 in by accident
+> anymore. If a future change to that config ever drops this exclusion, the symptom comes back
+> exactly as described above (a ~25s hang per tier5 test against localhost) — check
+> `testIgnore` first if that happens, don't re-diagnose it from scratch.
 
 ## Test data policy (short version)
 
