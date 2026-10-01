@@ -3,17 +3,28 @@ import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
 import { openReviewSheet, confirmButton } from '../helpers/bookingForm';
 
-// Reuses an existing real test company rather than creating one (per the
-// note's instruction to minimize footprint): "Test Company # 1" already has
-// two price tiers (1–10 guests: Tasting 50₾/pp, Lunch add-on 0₾/pp — a combo
-// guest pays the tasting rate; 11–20 guests: Tasting 30₾/pp, Lunch add-on
-// 0₾/pp — confirmed live via /admin/companies, and backfilled to this
-// add-on-only shape by scripts/migrate-lunch-price-to-addon.ts on 2026-09-13)
-// and a real access code, and unlike some of the tenant's other test
-// companies it is NOT flagged "⚠ Needs details", so it's safe to treat as
-// stable fixture data. The access code itself is read fresh from the admin
-// panel below rather than hardcoded, in case it's ever regenerated.
-const COMPANY_NAME = 'Test Company # 1';
+// Repointed (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): "Test
+// Company # 1" was deleted from Staging Winery weeks ago (KNOWN-ISSUES.md
+// #4). Of lib/demoSeed.ts's BOOKING_COMPANIES, "Tbilisi Tour Collective" is
+// the only one not already claimed by another spec (confirmed by grep
+// 2026-10-01: Caucasus Vine Travel → payment-amount-integrity, Alazani
+// Valley Tours → payment-label-precedence, Silk Road Journeys →
+// contact-role-picker, Kakheti Wine Routes → contact-orphan-safety). Read
+// both this spec and company-nationality-tagging.spec.ts (the other one
+// sharing it) in full first to confirm neither mutates company-level data —
+// neither does; each only creates and deletes its own Order row, never
+// touching the company's guides/prices/access code — so sharing one company
+// between them is safe, per Max's standing call to repoint at seeded demo
+// companies rather than recreate deleted fixtures (KNOWN-ISSUES.md #4).
+// Its real price tiers (lib/demoSeed.ts, confirmed live via
+// /admin/companies): 1–10 guests: Tasting 60₾/pp, Lunch add-on 40₾/pp (a
+// combo guest pays pricePerPerson + tastingLunchPricePerPerson = 100₾, per
+// lib/pricingUtils.ts's comboRatePerPerson — Tbilisi's add-on is NOT zero,
+// unlike Test Company # 1's old tier, so every downstream total below is
+// genuinely different, not just the company name). 11–30 guests: Tasting
+// 48₾/pp, Lunch add-on 40₾/pp. It also has a real access code and one real
+// guide (read fresh from admin below rather than hardcoded either way).
+const COMPANY_NAME = 'Tbilisi Tour Collective';
 const TEST_EMAIL = `playwright-booking-enhanced-${Date.now()}@example.com`;
 
 function formatDate(d: Date): string {
@@ -164,10 +175,37 @@ test.describe('Booking form — enhanced/company variant', () => {
 
     // 3. "Code confirmed" check. Real finding, differs from the note's
     // assumption of a dedicated confirmation banner: there isn't one — the
-    // popup just closes. The real, observable signal that the code was
-    // accepted is the company's saved contact profile auto-filling the name
-    // field (applyProfile() in BookingForm.tsx), so that's what this checks.
+    // popup just closes.
     await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
+
+    // Real finding (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): the
+    // note this comment used to cite — "the company's saved contact profile
+    // auto-filling the name field (applyProfile() in BookingForm.tsx)" — is
+    // stale. `applyProfile` doesn't exist anywhere in the current codebase.
+    // A company-level access code for a company with people on file now
+    // opens a ContactPickerPopupView once per role that has people
+    // (Plan-ContactRoles Chunk 7, KnownBugs #55) — nothing auto-fills until
+    // a person is explicitly picked or the role is explicitly skipped.
+    // Tbilisi Tour Collective has people in both its contact_person role
+    // (two of them: Giorgi Kapanadze from the company's own contact, Sofia
+    // Abuladze from its representatives — both folded into contact_person
+    // per Plan-ContactRoles decision 2) and its guide role (Nutsa
+    // Japaridze), so two pickers show in sequence — order not hardcoded
+    // here since it depends on ContactRole.sortOrder, not spec intent: pick
+    // Giorgi when he's offered (confirms the Name field below), skip
+    // whichever role he isn't in (the guide picker, since this test doesn't
+    // exercise guide data).
+    for (let i = 0; i < 2; i++) {
+      const pickerHeading = page.getByRole('heading', { name: 'Who should we put on this booking?' });
+      if (!(await pickerHeading.isVisible().catch(() => false))) break;
+      const giorgiButton = page.getByRole('button', { name: 'Giorgi Kapanadze' });
+      if (await giorgiButton.isVisible().catch(() => false)) {
+        await giorgiButton.click();
+      } else {
+        await page.getByRole('button', { name: 'I am not on this list' }).click();
+      }
+    }
+
     // exact: true — Contact Person merged First/Last Name into one "Name"
     // field 2026-09-30 (MaintenanceNotes.md §1); a company with a guide also
     // has a "Guide — Name" field, which an un-exact match would also hit.
@@ -194,44 +232,64 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(page.getByText('Masterclass Add-ons', { exact: true })).toBeVisible();
 
     // 6. Enter a guest count outside the company's defined tiers (1–10 and
-    // 11–20 guests — confirmed live). Real finding, differs from the note's
+    // 11–30 guests — confirmed live). Real finding, differs from the note's
     // assumption of a blocking "no rate for this guest count" alert: that
     // alert only exists on the *simple* company-booking path. The enhanced
     // path's `findTier()` (lib/pricingUtils.ts) deliberately falls back to
     // the highest-pricePerPerson tier for any out-of-range count — by design
     // ("protects against under-charging very small groups", per its own
     // doc comment) — so it never blocks. This checks that fallback instead:
-    // a guest count of 25 (above both tiers) should still show a price
-    // estimate using tier 1's rate (50₾/pp), not an error state.
-    await tastingGuests.fill('25');
+    // a guest count of 31 (above both tiers) should still show a price
+    // estimate using tier 1's rate (60₾/pp, the higher of 60 vs 48), not an
+    // error state. (25 no longer works as the out-of-range probe now that
+    // tier 2 runs up to 30 guests, not 20 — bumped to 31.)
+    await tastingGuests.fill('31');
     await expect(page.getByText('no rate', { exact: false })).not.toBeVisible();
-    await expect(page.getByText('25 Tasting × 50₾', { exact: false })).toBeVisible();
+    await expect(page.getByText('31 Tasting × 60₾', { exact: false })).toBeVisible();
 
     // 7. Correct to an in-range guest count, select one hot dish option and
     // one masterclass add-on, fill required contact fields, submit.
     await tastingGuests.fill('5');
     await lunchGuests.fill('3');
 
+    // Real finding (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): these
+    // menu/masterclass items are ad-hoc test fixtures on Staging Winery, as
+    // the original comment already warned — "pinned to today's exact live
+    // data, not curated names" — and the live data has since moved on from
+    // what this test originally pinned: /admin/menu-items no longer has a
+    // "აჯაფასნადალი" option (current Vegetable dish rows: Pkhali platter,
+    // Badrijani nigvzit, Lobio in a clay pot), and /admin/masterclass no
+    // longer has any "khinkali10₾/pc"-shaped item (current rows: Khinkali
+    // folding class 35₾/pp, Churchkhela making 25₾/pp, Wine blending session
+    // 45₾/pp, Qvevri cellar tour 60₾ flat) — confirmed live immediately
+    // before writing this fix, not assumed from the original comment.
+    // Repointed at current fixtures; the masterclass checkbox defaults its
+    // own quantity to 1 regardless of unit type (BookingForm.tsx — "per
+    // person" is a *label*, it does not auto-multiply by guest count), so
+    // one checked "Khinkali folding class" item adds exactly 35₾.
     const vegSelect = page.getByText('Vegetable dish', { exact: true }).locator('xpath=following-sibling::select');
-    await vegSelect.selectOption({ label: 'აჯაფასნადალი' });
+    await vegSelect.selectOption({ label: 'Badrijani nigvzit' });
+    await page.getByRole('checkbox', { name: /Khinkali folding class/ }).check();
 
-    // Real finding: these masterclass items are ad-hoc test fixtures on
-    // Staging Winery (mixed Georgian/English/typo names, e.g. "hifel iwagi
-    // fegiufe") — pinned to today's exact live data, not curated names.
-    await page.getByRole('checkbox', { name: 'khinkali10₾/pc' }).check();
-
+    // exact: true — Tbilisi Tour Collective has a guide on file, so the
+    // detailed form also renders a "Guide — Phone"/"Guide — Email" block
+    // (MaintenanceNotes.md §1); an un-exact match resolves to both (same
+    // drift already documented in KNOWN-ISSUES.md for
+    // payment-amount-integrity.spec.ts's company scenario).
     await nameInput.fill('Enhanced TestGuest');
-    await page.getByRole('textbox', { name: 'Phone' }).fill('+995500000002');
-    await page.getByRole('textbox', { name: 'Email' }).fill(TEST_EMAIL);
+    await page.getByRole('textbox', { name: 'Phone', exact: true }).fill('+995500000002');
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill(TEST_EMAIL);
     await page.getByRole('textbox', { name: /Food Notes/ }).fill('Playwright test notes');
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
 
-    // expect: the estimated total reflects tier 1's rate (5×50 + 3×(50+0) = 400)
-    // plus the masterclass add-on already selected above (10) = 410, before submitting
-    await expect(page.getByText('410₾', { exact: false })).toBeVisible();
+    // expect: the estimated total reflects tier 1's rate
+    // (5×60 + 3×(60+40) = 300 + 300 = 600) plus the masterclass add-on
+    // already selected above (35, Khinkali folding class × qty 1) = 635,
+    // before submitting
+    await expect(page.getByText('635₾', { exact: false })).toBeVisible();
 
     // Real finding, differs from the note's assumption: company bookings
     // (both simple and enhanced) never redirect to the Flitt payment
@@ -264,10 +322,10 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(cells.nth(5)).toHaveText('5'); // Tasting
     await expect(cells.nth(6)).toHaveText('3'); // Lunch
     await expect(cells.nth(7)).toHaveText('Tasting + Lunch'); // Visit
-    await expect(cells.nth(8)).toContainText('khinkali'); // Masterclass
-    await expect(cells.nth(9)).toContainText('აჯაფასნადალი'); // Food (hot dish)
+    await expect(cells.nth(8)).toContainText('Khinkali'); // Masterclass
+    await expect(cells.nth(9)).toContainText('Badrijani nigvzit'); // Food (hot dish)
     await expect(cells.nth(9)).toContainText('Playwright test notes');
-    await expect(cells.nth(10)).toHaveText('410₾'); // Total
+    await expect(cells.nth(10)).toHaveText('635₾'); // Total
 
     // 9. Cleanup: delete the test order. (No company/price tier was created
     // by this test, so there's nothing else to remove, and the settings

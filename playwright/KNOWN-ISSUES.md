@@ -62,7 +62,7 @@ explicit one-off call afterwards, which is why it now holds demo-shaped companie
 tests in one spec. The real blast radius is five spec files across two tiers. Surfaced here
 2026-09-19 after `booking-enhanced.spec.ts` failed on it in a live run.
 
-**Resolved for three specs, outstanding for three. Max's call (2026-09-19): repoint at the
+**Resolved for five specs, outstanding for one. Max's call (2026-09-19): repoint at the
 seeded demo companies** rather than recreate the deleted hand-made ones. The seeded companies'
 names, tiers and codes are constants in `lib/demoSeed.ts`, so if they are ever wiped again,
 restoring them is one documented command instead of rebuilding a company from memory.
@@ -76,9 +76,42 @@ obtain, dead-ending the guided tour at its first stop.
 | `payment-amount-integrity` | Caucasus Vine Travel + Sighnaghi Wine Bar | ✅ repointed |
 | `payment-label-precedence` | Alazani Valley Tours | ✅ repointed, green |
 | `guide-picker` (new) | Silk Road Journeys | ✅ green, 4/4 |
-| `booking-enhanced` | — | ⬜ still `Test Company # 1` |
-| `company-nationality-tagging` | — | ⬜ still `Test Company # 1` |
-| `company-guide-code` | — | ⬜ still `Cookie Company` |
+| `booking-enhanced` | Tbilisi Tour Collective | ✅ repointed, green (Chunk 3, 2026-10-01) |
+| `company-nationality-tagging` | Tbilisi Tour Collective | ✅ repointed, green (Chunk 3, 2026-10-01) |
+| `company-guide-code` | — | ⬜ still `Cookie Company` — out of scope for
+  Plan-PlaywrightSuiteHardening Chunk 3, which covered only the two specs named in its own text |
+
+**Chunk 3 close-out (2026-10-01):** confirmed live (read both spec files in full first, per the
+plan's own instruction) that neither mutates company-level data — each only creates and deletes
+its own `Order` row — so sharing `Tbilisi Tour Collective` between them, as the plan allowed, was
+safe. Three further real findings surfaced repointing these two, beyond the company-name swap
+itself:
+1. **A stale comment, not a company-specific difference.** Both specs' "the code auto-fills the
+   contact profile" assumption referenced `applyProfile()`, which doesn't exist anywhere in the
+   current codebase. A company-level access code for a company with people on file now opens a
+   `ContactPickerPopupView` once per role that has people (Plan-ContactRoles Chunk 7,
+   `KnownBugs.md` #55) — nothing auto-fills until a person is picked or the role explicitly
+   skipped. This would have broken against *any* company with people on file, old or new; it
+   surfaced now only because `Test Company # 1` apparently had none.
+2. **Same `exact: true` gap already known for `payment-amount-integrity.spec.ts`.** Tbilisi Tour
+   Collective has a guide on file, so un-exact `'Phone'`/`'Email'`/`'Name'` matches resolve to
+   both the contact-person and the "Guide — ..." fields. Fixed the same way.
+3. **Ad-hoc hot-dish/masterclass fixture data had moved on independently of this chunk.**
+   `booking-enhanced.spec.ts`'s own comment already warned its menu/masterclass item names were
+   "pinned to today's exact live data, not curated names" — confirmed live that the specific
+   items it pinned (`"აჯაფასნადალი"`, `"khinkali10₾/pc"`) no longer exist on
+   `/admin/menu-items`/`/admin/masterclass`; repointed at current rows (`Badrijani nigvzit`,
+   `Khinkali folding class` at 35₾/pp) and recalculated the total (635₾, not 610₾).
+4. **`company-nationality-tagging.spec.ts`'s `test.setTimeout(120_000)` was genuinely too tight**
+   for its own real step count (three page objects, two tenant-setting writes, a dozen-plus
+   navigations) — reproduced identically three times in a row, always completing every real
+   check and running out of budget on the final cleanup line. Bumped to 150s, matching the order
+   of magnitude this suite's other multi-round-trip tests already use.
+
+Also hit, mid-chunk, and recovered from rather than worked around: a real `P2028` connection-pool
+exhaustion window (see "Dev database connection pool exhaustion" below) and separately a
+"dev server process bloat" slowdown (see below) serious enough that a `.next` wipe + restart was
+the right call, not a guess — both are the documented, already-known patterns, not new findings.
 
 **Applied additively** via `saas/scripts/backfill-test-fixtures.ts`, not by re-running the seed —
 a re-seed deletes every order on the tenant. The script imports the specs from `demoSeed.ts`

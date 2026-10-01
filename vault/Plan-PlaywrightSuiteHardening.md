@@ -251,25 +251,77 @@ payment-amount-integrity, `Alazani Valley Tours` → payment-label-precedence, `
 Journeys` → contact-role-picker, `Kakheti Wine Routes` → contact-orphan-safety — confirmed by
 grep 2026-10-01). Only `Tbilisi Tour Collective` is free, and two specs need a company.
 
-- [ ] Read both `booking-enhanced.spec.ts` and `company-nationality-tagging.spec.ts` in full
+- [x] Read both `booking-enhanced.spec.ts` and `company-nationality-tagging.spec.ts` in full
       to confirm neither one mutates company-level data (guides, prices, access codes) in a
       way that would collide if they shared one company — they likely don't (both just
       submit a booking and clean up their own order), but confirm rather than assume, the
       same way `contact-orphan-safety.spec.ts`'s header comment explains *why* it needed a
       company with existing Guide/Contact Person rows specifically.
-- [ ] If sharing `Tbilisi Tour Collective` is safe: repoint both specs to it.
-- [ ] If not safe: add a 6th booking company to `lib/demoSeed.ts`'s `BOOKING_COMPANIES`
+- [x] If sharing `Tbilisi Tour Collective` is safe: repoint both specs to it.
+- [x] If not safe: add a 6th booking company to `lib/demoSeed.ts`'s `BOOKING_COMPANIES`
       (matching the existing entries' shape — name, contact, a contact_person row with a
       code) and apply it via `saas/scripts/backfill-test-fixtures.ts` the same additive way
       the 2026-09-19 session did (**not** a full reseed — that deletes every order on the
       tenant).
-- [ ] Update each spec's `COMPANY_NAME`/`COMPANY_CODE` constants and any hardcoded
+- [x] Update each spec's `COMPANY_NAME`/`COMPANY_CODE` constants and any hardcoded
       rate/tier numbers that were specific to the old `Test Company # 1` fixture (check for
       assertions on specific ₾ amounts tied to that company's old price tiers).
-- [ ] Verify: isolated rerun of both specs, clean state.
-- [ ] Update `playwright/KNOWN-ISSUES.md` #4's table — this closes the last two open rows.
+- [x] Verify: isolated rerun of both specs, clean state.
+- [x] Update `playwright/KNOWN-ISSUES.md` #4's table — this closes the last two open rows.
 
-**Resume point:** not started.
+**Resume point:** Done.
+
+**Result (2026-10-01):** Confirmed sharing `Tbilisi Tour Collective` was safe by reading both
+spec files in full — neither mutates company-level data, each only creates and deletes its own
+`Order` row — so no 6th `BOOKING_COMPANIES` entry was needed.
+
+Beyond the plain company-name swap, four further real findings surfaced, each confirmed live
+before fixing:
+
+1. **A stale comment describing dead code, not a company-specific difference.** Both specs'
+   "the code auto-fills the contact profile" assumption cited `applyProfile()`, which does not
+   exist anywhere in the current codebase (confirmed by grep). A company-level access code for a
+   company with people on file now opens a `ContactPickerPopupView` once per role with people
+   (Plan-ContactRoles Chunk 7, `KnownBugs.md` #55) — nothing auto-fills until a person is picked
+   or the role explicitly skipped. This would have broken against *any* company with people on
+   file; it surfaced only now because `Test Company # 1` apparently had none. Fixed with a small
+   pick/skip loop in both specs (`booking-enhanced` picks the contact person by name, to confirm
+   the Name field; `company-nationality-tagging` declines both roles, since it fills Name itself
+   regardless of who's picked).
+2. **The same `exact: true` gap `KNOWN-ISSUES.md` already documents for
+   `payment-amount-integrity.spec.ts`.** Tbilisi Tour Collective has a guide on file, so un-exact
+   `'Phone'`/`'Email'` matches resolved to both the contact-person and "Guide — ..." fields in
+   both specs. Fixed the same way.
+3. **Ad-hoc hot-dish/masterclass fixture data had drifted independently of this chunk** —
+   `booking-enhanced.spec.ts`'s own pre-existing comment already warned its menu/masterclass
+   item names were "pinned to today's exact live data, not curated names." Confirmed live on
+   `/admin/menu-items` and `/admin/masterclass` that the specific items it referenced
+   (`"აჯაფასნადალი"`, a `"khinkali10₾/pc"`-shaped item) no longer exist. Repointed at current
+   rows (`Badrijani nigvzit`; `Khinkali folding class` at 35₾/pp) and recalculated the total
+   (635₾, not 610₾ — the full breakdown is in `KNOWN-ISSUES.md`).
+4. **`company-nationality-tagging.spec.ts`'s `test.setTimeout(120_000)` was genuinely too
+   tight** for its own real step count (three page objects, two tenant-setting writes, a
+   dozen-plus navigations) — reproduced identically three times in a row, always completing
+   every real check (toggle, picker, tagging, confirm sheet, admin filter/column, print sheet,
+   toggle off then back on) and running out of budget on the final cleanup line only. Bumped to
+   150s, matching the order of magnitude this suite's other multi-round-trip tests already use
+   (`wine-catalogue-order`, `companies-crud`).
+
+Also hit mid-chunk, unrelated to the fix itself: a real `P2028` connection-pool exhaustion window
+and, separately, a "dev server process bloat" slowdown serious enough to justify a `.next` wipe +
+restart (both already-documented `KNOWN-ISSUES.md` patterns, recognized and recovered from rather
+than guessed at or worked around) — Chunk 6's own instruction to verify pool health before the
+final run exists for exactly this reason.
+
+Verified: two isolated reruns of each spec from a clean shell, all four green
+(`booking-enhanced`: 1.2m, 1.3m; `company-nationality-tagging`: 1.3m, 1.4m). Also cleaned up 4
+pre-existing `Playwright CRUD Test Co <timestamp>` companies left on the tenant from the
+*original* investigation session (predating this one, found incidentally while repointing) and
+2 debris orders this session's own failed attempts left before the timeout fix landed.
+
+Full detail: `playwright/KNOWN-ISSUES.md` #4's table and its "Chunk 3 close-out" note.
+Changed files: `saas/tests/tier2-core-flows/booking-enhanced.spec.ts`,
+`saas/tests/tier2-core-flows/company-nationality-tagging.spec.ts`, `playwright/KNOWN-ISSUES.md`.
 
 ---
 
