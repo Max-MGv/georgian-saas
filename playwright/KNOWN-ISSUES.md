@@ -259,6 +259,41 @@ row.
    the 120s budget on a loaded dev server, see "Dev server process bloat" above, but comfortably
    inside it).
 
+### `payment-edit-after-payment.spec.ts` is now structurally obsolete, not flaky (found 2026-10-01, Chunk 5)
+
+**Not a bug in the test's locators or timing — its entire premise was closed off by a later,
+deliberate fix.** Running the full `tier5-payment-e2e` suite for real against
+`staging.vineworks.ge` (Plan-PlaywrightSuiteHardening Chunk 5), this spec hung its full 200s
+budget and died inside its own `finally` block with `page.goto: Target page, context or browser
+has been closed`.
+
+The real hang is earlier: step 4 tries to raise a card-paid order's guest count through the
+**Guest Breakdown** panel and save — but a live DOM snapshot taken at the moment of failure shows
+every field in that panel is `[disabled]` ("This order is already paid. Guest counts, the
+tasting/lunch split, rates, and food details are locked..."), including the Save button itself.
+`.fill()` on a disabled input waits forever for it to become editable, with no error until the
+outer test timeout fires. This spec was written to document `KnownBugs.md` #64 (editing a paid
+order silently reprices `Order.totalPrice` while `Payment.amount` stays frozen) — but
+**`Plan-PostPaymentExtras` Chunk 1 fixed #64 by locking exactly these fields once `paidAt` is
+set**, deliberately making the edit this spec performs impossible. The locked-state behavior is
+already correctly tested by `payment-post-payment-extras.spec.ts` (`"4: Chunk 1 lock confirmed —
+fields disabled, edit attempt had no effect"`, confirmed passing in the same run).
+
+**This needs a decision, not a locator fix:** retire this spec (its coverage is now fully
+redundant with `payment-post-payment-extras.spec.ts`), or rewrite it to assert the lock itself
+(which would just duplicate that same spec), or something else — a test-strategy call, not
+something to force a passing assertion onto. Left failing/blocked rather than silently patched.
+
+**A second-order effect worth knowing:** because the hang happens *inside* the `try` block and
+the first line of `finally` (`setPaymentSectionToggle`, a `page.goto()`) throws immediately once
+Playwright force-closes the page on timeout, **nothing else in that `finally` block runs either**
+— `deleteTestOrderOnAdminPage` and `disconnectOrderMoneyDb` are silently skipped. A real Flitt-
+settled test order is left on Staging Winery every time this spec times out this way. Cleaned up
+manually via the live admin UI 2026-10-01; if this spec is run again before being retired or
+rewritten, expect to do the same.
+
+### A silently stale `DEFAULT_TENANT_ID`
+
 **Symptom:** every test in the suite quietly runs against the wrong tenant — no errors, just wrong data, wrong assumptions, everything "passing" against a tenant nobody meant to test.
 
 **Cause:** `saas/.env`'s `DEFAULT_TENANT_ID` is what `localhost:3000` resolves to (see `ARCHITECTURE.md`'s "two-tenant strategy"). A past session temporarily pointed it at a different tenant to inspect something manually, and never reverted it — it stayed wrong for hours before being caught by accident.

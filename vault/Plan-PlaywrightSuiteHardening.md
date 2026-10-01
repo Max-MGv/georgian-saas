@@ -382,20 +382,74 @@ The 4 real-payment `tier5` specs were updated 2026-09-30 for the Contact Person 
 merge but have **never been run** since — they only run against the deployed staging site
 (`playwright.staging.config.ts`), and nothing has been pushed there since the merge landed.
 
-- [ ] Push the `staging` branch (current commit `d03b056` plus everything from Chunks 0–4).
-- [ ] Confirm the Vercel preview deploy for `staging` succeeds and `staging.vineworks.ge`
+- [x] Push the `staging` branch (current commit `d03b056` plus everything from Chunks 0–4).
+- [x] Confirm the Vercel preview deploy for `staging` succeeds and `staging.vineworks.ge`
       is serving the new code (check a page that changed — the public booking form's
       Contact Person section should show the merged single Name field).
-- [ ] Run all 5 `tier5-payment-e2e` specs for real against the deployed staging site:
+- [x] Run all 5 `tier5-payment-e2e` specs for real against the deployed staging site:
       `npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e --workers=1`
-- [ ] Any failure here is high-signal — these hit Flitt's real test merchant and real
+- [x] Any failure here is high-signal — these hit Flitt's real test merchant and real
       settlement logic. Investigate fully before concluding it's unrelated noise.
-- [ ] Clean up all test/debug data created on Staging Winery's dev-DB-backed tenant
+- [x] Clean up all test/debug data created on Staging Winery's dev-DB-backed tenant
       afterward, per this suite's existing test-data policy (`playwright/README.md`).
 
-**Resume point:** not started. Blocked on Chunks 0–4 landing first — pushing broken or
-half-finished work to staging before then defeats the point of staging being the safe
-preview branch.
+**Resume point:** Done.
+
+**Result (2026-10-01):** Each commit from Chunks 0–4 was pushed straight to `origin/staging`
+as it landed (not batched at the end), so by the time this chunk started, staging already had
+everything. Confirmed the deploy was current and correct two ways: `X-Vercel-Id` showed
+`fra1::fra1::...` (the performance pin from `saas/vercel.json` is intact), and the public booking
+form at `https://staging.vineworks.ge/` showed the single merged "Name" field, not separate
+First/Last Name boxes — the real, pre-existing marker this chunk's own text named to check.
+
+Note: it's actually **6** tier5 spec files / 8 tests, not "5," matching Chunk 0's own correction
+of this plan's count.
+
+Ran all 8 for real against the deployed site:
+`npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e --workers=1`.
+**6 passed clean on the first run (8.8m total)** — `payment-admin-order`, both other
+`payment-approved-settlement` scenarios, `payment-declined-settlement`, and
+`payment-post-payment-extras` all genuinely exercised a real Flitt settlement/decline and
+verified every surface. **2 failed, investigated fully, neither dismissed as noise:**
+
+1. **`payment-book-later.spec.ts` — real environmental drift, not a code bug.** Its very first
+   assertion (`"Individual bookings toggle should be OFF at rest"`) failed: the toggle was `ON`.
+   Traced this to genuine pre-existing state, not something this run caused: every OTHER tier5
+   spec that touches this same toggle (`payment-approved-settlement`, `payment-declined-
+   settlement`, `payment-edit-after-payment`, `payment-post-payment-extras`) reads its value
+   first and restores that *same* value afterward in a `finally` — none of them can have flipped
+   it to a NEW wrong state, they can only have perpetuated whatever was already there. Since
+   nobody has run this tier against staging "since the merge landed" (this chunk's own opening
+   line), the toggle had evidently been left `ON` by whatever ran last, weeks ago, and nothing
+   since had reason to notice. Fixed by logging into `staging.vineworks.ge/admin/settings`
+   directly and turning "Individual bookings" off, confirmed via a page reload (not just the
+   optimistic UI flip). Re-ran `payment-book-later.spec.ts` alone afterward: **passed clean,
+   33.6s.**
+2. **`payment-edit-after-payment.spec.ts` — not a flake, a genuine structural conflict, left
+   blocked rather than forced.** Timed out at its full 200s budget. A live DOM snapshot at the
+   moment of failure showed why: its step 4 tries to edit a paid order's guest count through the
+   Guest Breakdown panel, but every field in that panel — including Save — is now `[disabled]`
+   ("This order is already paid..."). This spec exists to document `KnownBugs.md` #64 (editing a
+   paid order silently reprices the total while `Payment.amount` stays frozen) — but
+   `Plan-PostPaymentExtras` Chunk 1 **fixed** #64 by locking exactly these fields once paid,
+   making the edit this spec performs permanently impossible now. The locked state is already
+   correctly tested by `payment-post-payment-extras.spec.ts` (confirmed passing in the same run:
+   `"Chunk 1 lock confirmed — fields disabled, edit attempt had no effect"`). Whether to retire
+   this spec (fully redundant now) or rewrite it to assert the lock (duplicating the other spec)
+   is a test-strategy call for Max, not something to decide unilaterally or paper over with a
+   locator tweak — **left failing, documented in full in `KNOWN-ISSUES.md`, not fixed.**
+   Side effect worth flagging: because the hang happens before its own `finally` block's first
+   line can run (the page was already force-closed), its cleanup never fired either — a real
+   Flitt-settled test order was left behind, found and deleted manually via the live admin UI.
+
+Cleaned up afterward: the `payment-edit-after-payment` leftover order (above), confirmed no
+other tier5-created debris remained (`payment-book-later`'s own successful rerun cleaned up
+after itself normally). Did not touch unrelated, pre-existing debris on Staging Winery predating
+this session (several `ZZPayment...`-named orders from September, out of scope for this chunk).
+
+Changed files: `playwright/KNOWN-ISSUES.md`. (No spec files changed — both findings this chunk
+produced are a live-environment state fix and a documented, deliberately-unresolved test-strategy
+question, not code changes.)
 
 ---
 
