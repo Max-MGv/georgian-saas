@@ -8,6 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-02 (newest) — Chunk 6 run myself after the subagent's token budget got tight; found a third cache-corruption instance, 29/35, handing off
+
+The background subagent (deliberately separate, for bias hygiene) finished Chunks 0–5 of
+[[Plan-PlaywrightSuiteHardening]] across several resumes — each time it hit a shared-account
+rate limit mid-chunk, it was resumed from its own worktree rather than restarted, so nothing
+was lost across 3 separate cutoffs. By the time it reached Chunk 5 (tier5 real-payment specs
+against deployed staging), Max asked to stop the resume-loop pattern (3 rate-limit deaths in
+~10 minutes of wall-clock chat time) and have the mechanical, non-investigative Chunk 6 done
+directly in this session instead — cheaper, no browser-screenshot overhead, and Chunk 6 is
+"run the suite and read the output," not open-ended root-causing.
+
+**Chunk 6, done so far:** confirmed the dev DB pool was healthy (two spaced `/admin/orders`
+loads, no `P1001`/`P2028`), reset the onboarding-wizard tenant, ran the full tier1–4 suite.
+First attempt came back in a far worse state than expected — nearly everything hanging. Root
+cause, confirmed live via `curl` rather than assumed: `/admin/login` was genuinely 404ing —
+**a third instance** of the `.next` Turbopack dev-cache corruption bug this week, on a third
+different route (after `/admin/orders/new` and the original `/admin/login` incident from
+before this plan existed). This is no longer a one-off; it's a real, recurring risk for this
+dev setup. Fixed the same way (`rm -rf .next` + restart), confirmed live.
+
+**Second attempt, post-fix: 29/35 passed.** Both of Chunks 1–2's fixes
+(`companies-crud.spec.ts`, the first half of `wine-catalogue-order.spec.ts`'s flow) held up
+under a genuine full run, not just in isolation — real confirmation the earlier work was
+sound. 5 still failed (`payment-amount-integrity` individual scenario, `booking-simple`,
+`contact-orphan-safety`, a *different*, later part of `wine-catalogue-order` than Chunk 1
+touched, and `admin-orders`). Investigated rather than assumed: ruled out settings-state
+pollution from the one test that crashed hard (queried Staging Winery's actual `Setting` rows
+directly — clean, no dirty toggle), ruled out a broad regression in order creation (drove
+`/admin/orders/new` live, works fine), ruled out a sandboxed-network block on the Flitt
+redirect (`curl` to `pay.flitt.com`, healthy). **Did not positively confirm** a cause for the
+remaining 5 — the leading theory (first-compile cost stacking inside one test's timeout
+budget, the same pattern documented repeatedly this week) is plausible, not proven, and the
+plan file says so explicitly rather than rounding up to "done."
+
+**Handed off here, deliberately, to manage context** rather than keep going in an
+increasingly long session. Next step is already decided, not open-ended: rerun the 5 failures
+in isolation against the now fully-warmed server, which either confirms the cold-compile
+theory (clean reruns) or falsifies it (same failure, pointing at something real). See the
+handoff prompt in chat / [[Plan-PlaywrightSuiteHardening]] Chunk 6's Result note for exact
+state.
+
+**Also cleaned up:** an orphaned `playwright show-trace` process (port 9323) left running
+since the previous day by the subagent's worktree — pure debris, killed. The subagent's own
+worktree (`.claude\worktrees\agent-afb283110755b4c37`) is now redundant — all its commits
+(Chunks 0–5) are already on `origin/staging`, nothing uncommitted left in it — safe to
+discard whenever convenient, not urgent.
+
+---
+
 ## 2026-10-01 (later) — Hardening plan execution: Chunks 0–4 done and pushed to `staging`, Chunks 5–6 remain
 
 The implementing subagent (deliberately separate, per the bias-hygiene ask) hit a session

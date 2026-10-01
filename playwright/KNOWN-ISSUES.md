@@ -154,6 +154,15 @@ fix (`rm -rf .next` + restart). This one fix cleared 4 unrelated test failures i
 recognize: several *seemingly unrelated* failures clearing together after one cache wipe is a
 strong signal this pattern was the cause, not four separate regressions.
 
+**Reconfirmed again 2026-10-02, a third real instance, third different route:** during
+[[Plan-PlaywrightSuiteHardening]] Chunk 6's full-suite run, `/admin/login` itself started
+returning a genuine 404 — confirmed via a raw `curl` request (not just a test failure), fixed
+the same way. Three confirmed instances in one week, three different routes
+(`/admin/login` originally, `/admin/orders/new` on 2026-09-30, `/admin/login` again on
+2026-10-02) — this is a real, recurring risk for this dev setup, not a one-off fluke. **Not
+yet root-caused as to *why* it recurs this often** — worth a dedicated investigation if it
+keeps happening, rather than continuing to treat each instance as an independent surprise.
+
 **Trade-off worth knowing:** running tests immediately after a fresh `rm -rf .next` is itself
 slower for a while — every route's *first* Turbopack compile after the wipe costs several extra
 seconds, and a test doing many sequential admin-page loads can stack that into a timeout that
