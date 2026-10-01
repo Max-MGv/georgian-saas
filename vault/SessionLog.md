@@ -8,7 +8,31 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-09-30 (newest) — Playwright suite: ran it for real, found the `.next` cache pattern was live, fixed two real test-locator bugs
+## 2026-10-01 (newest) — Independent review of yesterday's Playwright work, then a hardening plan
+
+Max asked for a status update on yesterday's Playwright session, then for a second opinion
+from a subagent deliberately fenced off from yesterday's own notes (the project's standing
+"blind review" pattern). The agent verified yesterday's three test-bug fixes and the
+Contact Person merge by reading the actual current code itself, not by trusting the
+narrative — confirmed all of it, `tsc` clean, no drift found. It also found one real thing
+yesterday's session missed: `saas/playwright.config.ts` has no exclusion for
+`tests/tier5-payment-e2e/`, so the suite's own documented default command
+(`npx playwright test`) would sweep in the real-Flitt-payment specs and hang against
+`localhost`. Also flagged `playwright/README.md`/`Progress.md` as stale (last touched
+2026-09-25, undercounting the suite by 5 tests).
+
+Max then asked for a working plan to close all of this — the two still-open leads from
+yesterday (wine-catalogue-order's modal-intercept, companies-crud's unexplained
+navigation), the fixture-broken specs (#4, open since 2026-09-19), the tier5 config gap,
+and the stale docs — to be executed by a **separate subagent**, deliberately, for the same
+bias-hygiene reason: the session that just spent hours on this has every incentive to
+declare victory early. Plan written: **[[Plan-PlaywrightSuiteHardening]]**, 7 chunks,
+ending in the thing this whole effort is actually for — one clean, full, end-to-end suite
+run, which no session has achieved yet. Not started as of this entry.
+
+---
+
+## 2026-09-30 — Playwright suite: ran it for real, found the `.next` cache pattern was live, fixed two real test-locator bugs
 
 Not new feature work — Max asked what's in progress, then asked to explore the Playwright
 suite. Corrected one wrong assumption first: the four bug fixes reported pending on
