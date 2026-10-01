@@ -459,28 +459,77 @@ Everything above exists to make this possible. This session never achieved it �
 two full-suite attempts both hit genuine dev-DB connection-pool exhaustion (`P2028`,
 confirmed directly in the dev server's own error log, not assumed), not code problems.
 
-- [ ] **Before running anything:** confirm the dev DB pool is actually healthy. Poll an
+- [x] **Before running anything:** confirm the dev DB pool is actually healthy. Poll an
       ordinary `/admin/orders` page load 2–3 times, a minute or so apart, and confirm no
       `P1001`/`P2028` in the dev server's log. Do not proceed on a loaded pool — per
       `playwright/KNOWN-ISSUES.md`, a restart does not fix this, only reduced load and time
       do, and running the suite into an already-saturated pool just reproduces the same
       false failures this whole plan exists to get past.
-- [ ] Reset the onboarding-wizard tenant first (manual SQL, documented in
+- [x] Reset the onboarding-wizard tenant first (manual SQL, documented in
       `playwright/notes/10-onboarding-wizard.md`) — a required precondition, not optional.
-- [ ] Run the complete tier1–4 suite, serial, from a clean shell:
+- [x] Run the complete tier1–4 suite, serial, from a clean shell:
       `cd saas && PLAYWRIGHT_HTML_OPEN=never npx playwright test --workers=1 --reporter=list`
-- [ ] Every failure gets investigated, not dismissed as "probably load" — that exact
-      assumption is what let `companies-crud.spec.ts` stay silently broken for weeks
-      earlier this year. If something fails and the cause is genuinely unclear, say so
-      explicitly in this file rather than guessing.
+- [~] Every failure gets investigated, not dismissed as "probably load" — partially done,
+      see Result below; 5 of 35 still unexplained with full confidence.
 - [ ] Once genuinely clean: this is the new baseline. Record the result (test count,
       duration, date) in `playwright/Progress.md`'s chronological log, matching its existing
-      entries' style.
-- [ ] Report back to Max with the real number — not "should be passing now," an actual
+      entries' style. **Not done — the run below is not yet clean.**
+- [x] Report back to Max with the real number — not "should be passing now," an actual
       fresh run's actual output.
 
-**Resume point:** not started. This is the last chunk; everything before it exists to make
-this one trustworthy.
+**Resume point:** In progress, genuinely not done. A real, previously-undiscovered bug was
+found and fixed along the way (see Result); the clean-run goal itself is not yet met.
+
+**Result (2026-10-02):** Pool-health check passed clean (two spaced `/admin/orders` loads,
+no `P1001`/`P2028`). Onboarding tenant reset via the documented SQL. First full-suite attempt
+after that (35 tests) came back in a much worse state than expected — nearly every test
+timing out or hanging, no `P2028` in the server log ruling out pool exhaustion as the cause.
+Investigated directly rather than assumed: a raw `curl` to `/admin/login` returned a genuine
+**404**, same Turbopack dev-cache-corruption pattern documented in `KNOWN-ISSUES.md` and hit
+twice already this week on two *different* routes — this is now a **third** confirmed
+instance, on a third route, strongly suggesting this corruption is a real, recurring risk for
+this dev setup rather than a one-off. Fixed the same way: `rm -rf .next` + restart, confirmed
+live via `curl` that `/admin/login`'s real HTML (not a 404 shell) came back, then confirmed
+the originally-failing test passed clean in isolation (34.2s) before re-running the full
+suite.
+
+**Second full-suite attempt, post-cache-fix: 29/35 passed, 5 failed, 1 did-not-run
+(cascaded).** Real, measurable progress over the pre-fix attempt — both of Chunks 1–2's
+fixed specs (`companies-crud`, and the first half of `wine-catalogue-order`'s flow) passed
+clean this time, confirming those fixes hold under a genuine full-suite run, not just in
+isolation. The 5 that still failed:
+`payment-amount-integrity.spec.ts` (individual, line 140), `booking-simple.spec.ts`,
+`contact-orphan-safety.spec.ts`, `wine-catalogue-order.spec.ts` (a **different**, later
+assertion than Chunk 1 fixed — line 220's `.locator('../../..')`, not the `.last()` bug),
+and `admin-orders.spec.ts`.
+
+**Investigated, not just logged:** checked whether a hypothesis — that
+`payment-amount-integrity`'s crash (`Test timeout of 120000ms exceeded`, "Target page,
+context or browser has been closed" while mid-way through toggling a settings page) left
+Staging Winery's payment settings in a dirty, non-default state that then broke the two
+tests after it — held up. It didn't: queried the tenant's actual `Setting` rows directly,
+and none of the three payment-toggle keys have a row at all (meaning they're on their
+untouched defaults), ruling out state pollution as the shared cause. Also manually drove
+`/admin/orders/new` live (login, load the form) to rule out a broad regression in order
+creation — it rendered correctly, no console errors, no sign of a broken page. Checked
+outbound network reachability to `pay.flitt.com` directly (`curl`, 0.45s round trip, no
+connectivity problem) to rule out a sandboxed-environment network block as the cause of the
+Flitt-redirect test's hang.
+
+**Honest state: the specific cause of these 5 remaining failures is not yet confirmed.**
+The strongest remaining hypothesis, consistent with everything observed today, is that this
+is the same "first-compile-cost-per-route stacks up inside a single test's timeout budget"
+pattern documented repeatedly in `KNOWN-ISSUES.md` — `/admin/settings` and the Flitt-redirect
+checkout path specifically had not been exercised yet in this fresh server process when test
+6 hit them, several tests deep into a brand-new `.next` build. This is plausible, not proven:
+spot-checks ruled out the two most likely *alternative* explanations (state pollution,
+network block, broad app breakage) but did not positively confirm the cold-compile theory
+for these 5 specific tests the way earlier findings this week were confirmed (live
+reproduction, trace-level evidence). **Do not mark Chunk 6 done on the strength of this
+Result note alone** — the honest next step is rerunning these 5 in isolation (not the whole
+suite) against the now-fully-warmed server from this session, which would either confirm the
+cold-compile theory (isolated reruns pass clean) or falsify it (they fail the same way again,
+pointing at something real still unaccounted for).
 
 ---
 
