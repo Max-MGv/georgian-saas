@@ -476,3 +476,53 @@ confirmed by follow-up `count(*)` queries. The "Individual bookings" toggle was 
 default (`true`) throughout — no `Setting` row was ever written, confirmed by direct query.
 
 Full writeup: [[18-payment-post-payment-extras]].
+
+## 2026-10-02 — Plan-PlaywrightSuiteHardening Chunk 6 closes: every handed-off failure root-caused, not just rerun
+
+The hardening plan's last chunk — one clean, full, end-to-end tier1–4 run — handed off 5
+unexplained failures with a leading-but-unconfirmed "cold compile" theory. A fresh session
+settled it by rerunning each in isolation rather than guessing: **2 of 5 confirmed cold-compile**
+(`contact-orphan-safety.spec.ts`, `wine-catalogue-order.spec.ts` — passed clean once warmed),
+**3 of 5 did not** — each had a real, separate root cause, found via live reproduction
+(trace analysis, direct `Tenant`-table reads, timed browser reproductions), fixed, and verified
+with at least one clean isolated rerun apiece:
+
+- `admin-orders.spec.ts`: a genuinely slow (~5s, confirmed live) Calendar→Table re-render
+  against a default 5000ms assertion timeout — not a bug in the transition itself.
+- `payment-amount-integrity.spec.ts`'s Individual scenario: every real `page.goto()` in this
+  app's admin/public flow costs several seconds on this dev setup; the test's math just didn't
+  leave enough budget. Its own interrupted cleanup (caused by the old budget) directly broke
+  `booking-simple.spec.ts` downstream — a tenant-wide payment toggle left in the wrong state.
+- `booking-simple.spec.ts`: not its own bug — inherited the above toggle-state corruption.
+
+**Two further real bugs surfaced and got fixed investigating the above, neither part of the
+original 5:** this session's own mistaken toggle "fix" (flipped `paymentEnabledCompanies` to
+match the Prisma schema default, when Staging Winery deliberately overrides it to `false` —
+caught immediately via `booking-enhanced.spec.ts`/`company-nationality-tagging.spec.ts` failing),
+and a missing ContactPickerPopupView dismissal in `payment-amount-integrity.spec.ts`'s
+Company-booking scenario (Caucasus Vine Travel picked up a guide and contact person since that
+spec was written — same gap Chunk 3 already fixed for a different company). A separate,
+unrelated finding from the same investigation: `mobile-georgian-overflow.spec.ts`'s two admin
+tests had no explicit timeout at all, running on Playwright's bare 30s default — too tight for
+their real multi-round-trip sequence, reproduced consistently, fixed with an explicit 60s.
+
+**A genuine environmental recurrence, not a new bug:** a later full-suite confirmation run came
+back with a fresh wave of seemingly-unrelated failures. Direct process inspection
+(`Win32_Process`, not a guess) showed the dev server back up to 1.27–1.37GB resident — this
+session's own sustained heavy testing had re-triggered the already-documented "dev server
+process bloat" pattern. A clean restart cleared every one of those failures with zero code
+changes, confirming the diagnosis rather than assuming it.
+
+Full detail, trace-level evidence, and the complete toggle-state nuance (which toggle should be
+`true` vs `false` and why) are in `vault/Plan-PlaywrightSuiteHardening.md`'s Chunk 6 Result and
+`KNOWN-ISSUES.md`'s new "Shared tenant payment-toggle state can cascade" section and entry 5.
+
+**Not done:** the onboarding-wizard tenant's manual reset (blocked this session by a safety
+check on bulk-delete scripts, needs Max to run it by hand before the next full run) and a single
+literal 35/35 run in one sitting (not attempted again after the fixes, given the precondition
+above) — but every failure that appeared, across multiple full and partial runs, now has a
+confirmed, fixed, verified cause. Changed files:
+`saas/tests/tier3-admin-smoke/admin-orders.spec.ts`,
+`saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`,
+`saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts`, `KNOWN-ISSUES.md`.

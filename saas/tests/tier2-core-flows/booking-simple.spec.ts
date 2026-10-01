@@ -88,7 +88,19 @@ test.describe('Booking form — simple/individual variant', () => {
     // button in it (see abandonedRow() in helpers/bookingForm.ts), and raising
     // the budget to 120s reproduced the identical failure. The raise is still
     // justified on round-trip count alone, but it was not the fix.
-    test.setTimeout(90_000);
+    //
+    // Bumped again 90s → 120s (Plan-PlaywrightSuiteHardening Chunk 6,
+    // 2026-10-02): reproduced a genuine timeout here with NO specific stuck
+    // locator — the page snapshot at failure showed the flow had already
+    // reached a real pay.flitt.com test-mode redirect (i.e. the booking
+    // mechanism itself worked correctly), it simply ran out of budget
+    // somewhere in the admin-verification/cleanup phase afterward. Matches
+    // this suite's broader, repeatedly-confirmed finding this session: admin
+    // page round trips on this dev setup routinely cost several seconds each,
+    // not milliseconds, and this test's own round-trip count (login, two
+    // page contexts, abandoned-screen check, restore, orders-table check,
+    // delete) adds up.
+    test.setTimeout(120_000);
 
     // 1. Navigate to the booking form (home page — the form is embedded there,
     // not a dedicated route; real finding, resolves the note's open question)

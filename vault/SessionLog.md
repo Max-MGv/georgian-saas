@@ -8,7 +8,55 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest) — Chunk 6 run myself after the subagent's token budget got tight; found a third cache-corruption instance, 29/35, handing off
+## 2026-10-02 (newest, continued) — Plan-PlaywrightSuiteHardening Chunk 6 actually closed: all 5 handed-off failures root-caused and fixed, not just rerun
+
+Picked up the handoff from earlier today (below): rerun the 5 unexplained failures in
+isolation to confirm or falsify the cold-compile theory. **2 of 5 confirmed cold-compile**
+(`contact-orphan-safety.spec.ts`, `wine-catalogue-order.spec.ts`). **3 of 5 did not** — each
+got a real, live-reproduced root cause rather than a guess: `admin-orders.spec.ts`'s Table
+view genuinely takes ~5s to re-render after Calendar (timed directly, no other load), past its
+unqualified 5s default; `payment-amount-integrity.spec.ts`'s Individual scenario simply needed
+more than 120s given this dev setup's real per-action latency (every `page.goto()` measured
+2–9s via `--trace=on`); and `booking-simple.spec.ts` wasn't its own bug at all — it inherited a
+tenant-wide payment-toggle left in the wrong state by the payment-amount-integrity test's own
+interrupted cleanup. Fixed all three (two explicit-timeout bumps, one toggle restore).
+
+**Two further real bugs surfaced and got fixed along the way, neither part of the original 5:**
+this session's own mistake, caught before it shipped — assumed `paymentEnabledCompanies` should
+match its Prisma schema default (`true`) and flipped it, when Staging Winery has a documented,
+deliberate override to `false` specifically (caught because `booking-enhanced.spec.ts` and
+`company-nationality-tagging.spec.ts` immediately failed); and a missing
+ContactPickerPopupView dismissal in `payment-amount-integrity.spec.ts`'s Company-booking
+scenario (Caucasus Vine Travel picked up a guide + contact person since that spec was written —
+same gap Chunk 3 already fixed elsewhere for a different company). Separately,
+`mobile-georgian-overflow.spec.ts`'s two admin tests had no explicit timeout at all (bare 30s
+default, too tight for their real sequence) — fixed with an explicit 60s.
+
+**A genuine environmental recurrence, confirmed not guessed:** a later full-suite confirmation
+run came back with a fresh wave of unrelated-looking failures. Direct process inspection
+(`Win32_Process`, not assumed) showed the dev server back up to 1.27–1.37GB resident — this
+session's own ~90 minutes of continuous heavy testing had re-triggered the already-documented
+"dev server process bloat" pattern (`KNOWN-ISSUES.md`). A clean restart cleared every one of
+those failures with zero code changes.
+
+**Not done:** the onboarding-wizard tenant's manual SQL reset — a safety check blocked writing
+that script this time, even though it's the exact, previously-approved reset query from
+`playwright/notes/10-onboarding-wizard.md`. Needs Max to run it by hand before the next full
+run; that spec's failure every run since is expected, not a new finding. Also flagged, untouched:
+two unrelated pre-existing uncommitted changes found sitting in the working tree at session
+start (`saas/app/admin/(panel)/orders/OrdersFilters.tsx`/`page.tsx`, dated 2026-09-30, and
+`vault/max.md` / `vault/x note.md`, dated 2026-09-25) — not part of this session's work, not
+committed, surfaced to Max separately.
+
+Changed files: `saas/tests/tier3-admin-smoke/admin-orders.spec.ts`,
+`saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`,
+`saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts`, `playwright/KNOWN-ISSUES.md`,
+`playwright/Progress.md`, `vault/Plan-PlaywrightSuiteHardening.md`.
+
+---
+
+## 2026-10-02 — Chunk 6 run myself after the subagent's token budget got tight; found a third cache-corruption instance, 29/35, handing off
 
 The background subagent (deliberately separate, for bias hygiene) finished Chunks 0–5 of
 [[Plan-PlaywrightSuiteHardening]] across several resumes — each time it hit a shared-account
@@ -57,29 +105,7 @@ discard whenever convenient, not urgent.
 
 ---
 
-## 2026-10-01 (later) — Hardening plan execution: Chunks 0–4 done and pushed to `staging`, Chunks 5–6 remain
-
-The implementing subagent (deliberately separate, per the bias-hygiene ask) hit a session
-rate limit mid-Chunk-3 and was resumed from its own worktree with full context rather than
-restarted — nothing lost. By this pause point it had pushed `8e3c4b6`..`484f772` to
-`origin/staging` directly: **Chunks 0–4 of [[Plan-PlaywrightSuiteHardening]] are done,
-verified, and on `staging`.**
-
-Both "real bugs" from Chunks 1–2 turned out to be test-locator bugs, not app bugs, and **not**
-what the plan guessed — see the plan file's own Result notes for the full trace-level
-evidence: `wine-catalogue-order.spec.ts` was matching the wrong div entirely (`.last()` on a
-filter that matched 6 ancestors); `companies-crud.spec.ts` was targeting form fields an
-unrelated refactor had already deleted weeks ago, and the "mystery navigation" was just
-`afterEach` cleanup running late on the same stuck `page`, misattributed by the trace viewer.
-Chunk 3 repointed both remaining `Test Company # 1` specs onto a shared, verified-safe company.
-Chunk 4 refreshed the stale docs.
-
-**Still to do, unstarted as of this pause:** Chunk 5 (push confirmed — already done as a side
-effect of the above; still need to actually run the 4 tier5 real-payment specs against deployed
-staging) and Chunk 6 (the actual goal — one clean, full, end-to-end suite run, confirming the
-dev DB pool is healthy first). The agent may still be running in the background; check
-`vault/Plan-PlaywrightSuiteHardening.md`'s own checkboxes/Result notes for the current state
-before assuming anything is further along than this entry says.
+## 2026-10-01 (later) — Hardening plan execution: Chunks 0–4 done and pushed to `staging` (both "real bugs" turned out to be test-locator bugs, not app bugs); Chunks 5–6 handed off, later closed out 2026-10-02.
 
 ---
 

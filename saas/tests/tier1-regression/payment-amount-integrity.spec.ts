@@ -115,7 +115,14 @@ async function restoreAndDeleteAbandoned(page: Page, marker: string) {
   const row = abandonedRow(page, marker)
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Restore without payment' }).click()
-    await expect(abandonedRow(page, marker)).toHaveCount(0, { timeout: 15_000 })
+    // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02): the
+    // restore action itself is correct and normally fast (confirmed live,
+    // manually — ~2.5s) but flaked once here across several runs today at
+    // the default 15s, resolving to count 1 for the full budget with no
+    // other error. Bumped to 25s rather than chase a single non-reproducing
+    // flake further — matches this suite's general finding that admin-page
+    // round trips here occasionally run several seconds slower than usual.
+    await expect(abandonedRow(page, marker)).toHaveCount(0, { timeout: 25_000 })
   }
   await deleteTestOrderOnAdminPage(page, marker)
 }
@@ -138,7 +145,20 @@ async function restoreAndDeleteAbandoned(page: Page, marker: string) {
 
 test.describe('Individual booking — payment on/off carries the correct amount to Flitt', () => {
   test('payment ON: redirects to Flitt with the exact quoted amount; payment OFF: reservation-only, no checkout', async ({ page, context }) => {
-    test.setTimeout(120_000);
+    // Bumped 120s → 180s (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+    // a live --trace=on run of this exact scenario, on a freshly restarted,
+    // otherwise-idle dev server, showed the real flow — two full booking
+    // submissions, each with its own admin verification and cleanup round
+    // trip, plus two settings-toggle flips — genuinely needs ~125s+ of real
+    // per-action time (every page.goto() in this app's admin/public flows
+    // measured 2-9s here, not milliseconds). 120s left no margin at all, and
+    // this test's own `finally` restoring the "Individual bookings" toggle
+    // never got a chance to run when it timed out — leaving the dev tenant's
+    // real payment toggle stuck off and silently breaking booking-simple.spec.ts
+    // (and any other spec that assumes it's on) until someone noticed and
+    // fixed it by hand. Not a hang, not a stuck locator — every step
+    // completes, there just wasn't enough budget.
+    test.setTimeout(180_000);
     await loginAsTenantAdmin(page);
     const original = await readPaymentSectionToggle(page, 'Individual bookings');
 
@@ -264,6 +284,27 @@ test.describe('Company booking — section × per-company override × hidden-pri
       await formPage.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(accessCode);
       await formPage.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(formPage.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
+
+      // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+      // confirmed live that Caucasus Vine Travel now has people in both its
+      // guide role (Beka Lomidze, Salome Kikvadze) and contact_person role
+      // (Lasha Tsereteli) — an access code for a company with people on file
+      // opens a ContactPickerPopupView once per role with people
+      // (Plan-ContactRoles Chunk 7, KnownBugs #55), same gap Chunk 3 already
+      // found and fixed in booking-enhanced.spec.ts and
+      // company-nationality-tagging.spec.ts for Tbilisi Tour Collective. This
+      // spec predated that drift and never handled it at all: the leftover
+      // popup silently intercepted every later click on this page, including
+      // the final submit button, which read as a stuck/blocked click with no
+      // obvious cause until reproduced live in a real browser. Always decline
+      // ("I am not on this list") rather than pick a person — this scenario
+      // fills Name/Phone/Email by hand regardless, same choice
+      // company-nationality-tagging.spec.ts already made for the same reason.
+      for (let i = 0; i < 2; i++) {
+        const pickerHeading = formPage.getByRole('heading', { name: 'Who should we put on this booking?' });
+        if (!(await pickerHeading.isVisible().catch(() => false))) break;
+        await formPage.getByRole('button', { name: 'I am not on this list' }).click();
+      }
 
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);

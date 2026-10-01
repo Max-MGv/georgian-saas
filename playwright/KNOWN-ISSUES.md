@@ -170,6 +170,61 @@ looks like a new bug. If a test times out on something completely ordinary (a se
 a page load) right after a cache wipe, check whether it's just uncompiled-route latency before
 concluding it's a real regression.
 
+**Reconfirmed again 2026-10-02 (same day as the third instance above), a different shape of the
+same underlying pattern — slowness without cache corruption:** after the Chunk 6 cache-corruption
+fix, this session kept the dev server running for well over an hour of continuous heavy testing
+(a full 35-test suite run, plus a dozen isolated reruns investigating individual failures). A
+subsequent full-suite run came back markedly worse — a fresh wave of failures
+(`companies-crud`, `payment-label-precedence`, `locale-integrity`'s admin-companies case, plus
+`net::ERR_ABORTED` at multiple different routes including `/admin/login` itself mid-login)
+— **with no 404 this time**, ruling out the cache-corruption variant above. Confirmed directly
+via process inspection rather than assumed: `Get-CimInstance Win32_Process` on the real
+`next dev` server process (not the `npm`/`next` wrapper PIDs, which stay tiny) showed **1.27–1.37GB
+resident**, consistent with this section's own "~1.8GB" prior observation. Fixed the same way
+(`Stop-Process` the whole tree, `rm -rf .next`, restart) — confirmed live: every one of the
+newly-failing specs (`companies-crud`, `payment-label-precedence`, all three
+`locale-integrity` admin cases) passed clean on the very next run against the fresh server,
+with zero code changes. **Lesson for next time this suite is used to investigate itself:** the
+investigation's own heavy, repeated test traffic can re-trigger the exact degradation it's
+trying to diagnose — if a long investigation session's failures start looking broad and
+unrelated, check process memory before concluding the app regressed.
+
+### Shared tenant payment-toggle state can cascade into unrelated-looking failures
+
+**Symptom:** a spec that never touches payment settings at all (`booking-simple.spec.ts`,
+`booking-enhanced.spec.ts`) fails on a button-label mismatch — expecting `"Book & Pay"` and
+finding `"Request Booking"`, or vice versa — with no code change anywhere near it.
+
+**Cause:** several specs in this suite (`payment-amount-integrity.spec.ts`,
+`payment-label-precedence.spec.ts`) read the *current* value of a tenant-wide payment toggle
+(`Individual bookings` / `Company bookings`, both `Tenant` columns, not `Setting` rows) at the
+start of a test, flip it through several states for their own scenarios, and restore the
+original value in a `finally` block. **If that test gets interrupted before its `finally` can
+run** — a timeout, a crash, or (as happened repeatedly this session) the server itself
+degrading mid-test — the toggle is left at whatever intermediate value the test last set it
+to, not its real original. Every *other* spec that assumes an ambient default then fails, often
+in a completely different tier, for a reason that has nothing to do with its own code. This is
+the same shape Chunk 5 already documented for `staging`'s tier5 suite (`payment-book-later`
+found "Individual bookings" left ON there) — confirmed here to also affect the **dev** tenant,
+and to cut in **both directions** depending which toggle:
+
+- `paymentEnabledIndividuals` / `paymentEnabledWineOrders`: Prisma schema default `true`, and
+  that's the tenant's real intended state too (no override on record) — `booking-simple.spec.ts`
+  assumes this.
+- `paymentEnabledCompanies`: schema default is also `true`, but Staging Winery has a **deliberate,
+  documented override to `false`** — see `booking-enhanced.spec.ts`'s own comment
+  ("backfilled false by #148"). **Do not "fix" this one back to the schema default** — that
+  was this session's own mistake, caught only because `booking-enhanced.spec.ts` and
+  `company-nationality-tagging.spec.ts` (which both depend on it reading `false`) failed
+  immediately after. Confirmed correct values, 2026-10-02: Individuals **true**, Companies
+  **false**, WineOrders **true**.
+
+**If a spec using one of these toggles fails for any reason, check this tenant-state drift
+before assuming a code or locator bug** — read the three `Tenant` columns directly (not the
+`Setting` table, which is a different mechanism entirely despite the shared admin-UI look) and
+compare against the values above. This session hit the drift three separate times investigating
+Chunk 6 alone.
+
 ### Real, confirmed test-locator bugs found 2026-09-30 and 2026-10-01 (not app bugs)
 
 Both found by getting a full run's failures to actually pass in isolation, then reading the
@@ -267,6 +322,23 @@ row.
    Verified: two isolated reruns from a clean shell, both green (1.6m and 1.7m — both close to
    the 120s budget on a loaded dev server, see "Dev server process bloat" above, but comfortably
    inside it).
+
+5. **`payment-amount-integrity.spec.ts`'s company-booking scenario never handled the
+   ContactPickerPopupView at all (found 2026-10-02, Chunk 6).** Confirmed live: Caucasus Vine
+   Travel now has people in both its guide role (two guides) and its contact_person role (one
+   rep), so entering its access code opens the picker once per role — exactly the gap Chunk 3
+   already found and fixed in `booking-enhanced.spec.ts`/`company-nationality-tagging.spec.ts`
+   for a different company (Tbilisi Tour Collective). This spec predated that drift and never
+   dismissed the popup at all. Its symptom looked different from Chunk 3's: not a stuck `fill()`,
+   but the final submit button's `clickUntil` retrying for the full 20s with the trace showing a
+   `fixed inset-0 z-50` overlay intercepting every attempt — the picker, left open the whole time,
+   sitting on top of the form. The intervening fills (date, guests, Name/Phone/Email) all
+   succeeded regardless, which is why the failure surfaced at the submit click specifically, not
+   earlier — worth remembering if this shape (fills succeed, only the final click is blocked)
+   shows up again. Fixed with the same loop pattern Chunk 3 used, always declining ("I am not on
+   this list") since this scenario fills contact fields by hand regardless of who's offered.
+   Verified: two isolated reruns, both green (the full 5-sub-scenario describe block, 7.9m and
+   similar).
 
 ### `payment-edit-after-payment.spec.ts` is now structurally obsolete, not flaky (found 2026-10-01, Chunk 5)
 
