@@ -36,7 +36,41 @@ Test **output** (HTML report, trace files) is still redirected here via `playwri
 
 ## Current status
 
-**17 of 18 planned tests built and passing** (Phases 0–3 complete; Phase 4 — locale integrity, 1 test — not started). Every "done" state here has been independently re-verified (full-suite reruns from a clean shell, plus direct SQL spot-checks of real tenant data), not just taken from a single run's output. Full breakdown: `Progress.md`.
+**Last verified runs:** localhost tiers 1–4 = **35/35 green** (2026-10-02, 33.4 min); tier 5 against
+staging = **7/7 green** (2026-10-02, 5.6 min, `payment-book-later` also green on two isolated reruns).
+
+**42 tests across 22 spec files, all tiers complete** (Phases 0–5 — regression, core flows, admin
+smoke, locale integrity, and real Flitt payment E2E — confirmed current via
+`npx playwright test --list` + `npx playwright test --config=playwright.staging.config.ts --list`,
+2026-10-02). Every "done" state here has been independently re-verified (full-suite reruns from a
+clean shell, plus direct SQL spot-checks of real tenant data), not just taken from a single run's
+output. Full breakdown: `Progress.md`.
+
+| Tier | Files | What |
+|---|---|---|
+| 1 — regression | 5 | recurring bug shapes (mobile/locale overflow, popover clipping, theme colors, payment-label precedence) |
+| 2 — core flows | 6 | booking (simple/enhanced), wine catalogue, contact roles/nationality |
+| 3 — admin smoke | 4 | login, orders, companies CRUD, onboarding wizard |
+| 4 — locale integrity | 1 | EN/KA parity across 5 pages |
+| 5 — real Flitt payment E2E | 5 | settlement, decline, book-later, admin-created orders, post-payment extras — **staging only, see below** |
+
+(Plus `tests/seed.spec.ts`, a standalone smoke check not tied to a tier.)
+
+> `tier5-payment-e2e/payment-edit-after-payment.spec.ts` was **retired 2026-10-02**
+> (Plan-PlaywrightSuiteHardening Chunk 6) — its entire premise (editing a paid order's guest
+> count silently repricing the total) was closed off by a later fix that locks those fields once
+> paid, making the edit it tries to perform permanently impossible. Its coverage is fully
+> superseded by `payment-post-payment-extras.spec.ts`'s own lock assertion. See
+> `KNOWN-ISSUES.md` for the full story, kept as history rather than deleted.
+
+## What this suite does NOT cover (and the plan to expand it)
+
+Strong: booking, company booking, wine ordering, payment amounts, real Flitt payment flows.
+Untested: several whole admin pages (Statistics, Menu Items, Masterclass, Wines, Site Content,
+My Reports), the public About/Contact/Terms/Privacy/Returns pages, most super-admin pages, cron
+routes, the demo site, cross-tenant isolation, and any browser other than Chromium. Full audit and
+a proposed backlog (not started): `C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\Plan-ExpandPlaywrightCoverage.md`
+(FeatureLog #218).
 
 ## Target environment
 
@@ -51,9 +85,16 @@ Before running the suite:
 npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e/<file>.spec.ts --workers=1
 ```
 
+> ⚠️ **This is enforced, not just documented.** `playwright.config.ts` has had a `testIgnore`
+> for `tests/tier5-payment-e2e/**` since Plan-PlaywrightSuiteHardening Chunk 0 (2026-10-01) —
+> the default `npx playwright test` command above genuinely cannot sweep tier5 in by accident
+> anymore. If a future change to that config ever drops this exclusion, the symptom comes back
+> exactly as described above (a ~25s hang per tier5 test against localhost) — check
+> `testIgnore` first if that happens, don't re-diagnose it from scratch.
+
 ## Test data policy (short version)
 
-Any test that creates data cleans it up afterward, regardless of pass/fail. Tests never touch Staging Winery's pre-existing real data. There's one confirmed exception (Wine Orders has no delete action, so its test's cleanup can only mark "Cancelled") and one deliberate one (the onboarding-wizard tenant needs a manual reset before each run, not after) — both explained in full in `KNOWN-ISSUES.md`, not repeated here.
+Any test that creates data cleans it up afterward, regardless of pass/fail. Tests never touch Staging Winery's pre-existing real data. There's one confirmed exception (Wine Orders has no delete action, so its test's cleanup can only mark "Cancelled") and one deliberate one (the onboarding-wizard tenant needs a reset before each run, not after — a one-click "Reset onboarding wizard tenant" button on `/super-admin/tenants` since 2026-10-02, replacing the manual SQL this note used to point at) — both explained in full in `KNOWN-ISSUES.md`, not repeated here.
 
 ## Conventions (short version)
 

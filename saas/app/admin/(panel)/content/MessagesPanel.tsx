@@ -656,7 +656,12 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               ] as ReviewRow[]}
               guestRows={[
                 { label: t(locale, 'form.num_guests'), value: '4' },
-                { label: `${t(locale, 'form.first_name')} ${t(locale, 'form.last_name')}`, value: `${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}` },
+                // Contact Person merged into one Name field 2026-09-30 (matches
+                // BookingForm.tsx's confirmGuestRows). Label wording matches the
+                // seeded contact_person role's own labelEn/labelKa
+                // (app/actions/superAdmin.ts) — this static preview has no live
+                // tenant role data to read it from, unlike the real form.
+                { label: locale === 'ka' ? 'საკონტაქტო პირი' : 'Contact Person', value: `${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}` },
                 { label: t(locale, 'form.phone'), value: SAMPLE_GUEST.phone },
               ] as ReviewRow[]}
               durationNote={drafts.onsite_confirm_duration_note.replaceAll('{hours}', '2.5').replaceAll('{end}', '16:30')}

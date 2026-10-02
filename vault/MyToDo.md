@@ -8,6 +8,35 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🟢 2026-10-02 — The automated tests now all pass (35 out of 35). Nothing is broken, but a few decisions are yours.
+
+The test suite that checks the site still works ran clean for the first time ever. Getting there
+meant fixing bugs **in the tests themselves** (not in your site) — no customer-facing behaviour
+changed. Everything is on `staging`; `master` (your real site) is untouched.
+
+**Decisions for you (none urgent):**
+1. **Do you want to expand the tests?** I audited what they check. They're strong on bookings and
+   payments, but never visit several pages at all (Statistics, Menu Items, Masterclass, Wines,
+   Site Content, My Reports, About/Contact/Terms/Privacy/Returns). The proposed list is in
+   [[Plan-ExpandPlaywrightCoverage]] (FeatureLog #218). Tell me which pieces you want, if any.
+2. ~~Re-run the real-payment tests on staging?~~ **Done 2026-10-02 evening: all 7 passed.** One test
+   (book-later) had a built-in assumption that clashed with the real settings; I fixed the test, not
+   your site. Settings on Staging Winery are exactly as before and no test orders were left behind.
+3. **Ready to move staging → master?** That's the step that touches real customers, so it's your
+   call. Note `staging` also carries two small admin changes you haven't looked at yet: the
+   "Columns" picker now only shows on the Table view of Orders, and a new **"Reset onboarding
+   wizard tenant"** button on the super-admin Tenants page (used only by the tests).
+
+**Housekeeping, only if you feel like it:**
+- Staging Winery has accumulated leftover test orders (names starting `ZZ…`, `Playwright…`,
+  `Nationality TestGuest`) — the wine-orders screen has no delete button, so these pile up. They're
+  harmless; sweep them whenever, or use the super-admin "Clear staging data" button for a clean slate
+  (it deletes *every* booking/order/company there, so only if you don't need the fixtures).
+- An old helper working copy at `C:\Users\Max\Desktop\claude-projects\georgian-saas\.claude\worktrees\agent-afb283110755b4c37`
+  is redundant (everything in it is already on `staging`) and can be deleted.
+
+---
+
 ---
 
 ## 🟢 2026-09-22 (later) — Chunk 9 done, and an audit that found four real problems

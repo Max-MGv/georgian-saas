@@ -50,9 +50,13 @@ type Props = {
   tenantId?: string | null
   /** ISO codes actually present on this tenant's orders (Plan-CompanyNationality) — not the full country list. */
   nationalityOptions?: string[]
+  /** Resolved desktop view (page.tsx already normalizes `params.view` to this).
+   *  Only Table actually reads `visibleCols` — List and Board render fixed
+   *  layouts (see OrdersTable.tsx) — so the Columns picker only renders here. */
+  view?: 'table' | 'list' | 'board'
 }
 
-export default function OrdersFilters({ companies, params, statusCounts, paymentCounts, locale = 'en', tenantId = null, nationalityOptions = [] }: Props) {
+export default function OrdersFilters({ companies, params, statusCounts, paymentCounts, locale = 'en', tenantId = null, nationalityOptions = [], view = 'table' }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const at = (key: string) => adminT(locale, key)
@@ -463,39 +467,44 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
         </div>
       </div>
 
-      {/* Columns picker — right-aligned in the same row */}
-      <div className="relative ml-auto" ref={columnsPickerRef}>
-        <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
-        <button
-          onClick={() => setColumnsOpen(o => !o)}
-          className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
-          style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-          {at('orders.filters.columns')}
-        </button>
-        {columnsOpen && (
-          <div
-            className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
-            style={{ backgroundColor: C.bg, borderColor: C.border, minWidth: 180 }}
+      {/* Columns picker — right-aligned in the same row. Only Table reads
+          visibleCols (List and Board render fixed layouts — see
+          OrdersTable.tsx), so it only renders there; otherwise it's a control
+          that visibly does nothing. */}
+      {view === 'table' && (
+        <div className="relative ml-auto" ref={columnsPickerRef}>
+          <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>&nbsp;</label>
+          <button
+            onClick={() => setColumnsOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border text-xs font-medium"
+            style={{ ...inputStyle, padding: '8px 12px', width: 'auto', cursor: 'pointer' }}
           >
-            <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
-              <span className="text-xs font-semibold" style={{ color: C.faint }}>{at('orders.filters.showHideColumns')}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+            {at('orders.filters.columns')}
+          </button>
+          {columnsOpen && (
+            <div
+              className="absolute right-0 z-40 rounded-xl border shadow-lg py-2 mt-1"
+              style={{ backgroundColor: C.bg, borderColor: C.border, minWidth: 180 }}
+            >
+              <div className="px-3 pb-1 mb-1 border-b" style={{ borderColor: C.border }}>
+                <span className="text-xs font-semibold" style={{ color: C.faint }}>{at('orders.filters.showHideColumns')}</span>
+              </div>
+              {COLUMN_DEFS.map(c => (
+                <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-amber-50">
+                  <input
+                    type="checkbox"
+                    checked={visibleCols.has(c.id)}
+                    onChange={() => toggleCol(c.id)}
+                    style={{ accentColor: C.wine }}
+                  />
+                  <span className="text-xs" style={{ color: C.text }}>{at(c.labelKey)}</span>
+                </label>
+              ))}
             </div>
-            {COLUMN_DEFS.map(c => (
-              <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-amber-50">
-                <input
-                  type="checkbox"
-                  checked={visibleCols.has(c.id)}
-                  onChange={() => toggleCol(c.id)}
-                  style={{ accentColor: C.wine }}
-                />
-                <span className="text-xs" style={{ color: C.text }}>{at(c.labelKey)}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
     </div>
 

@@ -44,6 +44,16 @@ test.describe('Mobile + Georgian overflow — admin pages', () => {
   });
 
   test('admin orders', async ({ page }) => {
+    // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02): this
+    // test has no explicit budget, so it ran on Playwright's 30s global
+    // default — too tight for its real sequence (login's own Supabase Auth
+    // round trip alone can run ~10s+ per helpers/auth.ts, plus a settings
+    // page goto, a language-toggle click + POST wait, and a final goto, each
+    // measured at multiple seconds on this dev setup). Confirmed live,
+    // reproducibly: the final goto() gets aborted (net::ERR_ABORTED) when
+    // Playwright force-tears-down the page at the 30s deadline mid-navigation
+    // — not a stuck request, just not enough budget for a correct flow.
+    test.setTimeout(60_000);
     await loginAsTenantAdmin(page);
     await setAdminPanelLanguage(page, 'ka');
     await page.goto('/admin/orders');
@@ -64,6 +74,11 @@ test.describe('Mobile + Georgian overflow — admin pages', () => {
   });
 
   test('admin companies', async ({ page }) => {
+    // Same real finding and fix as 'admin orders' above — identical sequence,
+    // identically tight on the 30s default (passed once at 33.1s, already
+    // over budget, then failed the same way as its sibling in the full-suite
+    // run this was found in).
+    test.setTimeout(60_000);
     await loginAsTenantAdmin(page);
     await setAdminPanelLanguage(page, 'ka');
     await page.goto('/admin/companies');

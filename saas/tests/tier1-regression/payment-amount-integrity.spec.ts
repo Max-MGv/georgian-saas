@@ -115,7 +115,14 @@ async function restoreAndDeleteAbandoned(page: Page, marker: string) {
   const row = abandonedRow(page, marker)
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Restore without payment' }).click()
-    await expect(abandonedRow(page, marker)).toHaveCount(0, { timeout: 15_000 })
+    // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02): the
+    // restore action itself is correct and normally fast (confirmed live,
+    // manually — ~2.5s) but flaked once here across several runs today at
+    // the default 15s, resolving to count 1 for the full budget with no
+    // other error. Bumped to 25s rather than chase a single non-reproducing
+    // flake further — matches this suite's general finding that admin-page
+    // round trips here occasionally run several seconds slower than usual.
+    await expect(abandonedRow(page, marker)).toHaveCount(0, { timeout: 25_000 })
   }
   await deleteTestOrderOnAdminPage(page, marker)
 }
@@ -138,7 +145,20 @@ async function restoreAndDeleteAbandoned(page: Page, marker: string) {
 
 test.describe('Individual booking — payment on/off carries the correct amount to Flitt', () => {
   test('payment ON: redirects to Flitt with the exact quoted amount; payment OFF: reservation-only, no checkout', async ({ page, context }) => {
-    test.setTimeout(120_000);
+    // Bumped 120s → 180s (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+    // a live --trace=on run of this exact scenario, on a freshly restarted,
+    // otherwise-idle dev server, showed the real flow — two full booking
+    // submissions, each with its own admin verification and cleanup round
+    // trip, plus two settings-toggle flips — genuinely needs ~125s+ of real
+    // per-action time (every page.goto() in this app's admin/public flows
+    // measured 2-9s here, not milliseconds). 120s left no margin at all, and
+    // this test's own `finally` restoring the "Individual bookings" toggle
+    // never got a chance to run when it timed out — leaving the dev tenant's
+    // real payment toggle stuck off and silently breaking booking-simple.spec.ts
+    // (and any other spec that assumes it's on) until someone noticed and
+    // fixed it by hand. Not a hang, not a stuck locator — every step
+    // completes, there just wasn't enough budget.
+    test.setTimeout(180_000);
     await loginAsTenantAdmin(page);
     const original = await readPaymentSectionToggle(page, 'Individual bookings');
 
@@ -150,8 +170,10 @@ test.describe('Individual booking — payment on/off carries the correct amount 
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
       await formPage.getByRole('combobox').selectOption({ index: 1 });
       await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4');
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentIntegrity');
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker);
+      // Contact Person merged First/Last Name into one Name field 2026-09-30
+      // (MaintenanceNotes.md §1) — exact: true, same reason as the Phone/Email
+      // fix below: a company with a guide also has a "Guide — Name" field.
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentIntegrity ${marker}`);
       await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000021');
       await formPage.getByRole('textbox', { name: 'Email' }).fill(email);
 
@@ -263,6 +285,27 @@ test.describe('Company booking — section × per-company override × hidden-pri
       await formPage.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(formPage.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
 
+      // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+      // confirmed live that Caucasus Vine Travel now has people in both its
+      // guide role (Beka Lomidze, Salome Kikvadze) and contact_person role
+      // (Lasha Tsereteli) — an access code for a company with people on file
+      // opens a ContactPickerPopupView once per role with people
+      // (Plan-ContactRoles Chunk 7, KnownBugs #55), same gap Chunk 3 already
+      // found and fixed in booking-enhanced.spec.ts and
+      // company-nationality-tagging.spec.ts for Tbilisi Tour Collective. This
+      // spec predated that drift and never handled it at all: the leftover
+      // popup silently intercepted every later click on this page, including
+      // the final submit button, which read as a stuck/blocked click with no
+      // obvious cause until reproduced live in a real browser. Always decline
+      // ("I am not on this list") rather than pick a person — this scenario
+      // fills Name/Phone/Email by hand regardless, same choice
+      // company-nationality-tagging.spec.ts already made for the same reason.
+      for (let i = 0; i < 2; i++) {
+        const pickerHeading = formPage.getByRole('heading', { name: 'Who should we put on this booking?' });
+        if (!(await pickerHeading.isVisible().catch(() => false))) break;
+        await formPage.getByRole('button', { name: 'I am not on this list' }).click();
+      }
+
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
@@ -276,10 +319,16 @@ test.describe('Company booking — section × per-company override × hidden-pri
       // touch it explicitly at all — leave it at that default instead of
       // guessing which combobox is which.
       await formPage.getByRole('spinbutton').first().fill('4'); // Tasting guest count
-      await formPage.getByRole('textbox', { name: 'First Name' }).fill('ZZPaymentIntegrity');
-      await formPage.getByRole('textbox', { name: 'Last Name' }).fill(marker);
-      await formPage.getByRole('textbox', { name: 'Phone' }).fill('+995500000023');
-      await formPage.getByRole('textbox', { name: 'Email' }).fill(`zz-${marker.toLowerCase()}-${Date.now()}@example.invalid`);
+      // exact: true throughout — once a company has a guide, the picker's own
+      // "Guide — Name/Phone/Email" fields are also named "Name"/"Phone"/"Email"
+      // as a substring, so an un-exact role match resolves to two elements
+      // each. Real drift caught 2026-09-30 when the Contact Roles picker
+      // started appearing on this scenario's company (Name gained the same
+      // exposure on the same day First/Last merged into one field); see
+      // playwright/KNOWN-ISSUES.md.
+      await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentIntegrity ${marker}`);
+      await formPage.getByRole('textbox', { name: 'Phone', exact: true }).fill('+995500000023');
+      await formPage.getByRole('textbox', { name: 'Email', exact: true }).fill(`zz-${marker.toLowerCase()}-${Date.now()}@example.invalid`);
 
       const submitBtn = formPage.getByRole('button', { name: /^(Book & Pay|Request Booking)$/ });
       const reviewHeading = formPage.getByRole('heading', { name: 'Review your visit' });
@@ -422,7 +471,14 @@ test.describe('Wine orders — payment on/off, and a company override applies he
     // Real finding, same shape as the Company test above: 3 scenarios each
     // involving a real form flow (and sometimes a Flitt redirect) routinely
     // takes close to 180s end to end, leaving no room for final cleanup.
-    test.setTimeout(300_000);
+    // Confirmed live 2026-10-02 (Plan-PlaywrightSuiteHardening Chunk 6): once
+    // this test's own two real locator bugs (missing Wine-orders tab click,
+    // missing ContactPickerPopupView decline) were fixed and it could
+    // actually run the full flow instead of failing early, 300s wasn't
+    // enough either — timed out mid-`finally` the same way the Company test
+    // above did before its own bump to 480s. Matched here for the same
+    // reason: this dev setup's real per-action latency, not a stuck step.
+    test.setTimeout(480_000);
     await loginAsTenantAdmin(page);
     const originalToggle = await readPaymentSectionToggle(page, 'Wine orders');
     const originalOverride = await readCompanyPaymentOverride(page, WINE_COMPANY_NAME);
@@ -468,6 +524,11 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       // could never find the card. Fixed 2026-09-19 — the fourth stale spot
       // from that one feature in this file, each hidden behind the one before.
       await page.goto('/admin/abandoned');
+      // Same drift wine-catalogue-order.spec.ts already found and fixed
+      // 2026-09-30: this screen splits Bookings/Wine orders into two tabs and
+      // defaults to Bookings, so a wine-order row is not in the DOM at all
+      // until this tab is selected.
+      await page.getByRole('button', { name: /^Wine orders/ }).click();
       const cardOn = abandonedRow(page, businessOn);
       await expect(cardOn).toBeVisible({ timeout: 20_000 });
       // Whitespace-stripped: this screen renders money via
@@ -522,11 +583,44 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       await formPageCo.getByRole('heading', { name: 'Enter your company code' }).waitFor();
       await formPageCo.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(wineAccessCode);
       await formPageCo.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(formPageCo.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
+      // Same ContactPickerPopupView gap as the Company-booking describe block
+      // above (Chunk 6, 2026-10-02): Sighnaghi Wine Bar has since picked up a
+      // contact person (Tamar Gogoladze), so the access code now opens this
+      // picker here too — confirmed live. Left undeclined, the popup silently
+      // intercepts the final "Place Reservation" click below (toBeVisible
+      // passes since the button is merely covered, not absent, so this hangs
+      //
+      // A real mistake caught here, not just copied blind: without the
+      // `not.toBeVisible()` wait above acting as a sync point first (matching
+      // the Company-booking version above exactly), the `isVisible()` probe
+      // below fires immediately after the Confirm click — often before the
+      // picker has actually mounted — and silently sees nothing, breaking the
+      // loop without declining. That isn't hypothetical: it reproduced in a
+      // live isolated rerun (trace showed the probe completing in the same
+      // instant as Confirm, no gap at all) and burned a full 480s timeout
+      // before this fix.
+      // until the test's own full timeout with no indicative error).
+      for (let i = 0; i < 2; i++) {
+        const pickerHeading = formPageCo.getByRole('heading', { name: 'Who should we put on this booking?' });
+        if (!(await pickerHeading.isVisible().catch(() => false))) break;
+        await formPageCo.getByRole('button', { name: 'I am not on this list' }).click();
+      }
       // expect: the per-company override reaches wine orders too (documented
       // in the Edit-Company panel's own copy: "Covers both bookings and wine
       // orders for this company") — the section toggle is ON, but this
       // company must still fall back to a plain reservation.
       await expect(formPageCo.getByRole('button', { name: 'Place Reservation →', exact: true })).toBeVisible();
+      // Real finding, same root cause as the ContactPickerPopupView gap above:
+      // this spec predates the drift where company selection stopped
+      // auto-filling the contact name (nothing auto-fills once a role has
+      // people on file — it's pick-or-decline now, same as Chunk 3 found
+      // elsewhere). `contactName` is `required` (WineCatalogueClient.tsx)
+      // declining the picker above leaves it blank, and clicking submit with
+      // it empty just trips native HTML5 validation — the click "succeeds"
+      // but the page never navigates, which read as a stuck/failed submit
+      // with no thrown error until reproduced live.
+      await formPageCo.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact');
       await formPageCo.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000033');
       await formPageCo.getByRole('button', { name: 'Place Reservation', exact: true }).click();
       await expect(formPageCo.getByRole('heading', { name: 'Order received!' })).toBeVisible({ timeout: 15_000 });

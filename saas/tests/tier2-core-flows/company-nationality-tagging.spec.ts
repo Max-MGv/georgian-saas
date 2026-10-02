@@ -17,7 +17,16 @@ import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin, loginAsSuperAdmin } from '../helpers/auth';
 
 const TENANT_ID = 'cmrxb85wo0000vlc0d964nzf8'; // Staging Winery — see credentials.txt
-const COMPANY_NAME = 'Test Company # 1'; // same fixture company booking-enhanced.spec.ts uses
+// Repointed (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): "Test
+// Company # 1" was deleted weeks ago (KNOWN-ISSUES.md #4). Shares
+// "Tbilisi Tour Collective" with booking-enhanced.spec.ts, the only
+// unclaimed company in lib/demoSeed.ts's BOOKING_COMPANIES — confirmed safe
+// to share: this spec only creates/deletes its own Order and toggles a
+// tenant-wide (not company-level) super-admin setting, restored afterward,
+// so it never mutates the company record itself. Unlike booking-enhanced,
+// this spec asserts no company-specific price, only guest-count minimums
+// (step 4), so no numeric constants needed updating.
+const COMPANY_NAME = 'Tbilisi Tour Collective';
 const RUN_ID = Date.now();
 const TEST_EMAIL = `playwright-nationality-${RUN_ID}@example.com`;
 // Unique per run (not just the email) so a leftover order from an earlier failed run — which
@@ -98,7 +107,21 @@ test.describe.serial('Company booking nationality tagging', () => {
   });
 
   test('full flow: toggle, picker, confirm sheet, persistence, admin filter/column/print-sheet, toggle-off keeps data', async ({ page, context }) => {
-    test.setTimeout(120_000);
+    // Real finding (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01):
+    // 120s was not enough — reproduced three times in a row, all identical:
+    // every real step (toggle on, contact picker, nationality tagging,
+    // confirm sheet, admin column/filter, print sheet, toggle off then back
+    // on) genuinely passed every time, and the test ran out of budget on the
+    // very last line, cleanup's own page.goto('/admin/orders'). This is the
+    // suite's heaviest test — three page objects (guest, admin, super-admin),
+    // two tenant-setting writes, and a dozen-plus navigations — each paying
+    // proxy.ts's per-request tenant-resolution overhead; unrelated to the
+    // company swap, since it hit the same wall identically all three times.
+    // Bumped to the same order of magnitude wine-catalogue-order.spec.ts and
+    // companies-crud.spec.ts already use for their own multi-round-trip
+    // flows, following this suite's established pattern of sizing the
+    // budget to the step count rather than guessing.
+    test.setTimeout(150_000);
 
     const admin = await context.newPage();
     const superAdmin = await context.newPage();
@@ -136,6 +159,21 @@ test.describe.serial('Company booking nationality tagging', () => {
     await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
 
+    // Real finding (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): a
+    // company-level access code for a company with people on file opens a
+    // ContactPickerPopupView once per role that has people (Plan-ContactRoles
+    // Chunk 7, KnownBugs #55) — a blocking modal that has to be dismissed
+    // before any other field on the form is interactable. Tbilisi Tour
+    // Collective has people in both its contact_person and guide roles, so
+    // up to two pickers show in sequence. This test fills the Name field
+    // itself below regardless of who (if anyone) gets picked here, so just
+    // decline both rather than picking a specific person.
+    for (let i = 0; i < 2; i++) {
+      const pickerHeading = page.getByRole('heading', { name: 'Who should we put on this booking?' });
+      if (!(await pickerHeading.isVisible().catch(() => false))) break;
+      await page.getByRole('button', { name: 'I am not on this list' }).click();
+    }
+
     const nationalityInput = page.getByPlaceholder('Type or browse to add a country…');
     await expect(nationalityInput, 'Nationality picker must show once the tenant flag is on').toBeVisible();
     await nationalityInput.fill('fra');
@@ -155,10 +193,15 @@ test.describe.serial('Company booking nationality tagging', () => {
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
     await page.getByRole('combobox').last().selectOption({ index: 1 });
     await page.getByText('Tasting', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
-    await page.getByRole('textbox', { name: 'First Name' }).fill('Nationality');
-    await page.getByRole('textbox', { name: 'Last Name' }).fill('TestGuest');
-    await page.getByRole('textbox', { name: 'Phone' }).fill(TEST_PHONE);
-    await page.getByRole('textbox', { name: 'Email' }).fill(TEST_EMAIL);
+    // Contact Person merged First/Last Name into one Name field 2026-09-30
+    // (MaintenanceNotes.md §1); exact: true since Tbilisi Tour Collective has
+    // a guide on file, which also renders "Guide — Name"/"Guide — Phone"/
+    // "Guide — Email" fields (Chunk 3, Plan-PlaywrightSuiteHardening,
+    // 2026-10-01 — same drift already documented for
+    // payment-amount-integrity.spec.ts's company scenario).
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Nationality TestGuest');
+    await page.getByRole('textbox', { name: 'Phone', exact: true }).fill(TEST_PHONE);
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill(TEST_EMAIL);
     await page.getByRole('button', { name: /Request Booking|Confirm & Request Booking/ }).click();
 
     // expect: the review sheet lists the tagged nationalities before the booking is final.

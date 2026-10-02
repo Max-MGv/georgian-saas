@@ -3,9 +3,15 @@ import Link from 'next/link'
 import TenantsClient from './TenantsClient'
 import ResetDemoCard from './ResetDemoCard'
 import { demoTenantExists } from '@/app/actions/demoReset'
+import ClearStagingDataCard from './ClearStagingDataCard'
+import { stagingTenantExists } from '@/app/actions/stagingWipe'
+import ResetOnboardingWizardCard from './ResetOnboardingWizardCard'
+import { onboardingWizardTenantExists } from '@/app/actions/onboardingWizardReset'
 
 export default async function TenantsPage() {
-  const [tenants, demo] = await Promise.all([getTenants(), demoTenantExists()])
+  const [tenants, demo, staging, onboardingWizard] = await Promise.all([
+    getTenants(), demoTenantExists(), stagingTenantExists(), onboardingWizardTenantExists(),
+  ])
 
   return (
     <div>
@@ -30,6 +36,13 @@ export default async function TenantsPage() {
       {/* Only on the database that actually hosts the demo — Plan-DemoFlowFixes
           Chunk 8 task 8.2. */}
       {demo && <ResetDemoCard tenantName={demo.name} />}
+
+      {/* Only on the database that actually hosts Staging Winery (dev DB). */}
+      {staging && <ClearStagingDataCard tenantName={staging.name} />}
+
+      {/* Only on the database that actually hosts the onboarding-wizard test
+          tenant (dev DB) — Plan-PlaywrightSuiteHardening Chunk 6. */}
+      {onboardingWizard && <ResetOnboardingWizardCard tenantName={onboardingWizard.name} />}
     </div>
   )
 }

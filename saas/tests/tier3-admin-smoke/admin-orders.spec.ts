@@ -43,7 +43,12 @@ test.describe('Orders admin — filtering and view toggle', () => {
   });
 
   test('date-range filter scopes results correctly; view toggle preserves the active filter', async ({ page }) => {
-    test.setTimeout(60_000);
+    // Bumped 60s → 90s (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+    // this test does an admin order creation, two date-range filters, a
+    // Calendar round trip, and a Table-view re-render that alone measures
+    // ~5s on a healthy server (see the real finding further down) — 60s left
+    // no real margin even without any load.
+    test.setTimeout(90_000);
 
     await ensureAdminLoggedIn(page);
 
@@ -150,8 +155,19 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // 9. Toggle back to Table view. Check: table reappears with the same
     // filtered result set as step 6 — the view toggle shouldn't reset the
     // active filter.
+    //
+    // Real finding (Plan-PlaywrightSuiteHardening Chunk 6, 2026-10-02):
+    // switching back from Calendar to Table is a genuinely slow transition —
+    // timed live in a real browser (not just this test) at ~4.9s on a
+    // perfectly healthy, freshly-restarted dev server, no concurrent load.
+    // The default 5000ms toBeVisible() budget is right on the edge of that
+    // and fails intermittently depending on exact system load at the moment.
+    // Not a locator bug, not app breakage — the row count and data are
+    // correct once it renders (confirmed via a live-timed reproduction with
+    // the real network requests inspected). Matches this file's own 15s
+    // budget already used a few lines up for the initial table render.
     await page.getByRole('button', { name: 'Table', exact: true }).click();
-    await expect(page.locator('table')).toBeVisible();
+    await expect(page.locator('table')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('tbody tr')).toHaveCount(1);
     await expect(page.locator('tbody tr').first()).toContainText(TEST_EMAIL);
 

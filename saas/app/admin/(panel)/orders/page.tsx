@@ -273,7 +273,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {revenueStrip && <RevenueStrip {...revenueStrip} locale={locale} />}
 
       <div data-tour="orders-filters">
-        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} paymentCounts={paymentCounts} locale={locale} tenantId={tenantId} nationalityOptions={nationalityOptions} />
+        <OrdersFilters companies={companies} params={params} statusCounts={statusCounts} paymentCounts={paymentCounts} locale={locale} tenantId={tenantId} nationalityOptions={nationalityOptions} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} />
       </div>
 
       {orders.length === 0 ? (

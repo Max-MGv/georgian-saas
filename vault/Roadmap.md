@@ -279,6 +279,12 @@ Full tracking: `playwright/Progress.md` (chronological build log, phase-by-phase
 - [ ] A clean full run of all 22 tests together — blocked this session by severe dev-DB (`georgian-saas-dev`) connection-pool exhaustion under heavy shared load (confirmed as external/environmental, not a code regression); re-run once the shared dev DB isn't under contention
 - [ ] Not committed to git yet
 
+**#218 — Expanding Playwright coverage (📋 Planned, not started, recorded 2026-10-02):** audit of
+what the suite covers vs misses, plus 11 candidate chunks to close the gaps (Statistics, Menu
+Items/Masterclass, other admin + public + super-admin pages, cron routes, cross-tenant isolation,
+browser matrix, CI). Full plan: [[Plan-ExpandPlaywrightCoverage]].
+- [ ] Max to approve / reorder the chunks, then start (Chunk 0 = re-run tier 5 on staging)
+
 **Real app bugs found while building the suite** — tracked as their own entries: [[KnownBugs]] #15 (nested `<button>` hydration mismatch on `/admin/companies`) and #16 (`/wines` Grid/List toggle hardcoded English, no i18n). Also found and fixed along the way (infra/test-side, not app bugs): a stale `DEFAULT_TENANT_ID`, an admin-language-toggle race condition, and `proxy.ts`'s tenant cache being wider and staler than previously documented (now corrected in [[MigrationNotes]]).
 
 ---

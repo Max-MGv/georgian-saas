@@ -102,6 +102,38 @@ This file is the chronological record — what was built, when, and what was fou
 3. **A `.next` Turbopack cache corruption**, matching `KNOWN-ISSUES.md`'s dev-server-bloat pattern exactly: the dev server had to be started fresh for this session, and its first boot served a literal 404 for every route (including `/admin/login`) despite `x-resolved-tenant` resolving correctly. Fixed by the documented recovery: stop, `rm -rf .next`, restart clean.
 4. **A severe, sustained `KnownBugs.md`/`KNOWN-ISSUES.md`-pattern DB pool exhaustion (`P1001`/`P2028`) blocked full-suite reconfirmation in the original build session.** The new test passed cleanly and repeatably in isolation, but every attempt to run the complete 22-test suite that session — 2 attempts at the default parallel workers, 2 attempts fully serial (`--workers=1`) — came back with widespread failures (8-15 tests failing per run) hitting tests with **no relation to this change** (`popover-clipping`, `booking-simple`/`booking-enhanced`, `companies-crud`, `admin-login`, `onboarding-wizard` — all previously-green Phase 1-3 tests). Real recovery attempts were made between runs, following the documented protocol exactly: genuine idle waits, polling an ordinary page load every 30-60s for consecutive clean reads before retrying (confirmed clean 2-4 times across attempts), not just a fixed sleep or a bare restart. Each time, the pool exhausted again within seconds of resuming test traffic, and even single isolated health-check requests occasionally errored during otherwise-idle wait windows — evidence this was likely external load on the shared `georgian-saas-dev` project (per `KNOWN-ISSUES.md`: "combined test volume from more than one session"), not something this session's own test traffic alone was causing or something more local waiting would fix. **Not treated as a regression** — verified live via `playwright-cli` that Staging Winery's admin panel language is correctly `en` (not stuck in Georgian from the interrupted runs).
 
+## Phase 5 — Tier 5: Real Flitt payment E2E — ✅ COMPLETE (5 specs, 7 tests)
+
+Added later than the numbering above suggests — `vault/Plan-PaymentE2ETesting.md` tracked this
+work in its own chunks (0–8) rather than as a numbered Phase here, and its own Chunk 8 noted
+this file was meant to get "a real Phase 5 section" once the work landed. That section never
+got added until now (Plan-PlaywrightSuiteHardening Chunk 4, 2026-10-01) — this entry is that
+section, pointing at the existing narrative below rather than rewriting it.
+
+**Runs against the real deployed staging site** (`https://staging.vineworks.ge`, dev DB), never
+localhost — Flitt's settlement callback needs a publicly reachable host. Its own config,
+`saas/playwright.staging.config.ts`; run with
+`npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2e --workers=1`
+(see `README.md`). Excluded from the default `npx playwright test` command by `testIgnore` in
+`playwright.config.ts` (Plan-PlaywrightSuiteHardening Chunk 0, 2026-10-01) — before that fix,
+nothing stopped the default command from sweeping these in and hanging ~25s per test on a
+callback `localhost` can never receive.
+
+| Spec | Tests | Covers | Status |
+|---|---|---|---|
+| `payment-approved-settlement.spec.ts` | 3 | individual (full 5-surface check), company, wine order | ✅ |
+| `payment-declined-settlement.spec.ts` | 1 | a real Flitt decline never mis-read as paid | ✅ |
+| `payment-book-later.spec.ts` | 1 | reservation → invoice → manual bank transfer | ✅ |
+| `payment-admin-order.spec.ts` | 1 | admin-created order parity with a guest order | ✅ |
+| ~~`payment-edit-after-payment.spec.ts`~~ | — | retired 2026-10-02 — its premise (editing a paid order silently repricing it) was closed off by `Plan-PostPaymentExtras` Chunk 1's field lock; coverage superseded by the row below. See `notes/17-payment-edit-after-payment.md`. | 🪦 |
+| `payment-post-payment-extras.spec.ts` | 1 | lock → extra → manual top-up → card-link top-up → itemised payments, `Plan-PostPaymentExtras` | ✅ |
+
+Full build narrative, every real app bug found (the settlement email fire-and-forget gap
+#53, the declined-checkout inline-dialog case, the Paid-status picker's outside-click
+listener race, two editing-related bugs, and `KnownBugs.md` #64 itself) and every test bug
+fixed along the way: see the dated entries below, **"2026-09-24 — Tier 5 (real Flitt payment
+E2E) starts"** through **"2026-09-25 — Chunk 6 of Plan-PostPaymentExtras"**.
+
 ### 2026-08-12 — full-suite reconfirmation, clean 22/22
 
 Ran once the dev DB was no longer under contention (`pg_stat_activity`: 21 idle / 29 total connections, no `P1001`/`P2028`). First `--workers=1` run came back **19/22** — a real, unrelated bug caught, not pool exhaustion recurring:
@@ -444,3 +476,163 @@ confirmed by follow-up `count(*)` queries. The "Individual bookings" toggle was 
 default (`true`) throughout — no `Setting` row was ever written, confirmed by direct query.
 
 Full writeup: [[18-payment-post-payment-extras]].
+
+## 2026-10-02 — Plan-PlaywrightSuiteHardening Chunk 6 closes: every handed-off failure root-caused, not just rerun
+
+The hardening plan's last chunk — one clean, full, end-to-end tier1–4 run — handed off 5
+unexplained failures with a leading-but-unconfirmed "cold compile" theory. A fresh session
+settled it by rerunning each in isolation rather than guessing: **2 of 5 confirmed cold-compile**
+(`contact-orphan-safety.spec.ts`, `wine-catalogue-order.spec.ts` — passed clean once warmed),
+**3 of 5 did not** — each had a real, separate root cause, found via live reproduction
+(trace analysis, direct `Tenant`-table reads, timed browser reproductions), fixed, and verified
+with at least one clean isolated rerun apiece:
+
+- `admin-orders.spec.ts`: a genuinely slow (~5s, confirmed live) Calendar→Table re-render
+  against a default 5000ms assertion timeout — not a bug in the transition itself.
+- `payment-amount-integrity.spec.ts`'s Individual scenario: every real `page.goto()` in this
+  app's admin/public flow costs several seconds on this dev setup; the test's math just didn't
+  leave enough budget. Its own interrupted cleanup (caused by the old budget) directly broke
+  `booking-simple.spec.ts` downstream — a tenant-wide payment toggle left in the wrong state.
+- `booking-simple.spec.ts`: not its own bug — inherited the above toggle-state corruption.
+
+**Two further real bugs surfaced and got fixed investigating the above, neither part of the
+original 5:** this session's own mistaken toggle "fix" (flipped `paymentEnabledCompanies` to
+match the Prisma schema default, when Staging Winery deliberately overrides it to `false` —
+caught immediately via `booking-enhanced.spec.ts`/`company-nationality-tagging.spec.ts` failing),
+and a missing ContactPickerPopupView dismissal in `payment-amount-integrity.spec.ts`'s
+Company-booking scenario (Caucasus Vine Travel picked up a guide and contact person since that
+spec was written — same gap Chunk 3 already fixed for a different company). A separate,
+unrelated finding from the same investigation: `mobile-georgian-overflow.spec.ts`'s two admin
+tests had no explicit timeout at all, running on Playwright's bare 30s default — too tight for
+their real multi-round-trip sequence, reproduced consistently, fixed with an explicit 60s.
+
+**A genuine environmental recurrence, not a new bug:** a later full-suite confirmation run came
+back with a fresh wave of seemingly-unrelated failures. Direct process inspection
+(`Win32_Process`, not a guess) showed the dev server back up to 1.27–1.37GB resident — this
+session's own sustained heavy testing had re-triggered the already-documented "dev server
+process bloat" pattern. A clean restart cleared every one of those failures with zero code
+changes, confirming the diagnosis rather than assuming it.
+
+Full detail, trace-level evidence, and the complete toggle-state nuance (which toggle should be
+`true` vs `false` and why) are in `vault/Plan-PlaywrightSuiteHardening.md`'s Chunk 6 Result and
+`KNOWN-ISSUES.md`'s new "Shared tenant payment-toggle state can cascade" section and entry 5.
+
+**Not done:** the onboarding-wizard tenant's manual reset (blocked this session by a safety
+check on bulk-delete scripts, needs Max to run it by hand before the next full run) and a single
+literal 35/35 run in one sitting (not attempted again after the fixes, given the precondition
+above) — but every failure that appeared, across multiple full and partial runs, now has a
+confirmed, fixed, verified cause. Changed files:
+`saas/tests/tier3-admin-smoke/admin-orders.spec.ts`,
+`saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`,
+`saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts`, `KNOWN-ISSUES.md`.
+
+## 2026-10-02 (same day, continued) — Onboarding-wizard tenant gets a real reset button; `payment-edit-after-payment.spec.ts` retired
+
+Two follow-ups from the Chunk 6 close-out above, both Max's call, both shipped the same session.
+
+**The onboarding-wizard reset is a button now.** The manual SQL `notes/10-onboarding-wizard.md`
+has documented for weeks couldn't be run directly this session (a safety check blocked the
+script) — Max asked whether a super-admin UI button already existed for this. It didn't:
+checked `ResetDemoCard.tsx`, the only existing reset button, and it's hard-scoped to the demo
+tenant by slug, refuses anything else. Built the real thing instead of another workaround:
+`lib/onboardingWizardReset.ts` (the reset logic, resolved by the tenant's own slug
+`test-onboarding-wizard`, same safety shape as the existing demo/staging reset libs),
+`app/actions/onboardingWizardReset.ts` (the server action, `requireSuperAdmin()`-gated), and
+`app/super-admin/tenants/ResetOnboardingWizardCard.tsx` (the UI card, identical two-step-confirm
+shape to its two siblings), wired into `/super-admin/tenants`. `tsc --noEmit` clean. Verified
+live, not just type-checked: logged in as super-admin, clicked the new button, got a real
+result ("deleted 1 price tiers, 1 companies, 1 wines and 6 onboarding/contact/payment
+settings"), then ran `onboarding-wizard.spec.ts` — passed clean (1.2m). The manual SQL stays in
+the notes file as a fallback, but this is now the documented way to do the reset.
+
+**`payment-edit-after-payment.spec.ts` is retired.** Left deliberately failing since Chunk 5,
+pending a retire-or-rewrite decision (its whole premise — proving a paid order's guest count
+could be silently repriced — was closed off by a later fix locking those fields once paid).
+Max: retire it. Spec file deleted; `notes/17-payment-edit-after-payment.md` kept with a
+retirement banner (real, since-fixed bug, worth keeping as history) rather than deleted
+outright. Counts updated: tier5 is now 5 specs / 7 tests, suite-wide 42 tests / 22 files.
+
+## 2026-10-02 (later the same day) — Chunk 6 finally closes: the suite's first genuine 35/35, after two small confirmation items turned into a two-file, multi-hour investigation
+
+The handoff at the top of `Plan-PlaywrightSuiteHardening.md`'s Chunk 6 asked for two things, both
+described as quick, no-new-investigation-expected verification: rerun `onboarding-wizard.spec.ts`
+a second time clean (it only had one clean run on record), and get one literal from-scratch
+full-suite run to actually show all green (every prior attempt had that same spec failing before
+the reset button existed). Both are done — but the second one took far more than a rerun.
+
+**The quick part, done first:** `onboarding-wizard.spec.ts`, reset via the super-admin button each
+time, passed twice clean (59.0s, 50.2s). Two unrelated pre-existing uncommitted changes flagged in
+the handoff (`OrdersFilters.tsx`/`page.tsx`, `vault/max.md`/`vault/x note.md`) turned out to have
+already been committed by Max directly (`bdec403`, `93c7a58`) before this session started —
+nothing left to flag.
+
+**The full-suite run was not quick.** The first attempt came back 33/35 — one real failure
+(`payment-amount-integrity.spec.ts`'s Wine-orders scenario) and one cascaded skip (serial-mode
+sibling test in the same file). Reproducing that one failure honestly, live, per this plan's own
+ground rule, turned into the deepest single-test investigation this plan has done: **five
+genuinely separate real bugs, stacked on top of each other**, each one only surfacing once the
+bug before it stopped silently blocking progress — a missing tab click on `/admin/abandoned`, a
+missing ContactPickerPopupView decline, a race condition *inside that decline-loop fix itself*
+(found only by tracing raw event timestamps and seeing zero gap between a click and the probe
+that was supposed to catch its result), a too-tight `test.setTimeout` once the scenario could
+actually run to completion, and a missing required-field fill exposed only once the picker
+stopped silently eating the submit click. Three of the five intermediate verification attempts
+each burned a full multi-minute `test.setTimeout` (300s, then 480s twice) before the real cause
+of that particular layer was found. Full blow-by-blow, including the trace evidence: `KNOWN-
+ISSUES.md` entry 6.
+
+**A second full-suite run, now 34/35,** surfaced one more real bug in a different file —
+`booking-simple.spec.ts`'s order-detail-page navigation timeout (15s) wasn't enough against a
+server freshly wiped and restarted immediately beforehand; confirmed directly in the server's own
+log (`21.7s` for that route's first compile). Bumped to 30s, overall test budget 120s→150s.
+`KNOWN-ISSUES.md` entry 7.
+
+**The dev server itself degraded twice more along the way**, independently of either test bug —
+caught and *ruled out* as the cause each time rather than assumed, per `KNOWN-ISSUES.md`'s "Dev
+server process bloat" section: once at 525MB→617MB (a restart cleared an unrelated login timeout
+but did *not* clear the Wine-orders test failure, proving the race condition was the real cause),
+once at 1262.8MB after the first full-suite run (which *did* directly cause a login timeout in a
+`booking-simple.spec.ts` rerun attempt). Both cleared with the standard restart + `.next` wipe;
+the second one also taught a practical lesson — warming only *static* routes before a run isn't
+enough for a dynamic route like `/admin/orders/[id]`, which needs an actual click-through to
+pre-compile.
+
+**Third full-suite run: 35/35, clean, 33.4 minutes.** The suite's first literal all-green run,
+after six real findings (five in one test, one in another) and two environmental
+restarts across roughly two hours of live, trace- and log-based debugging — not the quick
+confirmation the handoff anticipated, but genuinely necessary to get here.
+
+Changed files: `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`, `KNOWN-ISSUES.md`,
+`vault/Plan-PlaywrightSuiteHardening.md`.
+
+## 2026-10-02 (evening) — Tier 5 re-run against staging: 7/7 green, one spec made self-sufficient
+
+First tier 5 run since 2026-10-01. Preconditions checked first: staging's newest deployment was READY
+on `86335dd` (= local HEAD), `X-Vercel-Id` showed `fra1`, the public booking form has the single merged
+"Name" field (and the specs fill it by that name successfully). Tenant payment columns read straight
+from the dev DB before running: Individuals **true**, Companies **false**, Wine orders **true** — the
+correct values from `KNOWN-ISSUES.md`.
+
+**The predicted conflict was real.** `payment-book-later.spec.ts` asserted "Individual bookings toggle
+should be OFF at rest" as its first check. That is wrong now: the localhost suite shares this tenant and
+its correct resting value is ON, so the spec would have failed against a perfectly healthy tenant. Chunk 5
+(2026-10-01) "fixed" the same assertion by manually flipping the toggle in the admin UI — which only
+worked until the localhost suite restored it. **Fix (spec, not state):** the spec now reads the original
+value, sets Individuals OFF itself inside the `try`, and restores the original in `finally` — the same
+read / set / restore shape the other four tier 5 files use. The at-rest assertion is removed. A timeout
+still skips `finally` (unchanged limitation, documented), but the spec no longer depends on any
+particular resting state.
+
+**Results:** full tier 5 (`playwright.staging.config.ts`, `--workers=1`): **7 passed, 0 failed, 5.6m**
+(admin-order, approved ×3 [individual/company/wine], book-later, declined, post-payment-extras — two real
+Flitt settlements in post-payment-extras, one each in the approved/declined ones). Then two clean isolated
+reruns of `payment-book-later` (26.8s, 29.4s).
+
+**Verified via DB, not the admin UI:** after all runs `Tenant` columns = Individuals true / Companies
+false / Wine orders true; zero leftover `ZZPaymentE2E…` Orders or WineOrders on Staging Winery. Older
+`ZZPaymentIntegrity` / `Playwright Wine Test …` rows were already there (localhost-suite debris, see
+`KNOWN-ISSUES.md`) and were not touched.
+
+Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`.
