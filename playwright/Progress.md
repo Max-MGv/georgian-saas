@@ -552,3 +552,57 @@ could be silently repriced — was closed off by a later fix locking those field
 Max: retire it. Spec file deleted; `notes/17-payment-edit-after-payment.md` kept with a
 retirement banner (real, since-fixed bug, worth keeping as history) rather than deleted
 outright. Counts updated: tier5 is now 5 specs / 7 tests, suite-wide 42 tests / 22 files.
+
+## 2026-10-02 (later the same day) — Chunk 6 finally closes: the suite's first genuine 35/35, after two small confirmation items turned into a two-file, multi-hour investigation
+
+The handoff at the top of `Plan-PlaywrightSuiteHardening.md`'s Chunk 6 asked for two things, both
+described as quick, no-new-investigation-expected verification: rerun `onboarding-wizard.spec.ts`
+a second time clean (it only had one clean run on record), and get one literal from-scratch
+full-suite run to actually show all green (every prior attempt had that same spec failing before
+the reset button existed). Both are done — but the second one took far more than a rerun.
+
+**The quick part, done first:** `onboarding-wizard.spec.ts`, reset via the super-admin button each
+time, passed twice clean (59.0s, 50.2s). Two unrelated pre-existing uncommitted changes flagged in
+the handoff (`OrdersFilters.tsx`/`page.tsx`, `vault/max.md`/`vault/x note.md`) turned out to have
+already been committed by Max directly (`bdec403`, `93c7a58`) before this session started —
+nothing left to flag.
+
+**The full-suite run was not quick.** The first attempt came back 33/35 — one real failure
+(`payment-amount-integrity.spec.ts`'s Wine-orders scenario) and one cascaded skip (serial-mode
+sibling test in the same file). Reproducing that one failure honestly, live, per this plan's own
+ground rule, turned into the deepest single-test investigation this plan has done: **five
+genuinely separate real bugs, stacked on top of each other**, each one only surfacing once the
+bug before it stopped silently blocking progress — a missing tab click on `/admin/abandoned`, a
+missing ContactPickerPopupView decline, a race condition *inside that decline-loop fix itself*
+(found only by tracing raw event timestamps and seeing zero gap between a click and the probe
+that was supposed to catch its result), a too-tight `test.setTimeout` once the scenario could
+actually run to completion, and a missing required-field fill exposed only once the picker
+stopped silently eating the submit click. Three of the five intermediate verification attempts
+each burned a full multi-minute `test.setTimeout` (300s, then 480s twice) before the real cause
+of that particular layer was found. Full blow-by-blow, including the trace evidence: `KNOWN-
+ISSUES.md` entry 6.
+
+**A second full-suite run, now 34/35,** surfaced one more real bug in a different file —
+`booking-simple.spec.ts`'s order-detail-page navigation timeout (15s) wasn't enough against a
+server freshly wiped and restarted immediately beforehand; confirmed directly in the server's own
+log (`21.7s` for that route's first compile). Bumped to 30s, overall test budget 120s→150s.
+`KNOWN-ISSUES.md` entry 7.
+
+**The dev server itself degraded twice more along the way**, independently of either test bug —
+caught and *ruled out* as the cause each time rather than assumed, per `KNOWN-ISSUES.md`'s "Dev
+server process bloat" section: once at 525MB→617MB (a restart cleared an unrelated login timeout
+but did *not* clear the Wine-orders test failure, proving the race condition was the real cause),
+once at 1262.8MB after the first full-suite run (which *did* directly cause a login timeout in a
+`booking-simple.spec.ts` rerun attempt). Both cleared with the standard restart + `.next` wipe;
+the second one also taught a practical lesson — warming only *static* routes before a run isn't
+enough for a dynamic route like `/admin/orders/[id]`, which needs an actual click-through to
+pre-compile.
+
+**Third full-suite run: 35/35, clean, 33.4 minutes.** The suite's first literal all-green run,
+after six real findings (five in one test, one in another) and two environmental
+restarts across roughly two hours of live, trace- and log-based debugging — not the quick
+confirmation the handoff anticipated, but genuinely necessary to get here.
+
+Changed files: `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`, `KNOWN-ISSUES.md`,
+`vault/Plan-PlaywrightSuiteHardening.md`.

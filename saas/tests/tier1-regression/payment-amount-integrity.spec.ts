@@ -471,7 +471,14 @@ test.describe('Wine orders — payment on/off, and a company override applies he
     // Real finding, same shape as the Company test above: 3 scenarios each
     // involving a real form flow (and sometimes a Flitt redirect) routinely
     // takes close to 180s end to end, leaving no room for final cleanup.
-    test.setTimeout(300_000);
+    // Confirmed live 2026-10-02 (Plan-PlaywrightSuiteHardening Chunk 6): once
+    // this test's own two real locator bugs (missing Wine-orders tab click,
+    // missing ContactPickerPopupView decline) were fixed and it could
+    // actually run the full flow instead of failing early, 300s wasn't
+    // enough either — timed out mid-`finally` the same way the Company test
+    // above did before its own bump to 480s. Matched here for the same
+    // reason: this dev setup's real per-action latency, not a stuck step.
+    test.setTimeout(480_000);
     await loginAsTenantAdmin(page);
     const originalToggle = await readPaymentSectionToggle(page, 'Wine orders');
     const originalOverride = await readCompanyPaymentOverride(page, WINE_COMPANY_NAME);
@@ -517,6 +524,11 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       // could never find the card. Fixed 2026-09-19 — the fourth stale spot
       // from that one feature in this file, each hidden behind the one before.
       await page.goto('/admin/abandoned');
+      // Same drift wine-catalogue-order.spec.ts already found and fixed
+      // 2026-09-30: this screen splits Bookings/Wine orders into two tabs and
+      // defaults to Bookings, so a wine-order row is not in the DOM at all
+      // until this tab is selected.
+      await page.getByRole('button', { name: /^Wine orders/ }).click();
       const cardOn = abandonedRow(page, businessOn);
       await expect(cardOn).toBeVisible({ timeout: 20_000 });
       // Whitespace-stripped: this screen renders money via
@@ -571,11 +583,44 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       await formPageCo.getByRole('heading', { name: 'Enter your company code' }).waitFor();
       await formPageCo.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(wineAccessCode);
       await formPageCo.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(formPageCo.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible();
+      // Same ContactPickerPopupView gap as the Company-booking describe block
+      // above (Chunk 6, 2026-10-02): Sighnaghi Wine Bar has since picked up a
+      // contact person (Tamar Gogoladze), so the access code now opens this
+      // picker here too — confirmed live. Left undeclined, the popup silently
+      // intercepts the final "Place Reservation" click below (toBeVisible
+      // passes since the button is merely covered, not absent, so this hangs
+      //
+      // A real mistake caught here, not just copied blind: without the
+      // `not.toBeVisible()` wait above acting as a sync point first (matching
+      // the Company-booking version above exactly), the `isVisible()` probe
+      // below fires immediately after the Confirm click — often before the
+      // picker has actually mounted — and silently sees nothing, breaking the
+      // loop without declining. That isn't hypothetical: it reproduced in a
+      // live isolated rerun (trace showed the probe completing in the same
+      // instant as Confirm, no gap at all) and burned a full 480s timeout
+      // before this fix.
+      // until the test's own full timeout with no indicative error).
+      for (let i = 0; i < 2; i++) {
+        const pickerHeading = formPageCo.getByRole('heading', { name: 'Who should we put on this booking?' });
+        if (!(await pickerHeading.isVisible().catch(() => false))) break;
+        await formPageCo.getByRole('button', { name: 'I am not on this list' }).click();
+      }
       // expect: the per-company override reaches wine orders too (documented
       // in the Edit-Company panel's own copy: "Covers both bookings and wine
       // orders for this company") — the section toggle is ON, but this
       // company must still fall back to a plain reservation.
       await expect(formPageCo.getByRole('button', { name: 'Place Reservation →', exact: true })).toBeVisible();
+      // Real finding, same root cause as the ContactPickerPopupView gap above:
+      // this spec predates the drift where company selection stopped
+      // auto-filling the contact name (nothing auto-fills once a role has
+      // people on file — it's pick-or-decline now, same as Chunk 3 found
+      // elsewhere). `contactName` is `required` (WineCatalogueClient.tsx)
+      // declining the picker above leaves it blank, and clicking submit with
+      // it empty just trips native HTML5 validation — the click "succeeds"
+      // but the page never navigates, which read as a stuck/failed submit
+      // with no thrown error until reproduced live.
+      await formPageCo.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact');
       await formPageCo.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000033');
       await formPageCo.getByRole('button', { name: 'Place Reservation', exact: true }).click();
       await expect(formPageCo.getByRole('heading', { name: 'Order received!' })).toBeVisible({ timeout: 15_000 });

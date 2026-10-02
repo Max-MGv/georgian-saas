@@ -4,7 +4,8 @@ tags: [plan, playwright, testing]
 
 # Plan — Playwright Suite Hardening
 
-**Status: 🚧 In progress.** Written 2026-10-01 after a session that ran the full suite for
+**Status: ✅ Closed (2026-10-02).** First genuine 35/35 full-suite run achieved — see the final
+Result note at the bottom of Chunk 6. Written 2026-10-01 after a session that ran the full suite for
 the first time in weeks, fixed several real bugs in the tests themselves, merged a form
 field (requiring 10 spec-file updates), and had an independent subagent review confirm the
 fixes but surface one structural gap and doc staleness. Full narrative: `vault/SessionLog.md`
@@ -478,16 +479,13 @@ confirmed directly in the dev server's own error log, not assumed), not code pro
       originally-handed-off failures plus 3 further real bugs found along the way each got a
       confirmed root cause, a fix, and at least one (most, two) clean isolated reruns. Full
       detail in the Result below.
-- [~] Once genuinely clean: this is the new baseline. Every one of the 5 originally-handed-off
+- [x] Once genuinely clean: this is the new baseline. Every one of the 5 originally-handed-off
       specs, plus the further real bugs found along the way, now passes clean in isolation,
-      verified twice each. **One exception, not yet at that bar:** `onboarding-wizard.spec.ts`
-      — verified clean only **once** (1.2m), immediately after the reset button (below) was
-      built, not rerun a second time. A single from-scratch full run showing literally 42/42
-      has still **not** been done this session — every full run attempted had
-      `onboarding-wizard.spec.ts` failing at its very first assertion the whole time (the
-      reset blocker below wasn't resolved until after the last full run), so none of them
-      represent a true all-green number. **Next session's job, see handoff note at the very
-      bottom of this file.**
+      verified twice each. **Closed out 2026-10-02 (continued further):** `onboarding-wizard.spec.ts`
+      got its required second clean rerun, and a literal from-scratch full-suite run finally
+      showed all green — **35/35**, 33.4 minutes. Getting there required a second, much deeper
+      round of investigation than expected; see the Result note immediately below for the full
+      account.
 - [x] Report back to Max with the real number — not "should be passing now," an actual
       fresh run's actual output.
 
@@ -666,7 +664,76 @@ yet when the last one ran.
 
 ---
 
+**Result, closed out (2026-10-02, continued further — the genuinely final close-out):** Picked up
+the handoff below expecting two small, no-new-investigation verification items. The first was
+exactly that: `onboarding-wizard.spec.ts`, reset via the super-admin button each time, passed
+twice clean (59.0s, 50.2s), meeting this plan's own two-clean-reruns bar. The second — one literal
+from-scratch full-suite run showing all green — was not a quick confirmation. It took three full
+attempts and surfaced real, previously-invisible bugs each time:
+
+**Attempt 1: 33/35.** One real failure (`payment-amount-integrity.spec.ts`'s Wine-orders
+scenario) plus one cascaded skip (`test.describe.configure({ mode: 'serial' })` means a sibling
+test in the same file never runs after an earlier one fails). Reproducing the failure live, per
+this plan's own ground rule, uncovered **five separate real bugs stacked on top of each other** —
+each one invisible until the bug before it was fixed:
+1. Missing "Wine orders" tab click before checking `/admin/abandoned` (same gap Chunk 1 already
+   fixed in a different spec, never ported to this one's own copy).
+2. Missing ContactPickerPopupView decline for Sighnaghi Wine Bar (same gap entry 5 in
+   `KNOWN-ISSUES.md` already fixed for a different company).
+3. **A genuine race condition inside that decline-loop fix itself**, not copied correctly from
+   the working version: missing an `await expect(...).not.toBeVisible()` sync wait before the
+   `isVisible()` probe for the popup. Confirmed via `--trace=on` and reading raw event timestamps
+   directly — the probe fired in the same instant as the preceding click, zero gap, so it
+   reliably missed the popup. This one alone cost three full isolated-rerun attempts (each
+   burning a full `test.setTimeout` — 300s, then 480s twice) before it was found.
+4. `test.setTimeout` bumped 300s→480s, genuinely too tight once the scenario could run to
+   completion instead of failing early on 1–3.
+5. A missing required-field fill (`contactName`, confirmed `required` in
+   `WineCatalogueClient.tsx`'s source), only exposed once 2 and 3 stopped silently eating the
+   final submit click — the click "succeeded" but native HTML5 validation silently blocked
+   actual submission, no thrown error.
+
+Also hit and ruled out along the way, not guessed past: the dev server climbed from 154.7MB to
+525MB then 617MB during this investigation. A restart cleared an unrelated login-timeout symptom
+but did **not** clear the actual test failure — direct proof the race condition (3), not server
+health, was the real cause. Verified all five fixes: two clean isolated reruns (3.3m, 2.8m).
+
+**Attempt 2: 34/35.** A different, unrelated real bug in a different file:
+`booking-simple.spec.ts`'s order-detail-page navigation timeout (15s) wasn't enough against a
+server freshly `rm -rf .next`-wiped and restarted immediately beforehand — confirmed directly in
+the server's own log (`GET /admin/orders/[id] 200 in 21.7s`, 17.5s of that just compilation).
+Bumped to 30s (overall test timeout 120s→150s). The first verification attempt after this fix
+failed differently — a login timeout — because the dev server had independently climbed to
+**1262.8MB** (confirmed via `Get-CimInstance Win32_Process`) after the first full-suite run; this
+instance of the bloat pattern *was* the direct cause of that particular failure, unlike the one
+above. A fresh restart, this time warming both static routes *and* the dynamic
+`/admin/orders/[id]` route via a real click-through (warming only static routes isn't enough —
+practical lesson for next time), fixed it. Verified: two clean isolated reruns (1.3m, 1.1m).
+
+**Attempt 3: 35/35, clean, 33.4 minutes.** The suite's first literal all-green run.
+
+Full trace-level detail and the exact server-log evidence for every finding above:
+`playwright/KNOWN-ISSUES.md` entries 6 and 7 (test-locator bugs section) and its "Dev server
+process bloat" section's two new 2026-10-02 recurrences. Chronological account:
+`playwright/Progress.md`'s "Chunk 6 finally closes" entry.
+
+**Honest accounting:** this was supposed to be two small confirmation items. It became a
+two-test-file, six-real-bug, two-environmental-restart investigation spanning roughly two hours
+of live trace- and log-based debugging. Every one of those six findings was confirmed by live
+reproduction before being fixed and verified by at least two clean isolated reruns, per this
+plan's own ground rule — none were guessed or rounded up. The suite genuinely works now; this
+plan is closed.
+
+Changed files: `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`, `playwright/KNOWN-ISSUES.md`,
+`playwright/Progress.md`.
+
+---
+
 ## Handoff — next session's job (written 2026-10-02, after the reset button landed)
+
+**Superseded — this plan is closed, see the Result immediately above.** Left verbatim below for
+history; both items it describes are done.
 
 Everything above is done and pushed to `staging` (`e23c83a` and before). Two small, well-scoped
 things are left, both just verification — no new investigation expected, no known unknowns:

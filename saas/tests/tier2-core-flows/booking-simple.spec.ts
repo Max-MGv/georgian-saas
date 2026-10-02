@@ -100,7 +100,12 @@ test.describe('Booking form — simple/individual variant', () => {
     // not milliseconds, and this test's own round-trip count (login, two
     // page contexts, abandoned-screen check, restore, orders-table check,
     // delete) adds up.
-    test.setTimeout(120_000);
+    // Bumped again 2026-10-02 alongside the order-detail timeout above: a
+    // genuine full-suite run spent 1.7m here (102s) before timing out on that
+    // one 15s assertion, leaving only ~18s of the old 120s budget for the
+    // other ~87s of real work plus the now-30s-budgeted assertion — too
+    // tight. 150s matches this file's own sibling tests' order of magnitude.
+    test.setTimeout(150_000);
 
     // 1. Navigate to the booking form (home page — the form is embedded there,
     // not a dedicated route; real finding, resolves the note's open question)
@@ -263,7 +268,18 @@ test.describe('Booking form — simple/individual variant', () => {
     // prior test in the same dev-server session; a genuinely fresh server
     // exposed the gap. Not a DB-pool-exhaustion symptom — a plain missed
     // timeout bump.
-    await expect(admin).toHaveURL(/\/admin\/orders\/[a-zA-Z0-9]+/, { timeout: 15_000 });
+    //
+    // Bumped again 2026-10-02 (Plan-PlaywrightSuiteHardening Chunk 6): 15s
+    // still wasn't always enough. Confirmed directly in the dev server's own
+    // log during a genuine full-suite run against a server restarted fresh
+    // moments before (`rm -rf .next`, to dodge the documented process-bloat
+    // pattern) — this exact route's first compile cost 21.7s on its own
+    // (`GET /admin/orders/[id] 200 in 21.7s (next.js: 17.5s, ...
+    // application-code: 4.0s)`), worse than the 8-10s this comment's earlier
+    // bump was based on. The cold-compile cost scales with how fresh the
+    // server is, not a fixed number — 30s gives real margin above the worst
+    // case actually observed so far.
+    await expect(admin).toHaveURL(/\/admin\/orders\/[a-zA-Z0-9]+/, { timeout: 30_000 });
     const totalGuestsLabel = admin.getByText('Total guests', { exact: true });
     await expect(totalGuestsLabel).toBeVisible({ timeout: 15_000 });
     const totalGuestsValue = totalGuestsLabel.locator('xpath=following-sibling::*[1]');

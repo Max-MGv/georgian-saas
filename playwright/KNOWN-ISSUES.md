@@ -189,6 +189,26 @@ investigation's own heavy, repeated test traffic can re-trigger the exact degrad
 trying to diagnose — if a long investigation session's failures start looking broad and
 unrelated, check process memory before concluding the app regressed.
 
+**Reconfirmed twice more 2026-10-02 (Chunk 6 close-out verification session), neither instance
+actually the cause of the test failures under investigation at the time — both caught and ruled
+out, not guessed past:**
+
+- Mid-investigation into `payment-amount-integrity.spec.ts`'s Wine-orders scenario (entry 6
+  above), the dev server climbed from a clean 154.7MB at session start to 525MB, then 617MB,
+  over roughly 40 minutes of repeated isolated reruns. A login-flow timeout appeared at the same
+  time, which looked at first like it might explain the test's own ongoing failures. Checked
+  directly rather than assumed: a full restart + `.next` wipe cleared the login timeout, but the
+  *test* failure persisted identically afterward (same timeout shape, same line) — proving the
+  real cause was the race condition documented in entry 6c, not server degradation. Worth
+  remembering: a server-health symptom appearing at the same time as a test failure is not proof
+  it's the cause; check whether fixing the server actually clears the test failure before
+  concluding that.
+- Later, after a full 33.8-minute 35-test suite run plus two more isolated reruns, the server hit
+  **1262.8MB** (confirmed via `Get-CimInstance Win32_Process`) — squarely past the ~1.3GB range
+  this section's own prior instances were observed at. This one *was* the direct, confirmed cause
+  of a real failure: a `booking-simple.spec.ts` isolated rerun timed out on login itself, same
+  shape as every other instance in this section. Cleared by the standard fix.
+
 ### Shared tenant payment-toggle state can cascade into unrelated-looking failures
 
 **Symptom:** a spec that never touches payment settings at all (`booking-simple.spec.ts`,
@@ -339,6 +359,72 @@ row.
    this list") since this scenario fills contact fields by hand regardless of who's offered.
    Verified: two isolated reruns, both green (the full 5-sub-scenario describe block, 7.9m and
    similar).
+
+6. **`payment-amount-integrity.spec.ts`'s Wine-orders scenario — five real bugs stacked on top
+   of each other, each masking the next (found 2026-10-02, Chunk 6 close-out verification).**
+   This scenario had apparently never passed since Feature 191 and the ContactPickerPopupView
+   both landed — it just hadn't been run in isolation since, so nothing surfaced until this
+   session tried to get it to two clean reruns as a "small confirmation item." Each fix below
+   unblocked the next failure; none were visible until the one before it was gone.
+
+   a. **Checked `/admin/abandoned` without clicking the "Wine orders" tab** — the exact same gap
+      entry 6 above (`wine-catalogue-order.spec.ts`) already found and fixed 2026-10-01, just
+      never ported to this spec's own copy of the same check. Confirmed live: the row was really
+      there, just on the tab this screen doesn't default to. Fixed the same way — click
+      `/^Wine orders/` before asserting.
+   b. **Never declined the ContactPickerPopupView at all**, same gap as entry 5 above, just for a
+      different company: Sighnaghi Wine Bar has since picked up a contact person (Tamar
+      Gogoladze). Confirmed live by reproducing the exact flow by hand in a browser — entering
+      the company's access code opens "Who should we put on this booking?" Left undeclined, the
+      popup silently intercepted the final submit click for the rest of the test's timeout
+      budget, with no indicative error (the preceding `toBeVisible` check on that same button
+      passes, since the popup only covers it, not removes it from the DOM). Fixed with the same
+      decline-loop pattern as entry 5.
+   c. **The decline-loop fix above had its own real bug: a race condition.** The working version
+      (entry 5, and the Company-booking scenario earlier in this same file) has an
+      `await expect(...).not.toBeVisible()` wait on the *previous* screen immediately before the
+      `isVisible()` probe for the picker — acting as a sync point that gives the popup time to
+      actually mount. This copy skipped straight from the "Confirm" click to the probe. Confirmed
+      via `--trace=on` and reading the raw event stream directly: the probe's `before` event
+      fired in the same instant as the Confirm click's `after` — zero gap — so it reliably saw
+      nothing and broke the loop without declining, and the popup then appeared a moment later
+      and blocked the submit click anyway. Not hypothetical: this one cost three full isolated
+      reruns (each burning its full `test.setTimeout` — 300s, then 480s twice) before the missing
+      sync line was found. Fixed by adding the same `not.toBeVisible()` wait the working copy has.
+   d. **`test.setTimeout` was genuinely too tight once the scenario could actually run to
+      completion** instead of failing early on (a)–(c). 300s (this file's own original estimate,
+      "routinely takes close to 180s end to end") wasn't enough; bumped to 480s, matching the
+      sibling Company-booking scenario's budget for a similarly-shaped 3-sub-scenario flow.
+   e. **A missing required-field fill, only exposed once (b) and (c) stopped silently blocking
+      the submit.** `WineCatalogueClient.tsx`'s `contactName` input has `required` — confirmed by
+      reading the component source directly. This scenario filled only the phone field before
+      clicking submit (the sibling "OFF, no company" scenario a few lines up fills both). Before
+      the picker was being properly declined, the submit click never got far enough to matter;
+      once it did, the click "succeeded" (a valid click on a real button) but native HTML5
+      validation silently blocked the actual form submission, so the page never navigated and no
+      error was thrown — it just looked like another stuck click until reproduced. Fixed by
+      filling "Contact person full name" to match the sibling scenario.
+
+   Verified: two clean isolated reruns after all five fixes (3.3m, 2.8m), then confirmed holding
+   up in two genuine full-suite runs (2.1m and 2.1m as part of 34/35 and 35/35 totals
+   respectively — see `Plan-PlaywrightSuiteHardening.md` Chunk 6's final Result for the complete
+   run numbers).
+
+7. **`booking-simple.spec.ts`'s order-detail-page navigation timeout, bumped again (2026-10-02,
+   Chunk 6 close-out verification).** A variant of the "Dev server process bloat" section's own
+   documented cold-compile trade-off below, just hit on a route/test this file hadn't needed to
+   bump before. The 15s timeout this line already carries (itself a 2026-0x fix for the same
+   general shape) wasn't enough against a server that had just been `rm -rf .next`-wiped and
+   restarted immediately before a full-suite run: confirmed directly in the dev server's own log
+   — `GET /admin/orders/[id] 200 in 21.7s (next.js: 17.5s, ..., application-code: 4.0s)` — the
+   route's first-ever compile on that fresh process cost more than this comment's earlier
+   8–10s estimate. Bumped to 30s (and the test's own overall `test.setTimeout` 120s→150s to keep
+   headroom). Practical lesson for next time a run follows a cache wipe: warming only *static*
+   routes beforehand isn't enough — a dynamic route like `/admin/orders/[id]` needs an actual
+   click-through on a real row to pre-compile; the first verification attempt after this fix
+   failed differently (a login timeout, see "Dev server process bloat" below) specifically
+   because only static routes had been warmed. Verified: two clean isolated reruns after warming
+   the dynamic route properly (1.3m, 1.1m), then held clean in the final 35/35 full-suite run.
 
 ### `payment-edit-after-payment.spec.ts` — retired 2026-10-02 (found obsolete 2026-10-01, Chunk 5)
 

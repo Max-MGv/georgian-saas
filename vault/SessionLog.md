@@ -8,7 +8,40 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, continued) — Plan-PlaywrightSuiteHardening Chunk 6: all 5 handed-off failures root-caused and fixed; onboarding-wizard gets a real reset button; one spec retired; full-green run still pending
+## 2026-10-02 (newest) — Plan-PlaywrightSuiteHardening Chunk 6 genuinely closes: first-ever 35/35 full-suite run, after a 6-bug investigation across two test files
+
+Picked up what the prior session's handoff described as two small, no-new-investigation
+verification items: a second clean rerun of `onboarding-wizard.spec.ts` (it only had one on
+record), and one literal from-scratch full-suite run actually showing all green (every attempt
+so far had that spec failing before its reset button existed). The first was exactly that quick
+— two clean reruns, 59.0s and 50.2s. The second was not.
+
+**Three full-suite attempts were needed, each surfacing a real, previously-invisible bug:**
+Attempt 1 (33/35) led to reproducing `payment-amount-integrity.spec.ts`'s Wine-orders scenario
+live and finding **five separate real bugs stacked on each other** — a missing `/admin/abandoned`
+tab click, a missing ContactPickerPopupView decline, a genuine race condition inside that
+decline-loop fix itself (a missing sync wait, found only via raw trace-event timestamps showing
+zero gap between a click and the probe meant to catch its result — this one cost three full
+isolated-rerun attempts before being found), a too-tight `test.setTimeout`, and a missing
+required-field fill exposed only once the picker stopped silently blocking the submit click.
+Attempt 2 (34/35) surfaced an unrelated real bug in `booking-simple.spec.ts`: a 15s navigation
+timeout that wasn't enough against a server just wiped and restarted (confirmed via the server's
+own log: 21.7s for that route's first compile). The dev server itself also degraded twice more
+along the way, independently of either bug — both caught and *ruled out* as the actual cause
+before concluding anything, per this plan's own ground rule (one restart cleared an unrelated
+login timeout but did *not* clear the real test failure, proving the race condition was the true
+cause; the other, at 1262.8MB, did directly cause a different failure). Attempt 3: **35/35
+clean, 33.4 minutes** — the suite's first literal all-green run.
+
+Full detail: `playwright/KNOWN-ISSUES.md` entries 6–7 and its "Dev server process bloat"
+section's two new recurrences; `playwright/Progress.md`'s "Chunk 6 finally closes" entry;
+[[Plan-PlaywrightSuiteHardening]]'s Chunk 6 final Result note. Plan status: closed.
+
+Changed files: `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
+`saas/tests/tier2-core-flows/booking-simple.spec.ts`, `playwright/KNOWN-ISSUES.md`,
+`playwright/Progress.md`, `vault/Plan-PlaywrightSuiteHardening.md`.
+
+## 2026-10-02 (earlier) — Chunk 6: all 5 originally-handed-off failures root-caused and fixed, onboarding-wizard gets a reset button, one spec retired — full-green run still pending at this point (closed later the same day, above)
 
 Picked up the handoff from earlier today (below): rerun the 5 unexplained failures in
 isolation to confirm or falsify the cold-compile theory. **2 of 5 confirmed cold-compile**
@@ -73,80 +106,11 @@ deleted `saas/tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`; new:
 
 ---
 
-## 2026-10-02 — Chunk 6 run myself after the subagent's token budget got tight; found a third cache-corruption instance, 29/35, handing off
-
-The background subagent (deliberately separate, for bias hygiene) finished Chunks 0–5 of
-[[Plan-PlaywrightSuiteHardening]] across several resumes — each time it hit a shared-account
-rate limit mid-chunk, it was resumed from its own worktree rather than restarted, so nothing
-was lost across 3 separate cutoffs. By the time it reached Chunk 5 (tier5 real-payment specs
-against deployed staging), Max asked to stop the resume-loop pattern (3 rate-limit deaths in
-~10 minutes of wall-clock chat time) and have the mechanical, non-investigative Chunk 6 done
-directly in this session instead — cheaper, no browser-screenshot overhead, and Chunk 6 is
-"run the suite and read the output," not open-ended root-causing.
-
-**Chunk 6, done so far:** confirmed the dev DB pool was healthy (two spaced `/admin/orders`
-loads, no `P1001`/`P2028`), reset the onboarding-wizard tenant, ran the full tier1–4 suite.
-First attempt came back in a far worse state than expected — nearly everything hanging. Root
-cause, confirmed live via `curl` rather than assumed: `/admin/login` was genuinely 404ing —
-**a third instance** of the `.next` Turbopack dev-cache corruption bug this week, on a third
-different route (after `/admin/orders/new` and the original `/admin/login` incident from
-before this plan existed). This is no longer a one-off; it's a real, recurring risk for this
-dev setup. Fixed the same way (`rm -rf .next` + restart), confirmed live.
-
-**Second attempt, post-fix: 29/35 passed.** Both of Chunks 1–2's fixes
-(`companies-crud.spec.ts`, the first half of `wine-catalogue-order.spec.ts`'s flow) held up
-under a genuine full run, not just in isolation — real confirmation the earlier work was
-sound. 5 still failed (`payment-amount-integrity` individual scenario, `booking-simple`,
-`contact-orphan-safety`, a *different*, later part of `wine-catalogue-order` than Chunk 1
-touched, and `admin-orders`). Investigated rather than assumed: ruled out settings-state
-pollution from the one test that crashed hard (queried Staging Winery's actual `Setting` rows
-directly — clean, no dirty toggle), ruled out a broad regression in order creation (drove
-`/admin/orders/new` live, works fine), ruled out a sandboxed-network block on the Flitt
-redirect (`curl` to `pay.flitt.com`, healthy). **Did not positively confirm** a cause for the
-remaining 5 — the leading theory (first-compile cost stacking inside one test's timeout
-budget, the same pattern documented repeatedly this week) is plausible, not proven, and the
-plan file says so explicitly rather than rounding up to "done."
-
-**Handed off here, deliberately, to manage context** rather than keep going in an
-increasingly long session. Next step is already decided, not open-ended: rerun the 5 failures
-in isolation against the now fully-warmed server, which either confirms the cold-compile
-theory (clean reruns) or falsifies it (same failure, pointing at something real). See the
-handoff prompt in chat / [[Plan-PlaywrightSuiteHardening]] Chunk 6's Result note for exact
-state.
-
-**Also cleaned up:** an orphaned `playwright show-trace` process (port 9323) left running
-since the previous day by the subagent's worktree — pure debris, killed. The subagent's own
-worktree (`.claude\worktrees\agent-afb283110755b4c37`) is now redundant — all its commits
-(Chunks 0–5) are already on `origin/staging`, nothing uncommitted left in it — safe to
-discard whenever convenient, not urgent.
-
----
+## 2026-10-02 — Chunk 6 run myself after the subagent's token budget got tight; found a third `.next` cache-corruption instance; 29/35, handed off to the session above for the final investigation and close-out.
 
 ## 2026-10-01 (later) — Hardening plan execution: Chunks 0–4 done and pushed to `staging` (both "real bugs" turned out to be test-locator bugs, not app bugs); Chunks 5–6 handed off, later closed out 2026-10-02.
 
----
-
-## 2026-10-01 — Independent review of yesterday's Playwright work, then a hardening plan
-
-Max asked for a status update on yesterday's Playwright session, then for a second opinion
-from a subagent deliberately fenced off from yesterday's own notes (the project's standing
-"blind review" pattern). The agent verified yesterday's three test-bug fixes and the
-Contact Person merge by reading the actual current code itself, not by trusting the
-narrative — confirmed all of it, `tsc` clean, no drift found. It also found one real thing
-yesterday's session missed: `saas/playwright.config.ts` has no exclusion for
-`tests/tier5-payment-e2e/`, so the suite's own documented default command
-(`npx playwright test`) would sweep in the real-Flitt-payment specs and hang against
-`localhost`. Also flagged `playwright/README.md`/`Progress.md` as stale (last touched
-2026-09-25, undercounting the suite by 5 tests).
-
-Max then asked for a working plan to close all of this — the two still-open leads from
-yesterday (wine-catalogue-order's modal-intercept, companies-crud's unexplained
-navigation), the fixture-broken specs (#4, open since 2026-09-19), the tier5 config gap,
-and the stale docs — to be executed by a **separate subagent**, deliberately, for the same
-bias-hygiene reason: the session that just spent hours on this has every incentive to
-declare victory early. Plan written: **[[Plan-PlaywrightSuiteHardening]]**, 7 chunks,
-ending in the thing this whole effort is actually for — one clean, full, end-to-end suite
-run, which no session has achieved yet. Not started as of this entry.
+## 2026-10-01 — Independent review of yesterday's Playwright work confirmed it (tsc clean, no drift) and found one real gap (tier5 specs not excluded from the default run command, stale docs); Max asked for a working plan to close everything — [[Plan-PlaywrightSuiteHardening]] written, executed and closed over the next two days (see entries above).
 
 ---
 
