@@ -8,7 +8,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, continued) — Plan-PlaywrightSuiteHardening Chunk 6 actually closed: all 5 handed-off failures root-caused and fixed, not just rerun
+## 2026-10-02 (newest, continued) — Plan-PlaywrightSuiteHardening Chunk 6: all 5 handed-off failures root-caused and fixed; onboarding-wizard gets a real reset button; one spec retired; full-green run still pending
 
 Picked up the handoff from earlier today (below): rerun the 5 unexplained failures in
 isolation to confirm or falsify the cold-compile theory. **2 of 5 confirmed cold-compile**
@@ -39,20 +39,37 @@ session's own ~90 minutes of continuous heavy testing had re-triggered the alrea
 "dev server process bloat" pattern (`KNOWN-ISSUES.md`). A clean restart cleared every one of
 those failures with zero code changes.
 
-**Not done:** the onboarding-wizard tenant's manual SQL reset — a safety check blocked writing
-that script this time, even though it's the exact, previously-approved reset query from
-`playwright/notes/10-onboarding-wizard.md`. Needs Max to run it by hand before the next full
-run; that spec's failure every run since is expected, not a new finding. Also flagged, untouched:
-two unrelated pre-existing uncommitted changes found sitting in the working tree at session
-start (`saas/app/admin/(panel)/orders/OrdersFilters.tsx`/`page.tsx`, dated 2026-09-30, and
-`vault/max.md` / `vault/x note.md`, dated 2026-09-25) — not part of this session's work, not
-committed, surfaced to Max separately.
+Also flagged, untouched: two unrelated pre-existing uncommitted changes found sitting in the
+working tree at session start (`saas/app/admin/(panel)/orders/OrdersFilters.tsx`/`page.tsx`,
+dated 2026-09-30, and `vault/max.md` / `vault/x note.md`, dated 2026-09-25) — not part of this
+session's work, not committed, surfaced to Max separately.
+
+**Two follow-ups, same session, both Max's call.** The onboarding-wizard tenant's manual SQL
+reset couldn't be run directly (a safety check blocked the script) — Max asked if a super-admin
+button already existed for this; it didn't, so one got built:
+`lib/onboardingWizardReset.ts` + `app/actions/onboardingWizardReset.ts` +
+`ResetOnboardingWizardCard.tsx` on `/super-admin/tenants`, same slug-scoped two-step-confirm
+shape as the existing demo/staging reset cards. Verified live (clicked it, got a real deletion
+report, reran the test — passed). Separately, `payment-edit-after-payment.spec.ts` — left
+deliberately failing since Chunk 5 pending a retire-or-rewrite call — got Max's answer: retire.
+Spec deleted, its notes file kept with a retirement banner, counts updated everywhere (42 tests
+/ 22 files suite-wide now).
+
+**Honestly still open, not done this session:** `onboarding-wizard.spec.ts` has only been
+verified clean **once**, not the two reruns this plan's own bar calls for elsewhere, and a
+literal from-scratch full-suite run showing everything green has never actually happened —
+every full run attempted had this spec failing throughout, since the button didn't exist yet.
+Handoff note with the exact next steps is at the bottom of `Plan-PlaywrightSuiteHardening.md`.
 
 Changed files: `saas/tests/tier3-admin-smoke/admin-orders.spec.ts`,
 `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
 `saas/tests/tier2-core-flows/booking-simple.spec.ts`,
 `saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts`, `playwright/KNOWN-ISSUES.md`,
-`playwright/Progress.md`, `vault/Plan-PlaywrightSuiteHardening.md`.
+`playwright/Progress.md`, `playwright/README.md`,
+`playwright/notes/17-payment-edit-after-payment.md`, `vault/Plan-PlaywrightSuiteHardening.md`;
+deleted `saas/tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`; new:
+`saas/lib/onboardingWizardReset.ts`, `saas/app/actions/onboardingWizardReset.ts`,
+`saas/app/super-admin/tenants/ResetOnboardingWizardCard.tsx`.
 
 ---
 

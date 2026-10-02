@@ -478,13 +478,16 @@ confirmed directly in the dev server's own error log, not assumed), not code pro
       originally-handed-off failures plus 3 further real bugs found along the way each got a
       confirmed root cause, a fix, and at least one (most, two) clean isolated reruns. Full
       detail in the Result below.
-- [x] Once genuinely clean: this is the new baseline. Every individual spec that was ever
-      part of this chunk's failures now passes clean in isolation, verified twice each. A
-      single from-scratch full run showing literally 35/35 was not achieved in this session
-      (the onboarding tenant needs its manual reset first, and this session's own heavy load
-      re-triggered the already-documented dev-server bloat pattern mid-run) — but every
-      failure that showed up was chased to a real, fixed, verified cause, not left as an
-      unexplained residual. See Result for the honest full picture.
+- [~] Once genuinely clean: this is the new baseline. Every one of the 5 originally-handed-off
+      specs, plus the further real bugs found along the way, now passes clean in isolation,
+      verified twice each. **One exception, not yet at that bar:** `onboarding-wizard.spec.ts`
+      — verified clean only **once** (1.2m), immediately after the reset button (below) was
+      built, not rerun a second time. A single from-scratch full run showing literally 42/42
+      has still **not** been done this session — every full run attempted had
+      `onboarding-wizard.spec.ts` failing at its very first assertion the whole time (the
+      reset blocker below wasn't resolved until after the last full run), so none of them
+      represent a true all-green number. **Next session's job, see handoff note at the very
+      bottom of this file.**
 - [x] Report back to Max with the real number — not "should be passing now," an actual
       fresh run's actual output.
 
@@ -651,12 +654,41 @@ Bumped both to 60s. Verified: two clean isolated reruns of the full file.
 **Final state:** every one of the originally-handed-off 5 failures, plus 3 further real bugs
 this investigation surfaced along the way, now has a confirmed root cause, a verified fix, and
 at least one clean isolated rerun (most have two). The suite itself is sound. The onboarding-
-wizard reset is now one click, not a manual query to go find — the only remaining operational
-step for the next full, uninterrupted run is clicking it first, and keeping an eye on dev-server
-memory if the session runs long (a known, already-documented, restart-fixes-it pattern, not an
-open bug). `payment-edit-after-payment.spec.ts` is retired, not a pending decision anymore.
+wizard reset is now one click, not a manual query to go find, and `payment-edit-after-payment.spec.ts`
+is retired, not a pending decision anymore.
+
+**Two things genuinely still open, not done this session — see the handoff note immediately
+below:** `onboarding-wizard.spec.ts` has only ever been run clean **once**, not the two this
+plan's own ground rule calls for everywhere else; and a literal from-scratch full-suite run
+showing every test green has never actually happened — every full run attempted this session
+had this spec failing at its first assertion throughout, because the reset button didn't exist
+yet when the last one ran.
 
 ---
+
+## Handoff — next session's job (written 2026-10-02, after the reset button landed)
+
+Everything above is done and pushed to `staging` (`e23c83a` and before). Two small, well-scoped
+things are left, both just verification — no new investigation expected, no known unknowns:
+
+1. **Rerun `onboarding-wizard.spec.ts` twice more, clean**, to bring it up to this plan's own
+   bar (everything else in this chunk has two clean isolated reruns; this one only has one).
+   Click "Reset onboarding wizard tenant" on `/super-admin/tenants` first each time (required
+   precondition, not optional — the test's own first assertion depends on it). Then:
+   `cd saas && npx playwright test --workers=1 --reporter=list tests/tier3-admin-smoke/onboarding-wizard.spec.ts`
+2. **One genuine full-suite run with a literal all-green number.** Reset the onboarding tenant
+   first (same button), confirm dev-server/pool health
+   (`vault/ClaudeInstructions.md`/`KNOWN-ISSUES.md` have the checklist — a couple of spaced
+   `/admin/orders` loads, no `P1001`/`P2028`), then:
+   `cd saas && PLAYWRIGHT_HTML_OPEN=never npx playwright test --workers=1 --reporter=list`
+   Expect **42/42**. If anything fails, don't assume it's environmental — this session hit real,
+   confirmed bugs behind several failures that looked environmental at first glance (see
+   `KNOWN-ISSUES.md`'s "Shared tenant payment-toggle state can cascade" section especially).
+   Reproduce live before concluding it's just load or bloat.
+
+Once both are clean: update this chunk's checklist (the `[~]` above → `[x]`), record the real
+number in `playwright/Progress.md`'s chronological log matching its existing entries' style, and
+this plan is genuinely, fully closed — not before.
 
 ## Explicitly out of scope for this plan
 
