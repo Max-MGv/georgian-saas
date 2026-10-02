@@ -1014,9 +1014,11 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             const rowError = isEditing ? bookingRulesError : null
             return (
               <div key={row.key} className="flex flex-col gap-1 px-5 py-3" style={{ backgroundColor: C.bg }}>
-                <div className="flex items-center gap-4">
-                  <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
-                  <div className="flex items-center gap-2">
+                {/* Phone: label above the control. Side by side, the 12rem label
+                    plus the input pushed the "guests" unit past the card edge. */}
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
+                  <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{row.label}</label>
+                  <div className="flex items-center gap-2 flex-wrap">
                     {isEditing ? (
                       <input
                         type="number" min={1} max={200}
@@ -1058,7 +1060,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   </div>
                 </div>
                 {rowError && (
-                  <p className="text-xs" style={{ color: '#b91c1c', marginLeft: 'calc(12rem + 1rem)' }}>{rowError}</p>
+                  <p className="text-xs sm:ml-[13rem]" style={{ color: '#b91c1c' }}>{rowError}</p>
                 )}
               </div>
             )

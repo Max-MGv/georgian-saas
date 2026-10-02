@@ -25,8 +25,10 @@ export default function StepNav({ steps, current, furthestIndex, onSelect }: {
   furthestIndex: number
   onSelect: (key: StepKey) => void
 }) {
+  const currentStep = steps.find(s => s.key === current)
   return (
-    <div className="flex items-start mb-6" role="tablist">
+    <div className="mb-6">
+    <div className="flex items-start" role="tablist">
       {steps.map((step, i) => {
         const isCurrent = step.key === current
         const reachable = i <= furthestIndex
@@ -59,8 +61,11 @@ export default function StepNav({ steps, current, furthestIndex, onSelect }: {
             >
               {step.done ? <Check size={16} /> : <Icon size={16} />}
             </button>
+            {/* Seven labels can't share a phone's width — they were breaking
+                mid-word ("Compa/nies"). Under sm only the current step's name
+                is shown, once, below the row; the icons carry the rest. */}
             <span
-              className="text-[11px] font-semibold text-center w-full break-words px-0.5"
+              className="hidden sm:block text-[11px] font-semibold text-center w-full break-words px-0.5"
               style={{ color: isCurrent ? C.wine : step.done ? '#15803d' : C.faint }}
             >
               {step.label}
@@ -68,6 +73,12 @@ export default function StepNav({ steps, current, furthestIndex, onSelect }: {
           </div>
         )
       })}
+    </div>
+    {currentStep && (
+      <p className="sm:hidden text-center text-xs font-semibold mt-2" style={{ color: C.wine }}>
+        {currentStep.label}
+      </p>
+    )}
     </div>
   )
 }

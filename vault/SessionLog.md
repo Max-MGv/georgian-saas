@@ -8,7 +8,27 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, last) — Tier 5 real-payment tests re-run against staging: 7/7 green
+## 2026-10-02 (newest, last) — Full mobile audit, then mobile pass 1 (uncommitted, not on staging)
+
+Max asked for a full mobile audit of every page, then said to fix the findings and, on mobile only,
+shrink or remove the cards above Orders and Wine Orders so the orders show without scrolling.
+**Audit** (read-only; headless iPhone 13 at 390px + 320px overflow pass, 34 routes, signed in with the
+Playwright suite's test logins on localhost): recorded in [[Audit-MobileFull-2026-10-02]] — guest site
+good, admin Orders list/detail good, data-entry pages rough, super-admin broken (605px-wide page).
+**Fixes** (details in FeatureLog #219): banners + revenue strip compacted on phones, Orders/Wine Orders
+headers tightened, Wine Orders filters collapse behind a button; plus the Filters "To" date field,
+Wine Orders double padding, Settings clipped "guests", onboarding stepper labels, Companies rows,
+Orders Table/List toggle, and menu-stays-open-after-language-switch. Measured: first order card at
+y=425 (Orders) / y=333 (Wine Orders) on 664px, no overflow at 390 or 320, desktop 1280 unchanged.
+`tsc --noEmit` clean. **Changes are in the working tree on `staging`, NOT committed or pushed** —
+waiting for Max's go-ahead. Deliberately not done (next batch): bug-report button over the booking
+form, admin mm/dd/yyyy dates, admin touch-target / 16px input pass, super-admin, Site Content editor
+on touch, the admin nav scroller-vs-drawer decision. Not tested: admin in Georgian, Orders Board view
+on a phone. Max may want a quick look on a real phone once it is on staging.
+
+---
+
+## 2026-10-02 (earlier) — Tier 5 real-payment tests re-run against staging: 7/7 green
 
 Task from Max: re-run the 7 real-Flitt tests (last run 2026-10-01). Confirmed staging was serving
 current code (latest deployment READY on `86335dd`, `fra1`, merged "Name" field). Read the Tenant

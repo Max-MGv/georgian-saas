@@ -233,14 +233,17 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
     {/* ── Mobile expanded filter panel ───────────────────────── */}
     {mobileFiltersOpen && (
       <div className="md:hidden flex flex-col gap-3 p-3 rounded-xl border mt-2" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+        {/* min-w-0 + w-full: a text input's default width is ~170px, so two of
+            them side by side were wider than the panel and the "To" field ran
+            out of the card on a phone. */}
         <div className="grid grid-cols-2 gap-3">
-          <div>
+          <div className="min-w-0">
             <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.from')}</label>
-            <DateInput value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={{ ...inputStyle, minHeight: 40 }} />
+            <DateInput className="w-full min-w-0" value={localDateFrom} onChange={v => { setLocalDateFrom(v); update('dateFrom', v) }} style={{ ...inputStyle, minHeight: 40 }} />
           </div>
-          <div>
+          <div className="min-w-0">
             <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('orders.filters.to')}</label>
-            <DateInput value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={{ ...inputStyle, minHeight: 40 }} />
+            <DateInput className="w-full min-w-0" value={localDateTo} onChange={v => { setLocalDateTo(v); update('dateTo', v) }} style={{ ...inputStyle, minHeight: 40 }} />
           </div>
         </div>
         <div>

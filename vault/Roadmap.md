@@ -71,6 +71,7 @@ Complete this before writing a single line of product code.
 ### Polish before first client
 - [x] Responsive design (mobile-friendly) — public site + admin panel; iOS Safari zoom fixed
 - [x] **Mobile tap targets across the shared product** (2026-09-12, `fe22fb4`) — ~25 controls on the guest site and admin panel raised from 15–36px to 38–45px at iPhone size. No layout changes: the audit found zero horizontal overflow. Desktop byte-identical. Remaining open item is the `/admin/orders` nav scroller, left as is on Max's call.
+- [x] **Mobile pass 1 — orders on the first screen + 7 layout fixes** (2026-10-02, not yet on staging) — banners and the revenue strip compacted on phones so Orders / Wine Orders show real orders without scrolling; Filters date overflow, Settings clipped label, onboarding stepper, Companies rows, redundant Table/List toggle, menu-stays-open all fixed. See `Audit-MobileFull-2026-10-02.md`. Still open from that audit: bug-report button over the booking form, admin mm/dd/yyyy dates, admin touch-target/16px-input pass, super-admin layout, Site Content editor on touch, the 11-link admin nav decision.
 - [x] Error states and loading indicators — loading skeleton, Saving…/Deleting… button text, error messages on forms
 - [x] Confirm dialogs before delete (admin) — inline Yes/No in orders, companies, price tiers
 

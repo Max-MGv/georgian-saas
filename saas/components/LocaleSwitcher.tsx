@@ -4,9 +4,13 @@ import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { setLocale } from '@/app/actions/locale'
 
-type Props = { locale: string }
+type Props = {
+  locale: string
+  /** Called once the new language has been applied — e.g. so a mobile menu can close itself. */
+  onChanged?: () => void
+}
 
-export default function LocaleSwitcher({ locale }: Props) {
+export default function LocaleSwitcher({ locale, onChanged }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -15,6 +19,7 @@ export default function LocaleSwitcher({ locale }: Props) {
     startTransition(async () => {
       await setLocale(next)
       router.refresh()
+      onChanged?.()
     })
   }
 

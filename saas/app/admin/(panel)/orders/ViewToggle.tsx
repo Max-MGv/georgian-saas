@@ -41,20 +41,44 @@ export default function ViewToggle({ view, params, locale = 'en' }: Props) {
     { v: 'board', labelKey: 'orders.view.board' },
   ]
 
+  // On a phone Table, List and Board all render the same card list (OrdersTable
+  // only has a separate layout for them from md up), so three of the four
+  // buttons did nothing different. Phones get two: the card list and Calendar.
+  const mobileOptions: { v: View; labelKey: string; active: boolean }[] = [
+    { v: 'table', labelKey: 'orders.view.list', active: view !== 'calendar' },
+    { v: 'calendar', labelKey: 'orders.view.calendar', active: view === 'calendar' },
+  ]
+
   return (
-    <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-      {options.map((opt, i) => (
-        <button
-          key={opt.v}
-          onClick={() => switchTo(opt.v)}
-          className="min-h-10 md:min-h-0"
-          style={{ ...base, border: 'none', borderRight: i < options.length - 1 ? `1px solid ${C.border}` : 'none',
-            backgroundColor: view === opt.v ? C.wine : C.inputBg,
-            color: view === opt.v ? '#fff' : C.muted }}
-        >
-          {at(opt.labelKey)}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="hidden md:flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+        {options.map((opt, i) => (
+          <button
+            key={opt.v}
+            onClick={() => switchTo(opt.v)}
+            className="md:min-h-0"
+            style={{ ...base, border: 'none', borderRight: i < options.length - 1 ? `1px solid ${C.border}` : 'none',
+              backgroundColor: view === opt.v ? C.wine : C.inputBg,
+              color: view === opt.v ? '#fff' : C.muted }}
+          >
+            {at(opt.labelKey)}
+          </button>
+        ))}
+      </div>
+      <div className="flex md:hidden rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+        {mobileOptions.map((opt, i) => (
+          <button
+            key={opt.v}
+            onClick={() => { if (!opt.active) switchTo(opt.v) }}
+            className="min-h-10 px-4"
+            style={{ ...base, border: 'none', borderRight: i < mobileOptions.length - 1 ? `1px solid ${C.border}` : 'none',
+              backgroundColor: opt.active ? C.wine : C.inputBg,
+              color: opt.active ? '#fff' : C.muted }}
+          >
+            {at(opt.labelKey)}
+          </button>
+        ))}
+      </div>
+    </>
   )
 }

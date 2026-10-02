@@ -102,7 +102,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </nav>
 
-      <main className="px-6 py-8 max-w-screen-2xl mx-auto">
+      <main className="px-4 py-4 sm:px-6 sm:py-8 max-w-screen-2xl mx-auto">
         {/* Both setup nudges are suppressed on the sales demo tenant. A
             prospect sent to /admin to be shown a working back office was
             landing on "Finish setting up your account" instead — the product

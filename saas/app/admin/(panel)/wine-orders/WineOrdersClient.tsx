@@ -389,6 +389,9 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
 }) {
   const at = (key: string) => adminT(locale, key)
   const hasExtra = search || dateFrom || dateTo
+  // Phone only: search + date range live behind a "Filters" button so the
+  // order cards start on the first screen. md+: always shown, as before.
+  const [extraOpen, setExtraOpen] = useState(false)
 
   function pill(code: string, opts?: { count?: number }) {
     const isActive = filters.has(code)
@@ -397,7 +400,7 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
       <button
         key={code}
         onClick={() => onToggleFilter(code)}
-        className="font-medium rounded-full transition-all duration-150 inline-flex items-center gap-1.5"
+        className="font-medium rounded-full transition-all duration-150 inline-flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
         style={{
           backgroundColor: isActive ? sc.border : '#fff',
           color: isActive ? '#fff' : C.faint,
@@ -424,11 +427,23 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
   }
 
   return (
-    <div className="flex flex-col gap-2 mb-4">
-      <div className="flex gap-2 flex-wrap items-center">
+    <div className="flex flex-col gap-2 mb-3 md:mb-4">
+      {/* Phone: one horizontally scrolling row of chips instead of a wrapped block. */}
+      <div className="flex gap-2 items-center overflow-x-auto md:overflow-visible md:flex-wrap" style={{ scrollbarWidth: 'none' }}>
+        <button
+          onClick={() => setExtraOpen(o => !o)}
+          className="md:hidden flex-shrink-0 whitespace-nowrap font-medium rounded-full border px-3 py-1.5 text-xs"
+          style={{
+            borderColor: extraOpen || hasExtra ? C.wine : C.border,
+            color: extraOpen || hasExtra ? C.wine : C.faint,
+            backgroundColor: extraOpen || hasExtra ? '#fdf2f3' : '#fff',
+          }}
+        >
+          {at('orders.filters.filters')} {hasExtra ? '•' : '▾'}
+        </button>
         <button
           onClick={onClearFilters}
-          className="font-medium rounded-full transition-all duration-150"
+          className="font-medium rounded-full transition-all duration-150 flex-shrink-0 whitespace-nowrap"
           style={{
             backgroundColor: filters.size === 0 ? C.wine : '#fff',
             color: filters.size === 0 ? '#fff' : C.faint,
@@ -444,17 +459,17 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         {/* Payment axis. Separated so it reads as a second question rather than
             five more stages — and so it is visually obvious that picking one
             from each group narrows rather than widens. */}
-        <span className="w-px self-stretch mx-1" style={{ backgroundColor: C.border }} />
+        <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
         {PAYMENT_FILTER_CODES.map(code => pill(code))}
 
       </div>
-      <div className="flex gap-2 flex-wrap items-center">
+      <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-center`}>
         <input
           type="text"
           placeholder={at('wineOrders.filter.searchPlaceholder')}
           value={search}
           onChange={e => onSearch(e.target.value)}
-          className="rounded-lg border px-3 py-1.5 text-sm"
+          className="rounded-lg border px-3 py-1.5 text-sm w-full md:w-auto"
           style={{ borderColor: C.border, color: C.text, backgroundColor: '#fff', minWidth: 160 }}
         />
         <input type="date" value={dateFrom} onChange={e => onDateFrom(e.target.value)} title={at('orders.filters.from')}
@@ -1087,13 +1102,13 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : at('wineOrders.mode.pack')
 
   const modeToggle = (
-    <div className="flex items-center gap-1.5 mb-5 self-start">
+    <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start">
       <div className="flex gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: '#f0e8dc' }}>
         {(['cards', 'table', 'board', 'pack'] as const).map(m => (
           <button
             key={m}
             onClick={() => switchMode(m)}
-            className="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
+            className="text-sm px-3 md:px-4 py-1.5 rounded-md font-medium transition-all"
             style={{
               backgroundColor: mode === m ? '#fff' : 'transparent',
               color: mode === m ? C.wine : C.faint,

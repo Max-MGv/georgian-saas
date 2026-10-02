@@ -109,7 +109,7 @@ export default function OnboardingWizard({ data }: { data: OnboardingData }) {
   }
 
   return (
-    <div className="rounded-xl border p-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+    <div className="rounded-xl border p-4 sm:p-6" style={{ borderColor: C.border, backgroundColor: C.bg }}>
       <StepNav
         steps={steps.map(s => ({ key: s.key, icon: s.icon, label: at(s.labelKey), done: doneMap[s.key] }))}
         current={currentKey}

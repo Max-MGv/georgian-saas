@@ -86,17 +86,20 @@ export default function RevenueStrip({
   ]
 
   return (
+    // Phone: the three cells stay side by side as one slim row (smaller type, no
+    // sub-line) instead of stacking into three full cards — the bookings list
+    // should start on the first screen, not below the totals. sm+: unchanged.
     <div
-      className="rounded-xl border mb-4 grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x"
+      className="rounded-xl border mb-3 sm:mb-4 grid grid-cols-3 divide-x"
       style={{ borderColor: C.border, backgroundColor: C.bg, borderStyle: 'solid' }}
     >
       {cells.map(cell => (
-        <div key={cell.label} className="px-5 py-3 text-center" style={{ borderColor: C.border }}>
-          <p className="text-xs font-medium" style={{ color: C.muted }}>{cell.label}</p>
-          <p className="text-xl font-bold leading-tight mt-0.5" style={{ color: C.wine }}>{cell.value}</p>
+        <div key={cell.label} className="px-2 py-2 sm:px-5 sm:py-3 text-center" style={{ borderColor: C.border }}>
+          <p className="text-[10px] sm:text-xs font-medium leading-tight" style={{ color: C.muted }}>{cell.label}</p>
+          <p className="text-base sm:text-xl font-bold leading-tight mt-0.5" style={{ color: C.wine }}>{cell.value}</p>
           {/* Reserved even when empty, so the three cells stay the same height
               and the numbers sit on one line however the subs land. */}
-          <p className="text-xs mt-0.5" style={{ color: C.faint, minHeight: '1rem' }}>{cell.sub}</p>
+          <p className="hidden sm:block text-xs mt-0.5" style={{ color: C.faint, minHeight: '1rem' }}>{cell.sub}</p>
         </div>
       ))}
     </div>

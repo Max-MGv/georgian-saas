@@ -963,7 +963,9 @@ export default function CompaniesClient({ companies: initial, roles = [], person
             const missing = missingDetails(at, company)
             return (
               <div key={company.id} style={{ borderBottom: i < visibleCompanies.length - 1 ? `1px solid ${C.border}` : 'none', backgroundColor: '#ffffff' }}>
-                <div className="flex items-center px-5 py-4 gap-4">
+                {/* Phone: summary above, Edit/Delete below. Side by side, the name wrapped
+                    to three lines and the tier/order-count text overlapped the buttons. */}
+                <div className="flex flex-col sm:flex-row sm:items-center px-4 sm:px-5 py-3 sm:py-4 gap-2 sm:gap-4">
                   {/* The summary button stops before the "needs details" hint.
                       HelpHint renders a <button>, and a button inside a button
                       is invalid HTML: the parser relocates the inner one, so
@@ -972,12 +974,12 @@ export default function CompaniesClient({ companies: initial, roles = [], person
                       (KnownBugs #15). Same shape the Individuals row above
                       already uses. Visual order is unchanged — the pieces below
                       simply sit beside the button rather than inside it. */}
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="flex items-center gap-x-2 gap-y-1 flex-wrap flex-1 min-w-0">
                   <button
                     onClick={() => setExpandedId(expanded ? null : company.id)}
-                    className="flex items-center gap-2 text-left min-w-0"
+                    className="flex items-center gap-x-2 gap-y-1 flex-wrap text-left min-w-0"
                   >
-                    <svg className="w-4 h-4 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
+                    <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
                       <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
