@@ -19,8 +19,9 @@ changed. Everything is on `staging`; `master` (your real site) is untouched.
    payments, but never visit several pages at all (Statistics, Menu Items, Masterclass, Wines,
    Site Content, My Reports, About/Contact/Terms/Privacy/Returns). The proposed list is in
    [[Plan-ExpandPlaywrightCoverage]] (FeatureLog #218). Tell me which pieces you want, if any.
-2. **Re-run the real-payment tests on staging?** Those 7 tests only run against the staging
-   website and I haven't re-run them since 2026-10-01. Cheap to do; I'd do it first.
+2. ~~Re-run the real-payment tests on staging?~~ **Done 2026-10-02 evening: all 7 passed.** One test
+   (book-later) had a built-in assumption that clashed with the real settings; I fixed the test, not
+   your site. Settings on Staging Winery are exactly as before and no test orders were left behind.
 3. **Ready to move staging → master?** That's the step that touches real customers, so it's your
    call. Note `staging` also carries two small admin changes you haven't looked at yet: the
    "Columns" picker now only shows on the Table view of Orders, and a new **"Reset onboarding

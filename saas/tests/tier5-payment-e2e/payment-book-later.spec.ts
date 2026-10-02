@@ -90,11 +90,14 @@ test.describe('Individual booking — reservation → invoice → manual bank tr
     mark('logged in')
 
     const originalToggle = await readPaymentSectionToggle(page, 'Individual bookings')
-    // Ground truth per the plan: this toggle rests OFF (confirmed at the end
-    // of Chunk 3). Verified here, not assumed — a "book & pay later" scenario
-    // needs it off to even reach the reservation-only path, and a drift here
-    // is worth surfacing loudly rather than silently forcing past it.
-    expect(originalToggle, 'Individual bookings toggle should be OFF at rest, per its documented resting state (end of Chunk 3)').toBe(false)
+    // This scenario needs the toggle OFF to reach the reservation-only path, so
+    // it sets that itself and restores whatever it found — the same read /
+    // set / restore-in-finally shape the other tier5 specs use. It used to
+    // assert the toggle was already OFF "at rest", but the localhost suite
+    // shares this tenant and its correct resting value is ON (see
+    // KNOWN-ISSUES.md, "Shared tenant payment-toggle state"), so that
+    // assertion failed against a perfectly healthy tenant (2026-10-02).
+    // The set is inside the try so a failure partway still restores.
 
     // Read the real bank-transfer details live, before creating anything —
     // these are what sendOrderInvoice() actually prints into the email, and
@@ -109,6 +112,9 @@ test.describe('Individual booking — reservation → invoice → manual bank tr
     const email = `zz-payment-e2e-book-later-${Date.now()}@example.invalid`
 
     try {
+      await setPaymentSectionToggle(page, 'Individual bookings', false)
+      mark('toggle set OFF')
+
       // ── 1. Reservation-only booking ──────────────────────────────────────
       const formPage = await context.newPage()
       await formPage.goto('/')

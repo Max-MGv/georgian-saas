@@ -36,6 +36,9 @@ Test **output** (HTML report, trace files) is still redirected here via `playwri
 
 ## Current status
 
+**Last verified runs:** localhost tiers 1–4 = **35/35 green** (2026-10-02, 33.4 min); tier 5 against
+staging = **7/7 green** (2026-10-02, 5.6 min, `payment-book-later` also green on two isolated reruns).
+
 **42 tests across 22 spec files, all tiers complete** (Phases 0–5 — regression, core flows, admin
 smoke, locale integrity, and real Flitt payment E2E — confirmed current via
 `npx playwright test --list` + `npx playwright test --config=playwright.staging.config.ts --list`,

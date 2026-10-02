@@ -8,7 +8,23 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, last) — Playwright coverage audit recorded as a backlog plan
+## 2026-10-02 (newest, last) — Tier 5 real-payment tests re-run against staging: 7/7 green
+
+Task from Max: re-run the 7 real-Flitt tests (last run 2026-10-01). Confirmed staging was serving
+current code (latest deployment READY on `86335dd`, `fra1`, merged "Name" field). Read the Tenant
+payment columns directly: Individuals true / Companies false / Wine true (correct). As predicted,
+`payment-book-later.spec.ts` would have failed its first assertion ("Individuals OFF at rest") — fixed
+by making the spec set OFF itself and restore the original in `finally`, instead of flipping state by
+hand. Result: **7 passed, 0 failed (5.6m)**, plus two clean isolated reruns of the changed spec. After
+everything: Tenant columns unchanged (verified in DB), no leftover `ZZPaymentE2E` orders. Task 2
+(expanding coverage) deliberately not started — waiting for Max to pick chunks from
+[[Plan-ExpandPlaywrightCoverage]]. Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`,
+`playwright/Progress.md`, `playwright/README.md`, `playwright/KNOWN-ISSUES.md`, `vault/SessionLog.md`,
+`vault/MyToDo.md`.
+
+---
+
+## 2026-10-02 (earlier) — Playwright coverage audit recorded as a backlog plan
 
 Max asked what the suite does and doesn't cover (all buttons? payment flows? which flows missed?).
 Answered by comparing `git ls-files` for app pages / API routes / server actions against the routes

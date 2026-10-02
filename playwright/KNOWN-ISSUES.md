@@ -239,6 +239,11 @@ and to cut in **both directions** depending which toggle:
   immediately after. Confirmed correct values, 2026-10-02: Individuals **true**, Companies
   **false**, WineOrders **true**.
 
+**Update 2026-10-02:** `payment-book-later.spec.ts` was the one tier 5 spec that asserted a resting
+value (Individuals OFF) instead of setting what it needs. That conflicted with the correct resting value
+(ON) and had only passed before because someone flipped the toggle by hand. It now sets OFF itself and
+restores the original in `finally`, like its siblings — no tier 5 spec assumes a resting toggle state any more.
+
 **If a spec using one of these toggles fails for any reason, check this tenant-state drift
 before assuming a code or locator bug** — read the three `Tenant` columns directly (not the
 `Setting` table, which is a different mechanism entirely despite the shared admin-UI look) and

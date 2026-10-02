@@ -606,3 +606,33 @@ confirmation the handoff anticipated, but genuinely necessary to get here.
 Changed files: `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
 `saas/tests/tier2-core-flows/booking-simple.spec.ts`, `KNOWN-ISSUES.md`,
 `vault/Plan-PlaywrightSuiteHardening.md`.
+
+## 2026-10-02 (evening) — Tier 5 re-run against staging: 7/7 green, one spec made self-sufficient
+
+First tier 5 run since 2026-10-01. Preconditions checked first: staging's newest deployment was READY
+on `86335dd` (= local HEAD), `X-Vercel-Id` showed `fra1`, the public booking form has the single merged
+"Name" field (and the specs fill it by that name successfully). Tenant payment columns read straight
+from the dev DB before running: Individuals **true**, Companies **false**, Wine orders **true** — the
+correct values from `KNOWN-ISSUES.md`.
+
+**The predicted conflict was real.** `payment-book-later.spec.ts` asserted "Individual bookings toggle
+should be OFF at rest" as its first check. That is wrong now: the localhost suite shares this tenant and
+its correct resting value is ON, so the spec would have failed against a perfectly healthy tenant. Chunk 5
+(2026-10-01) "fixed" the same assertion by manually flipping the toggle in the admin UI — which only
+worked until the localhost suite restored it. **Fix (spec, not state):** the spec now reads the original
+value, sets Individuals OFF itself inside the `try`, and restores the original in `finally` — the same
+read / set / restore shape the other four tier 5 files use. The at-rest assertion is removed. A timeout
+still skips `finally` (unchanged limitation, documented), but the spec no longer depends on any
+particular resting state.
+
+**Results:** full tier 5 (`playwright.staging.config.ts`, `--workers=1`): **7 passed, 0 failed, 5.6m**
+(admin-order, approved ×3 [individual/company/wine], book-later, declined, post-payment-extras — two real
+Flitt settlements in post-payment-extras, one each in the approved/declined ones). Then two clean isolated
+reruns of `payment-book-later` (26.8s, 29.4s).
+
+**Verified via DB, not the admin UI:** after all runs `Tenant` columns = Individuals true / Companies
+false / Wine orders true; zero leftover `ZZPaymentE2E…` Orders or WineOrders on Staging Winery. Older
+`ZZPaymentIntegrity` / `Playwright Wine Test …` rows were already there (localhost-suite debris, see
+`KNOWN-ISSUES.md`) and were not touched.
+
+Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`.
