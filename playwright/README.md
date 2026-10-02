@@ -60,6 +60,15 @@ output. Full breakdown: `Progress.md`.
 > superseded by `payment-post-payment-extras.spec.ts`'s own lock assertion. See
 > `KNOWN-ISSUES.md` for the full story, kept as history rather than deleted.
 
+## What this suite does NOT cover (and the plan to expand it)
+
+Strong: booking, company booking, wine ordering, payment amounts, real Flitt payment flows.
+Untested: several whole admin pages (Statistics, Menu Items, Masterclass, Wines, Site Content,
+My Reports), the public About/Contact/Terms/Privacy/Returns pages, most super-admin pages, cron
+routes, the demo site, cross-tenant isolation, and any browser other than Chromium. Full audit and
+a proposed backlog (not started): `C:\Users\Max\Desktop\claude-projects\georgian-saas\vault\Plan-ExpandPlaywrightCoverage.md`
+(FeatureLog #218).
+
 ## Target environment
 
 **Localhost (`http://localhost:3000`), against the dev database.** On localhost, tenant resolution falls back to `DEFAULT_TENANT_ID`, which is Staging Winery — see `MaintenanceNotes.md` §4. This suite never runs against `master`/production or real tenant data, per `ClaudeInstructions.md` Rule 0.

@@ -8,7 +8,21 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest) — Plan-PlaywrightSuiteHardening Chunk 6 genuinely closes: first-ever 35/35 full-suite run, after a 6-bug investigation across two test files
+## 2026-10-02 (newest, last) — Playwright coverage audit recorded as a backlog plan
+
+Max asked what the suite does and doesn't cover (all buttons? payment flows? which flows missed?).
+Answered by comparing `git ls-files` for app pages / API routes / server actions against the routes
+the specs actually visit. Short version: payment amounts and real payment flows are strong; whole
+admin pages (Statistics, Menu Items, Masterclass, Wines, Site Content, My Reports), the public info
+pages, most super-admin pages, cron routes, the demo site, cross-tenant isolation and non-Chromium
+browsers are untested; tier 5 (staging) hasn't been re-run since 2026-10-01. Max wants to tackle
+this later, so it is saved, not started: [[Plan-ExpandPlaywrightCoverage]] (FeatureLog #218 📋
+Planned, Roadmap v1.10). Changed files: `vault/Plan-ExpandPlaywrightCoverage.md` (new),
+`vault/FeatureLog.md`, `vault/Roadmap.md`, `vault/SessionLog.md`, `playwright/README.md`.
+
+---
+
+## 2026-10-02 (earlier still) — Plan-PlaywrightSuiteHardening Chunk 6 genuinely closes: first-ever 35/35 full-suite run, after a 6-bug investigation across two test files
 
 Picked up what the prior session's handoff described as two small, no-new-investigation
 verification items: a second clean rerun of `onboarding-wizard.spec.ts` (it only had one on
