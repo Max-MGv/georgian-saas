@@ -4,7 +4,24 @@ tags: [playwright, test, tier5, payment, known-bug]
 
 # 17. Edit after the fact — the stale-money check (Chunk 6)
 
-**Status:** ✅ Passing (1/1, 45.4s) — the spec's assertions are written against the *actual*, confirmed-buggy behaviour, not an idealized one; see [[KnownBugs]] #64.
+**Status: 🪦 RETIRED 2026-10-02** (`Plan-PlaywrightSuiteHardening` Chunk 6). The spec file
+(`tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`) has been deleted. This note is
+kept as history, not as a currently-runnable test's documentation.
+
+**Why:** this spec's entire premise was to prove `KnownBugs.md` #64 — editing a paid order's
+guest count silently reprices `Order.totalPrice` while `Payment.amount` stays frozen. That bug
+was real when this spec was written (see "Status" and the findings below, kept unchanged). It
+was then **fixed** by `Plan-PostPaymentExtras` Chunk 1, which locks every guest-count/pricing
+field once an order is paid — the exact edit this spec performs became permanently impossible,
+not merely harder. Confirmed live 2026-10-01 (`KNOWN-ISSUES.md`): the spec hung its full budget
+on a `.fill()` against a now-`disabled` field. The locked-state behavior this fix produces is
+already correctly, separately tested by `payment-post-payment-extras.spec.ts`
+([[18-payment-post-payment-extras]]) — so retiring this spec loses no coverage, it removes a
+test whose job is now done.
+
+---
+
+**Original status (superseded, kept for history):** ✅ Passing (1/1, 45.4s) — the spec's assertions were written against the *actual*, confirmed-buggy behaviour, not an idealized one; see [[KnownBugs]] #64.
 **Tier:** 5 — real staging E2E (`playwright.staging.config.ts`, targets `https://staging.vineworks.ge`, dev DB).
 **File:** `tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`
 **Helpers:** existing `auth.ts`/`payments.ts`/`bookingForm.ts`/`flittPayment.ts`/`credentials.ts`/`resendCheck.ts`, plus one new helper — `tests/helpers/orderMoneyDb.ts` (see below).

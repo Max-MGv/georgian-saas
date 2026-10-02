@@ -340,7 +340,13 @@ row.
    Verified: two isolated reruns, both green (the full 5-sub-scenario describe block, 7.9m and
    similar).
 
-### `payment-edit-after-payment.spec.ts` is now structurally obsolete, not flaky (found 2026-10-01, Chunk 5)
+### `payment-edit-after-payment.spec.ts` — retired 2026-10-02 (found obsolete 2026-10-01, Chunk 5)
+
+**🪦 Retired, not just left failing.** Max's call, once the decision below was surfaced: retire
+rather than rewrite. The spec file is deleted; `playwright/notes/17-payment-edit-after-payment.md`
+is kept as history with a retirement banner, and `README.md`/`Progress.md`'s counts (now 5 tier5
+files / 7 tests, 42 total) reflect the removal. The section below is kept as-written, unedited,
+for the full original finding.
 
 **Not a bug in the test's locators or timing — its entire premise was closed off by a later,
 deliberate fix.** Running the full `tier5-payment-e2e` suite for real against
@@ -360,10 +366,11 @@ set**, deliberately making the edit this spec performs impossible. The locked-st
 already correctly tested by `payment-post-payment-extras.spec.ts` (`"4: Chunk 1 lock confirmed —
 fields disabled, edit attempt had no effect"`, confirmed passing in the same run).
 
-**This needs a decision, not a locator fix:** retire this spec (its coverage is now fully
+**This needed a decision, not a locator fix:** retire this spec (its coverage is now fully
 redundant with `payment-post-payment-extras.spec.ts`), or rewrite it to assert the lock itself
 (which would just duplicate that same spec), or something else — a test-strategy call, not
-something to force a passing assertion onto. Left failing/blocked rather than silently patched.
+something to force a passing assertion onto. Left failing/blocked rather than silently patched
+until Max decided: **retire it** (2026-10-02).
 
 **A second-order effect worth knowing:** because the hang happens *inside* the `try` block and
 the first line of `finally` (`setPaymentSectionToggle`, a `page.goto()`) throws immediately once
@@ -383,9 +390,11 @@ rewritten, expect to do the same.
 
 ## Recurring cleanup this suite needs (accepted limitations, not bugs)
 
-### Onboarding-wizard tenant needs a manual reset before every run
+### Onboarding-wizard tenant needs a reset before every run
 
-`10-onboarding-wizard.spec.ts` runs against a second tenant ("Test Onboarding Wizard", `cmsioproi000avl9czd60ua5h`) and does **not** reset it back to zero-state afterward — nothing else in this suite depends on that tenant staying pristine between runs, so it wasn't built to self-clean. Running the full suite without resetting first will correctly fail this one test at its very first assertion (the Individuals-pricing gate will already be satisfied from the previous run). The reset SQL is documented in `notes/10-onboarding-wizard.md` — run it before this test's next run, every time.
+`10-onboarding-wizard.spec.ts` runs against a second tenant ("Test Onboarding Wizard", `cmsioproi000avl9czd60ua5h`) and does **not** reset it back to zero-state afterward — nothing else in this suite depends on that tenant staying pristine between runs, so it wasn't built to self-clean. Running the full suite without resetting first will correctly fail this one test at its very first assertion (the Individuals-pricing gate will already be satisfied from the previous run).
+
+**Since 2026-10-02, this is a button, not a query someone has to go find.** `/super-admin/tenants` has a "Reset onboarding wizard tenant" card (`app/super-admin/tenants/ResetOnboardingWizardCard.tsx`, mirroring the existing demo/staging reset cards) — click it, confirm, done. It runs the exact same operation the manual SQL did (`lib/onboardingWizardReset.ts`), resolved by tenant slug (`test-onboarding-wizard`) so it refuses to run against the wrong database. Built because a session trying to run the old manual-SQL reset got blocked by a safety check on bulk-delete scripts and couldn't complete it — the button has no such friction since it's ordinary app code behind `requireSuperAdmin()`, not an ad-hoc script. The original SQL is still in `notes/10-onboarding-wizard.md` for reference, but the button is now the documented way to do this.
 
 ### Wine Orders test debris needs a periodic manual sweep
 

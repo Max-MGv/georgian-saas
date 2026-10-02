@@ -102,7 +102,7 @@ This file is the chronological record — what was built, when, and what was fou
 3. **A `.next` Turbopack cache corruption**, matching `KNOWN-ISSUES.md`'s dev-server-bloat pattern exactly: the dev server had to be started fresh for this session, and its first boot served a literal 404 for every route (including `/admin/login`) despite `x-resolved-tenant` resolving correctly. Fixed by the documented recovery: stop, `rm -rf .next`, restart clean.
 4. **A severe, sustained `KnownBugs.md`/`KNOWN-ISSUES.md`-pattern DB pool exhaustion (`P1001`/`P2028`) blocked full-suite reconfirmation in the original build session.** The new test passed cleanly and repeatably in isolation, but every attempt to run the complete 22-test suite that session — 2 attempts at the default parallel workers, 2 attempts fully serial (`--workers=1`) — came back with widespread failures (8-15 tests failing per run) hitting tests with **no relation to this change** (`popover-clipping`, `booking-simple`/`booking-enhanced`, `companies-crud`, `admin-login`, `onboarding-wizard` — all previously-green Phase 1-3 tests). Real recovery attempts were made between runs, following the documented protocol exactly: genuine idle waits, polling an ordinary page load every 30-60s for consecutive clean reads before retrying (confirmed clean 2-4 times across attempts), not just a fixed sleep or a bare restart. Each time, the pool exhausted again within seconds of resuming test traffic, and even single isolated health-check requests occasionally errored during otherwise-idle wait windows — evidence this was likely external load on the shared `georgian-saas-dev` project (per `KNOWN-ISSUES.md`: "combined test volume from more than one session"), not something this session's own test traffic alone was causing or something more local waiting would fix. **Not treated as a regression** — verified live via `playwright-cli` that Staging Winery's admin panel language is correctly `en` (not stuck in Georgian from the interrupted runs).
 
-## Phase 5 — Tier 5: Real Flitt payment E2E — ✅ COMPLETE (6 specs, 8 tests)
+## Phase 5 — Tier 5: Real Flitt payment E2E — ✅ COMPLETE (5 specs, 7 tests)
 
 Added later than the numbering above suggests — `vault/Plan-PaymentE2ETesting.md` tracked this
 work in its own chunks (0–8) rather than as a numbered Phase here, and its own Chunk 8 noted
@@ -125,7 +125,7 @@ callback `localhost` can never receive.
 | `payment-declined-settlement.spec.ts` | 1 | a real Flitt decline never mis-read as paid | ✅ |
 | `payment-book-later.spec.ts` | 1 | reservation → invoice → manual bank transfer | ✅ |
 | `payment-admin-order.spec.ts` | 1 | admin-created order parity with a guest order | ✅ |
-| `payment-edit-after-payment.spec.ts` | 1 | editing a paid order never touches frozen `Payment.amount` (`KnownBugs.md` #64) | ✅ |
+| ~~`payment-edit-after-payment.spec.ts`~~ | — | retired 2026-10-02 — its premise (editing a paid order silently repricing it) was closed off by `Plan-PostPaymentExtras` Chunk 1's field lock; coverage superseded by the row below. See `notes/17-payment-edit-after-payment.md`. | 🪦 |
 | `payment-post-payment-extras.spec.ts` | 1 | lock → extra → manual top-up → card-link top-up → itemised payments, `Plan-PostPaymentExtras` | ✅ |
 
 Full build narrative, every real app bug found (the settlement email fire-and-forget gap
@@ -526,3 +526,29 @@ confirmed, fixed, verified cause. Changed files:
 `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
 `saas/tests/tier2-core-flows/booking-simple.spec.ts`,
 `saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts`, `KNOWN-ISSUES.md`.
+
+## 2026-10-02 (same day, continued) — Onboarding-wizard tenant gets a real reset button; `payment-edit-after-payment.spec.ts` retired
+
+Two follow-ups from the Chunk 6 close-out above, both Max's call, both shipped the same session.
+
+**The onboarding-wizard reset is a button now.** The manual SQL `notes/10-onboarding-wizard.md`
+has documented for weeks couldn't be run directly this session (a safety check blocked the
+script) — Max asked whether a super-admin UI button already existed for this. It didn't:
+checked `ResetDemoCard.tsx`, the only existing reset button, and it's hard-scoped to the demo
+tenant by slug, refuses anything else. Built the real thing instead of another workaround:
+`lib/onboardingWizardReset.ts` (the reset logic, resolved by the tenant's own slug
+`test-onboarding-wizard`, same safety shape as the existing demo/staging reset libs),
+`app/actions/onboardingWizardReset.ts` (the server action, `requireSuperAdmin()`-gated), and
+`app/super-admin/tenants/ResetOnboardingWizardCard.tsx` (the UI card, identical two-step-confirm
+shape to its two siblings), wired into `/super-admin/tenants`. `tsc --noEmit` clean. Verified
+live, not just type-checked: logged in as super-admin, clicked the new button, got a real
+result ("deleted 1 price tiers, 1 companies, 1 wines and 6 onboarding/contact/payment
+settings"), then ran `onboarding-wizard.spec.ts` — passed clean (1.2m). The manual SQL stays in
+the notes file as a fallback, but this is now the documented way to do the reset.
+
+**`payment-edit-after-payment.spec.ts` is retired.** Left deliberately failing since Chunk 5,
+pending a retire-or-rewrite decision (its whole premise — proving a paid order's guest count
+could be silently repriced — was closed off by a later fix locking those fields once paid).
+Max: retire it. Spec file deleted; `notes/17-payment-edit-after-payment.md` kept with a
+retirement banner (real, since-fixed bug, worth keeping as history) rather than deleted
+outright. Counts updated: tier5 is now 5 specs / 7 tests, suite-wide 42 tests / 22 files.

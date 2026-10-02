@@ -36,10 +36,10 @@ Test **output** (HTML report, trace files) is still redirected here via `playwri
 
 ## Current status
 
-**43 tests across 23 spec files, all tiers complete** (Phases 0–5 — regression, core flows, admin
+**42 tests across 22 spec files, all tiers complete** (Phases 0–5 — regression, core flows, admin
 smoke, locale integrity, and real Flitt payment E2E — confirmed current via
 `npx playwright test --list` + `npx playwright test --config=playwright.staging.config.ts --list`,
-2026-10-01). Every "done" state here has been independently re-verified (full-suite reruns from a
+2026-10-02). Every "done" state here has been independently re-verified (full-suite reruns from a
 clean shell, plus direct SQL spot-checks of real tenant data), not just taken from a single run's
 output. Full breakdown: `Progress.md`.
 
@@ -49,9 +49,16 @@ output. Full breakdown: `Progress.md`.
 | 2 — core flows | 6 | booking (simple/enhanced), wine catalogue, contact roles/nationality |
 | 3 — admin smoke | 4 | login, orders, companies CRUD, onboarding wizard |
 | 4 — locale integrity | 1 | EN/KA parity across 5 pages |
-| 5 — real Flitt payment E2E | 6 | settlement, decline, book-later, admin-created orders, post-payment edits/extras — **staging only, see below** |
+| 5 — real Flitt payment E2E | 5 | settlement, decline, book-later, admin-created orders, post-payment extras — **staging only, see below** |
 
 (Plus `tests/seed.spec.ts`, a standalone smoke check not tied to a tier.)
+
+> `tier5-payment-e2e/payment-edit-after-payment.spec.ts` was **retired 2026-10-02**
+> (Plan-PlaywrightSuiteHardening Chunk 6) — its entire premise (editing a paid order's guest
+> count silently repricing the total) was closed off by a later fix that locks those fields once
+> paid, making the edit it tries to perform permanently impossible. Its coverage is fully
+> superseded by `payment-post-payment-extras.spec.ts`'s own lock assertion. See
+> `KNOWN-ISSUES.md` for the full story, kept as history rather than deleted.
 
 ## Target environment
 
@@ -75,7 +82,7 @@ npx playwright test --config=playwright.staging.config.ts tests/tier5-payment-e2
 
 ## Test data policy (short version)
 
-Any test that creates data cleans it up afterward, regardless of pass/fail. Tests never touch Staging Winery's pre-existing real data. There's one confirmed exception (Wine Orders has no delete action, so its test's cleanup can only mark "Cancelled") and one deliberate one (the onboarding-wizard tenant needs a manual reset before each run, not after) — both explained in full in `KNOWN-ISSUES.md`, not repeated here.
+Any test that creates data cleans it up afterward, regardless of pass/fail. Tests never touch Staging Winery's pre-existing real data. There's one confirmed exception (Wine Orders has no delete action, so its test's cleanup can only mark "Cancelled") and one deliberate one (the onboarding-wizard tenant needs a reset before each run, not after — a one-click "Reset onboarding wizard tenant" button on `/super-admin/tenants` since 2026-10-02, replacing the manual SQL this note used to point at) — both explained in full in `KNOWN-ISSUES.md`, not repeated here.
 
 ## Conventions (short version)
 

@@ -602,23 +602,42 @@ toggle-cascade issue above a second time (`payment-label-precedence.spec.ts`'s o
 run, caught mid-bloat, left both toggles flipped) — fixed the same way, verified via direct
 `Tenant` reads.
 
-**Not done, by design — explicitly out of scope this session:**
+**Not done initially, then closed out the same session once Max asked:**
 - The onboarding-wizard tenant reset (`playwright/notes/10-onboarding-wizard.md`'s documented
-  SQL) could not be run — a safety check blocked writing a script with several `deleteMany`
-  calls, even though it is the exact, already-approved, previously-run reset query from that
-  note. `onboarding-wizard.spec.ts` failed in every full-suite run this session as a direct,
-  expected consequence (the gate it checks was already satisfied from a prior run) — not a new
-  finding. **Needs Max to run that reset by hand before the next full-suite run.**
+  SQL) could not be run directly — a safety check blocked writing a script with several
+  `deleteMany` calls, even though it is the exact, already-approved, previously-run reset query
+  from that note. `onboarding-wizard.spec.ts` failed in every full-suite run this session as a
+  direct, expected consequence (the gate it checks was already satisfied from a prior run), not
+  a new finding. **Resolved the same session:** Max asked whether a super-admin UI button
+  existed for this (there wasn't one — checked, the existing "Reset demo now" button is
+  hard-scoped to a different tenant and refuses anything else) and asked for one to be built.
+  Added `lib/onboardingWizardReset.ts` + `app/actions/onboardingWizardReset.ts` +
+  `app/super-admin/tenants/ResetOnboardingWizardCard.tsx`, mirroring the existing demo/staging
+  reset cards exactly (slug-scoped, two-step confirm, refuses on the wrong database). Verified
+  live: clicked it on `/super-admin/tenants`, got a real result
+  ("deleted 1 price tiers, 1 companies, 1 wines and 6 settings"), then reran
+  `onboarding-wizard.spec.ts` — passed clean. This is now the documented way to do this reset;
+  the manual SQL stays in the notes file for reference only.
 - Two unrelated, pre-existing uncommitted changes were found sitting in the working tree at
   session start (`OrdersFilters.tsx`/`page.tsx`, dated 2026-09-30, and `vault/max.md` /
   `vault/x note.md`, dated 2026-09-25) — left untouched and uncommitted, not part of this
   plan's work. Flagged to Max separately.
+- `payment-edit-after-payment.spec.ts` (tier5) had been left deliberately failing since Chunk 5,
+  pending a retire-or-rewrite call (see `KNOWN-ISSUES.md`'s entry on it). Max's answer: **retire
+  it.** Spec file deleted; `playwright/notes/17-payment-edit-after-payment.md` kept with a
+  retirement banner rather than deleted outright (it documents a real, since-fixed bug);
+  `README.md`/`Progress.md` counts updated (43→42 tests, 23→22 files, tier5 6→5 files/8→7 tests).
 
 **Changed files:** `saas/tests/tier3-admin-smoke/admin-orders.spec.ts`,
 `saas/tests/tier1-regression/payment-amount-integrity.spec.ts`,
 `saas/tests/tier2-core-flows/booking-simple.spec.ts`,
 `saas/tests/tier1-regression/mobile-georgian-overflow.spec.ts` (the tight-30s-default finding
-below), `playwright/KNOWN-ISSUES.md`.
+below), `playwright/KNOWN-ISSUES.md`, `playwright/README.md`, `playwright/Progress.md`,
+`playwright/notes/17-payment-edit-after-payment.md`; deleted
+`saas/tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`; new:
+`saas/lib/onboardingWizardReset.ts`, `saas/app/actions/onboardingWizardReset.ts`,
+`saas/app/super-admin/tenants/ResetOnboardingWizardCard.tsx`, with
+`saas/app/super-admin/tenants/page.tsx` wired to render it.
 
 **One more, independent finding caught during the final full-suite pass, same shape as the
 above:** `mobile-georgian-overflow.spec.ts`'s two admin-page tests had no explicit
@@ -631,10 +650,11 @@ Bumped both to 60s. Verified: two clean isolated reruns of the full file.
 
 **Final state:** every one of the originally-handed-off 5 failures, plus 3 further real bugs
 this investigation surfaced along the way, now has a confirmed root cause, a verified fix, and
-at least one clean isolated rerun (most have two). The suite itself is sound. The one remaining
-caveat for the next full, uninterrupted run: reset the onboarding tenant by hand first, and keep
-an eye on dev-server memory if the session runs long — both are known, accepted, already-
-documented operational steps, not open bugs.
+at least one clean isolated rerun (most have two). The suite itself is sound. The onboarding-
+wizard reset is now one click, not a manual query to go find — the only remaining operational
+step for the next full, uninterrupted run is clicking it first, and keeping an eye on dev-server
+memory if the session runs long (a known, already-documented, restart-fixes-it pattern, not an
+open bug). `payment-edit-after-payment.spec.ts` is retired, not a pending decision anymore.
 
 ---
 
@@ -642,8 +662,9 @@ documented operational steps, not open bugs.
 
 Noted so the executing subagent doesn't feel obliged to also do these:
 
-- Automating the onboarding-wizard tenant's manual reset (`playwright/KNOWN-ISSUES.md`
-  calls this accepted, not urgent).
+- ~~Automating the onboarding-wizard tenant's manual reset~~ — done anyway, 2026-10-02,
+  once a session got blocked trying to run the manual SQL directly and Max asked for a button.
+  See Chunk 6's close-out below.
 - The Wine Orders test-debris accumulation (no delete action exists on that screen;
   accepted, periodic-manual-sweep territory per `playwright/KNOWN-ISSUES.md`).
 - Re-examining `clickUntil()`'s retry budget across the whole suite (flagged as an open
