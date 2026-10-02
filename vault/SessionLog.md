@@ -16,7 +16,10 @@ payment columns directly: Individuals true / Companies false / Wine true (correc
 `payment-book-later.spec.ts` would have failed its first assertion ("Individuals OFF at rest") — fixed
 by making the spec set OFF itself and restore the original in `finally`, instead of flipping state by
 hand. Result: **7 passed, 0 failed (5.6m)**, plus two clean isolated reruns of the changed spec. After
-everything: Tenant columns unchanged (verified in DB), no leftover `ZZPaymentE2E` orders. Task 2
+everything: Tenant columns unchanged (verified in DB), no leftover `ZZPaymentE2E` orders. **Then, at Max's explicit request, merged `staging` → `master`** (22 commits, no conflicts, no
+migrations in the delta) as `89b121b`; Vercel production deploy READY, `nikalasmarani.vineworks.ge` serves 200.
+Shipped with it: Orders "Columns" picker only on Table view, super-admin "Reset onboarding wizard tenant"
+and "Clear staging data" buttons, booking-form/content-editor tweaks. Task 2
 (expanding coverage) deliberately not started — waiting for Max to pick chunks from
 [[Plan-ExpandPlaywrightCoverage]]. Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`,
 `playwright/Progress.md`, `playwright/README.md`, `playwright/KNOWN-ISSUES.md`, `vault/SessionLog.md`,
