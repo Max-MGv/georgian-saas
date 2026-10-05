@@ -1046,3 +1046,47 @@ reasoning and the field-by-field rationale: [[DataModel/Reference-SnapshotVsLive
 Invoice History card), `saas/scripts/setup-rls.ts`.
 
 ---
+
+## 32. Admin New Order mirrors the public form's contact blocks — what is shared, what is deliberately not
+
+**What the dependency is:**
+The admin New Order screen (`saas/app/admin/(panel)/orders/new/NewOrderForm.tsx`) and the public
+booking form (`saas/components/BookingForm.tsx`) are two different forms by design — the public one
+carries guest-facing labels, popups, payment wording, lead-time rules and demo events; the admin one
+carries manual rates, extra charges and per-line masterclass prices, and calls `createOrderAdmin`,
+never `createBooking` (calling `createBooking` from admin would risk abandoned/payment-flow orders;
+see #28). Since 2026-10-02 they share three small pieces so the information *looks and behaves* the
+same:
+- **`saas/components/ContactRoleFields.tsx`** — one role's block: title, optional "choose" control,
+  then Name / Phone / Email in one row. Admin renders Contact Person *and* every other role (Guide…)
+  through it. The public form still has its own copy of this markup (`BookingForm.tsx`, the
+  `extraRoles` block and the Contact Person row); if you restyle one, restyle the other, or move the
+  public form onto this component (it was left alone deliberately: ten Playwright specs drive it).
+- **`saas/lib/splitFullName.ts`** — the single Name box → `Order.name` / `Order.surname`. The admin
+  form no longer has First/Last boxes and `createOrderAdmin` no longer requires a surname.
+- **Nationality tags** — same `NationalityPicker`, same gate (`Tenant.enableCompanyNationalityBreakdown`
+  and a company booking); `createOrderAdmin` validates codes against `COUNTRIES` exactly as
+  `createBooking` does.
+Also: the admin company dropdown now lists only booking companies (`isBookingCompany`, not
+`isIndividual`), matching the public form.
+
+**What to remember:**
+- Admin still has **no** blocked-date / hours / lead-time / min-max checks and allows past dates —
+  deliberate for an admin tool. It also sends no emails on create.
+- Tests that fill the admin form use the placeholder `Name` (and the `Choose the Guide` combobox), not
+  positional `textbox.nth()` indexes: `admin-orders.spec.ts`, `payment-admin-order.spec.ts`,
+  `contact-orphan-safety.spec.ts`. Don't reintroduce positional selectors.
+- New admin labels live in `adminT.ts` (`newOrder.contact.name/email/nationality*`) — keep en/ka parity
+  (`npx tsx scripts/check-i18n-parity.ts`).
+
+**Card-payment link display (Order detail → "Send card-payment link"):** the URL is no longer shown as
+text. A `Show QR code` button opens `saas/components/QrCodeDialog.tsx` (Base UI Dialog + `qrcode.react`,
+drawn in the browser — the link carries a payment token, so never send it to an outside QR service).
+Copy link and Email to guest remain. The tier-5 spec `payment-post-payment-extras.spec.ts` reads the
+URL from the dialog's "Open link" `href`. Flitt keeps an unpaid link valid for its default `lifetime`
+of **36 000 s (10 h)** — this app does not set one (`lib/payments/flitt.ts`).
+
+**Files involved:** the three components/libs above, `NewOrderForm.tsx`, `orders/new/page.tsx`,
+`saas/app/actions/orders.ts` (`createOrderAdmin`), `OrderDetail.tsx`, `QrCodeDialog.tsx`, `adminT.ts`.
+
+---

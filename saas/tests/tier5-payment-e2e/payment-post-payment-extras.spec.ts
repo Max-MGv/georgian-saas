@@ -286,9 +286,15 @@ test.describe('Post-payment extras end-to-end (KnownBugs #64, Plan-PostPaymentEx
       // The amount field is prefilled to the full remaining balance — exactly
       // what's being collected here, so no edit needed.
       await page.getByRole('button', { name: 'Generate link', exact: true }).click()
-      const checkoutLinkInput = page.locator('label', { hasText: 'Checkout link' }).locator('xpath=following-sibling::div[1]//input')
-      await expect(checkoutLinkInput).toBeVisible({ timeout: 15_000 })
-      const checkoutUrl = await checkoutLinkInput.inputValue()
+      // The URL is no longer shown as text: a "Show QR code" button opens a dialog with the QR
+      // and an "Open link" link. Read the real URL off that link's href, then close the dialog.
+      await page.getByRole('button', { name: 'Show QR code', exact: true }).click()
+      const qrDialog = page.getByRole('dialog')
+      await expect(qrDialog).toBeVisible({ timeout: 15_000 })
+      await expect(qrDialog.getByRole('img', { name: 'QR code for the card payment link' })).toBeVisible()
+      const checkoutUrl = (await qrDialog.getByRole('link', { name: 'Open link' }).getAttribute('href')) ?? ''
+      await qrDialog.getByRole('button', { name: 'Close', exact: true }).click()
+      await expect(qrDialog).toHaveCount(0)
       expect(checkoutUrl, 'a real Flitt checkout URL should have been generated').toContain('flitt.com')
       mark('8: Chunk 4 — card-link checkout generated for the remaining balance')
 

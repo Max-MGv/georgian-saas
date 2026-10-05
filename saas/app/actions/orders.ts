@@ -16,7 +16,7 @@ import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import type { BookingStage } from '@prisma/client'
-import { countryName } from '@/lib/countries'
+import { COUNTRIES, countryName } from '@/lib/countries'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -27,6 +27,9 @@ import {
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
 import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
+
+// Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
+const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
@@ -243,10 +246,16 @@ export async function createOrderAdmin(data: {
    * re-verifies every `roleId` and `personId` against `companyId` under the tenant first.
    */
   contacts?: IncomingContact[]
+  /**
+   * ISO 3166-1 alpha-2 codes for a COMPANY booking — the same tag set the public form sends
+   * (Plan-CompanyNationality). Unknown codes are dropped; individuals never carry any.
+   */
+  nationalities?: string[]
 }): Promise<{ orderId: string } | { error: string }> {
   const actor = await requireAdmin()
-  if (!data.name.trim()) return { error: 'First name is required.' }
-  if (!data.surname.trim()) return { error: 'Last name is required.' }
+  // `surname` is no longer required: the form has one Name box (like the public one) and
+  // splits it with splitFullName(), so a one-word name arrives with an empty surname.
+  if (!data.name.trim()) return { error: 'Name is required.' }
   if (!data.date) return { error: 'Date is required.' }
   if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
   const splitTotal = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
@@ -315,6 +324,10 @@ export async function createOrderAdmin(data: {
         phone: data.phone?.trim() || null,
         email: data.email?.trim() || null,
         notes: data.notes?.trim() || null,
+        // Same rule as createBooking: company bookings only, valid codes only, no duplicates.
+        nationalities: data.companyId
+          ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
+          : [],
         totalPrice,
         tastingRateSnapshot,
         lunchRateSnapshot,

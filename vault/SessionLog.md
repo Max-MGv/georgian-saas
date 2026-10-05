@@ -8,7 +8,24 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, last) — Full mobile audit, then mobile pass 1 (uncommitted, not on staging)
+## 2026-10-02 (newest, last) — Admin New Order mirrors the public form; QR dialog for the card-payment link (uncommitted)
+
+Max asked (via a research subagent first, read-only) whether the admin New Order form could reuse the
+public form, then said: the guide block was a non-issue, but Contact Person and Guide must look
+coherent like the front end's; check how long a checkout link stays valid; build the QR dialog; add
+nationality to the admin form. Research finding that shaped the build: the public `BookingForm` is
+~1,350 lines of guest-facing logic feeding ten specs, so **no `adminMode` prop** — instead a shared
+`ContactRoleFields` block + `splitFullName`, with nationality and a company-list filter added. Flitt
+docs: `lifetime` default 36 000 s (10 h), max 69 120 000 s; this app sets none. Details: FeatureLog
+#220, MaintenanceNotes #32. Verified at 1000px and 390px, `tsc` clean, i18n parity OK, QR dialog
+checked on a throwaway preview page (deleted). Not committed or pushed — waiting on Max. Open:
+whether to set an explicit `lifetime` for top-up links, a "send confirmation email" option on admin
+orders, pricing admin individual orders from the Individuals tiers (today: typed manual rates,
+default 0), re-opening a pending link's QR after reload.
+
+---
+
+## 2026-10-02 (earlier) — Full mobile audit, then mobile pass 1 (pushed to staging as 15a5d57)
 
 Max asked for a full mobile audit of every page, then said to fix the findings and, on mobile only,
 shrink or remove the cards above Orders and Wine Orders so the orders show without scrolling.

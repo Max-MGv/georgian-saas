@@ -10,6 +10,9 @@ import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import { splitFullName } from '@/lib/splitFullName'
+import ContactRoleFields from '@/components/ContactRoleFields'
+import NationalityPicker from '@/components/NationalityPicker'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -79,11 +82,14 @@ export default function NewOrderForm({
   menuItems,
   masterclassItems,
   contactRoles = [],
+  nationalityEnabled = false,
   locale = 'en',
 }: {
   companies: CompanyOption[]
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  /** Tenant flag `enableCompanyNationalityBreakdown` — the same gate the public form uses. */
+  nationalityEnabled?: boolean
   /**
    * The tenant's per-order roles that apply to bookings, with no people attached. Choices come
    * per company from the resolver and render inline here — this screen has no code step to hang
@@ -101,12 +107,13 @@ export default function NewOrderForm({
   const [date, setDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
 
-  // Contact
-  const [name, setName] = useState('')
-  const [surname, setSurname] = useState('')
+  // Contact — one Name box like the public form; split into name/surname at submit.
+  const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [notes, setNotes] = useState('')
+  // Company-booking nationality tags (Plan-CompanyNationality) — ISO codes.
+  const [nationalities, setNationalities] = useState<string[]>([])
 
   // ── Contact roles ─────────────────────────────────────────────────────────
   // contact_person owns the four fields above — matched on `key`, since labels are
@@ -117,9 +124,7 @@ export default function NewOrderForm({
 
   const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
     if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
-    const parts = person.name.trim().split(' ')
-    setName(parts[0] ?? '')
-    setSurname(parts.slice(1).join(' '))
+    setFullName(person.name.trim())
     if (person.phone) setPhone(person.phone)
     if (person.email) setEmail(person.email)
   }, [contactPersonRole])
@@ -169,6 +174,8 @@ export default function NewOrderForm({
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isCompany = companyId !== ''
+  // Same rule as the public form: a company booking, on a tenant with the flag on.
+  const showNationalityPicker = nationalityEnabled && isCompany
   const selectedCompany = companies.find(c => c.id === companyId) ?? null
   const prices = selectedCompany?.prices ?? []
 
@@ -284,7 +291,7 @@ export default function NewOrderForm({
   function handleCompanyChange(id: string) {
     setCompanyId(id)
     resetContacts()
-    if (!id) return
+    if (!id) { setNationalities([]); return }
     void resolveContacts({ companyId: id }).then(result => {
       if ('error' in result) return
       for (const choices of result.roleChoices) {
@@ -301,12 +308,12 @@ export default function NewOrderForm({
   function buildContacts() {
     if (!isCompany) return undefined
     const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
-    const fullName = `${name} ${surname}`.trim()
-    const all = contactPersonRole && fullName
+    const typedName = fullName.trim()
+    const all = contactPersonRole && typedName
       ? [{
           roleId: contactPersonRole.roleId,
           personId: selectedContacts[contactPersonRole.roleId]?.personId,
-          name: fullName,
+          name: typedName,
           phone: phone.trim() || null,
           email: email.trim() || null,
         }, ...others]
@@ -324,8 +331,7 @@ export default function NewOrderForm({
       visitType,
       date,
       timeSlot,
-      name,
-      surname,
+      ...splitFullName(fullName),
       phone: phone || null,
       email: email || null,
       notes: notes || null,
@@ -345,6 +351,7 @@ export default function NewOrderForm({
       })),
       extras: extras.map(e => ({ label: e.label, amount: e.amount })),
       contacts: buildContacts(),
+      nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
     })
 
     if ('error' in result) {
@@ -354,6 +361,37 @@ export default function NewOrderForm({
     }
 
     router.push(`/admin/orders/${result.orderId}`)
+  }
+
+  // ── Contact-role helpers (shared by every role's ContactRoleFields) ──────────
+  const roleLabels = {
+    name: at('newOrder.contact.name'),
+    phone: at('orderDetail.bookingInfo.phone'),
+    email: at('newOrder.contact.email'),
+  }
+  const roleTitleStyle: React.CSSProperties = { color: C.faint, marginBottom: 6 }
+
+  /** "Choose one of this company's people" dropdown for a role — null when there is nobody to choose. */
+  function rolePicker(role: OrderRole) {
+    const choices = roleChoices.find(r => r.roleId === role.roleId)
+    if (!choices || choices.people.length === 0) return undefined
+    return (
+      <select
+        aria-label={at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}
+        value={selectedContacts[role.roleId]?.personId ?? ''}
+        onChange={e => {
+          const person = choices.people.find(pp => pp.id === e.target.value)
+          if (person) pickFor(person, choices)
+          else clearRole(role.roleId)
+        }}
+        style={inputStyle}
+      >
+        <option value="">{at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}</option>
+        {choices.people.map(pp => (
+          <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
+        ))}
+      </select>
+    )
   }
 
   const vegItems = menuItems.filter(i => i.type === 'VEGETABLE')
@@ -396,6 +434,17 @@ export default function NewOrderForm({
           </select>
         </Field>
 
+        {showNationalityPicker && (
+          <Field label={at('newOrder.contact.nationality')}>
+            <NationalityPicker
+              value={nationalities}
+              onChange={setNationalities}
+              placeholder={at('newOrder.contact.nationalityPlaceholder')}
+              emptyText={at('newOrder.contact.nationalityEmpty')}
+            />
+          </Field>
+        )}
+
         {(
           <Field label={at('orderDetail.guestBreakdown.partySize')}>
             <input
@@ -413,94 +462,62 @@ export default function NewOrderForm({
 
       {/* ── Contact ── */}
       <Card title={at('newOrder.contact.title')}>
-        {/* Choose one of the company's people, inline — no code step on this screen, so the
-            choices render as a dropdown rather than the public forms' popup (plan §4b). Rendered
-            only when there is someone to choose. */}
-        {isCompany && contactPersonRole && (() => {
-          const choices = roleChoices.find(r => r.roleId === contactPersonRole.roleId)
-          if (!choices || choices.people.length === 0) return null
-          const chosenId = selectedContacts[contactPersonRole.roleId]?.personId ?? ''
-          return (
-            <Field label={at('newWineOrder.contact.pickPerson', { role: roleLabel(contactPersonRole) })}>
-              <select
-                value={chosenId}
-                onChange={e => {
-                  const person = choices.people.find(pp => pp.id === e.target.value)
-                  if (person) pickFor(person, choices)
-                  else clearRole(contactPersonRole.roleId)
-                }}
-                style={inputStyle}
-              >
-                <option value="">{at('newWineOrder.contact.pickPersonNone')}</option>
-                {choices.people.map(pp => (
-                  <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
-                ))}
-              </select>
-            </Field>
-          )
-        })()}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <Field label={at('newOrder.contact.firstName')} half>
-            <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label={at('newOrder.contact.lastName')} half>
-            <input value={surname} onChange={e => setSurname(e.target.value)} style={inputStyle} />
+        {/* Every contact role — Contact Person first, then Guide etc. — renders through the same
+            ContactRoleFields block (title, optional "choose" dropdown, then Name / Phone / Email in
+            one row), the layout the public booking form gives each role. They used to be two
+            differently shaped sets of boxes for the same kind of information. The "choose" control
+            is an inline dropdown rather than the public forms' popup: there is no code step on this
+            screen to hang a popup off (Plan-ContactRoles §4b). A role added on the Contact Types
+            screen appears here with no code change. */}
+        <div className="flex flex-col gap-4">
+          <ContactRoleFields
+            title={contactPersonRole ? roleLabel(contactPersonRole) : at('newOrder.contact.title')}
+            titleStyle={roleTitleStyle}
+            picker={contactPersonRole && isCompany ? rolePicker(contactPersonRole) : undefined}
+            name={fullName}
+            phone={phone}
+            email={email}
+            onChange={(field, value) => {
+              if (field === 'name') setFullName(value)
+              else if (field === 'phone') setPhone(value)
+              else setEmail(value)
+            }}
+            labels={roleLabels}
+            inputStyle={inputStyle}
+          />
+
+          {isCompany && extraRoles.map(role => {
+            const chosen = selectedContacts[role.roleId]
+            return (
+              <ContactRoleFields
+                key={role.roleId}
+                title={roleLabel(role)}
+                titleStyle={roleTitleStyle}
+                picker={rolePicker(role)}
+                name={chosen?.name ?? ''}
+                phone={chosen?.phone ?? ''}
+                email={chosen?.email ?? ''}
+                onChange={(field, value) => setTypedContact(role.roleId, {
+                  name: field === 'name' ? value : (chosen?.name ?? ''),
+                  phone: field === 'phone' ? value : chosen?.phone,
+                  email: field === 'email' ? value : chosen?.email,
+                })}
+                labels={roleLabels}
+                inputStyle={inputStyle}
+              />
+            )
+          })}
+
+          <Field label={at('orderDetail.bookingInfo.notes')}>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={2}
+              placeholder={at('orders.editPanel.notesPlaceholder')}
+              style={{ ...inputStyle, resize: 'vertical' }}
+            />
           </Field>
         </div>
-        <Field label={at('orderDetail.bookingInfo.phone')}>
-          <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle} />
-        </Field>
-        <Field label={at('orderDetail.bookingInfo.email')}>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
-        </Field>
-        <Field label={at('orderDetail.bookingInfo.notes')}>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            rows={2}
-            placeholder={at('orders.editPanel.notesPlaceholder')}
-            style={{ ...inputStyle, resize: 'vertical' }}
-          />
-        </Field>
-
-        {/* One block per booking-applicable role other than contact_person — e.g. Guide. A role
-            added on the Contact Types screen appears here with no code change. */}
-        {isCompany && extraRoles.map(role => {
-          const chosen = selectedContacts[role.roleId]
-          const choices = roleChoices.find(r => r.roleId === role.roleId)
-          return (
-            <div key={role.roleId} className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
-              {choices && choices.people.length > 0 && (
-                <Field label={at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}>
-                  <select
-                    value={chosen?.personId ?? ''}
-                    onChange={e => {
-                      const person = choices.people.find(pp => pp.id === e.target.value)
-                      if (person) pickFor(person, choices)
-                      else clearRole(role.roleId)
-                    }}
-                    style={inputStyle}
-                  >
-                    <option value="">{at('newWineOrder.contact.pickPersonNone')}</option>
-                    {choices.people.map(pp => (
-                      <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={`${roleLabel(role)} — ${at('newOrder.contact.firstName')}`} half>
-                  <input value={chosen?.name ?? ''} style={inputStyle}
-                    onChange={e => setTypedContact(role.roleId, { name: e.target.value, phone: chosen?.phone, email: chosen?.email })} />
-                </Field>
-                <Field label={`${roleLabel(role)} — ${at('orderDetail.bookingInfo.phone')}`} half>
-                  <input type="tel" value={chosen?.phone ?? ''} style={inputStyle}
-                    onChange={e => setTypedContact(role.roleId, { name: chosen?.name ?? '', phone: e.target.value, email: chosen?.email })} />
-                </Field>
-              </div>
-            </div>
-          )
-        })}
       </Card>
 
       {/* ── Guest Breakdown & Dishes (company only) ── */}

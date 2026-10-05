@@ -145,13 +145,13 @@ test.describe('Deleting a person must not erase their name from a past order (F2
     //    (plan §4b), so the choice is inline.
     await page.goto('/admin/orders/new');
     await page.getByText('Company', { exact: true }).locator('xpath=following-sibling::*[1]').selectOption({ label: COMPANY_NAME });
-    await expect(page.getByText('Choose the Guide', { exact: true })).toBeVisible({ timeout: 10_000 });
-    await page.getByText('Choose the Guide', { exact: true })
-      .locator('xpath=following-sibling::*[1]')
-      .selectOption({ label: `${GUIDE_NAME} — ${GUIDE_PHONE}` });
+    const guidePicker = page.getByRole('combobox', { name: 'Choose the Guide' });
+    await expect(guidePicker).toBeVisible({ timeout: 10_000 });
+    await guidePicker.selectOption({ label: `${GUIDE_NAME} — ${GUIDE_PHONE}` });
 
-    await page.getByText('First name', { exact: true }).locator('xpath=following-sibling::*[1]').fill(ADMIN_FIRST);
-    await page.getByText('Last name', { exact: true }).locator('xpath=following-sibling::*[1]').fill(ADMIN_LAST);
+    // Contact Person's Name box is the first "Name" on the page (the Guide block's comes after
+    // it). One box now: first word → name, the rest → surname, at submit.
+    await page.getByPlaceholder('Name', { exact: true }).first().fill(`${ADMIN_FIRST} ${ADMIN_LAST}`);
 
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     await page.getByText('Date', { exact: true }).locator('xpath=following-sibling::*[1]').fill(tomorrow);
