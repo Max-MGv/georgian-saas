@@ -768,9 +768,15 @@ model BugReport {
   submitterUserId String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  /// The work item this report belongs to (Plan-Tickets.md). Many reports can point at
+  /// one ticket (duplicates). `status` above stays what the *tenant* sees on /admin/my-reports
+  /// and is kept in sync from the ticket's status by a fixed mapping.
+  ticketId        String?
+  ticket          Ticket?          @relation(fields: [ticketId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([status])
+  @@index([ticketId])
 }
 
 /// Where a booking is in its life, and nothing at all about money (Feature 191).
@@ -903,4 +909,127 @@ enum BugReportSurface {
   PUBLIC_SITE
   ADMIN
   SUPER_ADMIN
+}
+
+// ── Internal tickets (Plan-Tickets.md) ──────────────────────────────────────
+// Super-admin only. Like BugReport these have NO tenant RLS policy by design (the
+// super-admin reads across tenants) — but they are NOT left open: the migration enables RLS
+// with no policy and revokes anon/authenticated, so Supabase's REST API cannot reach them
+// (BugReport was open to it until 2026-10-07, KnownBugs #73). Only the app server (table
+// owner) touches them. `tenantId` is a plain column, no relation, as on BugReport.
+
+/// A unit of work: a bug report from the widget, a feature idea, a task Max or Claude added.
+model Ticket {
+  id          String             @id @default(cuid())
+  /// Human-friendly sequence, shown as T-42 and used in commit messages.
+  number      Int                @unique @default(autoincrement())
+  title       String
+  description String             @default("")
+  type        TicketType         @default(BUG)
+  status      TicketStatus       @default(INBOX)
+  priority    TicketPriority     @default(NORMAL)
+  /// One of a fixed list in code (lib/tickets.ts AREAS); text so adding one needs no migration.
+  area        String?
+  labels      String[]           @default([])
+  tenantId    String?
+  source      TicketSource
+  /// Makes imports re-runnable, e.g. "vault:KnownBugs#41".
+  externalRef String?            @unique
+  closeReason TicketCloseReason?
+  closedAt    DateTime?
+  /// Who created it: "max", "claude", "reporter", "system".
+  createdBy   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  events      TicketEvent[]
+  attachments TicketAttachment[]
+  reports     BugReport[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([type])
+}
+
+/// Append-only timeline of a ticket: comments, status changes, review cards.
+model TicketEvent {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  /// CREATED | COMMENT | STATUS | FIELD | REVIEW | VERIFIED | SENT_BACK | REPORT_LINKED (lib/tickets.ts)
+  kind      String
+  body      String   @default("")
+  fromValue String?
+  toValue   String?
+  /// "max" | "claude" | "system" | "reporter" | an API token's name.
+  actor     String
+  /// Structured review card: { changed, howToTest, leftOver, commit }.
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  /// Path inside the private `ticket-attachments` bucket (or `bug-report-screenshots` for a
+  /// screenshot that came in with a widget report). Never a public URL.
+  storagePath String
+  bucket      String   @default("ticket-attachments")
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+/// Bearer tokens for the /api/tickets API (Claude's access). Only the SHA-256 hash is stored.
+model TicketApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+}
+
+enum TicketType {
+  BUG
+  FEATURE
+  TASK
+  IDEA
+}
+
+enum TicketStatus {
+  INBOX
+  BACKLOG
+  IN_PROGRESS
+  /// Shown as "Ready to test" — work finished, waiting for Max to verify.
+  REVIEW
+  DONE
+  CLOSED
+}
+
+enum TicketPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum TicketSource {
+  WIDGET
+  MANUAL
+  ASSISTANT
+  IMPORT
+}
+
+enum TicketCloseReason {
+  WONT_FIX
+  DUPLICATE
+  NOT_REPRODUCIBLE
+  OBSOLETE
 }
