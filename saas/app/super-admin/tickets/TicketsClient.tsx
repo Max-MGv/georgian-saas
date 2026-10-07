@@ -40,10 +40,17 @@ export default function TicketsClient({
   env: 'PRODUCTION' | 'STAGING' | 'LOCAL'
 }) {
   const router = useRouter()
-  const [items, setItems] = useState(tickets)
-  useEffect(() => setItems(tickets), [tickets])
+  // Optimistic moves are kept as a small overlay on the server's list and thrown away as soon as a
+  // fresh list arrives ("adjust state during render", the pattern React documents for this), instead
+  // of copying props into state from an effect.
+  const [overrides, setOverrides] = useState<Record<string, Partial<TicketListItem>>>({})
+  const [seenTickets, setSeenTickets] = useState(tickets)
+  if (seenTickets !== tickets) { setSeenTickets(tickets); setOverrides({}) }
+  const items = useMemo(() => tickets.map(t => (overrides[t.id] ? { ...t, ...overrides[t.id] } : t)), [tickets, overrides])
 
   const [view, setView] = useState<View>('board')
+  // Reads localStorage, which only exists in the browser: the server renders 'board', then the saved choice is applied once mounted.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setView(loadPref<View>(VIEW_KEY, ['board', 'list'], 'board')), [])
   const changeView = (v: View) => { setView(v); savePref(VIEW_KEY, v) }
 
@@ -96,7 +103,7 @@ export default function TicketsClient({
     if (t.status === to) return
     if (to === 'CLOSED' && !reason) { setClosing(t); setCloseReason('WONT_FIX'); return }
     setError(null)
-    setItems(prev => prev.map(x => x.id === t.id ? { ...x, status: to, closeReason: to === 'CLOSED' ? (reason ?? null) : null, updatedAt: new Date().toISOString() } : x))
+    setOverrides(prev => ({ ...prev, [t.id]: { status: to, closeReason: to === 'CLOSED' ? (reason ?? null) : null, updatedAt: new Date().toISOString() } }))
     const res = await moveTicket(t.number, to, reason ?? null)
     if ('error' in res) setError(res.error)
     router.refresh()

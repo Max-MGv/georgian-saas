@@ -119,8 +119,10 @@ export default function BugReportWidget({
   }
 
   function acceptImage(file: File) {
-    if (!file.type.startsWith('image/')) {
-      setImageError('Please attach an image file.')
+    // Same list the server accepts (it checks the file's real bytes): a HEIC/AVIF/SVG here would
+    // otherwise be refused only after the whole report was sent.
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      setImageError('Please attach a PNG, JPEG, WebP or GIF image.')
       return
     }
     if (file.size > MAX_SCREENSHOT_BYTES) {
@@ -402,7 +404,7 @@ export default function BugReportWidget({
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
                         onChange={handleFileInputChange}
                         className="hidden"
                       />

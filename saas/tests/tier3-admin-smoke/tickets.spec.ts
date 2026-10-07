@@ -95,7 +95,9 @@ test.describe('Internal tickets (super-admin)', () => {
     const card = page.locator('a', { hasText: TITLE }).first();
     await expect(card).toBeVisible({ timeout: 20_000 });
     await card.click();
-    await expect(page.getByLabel('Title')).toHaveValue(TITLE);
+    // Wait for the navigation, and match the label exactly: the board's "New ticket title" box also contains the word Title.
+    await page.waitForURL(/\/super-admin\/tickets\/\d+$/, { timeout: 60_000 });
+    await expect(page.getByLabel('Title', { exact: true })).toHaveValue(TITLE, { timeout: 30_000 });
 
     // Review card: both "what changed" and "how to test" are required.
     await page.getByRole('button', { name: /Mark ready to test/ }).click();
