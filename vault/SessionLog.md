@@ -8,6 +8,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-07 (security) — BugReport table was open to the public Supabase key; locked on dev and production
+
+While getting independent design opinions for the ticket tool (3 context-free sub-agents; security reviewer flagged it), tested and confirmed: with only the public anon key, `BugReport` could be read on production and read/inserted/updated/deleted on dev (KnownBugs #73). Checked all 24 tables — only `BugReport` open. Fixed with migration `20261007120000_lock_bug_report_from_rest_api` (RLS on, no policy, revoke anon/authenticated), applied dev → production, verified (anon 401; app + live production report still work). RLS-Architecture.md corrected. Rule going forward: every new server-only table gets RLS-no-policy + revoke in its own migration — applies to the ticket tables about to be added.
+
+---
+
 ## 2026-10-07 (proposal) — Jira-style bug/feature board for super-admin: planned, not built
 
 Max asked for an internal board to manage all bug/feature requests (he had just added a batch of items to review). Read what exists (widget → `BugReport` row → flat inbox with 3 filters → detail page with a 4-value status dropdown) and wrote [[Plan-BugBoard]]: board + list toggle, real cards (title, priority, area, several screenshots, comments), quick/bulk add, a "Ready to test" column as Max's review queue, an optional Claude script to read/move/comment on cards, 7 additive chunks, 8 questions for Max. **Nothing implemented — awaiting answers (Rule 8).**
