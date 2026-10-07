@@ -8,6 +8,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-07 (later, newest) — Merged staging → master at Max's request; production bug-report failure diagnosed
+
+Max reported the bug/feature report not working on `nikalasmarani.vineworks.ge` (works on staging) and asked to push everything to `master` and re-check. **Order mattered:** tested production *first* (baseline): text-only report OK, report **with a screenshot fails** ("Failed to upload screenshot"). Then merged `staging` → `master` as `3f3b18c` (no migrations in the delta; none of the bug-report code differed), confirmed the new build live (server-action build id changed), retested: **identical failure** → not caused by recent changes. Cause: Storage bucket `bug-report-screenshots` was only ever created in the dev Supabase project; production lists only `wine-photos` (KnownBugs #71; `logos`/`backgrounds` suspected missing too). **Not fixed — awaiting Max's go-ahead** to create the bucket in production. Side effects on production: 3 test reports (2 failed at upload, 1 text-only saved as a row + probable email to max@vineworks.ge), all labelled TEST. Merging shipped the 7 unverified-on-a-real-phone mobile fixes to real admins — Max asked for it explicitly.
+
+---
+
 ## 2026-10-07 (newest) — Seven phone fixes from the annotated screenshots built on `staging` working tree (uncommitted)
 
 Follow-up to 2026-10-05 (screenshots read, reproduced in a headless iPhone-13, plan [[Plan-MobileBugReports-2026-10-05]]).
