@@ -275,6 +275,114 @@ function visitLabel(locale: string, v: string) {
   return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : adminT(locale, 'orders.visit.tastingLunch')
 }
 
+// ── Phone order card ───────────────────────────────────────────────────
+//
+// Built from the "Grid of cards" option of the 2026-09-16 Booking Views
+// mockup (Max, 2026-10-05: "more readable" than the old card). Layout only -
+// fonts and colours stay the tenant's own. Status is a plain pill here: it
+// is changed on the order's own page, not from the list, so a tap anywhere on
+// the card means one thing - open the order.
+
+const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const
+
+function GuestsIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
+function WineGlassIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M8 22h8" /><path d="M12 15v7" /><path d="M7 3h10l-.6 6.2a4.4 4.4 0 0 1-8.8 0z" />
+    </svg>
+  )
+}
+function ForkIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M7 2v9M4 2v5a3 3 0 0 0 6 0V2M7 11v11" /><path d="M18 2c-2 2-3 5-3 8h3v12" />
+    </svg>
+  )
+}
+
+function MobileOrderCard({ order, locale, onOpen }: { order: Order; locale: string; onOpen: () => void }) {
+  const at = (key: string) => adminT(locale, key)
+  const cfg = styleFor(order.stage)
+  const isCompany = order.bookingType === 'COMPANY'
+  const contact = `${order.name} ${order.surname}`.trim()
+  const companyName = order.company?.name ?? (order.requestedCompanyName ? `${order.requestedCompanyName} (new)` : null)
+  const title = isCompany && companyName ? companyName : contact
+  const sub = [isCompany && companyName ? contact : null, visitLabel(locale, order.visitType)].filter(Boolean).join(' · ')
+  const hasMasterclass = order.masterclassLines.length > 0
+  const hasFood = Boolean(order.hotDishVegetable || order.hotDishMeat || order.foodNotes)
+  const pay = paymentStateOf(order)
+  const balance = order.paidAt != null ? balanceDue(order.totalPrice, order.paymentsSettledTotal) : 0
+
+  const chip = (text: string, bg: string, color: string) => (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: bg, color }}>{text}</span>
+  )
+
+  return (
+    <div
+      onClick={onOpen}
+      role="link"
+      className="rounded-xl border p-4 cursor-pointer active:bg-amber-50"
+      style={{ backgroundColor: '#ffffff', borderColor: C.border, boxShadow: '0 1px 2px rgba(28,16,8,0.04)' }}
+    >
+      {/* Name + status */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{title}</p>
+          <p className="text-sm truncate" style={{ color: C.faint }}>{sub}</p>
+        </div>
+        <span
+          className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
+          style={{ backgroundColor: cfg.bg, color: cfg.color }}
+        >
+          {labelFor(locale, order.stage)}
+        </span>
+      </div>
+
+      {/* When + type */}
+      <div className="flex items-center justify-between gap-3 mt-2">
+        <p className="text-sm" style={{ color: C.muted }}>{formatDate(order.date)} · {order.timeSlot}</p>
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0" style={{
+          backgroundColor: isCompany ? '#fef3c7' : '#f0fdf4',
+          color: isCompany ? '#92400e' : '#166534',
+        }}>
+          {isCompany ? at('orders.type.company') : at('orders.type.individual')}
+        </span>
+      </div>
+
+      {/* Guests, extras, payment, total */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+        <span className="inline-flex items-center gap-1 text-sm" style={{ color: C.muted }} title={at('orders.col.guests')}>
+          <GuestsIcon />{order.guestCount}
+        </span>
+        {hasMasterclass && (
+          <span className="inline-flex items-center" style={{ color: C.muted }} title={at('orders.col.masterclass')} aria-label={at('orders.col.masterclass')}>
+            <WineGlassIcon />
+          </span>
+        )}
+        {hasFood && (
+          <span className="inline-flex items-center" style={{ color: C.muted }} title={at('orders.col.food')} aria-label={at('orders.col.food')}>
+            <ForkIcon />
+          </span>
+        )}
+        {pay === 'paid' && chip(`₾✓ ${at('orders.status.paid')}`, '#dcfce7', '#166534')}
+        {pay === 'invoiced' && chip(at('orders.status.invoiceSent'), '#fef3c7', '#92400e')}
+        {balance > 0 && chip(`⚠ ${at('orders.balanceDue')}: ${formatTetri(asTetri(balance), { decimals: true })}`, '#fef3c7', '#92400e')}
+        <span className="ml-auto font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1.05rem' }}>
+          {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // `timeZone` is pinned deliberately. This is a client component, so it renders
 // once on the server and again at hydration — and without a fixed zone those two
 // runs use *different* ones (UTC on Vercel, the viewer's in the browser). A date
@@ -888,82 +996,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   return (
     <>
       {/* ── Mobile card list (hidden on md+) ──────────────────── */}
-      <div className="flex flex-col gap-2 mt-4 md:hidden">
+      <div className="flex flex-col gap-3 mt-4 md:hidden">
         {orders.length === 0 && (
           <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         )}
-        {orders.map(order => {
-          const cfg = styleFor(order.stage)
-          return (
-            <div
-              key={order.id}
-              className="rounded-xl border overflow-hidden"
-              style={{ backgroundColor: '#ffffff', borderColor: C.border, borderLeftWidth: 4, borderLeftColor: cfg.color }}
-            >
-              <div
-                onClick={() => router.push(`/admin/orders/${order.id}`)}
-                className="p-4 cursor-pointer active:bg-amber-50"
-              >
-                {/* Name + status badge */}
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="font-semibold inline-flex items-center gap-1.5" style={{ color: C.text, fontSize: '0.9375rem' }}>
-                    {order.name} {order.surname}
-                    <PaymentMark order={order} locale={locale} />
-                    <BalanceDueMark order={order} locale={locale} />
-                  </span>
-                  {/* The click handler is on this wrapper, not the pill, so
-                      padding here buys hit area for free: the badge still reads
-                      as a 26px badge, the thumb gets 42px. Vertical only — the
-                      whole card is a link to the order, so widening sideways
-                      would turn taps meant for the guest's name into status
-                      changes. Card list = the phone view of /admin/orders. */}
-                  <div
-                    className="relative flex-shrink-0 py-2 -my-2"
-                    data-status-menu
-                    onClick={e => { e.stopPropagation(); toggleStatusMenu(order.id, e) }}
-                  >
-                    <button
-                      className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
-                      style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}33` }}
-                    >
-                      {labelFor(locale, order.stage)} ▾
-                    </button>
-                    {/* Menu itself renders in the shared portal at the bottom of this
-                        component (#62) — same trigger→toggleStatusMenu→statusMenuRect
-                        path the desktop table/list/board views use, so it can't be
-                        clipped by this card's own overflow-hidden. */}
-                  </div>
-                </div>
-
-                {/* Date / time / guests */}
-                <p className="text-sm mb-0.5" style={{ color: C.muted }}>
-                  {formatDate(order.date)} · {order.timeSlot}
-                </p>
-                <p className="text-sm mb-0.5" style={{ color: C.muted }}>
-                  {order.guestCount} {order.guestCount === 1 ? at('orders.guest.singular') : at('orders.guest.plural')} · {visitLabel(locale, order.visitType)}
-                </p>
-                {(order.company || order.requestedCompanyName) && (
-                  <p className="text-sm" style={{ color: order.requestedCompanyName && !order.company ? '#92400e' : C.faint }}>
-                    {order.company?.name ?? `${order.requestedCompanyName} (new)`}
-                  </p>
-                )}
-
-                {/* Footer row: total + arrow */}
-                <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
-                  <span className="font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1rem' }}>
-                    {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
-                  </span>
-                  <span className="text-xs flex items-center gap-1" style={{ color: C.faint }}>
-                    {at('orders.viewDetails')}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18l6-6-6-6"/>
-                    </svg>
-                  </span>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {orders.map(order => (
+          <MobileOrderCard key={order.id} order={order} locale={locale} onOpen={() => router.push(`/admin/orders/${order.id}`)} />
+        ))}
       </div>
 
       {/* ── Desktop table (hidden on mobile) ──────────────────── */}

@@ -20,6 +20,7 @@ import {
 } from '@/lib/statusFlow'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
 
 const C = {
@@ -107,13 +108,20 @@ function flowStateOf(o: WineOrder): FlowState {
 const isPaid = (o: WineOrder) => o.paidAt != null
 
 /**
- * Off the working list: delivered or cancelled. Reads the stage, so a delivered
- * order that has not been paid for still dims - being owed money is not a
- * reason to keep it in the winery's packing queue, it is a reason for it to
- * show up under the Unpaid filter.
+ * Off the working list: finished on BOTH axes, or cancelled.
+ *
+ * Delivered is only half of "done". A delivered order that has not been paid
+ * for is the one the winery is still chasing - the normal B2B state, since
+ * wine goes out first and the invoice is settled later - so it must stay fully
+ * readable, not fade like something closed (Max, 2026-10-05: it looked
+ * disabled). It fades once it is paid too. It was never in the packing queue
+ * either way: Pack mode already excludes Delivered orders.
  */
 const isInactiveOrder = (o: WineOrder) =>
-  o.stage === 'DELIVERED' || o.stage === CANCELLED
+  o.stage === CANCELLED || (o.stage === 'DELIVERED' && isPaid(o))
+
+/** Delivered but not yet paid: money is owed. */
+const isOwed = (o: WineOrder) => o.stage === 'DELIVERED' && !isPaid(o)
 
 function itemLabel(i: WineOrderItem) {
   return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot} × ${i.quantity} bottle${i.quantity !== 1 ? 's' : ''}`
@@ -183,6 +191,94 @@ function PaidMark({ locale }: { locale: string }) {
     >
       ₾✓
     </span>
+  )
+}
+
+/** The amber counterpart to PaidMark: delivered, money still owed. */
+function OwedMark({ locale }: { locale: string }) {
+  return (
+    <span
+      title={adminT(locale, 'wineOrders.status.unpaid')}
+      className="inline-flex items-center rounded-full font-bold flex-shrink-0 whitespace-nowrap"
+      style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', padding: '0.05rem 0.4rem', lineHeight: 1.5 }}
+    >
+      {adminT(locale, 'wineOrders.status.unpaid')}
+    </span>
+  )
+}
+
+/** Paid mark, owed mark, or nothing - one decision for every view. */
+function PaymentMark({ order, locale }: { order: WineOrder; locale: string }) {
+  if (isPaid(order)) return <PaidMark locale={locale} />
+  if (isOwed(order)) return <OwedMark locale={locale} />
+  return null
+}
+
+/**
+ * True on a phone-width screen. Used where the phone gets a different
+ * component rather than a restyled one, so only one of the two is in the DOM
+ * (two copies would double every text a test or a screen reader looks up).
+ * Starts false so the server render matches desktop.
+ */
+function useIsPhone() {
+  const [phone, setPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    setPhone(mq.matches)
+    const onChange = () => setPhone(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return phone
+}
+
+/**
+ * The phone's wine-order card: the same compact layout as the phone booking
+ * card (Max, 2026-10-05) - who, what, where it stands, how much. Wine orders
+ * have no detail page, so tapping opens the full card in place, which is where
+ * the flow-line (status changes) lives.
+ */
+function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; locale: string; dim: boolean; onOpen: () => void }) {
+  const at = (key: string) => adminT(locale, key)
+  const sc = styleFor(order.stage)
+  const bottles = order.wineItems.reduce((sum, i) => sum + i.quantity, 0)
+  const wines = order.wineItems.length
+  const paid = isPaid(order)
+  return (
+    <div
+      onClick={onOpen}
+      role="button"
+      className="rounded-xl border p-4 cursor-pointer active:bg-amber-50"
+      style={{
+        backgroundColor: '#ffffff', borderColor: C.border, boxShadow: '0 1px 2px rgba(28,16,8,0.04)',
+        opacity: dim ? 0.55 : 1, transition: 'opacity 0.45s ease',
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}</p>
+          <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
+        </div>
+        <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
+          style={{ backgroundColor: sc.pill, color: sc.pillText }}>
+          {labelFor(locale, order.stage)}
+        </span>
+      </div>
+      <p className="text-sm mt-2 truncate" style={{ color: C.muted }}>
+        {wines} {wines === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+        {paid
+          ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: '#dcfce7', color: '#166534' }}>₾✓ {at('orders.status.paid')}</span>
+          : isOwed(order) && <OwedMark locale={locale} />}
+        {order.discountPercent != null && order.discountPercent > 0 && (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>−{order.discountPercent}%</span>
+        )}
+        <span className="ml-auto font-bold" style={{ color: order.displayTotal != null ? C.wine : C.faint, fontSize: '1.05rem' }}>
+          {order.displayTotal != null ? `${order.totalEstimated ? '~' : ''}${formatTetri(asTetri(order.displayTotal))}` : '—'}
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -463,24 +559,40 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         {PAYMENT_FILTER_CODES.map(code => pill(code))}
 
       </div>
-      <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-center`}>
-        <input
-          type="text"
-          placeholder={at('wineOrders.filter.searchPlaceholder')}
-          value={search}
-          onChange={e => onSearch(e.target.value)}
-          className="rounded-lg border px-3 py-1.5 text-sm w-full md:w-auto"
-          style={{ borderColor: C.border, color: C.text, backgroundColor: '#fff', minWidth: 160 }}
-        />
-        <input type="date" value={dateFrom} onChange={e => onDateFrom(e.target.value)} title={at('orders.filters.from')}
-          className="rounded-lg border px-3 py-1.5 text-sm"
-          style={{ borderColor: C.border, color: dateFrom ? C.text : C.faint, backgroundColor: '#fff' }}
-        />
-        <span className="text-xs" style={{ color: C.faint }}>→</span>
-        <input type="date" value={dateTo} onChange={e => onDateTo(e.target.value)} title={at('orders.filters.to')}
-          className="rounded-lg border px-3 py-1.5 text-sm"
-          style={{ borderColor: C.border, color: dateTo ? C.text : C.faint, backgroundColor: '#fff' }}
-        />
+      <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-end`}>
+        <div className="relative w-full md:w-auto">
+          {/* Magnifier so the bar reads as a search field at a glance on a phone. */}
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.faint }} aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder={at('wineOrders.filter.searchPlaceholder')}
+            value={search}
+            onChange={e => onSearch(e.target.value)}
+            className="rounded-lg border py-1.5 text-sm w-full md:w-auto"
+            style={{ borderColor: C.border, color: C.text, backgroundColor: '#fff', minWidth: 160, paddingLeft: '2rem', paddingRight: '0.75rem' }}
+          />
+        </div>
+        {/* From / To: an empty native date field is a blank box on iPhone Safari
+            (no dd/mm/yyyy hint, and `title` never shows on touch). The shared
+            DateInput gives a DD/MM/YYYY hint + calendar icon, and the small
+            label says which end of the range each box is. */}
+        <div className="flex items-end gap-2 w-full md:w-auto">
+          <div className="flex-1 min-w-0 md:flex-none md:w-40">
+            <span className="block text-xs mb-0.5" style={{ color: C.faint }}>{at('orders.filters.from')}</span>
+            <DateInput value={dateFrom} onChange={onDateFrom}
+              className="rounded-lg border py-1.5 text-sm"
+              style={{ borderColor: C.border, color: dateFrom ? C.text : C.faint, backgroundColor: '#fff', width: '100%', minWidth: 0, paddingLeft: '0.75rem' }} />
+          </div>
+          <span className="text-xs pb-2" style={{ color: C.faint }}>→</span>
+          <div className="flex-1 min-w-0 md:flex-none md:w-40">
+            <span className="block text-xs mb-0.5" style={{ color: C.faint }}>{at('orders.filters.to')}</span>
+            <DateInput value={dateTo} onChange={onDateTo}
+              className="rounded-lg border py-1.5 text-sm"
+              style={{ borderColor: C.border, color: dateTo ? C.text : C.faint, backgroundColor: '#fff', width: '100%', minWidth: 0, paddingLeft: '0.75rem' }} />
+          </div>
+        </div>
         {hasExtra && (
           <button onClick={() => { onSearch(''); onDateFrom(''); onDateTo('') }}
             className="text-xs px-2.5 py-1.5 rounded-lg border"
@@ -591,7 +703,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                       >
                         {labelFor(locale, order.stage)} ▾
                       </button>
-                      {isPaid(order) && <PaidMark locale={locale} />}
+                      <PaymentMark order={order} locale={locale} />
                     </div>
                     {statusMenuId === order.id && (
                       <div
@@ -764,7 +876,7 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         <div className="font-semibold truncate" style={{ color: C.text, fontSize: '0.8125rem' }} title={order.businessName}>
                           {order.businessName}
                         </div>
-                        {isPaid(order) && <PaidMark locale={locale} />}
+                        <PaymentMark order={order} locale={locale} />
                       </div>
                       <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }}>
                         {order.wineItems.length} {order.wineItems.length === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
@@ -874,7 +986,74 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
   }
 
   return (
-    <div className="rounded-xl border overflow-x-auto" style={{ borderColor: C.border }}>
+    <>
+    {/* Phone: one tappable row per order. The 520px-wide table below is a
+        desktop layout - on a phone it either scrolled sideways or, beside the
+        summary panel, collapsed to a column of empty checkboxes. */}
+    <div className="md:hidden rounded-xl border overflow-hidden" style={{ borderColor: C.border, backgroundColor: '#fff' }}>
+      <label className="flex items-center gap-3 px-4 py-3 border-b text-sm cursor-pointer" style={{ borderColor: C.border, backgroundColor: C.bg, color: C.muted }}>
+        <input
+          type="checkbox"
+          checked={allChecked}
+          ref={el => { if (el) el.indeterminate = someChecked }}
+          onChange={e => onToggleAll(e.target.checked)}
+          style={{ width: 18, height: 18 }}
+        />
+        {at('packing.selectAll')}
+      </label>
+      {orders.map((order, i) => {
+        const bottles = order.wineItems.reduce((sum, item) => sum + item.quantity, 0)
+        const sc = styleFor(order.stage)
+        const isSelected = selected.has(order.id)
+        return (
+          <div
+            key={order.id}
+            onClick={() => onToggle(order.id)}
+            className="flex items-start gap-3 px-4 py-3 select-none cursor-pointer"
+            style={{
+              borderBottom: i === orders.length - 1 ? 'none' : `1px solid ${C.border}`,
+              borderLeft: `4px solid ${sc.border}`,
+              backgroundColor: isSelected ? '#fffbf5' : '#ffffff',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggle(order.id)}
+              onClick={e => e.stopPropagation()}
+              aria-label={order.businessName}
+              className="mt-0.5 flex-shrink-0"
+              style={{ width: 18, height: 18 }}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold" style={{ color: C.text }}>{order.businessName}</p>
+                <span className="font-bold flex-shrink-0 whitespace-nowrap" style={{ color: C.wine }}>
+                  {bottles} <span className="text-xs font-medium">{at('packing.bottlesTotal')}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {order.wineItems.map(item => (
+                  <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
+                    style={{ borderColor: C.border, color: C.muted, backgroundColor: 'var(--site-bg)' }}>
+                    {itemLabel(item)}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2">
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                  style={{ backgroundColor: sc.pill, color: sc.pillText }}>
+                  {labelFor(locale, order.stage)}
+                </span>
+                <PaymentMark order={order} locale={locale} />
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+
+    <div className="hidden md:block rounded-xl border overflow-x-auto" style={{ borderColor: C.border }}>
       <table className="w-full text-sm border-collapse" style={{ minWidth: 520 }}>
         <thead>
           <tr style={{ backgroundColor: C.bg, borderBottom: `1px solid ${C.border}` }}>
@@ -932,7 +1111,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                       style={{ backgroundColor: sc.pill, color: sc.pillText }}>
                       {labelFor(locale, order.stage)}
                     </span>
-                    {isPaid(order) && <PaidMark locale={locale} />}
+                    <PaymentMark order={order} locale={locale} />
                   </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted, fontSize: '0.8rem' }}>
@@ -944,6 +1123,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -962,6 +1142,9 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const isPhone = useIsPhone()
+  // Phone Cards mode: which compact card is opened into the full card.
+  const [openCardId, setOpenCardId] = useState<string | null>(null)
   const [boxMode, setBoxMode] = useState<BoxMode>('six')
   const [recentlyInactive, setRecentlyInactive] = useState<Set<string>>(new Set())
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
@@ -1158,6 +1341,9 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
             const sc = styleFor(order.stage)
             const isPending = pendingChange?.orderId === order.id
             const isSelected = selected.has(order.id)
+            if (isPhone && openCardId !== order.id && !isPending) {
+              return <CompactWineCard key={order.id} order={order} locale={locale} dim={isInactive} onOpen={() => setOpenCardId(order.id)} />
+            }
             return (
               <div
                 key={order.id}
@@ -1171,6 +1357,15 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                 {/* Col 1 — name, wines, address */}
                 <div className="flex-1 min-w-0 p-5 flex flex-col justify-between">
                   <div>
+                    {isPhone && (
+                      <button
+                        onClick={() => setOpenCardId(null)}
+                        className="float-right text-xs px-3 py-2 -mt-2 -mr-2 rounded-lg border font-medium"
+                        style={{ borderColor: C.border, color: C.muted, backgroundColor: '#fff' }}
+                      >
+                        {at('packing.details')} ▾
+                      </button>
+                    )}
                     <p className="font-bold mb-1" style={{ color: C.text }}>{order.businessName}</p>
                     <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
@@ -1203,6 +1398,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                       −{order.discountPercent}%
                     </span>
                   )}
+                  {isOwed(order) && <OwedMark locale={locale} />}
                   <p>&#128100; {order.contactName}</p>
                   <p>&#128222; {order.contactPhone}</p>
                   <button

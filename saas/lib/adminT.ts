@@ -296,6 +296,8 @@ const en: Translations = {
   // Settings — Closed Days
   'settings.closedDays.sectionTitle': 'Closed Days',
   'settings.closedDays.sectionHint': 'Dates when the winery is closed. Customers cannot book these dates.',
+  'settings.closedDays.dateLabel': 'Date',
+  'settings.closedDays.reasonLabel': 'Reason',
   'settings.closedDays.reasonPh': 'Reason (optional)',
   'settings.closedDays.blockDate': 'Block date',
   'settings.closedDays.none': 'No closed days set.',
@@ -756,6 +758,9 @@ const en: Translations = {
   'packing.boxesNeeded': 'boxes needed',
   'packing.companiesPackedSeparately': '(companies packed separately)',
   'packing.noOrdersSelected': 'No orders selected.',
+  'packing.selectHint': 'Tap orders to build a packing summary.',
+  'packing.details': 'Details',
+  'packing.selectAll': 'Select all',
   'packing.sheetTitle': 'Wine Order Packing Sheet',
   'packing.boxModeLabel': 'Box mode',
   'packing.order.singular': 'order',
@@ -843,6 +848,8 @@ const en: Translations = {
   'orders.calendar.oct': 'October',
   'orders.calendar.nov': 'November',
   'orders.calendar.dec': 'December',
+  'orders.calendar.tapHint': 'Tap a day to preview its bookings.',
+  'orders.calendar.viewInTable': 'View in table',
 
   // Wines page
   'wines.pageTitle': 'Wine Listings',
@@ -1573,6 +1580,8 @@ const ka: Translations = {
   // Settings — Closed Days
   'settings.closedDays.sectionTitle': 'დახურული დღეები',
   'settings.closedDays.sectionHint': 'თარიღები, როდესაც მარანი დახურულია. მომხმარებლებს არ შეუძლიათ ამ თარიღებზე ჯავშნის გაკეთება.',
+  'settings.closedDays.dateLabel': 'თარიღი',
+  'settings.closedDays.reasonLabel': 'მიზეზი',
   'settings.closedDays.reasonPh': 'მიზეზი (არასავალდებულო)',
   'settings.closedDays.blockDate': 'თარიღის დაბლოკვა',
   'settings.closedDays.none': 'დახურული დღეები არ არის მითითებული.',
@@ -2035,6 +2044,9 @@ const ka: Translations = {
   'packing.boxesNeeded': 'ყუთი საჭირო',
   'packing.companiesPackedSeparately': '(კომპანიები ცალ-ცალკე იფუთება)',
   'packing.noOrdersSelected': 'შეკვეთა არჩეული არ არის.',
+  'packing.selectHint': 'შეეხეთ შეკვეთებს შეფუთვის შეჯამების შესადგენად.',
+  'packing.details': 'დეტალები',
+  'packing.selectAll': 'ყველას არჩევა',
   'packing.sheetTitle': 'ღვინის შეკვეთის შეფუთვის ფურცელი',
   'packing.boxModeLabel': 'ყუთის რეჟიმი',
   'packing.order.singular': 'შეკვეთა',
@@ -2121,6 +2133,8 @@ const ka: Translations = {
   'orders.calendar.oct': 'ოქტომბერი',
   'orders.calendar.nov': 'ნოემბერი',
   'orders.calendar.dec': 'დეკემბერი',
+  'orders.calendar.tapHint': 'შეეხეთ დღეს მისი ჯავშნების სანახავად.',
+  'orders.calendar.viewInTable': 'ცხრილში ნახვა',
 
   // Wines page
   'wines.pageTitle': 'ღვინოების ჩამონათვალი',

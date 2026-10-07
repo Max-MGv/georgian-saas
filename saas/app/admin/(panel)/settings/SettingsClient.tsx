@@ -7,6 +7,7 @@ import { uploadTenantLogo, uploadTenantFavicon, saveTenantLogo, saveTenantFavico
 import { updatePaymentCredentials, clearPaymentSecretKey, updatePaymentSectionToggles } from '@/app/actions/paymentCredentials'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
+import DateInput from '@/components/DateInput'
 import { parseWeeklyHours, defaultWeeklyHours, type WeeklyHours } from '@/lib/bookingHours'
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
@@ -779,12 +780,16 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           {paymentRows.map(({ key, label, placeholder }) => {
             const isEditing = paymentEditing === key
             return (
-              <div key={key} className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{label}</label>
-                <div className="flex-1 flex items-center gap-2">
+              <div key={key} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                {/* Phone: label above the value. Side by side, the 12rem label left
+                    ~140px for the value, and a long IBAN pushed the row (and its
+                    edit pencil) past the card edge. min-w-0 lets the value shrink
+                    inside the row instead of widening it. */}
+                <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{label}</label>
+                <div className="flex-1 min-w-0 flex items-center gap-2">
                   {isEditing ? (
                     <input
-                      style={inputStyle}
+                      style={{ ...inputStyle, minWidth: 0 }}
                       value={paymentFields[key]}
                       placeholder={placeholder}
                       autoFocus
@@ -792,7 +797,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       onKeyDown={e => { if (e.key === 'Escape') setPaymentEditing(null) }}
                     />
                   ) : (
-                    <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
+                    <div style={{ ...inputStyle, flex: 1, minWidth: 0, cursor: 'default', overflowWrap: 'anywhere' }}>
                       {paymentFields[key]
                         ? <span style={{ color: C.text }}>{paymentFields[key]}</span>
                         : <span style={{ color: C.faint, fontStyle: 'italic' }}>{placeholder}</span>
@@ -1081,8 +1086,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           </div>
 
           {!leadSplit ? (
-            <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.single')}</label>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+              <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.single')}</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number" min={0} max={168}
@@ -1099,8 +1104,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tasting')}</label>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tasting')}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={0} max={168}
@@ -1115,8 +1120,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tastingLunch')}</label>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.leadTime.tastingLunch')}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={0} max={168}
@@ -1143,8 +1148,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('settings.visitDuration.sectionHint')}</p>
         </div>
         <div className="divide-y" style={{ borderColor: C.border }}>
-          <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-            <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tasting')}</label>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tasting')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={0} max={600} step={15}
@@ -1159,8 +1164,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
-            <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tastingLunch')}</label>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3" style={{ backgroundColor: C.bg }}>
+            <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.visitDuration.tastingLunch')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={0} max={600} step={15}
@@ -1191,9 +1196,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
           </div>
 
           {!hoursCustom ? (
-            <div className="flex items-center gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
-              <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at('settings.workingHours.dailyHours')}</label>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
+              <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.workingHours.dailyHours')}</label>
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="time"
                   style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
@@ -1216,8 +1221,8 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             </div>
           ) : (
             weeklyDays.map((day, i) => (
-              <div key={i} className="flex items-center gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
-                <label className="text-sm w-48 flex-shrink-0" style={{ color: C.muted }}>{at(`settings.workingHours.day.${WEEKDAY_KEYS[i]}`)}</label>
+              <div key={i} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
+                <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at(`settings.workingHours.day.${WEEKDAY_KEYS[i]}`)}</label>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-xs" style={{ color: C.faint }}>
                     <input
@@ -1540,20 +1545,25 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
         </div>
         <div className="px-5 py-4 space-y-4" style={{ backgroundColor: C.bg }}>
           {/* Add form */}
-          <div className="flex gap-2 flex-wrap">
-            <input
-              type="date"
-              style={{ ...inputStyle, width: 'auto' }}
-              value={newBlockDate}
-              onChange={e => setNewBlockDate(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder={at('settings.closedDays.reasonPh')}
-              style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-              value={newBlockReason}
-              onChange={e => setNewBlockReason(e.target.value)}
-            />
+          {/* The date box carries a label + DD/MM/YYYY hint: an empty native date
+              field is a blank, unexplained box on iPhone Safari. */}
+          <div className="flex gap-2 flex-wrap items-end">
+            <div style={{ width: 170 }}>
+              <span className="block text-xs mb-0.5" style={{ color: C.faint }}>{at('settings.closedDays.dateLabel')}</span>
+              <DateInput value={newBlockDate} onChange={setNewBlockDate} style={inputStyle} />
+            </div>
+            {/* Own full-width row on phones: beside the Georgian "Block date" button
+                (a long word) the field shrank until its placeholder was cut off. */}
+            <div className="flex-1 basis-full sm:basis-0" style={{ minWidth: 140 }}>
+              <span className="block text-xs mb-0.5" style={{ color: C.faint }}>{at('settings.closedDays.reasonLabel')}</span>
+              <input
+                type="text"
+                placeholder={at('settings.closedDays.reasonPh')}
+                style={inputStyle}
+                value={newBlockReason}
+                onChange={e => setNewBlockReason(e.target.value)}
+              />
+            </div>
             <button
               type="button"
               onClick={handleAddBlockedDate}

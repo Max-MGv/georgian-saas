@@ -8,7 +8,26 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, last) — Admin New Order mirrors the public form; QR dialog for the card-payment link (uncommitted)
+## 2026-10-07 (newest) — Seven phone fixes from the annotated screenshots built on `staging` working tree (uncommitted)
+
+Follow-up to 2026-10-05 (screenshots read, reproduced in a headless iPhone-13, plan [[Plan-MobileBugReports-2026-10-05]]).
+Max answered the plan's questions (tenant font wins; no tappable pill on the phone order card but a matching compact view for
+wine orders; Companies icons phone-only; Pack mostly look-only but Print kept; calendar panel under the grid; fade only when
+delivered AND paid; search icon my call) and said go. **Built** (FeatureLog #221, KnownBugs #66–#70,
+[[Feature 221 - Mobile bug reports 2026-10-05]], MaintenanceNotes §33): Settings rows stack on phones (also Lead Time / Visit
+Duration / Working Hours at 320px); shared `DateInput` + labels for Closed Days and Wine Orders filters, magnifier in search;
+Pack = phone list + sticky bottom bar; Orders calendar tap-to-select with the day's bookings under the grid; new phone order
+card from the "Grid of cards" reference; compact wine-order card that opens in place; delivered-unpaid no longer faded, amber
+**Unpaid** chip; Companies icon buttons. Verified in headless phone emulation at 390 and 320 px and desktop 1280 (measurements
+in the feature note, screenshots in `vault/BugReports-2026-10-05/final/`), `tsc` clean, i18n parity 1147/1147. Not verified:
+real iPhone Safari, Georgian wording (drafted). **Double-check pass before commit** (screenshots of every changed screen, EN + KA, 390/320/1280 px — `vault/BugReports-2026-10-05/final/`) found and fixed two defects in this work: the Pack bar (sticky → fixed; Print was off-screen when opened) and the Georgian Closed Days placeholder cut-off; 7 related Playwright specs pass. **Committed to `staging` (not pushed, not merged) — waiting for Max's phone check** (checklist in
+[[MyToDo]]). Side findings: dev server 404'd on every route until `.next` was deleted and it was restarted; an old claim in the
+code that "being owed money is not a reason to keep an order in the packing queue" was reversed on purpose (Pack already excludes
+Delivered).
+
+---
+
+## 2026-10-02 (earlier) — Admin New Order mirrors the public form; QR dialog for the card-payment link (uncommitted)
 
 Max asked (via a research subagent first, read-only) whether the admin New Order form could reuse the
 public form, then said: the guide block was a non-issue, but Contact Person and Guide must look

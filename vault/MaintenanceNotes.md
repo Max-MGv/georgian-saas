@@ -423,6 +423,9 @@ their visual size**, because making the visual bigger would have been wrong in e
 | `SettingsClient.tsx` `Toggle` | 44x24 | 44x39 | same pattern, `inset-x-0 -inset-y-2` |
 | `OrdersTable.tsx` card-list status pill | 87x26 | 87x41 | `py-2 -my-2` on the wrapper `div`, which already owned the `onClick` |
 
+> **Update 2026-10-07:** the phone card's status pill (row above) was removed — `MobileOrderCard` shows a plain pill and the whole
+> card opens the order. The row is kept for the desktop-style wrapper pattern only; do not look for it on the phone card.
+
 **Why it bites:** an audit script that reads each element's own rect reports the **old** numbers
 for all three and looks like a regression that was never fixed — or worse, invites someone to
 "fix" it again by enlarging the visual. Verify these with `document.elementFromPoint`, walking
@@ -1090,3 +1093,23 @@ of **36 000 s (10 h)** — this app does not set one (`lib/payments/flitt.ts`).
 `saas/app/actions/orders.ts` (`createOrderAdmin`), `OrderDetail.tsx`, `QrCodeDialog.tsx`, `adminT.ts`.
 
 ---
+
+---
+
+## 33. Phone and desktop are different components in four places — change both halves
+
+Added 2026-10-07 ([[Feature 221 - Mobile bug reports 2026-10-05]]). Four admin screens deliberately render a **different thing on
+phones**, so an edit to one half silently leaves the other behind:
+
+| Screen | Desktop | Phone | How it switches |
+|---|---|---|---|
+| Orders list | table / list / board columns in `OrdersTable.tsx` | `MobileOrderCard` (same file) | CSS `md:hidden` / `hidden md:block` — **both are in the DOM** |
+| Orders calendar | hover popover | tap-to-select panel under the grid (`CalendarView.tsx`) | `matchMedia('(hover: hover) and (pointer: fine)')` — the *input device*, not width |
+| Wine Orders cards | full card | `CompactWineCard`, tap opens the full card (`WineOrdersClient.tsx`) | `useIsPhone()` (width < 768, JS) — only one is in the DOM |
+| Wine Orders Pack | table + 300px side panel | `PackingTable` phone list + **fixed** bottom bar in `PackingView.tsx` (not sticky — a sticky bar can't leave its parent's box and spilled off-screen when opened) | CSS (`md:` classes); the summary content is one `SummaryContent` shared by both |
+
+**Rules.** A new field on an order (a column, a mark, a status rule) must be added to the phone half too — the Orders phone card
+reads the same `Order` type but picks fields by hand. The "faded/inactive" predicate and the payment marks are shared on purpose
+(`isInactiveOrder`, `isOwed`, `PaymentMark` in `WineOrdersClient.tsx`) — change them there, not per view.
+**Tests:** Playwright runs desktop; a phone-only regression needs a 390px context (`devices['iPhone 13']`).
+`useIsPhone` starts `false`, so a phone sees the full wine card for one frame before it swaps to the compact one.

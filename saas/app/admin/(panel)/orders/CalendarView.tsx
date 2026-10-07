@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { useRouter, usePathname } from 'next/navigation'
 import { adminT } from '@/lib/adminT'
@@ -56,6 +56,22 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number; alignRight: boolean } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The hover preview is a mouse feature. On a touch screen a tap fires an
+  // emulated hover AND a click, and the click navigated away - the preview
+  // flashed for a moment and vanished. Touch gets tap-to-select instead, with
+  // the day's bookings in a panel under the grid. Decided by the input device,
+  // not by screen width, so a tablet with a mouse and a narrow desktop window
+  // both behave sensibly. Starts true so the server render matches desktop.
+  const [canHover, setCanHover] = useState(true)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
+    setCanHover(mq.matches)
+    const onChange = () => setCanHover(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const countByDate = new Map(daySummaries.map(d => [d.date, d.count]))
   const today = new Date().toISOString().split('T')[0]
@@ -75,11 +91,13 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
 
   function prevMonth() {
     setHoveredDate(null)
+    setSelectedDate(null)
     if (month === 0) { setYear(y => y - 1); setMonth(11) }
     else setMonth(m => m - 1)
   }
   function nextMonth() {
     setHoveredDate(null)
+    setSelectedDate(null)
     if (month === 11) { setYear(y => y + 1); setMonth(0) }
     else setMonth(m => m + 1)
   }
@@ -90,7 +108,16 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
     router.push(`${pathname}?${sp.toString()}`)
   }
 
+  function handleDayTap(day: number) {
+    const ds = dateStr(day)
+    if (canHover) { handleDayClick(day); return }
+    setSelectedDate(prev => (prev === ds ? null : ds))
+    // Bring the panel into view once it has rendered under the grid.
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+  }
+
   function handleMouseEnter(ds: string, e: React.MouseEvent<HTMLButtonElement>) {
+    if (!canHover) return
     if (hoverTimer.current) clearTimeout(hoverTimer.current)
     if (!ordersByDate[ds]?.length) return
     const target = e.currentTarget
@@ -118,6 +145,47 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
   }
 
   const hoveredOrders = hoveredDate ? (ordersByDate[hoveredDate] ?? []) : []
+  const selectedOrders = selectedDate ? (ordersByDate[selectedDate] ?? []) : []
+
+  /** One booking's summary lines - shared by the hover popover and the touch panel. */
+  function orderRow(o: CalendarOrder) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium truncate" style={{ color: C.text }}>
+            {o.name} {o.surname}
+          </p>
+          <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1"
+            style={{ color: STATUS_COLORS[o.stage] ?? C.muted }}>
+            {(() => {
+              const key = STATUS_LABEL_KEYS[o.stage]
+              return key ? at(key) : o.stage
+            })()}
+            {o.paid ? (
+              <span title={at('orders.status.paid')} style={{ color: '#14532d' }}>₾✓</span>
+            ) : o.invoiced ? (
+              <span title={at('orders.status.invoiceSent')} style={{ color: '#92400e' }}>✉</span>
+            ) : null}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-xs" style={{ color: C.faint }}>{o.timeSlot}</span>
+          <span className="text-xs" style={{ color: C.faint }}>·</span>
+          <span className="text-xs" style={{ color: C.faint }}>{o.guestCount} {at('orders.guest.plural')}</span>
+          <span className="text-xs" style={{ color: C.faint }}>·</span>
+          <span className="text-xs" style={{ color: C.faint }}>
+            {o.visitType === 'TASTING' ? at('orders.col.tasting') : at('orders.visit.tastingLunch')}
+          </span>
+        </div>
+        {o.companyName && (
+          <p className="text-xs mt-0.5 truncate" style={{ color: C.muted }}>{o.companyName}</p>
+        )}
+        {o.totalPrice != null && (
+          <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{formatTetriOrDash(asTetriOrNull(o.totalPrice))}</p>
+        )}
+      </>
+    )
+  }
 
   return (
     <div className="rounded-xl border overflow-visible mt-4 relative" style={{ borderColor: C.border, backgroundColor: C.bg }}>
@@ -151,17 +219,17 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
           return (
             <button
               key={ds}
-              onClick={() => count > 0 && handleDayClick(day)}
+              onClick={() => count > 0 && handleDayTap(day)}
               onMouseEnter={e => handleMouseEnter(ds, e)}
               onMouseLeave={handleMouseLeave}
               className="border-r border-b text-left p-2 transition-colors"
               style={{
                 borderColor: C.border,
                 minHeight: 64,
-                backgroundColor: isHovered && count > 0 ? '#fdf0e0' : isToday ? '#fef3e8' : C.bg,
+                backgroundColor: (isHovered || selectedDate === ds) && count > 0 ? '#fdf0e0' : isToday ? '#fef3e8' : C.bg,
                 cursor: count > 0 ? 'pointer' : 'default',
-                outline: isToday ? `2px solid ${C.faint}` : undefined,
-                outlineOffset: isToday ? -2 : undefined,
+                outline: selectedDate === ds ? `2px solid ${C.wine}` : isToday ? `2px solid ${C.faint}` : undefined,
+                outlineOffset: isToday || selectedDate === ds ? -2 : undefined,
               }}
             >
               <span className="text-xs font-medium" style={{ color: isToday ? C.wine : C.muted }}>{day}</span>
@@ -201,44 +269,50 @@ export default function CalendarView({ daySummaries, ordersByDate, initialYear, 
             <div className="max-h-64 overflow-y-auto divide-y" style={{ borderColor: C.border }}>
               {hoveredOrders.map(o => (
                 <div key={o.id} className="px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium truncate" style={{ color: C.text }}>
-                      {o.name} {o.surname}
-                    </p>
-                    <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1"
-                      style={{ color: STATUS_COLORS[o.stage] ?? C.muted }}>
-                      {(() => {
-                        const key = STATUS_LABEL_KEYS[o.stage]
-                        return key ? at(key) : o.stage
-                      })()}
-                      {o.paid ? (
-                        <span title={at('orders.status.paid')} style={{ color: '#14532d' }}>₾✓</span>
-                      ) : o.invoiced ? (
-                        <span title={at('orders.status.invoiceSent')} style={{ color: '#92400e' }}>✉</span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs" style={{ color: C.faint }}>{o.timeSlot}</span>
-                    <span className="text-xs" style={{ color: C.faint }}>·</span>
-                    <span className="text-xs" style={{ color: C.faint }}>{o.guestCount} {at('orders.guest.plural')}</span>
-                    <span className="text-xs" style={{ color: C.faint }}>·</span>
-                    <span className="text-xs" style={{ color: C.faint }}>
-                      {o.visitType === 'TASTING' ? at('orders.col.tasting') : at('orders.visit.tastingLunch')}
-                    </span>
-                  </div>
-                  {o.companyName && (
-                    <p className="text-xs mt-0.5 truncate" style={{ color: C.muted }}>{o.companyName}</p>
-                  )}
-                  {o.totalPrice != null && (
-                    <p className="text-xs font-semibold mt-0.5" style={{ color: C.wine }}>{formatTetriOrDash(asTetriOrNull(o.totalPrice))}</p>
-                  )}
+                  {orderRow(o)}
                 </div>
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* Touch: the selected day's bookings, under the grid. Rows open the order;
+          the link keeps the old "see this day in the table" jump as a deliberate choice. */}
+      {!canHover && (
+        <div ref={panelRef} className="border-t rounded-b-xl" style={{ borderColor: C.border }}>
+          {selectedDate && selectedOrders.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b" style={{ borderColor: C.border }}>
+                <p className="text-sm font-semibold" style={{ color: C.text }}>
+                  {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {' · '}{selectedOrders.length} {selectedOrders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}
+                </p>
+                <button
+                  onClick={() => handleDayClick(parseInt(selectedDate.split('-')[2]))}
+                  className="text-xs font-medium px-3 py-2 -my-1 rounded-lg border flex-shrink-0"
+                  style={{ borderColor: C.border, color: C.wine, backgroundColor: C.inputBg }}
+                >
+                  {at('orders.calendar.viewInTable')} ›
+                </button>
+              </div>
+              <div className="divide-y" style={{ borderColor: C.border }}>
+                {selectedOrders.map(o => (
+                  <button
+                    key={o.id}
+                    onClick={() => router.push(`/admin/orders/${o.id}`)}
+                    className="w-full text-left px-4 py-3 active:bg-amber-50"
+                  >
+                    {orderRow(o)}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs px-4 py-3" style={{ color: C.faint }}>{at('orders.calendar.tapHint')}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
