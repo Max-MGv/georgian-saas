@@ -10,7 +10,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ## 2026-10-07 (latest) — Second root cause: uploads over 1 MB fail everywhere (KnownBugs #72)
 
-Max asked "does it work now?" — before saying yes I checked with a realistic file: the production test had used a 187-byte image. Next.js caps Server Action bodies at 1 MB by default and `next.config.ts` never raised it, so any screenshot over ~1 MB still failed (reproduced locally: 1.61 / 3.28 MB failed). Fixed with `serverActions.bodySizeLimit: '4.4mb'` and caps aligned to 4 MB (Vercel's own ~4.5 MB request limit is the hard ceiling). Verified locally 1.6 / 3.3 / 4.0 MB OK, 5.5 MB refused cleanly; staging and production verification below.
+Max asked "does it work now?" — before saying yes I checked with a realistic file: the production test had used a 187-byte image. Next.js caps Server Action bodies at 1 MB by default and `next.config.ts` never raised it, so any screenshot over ~1 MB still failed (reproduced locally: 1.61 / 3.28 MB failed). Fixed with `serverActions.bodySizeLimit: '4.4mb'` and caps aligned to 4 MB (Vercel's own ~4.5 MB request limit is the hard ceiling). Verified locally 1.6 / 3.3 / 4.0 MB OK, 5.5 MB refused cleanly. **Live:** staging — 3.3 MB screenshot report failed on the old build, succeeded on the new one; promoted to `master` (`20021af`), production — failed twice while deploying, then **succeeded** with the same 3.3 MB screenshot. Test reports labelled TEST are in both inboxes (staging + production).
 
 ---
 
