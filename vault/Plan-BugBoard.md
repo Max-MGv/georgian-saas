@@ -4,7 +4,7 @@ tags: [plan, super-admin, bug-reports]
 
 # Plan — Internal Jira-style board for bugs & feature requests (super-admin)
 
-**Status: 📋 PROPOSED 2026-10-07 — nothing built. Waiting for Max's answers to the questions at the bottom (ClaudeInstructions Rule 8).**
+**Status: ⛔ SUPERSEDED 2026-10-07 by [[Plan-Tickets]] (Max answered with a broader mission: a general internal ticket tool; design reviewed by three independent sub-agents). Kept for history. Original status: PROPOSED — nothing built. Waiting for Max's answers to the questions at the bottom (ClaudeInstructions Rule 8).**
 
 **Trigger (Max, 2026-10-07):** "an internal Jira-board-style thing for superadmin to manage all bug/feature requests — for
 example today I added a bunch of stuff I needed to review."
