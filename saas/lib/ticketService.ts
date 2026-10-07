@@ -57,9 +57,20 @@ export type NewTicketInput = {
   createdNote?: string
 }
 
+/** A ticket can only START in these; Ready to test needs a review card, Done needs Max, Closed needs a reason. */
+const STARTING_STATUSES = ['INBOX', 'BACKLOG', 'IN_PROGRESS'] as const
+
+async function assertTenantExists(tx: Tx | typeof db, tenantId: string | null | undefined) {
+  if (!tenantId) return
+  const t = await tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true } })
+  if (!t) throw new TicketError('Unknown tenant.')
+}
+
 export async function createTicket(input: NewTicketInput, tx: Tx | typeof db = db) {
   const title = clean(input.title, MAX_TITLE)
   if (!title) throw new TicketError('A ticket needs a title.')
+  if (input.status) oneOf(input.status, STARTING_STATUSES, 'starting status (use Inbox, Backlog or In progress)')
+  await assertTenantExists(tx, input.tenantId)
   const ticket = await tx.ticket.create({
     data: {
       title,
@@ -106,23 +117,31 @@ export async function changeStatus(
       reason = oneOf(opts.closeReason, TICKET_CLOSE_REASONS, 'close reason')
     }
     const finished = to === 'DONE' || to === 'CLOSED'
-    const updated = t.status === to && !opts.kind
-      ? t
-      : await tx.ticket.update({
-          where: { id },
-          data: {
-            status: to,
-            closeReason: reason,
-            closedAt: finished ? (t.closedAt && (t.status === 'DONE' || t.status === 'CLOSED') ? t.closedAt : new Date()) : null,
-          },
-        })
-    if (t.status !== to || opts.kind) {
+    const reasonChanged = to === 'CLOSED' && t.status === 'CLOSED' && t.closeReason !== reason
+    const noop = t.status === to && !opts.kind && !reasonChanged
+    let updated = t
+    if (!noop) {
+      // Optimistic concurrency: the write only lands if the ticket is still in the status we read.
+      // Without it, two people (or Max and the assistant) moving the same ticket at once would both
+      // "succeed", the last write would win, and both timeline entries would claim the same "from".
+      const res = await tx.ticket.updateMany({
+        where: { id, status: t.status },
+        data: {
+          status: to,
+          closeReason: reason,
+          closedAt: finished ? (t.closedAt && (t.status === 'DONE' || t.status === 'CLOSED') ? t.closedAt : new Date()) : null,
+        },
+      })
+      if (res.count === 0) throw new TicketError('This ticket was changed by someone else a moment ago - reload and try again.')
+      updated = await load(tx, id)
+    }
+    if (!noop) {
       await tx.ticketEvent.create({
         data: {
           ticketId: id,
           kind: opts.kind ?? 'STATUS',
           body: clean(opts.note, MAX_COMMENT),
-          fromValue: t.status,
+          fromValue: t.status + (t.closeReason ? `:${t.closeReason}` : ''),
           toValue: to + (reason ? `:${reason}` : ''),
           actor,
           meta: opts.meta,
@@ -208,6 +227,7 @@ export async function updateFields(id: string, patch: TicketPatch, actor: string
     }
     if (patch.tenantId !== undefined) {
       const v = patch.tenantId || null
+      await assertTenantExists(tx, v)
       if (v !== t.tenantId) { data.tenantId = v; events.push({ body: 'tenant changed', from: t.tenantId ?? '—', to: v ?? '—' }) }
     }
     if (events.length === 0) return t
@@ -227,6 +247,16 @@ export async function addAttachmentRow(
 }
 
 // ── Reads ──────────────────────────────────────────────────────────────────
+
+/** What the token API may do to a ticket's status (Plan-Tickets.md + review 2026-10-07).
+ *  The assistant plans and hands over; it does not reopen what Max verified, close what a
+ *  customer reported (they would see "Won't fix"), or skip the review card. */
+export function assertApiStatusChange(ticket: { status: TicketStatus; source: TicketSource }, to: TicketStatusValue) {
+  if (to === 'DONE') throw new TicketError('Only Max can mark a ticket Done - post a review card instead.')
+  if (to === 'REVIEW') throw new TicketError('Use the review endpoint to move a ticket to Ready to test (it needs a review card).')
+  if (ticket.status === 'DONE' || ticket.status === 'CLOSED') throw new TicketError('This ticket is already finished - ask Max to reopen it.')
+  if (to === 'CLOSED' && ticket.source === 'WIDGET') throw new TicketError('Reporter tickets are closed by Max (the reporter sees the result).')
+}
 
 export type TicketListItem = {
   id: string
@@ -292,8 +322,16 @@ export async function getTicketByNumber(number: number): Promise<TicketDetail | 
 
   const supabase = createServiceClient()
   const attachments = await Promise.all(t.attachments.map(async a => {
-    const { data } = await supabase.storage.from(a.bucket).createSignedUrl(a.storagePath, 60 * 60)
-    return { id: a.id, fileName: a.fileName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, signedUrl: data?.signedUrl ?? null, createdAt: a.createdAt.toISOString() }
+    // A flaky storage call (timeout, reset) must never take the whole ticket page down:
+    // the image just shows as "unavailable" and the rest of the ticket still renders.
+    let signedUrl: string | null = null
+    try {
+      const { data } = await supabase.storage.from(a.bucket).createSignedUrl(a.storagePath, 60 * 60)
+      signedUrl = data?.signedUrl ?? null
+    } catch (e) {
+      console.error('[getTicketByNumber] signed URL failed', a.id, e instanceof Error ? e.message : e)
+    }
+    return { id: a.id, fileName: a.fileName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, signedUrl, createdAt: a.createdAt.toISOString() }
   }))
 
   return {

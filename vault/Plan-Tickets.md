@@ -89,3 +89,19 @@ Obsidian sync (two sources of truth is how trackers die — one-off import + one
 
 ## Open for Max later (not blocking)
 Area list wording; whether `Idea` should be a type or just a label; whether a weekly "Review items older than 3 days" digest is wanted.
+
+## Independent code review of the finished build (2026-10-07) — what it found and what was done
+
+A fresh blind sub-agent (vault fenced off, no hints) reviewed the whole build. Claims were verified against the source before acting.
+
+**Fixed:** (1) **proxy header forgery** (KnownBugs #75 — existing code, not just the new tool); (2) **crafted breadcrumbs could crash a ticket page** — now sanitised on submit;
+(3) **token could create inconsistent tickets** (create as Closed with no reason, put a ticket in Ready to test without a card, reopen what Max verified, close a reporter's ticket, change tenant) —
+now: tickets start only in Inbox/Backlog/In progress, the token cannot do Done/Ready to test/touch finished tickets/close reporter tickets/change tenant, tenant must exist;
+(4) **PATCH was not atomic** — everything validated before anything is written; **status changes now use optimistic concurrency** (a concurrent change fails with a clear message instead of both "succeeding");
+changing a Closed ticket's reason is honoured; (5) **page could write back an older title/description/labels** — fields now re-sync from the server unless you were typing in them;
+(6) old four-value dropdown can no longer drag a ticket backwards; `run()` can no longer leave controls locked; clean 400s for huge/odd ticket numbers and `null` bodies; 409 on duplicate `externalRef`;
+attachments no longer count as comments; dialogs get role/Escape/labels; group-by-tenant sorts by name; API list reports `total`/`truncated`, `tix export` warns when incomplete;
+**prompt-injection hygiene:** Widget ticket text is marked untrusted in the API (`untrustedText`), in `tix show/list/export`, and control characters are stripped; local dev no longer emails Max on every widget report.
+
+**Deliberately not done (noted for later):** re-pointing a duplicate ticket's reports to the original (a ticket closed as *Duplicate* still shows the reporter "Won't fix");
+the board loads every ticket (fine at today's ~25; add "last N days" for Done/Closed past ~1,000); orphan files if a DB write fails after an upload; a durable (DB-backed) rate limiter.

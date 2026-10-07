@@ -20,9 +20,9 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
 import type { BugReportStatus } from '@prisma/client'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
-import { createTicket, changeStatus } from '@/lib/ticketService'
+import { createTicket, changeStatus, TicketError } from '@/lib/ticketService'
 import {
-  ALLOWED_IMAGE_TYPES, TICKET_STATUS_FOR_REPORT, deriveTitle, environmentFromHost, escapeHtml, safeHttpUrl,
+  ALLOWED_IMAGE_TYPES, TENANT_STATUS_FOR, TICKET_STATUS_FOR_REPORT, deriveTitle, environmentFromHost, escapeHtml, safeHttpUrl,
   sniffImageType, ticketRef,
 } from '@/lib/tickets'
 
@@ -60,6 +60,26 @@ function strOrNull(formData: FormData, key: string): string | null {
 const SURFACE_AREA: Record<Surface, string> = { PUBLIC_SITE: 'Public site', ADMIN: 'Admin', SUPER_ADMIN: 'Super-admin' }
 const SURFACE_LABEL: Record<Surface, string> = { PUBLIC_SITE: 'public site', ADMIN: 'tenant admin', SUPER_ADMIN: 'super-admin' }
 const CUID_LIKE = /^[a-z0-9]{10,40}$/i
+
+/**
+ * Breadcrumbs come from an unauthenticated form, so JSON.parse can return anything. The ticket page
+ * renders them as text; an object or null in the wrong place makes React throw and the whole page
+ * stop rendering (found by code review). Keep only well-formed entries, cap the count and lengths.
+ */
+function sanitizeBreadcrumbs(value: unknown): { type: string; target: string; path: string; timestamp: number }[] {
+  if (!Array.isArray(value)) return []
+  const out: { type: string; target: string; path: string; timestamp: number }[] = []
+  for (const c of value.slice(-25)) {
+    if (!c || typeof c !== 'object') continue
+    const { type, target, path, timestamp } = c as Record<string, unknown>
+    if (typeof type !== 'string' || typeof target !== 'string' || typeof path !== 'string') continue
+    out.push({
+      type: type.slice(0, 20), target: target.slice(0, 200), path: path.slice(0, 300),
+      timestamp: typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : 0,
+    })
+  }
+  return out
+}
 
 export async function submitBugReport(formData: FormData): Promise<SubmitResult> {
   // ── Identity is NEVER taken from the form (KnownBugs #74). Anyone can post any
@@ -109,7 +129,7 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
   let breadcrumbs: unknown = null
   if (breadcrumbsRaw && breadcrumbsRaw.length <= 30000) {
     try {
-      breadcrumbs = JSON.parse(breadcrumbsRaw)
+      breadcrumbs = sanitizeBreadcrumbs(JSON.parse(breadcrumbsRaw))
     } catch {
       breadcrumbs = null // malformed breadcrumbs shouldn't block the submission
     }
@@ -189,8 +209,10 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
     return { error: 'Failed to save your report. Please try again.' }
   }
 
-  // ── Notify Max via Resend — never fails the submission. ──
+  // ── Notify Max via Resend — never fails the submission. Not from local development: every dev
+  //    session and Playwright run would otherwise email Max. Staging and production still do. ──
   try {
+    if (environmentFromHost(h.get('host')) === 'LOCAL') return { ok: true }
     await sendBugReportNotification({ ticketNumber, ticketTitle, type, surface, comment, tenantId, hasScreenshot })
   } catch (err) {
     console.error('[submitBugReport] notification email failed', err)
@@ -352,12 +374,18 @@ export async function updateBugReportStatus(id: string, status: BugReportStatus)
   if (!(STATUSES as readonly string[]).includes(status)) {
     throw new Error('Invalid status.')
   }
-  const report = await db.bugReport.findUnique({ where: { id }, select: { ticketId: true } })
+  const report = await db.bugReport.findUnique({ where: { id }, select: { ticketId: true, ticket: { select: { status: true } } } })
   if (report?.ticketId) {
     // The ticket is authoritative; moving it also updates every linked report's tenant-visible status.
-    await changeStatus(report.ticketId, TICKET_STATUS_FOR_REPORT[status], 'max', {
-      closeReason: status === 'WONT_FIX' ? 'WONT_FIX' : undefined,
-    })
+    // The old four-value dropdown cannot express the finer ticket states, so it must not drag a ticket
+    // backwards (e.g. "New" must not pull a Ready-to-test ticket back to Inbox): only act when the
+    // tenant-visible meaning actually changes.
+    const current = report.ticket ? TENANT_STATUS_FOR[report.ticket.status] : null
+    if (current !== status) {
+      await changeStatus(report.ticketId, TICKET_STATUS_FOR_REPORT[status], 'max', {
+        closeReason: status === 'WONT_FIX' ? 'WONT_FIX' : undefined,
+      }).catch(e => { if (e instanceof TicketError) throw new Error(e.message); throw e })
+    }
   } else {
     await db.bugReport.update({ where: { id }, data: { status } })
   }

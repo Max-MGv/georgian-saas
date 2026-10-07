@@ -1113,3 +1113,26 @@ reads the same `Order` type but picks fields by hand. The "faded/inactive" predi
 (`isInactiveOrder`, `isOwed`, `PaymentMark` in `WineOrdersClient.tsx`) — change them there, not per view.
 **Tests:** Playwright runs desktop; a phone-only regression needs a 390px context (`devices['iPhone 13']`).
 `useIsPhone` starts `false`, so a phone sees the full wine card for one frame before it swaps to the compact one.
+
+---
+
+## 34. The ticket tool: one writer, four things that must stay in sync
+
+Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
+
+- **`lib/ticketService.ts` is the ONLY place that changes a ticket.** The super-admin server actions (`app/actions/tickets.ts`), the widget
+  submit (`bugReports.ts`), the token API (`app/api/tickets/**`) and the scripts all call it. Do not `db.ticket.update(...)` from anywhere else: you
+  would skip the timeline event, the "reason required to close" rule, and the tenant-visible `BugReport.status` sync.
+- **The status vocabulary lives in four places that must change together:** the `TicketStatus` enum (`schema.prisma` + a migration), `TICKET_STATUSES` /
+  `STATUS_LABEL` / `TENANT_STATUS_FOR` / `TICKET_STATUS_FOR_REPORT` in `lib/tickets.ts`, the colours in `app/super-admin/tickets/ui.tsx`, and the CLI
+  export order in `scripts/tix.ts`. Postgres enum values are painful to remove — add sparingly.
+- **`BugReport.status` is now a *derived, tenant-facing* value.** The ticket is authoritative; every ticket status change rewrites its linked reports'
+  status through `TENANT_STATUS_FOR`. `/admin/my-reports` reads `BugReport.status` and needs no change. The old inbox pages redirect to the ticket.
+- **New server-only table ⇒ RLS on, NO policy, `REVOKE ALL … FROM anon, authenticated`, in the SAME migration** (copy the tail of `…add_tickets/migration.sql`).
+  A table in `public` is otherwise open to Supabase's REST API with the public anon key (KnownBugs #73). After migrating, re-run the anon read test.
+- **Every storage bucket must exist in BOTH Supabase projects** (dev `jpbkkngpgtvqmsocitjx`, prod `dshsfkffcsgerdqinqst`). `ticket-attachments` (private) is created
+  in dev; **production still needs it** before the production deploy.
+- **Two boards, two databases.** Staging + localhost share the dev DB; production is separate. `tix` defaults to staging; `--prod` writes need `--yes-prod`
+  *and* Max's go. API tokens are per database (`ticket-token.ts`); `credentials.txt` holds `TICKETS_TOKEN_DEV` (and, later, `_PROD`).
+- **`proxy.ts` exempts `/api/tickets`** from tenant/auth redirects (the API authenticates itself with the bearer token).
+- Phone/desktop: the board uses native drag-and-drop on desktop and a per-card status `<select>` everywhere (no DnD on touch).

@@ -32,6 +32,7 @@ async function main() {
           source: 'WIDGET',
           createdBy: 'reporter',
           createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
           events: { create: [{ kind: 'CREATED', body: `Imported from bug report ${r.id}. Reported from ${r.pageUrl}`, actor: 'system', createdAt: r.createdAt }] },
         },
       })

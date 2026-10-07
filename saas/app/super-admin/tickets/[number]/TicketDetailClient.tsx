@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TicketDetail } from '@/lib/ticketService'
 import {
@@ -32,7 +32,12 @@ const card = { backgroundColor: C.card, border: `1px solid ${C.border}`, borderR
 export default function TicketDetailClient({ ticket: t, tenants, env }: { ticket: TicketDetail; tenants: { id: string; name: string }[]; env: Env }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [acting, setActing] = useState(false)
+  // router.refresh() runs inside a transition so the controls stay locked until the fresh data has
+  // actually arrived: acting again while an older refresh is in flight let that stale refresh land
+  // afterwards and show an out-of-date status even though the database was right.
+  const [refreshing, startTransition] = useTransition()
+  const busy = acting || refreshing
 
   const [title, setTitle] = useState(t.title)
   const [description, setDescription] = useState(t.description)
@@ -41,18 +46,42 @@ export default function TicketDetailClient({ ticket: t, tenants, env }: { ticket
   const [note, setNote] = useState('')
   const [showReview, setShowReview] = useState(false)
   const [card1, setCard1] = useState({ changed: '', howToTest: '', leftOver: '', commit: '' })
+  // The ticket can change on the server while this page is open (the assistant retitles it, a refresh
+  // after your own comment...). Adopt the new value for every field you have NOT been typing in, but keep
+  // an unsaved edit of yours - otherwise an old copy of the title/description/labels could be written back.
+  const [synced, setSynced] = useState({ title: t.title, description: t.description, labels: t.labels.join(', ') })
+  const serverLabels = t.labels.join(', ')
+  if (synced.title !== t.title || synced.description !== t.description || synced.labels !== serverLabels) {
+    if (title === synced.title) setTitle(t.title)
+    if (description === synced.description) setDescription(t.description)
+    if (labels === synced.labels) setLabels(serverLabels)
+    setSynced({ title: t.title, description: t.description, labels: serverLabels })
+  }
   const [closing, setClosing] = useState(false)
+  useEffect(() => {
+    if (!closing) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setClosing(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closing])
   const [closeReason, setCloseReason] = useState<TicketCloseReasonValue>('WONT_FIX')
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function run(fn: () => Promise<{ ok: true } | { error: string }>, after?: () => void) {
     if (busy) return
-    setBusy(true); setError(null)
-    const res = await fn()
-    setBusy(false)
+    setActing(true); setError(null)
+    let res: { ok: true } | { error: string }
+    try {
+      res = await fn()
+    } catch {
+      setError('Something went wrong. Please try again.')
+      return
+    } finally {
+      setActing(false)
+    }
     if ('error' in res) { setError(res.error); return }
     after?.()
-    router.refresh()
+    startTransition(() => router.refresh())
   }
 
   const patch = (p: Parameters<typeof updateTicketFields>[1]) => run(() => updateTicketFields(t.number, p))
@@ -70,12 +99,13 @@ export default function TicketDetailClient({ ticket: t, tenants, env }: { ticket
 
       {/* Title + chips */}
       <div style={{ ...card, marginBottom: 16 }}>
-        <input
-          value={title} onChange={e => setTitle(e.target.value)}
+        {/* A text area, not an input: titles run up to 140 characters and must wrap on a phone. */}
+        <textarea
+          value={title} onChange={e => setTitle(e.target.value.split('\n').join(' '))}
           onBlur={() => { if (title.trim() && title !== t.title) void patch({ title }) }}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          aria-label="Title" maxLength={140}
-          style={{ ...inputStyle, width: '100%', fontSize: 20, fontWeight: 700, padding: '6px 8px', backgroundColor: 'transparent', borderColor: 'transparent' }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur() } }}
+          aria-label="Title" maxLength={140} rows={2}
+          style={{ ...inputStyle, width: '100%', fontSize: 20, fontWeight: 700, padding: '6px 8px', backgroundColor: 'transparent', borderColor: 'transparent', resize: 'none', lineHeight: 1.3 }}
         />
         <div className="flex flex-wrap items-center gap-2 mt-3">
           <Chip tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status]}{t.closeReason ? ` · ${CLOSE_REASON_LABEL[t.closeReason]}` : ''}</Chip>
@@ -235,7 +265,7 @@ export default function TicketDetailClient({ ticket: t, tenants, env }: { ticket
                     </div>
                     {(ev.kind === 'STATUS' || ev.kind === 'VERIFIED' || ev.kind === 'SENT_BACK' || ev.kind === 'REVIEW') && ev.fromValue && (
                       <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-                        {STATUS_LABEL[ev.fromValue as TicketStatusValue] ?? ev.fromValue} → {STATUS_LABEL[ev.toValue?.split(':')[0] as TicketStatusValue] ?? ev.toValue}
+                        {STATUS_LABEL[ev.fromValue.split(':')[0] as TicketStatusValue] ?? ev.fromValue} → {STATUS_LABEL[ev.toValue?.split(':')[0] as TicketStatusValue] ?? ev.toValue}
                         {ev.toValue?.includes(':') ? ` (${CLOSE_REASON_LABEL[ev.toValue.split(':')[1] as TicketCloseReasonValue] ?? ev.toValue.split(':')[1]})` : ''}
                       </div>
                     )}
@@ -263,15 +293,15 @@ export default function TicketDetailClient({ ticket: t, tenants, env }: { ticket
       </div>
 
       {closing && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-          <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, width: 'min(420px, 100%)' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }} onClick={() => setClosing(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Close this ticket" onClick={e => e.stopPropagation()} style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, width: 'min(420px, 100%)' }}>
             <div style={{ fontWeight: 600, marginBottom: 10 }}>Close this ticket — why?</div>
-            <select value={closeReason} onChange={e => setCloseReason(e.target.value as TicketCloseReasonValue)} style={{ ...inputStyle, width: '100%', marginBottom: 14 }}>
+            <select aria-label="Reason for closing" autoFocus value={closeReason} onChange={e => setCloseReason(e.target.value as TicketCloseReasonValue)} style={{ ...inputStyle, width: '100%', marginBottom: 14 }}>
               {TICKET_CLOSE_REASONS.map(r => <option key={r} value={r}>{CLOSE_REASON_LABEL[r]}</option>)}
             </select>
             <div className="flex gap-2 justify-end">
               <button style={ghostButtonStyle} onClick={() => setClosing(false)}>Cancel</button>
-              <button style={buttonStyle} onClick={() => { setClosing(false); void run(() => moveTicket(t.number, 'CLOSED', closeReason)) }}>Close ticket</button>
+              <button style={buttonStyle} disabled={busy} onClick={() => { setClosing(false); void run(() => moveTicket(t.number, 'CLOSED', closeReason)) }}>Close ticket</button>
             </div>
           </div>
         </div>

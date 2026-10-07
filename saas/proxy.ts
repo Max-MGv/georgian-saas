@@ -92,6 +92,14 @@ export async function proxy(request: NextRequest) {
 
   // Clone request headers and inject tenant info
   const requestHeaders = new Headers(request.headers)
+  // These headers are OURS: the proxy sets them from the resolved tenant and downstream code
+  // (getTenantId(), the theme, server actions) trusts them. A visitor can send any header, and
+  // on a host that resolves to NO tenant the `if (tenantId)` below never overwrites a forged
+  // `x-tenant-id` - so it would pass straight through and point public actions at any tenant.
+  // Drop every client-supplied copy first (found by a blind code review, 2026-10-07).
+  for (const name of [...requestHeaders.keys()]) {
+    if (name.startsWith('x-tenant-') || name.startsWith('x-platform-')) requestHeaders.delete(name)
+  }
   if (tenantId) requestHeaders.set('x-tenant-id', tenantId)
   requestHeaders.set('x-tenant-theme', encodeURIComponent(JSON.stringify(theme)))
   requestHeaders.set('x-tenant-name', displayName)
@@ -118,7 +126,9 @@ export async function proxy(request: NextRequest) {
   // set above so the handler can cross-check them, but the authoritative tenant
   // binding is the Payment row itself (looked up by providerPaymentId), which
   // survives a tenant changing domain mid-payment.
-  if (request.nextUrl.pathname.startsWith('/api/payments/')) {
+  // /api/tickets authenticates itself with a bearer token (lib/ticketApiAuth.ts) and carries no
+  // cookies either - same reasoning, so it skips the tenant redirects and the Supabase round trip below.
+  if (request.nextUrl.pathname.startsWith('/api/payments/') || request.nextUrl.pathname.startsWith('/api/tickets')) {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 

@@ -137,7 +137,7 @@ export async function uploadTicketAttachment(formData: FormData): Promise<Action
     if (error) { console.error('[uploadTicketAttachment]', error); throw new TicketError('Upload failed. Please try again.') }
     const safeName = (file.name || `image.${ext}`).replace(/[^\w.\- ]+/g, '_').slice(0, 80)
     await addAttachmentRow(ticketId, { storagePath: path, bucket: ATTACH_BUCKET, fileName: safeName, mimeType: mime, sizeBytes: bytes.length })
-    await db.ticketEvent.create({ data: { ticketId, kind: 'COMMENT', body: `Attached ${safeName}`, actor: ACTOR } })
+    await db.ticketEvent.create({ data: { ticketId, kind: 'FIELD', body: `image attached: ${safeName}`, actor: ACTOR } })
     return {}
   })
 }

@@ -18,9 +18,11 @@ export default async function SuperAdminLayout({ children }: { children: React.R
       {/* Super-admin is cross-tenant by design — no single tenantId applies here. */}
       <BugReportWidget surface="SUPER_ADMIN" submitterEmail={user.email ?? null} submitterUserId={user.id ?? null} />
       <nav style={{ backgroundColor: '#111827', borderBottom: '1px solid #1e293b' }}>
-        <div className="px-6 py-0 flex items-center justify-between" style={{ height: 56 }}>
+        {/* flex-wrap: on a phone the brand, five links and the back button are wider than the
+            screen as one row (it forced the whole page to ~605px). They wrap instead. */}
+        <div className="px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1" style={{ minHeight: 56 }}>
           {/* Left: brand + nav */}
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
             <div className="flex items-center gap-2.5">
               <div style={{
                 width: 28, height: 28, borderRadius: 8,
@@ -37,7 +39,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
               }}>PLATFORM</span>
             </div>
 
-            <div className="flex gap-0.5">
+            <div className="flex flex-wrap gap-0.5">
               {[
                 { href: '/super-admin/tenants', label: 'Tenants' },
                 { href: '/super-admin/orders', label: 'Orders' },
@@ -73,7 +75,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
         </div>
       </nav>
 
-      <main className="px-6 py-8 max-w-6xl mx-auto">
+      <main className="px-4 py-5 sm:px-6 sm:py-8 max-w-screen-2xl mx-auto">
         {children}
       </main>
     </div>

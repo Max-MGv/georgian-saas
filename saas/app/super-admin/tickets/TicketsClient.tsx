@@ -62,6 +62,12 @@ export default function TicketsClient({
   const [error, setError] = useState<string | null>(null)
   const [closing, setClosing] = useState<TicketListItem | null>(null)
   const [closeReason, setCloseReason] = useState<TicketCloseReasonValue>('WONT_FIX')
+  useEffect(() => {
+    if (!closing) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setClosing(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closing])
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
 
@@ -208,11 +214,11 @@ export default function TicketsClient({
       )}
 
       {closing && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-          <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, width: 'min(420px, 100%)' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }} onClick={() => setClosing(null)}>
+          <div role="dialog" aria-modal="true" aria-label={`Close T-${closing.number}`} onClick={e => e.stopPropagation()} style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, width: 'min(420px, 100%)' }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Close T-{closing.number}?</div>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>{closing.title}</div>
-            <select value={closeReason} onChange={e => setCloseReason(e.target.value as TicketCloseReasonValue)} style={{ ...inputStyle, width: '100%', marginBottom: 14 }}>
+            <select aria-label="Reason for closing" autoFocus value={closeReason} onChange={e => setCloseReason(e.target.value as TicketCloseReasonValue)} style={{ ...inputStyle, width: '100%', marginBottom: 14 }}>
               {TICKET_CLOSE_REASONS.map(r => <option key={r} value={r}>{CLOSE_REASON_LABEL[r]}</option>)}
             </select>
             <div className="flex gap-2 justify-end">
@@ -282,7 +288,7 @@ function ListView({
 
   const keyOf = (t: TicketListItem): [string, string] => {
     switch (groupBy) {
-      case 'tenant': return [t.tenantId ?? '~', t.tenantName ?? 'No tenant (internal)']
+      case 'tenant': return [(t.tenantName ?? '~~~').toLowerCase(), t.tenantName ?? 'No tenant (internal)']
       case 'type': return [String(TICKET_TYPES.indexOf(t.type)), TYPE_LABEL[t.type]]
       case 'priority': return [String(5 - PRIORITY_RANK[t.priority]), PRIORITY_LABEL[t.priority]]
       case 'area': return [t.area ?? '~', t.area ?? 'No area']
