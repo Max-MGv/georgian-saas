@@ -43,9 +43,15 @@ checklists in Obsidian. Widget reports are just one **source**; tickets can also
 - **No assignee, sprints, points, manual ranking, notifications** — priority then recency orders a column. One-way export, not two-way sync, to Obsidian.
 - **Every new server-only table gets RLS-on-no-policy + revoke anon/authenticated in its own migration** (the `BugReport` hole, KnownBugs #73).
 
+## Verification (2026-10-07)
+
+Everything on staging was scrutinised before any production step: see [[Plan-VerifyBeforeProduction]] (layers 0–8, all passed; findings fixed, including a React hydration mismatch #418 that only showed in a production build — timezone pinned to Asia/Tbilisi, ages marked client-only, re-checked live on staging). Playwright: `playwright/notes/19-tickets.md`. Also see [[Plan-Tickets]].
+
 ## Production steps still to do (each needs Max's explicit go)
 
-1. `prisma migrate deploy` on production (two additive migrations; the first, the BugReport lock, is already applied).
+**Order matters — the full runbook is in [[Plan-VerifyBeforeProduction]]; bucket + migration come BEFORE the code merge.**
+
+1. `prisma migrate deploy` on production (the `add_tickets` migration is the one still pending; the BugReport lock is already applied).
 2. Create the private bucket `ticket-attachments` in the **production** Supabase project (lesson of KnownBugs #71).
 3. Backfill existing production reports into tickets + write proper titles (`scripts/backfill-tickets.ts`, then a titles pass).
 4. Create the production API token (`scripts/ticket-token.ts create claude`) and store it in `credentials.txt`.

@@ -472,6 +472,24 @@ dependency map was confidently wrong in four places, each caught only by opening
 
 ---
 
+## v1.14 — Internal ticket tool (Super Admin → Tickets) 🚧 BUILT + VERIFIED ON STAGING, NOT ON PRODUCTION
+
+Full tracking: [[Plan-Tickets]] (design, reviewed by three blind sub-agents) · [[Feature 222 - Internal ticket tool]] · verification and the production runbook: [[Plan-VerifyBeforeProduction]].
+Max's mission (2026-10-07): an internal tool to manage bugs/features/tasks/ideas — widget reports are one source; Max and Claude use it regularly instead of ad-hoc notes.
+
+- [x] Schema + additive migration (RLS locked, anon revoked) — dev DB + staging
+- [x] `lib/ticketService.ts` (single writer), hardened widget submit that creates a ticket (KnownBugs #74), proxy header fix (#75)
+- [x] Board / List / ticket page, review flow (Ready to test → Verified / Send back), quick + bulk add, attachments, filters + group-by
+- [x] Token API + `tix` CLI + `tix export` → `vault/Tickets.md`
+- [x] Playwright spec (4 tests), full regression tiers 1–4, production-build check, independent reviews, live staging check
+- [ ] **Production** — needs Max's explicit go; order matters: storage bucket + migration **before** the code merge (runbook in [[Plan-VerifyBeforeProduction]])
+- [ ] Backfill + title existing production reports; create the production API token
+- [ ] Known gap: re-link a duplicate ticket's reports to the canonical ticket (a closed duplicate currently shows the reporter "Won't fix")
+
+**Also shipped 2026-10-07 (already on `master`, Max's explicit go):** the seven phone fixes from his annotated screenshots ([[Feature 221 - Mobile bug reports 2026-10-05]]), the 1 MB upload-limit fix (KnownBugs #72), production storage buckets (#71), the `BugReport` REST-API lock (#73).
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

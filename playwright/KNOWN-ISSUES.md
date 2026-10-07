@@ -129,6 +129,23 @@ seed-owned codes so a hand-created guide is never touched.
 
 These come from running this suite (or the app in general) hard, not from any single test being wrong. Recognize the shape before assuming a regression.
 
+### `wine-catalogue-order` fails because fixture wine "Rkatsiteli" is inactive (2026-10-07)
+
+**Symptom:** the test can't find the wine "Rkatsiteli" in the public catalogue.
+**Cause:** in the shared dev data the wine has `active:false`, so it is hidden from the catalogue. Not a code regression — proven by disabling the proxy change (still failed) and temporarily activating the wine (passed).
+**Fix:** re-activate the wine on the Wines admin page (Max's data; left as found).
+
+### First run after a dev-server start times out on cold-compiled routes (2026-10-07)
+
+**Symptom:** a test's first navigation to a rarely-visited route (e.g. `/super-admin/tickets/[number]`) times out.
+**Fix:** warm the route with one real visit first; the tickets spec uses 150 s timeouts for the same reason.
+
+### `next build` fails with EPERM while a dev process is running (Windows, 2026-10-07)
+
+**Symptom:** `prisma generate` / `next build` fails with EPERM on the Prisma query-engine DLL.
+**Cause:** a stray `next dev` / node process still holds the engine file (ClaudeInstructions Rule 10).
+**Fix:** stop the project's node processes, then rebuild.
+
 ### Dev database connection pool exhaustion
 
 **Symptom:** `PrismaClientKnownRequestError` with code `P1001` ("Can't reach database server") or `P2028` ("Transaction already closed" / "Unable to start a transaction in the given time"), appearing even on ordinary `/admin/*` page loads — including immediately on a *freshly restarted* dev server.

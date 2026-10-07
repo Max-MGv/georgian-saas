@@ -8,11 +8,25 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 📱 2026-10-07 — Check your seven phone fixes (they are pushed to `staging` — check them at staging.vineworks.ge once Vercel has deployed; NOT on the real site)
+## 🎫 2026-10-07 — The ticket tool is built and verified on STAGING. Nothing is on production. Your go is needed.
+
+**What it is:** Super Admin → **Tickets** (staging.vineworks.ge/super-admin/tickets). One board for bugs / features / tasks / ideas; widget reports land there as tickets; you and I use it day to day; I can read and write it through the `tix` CLI / token API. Details: [[Feature 222 - Internal ticket tool]], design: [[Plan-Tickets]].
+
+**What I verified** (full table: [[Plan-VerifyBeforeProduction]]): static checks + a real production build, dependency audit, DB/anon-REST security on dev and production, full Playwright tiers 1–4, the widget on all 3 surfaces, tenant "My reports" status mapping, an independent blind review, and the deployed staging site (real 3.3 MB screenshot report → ticket). Found and fixed along the way: line-ending noise, lint errors, widget file picker mismatch, flaky selectors, a React hydration error only visible in production builds.
+
+**For you to do:**
+1. Open the tickets page on staging; click around (board, list, a ticket, "Ready to test" → Verified / Send back, quick add). Tell me what feels wrong or missing.
+2. **Decide on production.** The runbook is in [[Plan-VerifyBeforeProduction]]: bucket `ticket-attachments` + migration come BEFORE the code merge. I will not run any step until you say "go".
+3. The dev wine **"Rkatsiteli"** is inactive in the staging data, so the Playwright test `wine-catalogue-order` fails until you re-activate it on the Wines page. Your data, so I left it.
+
+Known and accepted: closing a ticket as Duplicate shows the reporter "Won't fix" (no re-link action yet); notification email subjects now start with `[PRODUCTION]` / `[STAGING]`.
+
+---
+
+## 📱 2026-10-07 — Check your seven phone fixes (already LIVE on `master`, shipped with your go — a real-phone check is still wanted)
 
 I fixed everything from your 9 screenshots (details: [[Feature 221 - Mobile bug reports 2026-10-05]]). I could only test in a
-simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust. Once you're happy, say so and I'll
-ask before anything goes near `master`.
+simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust.
 
 1. **Settings → Payment details** — IBAN now fully visible, pencil on screen. (Try the pencil → type → save.)
 2. **Settings → Closed Days** and **Wine Orders → Filters** — the date boxes now say `DD/MM/YYYY`, have a calendar icon and a small label. Does tapping open the iPhone date picker?
