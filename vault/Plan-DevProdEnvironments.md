@@ -64,6 +64,7 @@ The **old** auto-generated alias, `georgian-saas-git-staging-mg-productions-proj
 - Baseline marked `--applied` on BOTH DBs; `migrate status` clean on both.
 - Dev DB also got the full RLS layer (app_user role, 14 tenant_isolation policies, platform-table lock) via MCP migration `rls_setup_and_platform_lock` — dev matches prod's security posture, incl. the 2026-07-23 Tenant/PlatformConfig lockdown.
 - Storage buckets `logos` / `backgrounds` / `wine-photos` created (public) in dev.
+- ⚠️ **Storage buckets are NOT created by `prisma migrate` — create every new bucket in BOTH Supabase projects by hand.** Gap found 2026-10-07 (KnownBugs #71): prod had only `wine-photos`; `logos`, `backgrounds` and `bug-report-screenshots` were created in dev only, so screenshot bug reports failed on production. All four now exist in prod (`logos`/`backgrounds`/`wine-photos` public, `bug-report-screenshots` private). Checklist item for any feature that calls `supabase.storage.from('<name>')`: create `<name>` in prod before merging to `master`.
 
 ## Gotchas learned during setup (important!)
 
