@@ -128,8 +128,8 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
       await expect(dateInput).toBeVisible({ timeout: 15_000 })
       await dateInput.fill(dateIso)
       await page.getByRole('textbox').nth(1).fill(String(guestCount)) // Party size / guest count
-      await page.getByRole('textbox').nth(2).fill(firstName) // First name
-      await page.getByRole('textbox').nth(3).fill(marker) // Last name (the unique marker)
+      // One Name box (split into first word / rest at submit): first name, then the unique marker.
+      await page.getByPlaceholder('Name', { exact: true }).fill(`${firstName} ${marker}`)
       await page.locator('input[type="tel"]').fill(phone)
       await page.locator('input[type="email"]').fill(email)
       // Manual tasting rate — an individual order always shows this (no

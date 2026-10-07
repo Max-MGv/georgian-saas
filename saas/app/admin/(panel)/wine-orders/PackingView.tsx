@@ -351,21 +351,77 @@ export default function PackingView({
   children, selectedOrders, boxMode, onBoxModeChange, locale = 'en',
 }: PackingViewProps) {
   const handlePrint = () => printPackingSheet(selectedOrders, boxMode, locale)
+  const at = (key: string) => adminT(locale, key)
+  const [open, setOpen] = useState(false)
+  const n = selectedOrders.length
+  const { totalBottles, totalBoxes } = computeSummary(selectedOrders, boxMode, locale)
+
+  const summary = (
+    <SummaryContent
+      orders={selectedOrders}
+      boxMode={boxMode}
+      onBoxModeChange={onBoxModeChange}
+      onPrint={handlePrint}
+      locale={locale}
+    />
+  )
 
   return (
-    <div className="flex gap-5 items-start">
+    <div className="flex flex-col md:flex-row md:gap-5 md:items-start">
       <div className="flex-1 min-w-0">{children}</div>
+
+      {/* md+: the summary is a side panel, as it always was. */}
       <div
-        className="flex-shrink-0 rounded-xl border p-4 overflow-y-auto sticky top-4"
+        className="hidden md:block flex-shrink-0 rounded-xl border p-4 overflow-y-auto sticky top-4"
         style={{ borderColor: C.border, backgroundColor: C.bg, width: 300, maxHeight: 'calc(100vh - 96px)' }}
       >
-        <SummaryContent
-          orders={selectedOrders}
-          boxMode={boxMode}
-          onBoxModeChange={onBoxModeChange}
-          onPrint={handlePrint}
-          locale={locale}
-        />
+        {summary}
+      </div>
+
+      {/* Phone: a 300px side panel left the order list 38px wide (unreadable),
+          so the summary becomes a bar fixed to the bottom of the screen (fixed,
+          not sticky: a sticky bar cannot leave its parent's box, so once opened
+          it spilled below the fold when the page was scrolled to the top) -
+          collapsed it is one line with Print on it, tapped open it shows the
+          full summary above. Its width leaves room on the right for the
+          floating bug-report button. */}
+      <div className="md:hidden h-24" aria-hidden="true" />
+      <div
+        className="md:hidden fixed bottom-3 left-4 rounded-2xl border shadow-lg overflow-hidden z-30"
+        style={{ borderColor: C.border, backgroundColor: C.bg, width: 'calc(100vw - 6.25rem)' }}
+      >
+        {open && n > 0 && (
+          <div className="p-3 border-b overflow-y-auto" style={{ borderColor: C.border, maxHeight: '55vh' }}>
+            {summary}
+          </div>
+        )}
+        {n === 0 ? (
+          <p className="text-xs px-3 py-3" style={{ color: C.faint }}>{at('packing.selectHint')}</p>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: C.text }}>
+                {n} {n === 1 ? at('packing.order.singular') : at('packing.order.plural')} · {totalBottles} {at('packing.bottlesTotal')}
+              </p>
+              <p className="text-xs truncate" style={{ color: C.faint }}>{totalBoxes} {at('packing.boxesTotal')}</p>
+            </div>
+            <button
+              onClick={() => setOpen(o => !o)}
+              aria-expanded={open}
+              className="flex-shrink-0 text-xs px-3 py-2.5 rounded-lg border font-medium"
+              style={{ borderColor: C.border, color: C.muted, backgroundColor: '#fff' }}
+            >
+              {at('packing.details')} {open ? '▾' : '▴'}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="flex-shrink-0 text-xs px-3 py-2.5 rounded-lg font-medium"
+              style={{ backgroundColor: C.wine, color: '#fff' }}
+            >
+              {at('packing.print')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

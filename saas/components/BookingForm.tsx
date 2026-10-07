@@ -14,6 +14,7 @@ import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import NationalityPicker from '@/components/NationalityPicker'
+import { splitFullName } from '@/lib/splitFullName'
 import { countryName } from '@/lib/countries'
 import NewCompanyPopupView from '@/components/NewCompanyPopupView'
 import { buildNewCompanyLabels } from '@/lib/newCompanyPopupLabels'
@@ -129,18 +130,8 @@ type Props = {
 
 const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: false }
 
-/** Same split convention this form already used for a picked person's name
- * (see the old `applyPickedPerson` first-word/rest split) — now also used to
- * turn the guest's own single Name field back into `Order.name`/`surname`
- * at submit time, since those stay two DB columns (the orders CSV export
- * keeps them separate for the winery's own accounting). No "both required"
- * check exists on the server for this path (`createBooking.ts` never
- * validates `surname`), so a one-word name is accepted with an empty
- * surname rather than blocked. */
-function splitFullName(full: string): { name: string; surname: string } {
-  const parts = full.trim().split(' ')
-  return { name: parts[0] ?? '', surname: parts.slice(1).join(' ') }
-}
+// splitFullName now lives in lib/splitFullName.ts so the admin New Order form
+// splits a single Name box the same way (see that file for the convention).
 
 export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)

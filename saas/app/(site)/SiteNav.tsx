@@ -130,7 +130,7 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
             {bookLabel}
           </Link>
           <div className="pt-1">
-            <LocaleSwitcher locale={locale} />
+            <LocaleSwitcher locale={locale} onChanged={() => setOpen(false)} />
           </div>
         </div>
       )}

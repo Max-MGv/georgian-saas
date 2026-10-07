@@ -18,7 +18,11 @@ import {
   type BookingStatusChange,
 } from '@/lib/statusWrite'
 import { BOOKING_STAGES, buildFlowLine, unreachedStages, isCancelled, CANCELLED, type FlowState } from '@/lib/statusFlow'
+import dynamic from 'next/dynamic'
 import InvoicePrint from '../InvoicePrint'
+
+// The QR library only loads once a card-payment link actually exists on this page.
+const QrCodeDialog = dynamic(() => import('@/components/QrCodeDialog'), { ssr: false })
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -1917,12 +1921,19 @@ export default function OrderDetail({
                   {at('orderDetail.topUpCheckout.linkLabel')}
                 </label>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={generatedLink.checkoutUrl}
-                    onFocus={e => e.currentTarget.select()}
-                    style={{ ...inputStyle, width: 260, fontSize: '0.75rem' }}
+                  {/* The full URL is deliberately not shown: it is long, it carries a payment
+                      token, and nobody needs to read it. A QR opens in a dialog for scanning;
+                      Copy and Email below are the other ways to hand it over. */}
+                  <QrCodeDialog
+                    url={generatedLink.checkoutUrl}
+                    triggerLabel={at('orderDetail.topUpCheckout.showQr')}
+                    title={at('orderDetail.topUpCheckout.qrTitle')}
+                    hint={at('orderDetail.topUpCheckout.qrHint')}
+                    qrAriaLabel={at('orderDetail.topUpCheckout.qrAria')}
+                    openLabel={at('orderDetail.topUpCheckout.openLink')}
+                    closeLabel={at('orderDetail.topUpCheckout.closeQr')}
+                    triggerClassName="text-xs px-2 py-1.5 rounded font-medium"
+                    triggerStyle={{ border: `1px solid ${C.wine}`, color: C.wine }}
                   />
                   <button
                     onClick={handleCopyLink}

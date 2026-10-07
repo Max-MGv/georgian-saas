@@ -78,8 +78,9 @@ test.describe('Orders admin — filtering and view toggle', () => {
     await expect(dateInput).toBeVisible({ timeout: 15_000 });
     await dateInput.fill(TEST_DATE);
     await page.getByRole('textbox').nth(1).fill('4'); // Guest count
-    await page.getByRole('textbox').nth(2).fill('Playwright'); // First name
-    await page.getByRole('textbox').nth(3).fill('AdminOrdersTest'); // Last name
+    // One Name box now (like the public form) — split into first word / rest at submit,
+    // so this still stores name "Playwright", surname "AdminOrdersTest".
+    await page.getByPlaceholder('Name', { exact: true }).fill('Playwright AdminOrdersTest');
     await page.locator('input[type="tel"]').fill('+995500000099');
     await page.locator('input[type="email"]').fill(TEST_EMAIL);
     await dateInput.fill(TEST_DATE);

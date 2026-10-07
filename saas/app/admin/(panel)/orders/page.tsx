@@ -243,18 +243,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
-        <h1 className="text-xl font-bold" style={{ color: C.text }}>{at('orders.pageTitle')}</h1>
-        <div className="flex items-center gap-3 flex-wrap">
+      {/* Phone: title + New Order share the first row, count + view toggle sit on
+          the second — three wrapped rows used to push the list down the screen.
+          md+: the same single row as before (title left, the rest right). */}
+      <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-3 md:mb-6">
+        <h1 className="order-1 md:mr-auto text-xl font-bold" style={{ color: C.text }}>{at('orders.pageTitle')}</h1>
+        <Link
+          href="/admin/orders/new"
+          className="order-2 ml-auto md:ml-0 md:order-3 px-3 py-1.5 min-h-10 md:min-h-0 inline-flex items-center rounded-lg text-sm font-medium text-white"
+          style={{ backgroundColor: C.wine }}
+        >
+          {at('orders.newOrder')}
+        </Link>
+        <div className="order-3 md:order-2 w-full md:w-auto flex items-center gap-3 flex-wrap">
           {isTableLike && <span className="text-sm" style={{ color: C.faint }}>{orders.length} {orders.length !== 1 ? at('orders.booking.plural') : at('orders.booking.singular')}</span>}
           <ViewToggle view={view} params={params} locale={locale} />
-          <Link
-            href="/admin/orders/new"
-            className="px-3 py-1.5 min-h-10 md:min-h-0 inline-flex items-center rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: C.wine }}
-          >
-            {at('orders.newOrder')}
-          </Link>
         </div>
       </div>
 

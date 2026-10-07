@@ -12,14 +12,19 @@ export default async function NewOrderPage() {
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
   const contactRoles = await orderRolesFor(tenantId, 'BOOKING')
-  const [companies, menuItems, masterclassItems] = await Promise.all([
+  const [companies, menuItems, masterclassItems, tenantFlags] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({
-      where: { tenantId },
+      // Same list the public booking form offers: booking companies only. Without this the
+      // dropdown also listed the internal "Individuals" price container and wine-only companies.
+      where: { tenantId, isBookingCompany: true, isIndividual: false },
       include: { prices: true },
       orderBy: { name: 'asc' },
     })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
+    // Read through `db` directly, like the public page does: Tenant has RLS enabled with no
+    // policies, so withTenantDb would silently return null (MaintenanceNotes §27).
+    db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
   ])
 
   return (
@@ -39,6 +44,7 @@ export default async function NewOrderPage() {
       <NewOrderForm
         locale={locale}
         contactRoles={contactRoles}
+        nationalityEnabled={tenantFlags?.enableCompanyNationalityBreakdown ?? false}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,

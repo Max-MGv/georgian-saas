@@ -8,7 +8,63 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-02 (newest, last) — Tier 5 real-payment tests re-run against staging: 7/7 green
+## 2026-10-07 (newest) — Seven phone fixes from the annotated screenshots built on `staging` working tree (uncommitted)
+
+Follow-up to 2026-10-05 (screenshots read, reproduced in a headless iPhone-13, plan [[Plan-MobileBugReports-2026-10-05]]).
+Max answered the plan's questions (tenant font wins; no tappable pill on the phone order card but a matching compact view for
+wine orders; Companies icons phone-only; Pack mostly look-only but Print kept; calendar panel under the grid; fade only when
+delivered AND paid; search icon my call) and said go. **Built** (FeatureLog #221, KnownBugs #66–#70,
+[[Feature 221 - Mobile bug reports 2026-10-05]], MaintenanceNotes §33): Settings rows stack on phones (also Lead Time / Visit
+Duration / Working Hours at 320px); shared `DateInput` + labels for Closed Days and Wine Orders filters, magnifier in search;
+Pack = phone list + sticky bottom bar; Orders calendar tap-to-select with the day's bookings under the grid; new phone order
+card from the "Grid of cards" reference; compact wine-order card that opens in place; delivered-unpaid no longer faded, amber
+**Unpaid** chip; Companies icon buttons. Verified in headless phone emulation at 390 and 320 px and desktop 1280 (measurements
+in the feature note, screenshots in `vault/BugReports-2026-10-05/final/`), `tsc` clean, i18n parity 1147/1147. Not verified:
+real iPhone Safari, Georgian wording (drafted). **Double-check pass before commit** (screenshots of every changed screen, EN + KA, 390/320/1280 px — `vault/BugReports-2026-10-05/final/`) found and fixed two defects in this work: the Pack bar (sticky → fixed; Print was off-screen when opened) and the Georgian Closed Days placeholder cut-off; 7 related Playwright specs pass. Three small leftover quirks (Georgian Pack tab wrap, company chevron wrap at 320px, Individuals "?" clipped at 320px) fixed in a follow-up commit. **Committed and pushed to `staging` (not merged to `master`) — waiting for Max's phone check on staging.vineworks.ge** (checklist in
+[[MyToDo]]). Side findings: dev server 404'd on every route until `.next` was deleted and it was restarted; an old claim in the
+code that "being owed money is not a reason to keep an order in the packing queue" was reversed on purpose (Pack already excludes
+Delivered).
+
+---
+
+## 2026-10-02 (earlier) — Admin New Order mirrors the public form; QR dialog for the card-payment link (uncommitted)
+
+Max asked (via a research subagent first, read-only) whether the admin New Order form could reuse the
+public form, then said: the guide block was a non-issue, but Contact Person and Guide must look
+coherent like the front end's; check how long a checkout link stays valid; build the QR dialog; add
+nationality to the admin form. Research finding that shaped the build: the public `BookingForm` is
+~1,350 lines of guest-facing logic feeding ten specs, so **no `adminMode` prop** — instead a shared
+`ContactRoleFields` block + `splitFullName`, with nationality and a company-list filter added. Flitt
+docs: `lifetime` default 36 000 s (10 h), max 69 120 000 s; this app sets none. Details: FeatureLog
+#220, MaintenanceNotes #32. Verified at 1000px and 390px, `tsc` clean, i18n parity OK, QR dialog
+checked on a throwaway preview page (deleted). Not committed or pushed — waiting on Max. Open:
+whether to set an explicit `lifetime` for top-up links, a "send confirmation email" option on admin
+orders, pricing admin individual orders from the Individuals tiers (today: typed manual rates,
+default 0), re-opening a pending link's QR after reload.
+
+---
+
+## 2026-10-02 (earlier) — Full mobile audit, then mobile pass 1 (pushed to staging as 15a5d57)
+
+Max asked for a full mobile audit of every page, then said to fix the findings and, on mobile only,
+shrink or remove the cards above Orders and Wine Orders so the orders show without scrolling.
+**Audit** (read-only; headless iPhone 13 at 390px + 320px overflow pass, 34 routes, signed in with the
+Playwright suite's test logins on localhost): recorded in [[Audit-MobileFull-2026-10-02]] — guest site
+good, admin Orders list/detail good, data-entry pages rough, super-admin broken (605px-wide page).
+**Fixes** (details in FeatureLog #219): banners + revenue strip compacted on phones, Orders/Wine Orders
+headers tightened, Wine Orders filters collapse behind a button; plus the Filters "To" date field,
+Wine Orders double padding, Settings clipped "guests", onboarding stepper labels, Companies rows,
+Orders Table/List toggle, and menu-stays-open-after-language-switch. Measured: first order card at
+y=425 (Orders) / y=333 (Wine Orders) on 664px, no overflow at 390 or 320, desktop 1280 unchanged.
+`tsc --noEmit` clean. **Changes are in the working tree on `staging`, NOT committed or pushed** —
+waiting for Max's go-ahead. Deliberately not done (next batch): bug-report button over the booking
+form, admin mm/dd/yyyy dates, admin touch-target / 16px input pass, super-admin, Site Content editor
+on touch, the admin nav scroller-vs-drawer decision. Not tested: admin in Georgian, Orders Board view
+on a phone. Max may want a quick look on a real phone once it is on staging.
+
+---
+
+## 2026-10-02 (earlier) — Tier 5 real-payment tests re-run against staging: 7/7 green
 
 Task from Max: re-run the 7 real-Flitt tests (last run 2026-10-01). Confirmed staging was serving
 current code (latest deployment READY on `86335dd`, `fra1`, merged "Name" field). Read the Tenant
@@ -16,7 +72,10 @@ payment columns directly: Individuals true / Companies false / Wine true (correc
 `payment-book-later.spec.ts` would have failed its first assertion ("Individuals OFF at rest") — fixed
 by making the spec set OFF itself and restore the original in `finally`, instead of flipping state by
 hand. Result: **7 passed, 0 failed (5.6m)**, plus two clean isolated reruns of the changed spec. After
-everything: Tenant columns unchanged (verified in DB), no leftover `ZZPaymentE2E` orders. Task 2
+everything: Tenant columns unchanged (verified in DB), no leftover `ZZPaymentE2E` orders. **Then, at Max's explicit request, merged `staging` → `master`** (22 commits, no conflicts, no
+migrations in the delta) as `89b121b`; Vercel production deploy READY, `nikalasmarani.vineworks.ge` serves 200.
+Shipped with it: Orders "Columns" picker only on Table view, super-admin "Reset onboarding wizard tenant"
+and "Clear staging data" buttons, booking-form/content-editor tweaks. Task 2
 (expanding coverage) deliberately not started — waiting for Max to pick chunks from
 [[Plan-ExpandPlaywrightCoverage]]. Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`,
 `playwright/Progress.md`, `playwright/README.md`, `playwright/KNOWN-ISSUES.md`, `vault/SessionLog.md`,

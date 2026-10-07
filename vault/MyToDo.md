@@ -8,6 +8,24 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 📱 2026-10-07 — Check your seven phone fixes (they are pushed to `staging` — check them at staging.vineworks.ge once Vercel has deployed; NOT on the real site)
+
+I fixed everything from your 9 screenshots (details: [[Feature 221 - Mobile bug reports 2026-10-05]]). I could only test in a
+simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust. Once you're happy, say so and I'll
+ask before anything goes near `master`.
+
+1. **Settings → Payment details** — IBAN now fully visible, pencil on screen. (Try the pencil → type → save.)
+2. **Settings → Closed Days** and **Wine Orders → Filters** — the date boxes now say `DD/MM/YYYY`, have a calendar icon and a small label. Does tapping open the iPhone date picker?
+3. **Orders → Calendar** — tap a day with bookings: the list should stay under the calendar. Tap a booking: it opens.
+4. **Orders list** — the new card. Is it the "more readable" one you wanted? (The status pill is no longer tappable here — change status inside the order.)
+5. **Wine Orders → Cards** — compact cards; tap one to open the full card (status steps), "Details ▾" closes it. **Delivered + unpaid** should be fully readable with an amber "Unpaid" chip; it greys out only once paid.
+6. **Wine Orders → Pack** — a readable list; tick two; the bar at the bottom shows the totals, **Details** opens the summary, **Print** prints.
+7. **Companies** — pencil/bin icons. (Rows are ~20% shorter, not half: the ID / Code set / tiers line still takes space. Want that tucked behind the arrow? Say so.)
+
+Also try the admin in **Georgian** — 9 new words were drafted by me, not checked by a native speaker.
+
+---
+
 ## 🟢 2026-10-02 — The automated tests now all pass (35 out of 35). Nothing is broken, but a few decisions are yours.
 
 The test suite that checks the site still works ran clean for the first time ever. Getting there

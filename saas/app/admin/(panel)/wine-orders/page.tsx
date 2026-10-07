@@ -31,8 +31,10 @@ export default async function WineOrdersPage() {
   })
 
   return (
-    <div data-tour="wine-orders-list" className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
+    // md:p-6, not p-6: the admin <main> already pads the page, so on a phone this
+    // doubled the side margin (and pushed the page 24px past a 320px screen).
+    <div data-tour="wine-orders-list" className="md:p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 mb-3 md:mb-6">
         <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(locale, 'nav.wineOrders')}</h1>
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
