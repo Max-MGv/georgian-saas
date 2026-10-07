@@ -8,6 +8,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-07 (proposal) — Jira-style bug/feature board for super-admin: planned, not built
+
+Max asked for an internal board to manage all bug/feature requests (he had just added a batch of items to review). Read what exists (widget → `BugReport` row → flat inbox with 3 filters → detail page with a 4-value status dropdown) and wrote [[Plan-BugBoard]]: board + list toggle, real cards (title, priority, area, several screenshots, comments), quick/bulk add, a "Ready to test" column as Max's review queue, an optional Claude script to read/move/comment on cards, 7 additive chunks, 8 questions for Max. **Nothing implemented — awaiting answers (Rule 8).**
+
+---
+
 ## 2026-10-07 (latest) — Second root cause: uploads over 1 MB fail everywhere (KnownBugs #72)
 
 Max asked "does it work now?" — before saying yes I checked with a realistic file: the production test had used a 187-byte image. Next.js caps Server Action bodies at 1 MB by default and `next.config.ts` never raised it, so any screenshot over ~1 MB still failed (reproduced locally: 1.61 / 3.28 MB failed). Fixed with `serverActions.bodySizeLimit: '4.4mb'` and caps aligned to 4 MB (Vercel's own ~4.5 MB request limit is the hard ceiling). Verified locally 1.6 / 3.3 / 4.0 MB OK, 5.5 MB refused cleanly. **Live:** staging — 3.3 MB screenshot report failed on the old build, succeeded on the new one; promoted to `master` (`20021af`), production — failed twice while deploying, then **succeeded** with the same 3.3 MB screenshot. Test reports labelled TEST are in both inboxes (staging + production).
