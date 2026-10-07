@@ -2,11 +2,17 @@ import { getBugReport } from '@/app/actions/bugReports'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import BugReportDetailClient from './BugReportDetailClient'
+import { redirect } from 'next/navigation'
+import { db } from '@/lib/db'
 
 export default async function BugReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const report = await getBugReport(id)
   if (!report) notFound()
+
+  // Emails and bookmarks from before the ticket board point here: send them to the ticket.
+  const linked = await db.bugReport.findUnique({ where: { id }, select: { ticket: { select: { number: true } } } })
+  if (linked?.ticket) redirect(`/super-admin/tickets/${linked.ticket.number}`)
 
   return (
     <div>

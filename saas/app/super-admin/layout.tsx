@@ -42,7 +42,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
                 { href: '/super-admin/tenants', label: 'Tenants' },
                 { href: '/super-admin/orders', label: 'Orders' },
                 { href: '/super-admin/users', label: 'Users' },
-                { href: '/super-admin/bug-reports', label: 'Bug Reports' },
+                { href: '/super-admin/tickets', label: 'Tickets' },
                 { href: '/super-admin/settings', label: 'Settings' },
               ].map(l => (
                 <Link
