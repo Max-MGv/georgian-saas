@@ -259,7 +259,8 @@ function Card({ t, onDragStart, onDragEnd, onMove }: { t: TicketListItem; onDrag
         <div className="flex items-center gap-2 mb-1" style={{ fontSize: 11, color: C.faint }}>
           <span style={{ fontWeight: 700, color: C.muted }}>T-{t.number}</span>
           <PriorityDot priority={t.priority} />
-          <span style={{ marginLeft: 'auto' }}>{age(t.updatedAt)}</span>
+          {/* "5m" depends on the current time: server and browser render a moment apart, so this text is allowed to differ. */}
+          <span style={{ marginLeft: 'auto' }} suppressHydrationWarning>{age(t.updatedAt)}</span>
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{t.title}</div>
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -329,7 +330,7 @@ function ListView({
                   {t.tenantName && <PlainChip title="Tenant">{t.tenantName}</PlainChip>}
                   {t.area && <PlainChip title="Area">{t.area}</PlainChip>}
                   {t.attachmentCount > 0 && <PlainChip>📎 {t.attachmentCount}</PlainChip>}
-                  <span style={{ fontSize: 11, color: C.faint, minWidth: 34, textAlign: 'right' }}>{age(t.updatedAt)}</span>
+                  <span style={{ fontSize: 11, color: C.faint, minWidth: 34, textAlign: 'right' }} suppressHydrationWarning>{age(t.updatedAt)}</span>
                   <select value={t.status} onChange={e => onMove(t, e.target.value as TicketStatusValue)} aria-label={`Status of T-${t.number}`}
                     style={{ ...inputStyle, padding: '4px 6px', fontSize: 12, cursor: 'pointer', color: STATUS_TONE[t.status].color, borderColor: STATUS_TONE[t.status].border }}>
                     {TICKET_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}

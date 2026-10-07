@@ -96,8 +96,10 @@ export function age(iso: string, now = Date.now()): string {
   return `${Math.floor(d / 30)}mo`
 }
 
+// timeZone is pinned (the winery's zone, same convention as OrdersTable): without it the server renders in UTC and the
+// browser in the viewer's zone, the text differs, and React logs a hydration error (#418) on every ticket page.
 export function fullDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tbilisi' })
 }
 
 /** Environment banner shown on every ticket screen so the two boards are never confused. */
