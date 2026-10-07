@@ -128,7 +128,7 @@ withTenantDb(tenantId, tx => ...)
 | OrderContact | ✅ direct | simple | same — Plan-ContactRoles Chunk 2. Polymorphic over `Order`/`WineOrder` (exactly one FK set), carries its own `tenantId` rather than joining through either parent, same shape as `OrderEvent`/`Payment` |
 | InvoiceSent | ✅ direct | simple | same — Feature 203 |
 | Tenant | N/A | no RLS | Read by proxy.ts as superuser before tenant context exists |
-| BugReport | ✅ direct, nullable | **no RLS, deliberate** | Same treatment as `Tenant`, not an oversight — the super-admin bug-report inbox must read every tenant's reports (plus anonymous public-site submissions with `tenantId = null`) in one query, which a `tenant_isolation` policy would block. Access control is enforced entirely in server actions instead: `requireSuperAdmin()` gates the inbox (read/write all), a narrower "must be this admin's own report" filter (`submitterUserId = current user`) gates the tenant-admin status view. Not in `setup-rls.ts`'s `writableTables`. See `Plan-BugReportWidget.md` Phase 1. |
+| BugReport | ✅ direct, nullable | **RLS enabled, NO policy, anon/authenticated REVOKEd** (migration `20261007120000_lock_bug_report_from_rest_api`) | Read/written only by the app server as table owner (bypasses RLS). **Not** open to the Supabase REST API. Earlier this row said "no RLS, deliberate" — that left the table world-readable/writable with the public anon key until 2026-10-07 (KnownBugs #73). Rule: server-only table ⇒ RLS on + no policy + revoke grants, in the same migration. |
 
 ---
 
