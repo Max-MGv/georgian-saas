@@ -15,7 +15,7 @@ export async function uploadBgImage(formData: FormData): Promise<string> {
 
   const file = formData.get('file') as File
   if (!file || !file.type.startsWith('image/')) throw new Error('Invalid file')
-  if (file.size > 10 * 1024 * 1024) throw new Error('File too large (max 10 MB)')
+  if (file.size > 4 * 1024 * 1024) throw new Error('File too large (max 4 MB)') // Vercel rejects request bodies over ~4.5 MB
 
   const supabase = createServiceClient()
   await supabase.storage.createBucket(BUCKET, { public: true }).catch(() => {})
@@ -65,7 +65,7 @@ export async function uploadWineImage(formData: FormData): Promise<string> {
 
   const file = formData.get('file') as File
   if (!file || !file.type.startsWith('image/')) throw new Error('Invalid file')
-  if (file.size > 10 * 1024 * 1024) throw new Error('File too large (max 10 MB)')
+  if (file.size > 4 * 1024 * 1024) throw new Error('File too large (max 4 MB)') // Vercel rejects request bodies over ~4.5 MB
 
   const supabase = createServiceClient()
   await supabase.storage.createBucket(WINE_BUCKET, { public: true }).catch(() => {})

@@ -6,7 +6,7 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 
 const BUCKET = 'logos'
-const MAX_SIZE = 5 * 1024 * 1024
+const MAX_SIZE = 4 * 1024 * 1024 // 4 MB (Vercel rejects request bodies over ~4.5 MB)
 
 export async function getPlatformConfig() {
   return db.platformConfig.findUnique({ where: { id: 'platform' } })
@@ -17,7 +17,7 @@ export async function uploadPlatformLogo(formData: FormData): Promise<string> {
 
   const file = formData.get('file') as File
   if (!file || file.size === 0) throw new Error('No file provided')
-  if (file.size > MAX_SIZE) throw new Error('File too large (max 5 MB)')
+  if (file.size > MAX_SIZE) throw new Error('File too large (max 4 MB)')
 
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
   const allowed = ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp']

@@ -31,7 +31,7 @@ const MAX_COMMENT_LENGTH = 2000
 // Provisional — Phase 4 owns the real cap (client + server) alongside the
 // Storage bucket's own limits. Keeping this here just avoids obviously large
 // pastes/uploads bogging down the panel before Phase 4 exists.
-const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024
 
 type BugReportPayload = {
   type: ReportType

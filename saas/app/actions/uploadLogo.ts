@@ -8,7 +8,7 @@ import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 
 const BUCKET = 'logos'
-const MAX_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_SIZE = 4 * 1024 * 1024 // 4 MB (Vercel rejects request bodies over ~4.5 MB)
 
 async function ensureBucket() {
   const supabase = createServiceClient()
@@ -44,7 +44,7 @@ export async function uploadTenantFaviconAdmin(tenantId: string, formData: FormD
 async function uploadLogoFile(formData: FormData, tenantId: string, type: 'logo' | 'favicon'): Promise<string> {
   const file = formData.get('file') as File
   if (!file || file.size === 0) throw new Error('No file provided')
-  if (file.size > MAX_SIZE) throw new Error('File too large (max 5 MB)')
+  if (file.size > MAX_SIZE) throw new Error('File too large (max 4 MB)')
 
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
   const allowed = ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp']

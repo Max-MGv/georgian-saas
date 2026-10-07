@@ -22,7 +22,7 @@ import type { BugReportStatus } from '@prisma/client'
 
 const BUCKET = 'bug-report-screenshots' // private bucket, created in Phase 1
 const MAX_COMMENT_LENGTH = 2000
-const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024 // 5MB — matches widget's client-side cap (BugReportWidget.tsx)
+const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024 // 4MB — matches widget's client-side cap (BugReportWidget.tsx); Vercel rejects request bodies over ~4.5MB
 
 const REPORT_TYPES = ['BUG', 'FEATURE'] as const
 const SURFACES = ['PUBLIC_SITE', 'ADMIN', 'SUPER_ADMIN'] as const

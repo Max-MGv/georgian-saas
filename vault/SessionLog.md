@@ -8,6 +8,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-07 (latest) — Second root cause: uploads over 1 MB fail everywhere (KnownBugs #72)
+
+Max asked "does it work now?" — before saying yes I checked with a realistic file: the production test had used a 187-byte image. Next.js caps Server Action bodies at 1 MB by default and `next.config.ts` never raised it, so any screenshot over ~1 MB still failed (reproduced locally: 1.61 / 3.28 MB failed). Fixed with `serverActions.bodySizeLimit: '4.4mb'` and caps aligned to 4 MB (Vercel's own ~4.5 MB request limit is the hard ceiling). Verified locally 1.6 / 3.3 / 4.0 MB OK, 5.5 MB refused cleanly; staging and production verification below.
+
+---
+
 ## 2026-10-07 (later, newest) — Merged staging → master at Max's request; production bug-report failure diagnosed
 
 Max reported the bug/feature report not working on `nikalasmarani.vineworks.ge` (works on staging) and asked to push everything to `master` and re-check. **Order mattered:** tested production *first* (baseline): text-only report OK, report **with a screenshot fails** ("Failed to upload screenshot"). Then merged `staging` → `master` as `3f3b18c` (no migrations in the delta; none of the bug-report code differed), confirmed the new build live (server-action build id changed), retested: **identical failure** → not caused by recent changes. Cause: Storage bucket `bug-report-screenshots` was only ever created in the dev Supabase project; production lists only `wine-photos` (KnownBugs #71; `logos`/`backgrounds` suspected missing too). **Then fixed on Max's instruction ("fix all of it"):** created `bug-report-screenshots` (private), `logos` and `backgrounds` (public) in the production Supabase project to match dev; verified live — a screenshot report on `nikalasmarani.vineworks.ge` now returns `{ok:true}` and lands in the bucket. Logo/background uploads in the production admin not tested (needs a production admin login). Checklist added to `Plan-DevProdEnvironments.md`. Side effects on production: 3 test reports (2 failed at upload, 1 text-only saved as a row + probable email to max@vineworks.ge), all labelled TEST. Merging shipped the 7 unverified-on-a-real-phone mobile fixes to real admins — Max asked for it explicitly.

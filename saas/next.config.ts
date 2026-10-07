@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Next.js rejects any Server Action request body over 1 MB by default, before
+  // the action even runs - so every upload that went through one (bug-report
+  // screenshots, logos, favicons, backgrounds, wine photos) silently failed with
+  // "Something went wrong" once the file passed ~1 MB, whatever the action's own
+  // size check said. Real screenshots are usually 1-4 MB. 4.4mb leaves room for
+  // a file at the 4 MB cap plus form fields, and stays under Vercel's own ~4.5 MB
+  // request-body limit, which no config can raise (KnownBugs #72).
+  experimental: {
+    serverActions: { bodySizeLimit: '4.4mb' },
+  },
   // Dev-only. Lets Playwright's onboarding-wizard.spec.ts reach a second
   // tenant ("Test Onboarding Wizard") via its own domain, resolved locally
   // via a Chromium --host-resolver-rules flag scoped to that one test file
