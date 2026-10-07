@@ -897,9 +897,9 @@ export default function CompaniesClient({ companies: initial, roles = [], person
             <div className="flex items-center px-5 py-4 gap-4" style={{ backgroundColor: '#fffbeb' }}>
               <button
                 onClick={() => setExpandedId(expanded ? null : individualsRow.id)}
-                className="flex items-center gap-2 flex-1 text-left"
+                className="flex items-center gap-x-2 gap-y-1 flex-wrap flex-1 min-w-0 text-left"
               >
-                <svg className="w-4 h-4 transition-transform" style={{ color: '#b45309', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
+                <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: '#b45309', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
                   <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span className="font-semibold" style={{ color: '#92400e' }}>{at('companies.individuals.title')}</span>
@@ -916,7 +916,7 @@ export default function CompaniesClient({ companies: initial, roles = [], person
                   </span>
                 )}
               </button>
-              <HelpHint text={at('help.companies.individuals')} />
+              <span className="flex-shrink-0"><HelpHint text={at('help.companies.individuals')} /></span>
             </div>
             {expanded && (
               <PriceTiersSection
@@ -981,10 +981,14 @@ export default function CompaniesClient({ companies: initial, roles = [], person
                     onClick={() => setExpandedId(expanded ? null : company.id)}
                     className="flex items-center gap-x-2 gap-y-1 flex-wrap text-left min-w-0"
                   >
-                    <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
-                      <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
+                    {/* Chevron and name are one unit: on a 320px phone a long name used to
+                        wrap onto its own line and leave the chevron alone above it. */}
+                    <span className="flex items-start gap-x-2 min-w-0">
+                      <svg className="w-4 h-4 mt-1 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }} fill="none" viewBox="0 0 16 16">
+                        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
+                    </span>
                     {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>{at('companies.idLabel')} {company.identificationCode}</span>}
                     {company.accessCode && (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>

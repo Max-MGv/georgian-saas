@@ -1285,13 +1285,15 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : at('wineOrders.mode.pack')
 
   const modeToggle = (
-    <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start">
-      <div className="flex gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: '#f0e8dc' }}>
+    <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start max-w-full">
+      {/* min-w-0 + overflow-x-auto: Georgian labels are long, and at 320px the four tabs
+          plus the "?" are wider than the screen - scroll the tabs rather than the page. */}
+      <div className="flex gap-0.5 rounded-lg p-0.5 min-w-0 overflow-x-auto" style={{ backgroundColor: '#f0e8dc', scrollbarWidth: 'none' }}>
         {(['cards', 'table', 'board', 'pack'] as const).map(m => (
           <button
             key={m}
             onClick={() => switchMode(m)}
-            className="text-sm px-3 md:px-4 py-1.5 rounded-md font-medium transition-all"
+            className="text-sm px-2 min-[360px]:px-2.5 md:px-4 py-1.5 rounded-md font-medium transition-all whitespace-nowrap flex-shrink-0"
             style={{
               backgroundColor: mode === m ? '#fff' : 'transparent',
               color: mode === m ? C.wine : C.faint,

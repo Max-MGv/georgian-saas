@@ -8,11 +8,11 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
-## 📱 2026-10-07 — Check your seven phone fixes (they are on staging's working copy, NOT pushed yet)
+## 📱 2026-10-07 — Check your seven phone fixes (they are pushed to `staging` — check them at staging.vineworks.ge once Vercel has deployed; NOT on the real site)
 
 I fixed everything from your 9 screenshots (details: [[Feature 221 - Mobile bug reports 2026-10-05]]). I could only test in a
-simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust. Once you're happy, say so and
-I'll commit + push to `staging`, you look at it at `staging.vineworks.ge`, and only then does it go anywhere near `master`.
+simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust. Once you're happy, say so and I'll
+ask before anything goes near `master`.
 
 1. **Settings → Payment details** — IBAN now fully visible, pencil on screen. (Try the pencil → type → save.)
 2. **Settings → Closed Days** and **Wine Orders → Filters** — the date boxes now say `DD/MM/YYYY`, have a calendar icon and a small label. Does tapping open the iPhone date picker?

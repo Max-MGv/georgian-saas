@@ -47,7 +47,10 @@ Screenshots of every changed screen in English and Georgian at 390px, plus 320px
    Now `fixed` with a spacer under the list. Measured after: bar bottom 652 of 664, Print visible.
 2. Georgian Closed Days: the "Reason (optional)" placeholder was cut off beside the long Georgian button. The field now takes its own row on phones.
 Also confirmed: no horizontal overflow anywhere at 390/320, calendar select / deselect / month-change reset behave, language restored to EN, zero page errors.
-Pre-existing quirks noticed, NOT caused by this work, left alone: Georgian "Pack" tab label wraps under its emoji; at 320px a long company name wraps beneath its chevron; the Individuals row's "?" is slightly clipped at 320px.
+Three pre-existing quirks noticed in that pass were **fixed in a follow-up commit** (same day): the Georgian "Pack" tab label wrapping under
+its emoji (tabs no-wrap, tighter padding, and the tab strip scrolls instead of widening the page at 320px); a long company name wrapping
+beneath its chevron at 320px (chevron + name are now one unit); the Individuals row's "?" clipped at 320px (row wraps, "?" never shrinks).
+Measured after: Georgian tabs end at 337 of 390 and 282 of 320; chevrons share a line with their names; "?" ends at 283 of 320.
 
 ## Not done / limits
 
