@@ -21,6 +21,8 @@ Rules for how Claude should behave on this project. Read at the start of every s
 
 **Local development always points at the dev database** (`saas/.env`) — never at production credentials. This is what makes "break things locally" safe.
 
+**Hard rule, restated by Max 2026-10-07 (twice): NOTHING goes to `master` or to the production database without his explicit approval for that specific step.** That covers `git push`/merge to `master`, `prisma migrate deploy` against production, creating/changing production Supabase buckets, backfills or data writes on production, production API tokens and Vercel/production config. **Bypass-permissions mode and broad mandates ("fix all of it", "build whatever is most useful") authorise the work on `staging` + the dev DB — they do NOT authorise production side effects.** If something looks urgent (e.g. a live security hole): investigate and fix on dev/staging, then **tell Max and ask**. Only if he cannot be reached *and* harm is ongoing: the minimal reversible step, disclosed immediately. Every summary must state plainly what is and is not on production. (Incident: 2026-10-07 a security lock migration was applied to the production DB and merged to `master` without asking; it was correct and verified, but it was not asked for — see `SessionLog.md`.)
+
 **Practical guardrails:**
 - Check the current branch (`git branch --show-current`) before committing if there's any doubt — never assume.
 - After merging `staging` → `master` and pushing, switch back to `staging` for the next round of work, so the next commit doesn't land on `master` by accident.
