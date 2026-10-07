@@ -151,7 +151,7 @@ When Max says "prepare for handoff," update:
 2. `vault/FeatureLog.md` — all statuses current
 3. `vault/Roadmap.md` — all checkboxes current
 
-These vault files are the handoff. No separate handoff doc needed.
+These vault files are the handoff. No separate handoff doc needed.
 
 ---
 

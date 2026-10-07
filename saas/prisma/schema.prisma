@@ -909,7 +909,7 @@ enum BugReportSurface {
   PUBLIC_SITE
   ADMIN
   SUPER_ADMIN
-}
+}
 
 // ── Internal tickets (Plan-Tickets.md) ──────────────────────────────────────
 // Super-admin only. Like BugReport these have NO tenant RLS policy by design (the
