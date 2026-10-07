@@ -85,7 +85,7 @@ Obsidian sync (two sources of truth is how trackers die — one-off import + one
 | 4 | Quick add, bulk add, attachments, drag-and-drop | |
 | 5 | API + token + `tix` CLI + export; one-time import of open vault items | |
 | 6 | Tests (Playwright + API script), mobile + desktop screenshots, fresh-eyes code review by a blind sub-agent | |
-| 7 | Production: migration, bucket, backfill, token → merge to `master` | additive; deliberate separate steps (Rule 0) |
+| 7 | Production: migration, bucket, backfill, token → merge to `master` | **🛑 ONLY AFTER MAX'S EXPLICIT "GO" FOR THIS STEP** (2026-10-07: Max asked to be sure nothing reaches `master` unasked). Everything in chunks 1–6 lives on `staging` + the dev DB only. Additive; deliberate separate steps (Rule 0) |
 
 ## Open for Max later (not blocking)
 Area list wording; whether `Idea` should be a type or just a label; whether a weekly "Review items older than 3 days" digest is wanted.
