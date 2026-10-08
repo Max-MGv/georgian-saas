@@ -756,14 +756,23 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en' }: { companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string }) {
+export default function CompaniesClient({ companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
     ...(wineOrdersOn ? (['WINE_ORDER'] as const) : []),
   ]
   const [companies, setCompanies] = useState(initial)
-  const [activeModule, setActiveModule] = useState<Module>(availableModules[0] ?? 'BOOKING')
+  // `?edit=<id>` (read by the server page) opens that company's full edit form on
+  // arrival — "Add company" lands here right after creating one, so the admin goes
+  // straight into the form instead of finding an empty row and pressing Edit (T-6).
+  // Lazy initialisers, not an effect, so server and client render the same thing.
+  const initialEdit = initialEditId ? initial.find(c => c.id === initialEditId && !c.isIndividual) ?? null : null
+  const [activeModule, setActiveModule] = useState<Module>(() =>
+    initialEdit && !initialEdit.isBookingCompany && initialEdit.isWineOrderCompany && wineOrdersOn
+      ? 'WINE_ORDER'
+      : availableModules[0] ?? 'BOOKING'
+  )
   // `?expand=first` opens the first company in the list on arrival.
   //
   // The rate ladders are the proof this screen exists to show, and every row
@@ -773,7 +782,14 @@ export default function CompaniesClient({ companies: initial, roles = [], person
   // normal visit, and it is a plain deep-link parameter rather than demo
   // chrome: any link into this page can use it.
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [editingCompany, setEditingCompany] = useState<Company | null>(null)
+  const [editingCompany, setEditingCompany] = useState<Company | null>(initialEdit)
+  // Drop `?edit=` from the address bar once used, so a later reload doesn't reopen the form.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('edit')) return
+    url.searchParams.delete('edit')
+    window.history.replaceState(window.history.state, '', url)
+  }, [])
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -812,9 +828,11 @@ export default function CompaniesClient({ companies: initial, roles = [], person
       isBookingCompany: activeModule === 'BOOKING',
       isWineOrderCompany: activeModule === 'WINE_ORDER',
     })
-    if ('error' in result) { setError(result.error ?? '') }
-    else { setNewName(''); setAdding(false); window.location.reload() }
-    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
+    // Reload with `?edit=` so the new company opens straight in the full form (T-6).
+    const url = new URL(window.location.href)
+    url.searchParams.set('edit', result.company.id)
+    window.location.assign(url)
   }
 
   async function handleDelete(id: string) {

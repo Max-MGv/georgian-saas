@@ -8,10 +8,10 @@ import { listContactRoles } from '@/app/actions/contactRoles'
 import { adminT } from '@/lib/adminT'
 import CompaniesClient from './CompaniesClient'
 
-export default async function CompaniesPage() {
-  const [tenantId, h, adminLanguage, personCodesEnabled, allRoles] = await Promise.all([
+export default async function CompaniesPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  const [tenantId, h, adminLanguage, personCodesEnabled, allRoles, { edit }] = await Promise.all([
     getTenantId(), headers(), getSetting('admin_language'),
-    getSetting('person_codes_enabled'), listContactRoles(),
+    getSetting('person_codes_enabled'), listContactRoles(), searchParams,
   ])
   const personCodesOn = personCodesEnabled === 'true'
   const locale = adminLanguage || 'en'
@@ -62,6 +62,7 @@ export default async function CompaniesPage() {
         wineOrdersOn={wineOrdersOn}
         paymentModuleOn={paymentModuleOn}
         locale={locale}
+        initialEditId={edit ?? null}
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,
