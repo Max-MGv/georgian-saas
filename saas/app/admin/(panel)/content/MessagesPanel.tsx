@@ -98,26 +98,57 @@ const NEW_COMPANY_PREVIEW: Record<NewCompanyVariant, { includesBooking: boolean;
   error: { includesBooking: false, status: 'error' },
 }
 
+// The email templates are ~560px wide. On a phone the admin leaves ~300px for the
+// preview, and squeezing an email into that made it look broken — far narrower than
+// any real mail app shows it (T-11). Below PHONE_WIDTH the email is laid out at a
+// phone's width and scaled down to fit, like a thumbnail; wider, nothing changes.
+const PHONE_WIDTH = 375
+
 function IframePreview({ html }: { html: string }) {
   const ref = useRef<HTMLIFrameElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(420)
+  const [boxWidth, setBoxWidth] = useState<number | null>(null)
 
+  const narrow = boxWidth !== null && boxWidth < PHONE_WIDTH
+  const scale = narrow ? boxWidth / PHONE_WIDTH : 1
+
+  // Measures the content wrapper, not the document — a document is never shorter
+  // than its iframe, so measuring it could only ever grow the preview.
   const measure = () => {
-    const doc = ref.current?.contentDocument
-    if (doc) setHeight(doc.documentElement.scrollHeight)
+    const content = ref.current?.contentDocument?.body?.firstElementChild as HTMLElement | null | undefined
+    if (content) setHeight(content.offsetHeight)
   }
 
-  useEffect(measure, [html])
+  // Re-measure after the iframe's width changes (text re-wraps) or the email changes.
+  useEffect(() => {
+    const id = requestAnimationFrame(measure)
+    return () => cancelAnimationFrame(id)
+  }, [html, narrow])
+
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    const ro = new ResizeObserver(([entry]) => setBoxWidth(entry.contentRect.width))
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [])
 
   return (
-    <iframe
-      ref={ref}
-      srcDoc={`<div style="padding:24px;background:#f4f1ec;">${html}</div>`}
-      sandbox="allow-same-origin"
-      onLoad={measure}
-      style={{ width: '100%', height, border: 'none', borderRadius: 8, backgroundColor: '#f4f1ec' }}
-      title="Email preview"
-    />
+    <div ref={boxRef} style={{ width: '100%', height: height * scale, overflow: 'hidden', borderRadius: 8, backgroundColor: '#f4f1ec' }}>
+      <iframe
+        ref={ref}
+        srcDoc={`<style>html,body{margin:0}</style><div style="padding:${narrow ? 8 : 24}px;background:#f4f1ec;">${html}</div>`}
+        sandbox="allow-same-origin"
+        onLoad={measure}
+        style={{
+          display: 'block', border: 'none', backgroundColor: '#f4f1ec',
+          width: narrow ? PHONE_WIDTH : '100%', height,
+          transform: narrow ? `scale(${scale})` : undefined, transformOrigin: 'top left',
+        }}
+        title="Email preview"
+      />
+    </div>
   )
 }
 
@@ -319,7 +350,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
-    totalPrice: 320,
+    totalPrice: 32000, // tetri — the templates take tetri since the money refactor
     wineryName: winery.name,
     wineryAddress: winery.address,
     wineryPhone: winery.phone,
@@ -335,10 +366,10 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     contactName: `${SAMPLE_GUEST.name} ${SAMPLE_GUEST.surname}`,
     businessName: SAMPLE_COMPANY,
     lines: [
-      { name: 'Saperavi', year: 2021, quantity: 6, price: 25 },
-      { name: 'Rkatsiteli', year: 2022, quantity: 6, price: 20 },
+      { name: 'Saperavi', year: 2021, quantity: 6, price: 2500 },
+      { name: 'Rkatsiteli', year: 2022, quantity: 6, price: 2000 },
     ],
-    totalAmount: (6 * 25 + 6 * 20) * 0.9,
+    totalAmount: (6 * 2500 + 6 * 2000) * 0.9,
     discountPercent: 10,
     wineryName: winery.name,
     wineryAddress: winery.address,
@@ -358,10 +389,10 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     tastingGuestCount: 2,
     lunchGuestCount: 2,
     freeGuestCount: 0,
-    totalPrice: 320,
+    totalPrice: 32000, // tetri — the templates take tetri since the money refactor
     companyName: SAMPLE_COMPANY,
     identificationCode: '123456789',
-    masterclassLines: [{ name: 'Wine Blending Masterclass', quantity: 2, pricePerUnit: 40 }],
+    masterclassLines: [{ name: 'Wine Blending Masterclass', quantity: 2, pricePerUnit: 4000 }],
     extras: [],
     payment: {
       recipientName: winery.name || 'Winery LLC',
@@ -386,7 +417,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
-    totalPrice: 320,
+    totalPrice: 32000, // tetri — the templates take tetri since the money refactor
     bookingType: 'INDIVIDUAL',
     paid: false,
     requestedCompanyName: null,
@@ -416,7 +447,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           open={open.has('booking')}
           onToggle={() => toggle('booking')}
         >
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {(['unpaid', 'paid', 'pendingCompany'] as BookingVariant[]).map(v => (
               <button
                 key={v}
@@ -559,7 +590,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsiteNewCompany.titleField')} draftKey="onsite_new_company_title"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
 
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {(['withBooking', 'noBooking', 'sent', 'error'] as NewCompanyVariant[]).map(v => (
               <button
                 key={v}
@@ -680,7 +711,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           open={open.has('onsitePayment')}
           onToggle={() => toggle('onsitePayment')}
         >
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {(['success', 'failed', 'pending'] as PaymentResultKind[]).map(v => (
               <button
                 key={v}
@@ -725,7 +756,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsiteAccessCode.intro')} draftKey="onsite_access_code_intro"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
 
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {(['entry', 'error'] as AccessCodeVariant[]).map(v => (
               <button
                 key={v}
