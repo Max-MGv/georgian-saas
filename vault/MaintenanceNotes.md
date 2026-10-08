@@ -92,6 +92,18 @@ change, so a one-word name is accepted with an empty `surname` rather than block
   behavior needed real semantic changes, not just a locator swap, since `applyPickedPerson` no
   longer splits a picked person's name before writing it.
 
+**Since T-21 (2026-10-08):** two blocks of the detailed variant have a **compact state**, which
+changes what is in the DOM — tests must account for it:
+- **Masterclass Add-ons** start collapsed to one `aria-expanded` button ("Add a masterclass (N
+  available)" / "N selected · X₾"); the checkboxes only exist after it is clicked (`mcOpen`).
+  `BookingFormVisualPanel.tsx` mirrors the collapsed row.
+- **Contact Person**, when filled by the picker (`applyPickedPerson` sets `contactCompact`), shows
+  one summary line + an "Edit Contact Person" button and **no Name/Phone/Email inputs** until Edit
+  is pressed. It falls back to the boxes when the name is empty, both phone and email are empty,
+  or `contactHasError`. Every place that clears these fields must also `setContactCompact(false)`,
+  or the summary would snap shut while the guest is typing. Typed and "I am not on this list"
+  contacts never collapse, which is why most specs were unaffected.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the

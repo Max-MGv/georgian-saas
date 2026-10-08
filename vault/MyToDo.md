@@ -8,6 +8,19 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## ✅ 2026-10-08 — Five tickets ready to test on STAGING (Tickets → "Ready to test"). Not on production.
+
+Each ticket has a review card with exact steps. Quick version, on **staging.vineworks.ge** (phone where it says so):
+1. **T-5** (phone) Admin → Orders → New order → tap "Total guests". The page should **not** zoom in.
+2. **T-23** `/wines` — the winery name/logo appears **once** (in the header).
+3. **T-6** Admin → Companies → Add company → type a name → Save → the **full Edit Company form** opens.
+4. **T-11** (phone) Admin → Site Content → Messages → open "Booking Confirmation": the email preview looks like a small version of the desktop one; all 3 buttons visible.
+5. **T-21** Public site → book as Tour Company → enter the company code → pick a contact: Contact Person becomes **one line + Edit**; Masterclass is **one row** that opens on tap.
+Also: the 3 new Georgian words on the booking form ("მასტერკლასის დამატება…", "არჩეული", "შეცვლა") are mine — check them.
+Then: Verified / Send back on each card. Shipping to `master` needs your separate go.
+
+---
+
 ## 🎫 2026-10-07 — The ticket tool is built and verified on STAGING. Nothing is on production. Your go is needed.
 
 **What it is:** Super Admin → **Tickets** (staging.vineworks.ge/super-admin/tickets). One board for bugs / features / tasks / ideas; widget reports land there as tickets; you and I use it day to day; I can read and write it through the `tix` CLI / token API. Details: [[Feature 222 - Internal ticket tool]], design: [[Plan-Tickets]].

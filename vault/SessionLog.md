@@ -8,6 +8,18 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-08 — Five easy-win tickets built on `staging` (T-5, T-23, T-6, T-11, T-21) — NOT on production
+
+Max asked which open tickets were easy wins, moved his picks to Backlog (T-5, T-6, T-11, T-21, T-23; T-22 sent back — it is a real feature that overlaps T-7), and said "feature by feature, implement, verify, proceed". One commit per ticket on `staging`, pushed (`00d6bb1`, `3a6ece2`, `f82cb20`, `0c02cac`, `6cc3f08`); FeatureLog #223. Verified each with headless Playwright against localhost (iPhone 13, 320px, desktop 1280; login through the suite's own credentials helper), screenshots in the session scratchpad.
+- **T-5** iOS zoom on admin inputs: forms set 14px *inline*, which beat the existing global 16px rule → forced 16px on `input/select/textarea` below 768px. Checked: every visible input ≥16px on 5 admin pages + `/book`; no horizontal overflow at 320px; desktop still 14px.
+- **T-23** `/wines` repeated the logo/name the header already shows → removed (and the 3 unused props).
+- **T-6** "Add company" → reload with `?edit=<id>` → full Edit Company form open (server page passes it; lazy initialisers, not an effect, so no hydration mismatch and no new lint error). 4 `ZZ T-6 verify` companies created during testing were deleted from the dev DB.
+- **T-11** The ticket's screenshot was the **email preview** under Messages, not the text editor. Preview now lays out at 375px and scales on narrow screens; height measured from the content (no more blank space); pill rows wrap. Found in passing: preview sample amounts were lari while templates take tetri since the money refactor (320 → "3.20₾") — fixed in the same commit; real emails were never affected.
+- **T-21** Company booking form: masterclass list collapsed to one summary row; a *picked* Contact Person becomes one line + "Edit" (typed/skipped/invalid contacts keep the boxes). Visual panel mirrors the masterclass row. Two specs updated; `contact-role-picker` + `booking-enhanced` 6/6 pass. MaintenanceNotes §1 updated.
+**Not verified:** real iPhone Safari; the 3 new Georgian strings (`form.mc_choose/mc_selected/contact_edit`) are mine. **Production untouched**; merging to `master` needs Max's go.
+
+---
+
 ## 2026-10-07 (verification) — Scrutiny pass before production: all layers executed, nothing on production
 
 Max: "nothing goes to production until we verify what was done, no missed dependencies, nothing broke or was collateral damage". Plan + results + production runbook: [[Plan-VerifyBeforeProduction]]. Layers 0–8 run (hygiene, static incl. a real production build, dependency audit, DB/security matrix on all 28 tables dev+prod, full Playwright tiers 1–4 = 36/37 + the failure fixed, new-feature behaviour on dev AND the production build, phone/desktop visuals of every super-admin page, a blind collateral-damage review, live staging). **Found and fixed:** whole-file CRLF rewrite of 2 files; ESLint errors in new code; widget file picker vs server allow-list; racy selectors in my test; React hydration errors visible only in production builds. **Not caused by this work, explained:** wine-catalogue-order fails because the dev wine "Rkatsiteli" is inactive (Max's data, left as found); onboarding test needs its documented reset. **Production untouched** (4 ticket tables still absent there; BugReport lock still in place). The runbook's key point: **migration and the `ticket-attachments` bucket must go to production BEFORE the code merge.**
