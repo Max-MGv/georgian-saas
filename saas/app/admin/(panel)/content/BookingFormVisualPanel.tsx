@@ -128,13 +128,12 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
       {isDetailed && (
         <div>
           <label style={labelStyle}><ET k="form_masterclass_header" fb="Masterclass Add-ons" /></label>
-          <div className="rounded-lg border divide-y" style={{ borderColor: C.border }}>
-            <div className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: C.bg }}>
-              <div className="w-4 h-4 rounded border flex-shrink-0" style={{ borderColor: C.border }} />
-              <span className="flex-1 text-sm" style={{ color: C.text }}>
-                Wine Blending Workshop <span className="text-xs" style={{ color: C.faint }}>25₾/pp</span>
-              </span>
-            </div>
+          {/* Mirrors the public form's collapsed summary row (T-21) — the list opens on tap there. */}
+          <div className="rounded-lg border flex items-center justify-between gap-3 px-4 py-3 text-sm" style={{ borderColor: C.border, backgroundColor: C.bg, color: C.muted }}>
+            <span>Add a masterclass (3 available)</span>
+            <svg className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
         </div>
       )}

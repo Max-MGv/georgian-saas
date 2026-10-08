@@ -175,6 +175,10 @@ const en: Translations = {
   'form.contact_role_phone': 'Phone',
   'form.contact_role_email': 'Email',
   'form.contact_role_choose': 'Choose from list',
+  // T-21 — compact masterclass row and autofilled contact person
+  'form.mc_choose': 'Add a masterclass ({n} available)',
+  'form.mc_selected': '{n} selected',
+  'form.contact_edit': 'Edit',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -387,6 +391,9 @@ const ka: Translations = {
   'form.contact_role_phone': 'ტელეფონი',
   'form.contact_role_email': 'ელფოსტა',
   'form.contact_role_choose': 'არჩევა სიიდან',
+  'form.mc_choose': 'მასტერკლასის დამატება ({n} ხელმისაწვდომი)',
+  'form.mc_selected': '{n} არჩეული',
+  'form.contact_edit': 'შეცვლა',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

@@ -209,6 +209,9 @@ test.describe('Booking form — enhanced/company variant', () => {
     // exact: true — Contact Person merged First/Last Name into one "Name"
     // field 2026-09-30 (MaintenanceNotes.md §1); a company with a guide also
     // has a "Guide — Name" field, which an un-exact match would also hit.
+    // T-21: a picked Contact Person shows as a one-line summary; Edit brings the boxes back.
+    const contactEdit = page.getByRole('button', { name: 'Edit Contact Person', exact: true });
+    if (await contactEdit.isVisible().catch(() => false)) await contactEdit.click();
     const nameInput = page.getByRole('textbox', { name: 'Name', exact: true });
     await expect(nameInput).not.toHaveValue('');
 
@@ -269,6 +272,8 @@ test.describe('Booking form — enhanced/company variant', () => {
     // one checked "Khinkali folding class" item adds exactly 35₾.
     const vegSelect = page.getByText('Vegetable dish', { exact: true }).locator('xpath=following-sibling::select');
     await vegSelect.selectOption({ label: 'Badrijani nigvzit' });
+    // T-21: the masterclass list starts collapsed behind one summary row.
+    await page.getByRole('button', { name: /Add a masterclass/ }).click();
     await page.getByRole('checkbox', { name: /Khinkali folding class/ }).check();
 
     // exact: true — Tbilisi Tour Collective has a guide on file, so the
