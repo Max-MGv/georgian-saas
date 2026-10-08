@@ -183,6 +183,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  // T-21: once a picked person fills Contact Person, show it as one summary line
+  // with an Edit button instead of three filled boxes. Set by applyPickedPerson,
+  // cleared by Edit and wherever the form empties these fields.
+  const [contactCompact, setContactCompact] = useState(false)
+  // T-21: masterclass add-ons start collapsed to one summary row.
+  const [mcOpen, setMcOpen] = useState(false)
   /** Which company the four fields above were last filled from — see the effect below. */
   const prevCompanyIdRef = useRef('')
 
@@ -222,6 +228,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setFullName(person.name)
     if (person.phone) setPhone(person.phone)
     if (person.email) setEmail(person.email)
+    setContactCompact(true)
   }, [contactPersonRole])
 
   const {
@@ -298,6 +305,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     (selectedDate !== '' && !isPastDate && !isDateBlocked(selectedDate) && isDayClosed(selectedDate)) ||
     (attemptedSubmit && !selectedDate)
   const contactHasError = attemptedSubmit && !phone && !email
+  // Only summarise a contact the guest could submit as-is; anything missing shows the boxes.
+  const showContactSummary = contactCompact && fullName.trim() !== '' && (!!phone || !!email) && !contactHasError
   const timeSlotHasError = attemptedSubmit && (!timeSlot || !availableSlots.includes(timeSlot))
 
   function handleDateChange(date: string) {
@@ -355,7 +364,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
      * details first and only then chose a company does not watch them vanish.
      */
     if (prevCompanyIdRef.current && prevCompanyIdRef.current !== companyId) {
-      setFullName(''); setPhone(''); setEmail('')
+      setFullName(''); setPhone(''); setEmail(''); setContactCompact(false)
     }
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
@@ -428,7 +437,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     setDirectCode('')
     setDirectCodeError('')
     resetContacts()
-    setFullName(''); setPhone(''); setEmail('')
+    setFullName(''); setPhone(''); setEmail(''); setContactCompact(false)
   }
 
   async function handleNewCompanySubmit() {
@@ -1134,7 +1143,24 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {isEnhanced && masterclassItems.length > 0 && (
           <div>
             <label style={labelStyle}>{fc('form_masterclass_header', 'form.masterclass')}</label>
-            <div className="rounded-lg border divide-y" style={{ borderColor: C.border }}>
+            {/* T-21: collapsed to one summary row by default — the full list was
+                always open and took a lot of room for an optional extra. */}
+            <div className="rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
+              <button type="button" aria-expanded={mcOpen} aria-controls="mc-list"
+                onClick={() => setMcOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-left"
+                style={{ backgroundColor: C.bg, color: activeMcLines.length > 0 ? C.text : C.muted }}>
+                <span>
+                  {activeMcLines.length > 0
+                    ? `${t(locale, 'form.mc_selected', { n: activeMcLines.length })} · ${formatTetri(asTetri(masterclassAmt))}`
+                    : t(locale, 'form.mc_choose', { n: masterclassItems.length })}
+                </span>
+                <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: mcOpen ? 'rotate(180deg)' : undefined }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {mcOpen && (
+              <div id="mc-list" className="divide-y border-t" style={{ borderColor: C.border }}>
               {masterclassItems.map(m => {
                 const sel = mcSelections[m.id]
                 return (
@@ -1160,6 +1186,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   </div>
                 )
               })}
+              </div>
+              )}
             </div>
           </div>
         )}
@@ -1244,7 +1272,29 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             label above the box to placeholder text inside it. See
             MaintenanceNotes.md §1. */}
         <div ref={contactWrapRef}>
-          <label style={{ ...labelStyle, marginBottom: 6, display: 'block' }}>{contactPersonTitle}</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label style={{ ...labelStyle, marginBottom: 0 }}>{contactPersonTitle}</label>
+            {showContactSummary && (
+              <button type="button" aria-label={`${t(locale, 'form.contact_edit')} ${contactPersonTitle}`}
+                onClick={() => {
+                  setContactCompact(false)
+                  requestAnimationFrame(() => contactWrapRef.current?.querySelector<HTMLInputElement>('#name')?.focus())
+                }}
+                className="text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                style={{ color: 'var(--color-brand)' }}>
+                {t(locale, 'form.contact_edit')}
+              </button>
+            )}
+          </div>
+          {/* T-21: an autofilled (picked) contact person shows as one line; Edit brings the boxes back. */}
+          {showContactSummary ? (
+            <div className="rounded-lg border px-3 py-2.5 text-sm" style={{ ...inputStyle, color: C.text }}>
+              <span className="font-medium">{fullName}</span>
+              {phone && <span style={{ color: C.muted }}> · {phone}</span>}
+              {email && <span style={{ color: C.muted }}> · <span className="inline-block max-w-full [overflow-wrap:anywhere]">{email}</span></span>}
+            </div>
+          ) : (
+          <>
           <div className="grid sm:grid-cols-3 gap-3">
             <input id="name" name="name" required value={fullName} onChange={e => setFullName(e.target.value)}
               type="text" aria-label={t(locale, 'form.contact_role_name')} placeholder={t(locale, 'form.contact_role_name')}
@@ -1260,6 +1310,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           </div>
           {contactHasError && (
             <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_contact', 'form.err_contact')}</p>
+          )}
+          </>
           )}
         </div>
 

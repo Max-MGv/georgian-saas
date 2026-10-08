@@ -43,6 +43,9 @@ async function ensureAdminLoggedIn(page: Page) {
 const pickerHeading = (page: Page) => page.getByRole('heading', { name: 'Who should we put on this booking?' });
 const codeHeading = (page: Page) => page.getByRole('heading', { name: 'Enter your company code' });
 const contactField = (page: Page, label: string) => page.getByRole('textbox', { name: label, exact: true });
+// T-21: a *picked* Contact Person collapses to a one-line summary with this button; the
+// Name/Phone/Email boxes come back only after pressing it. Typed or skipped contacts keep the boxes.
+const contactEdit = (page: Page) => page.getByRole('button', { name: 'Edit Contact Person', exact: true });
 
 /** Select the fixture company (as a Tour Company booking) and submit `code` into the access-code popup. */
 async function enterCode(page: Page, code: string) {
@@ -103,9 +106,11 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
 
     // Contact Person merged First/Last Name into one Name field 2026-09-30
     // (MaintenanceNotes.md §1) — applyPickedPerson now writes person.name
-    // straight into it rather than splitting across two boxes.
-    await expect(contactField(page, 'Name')).toHaveValue(CONTACT_NAME);
-    await expect(contactField(page, 'Phone')).toHaveValue(CONTACT_PHONE);
+    // straight into it rather than splitting across two boxes. Since T-21 the picked person
+    // shows as a summary line (boxes hidden) — the values are checked after Edit, below,
+    // because the Guide picker re-opens over the form right now.
+    await expect(contactEdit(page)).toBeVisible();
+    await expect(contactField(page, 'Name')).toHaveCount(0);
 
     // ── Guide role next (sortOrder 20) — the popup re-opens itself for the next role in the
     // queue with no action from the guest. ──
@@ -119,7 +124,9 @@ test.describe.serial('Contact role picker — public booking form (Plan-ContactR
     // is on for this tenant), never the First/Last Name fields, which stay Mariam's.
     await expect(contactField(page, 'Guide — Name')).toHaveValue(GUIDE_NAME);
     await expect(contactField(page, 'Guide — Phone')).toHaveValue(GUIDE_PHONE);
+    await contactEdit(page).click();
     await expect(contactField(page, 'Name')).toHaveValue(CONTACT_NAME);
+    await expect(contactField(page, 'Phone')).toHaveValue(CONTACT_PHONE);
   });
 
   test('codes off: "I am not on this list" leaves the role\'s fields blank for the guest to fill in', async ({ page, context }) => {
