@@ -171,6 +171,13 @@
 input, select, textarea {
   font-size: 16px;
 }
+/* Many admin forms set a smaller font-size inline (style={inputStyle}), which
+   beats the rule above — so on phones force it. Desktop keeps the inline size. (T-5) */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
 
 .btn-wine {
   background-color: var(--color-brand);
