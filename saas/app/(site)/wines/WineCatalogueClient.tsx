@@ -104,9 +104,6 @@ export default function WineCatalogueClient({
   wines: WINES,
   companies = [],
   contactRoles = [],
-  logoUrl = null,
-  logoAlt = '',
-  tenantName = '',
   hideCompanyDropdown = false,
   locale = 'en',
   paymentConfigured = false,
@@ -122,9 +119,6 @@ export default function WineCatalogueClient({
    * appears here with no code change.
    */
   contactRoles?: OrderRole[]
-  logoUrl?: string | null
-  logoAlt?: string
-  tenantName?: string
   hideCompanyDropdown?: boolean
   locale?: string
   /**
@@ -932,11 +926,7 @@ export default function WineCatalogueClient({
         <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: 'var(--site-secondary)' }}>{t(locale, 'home.order_wine')}</p>
         <div className="flex items-start justify-between gap-4 mb-10">
           <div>
-            {logoUrl ? (
-              <img src={logoUrl} alt={logoAlt} style={{ height: '56px', width: 'auto' }} />
-            ) : (
-              <p className="font-serif text-2xl font-semibold tracking-wide" style={{ color: 'var(--color-brand)' }}>{tenantName}</p>
-            )}
+            {/* No logo / winery name here — the site header already shows it (T-23). */}
             <p className="text-base" style={{ color: 'var(--site-muted)' }}>{t(locale, 'wine.orderSubtitle')}</p>
           </div>
           {/* View toggle */}

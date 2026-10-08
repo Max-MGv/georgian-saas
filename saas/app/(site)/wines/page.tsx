@@ -27,9 +27,6 @@ export default async function WinesPage() {
   ])
   if (h.get('x-tenant-modules-wine-orders') !== 'true') redirect('/')
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const logoUrl = h.get('x-tenant-logo')
-  const logoAlt = h.get('x-tenant-logo-alt') ?? ''
-  const tenantName = h.get('x-tenant-name') ?? ''
   const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
@@ -93,9 +90,6 @@ export default async function WinesPage() {
       wines={wines}
       companies={companies}
       contactRoles={contactRoles}
-      logoUrl={logoUrl}
-      logoAlt={logoAlt}
-      tenantName={tenantName}
       hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
       locale={locale}
       paymentConfigured={paymentConfigured}
