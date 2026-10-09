@@ -8,6 +8,13 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-09 — iOS bookmark icons (FeatureLog #224) — on `staging`; production step blocked
+
+Max bookmarked nikalasmarani.vineworks.ge (for his father: bookings/wine orders) and /admin in Safari; no icons. Cause: no `apple-touch-icon` anywhere (only the tenant `faviconUrl` → `<link rel="icon">`). Built a per-tenant `/touch-icon` route: Nikalas Marani gets the logo's red "ნმ" (cream tile, thin frame); admin gets the inverted wine tile + "ADMIN"; any other tenant gets its initials in its own theme colours (checked with the Vineworks Demo host). Committed `50c9fbf`, live on staging. Max said "push without asking"; I tried to cherry-pick **only `50c9fbf`** onto `master` (a full staging merge would also ship the 5 unverified tickets and the ticket tool, which needs its production migration first) — **the permission system blocked it**; master untouched at `6012b71`.
+Also answered: staging home cards show no per-person price because Staging Winery's Individuals tiers have none marked "shown on site" (unchanged since 2026-09-18) — not caused by the 2026-10-08 work; production shows 50₾/110₾.
+
+---
+
 ## 2026-10-08 — Five easy-win tickets built on `staging` (T-5, T-23, T-6, T-11, T-21) — NOT on production
 
 Max asked which open tickets were easy wins, moved his picks to Backlog (T-5, T-6, T-11, T-21, T-23; T-22 sent back — it is a real feature that overlaps T-7), and said "feature by feature, implement, verify, proceed". One commit per ticket on `staging`, pushed (`00d6bb1`, `3a6ece2`, `f82cb20`, `0c02cac`, `6cc3f08`); FeatureLog #223. Verified each with headless Playwright against localhost (iPhone 13, 320px, desktop 1280; login through the suite's own credentials helper), screenshots in the session scratchpad.
