@@ -20,6 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: `${displayName} — Book a Visit`,
     description: `Book a wine tasting experience at ${displayName}.`,
+    // iOS bookmark / home-screen icon + name, per tenant (app/touch-icon/route.tsx).
+    // app/admin/layout.tsx overrides both for the admin panel.
+    icons: { apple: '/touch-icon' },
+    appleWebApp: { title: displayName },
   }
 }
 
