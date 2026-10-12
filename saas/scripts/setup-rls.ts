@@ -43,6 +43,8 @@ async function main() {
     // Company delivery addresses (T-13, Plan-WineOrderFeatures Chunk 1). JOIN-to-Company like
     // CompanyPerson; its policy is created below AND in its own migration.
     'CompanyAddress',
+    // Delivery zones (T-8). Own tenantId → also in tenantedTables below (H18: both lists).
+    'DeliveryZone',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
     // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
     // child of Order. See MaintenanceNotes on why this exists.
@@ -97,6 +99,8 @@ async function main() {
     // Both tenantId columns are nullable, and NULL compares as NULL — never true — so a row
     // written without one is invisible to every tenant. The write path must always set it.
     'ContactRole', 'OrderContact', 'InvoiceSent',
+    // Delivery zones (T-8) — also in writableTables above; its migration creates the same policy.
+    'DeliveryZone',
   ]
 
   for (const t of tenantedTables) {

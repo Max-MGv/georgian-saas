@@ -127,11 +127,44 @@ model CompanyAddress {
   workingHours String?
   sortOrder    Int         @default(0)
   isActive     Boolean     @default(true)
+  /// The delivery zone this address is in (T-8), so its fee fills in by itself on the wine
+  /// form. SetNull: deleting a zone leaves the address, just without a zone.
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @default(now()) @updatedAt
   wineOrders   WineOrder[]
 
   @@index([companyId])
+}
+
+/// An area a winery delivers wine to, with one fee per order — "Tbilisi — 0₾" (T-8,
+/// vault/Plan-WineOrderFeatures.md Chunk 4). Customers outside every zone pick "Other" and the
+/// winery agrees delivery with them; see WineOrder.deliveryFeePending.
+///
+/// Own tenantId (a zone belongs to the winery, not to a company) → direct RLS policy.
+model DeliveryZone {
+  id         String           @id @default(cuid())
+  tenantId   String
+  nameEn     String
+  nameKa     String?
+  /// TETRI, like every money column. Whole, non-negative (CHECK in the migration).
+  fee        Int
+  sortOrder  Int              @default(0)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @default(now()) @updatedAt
+  addresses  CompanyAddress[]
+  wineOrders WineOrder[]
+
+  @@index([tenantId])
+}
+
+/// How a wine order reaches the customer (T-8). DELIVERY is the default because every order
+/// before T-8 was a delivery.
+enum WineFulfilment {
+  DELIVERY
+  PICKUP
 }
 
 /// A kind of contact a company can have — "Guide", "Contact Person", later "CEO".
@@ -576,6 +609,23 @@ model WineOrder {
   companyAddressId String?
   companyAddress   CompanyAddress? @relation(fields: [companyAddressId], references: [id], onDelete: SetNull)
   addressLabel     String?
+  // ── Delivery (T-8, vault/Plan-WineOrderFeatures.md) ──
+  // Money rule (Max, 2026-10-12): `totalAmount` above stays WINES ONLY — statistics and packing
+  // read it as wine revenue. The fee lives here; what the customer owes is the two together,
+  // computed in one place (lib/wineOrderMoney.ts), never re-added by hand.
+  fulfilment         WineFulfilment @default(DELIVERY)
+  /// Link only; `deliveryZoneName` + `deliveryFee` are the snapshot (a zone can be renamed,
+  /// repriced or deleted without moving a past order).
+  deliveryZoneId     String?
+  deliveryZone       DeliveryZone?  @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  deliveryZoneName   String?
+  /// TETRI. Null = no fee recorded (pickup, no zones configured, every pre-T-8 order, or a fee
+  /// still to be agreed — see the next column).
+  deliveryFee        Int?
+  /// True when the customer chose "Other – we'll contact you": the winery owes them a fee
+  /// decision. Cleared when the admin sets the fee. Separate from `deliveryFee IS NULL` so that
+  /// pre-T-8 orders are not all flagged as waiting for one.
+  deliveryFeePending Boolean        @default(false)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]

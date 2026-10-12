@@ -192,28 +192,43 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Resume point:** done.
 
 ### Chunk 4 — T-8 data + Settings
-**Status:** 🚧 started 2026-10-12
-- [ ] `DeliveryZone` model: `id, tenantId, nameEn, nameKa, fee Int (tetri), sortOrder,
-      isActive, createdAt, updatedAt`; RLS direct-tenantId policy; both setup-rls lists.
-- [ ] `CompanyAddress.deliveryZoneId String?` (SetNull).
-- [ ] `WineOrder`: `fulfilment` enum `DELIVERY | PICKUP` (default DELIVERY — every existing
-      order was a delivery), `deliveryZoneId` (SetNull), `deliveryZoneName` snapshot,
-      `deliveryFee Int?` (tetri; **null on a DELIVERY order = fee not decided yet**).
-- [ ] **Money rule to settle in this chunk:** `totalAmount` stays **wines only** (statistics
-      and packing read it as wine revenue); amount due = `totalAmount + (deliveryFee ?? 0)`
-      through **one helper** used by checkout, cards, emails, CSV. Verify every reader of
-      `totalAmount` against this before building (list them in this file).
-- [ ] Settings keys (per tenant, `Setting` table): `wine_min_order_type` (`off|bottles|amount`),
-      `wine_min_order_value`, `wine_pickup_enabled`, `wine_unknown_zone_payment`
-      (`pay_wine_now|reservation`).
-- [ ] Settings → Wine orders card: minimum order, pickup toggle, zones list (add / edit /
-      deactivate), unknown-zone policy (shown only when online payment is on).
-- [ ] Companies edit panel: each address gets an optional zone dropdown.
-**Resume point:** —
-**Production steps (later):** migration (additive).
+**Status:** ✅ 2026-10-12 (staging; migration on the dev DB only)
+- [x] Migration `20261012141158_delivery_zones` (additive): `DeliveryZone` (own tenantId, fee in
+      tetri), enum `WineFulfilment` (DELIVERY default), `CompanyAddress.deliveryZoneId` (SetNull),
+      `WineOrder.fulfilment / deliveryZoneId (SetNull) / deliveryZoneName / deliveryFee /
+      deliveryFeePending`. CHECKs: zone fee ≥ 0, order fee ≥ 0, a PICKUP order has no fee, zone
+      or pending flag. RLS direct policy + app_user grant + anon/authenticated revoke inside the
+      migration; also added to **both** `setup-rls.ts` lists. Anon REST → **401**.
+- [x] Why `deliveryFeePending` and not "fee IS NULL": every pre-T-8 order has a null fee and
+      must not show up as "fee to set".
+- [x] **Money rule** (Max 2026-10-12): `totalAmount` = wines only; `lib/wineOrderMoney.ts`
+      `wineOrderAmountDue()` = wines + fee — the only place the two are added. Readers of
+      `totalAmount` to route through it in Chunks 5–6: `submitWineOrder`, `wineOrders.ts`,
+      `wineOrderReceiptTemplate`, `invoiceEmailTemplate`, `settle.ts`, `abandoned/page`,
+      `wine-orders/page` + `WineOrdersClient`, `superAdmin.ts`, `MessagesPanel` (preview);
+      `statistics/page` deliberately stays wines-only.
+- [x] `lib/wineOrderRules.ts` — `parseWineOrderRules()` (unset/garbage → off; only the exact
+      value 'reservation' selects reservation) + `meetsMinimum()`. Keys: `wine_min_order_type`,
+      `wine_min_order_value` (bottles, or tetri for amount), `wine_pickup_enabled`,
+      `wine_unknown_zone_payment`. Defaults = today's behaviour (no minimum, no pickup).
+- [x] `app/actions/deliveryZones.ts` — zone CRUD + `saveWineOrderRules()` (validated; not the
+      generic `updateSetting`).
+- [x] Settings → new panel **"Wine Orders — Delivery & Minimum"** (`WineOrderSettingsPanel.tsx`,
+      sibling of ContactRolesPanel; only with the wine module): minimum (off / bottles / ₾),
+      pickup switch, unknown-zone choice (only with online payment), zone list.
+- [x] Companies → each address gets an optional **Delivery zone** dropdown (shown once zones
+      exist); server checks the zone is this tenant's.
+- [x] Tests: `scripts/test-delivery-zones.ts` **20/20** (isolation, DB money guards, SetNull,
+      parser fallbacks, minimum maths). Browser (localhost, suite login): zone 12.50₾ → 1250
+      tetri in DB; rules saved + survive reload; address zone saved; desktop/390/320 no overflow.
+      Test data removed afterwards (4 rule settings + ZZ zone) — Staging Winery is back to
+      "nothing configured".
+- Noted, not mine: an intermittent React hydration warning on admin pages at 320px (seen once
+  on Settings, once earlier on Companies; not reproducible on a clean load).
+**Resume point:** done.
 
 ### Chunk 5 — T-8 forms: pickup/delivery, zone, fee, minimum
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] Public wine form: Delivery / Pickup selector (pickup only when enabled). Delivery → zone
       dropdown (pre-selected from the company address's zone) + "Other – we'll contact you".
       Total shows wines + fee, or "+ delivery fee to be confirmed".

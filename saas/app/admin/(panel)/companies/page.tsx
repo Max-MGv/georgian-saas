@@ -22,6 +22,15 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   const paymentModuleOn = h.get('x-tenant-modules-online-payment') === 'true'
   await ensureIndividualsCompany(tenantId)
 
+  // Delivery zones (T-8) for each address's zone dropdown. Only when the module is on.
+  const zones = wineOrdersOn
+    ? await withTenantDb(tenantId, tx => tx.deliveryZone.findMany({
+        where: { tenantId, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, nameEn: true, nameKa: true },
+      }))
+    : []
+
   const companies = await withTenantDb(tenantId, tx =>
     tx.company.findMany({
       where: { tenantId },
@@ -41,7 +50,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         addresses: {
           where: { isActive: true },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-          select: { id: true, label: true, address: true, workingHours: true },
+          select: { id: true, label: true, address: true, workingHours: true, deliveryZoneId: true },
         },
       },
     })
@@ -60,6 +69,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         </span>
       </div>
       <CompaniesClient
+        zones={zones}
         roles={allRoles
           .filter(r => r.isActive && r.scope === 'PER_ORDER')
           .map(r => ({ id: r.id, key: r.key, labelEn: r.labelEn, labelKa: r.labelKa, sortOrder: r.sortOrder }))}

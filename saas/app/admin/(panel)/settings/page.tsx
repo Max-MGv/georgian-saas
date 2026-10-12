@@ -6,6 +6,10 @@ import { adminT } from '@/lib/adminT'
 import PaymentSetupBanner from '../PaymentSetupBanner'
 import SettingsClient from './SettingsClient'
 import ContactRolesPanel from './ContactRolesPanel'
+import WineOrderSettingsPanel from './WineOrderSettingsPanel'
+import { withTenantDb } from '@/lib/db'
+import { getTenantId } from '@/lib/tenant'
+import { parseWineOrderRules, WINE_RULE_KEYS } from '@/lib/wineOrderRules'
 import { listContactRoles } from '@/app/actions/contactRoles'
 
 export default async function SettingsPage() {
@@ -96,6 +100,24 @@ export default async function SettingsPage() {
   const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
   const credentials = onlinePaymentOn ? await getPaymentCredentials() : null
 
+  // Wine-order rules + delivery zones (T-8). Only for tenants with the module; read here as four
+  // named keys + the zone list — never the whole settings map (MaintenanceNotes §9).
+  const wineRules = wineOrdersOn
+    ? await (async () => {
+        const tenantId = await getTenantId()
+        const [values, zones] = await Promise.all([
+          Promise.all(Object.values(WINE_RULE_KEYS).map(async k => [k, await getSetting(k)] as const)),
+          withTenantDb(tenantId, tx => tx.deliveryZone.findMany({
+            where: { tenantId, isActive: true },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true, nameEn: true, nameKa: true, fee: true },
+          })),
+        ])
+        const map = new Map<string, string>(values)
+        return { rules: parseWineOrderRules(k => map.get(k)), zones }
+      })()
+    : null
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
@@ -164,6 +186,16 @@ export default async function SettingsPage() {
         locale={adminLanguage || 'en'}
         wineOrdersOn={wineOrdersOn}
       />
+
+      {/* Wine orders — minimum, pickup, delivery zones (T-8). Sibling panel, like the one above. */}
+      {wineRules && (
+        <WineOrderSettingsPanel
+          rules={wineRules.rules}
+          zones={wineRules.zones}
+          onlinePaymentOn={onlinePaymentOn}
+          locale={adminLanguage || 'en'}
+        />
+      )}
     </div>
   )
 }

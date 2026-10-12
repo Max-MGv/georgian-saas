@@ -44,7 +44,11 @@ type CompanyAddressRow = {
   label: string | null
   address: string
   workingHours: string | null
+  /** Delivery zone (T-8) — its fee fills in on the wine form. */
+  deliveryZoneId: string | null
 }
+/** A delivery zone, as much as the address form needs. */
+type ZoneLite = { id: string; nameEn: string; nameKa: string | null }
 /** Just enough of a ContactRole to label and group a list. */
 type RoleLite = { id: string; key: string; labelEn: string; labelKa: string; sortOrder: number }
 type Company = {
@@ -319,24 +323,38 @@ function PeopleSection({ companyId, role, people, setPeople, personCodesOn, loca
   )
 }
 
-function AddressForm({ initial, onSave, onCancel, loading, locale }: {
+type AddressFormData = { label: string; address: string; workingHours: string; deliveryZoneId: string | null }
+
+function AddressForm({ initial, onSave, onCancel, loading, locale, zones }: {
   initial?: CompanyAddressRow
-  onSave: (data: { label: string; address: string; workingHours: string }) => void
+  onSave: (data: AddressFormData) => void
   onCancel: () => void
   loading: boolean
   locale: string
+  zones: ZoneLite[]
 }) {
   const at = (key: string) => adminT(locale, key)
   const [label, setLabel] = useState(initial?.label ?? '')
   const [address, setAddress] = useState(initial?.address ?? '')
   const [workingHours, setWorkingHours] = useState(initial?.workingHours ?? '')
+  const [zoneId, setZoneId] = useState(initial?.deliveryZoneId ?? '')
   return (
     <div className="flex flex-wrap items-end gap-3">
       <SmallInput label={at('companies.addresses.label')} value={label} onChange={setLabel} width={130} />
       <SmallInput label={at('companies.addresses.address')} value={address} onChange={setAddress} width={220} />
       <SmallInput label={at('companies.addresses.hours')} value={workingHours} onChange={setWorkingHours} width={120} />
+      {/* Only once the winery has zones (Settings → Wine Orders — Delivery & Minimum). */}
+      {zones.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <label style={{ fontSize: '0.7rem', color: C.faint }}>{at('companies.addresses.zone')}</label>
+          <select value={zoneId} onChange={e => setZoneId(e.target.value)} style={{ ...inputStyle, width: 150 }}>
+            <option value="">{at('companies.addresses.zoneNone')}</option>
+            {zones.map(z => <option key={z.id} value={z.id}>{(locale === 'ka' && z.nameKa) || z.nameEn}</option>)}
+          </select>
+        </div>
+      )}
       <div className="flex gap-2 pb-0.5">
-        <button onClick={() => onSave({ label, address, workingHours })} disabled={loading || !address.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+        <button onClick={() => onSave({ label, address, workingHours, deliveryZoneId: zoneId || null })} disabled={loading || !address.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
         <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
       </div>
     </div>
@@ -348,12 +366,17 @@ function AddressForm({ initial, onSave, onCancel, loading, locale }: {
  * Address field. Same live-edit shape as `PeopleSection`: each row saves on its own, not on the
  * panel's main Save button.
  */
-function AddressesSection({ companyId, addresses, setAddresses, locale }: {
+function AddressesSection({ companyId, addresses, setAddresses, locale, zones }: {
   companyId: string
   addresses: CompanyAddressRow[]
   setAddresses: (a: CompanyAddressRow[]) => void
   locale: string
+  zones: ZoneLite[]
 }) {
+  const zoneName = (id: string | null) => {
+    const z = id ? zones.find(zz => zz.id === id) : null
+    return z ? (locale === 'ka' && z.nameKa) || z.nameEn : null
+  }
   const at = (key: string) => adminT(locale, key)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -361,7 +384,7 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleAdd(data: { label: string; address: string; workingHours: string }) {
+  async function handleAdd(data: AddressFormData) {
     setLoading(true); setError('')
     const result = await createAddress(companyId, data)
     setLoading(false)
@@ -370,13 +393,13 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
     setAdding(false)
   }
 
-  async function handleUpdate(id: string, data: { label: string; address: string; workingHours: string }) {
+  async function handleUpdate(id: string, data: AddressFormData) {
     setLoading(true); setError('')
     const result = await updateAddress(id, companyId, data)
     setLoading(false)
     if ('error' in result) { setError(result.error ?? ''); return }
     setAddresses(addresses.map(a => a.id === id
-      ? { ...a, label: data.label.trim() || null, address: data.address.trim(), workingHours: data.workingHours.trim() || null }
+      ? { ...a, label: data.label.trim() || null, address: data.address.trim(), workingHours: data.workingHours.trim() || null, deliveryZoneId: data.deliveryZoneId }
       : a))
     setEditingId(null)
   }
@@ -403,7 +426,7 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
       {addresses.map(a => (
         <div key={a.id}>
           {editingId === a.id ? (
-            <AddressForm initial={a} onSave={data => handleUpdate(a.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} />
+            <AddressForm initial={a} onSave={data => handleUpdate(a.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} zones={zones} />
           ) : deletingId === a.id ? (
             <div className="flex items-center gap-2 text-xs">
               <span style={{ color: C.muted }}>{at('companies.addresses.deleteConfirm')}</span>
@@ -417,6 +440,9 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
                 {a.address}
               </span>
               {a.workingHours && <span className="text-xs" style={{ color: C.faint }}>{a.workingHours}</span>}
+              {zoneName(a.deliveryZoneId) && (
+                <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: C.border, color: C.muted }}>{zoneName(a.deliveryZoneId)}</span>
+              )}
               <button onClick={() => setEditingId(a.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
               <button onClick={() => setDeletingId(a.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
             </div>
@@ -424,7 +450,7 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
         </div>
       ))}
       {adding ? (
-        <AddressForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} />
+        <AddressForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} zones={zones} />
       ) : (
         <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>
           {at('companies.addresses.add')}
@@ -435,7 +461,8 @@ function AddressesSection({ companyId, addresses, setAddresses, locale }: {
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones }: {
+  zones: ZoneLite[]
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
@@ -637,7 +664,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
             {field(at('companies.editPanel.idCode'), idCode, setIdCode, at('companies.editPanel.optional'))}
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
-          <AddressesSection companyId={company.id} addresses={addresses} setAddresses={setAddresses} locale={locale} />
+          <AddressesSection companyId={company.id} addresses={addresses} setAddresses={setAddresses} locale={locale} zones={zones} />
           {/* The three company contact columns are gone (Plan-ContactRoles Chunk 1). The people
               lists below replace them — a company's contact person is now a row in a role, so
               there is one place to edit it rather than two that could disagree. (An empty block
@@ -879,7 +906,7 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
+export default function CompaniesClient({ zones = [], companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { zones?: ZoneLite[]; companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
@@ -1029,6 +1056,7 @@ export default function CompaniesClient({ companies: initial, roles = [], person
           roles={roles}
           personCodesOn={personCodesOn}
           paymentModuleOn={paymentModuleOn}
+          zones={zones}
         />
       )}
 
