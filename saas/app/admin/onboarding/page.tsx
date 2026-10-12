@@ -49,7 +49,7 @@ export default async function OnboardingPage() {
           accessCode: true,
           prices: { select: { pricePerPerson: true } },
           people: { select: { id: true } },
-          address: true,
+          addresses: { select: { id: true } },
           identificationCode: true,
         },
       })
@@ -98,7 +98,7 @@ export default async function OnboardingPage() {
     name: c.name,
     accessCode: c.accessCode,
     prices: c.prices,
-    contactInfoSet: Boolean(c.people.length > 0 || c.address || c.identificationCode),
+    contactInfoSet: Boolean(c.people.length > 0 || c.addresses.length > 0 || c.identificationCode),
   }))
 
   const winesForWizard = wines

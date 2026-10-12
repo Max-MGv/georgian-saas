@@ -120,19 +120,31 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Production steps (later):** `prisma migrate deploy` (additive + backfill + RLS in one file).
 
 ### Chunk 2 — T-13 admin: Addresses on the Companies screen
-**Status:** 🚧 next
-- [ ] `app/actions/companyAddresses.ts`: create / update / delete (deactivate if any order
-      points at it? — SetNull makes delete safe; decide in chunk) — `requireAdmin()`, tenant
-      check through the company.
-- [ ] Companies edit panel: the single "Address" field becomes an **Addresses** list
-      (name / address / hours, add / edit / delete), same pattern as `PeopleSection`.
-- [ ] "Is this company set up" checks (`missingDetails`, onboarding) read addresses.
-- [ ] Companies page query + `Company` type carry `addresses`.
-- [ ] adminT keys en + ka. Phone 390/320 + desktop check.
-**Resume point:** —
+**Status:** ✅ 2026-10-12 (staging)
+- [x] `app/actions/companyAddresses.ts`: create / update / delete — `requireAdmin()`, tenant
+      check through the company (same shape as `companyPeople.ts`). **Delete is a real delete**:
+      safe because `WineOrder.companyAddressId` is SetNull and orders keep their snapshot.
+- [x] Companies edit panel: the single "Address" field is now an **Addresses** list (name /
+      address / working hours; add / edit / delete; live-saved like the people lists, and
+      propagated to the parent so close + reopen shows the change). Shown for every company.
+      Removed a pre-existing empty block that drew a double divider under it.
+- [x] `updateCompany` no longer writes `Company.address` (field removed from `CompanyProfile`).
+- [x] "Is this company set up" checks read addresses: `missingDetails` (CompaniesClient),
+      `getFinishDetailsStatus` (`app/actions/onboarding.ts`), onboarding wizard page.
+- [x] Demo seed (`lib/demoSeed.ts`) creates `CompanyAddress` rows instead of `Company.address`;
+      Restaurant Kakhuri gets **two branches** (Vake, Old Tbilisi) so the demo shows the picker
+      after the next demo reset.
+- [x] adminT `companies.addresses.*` en + ka (Georgian drafted by Claude); old
+      `companies.editPanel.address/addressPh` removed. Parity ✅, `tsc` ✅.
+- [x] Verified on localhost (headless, suite credentials helper): desktop 1280, iPhone 13 (390),
+      320 — no horizontal overflow; add → edit → close/reopen → delete each confirmed against the
+      dev DB; no test rows left behind.
+- Known, not mine: `CompaniesClient.tsx` has one pre-existing `react-hooks/set-state-in-effect`
+  lint error (the `?expand=first` effect) — present before this chunk.
+**Resume point:** done.
 
 ### Chunk 3 — T-13 forms: pick an address
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] Resolver (`ResolvedCompany`) returns active `addresses` (code-gated path). Remove
       `address` from the public `/wines` companies prop.
 - [ ] Public wine form: 0 addresses → typed address as today; 1 → filled in, no picker;

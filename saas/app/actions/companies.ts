@@ -51,7 +51,8 @@ type CompanyProfile = {
   // No contactName/contactPhone/contactEmail: those three columns are gone, replaced by
   // CompanyPerson rows in a contact_person role (Plan-ContactRoles Chunk 1). People are
   // managed through companyPeople.ts, not by updating the company.
-  address?: string
+  // No address either: addresses are CompanyAddress rows, managed through companyAddresses.ts
+  // (T-13). Company.address is being retired — nothing writes it any more.
   isBookingCompany?: boolean
   isWineOrderCompany?: boolean
   wineDiscountPercent?: number | null
@@ -91,7 +92,6 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
       data: {
         name: profile.name.trim(),
         identificationCode: profile.identificationCode?.trim() || null,
-        address: profile.address?.trim() || null,
         ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
         ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
         ...(profile.wineDiscountPercent !== undefined ? { wineDiscountPercent: profile.wineDiscountPercent } : {}),

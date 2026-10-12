@@ -37,6 +37,12 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           orderBy: [{ roleId: 'asc' }, { name: 'asc' }],
           select: { id: true, roleId: true, name: true, phone: true, email: true, code: true, isActive: true },
         },
+        // Delivery addresses (T-13). Inactive ones are hidden, the same as people above.
+        addresses: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: { id: true, label: true, address: true, workingHours: true },
+        },
       },
     })
   )
@@ -72,7 +78,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           wineDiscountPercent: c.wineDiscountPercent,
           skipPayment: c.skipPayment,
           identificationCode: c.identificationCode,
-          address: c.address,
+          addresses: c.addresses,
           accessCode: c.accessCode,
           orderCount: c._count.orders,
           // Prisma hands these back as plain numbers; re-brand at the boundary
