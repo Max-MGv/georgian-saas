@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
@@ -393,6 +394,8 @@ export async function sendSettlementEmail(
         fee: wineOrder.deliveryFee,
         pending: wineOrder.deliveryFeePending,
       },
+      // T-14 — shown as a preference, in the email's language.
+      preferredDate: formatPreferredDate(wineOrder.preferredDate, emailLocale) || undefined,
       introText: messages.email_wine_receipt_intro
         ?? (emailLocale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
       ...common,

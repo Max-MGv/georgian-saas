@@ -2,6 +2,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
 import { setSiteLanguage } from '../helpers/locale';
+import { fillPreferredWineDate } from '../helpers/wineForm';
 
 const TEST_BUSINESS_NAME = `Playwright Wine Test ${Date.now()}`;
 const TEST_EMAIL = `playwright-wine-order-${Date.now()}@example.com`;
@@ -181,6 +182,7 @@ test.describe('Wine catalogue → order', () => {
     await page.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street, Tbilisi');
     await page.getByRole('textbox', { name: 'Contact person full name' }).fill('Wine PlaywrightTest');
     await page.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000003');
+    await fillPreferredWineDate(page); // T-14: the form requires a preferred date
     await page.getByRole('textbox', { name: /Email address/ }).fill(TEST_EMAIL);
 
     // Real finding, same shape as the booking forms: online payment is

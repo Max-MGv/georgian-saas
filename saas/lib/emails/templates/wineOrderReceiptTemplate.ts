@@ -42,6 +42,8 @@ export type WineOrderReceiptData = {
     /** "Other" area — the fee is agreed later and was not part of this payment. */
     pending: boolean
   }
+  /** T-14 — the customer's preferred day, already formatted ("14 Oct 2026"). A preference. */
+  preferredDate?: string
   wineryName?: string
   wineryAddress?: string
   wineryPhone?: string
@@ -97,6 +99,10 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
           ? `<tr><td style="color: ${th.text}; padding: 5px 0;">Delivery${d.zoneName ? ` — ${d.zoneName}` : ''}</td><td style="color: ${th.text}; text-align: right;">${formatTetri(asTetri(d.fee), { decimals: true })}</td></tr>`
           : ''
   const paid = data.totalAmount + (d?.fee ?? 0)
+  const dateLabel = d?.fulfilment === 'PICKUP' ? 'Preferred pickup date' : 'Preferred delivery date'
+  const dateLine = data.preferredDate
+    ? `<p style="font-size: 13px; color: ${th.muted}; margin: 12px 0 0;">📅 ${dateLabel}: <strong style="color: ${th.text};">${data.preferredDate}</strong> — we will confirm the exact day with you.</p>`
+    : ''
 
   const introHtml = renderTokenizedText(data.introText?.trim() || DEFAULT_WINE_RECEIPT_INTRO, { name: data.contactName })
 
@@ -126,6 +132,7 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
             </tr>
           </table>
           <p style="font-size: 12px; color: ${th.secondary}; margin: 12px 0 0;">${bottles} bottle${bottles === 1 ? '' : 's'} · ${data.businessName}</p>
+          ${dateLine}
         </div>
 
         ${contactLines}

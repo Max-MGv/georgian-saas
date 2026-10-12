@@ -294,19 +294,38 @@ payment link for an owed fee.
 **Resume point:** done.
 
 ### Chunk 7 — T-14 preferred date
-**Status:** 🚧 next
-- [ ] `WineOrder.preferredDate DateTime? @db.Date` + index `[tenantId, preferredDate]`.
-- [ ] Public form: required date field, label "Preferred delivery date" / "Preferred pickup
-      date" + small note "We'll confirm the exact day". Closed Days + lead time enforced on the
-      client **and** in `submitWineOrder`. Shared `DateInput` (Feature 221) for phones.
-- [ ] Admin manual form: optional date, no restrictions (admin tool, like bookings).
-- [ ] Admin can change the date on an order (`OrderEvent`).
-- [ ] Shown on cards (desktop + phone), Pack view, emails.
-**Resume point:** —
-**Production steps (later):** migration (additive).
+**Status:** ✅ 2026-10-12 (staging; migration on the dev DB only)
+- [x] Migration `…_wine_order_preferred_date`: `WineOrder.preferredDate DATE` + index
+      `[tenantId, preferredDate]`; `OrderEventType.PREFERRED_DATE_CHANGED`.
+- [x] `lib/wineOrderDate.ts` (pure, client-safe): `earliestPreferredDate` (calendar day of now +
+      lead time), `checkPreferredDate` (missing / invalid / too_soon / closed), `wineLeadHours`
+      (single value, or the shorter of the split pair), `formatPreferredDate` (UTC, no day slip).
+      Same local-calendar convention as lib/bookingHours.ts. Weekly working-hours "closed" days
+      are **not** applied — Max approved lead time + Closed Days only; worth asking.
+- [x] `loadWineOrderDelivery` now also returns `dateRules` (booking lead-time settings +
+      Closed Days from yesterday on).
+- [x] Public form: required "Preferred delivery date" / "Preferred pickup date" (shared
+      `DateInput`, min = earliest day) with "This is your preferred day — we will confirm the
+      exact day with you."; Closed Day / too soon messages; submit disabled until valid.
+      `submitWineOrder` refuses missing / invalid / too soon / Closed Day.
+- [x] Admin manual form: optional date, no restrictions. Cards: full card "📅 Preferred: 20 Oct
+      2026 · Change / Clear" (`setWineOrderPreferredDate`, PREFERRED_DATE_CHANGED event); a date chip
+      on the phone card, table, board and pack. Receipt email: "Preferred … date: … — we will
+      confirm the exact day with you."
+- [x] **Every existing spec that submits the wine form now chooses a date** via
+      `tests/helpers/wineForm.ts` `fillPreferredWineDate()` (payment-amount-integrity ×3,
+      wine-catalogue-order, both new wine specs, and tier-5 payment-approved-settlement — the
+      tier-5 one is staging-only and **not re-run**).
+- [x] Tests: `scripts/test-wine-order-date.ts` **13/13**; delivery spec +1 (Closed Day refused,
+      chosen day stored); admin fee spec +1 (set date → DB + event). Full local wine run 12/12
+      before the two new tests; both new pass after fixes.
+- [x] **Found + fixed by the admin date test:** the card's date box spilled past its 160px
+      wrapper and covered the Save button (unclickable). Input now fills its box.
+- Phone 320/390 + desktop screenshots: no overflow.
+**Resume point:** done.
 
 ### Chunk 8 — T-14 calendar view in Wine Orders
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] View toggle on Wine Orders: Cards / Calendar (by preferred date).
 - [ ] Reuse `app/admin/(panel)/orders/CalendarView.tsx` (generalise its order type) rather
       than copy it; keep its hover-vs-tap split (MaintenanceNotes §33).

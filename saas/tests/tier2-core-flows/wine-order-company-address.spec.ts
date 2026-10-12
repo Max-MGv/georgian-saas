@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 import { db } from '../../lib/db'
+import { fillPreferredWineDate } from '../helpers/wineForm'
 
 const TENANT = process.env.DEFAULT_TENANT_ID!
 const COMPANY = `ZZ Address Test ${Date.now()}`
@@ -67,6 +68,7 @@ test('picking the second saved address files the order against it', async ({ pag
 
   await page.getByPlaceholder('Contact person full name').fill('ZZ Address Tester')
   await page.getByPlaceholder('Contact person phone number').fill('+995500000013')
+  await fillPreferredWineDate(page) // T-14: the form requires a preferred date
   await page.getByPlaceholder(/Email address/).fill('zz-address-test@example.com')
 
   // Online payment may be on or off for this tenant; either way the order exists before any

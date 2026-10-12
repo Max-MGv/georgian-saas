@@ -197,6 +197,13 @@ const en: Translations = {
   'wine.summary_free': 'free',
   'wine.min_bottles': 'Minimum order: {n} bottles',
   'wine.min_amount': 'Minimum order: {amount} of wine',
+  // T-14 — preferred delivery / pickup date
+  'wine.date_delivery': 'Preferred delivery date',
+  'wine.date_pickup': 'Preferred pickup date',
+  'wine.date_note': 'This is your preferred day — we will confirm the exact day with you.',
+  'wine.date_closed': 'We are closed on that day — please choose another.',
+  'wine.date_too_soon': 'That day is too soon — please choose a later one.',
+  'wine.date_invalid': 'Please enter a valid date (DD/MM/YYYY).',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -428,6 +435,12 @@ const ka: Translations = {
   'wine.summary_free': 'უფასო',
   'wine.min_bottles': 'მინიმალური შეკვეთა: {n} ბოთლი',
   'wine.min_amount': 'მინიმალური შეკვეთა: {amount} ღვინო',
+  'wine.date_delivery': 'მიწოდების სასურველი თარიღი',
+  'wine.date_pickup': 'გატანის სასურველი თარიღი',
+  'wine.date_note': 'ეს თქვენი სასურველი დღეა — ზუსტ დღეს თქვენთან დავაზუსტებთ.',
+  'wine.date_closed': 'ამ დღეს დაკეტილი ვართ — გთხოვთ, აირჩიოთ სხვა.',
+  'wine.date_too_soon': 'ეს დღე ძალიან ახლოა — გთხოვთ, აირჩიოთ უფრო გვიანი.',
+  'wine.date_invalid': 'გთხოვთ, შეიყვანოთ სწორი თარიღი (DD/MM/YYYY).',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

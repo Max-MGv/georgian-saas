@@ -18,7 +18,7 @@ function check(label: string, ok: boolean, detail = '') {
 
 const rules = (m: Record<string, string>) => parseWineOrderRules(k => m[k])
 const zones = [{ id: 'z1', nameEn: 'Tbilisi', nameKa: 'თბილისი', fee: 1500 }]
-const setup = (m: Record<string, string> = {}, z = zones): WineOrderDelivery => ({ rules: rules(m), zones: z })
+const setup = (m: Record<string, string> = {}, z = zones): WineOrderDelivery => ({ rules: rules(m), zones: z, dateRules: { leadHours: 0, blockedDates: [] } })
 
 console.log('\n── resolveOrderDelivery / minimumOrderError ──\n')
 

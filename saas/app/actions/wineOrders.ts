@@ -126,6 +126,9 @@ export async function createWineOrderAdmin(data: {
   /** T-8 — 'DELIVERY' (default) or 'PICKUP'; a zone id, 'other' (fee set later), or null. */
   fulfilment?: 'DELIVERY' | 'PICKUP'
   zoneChoice?: string | null
+  /** T-14 — YYYY-MM-DD, optional for admin entry and not held to the lead time / Closed Days
+   *  (an admin tool, like bookings: phone orders for "today" are real). */
+  preferredDate?: string | null
   address: string
   workingHours: string | null
   contactName: string
@@ -154,6 +157,7 @@ export async function createWineOrderAdmin(data: {
   if (!data.businessName.trim()) return { error: 'Business / customer name is required.' }
   const isPickup = data.fulfilment === 'PICKUP'
   if (!isPickup && !data.address.trim() && !data.companyAddressId) return { error: 'Address is required.' }
+  if (data.preferredDate && !isIsoDate(data.preferredDate)) return { error: 'Please enter a valid date.' }
   if (!data.contactName.trim()) return { error: 'Contact name is required.' }
   if (!data.contactPhone.trim()) return { error: 'Contact phone is required.' }
 
@@ -213,6 +217,7 @@ export async function createWineOrderAdmin(data: {
         addressLabel: orderAddress.addressLabel,
         companyAddressId: orderAddress.companyAddressId,
         ...delivery,
+        preferredDate: data.preferredDate ? new Date(data.preferredDate) : null,
         contactName: data.contactName.trim(),
         contactPhone: data.contactPhone.trim(),
         contactEmail: data.contactEmail?.trim() || null,
@@ -351,4 +356,42 @@ export async function startWineOrderFeeCheckout(
     amount: data.amount,
     orderDesc: `Wine order balance${order.deliveryZoneName ? ` (delivery ${order.deliveryZoneName})` : ''}, ${order.businessName}`,
   })
+}
+
+/** A real calendar day in YYYY-MM-DD form. */
+function isIsoDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+  const d = new Date(v + 'T00:00:00Z')
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
+}
+
+/**
+ * Change (or clear) a wine order's preferred delivery / pickup date (T-14, Chunk 7) — the winery
+ * agreeing a different day with the customer. Not held to the lead time or Closed Days: the admin
+ * is recording what was agreed. Logged as PREFERRED_DATE_CHANGED with the old and new day.
+ */
+export async function setWineOrderPreferredDate(
+  id: string,
+  date: string | null
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  if (date !== null && !isIsoDate(date)) return { error: 'Please enter a valid date.' }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const order = await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { preferredDate: true } })
+    if (!order) return { error: 'Wine order not found.' }
+    await tx.wineOrder.update({ where: { id }, data: { preferredDate: date ? new Date(date) : null } })
+    await recordOrderEvent(tx, {
+      tenantId,
+      wineOrderId: id,
+      type: 'PREFERRED_DATE_CHANGED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      payload: { from: order.preferredDate?.toISOString().slice(0, 10) ?? null, to: date },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+  revalidatePath('/admin/wine-orders')
+  return result
 }

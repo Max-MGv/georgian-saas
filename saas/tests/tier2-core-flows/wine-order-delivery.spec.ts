@@ -12,6 +12,7 @@ import * as dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 import { db } from '../../lib/db'
+import { fillPreferredWineDate } from '../helpers/wineForm'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -63,6 +64,7 @@ async function fillContact(page: Page, tag: string, { pickup = false } = {}) {
   if (!pickup) await page.getByPlaceholder('Actual address of bar / restaurant').fill('ZZ Street 1')
   await page.getByPlaceholder('Contact person full name').fill('ZZ Delivery Tester')
   await page.getByPlaceholder('Contact person phone number').fill('+995500000041')
+  await fillPreferredWineDate(page) // T-14: the form requires a preferred date
   await page.getByPlaceholder(/Email address/).fill(`zz-delivery-${RUN}@example.invalid`)
 }
 
@@ -160,4 +162,33 @@ test('pickup needs no address and records no delivery', async ({ page }) => {
   expect(o.address).toBe('')
   expect(o.deliveryFee).toBeNull()
   expect(o.deliveryZoneId).toBeNull()
+})
+
+test('preferred date: a Closed Day is refused, and the chosen day is stored (T-14)', async ({ page }) => {
+  test.setTimeout(120_000)
+  const iso = (daysAhead: number) => {
+    const d = new Date(); d.setDate(d.getDate() + daysAhead)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const closed = iso(20)
+  // Reuse the winery's own Closed Day if it already has one there; otherwise add and remove ours.
+  const existing = await db.blockedDate.findFirst({ where: { tenantId: TENANT, date: new Date(closed) } })
+  const made = existing ? null : await db.blockedDate.create({ data: { tenantId: TENANT, date: new Date(closed), reason: 'ZZ test' } })
+  try {
+    await openDrawerWith(page, 2)
+    // Zones exist in this file, so the (required) area must be answered or the browser blocks submit.
+    await page.getByRole('combobox', { name: 'Choose your delivery area' }).selectOption(zoneId)
+    await fillContact(page, 'date')
+    await fillPreferredWineDate(page, 20)
+    await expect(page.getByText('We are closed on that day — please choose another.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /^(Order & Pay|Place Reservation)$/ })).toBeDisabled()
+
+    await fillPreferredWineDate(page, 21)
+    await expect(page.getByText('This is your preferred day — we will confirm the exact day with you.')).toBeVisible()
+    await submit(page)
+    const o = await orderFor('date')
+    expect(o.preferredDate?.toISOString().slice(0, 10)).toBe(iso(21))
+  } finally {
+    if (made) await db.blockedDate.delete({ where: { id: made.id } })
+  }
 })

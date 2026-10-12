@@ -9,6 +9,8 @@ import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactRes
 import { formatAddressOption } from '@/lib/orderAddress'
 import { meetsMinimum, zoneDisplayName, type WineOrderRules } from '@/lib/wineOrderRules'
 import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
+import { checkPreferredDate, earliestPreferredDate, type PreferredDateRules } from '@/lib/wineOrderDate'
+import DateInput from '@/components/DateInput'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -119,7 +121,7 @@ export default function WineCatalogueClient({
    * means the form is exactly what it was before T-8. Display only — submitWineOrder re-reads
    * all of it and computes the real fee and minimum itself.
    */
-  delivery?: { rules: WineOrderRules; zones: DeliveryZoneOption[] } | null
+  delivery?: { rules: WineOrderRules; zones: DeliveryZoneOption[]; dateRules?: PreferredDateRules } | null
   wines: DbWine[]
   companies?: Company[]
   /**
@@ -210,6 +212,8 @@ export default function WineCatalogueClient({
   // T-8 — delivery or pickup, and which delivery zone: a zone id, 'other', or '' (not chosen).
   const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
   const [zoneChoice, setZoneChoice] = useState('')
+  // T-14 — the customer's preferred day, YYYY-MM-DD ('' until chosen).
+  const [preferredDate, setPreferredDate] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -528,7 +532,7 @@ export default function WineCatalogueClient({
       setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       setContactEmail('')
       clearAddresses()
-      setFulfilment('DELIVERY'); setZoneChoice('')
+      setFulfilment('DELIVERY'); setZoneChoice(''); setPreferredDate('')
     })
   }
 
@@ -561,6 +565,11 @@ export default function WineCatalogueClient({
     : minRule.type === 'amount'
       ? t(locale, 'wine.min_amount').replace('{amount}', formatTetri(minRule.amount))
       : ''
+
+  // ── Preferred date (T-14) — display mirror of the server's checkPreferredDate ──
+  const dateRules = delivery?.dateRules ?? { leadHours: 0, blockedDates: [] }
+  const dateProblem = preferredDate ? checkPreferredDate(preferredDate, dateRules) : null
+  const dateMissing = !preferredDate
 
   const paymentLabelActive = !paymentConfigured
     ? false
@@ -1088,10 +1097,28 @@ export default function WineCatalogueClient({
 
                     {error && <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{error}</p>}
 
+                    {/* Preferred delivery / pickup date (T-14). Said to be a preference, not a
+                        promise — Max: "make sure it says preferred". */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm font-medium" style={{ color: C.muted }}>
+                        {t(locale, isPickup ? 'wine.date_pickup' : 'wine.date_delivery')}
+                      </label>
+                      <input type="hidden" name="preferredDate" value={preferredDate} />
+                      <DateInput value={preferredDate} onChange={setPreferredDate}
+                        min={earliestPreferredDate(new Date(), dateRules.leadHours)}
+                        className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                      <p className="text-xs" style={{ color: dateProblem ? 'var(--color-brand)' : C.faint }}>
+                        {dateProblem === 'closed' ? t(locale, 'wine.date_closed')
+                          : dateProblem === 'too_soon' ? t(locale, 'wine.date_too_soon')
+                          : dateProblem === 'invalid' ? t(locale, 'wine.date_invalid')
+                          : t(locale, 'wine.date_note')}
+                      </p>
+                    </div>
+
                     {belowMinimum && (
                       <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{minimumText}</p>
                     )}
-                    <button type="submit" disabled={isPending || belowMinimum}
+                    <button type="submit" disabled={isPending || belowMinimum || dateMissing || !!dateProblem}
                       className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">
                       {isPending
                         ? (paymentLabelActive ? 'Redirecting...' : 'Sending...')

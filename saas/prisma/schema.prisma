@@ -492,6 +492,8 @@ enum OrderEventType {
   // vault/Plan-WineOrderFeatures.md Chunk 6) — e.g. a customer outside every delivery zone.
   // Payload carries the old and new fee in tetri.
   DELIVERY_FEE_SET
+  // An admin changed a wine order's preferred delivery/pickup date (T-14). Payload: from / to.
+  PREFERRED_DATE_CHANGED
 }
 
 enum ActorType {
@@ -630,6 +632,9 @@ model WineOrder {
   /// decision. Cleared when the admin sets the fee. Separate from `deliveryFee IS NULL` so that
   /// pre-T-8 orders are not all flagged as waiting for one.
   deliveryFeePending Boolean        @default(false)
+  /// The customer's PREFERRED delivery / pickup day (T-14) — a wish, not a promise; the form says
+  /// so. Date only. Null on every order placed before T-14, and optional on admin-entered ones.
+  preferredDate      DateTime?      @db.Date
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
@@ -645,6 +650,8 @@ model WineOrder {
   @@index([tenantId, stage])
   @@index([tenantId, createdAt])
   @@index([tenantId, abandonedAt])
+  // The Wine Orders calendar groups by this (T-14, Plan-WineOrderFeatures Chunk 8).
+  @@index([tenantId, preferredDate])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.

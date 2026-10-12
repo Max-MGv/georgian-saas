@@ -9,6 +9,7 @@ import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
 import { formatAddressOption } from '@/lib/orderAddress'
 import { zoneDisplayName } from '@/lib/wineOrderRules'
+import DateInput from '@/components/DateInput'
 import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 
 const C = {
@@ -113,6 +114,8 @@ export default function NewWineOrderForm({
   // choose "Other" to set the fee later on the order. No minimum here (admin tool, like bookings).
   const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
   const [zoneChoice, setZoneChoice] = useState('')
+  // T-14 — optional here, and not held to lead time / Closed Days (what was agreed on the phone).
+  const [preferredDate, setPreferredDate] = useState('')
   const isPickup = fulfilment === 'PICKUP'
   const chosenZone = !isPickup ? zones.find(z => z.id === zoneChoice) ?? null : null
   function chooseAddress(choice: string) {
@@ -272,6 +275,7 @@ export default function NewWineOrderForm({
       companyAddressId: isPickup ? null : chosenSavedAddress?.id ?? null,
       fulfilment,
       zoneChoice: isPickup ? null : zoneChoice || null,
+      preferredDate: preferredDate || null,
       address,
       workingHours: workingHours || null,
       contactName,
@@ -366,6 +370,9 @@ export default function NewWineOrderForm({
             </select>
           </Field>
         )}
+        <Field label={at(isPickup ? 'newWineOrder.delivery.datePickup' : 'newWineOrder.delivery.dateDelivery')}>
+          <DateInput value={preferredDate} onChange={setPreferredDate} style={inputStyle} />
+        </Field>
         {/* Choose one of the company's people, inline. The public forms reach the same
             choices through a code popup; an admin has no code step, so the list is simply a
             dropdown (plan §4b). Rendered only when there is someone to choose: no company

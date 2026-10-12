@@ -13,6 +13,7 @@ import { resolveOrderAddress, type OrderAddress } from '@/lib/orderAddress'
 import { resolveOrderDelivery, minimumOrderError } from '@/lib/orderDelivery'
 import { loadWineOrderDeliveryTx } from '@/lib/wineOrderDelivery'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
+import { checkPreferredDate } from '@/lib/wineOrderDate'
 
 export type WineSelection = {
   vintageId: string
@@ -48,6 +49,9 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const fulfilmentInput = formData.get('fulfilment') as string | null
   const zoneChoice = formData.get('deliveryZone') as string | null
   const isPickup = fulfilmentInput === 'PICKUP'
+  // Preferred delivery / pickup day (T-14), YYYY-MM-DD. Required here; checked below against the
+  // lead time and Closed Days the winery set — the same rules the form greys days out with.
+  const preferredDateInput = (formData.get('preferredDate') as string | null)?.trim() || null
   const contactName = formData.get('contactName') as string
   const contactPhone = formData.get('contactPhone') as string
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
@@ -111,6 +115,15 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   if ('error' in orderAddress) return { error: orderAddress.error }
   const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice })
   if ('error' in delivery) return { error: delivery.error }
+  const dateProblem = checkPreferredDate(preferredDateInput, deliverySetup.dateRules)
+  if (dateProblem) {
+    return {
+      error: dateProblem === 'missing' ? 'Please choose a preferred date.'
+        : dateProblem === 'closed' ? 'We are closed on that day — please choose another date.'
+        : dateProblem === 'too_soon' ? 'That date is too soon — please choose a later date.'
+        : 'Please choose a valid date.',
+    }
+  }
   const priceMap = Object.fromEntries(realVintages.map(v => [v.id, v.price]))
 
   if (selectedWines.some(w => !(w.vintageId in priceMap))) {
@@ -177,6 +190,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           addressLabel: orderAddress.addressLabel,
           companyAddressId: orderAddress.companyAddressId,
           ...delivery,
+          preferredDate: new Date(preferredDateInput!),
           contactName,
           contactPhone,
           contactEmail,

@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent, parseMajor, toMajor } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment, startWineOrderFeeCheckout } from '@/app/actions/wineOrders'
+import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment, startWineOrderFeeCheckout, setWineOrderPreferredDate } from '@/app/actions/wineOrders'
+import { formatPreferredDate } from '@/lib/wineOrderDate'
 import dynamic from 'next/dynamic'
 import {
   wineOrderStagePatch,
@@ -101,6 +102,8 @@ type WineOrder = {
   deliveryFeePending: boolean
   /** On a paid order: what is still owed (tetri) — a fee set after payment. Computed on the page. */
   feeOwed: number
+  /** T-14 — the customer's preferred delivery / pickup day (date only). */
+  preferredDate: Date | string | null
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -405,6 +408,79 @@ function DeliverySection({ order, locale, onPatch }: {
   )
 }
 
+/** The preferred day as a small chip, for the compact views (T-14). Nothing when there is none. */
+function DateChip({ order, locale }: { order: WineOrder; locale: string }) {
+  if (!order.preferredDate) return null
+  return (
+    <span className="inline-flex items-center rounded-full font-semibold flex-shrink-0 whitespace-nowrap"
+      title={adminT(locale, 'wineOrders.date.label')}
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>
+      &#128197; {formatPreferredDate(order.preferredDate, locale)}
+    </span>
+  )
+}
+
+/** Full card: the preferred day, and "Change" / "Clear" for the winery (T-14, Chunk 7). */
+function PreferredDateRow({ order, locale, onPatch }: {
+  order: WineOrder
+  locale: string
+  onPatch: (patch: Partial<WineOrder>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const current = order.preferredDate ? new Date(order.preferredDate).toISOString().slice(0, 10) : ''
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(current)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save(next: string | null) {
+    setBusy(true); setError('')
+    const r = await setWineOrderPreferredDate(order.id, next)
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    onPatch({ preferredDate: next })
+    setEditing(false)
+  }
+
+  const small = { borderColor: C.border, color: C.muted }
+  return (
+    <div className="flex flex-col gap-1 text-sm" style={{ color: C.muted }}>
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The input must fill its box: left at its default width it spilled past 160px and
+              covered the Save button (caught by wine-order-delivery-fee.spec.ts). */}
+          <div style={{ width: 170 }}>
+            <DateInput value={value} onChange={setValue}
+              style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 8px', fontSize: '0.8125rem', backgroundColor: '#fff' }} />
+          </div>
+          <button type="button" disabled={busy || !value} onClick={() => save(value)}
+            className="text-xs px-3 py-1 rounded-lg font-medium text-white disabled:opacity-60" style={{ backgroundColor: C.wine }}>
+            {at('settings.common.save')}
+          </button>
+          {current && (
+            <button type="button" disabled={busy} onClick={() => save(null)} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+              {at('wineOrders.date.clear')}
+            </button>
+          )}
+          <button type="button" onClick={() => { setEditing(false); setValue(current); setError('') }} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+            {at('settings.common.cancel')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span>&#128197; {current
+            ? <>{at('wineOrders.date.label')}: <span className="font-medium" style={{ color: C.text }}>{formatPreferredDate(order.preferredDate, locale)}</span></>
+            : at('wineOrders.date.none')}</span>
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small} onClick={() => { setValue(current); setEditing(true) }}>
+            {current ? at('wineOrders.date.change') : at('wineOrders.date.set')}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+    </div>
+  )
+}
+
 /**
  * True on a phone-width screen. Used where the phone gets a different
  * component rather than a restyled one, so only one of the two is in the DOM
@@ -464,6 +540,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
           : isOwed(order) && <OwedMark locale={locale} />}
         <FeeOwedMark order={order} locale={locale} />
         <DeliveryBadge order={order} locale={locale} />
+        <DateChip order={order} locale={locale} />
         {order.discountPercent != null && order.discountPercent > 0 && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>−{order.discountPercent}%</span>
         )}
@@ -903,6 +980,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                       <PaymentMark order={order} locale={locale} />
                       <FeeOwedMark order={order} locale={locale} />
                       <DeliveryBadge order={order} locale={locale} />
+                      <DateChip order={order} locale={locale} />
                     </div>
                     {statusMenuId === order.id && (
                       <div
@@ -1078,6 +1156,7 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         <PaymentMark order={order} locale={locale} />
                         <FeeOwedMark order={order} locale={locale} />
                         <DeliveryBadge order={order} locale={locale} />
+                        <DateChip order={order} locale={locale} />
                       </div>
                       <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }}>
                         {order.wineItems.length} {order.wineItems.length === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
@@ -1249,6 +1328,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                 <PaymentMark order={order} locale={locale} />
                 <FeeOwedMark order={order} locale={locale} />
                 <DeliveryBadge order={order} locale={locale} />
+                <DateChip order={order} locale={locale} />
               </div>
             </div>
           </div>
@@ -1317,6 +1397,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                     <PaymentMark order={order} locale={locale} />
                     <FeeOwedMark order={order} locale={locale} />
                     <DeliveryBadge order={order} locale={locale} />
+                    <DateChip order={order} locale={locale} />
                   </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted, fontSize: '0.8rem' }}>
@@ -1596,6 +1677,8 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                       </>
                     )}
                     <DeliverySection order={order} locale={locale}
+                      onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />
+                    <PreferredDateRow order={order} locale={locale}
                       onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />
                   </div>
                 </div>

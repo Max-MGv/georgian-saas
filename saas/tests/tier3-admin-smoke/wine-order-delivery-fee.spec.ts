@@ -153,3 +153,19 @@ test('the Delivery / Pickup filter narrows the list', async ({ page }) => {
   await expect(page.getByText(UNPAID_NAME, { exact: true })).toBeVisible()
   await expect(page.getByText(PICKUP_NAME, { exact: true })).toHaveCount(0)
 })
+
+test('the winery can set and change the preferred date on an order (T-14)', async ({ page }) => {
+  test.setTimeout(90_000)
+  await openWineOrders(page)
+  const c = card(page, UNPAID_NAME)
+  await expect(c.getByText('No date')).toBeVisible({ timeout: 20_000 })
+  await c.getByRole('button', { name: 'Set date' }).click()
+  await c.getByPlaceholder('DD/MM/YYYY').fill('15/11/2030')
+  await c.getByRole('button', { name: 'Save' }).click()
+  await expect(c.getByText('15 Nov 2030').first()).toBeVisible()
+
+  const o = await db.wineOrder.findUniqueOrThrow({ where: { id: unpaidId }, include: { events: true } })
+  expect(o.preferredDate?.toISOString().slice(0, 10)).toBe('2030-11-15')
+  const ev = o.events.find(e => e.type === 'PREFERRED_DATE_CHANGED')
+  expect(ev?.payload).toEqual({ from: null, to: '2030-11-15' })
+})
