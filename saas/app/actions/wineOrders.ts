@@ -2,9 +2,10 @@
 
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
-import { applyPercent, asTetri } from '@/lib/money'
+import { asTetri } from '@/lib/money'
 import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
+import { priceWineOrder } from '@/lib/winePricing'
 import { startWineTopUpCheckout } from '@/lib/payments/topUpCheckout'
 import type { Tetri } from '@/lib/money'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
@@ -171,7 +172,14 @@ export async function createWineOrderAdmin(data: {
   const [vintages, company, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, include: { wine: true } }),
     data.companyId
-      ? tx.company.findFirst({ where: { id: data.companyId, tenantId }, select: { wineDiscountPercent: true } })
+      ? tx.company.findFirst({
+          where: { id: data.companyId, tenantId },
+          select: {
+            wineDiscountPercent: true,
+            // T-12 — negotiated prices for these vintages, same rule as the public path.
+            winePrices: { where: { wineVintageId: { in: vintageIds } }, select: { wineVintageId: true, price: true } },
+          },
+        })
       : Promise.resolve(null),
     // Same helper as the public path: requireAdmin() proves who is calling, not that the
     // address id belongs to this company.
@@ -195,16 +203,16 @@ export async function createWineOrderAdmin(data: {
     return { error: 'One or more selected wines are no longer available. Please refresh and try again.' }
   }
 
-  const discountPercent = company?.wineDiscountPercent && company.wineDiscountPercent > 0
-    ? Math.min(company.wineDiscountPercent, 100)
-    : null
-
-  const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * vintageMap[w.vintageId].price, 0)
-  // Same stale major-unit rounding as submitWineOrder.ts carried — see the
-  // comment there. Rounding at tetri scale is what keeps this an integer (#44).
-  const totalAmount = discountPercent
-    ? applyPercent(asTetri(subtotal), discountPercent)
-    : asTetri(subtotal)
+  // Same function as the public path and the form (lib/winePricing.ts): negotiated prices
+  // replace the standard ones, the company % applies to the rest.
+  const pricing = priceWineOrder(
+    selectedWines.map(w => ({ vintageId: w.vintageId, quantity: w.quantity, standardPrice: vintageMap[w.vintageId].price })),
+    Object.fromEntries((company?.winePrices ?? []).map(p => [p.wineVintageId, p.price])),
+    company?.wineDiscountPercent ?? null,
+  )
+  const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
+  const discountPercent = pricing.discountPercent
+  const totalAmount = pricing.total
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
     const order = await tx.wineOrder.create({
@@ -234,7 +242,7 @@ export async function createWineOrderAdmin(data: {
         wineVintageId: w.vintageId,
         wineNameSnapshot: vintageMap[w.vintageId].wine.name,
         vintageYearSnapshot: vintageMap[w.vintageId].year,
-        priceSnapshot: vintageMap[w.vintageId].price,
+        priceSnapshot: unitPrice[w.vintageId],
         quantity: w.quantity,
       })),
     })

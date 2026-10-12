@@ -68,6 +68,22 @@ export type ResolvedCompany = {
    */
   addresses: ResolvedAddress[]
   wineDiscountPercent: number | null
+  /**
+   * Negotiated price per vintage id, tetri (T-12). Only when the company was proven — its access
+   * code, a person's code, or an admin screen — because anyone can pick a company with no code
+   * from the public dropdown (Max, 2026-10-12: shown only after the code). Null otherwise.
+   */
+  winePrices: Record<string, number> | null
+  /** True when the company has negotiated prices, even when `winePrices` is withheld — so the
+   *  form can say the agreed prices will be applied (and not offer to charge a total it can't show). */
+  hasNegotiatedPrices: boolean
+}
+
+/** Negotiated prices, as the resolver selects them (T-12). */
+const PRICE_SELECT = { select: { wineVintageId: true, price: true } }
+
+function priceMap(rows: { wineVintageId: string; price: number }[]): Record<string, number> {
+  return Object.fromEntries(rows.map(r => [r.wineVintageId, r.price]))
 }
 
 /** The select both resolver paths use for a company's addresses — one shape, one order. */
@@ -225,6 +241,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
             select: {
               id: true, name: true, identificationCode: true,
               addresses: ADDRESS_SELECT,
+              winePrices: PRICE_SELECT,
               wineDiscountPercent: true,
             },
           },
@@ -233,7 +250,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
       if (person) {
         return {
           success: true as const,
-          company: person.company,
+          // A person's own code proves the company, so its prices may be shown.
+          company: (({ winePrices, ...c }) => ({
+            ...c, winePrices: priceMap(winePrices), hasNegotiatedPrices: winePrices.length > 0,
+          }))(person.company),
           matchType: 'person' as const,
           matchedPerson: {
             id: person.id,
@@ -259,6 +279,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
       select: {
         id: true, name: true, accessCode: true, identificationCode: true,
         addresses: ADDRESS_SELECT,
+        winePrices: PRICE_SELECT,
         wineDiscountPercent: true,
       },
     })
@@ -311,6 +332,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         identificationCode: company.identificationCode,
         addresses: company.addresses,
         wineDiscountPercent: company.wineDiscountPercent,
+        // Proven = an admin (trusted) or a company whose code was just checked above. A company
+        // with no code was only *named*, so its prices stay private (applied server-side anyway).
+        winePrices: input.trusted || company.accessCode ? priceMap(company.winePrices) : null,
+        hasNegotiatedPrices: company.winePrices.length > 0,
       },
       matchType: 'company' as const,
       matchedPerson: null,

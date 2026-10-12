@@ -43,6 +43,8 @@ async function main() {
     // Company delivery addresses (T-13, Plan-WineOrderFeatures Chunk 1). JOIN-to-Company like
     // CompanyPerson; its policy is created below AND in its own migration.
     'CompanyAddress',
+    // Negotiated wine prices (T-12). JOIN-to-Company; policy below AND in its own migration.
+    'CompanyWinePrice',
     // Delivery zones (T-8). Own tenantId → also in tenantedTables below (H18: both lists).
     'DeliveryZone',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
@@ -238,6 +240,28 @@ async function main() {
         EXISTS (
           SELECT 1 FROM "Company" c
           WHERE c.id = "CompanyAddress"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  // CompanyWinePrice: JOIN to Company, same as CompanyAddress (T-12). Its migration
+  // 20261012…_company_wine_prices creates the same policy; this keeps a re-run identical.
+  console.log('Creating policy on "CompanyWinePrice" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyWinePrice";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyWinePrice"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyWinePrice"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyWinePrice"."companyId"
             AND c."tenantId" = current_setting('app.tenant_id', true)
         )
       );

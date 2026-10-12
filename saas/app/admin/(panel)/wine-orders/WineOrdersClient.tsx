@@ -64,6 +64,8 @@ const STATUS_COLOR: Record<string, StatusStyle> = {
   // Fulfilment filter words (T-8).
   delivery:  { border: '#0f766e', pill: '#ccfbf1', pillText: '#134e4a', labelKey: 'wineOrders.delivery.delivery' },
   pickup:    { border: '#4338ca', pill: '#e0e7ff', pillText: '#3730a3', labelKey: 'wineOrders.delivery.pickup' },
+  // T-12 — exporter companies.
+  exporter:  { border: '#6d28d9', pill: '#f5f3ff', pillText: '#5b21b6', labelKey: 'companies.exporter.badge' },
 }
 
 const UNKNOWN_STATUS_STYLE: StatusStyle = { border: '#9ca3af', pill: '#f3f4f6', pillText: '#374151', labelKey: '' }
@@ -105,6 +107,8 @@ type WineOrder = {
   feeOwed: number
   /** T-14 — the customer's preferred delivery / pickup day (date only). */
   preferredDate: Date | string | null
+  /** T-12 — the ordering company is marked as an exporter. */
+  isExporter: boolean
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -409,6 +413,16 @@ function DeliverySection({ order, locale, onPatch }: {
   )
 }
 
+/** T-12 — "Exporter" next to a company name. */
+function ExporterMark({ locale }: { locale: string }) {
+  return (
+    <span className="ml-2 align-middle inline-flex items-center rounded-full font-semibold whitespace-nowrap"
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe' }}>
+      {adminT(locale, 'companies.exporter.badge')}
+    </span>
+  )
+}
+
 /** The preferred day as a small chip, for the compact views (T-14). Nothing when there is none. */
 function DateChip({ order, locale }: { order: WineOrder; locale: string }) {
   if (!order.preferredDate) return null
@@ -525,7 +539,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}</p>
+          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}{order.isExporter && <ExporterMark locale={locale} />}</p>
           <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
@@ -833,6 +847,10 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         {/* Fulfilment axis (T-8). */}
         <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
         {FULFILMENT_FILTER_CODES.map(code => pill(code))}
+
+        {/* Exporters (T-12) — narrows to orders from companies marked as exporters. */}
+        <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
+        {pill('exporter')}
 
       </div>
       <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-end`}>
@@ -1475,6 +1493,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     if (!matchesSearchAndDates(o)) return false
     if (activeFilters.stage.size > 0 && !activeFilters.stage.has(o.stage)) return false
     if (activeFilters.fulfilment.size > 0 && !activeFilters.fulfilment.has(o.fulfilment === 'PICKUP' ? 'pickup' : 'delivery')) return false
+    if (filters.has('exporter') && !o.isExporter) return false
     return matchesPayment(o)
   }), [orders, activeFilters, matchesPayment, matchesSearchAndDates])
 
@@ -1659,7 +1678,10 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                         {at('packing.details')} ▾
                       </button>
                     )}
-                    <p className="font-bold mb-1" style={{ color: C.text }}>{order.businessName}</p>
+                    <p className="font-bold mb-1" style={{ color: C.text }}>
+                      {order.businessName}
+                      {order.isExporter && <ExporterMark locale={locale} />}
+                    </p>
                     <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
                     </p>

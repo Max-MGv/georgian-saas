@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { useContactSelection } from '@/lib/useContactSelection'
 import ContactPickerPopupView from '@/components/ContactPickerPopupView'
 import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
 import { formatAddressOption } from '@/lib/orderAddress'
 import { meetsMinimum, zoneDisplayName, type WineOrderRules } from '@/lib/wineOrderRules'
+import { priceWineOrder } from '@/lib/winePricing'
 import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 import { checkPreferredDate, earliestPreferredDate, type PreferredDateRules } from '@/lib/wineOrderDate'
 import DateInput from '@/components/DateInput'
@@ -172,6 +173,14 @@ export default function WineCatalogueClient({
   // Company selector
   const [companyId, setCompanyId] = useState('')
   const [discountPercent, setDiscountPercent] = useState<number | null>(null)
+  /**
+   * The chosen company's negotiated prices (T-12), per vintage, tetri — only once the company was
+   * proven by its code (the resolver withholds them otherwise). `pricesWithheld` = the company has
+   * agreed prices we may not show: the form says they will apply and does not offer to charge.
+   */
+  const [negotiatedPrices, setNegotiatedPrices] = useState<Record<string, number>>({})
+  const [pricesWithheld, setPricesWithheld] = useState(false)
+  const priceOf = (vintageId: string, standard: number) => negotiatedPrices[vintageId] ?? standard
 
   // Access code popup
   const [showCodePopup, setShowCodePopup] = useState(false)
@@ -231,7 +240,8 @@ export default function WineCatalogueClient({
 
   const cartBarRef = useRef<HTMLDivElement>(null)
   const totalBottles = Object.values(quantities).reduce((s, q) => s + q, 0)
-  const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * w.price, 0)
+  // Before the company %: negotiated prices where agreed (T-12), standard elsewhere.
+  const totalPrice = WINES.reduce((s, w) => s + (quantities[w.vintageId] ?? 0) * priceOf(w.vintageId, w.price), 0)
 
   // Filter over whatever's actually set — a null wineType/sweetness (unset
   // vintage field in VINTAGE mode) simply isn't offered as a filter option.
@@ -339,6 +349,12 @@ export default function WineCatalogueClient({
     if (zoneId && zones.some(z => z.id === zoneId)) setZoneChoice(zoneId)
   }
 
+  /** A resolved company's negotiated prices (T-12) — see the state above. */
+  function applyPrices(c: { winePrices: Record<string, number> | null; hasNegotiatedPrices: boolean }) {
+    setNegotiatedPrices(c.winePrices ?? {})
+    setPricesWithheld(c.hasNegotiatedPrices && c.winePrices === null)
+  }
+
   function clearAddresses() {
     setSavedAddresses([]); setAddressChoice(''); setAddress(''); setWorkingHours('')
   }
@@ -389,6 +405,7 @@ export default function WineCatalogueClient({
     }
     // Addresses are always the current company's, filled only once it resolves.
     clearAddresses()
+    setNegotiatedPrices({}); setPricesWithheld(false)
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
     if (!companyId) {
@@ -411,6 +428,7 @@ export default function WineCatalogueClient({
       // Ignore a late answer for a company the customer has already moved away from.
       if ('error' in result || prevCompanyIdRef.current !== result.company.id) return
       applyAddresses(result.company.addresses)
+      applyPrices(result.company)
     })
   }, [companyId, hideCompanyDropdown])
 
@@ -426,6 +444,7 @@ export default function WineCatalogueClient({
     }
     applyCompanyProfile(result.company)
     applyAddresses(result.company.addresses)
+    applyPrices(result.company)
     setShowCodePopup(false)
     // The picker below opens itself off `activeRole`. A person's own code has already named
     // them; person codes on means no choices at all, deliberately.
@@ -453,6 +472,7 @@ export default function WineCatalogueClient({
     setDirectCompanyName(result.company.name)
     applyCompanyProfile(result.company)
     applyAddresses(result.company.addresses)
+    applyPrices(result.company)
   }
 
   function clearDirectCode() {
@@ -463,6 +483,7 @@ export default function WineCatalogueClient({
     setDiscountPercent(null)
     resetContacts()
     clearAddresses()
+    setNegotiatedPrices({}); setPricesWithheld(false)
     setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone(''); setContactEmail('')
   }
 
@@ -506,7 +527,7 @@ export default function WineCatalogueClient({
     setError('')
     const form = e.currentTarget
     const formData = new FormData(form)
-    const wines = WINES.map(w => ({ vintageId: w.vintageId, name: w.name, year: w.year, quantity: quantities[w.vintageId] ?? 0, price: w.price }))
+    const wines = WINES.map(w => ({ vintageId: w.vintageId, name: w.name, year: w.year, quantity: quantities[w.vintageId] ?? 0, price: priceOf(w.vintageId, w.price) }))
     formData.set('wines', JSON.stringify(wines))
 
     startTransition(async () => {
@@ -532,6 +553,7 @@ export default function WineCatalogueClient({
       setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       setContactEmail('')
       clearAddresses()
+      setNegotiatedPrices({}); setPricesWithheld(false)
       setFulfilment('DELIVERY'); setZoneChoice(''); setPreferredDate('')
     })
   }
@@ -554,9 +576,15 @@ export default function WineCatalogueClient({
   const askZone = !isPickup && zones.length > 0
   const chosenZone = askZone ? zones.find(z => z.id === zoneChoice) ?? null : null
   const feeUnknown = askZone && zoneChoice === 'other'
-  const winesTotal = discountPercent && discountPercent > 0
-    ? applyPercent(asTetri(totalPrice), discountPercent)
-    : asTetri(totalPrice)
+  // The same function the server charges with (lib/winePricing.ts): negotiated lines as they
+  // are, the company % on the rest. `pricing.discountPercent` is null when it touches nothing.
+  const pricing = priceWineOrder(
+    WINES.filter(w => (quantities[w.vintageId] ?? 0) > 0)
+      .map(w => ({ vintageId: w.vintageId, quantity: quantities[w.vintageId]!, standardPrice: w.price })),
+    negotiatedPrices,
+    discountPercent,
+  )
+  const winesTotal = pricing.total
   const grandTotal = asTetri(winesTotal + (chosenZone?.fee ?? 0))
   const minRule = delivery?.rules.minOrder ?? { type: 'off' as const }
   const belowMinimum = !meetsMinimum(minRule, totalBottles, winesTotal)
@@ -575,6 +603,9 @@ export default function WineCatalogueClient({
     ? false
     // "Other" area + the winery takes those as reservations: no online payment (T-8).
     : feeUnknown && delivery?.rules.unknownZonePayment === 'reservation'
+      ? false
+    // T-12 — a total built on prices the customer was not shown is never charged online.
+    : pricesWithheld
       ? false
       : selectedCompany?.skipPayment === true
         ? false
@@ -873,7 +904,7 @@ export default function WineCatalogueClient({
                         <span style={{ color: C.text }}>
                           {w.name} <span style={{ color: C.faint }}>{w.year}</span> <span style={{ color: C.muted }}>×{quantities[w.vintageId]}</span>
                         </span>
-                        <span style={{ color: C.muted }}>{formatTetri(multiplyTetri(asTetri(w.price), quantities[w.vintageId]!))}</span>
+                        <span style={{ color: C.muted }}>{formatTetri(multiplyTetri(asTetri(priceOf(w.vintageId, w.price)), quantities[w.vintageId]!))}</span>
                       </div>
                     ))}
                   </div>
@@ -881,14 +912,14 @@ export default function WineCatalogueClient({
                     <span className="text-sm font-semibold" style={{ color: C.text }}>
                       {chosenZone ? t(locale, 'wine.summary_wines') : 'Total'}
                     </span>
-                    {discountPercent && discountPercent > 0 ? (
+                    {pricing.discountPercent ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs line-through" style={{ color: C.faint }}>{formatTetri(asTetri(totalPrice))}</span>
                         <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: STATUS.successBg, color: STATUS.successText }}>
-                          −{discountPercent}%
+                          −{pricing.discountPercent}%
                         </span>
                         <span className="text-base font-bold" style={{ color: C.wine }}>
-                          {formatTetri(applyPercent(asTetri(totalPrice), discountPercent))}
+                          {formatTetri(winesTotal)}
                         </span>
                       </div>
                     ) : (
@@ -923,6 +954,12 @@ export default function WineCatalogueClient({
                   {minRule.type !== 'off' && (
                     <p className="text-xs mt-2" style={{ color: belowMinimum ? 'var(--color-brand)' : C.faint, fontWeight: belowMinimum ? 600 : 400 }}>
                       {minimumText}
+                    </p>
+                  )}
+                  {/* T-12 — agreed prices we may not show (company proven by name only). */}
+                  {pricesWithheld && (
+                    <p className="text-xs mt-2 font-medium" style={{ color: 'var(--color-brand)' }}>
+                      {t(locale, 'wine.prices_withheld')}
                     </p>
                   )}
                   {!discountPercent && (
@@ -1271,7 +1308,7 @@ export default function WineCatalogueClient({
                       <p className="text-xs font-medium uppercase tracking-wide mt-0.5" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                     <div className="flex items-center justify-between mt-auto">
-                      <span className="text-sm font-semibold" style={{ color: 'var(--site-text)' }}>{formatTetri(asTetri(wine.price))} {t(locale, 'wine.perBottle')}</span>
+                      <span className="text-sm font-semibold" style={{ color: 'var(--site-text)' }}>{formatTetri(asTetri(priceOf(wine.vintageId, wine.price)))} {t(locale, 'wine.perBottle')}</span>
                       {qty === 0 ? (
                         <button type="button" onClick={() => setQty(wine.vintageId, 1)}
                           className="w-10 h-10 md:w-8 md:h-8 rounded-lg border-2 font-bold text-xl flex items-center justify-center transition-colors hover:text-white"
@@ -1319,7 +1356,7 @@ export default function WineCatalogueClient({
 
             {visibleWines.map((wine, i) => {
               const qty = quantities[wine.vintageId] ?? 0
-              const lineTotal = qty * wine.price
+              const lineTotal = qty * priceOf(wine.vintageId, wine.price)
               return (
                 <div key={wine.vintageId} className="grid items-center px-4 py-3 border-b last:border-b-0"
                   style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', borderColor: 'var(--site-border)', backgroundColor: i % 2 === 0 ? 'var(--site-surface)' : 'var(--site-bg)' }}>
@@ -1339,7 +1376,7 @@ export default function WineCatalogueClient({
                       <p className="text-xs uppercase tracking-wide" style={{ color: wine.color }}>{wineMeta(wine, TYPE_LABEL, SWEETNESS_LABEL, SPARKLING_LABEL)}</p>
                     </div>
                   </div>
-                  <p className="text-sm font-medium text-center" style={{ color: 'var(--site-muted)' }}>{formatTetri(asTetri(wine.price))}</p>
+                  <p className="text-sm font-medium text-center" style={{ color: 'var(--site-muted)' }}>{formatTetri(asTetri(priceOf(wine.vintageId, wine.price)))}</p>
                   <div className="flex items-center justify-center gap-1">
                     {qty === 0 ? (
                       <button type="button" onClick={() => setQty(wine.vintageId, 1)}

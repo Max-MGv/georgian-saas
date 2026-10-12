@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
-import { asTetri, fromMajor, toMajor, formatTetri, type Tetri } from '@/lib/money'
+import { asTetri, fromMajor, toMajor, formatTetri, parseMajor, type Tetri } from '@/lib/money'
 import {
   createPerson, updatePerson, deletePerson, regeneratePersonCode,
 } from '@/app/actions/companyPeople'
 import { createAddress, updateAddress, deleteAddress } from '@/app/actions/companyAddresses'
+import { setCompanyWinePrice } from '@/app/actions/companyWinePrices'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
@@ -58,6 +59,10 @@ type Company = {
   isBookingCompany: boolean
   isWineOrderCompany: boolean
   wineDiscountPercent: number | null
+  /** T-12 — label + filter only. */
+  isExporter: boolean
+  /** T-12 — negotiated price per vintage id (tetri). Exceptions only. */
+  winePrices: Record<string, number>
   // Per-company payment override (#148). null = follow the tenant's Companies
   // section toggle; true = always skip (trusted); false = always require.
   skipPayment: boolean | null
@@ -460,9 +465,88 @@ function AddressesSection({ companyId, addresses, setAddresses, locale, zones }:
   )
 }
 
+/** One vintage as the price list needs it (T-12). `price` is the standard price, tetri. */
+type VintageLite = { id: string; label: string; price: number }
+
+/**
+ * Negotiated prices (T-12, vault/Plan-WineOrderFeatures.md Chunk 9) — every active vintage with
+ * its standard price greyed; type a price to negotiate it (bold), clear it or press "Standard"
+ * to go back. Exceptions only: only typed prices are stored. Saves per row, live, like the
+ * addresses and people lists.
+ */
+function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
+  companyId: string
+  vintages: VintageLite[]
+  prices: Record<string, number>
+  setPrices: (p: Record<string, number>) => void
+  locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  async function save(vintageId: string, text: string) {
+    const trimmed = text.trim()
+    const price = trimmed === '' ? null : parseMajor(trimmed)
+    if (trimmed !== '' && (price === null || price < 0)) { setError(at('companies.winePrices.invalid')); return }
+    const current = prices[vintageId] ?? null
+    if (price === current) return
+    setBusyId(vintageId); setError('')
+    const r = await setCompanyWinePrice(companyId, vintageId, price)
+    setBusyId(null)
+    if ('error' in r) { setError(r.error); return }
+    const next = { ...prices }
+    if (price === null) delete next[vintageId]; else next[vintageId] = price
+    setPrices(next)
+    setDrafts(d => { const { [vintageId]: _drop, ...rest } = d; return rest })
+  }
+
+  if (vintages.length === 0) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.winePrices.title')}</p>
+        <HelpHint text={at('companies.winePrices.hint')} />
+      </div>
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+      {vintages.map(v => {
+        const negotiated = prices[v.id]
+        const draft = drafts[v.id] ?? (negotiated !== undefined ? String(toMajor(asTetri(negotiated))) : '')
+        return (
+          <div key={v.id} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 break-words" style={{ color: C.text, fontWeight: negotiated !== undefined ? 600 : 400 }}>{v.label}</span>
+            <span className="text-xs" style={{ color: C.faint, textDecoration: negotiated !== undefined ? 'line-through' : undefined }}>
+              {formatTetri(asTetri(v.price))}
+            </span>
+            <input
+              type="number" min={0} step="0.01" inputMode="decimal"
+              aria-label={`${v.label} — ${at('companies.winePrices.negotiated')}`}
+              placeholder={String(toMajor(asTetri(v.price)))}
+              value={draft}
+              disabled={busyId === v.id}
+              onChange={e => setDrafts(d => ({ ...d, [v.id]: e.target.value }))}
+              onBlur={e => save(v.id, e.target.value)}
+              style={{ ...inputStyle, width: 80, textAlign: 'right', fontWeight: negotiated !== undefined ? 700 : 400 }}
+            />
+            <span className="text-xs" style={{ color: C.muted }}>₾</span>
+            {negotiated !== undefined && (
+              <button type="button" disabled={busyId === v.id} onClick={() => save(v.id, '')}
+                className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>
+                {at('companies.winePrices.reset')}
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages }: {
   zones: ZoneLite[]
+  vintages: VintageLite[]
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
@@ -478,6 +562,10 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
   const [isBooking, setIsBooking] = useState(company.isBookingCompany)
   const [isWineOrder, setIsWineOrder] = useState(company.isWineOrderCompany)
   const [wineDiscount, setWineDiscount] = useState(company.wineDiscountPercent != null ? String(company.wineDiscountPercent) : '')
+  const [isExporter, setIsExporter] = useState(company.isExporter)
+  // Negotiated prices save live, per row — propagated up like addresses and people.
+  const [winePrices, setWinePricesState] = useState(company.winePrices)
+  function setWinePrices(next: Record<string, number>) { setWinePricesState(next); onSaved({ winePrices: next }) }
   // #148 — three-way override, stored as null/true/false; the UI works with a
   // string so "no override" is a distinct selectable state, not just "unchecked".
   const [skipPayment, setSkipPayment] = useState<'default' | 'skip' | 'require'>(
@@ -514,6 +602,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
       skipPayment: parsedSkipPayment,
+      isExporter,
     })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     onSaved({
@@ -522,6 +611,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
+      isExporter,
       ...(parsedSkipPayment !== undefined ? { skipPayment: parsedSkipPayment } : {}),
     })
     onClose()
@@ -625,7 +715,13 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
                   />
                   <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
+                  <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
+                </label>
               </div>
+              <div className="h-px" style={{ backgroundColor: C.border }} />
+              <WinePricesSection companyId={company.id} vintages={vintages} prices={winePrices} setPrices={setWinePrices} locale={locale} />
               <div className="h-px" style={{ backgroundColor: C.border }} />
             </>
           )}
@@ -906,7 +1002,7 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ zones = [], companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { zones?: ZoneLite[]; companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
+export default function CompaniesClient({ zones = [], vintages = [], companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { zones?: ZoneLite[]; vintages?: VintageLite[]; companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
@@ -1057,6 +1153,7 @@ export default function CompaniesClient({ zones = [], companies: initial, roles 
           personCodesOn={personCodesOn}
           paymentModuleOn={paymentModuleOn}
           zones={zones}
+          vintages={vintages}
         />
       )}
 
@@ -1169,6 +1266,11 @@ export default function CompaniesClient({ zones = [], companies: initial, roles 
                     {company.accessCode && (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
                         {at('companies.codeSet')}
+                      </span>
+                    )}
+                    {company.isExporter && (
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}>
+                        {at('companies.exporter.badge')}
                       </span>
                     )}
                     {isInBoth && (

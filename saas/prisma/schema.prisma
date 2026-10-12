@@ -104,8 +104,33 @@ model Company {
   prices              Price[]
   people              CompanyPerson[]
   addresses           CompanyAddress[]
+  /// T-12 — a label (and an admin filter) for companies that export. Nothing else depends on it.
+  isExporter          Boolean         @default(false)
+  winePrices          CompanyWinePrice[]
 
   @@index([tenantId])
+}
+
+/// A price this company negotiated for one vintage (T-12, vault/Plan-WineOrderFeatures.md
+/// Chunk 9). **Exceptions only** (Max, 2026-10-12): a row exists only where a price was agreed;
+/// every other vintage is the standard price less the company's % discount. A negotiated price
+/// replaces the standard one outright — the % is never applied on top of it.
+///
+/// No own tenantId — RLS JOIN-to-Company, like CompanyPerson / CompanyAddress / Price. Orders are
+/// unaffected by edits here: WineOrderItem.priceSnapshot records the price actually charged.
+model CompanyWinePrice {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  wineVintageId String
+  wineVintage   WineVintage @relation(fields: [wineVintageId], references: [id], onDelete: Cascade)
+  /// TETRI per bottle.
+  price         Int
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @default(now()) @updatedAt
+
+  @@unique([companyId, wineVintageId])
+  @@index([wineVintageId])
 }
 
 /// One delivery address of a company — "Vake branch, 12 Chavchavadze Ave" (T-13,
@@ -821,6 +846,7 @@ model WineVintage {
   alcoholLevel Float?
   wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
   orderItems   WineOrderItem[]
+  companyPrices CompanyWinePrice[]
 
   @@index([tenantId])
   @@index([wineId])

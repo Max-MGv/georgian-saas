@@ -10,6 +10,7 @@ import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactRes
 import { formatAddressOption } from '@/lib/orderAddress'
 import { zoneDisplayName } from '@/lib/wineOrderRules'
 import DateInput from '@/components/DateInput'
+import { priceWineOrder } from '@/lib/winePricing'
 import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 
 const C = {
@@ -116,6 +117,8 @@ export default function NewWineOrderForm({
   const [zoneChoice, setZoneChoice] = useState('')
   // T-14 — optional here, and not held to lead time / Closed Days (what was agreed on the phone).
   const [preferredDate, setPreferredDate] = useState('')
+  // T-12 — the chosen company's negotiated prices, per vintage (tetri).
+  const [negotiatedPrices, setNegotiatedPrices] = useState<Record<string, number>>({})
   const isPickup = fulfilment === 'PICKUP'
   const chosenZone = !isPickup ? zones.find(z => z.id === zoneChoice) ?? null : null
   function chooseAddress(choice: string) {
@@ -171,10 +174,17 @@ export default function NewWineOrderForm({
     ? Math.min(selectedCompany.wineDiscountPercent, 100)
     : null
 
-  const subtotal = lines.reduce((s, l) => s + l.quantity * l.price, 0)
-  const computedTotal = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+  // T-12 — the same pricing the server charges with: negotiated prices where the company has
+  // them (admin resolution is trusted, so they are always visible here), the % on the rest.
+  // Replaces a lari-era Math.round(*100)/100 that no longer matched the server's tetri rounding.
+  const unitOf = (vintageId: string, standard: number) => negotiatedPrices[vintageId] ?? standard
+  const pricing = priceWineOrder(
+    lines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity, standardPrice: l.price })),
+    negotiatedPrices,
+    selectedCompany?.wineDiscountPercent ?? null,
+  )
+  const subtotal = pricing.negotiatedTotal + pricing.standardSubtotal
+  const computedTotal = pricing.total
 
   // ── Company autofill ──────────────────────────────────────────────────────
   // businessName/llcName take the company name unconditionally; everything else only
@@ -192,6 +202,7 @@ export default function NewWineOrderForm({
     // Never carry one company's saved address over to another; typed text stays (see above).
     setSavedAddresses([])
     setAddressChoice('other')
+    setNegotiatedPrices({})
     if (!id) return
     const company = companies.find(c => c.id === id)
     if (!company) return
@@ -201,6 +212,7 @@ export default function NewWineOrderForm({
     void resolveContacts({ companyId: id }).then(result => {
       if ('error' in result) return
       // One saved address is used straight away; several must be chosen; none → typed.
+      setNegotiatedPrices(result.company.winePrices ?? {})
       const list = result.company.addresses
       setSavedAddresses(list)
       setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
@@ -236,7 +248,7 @@ export default function NewWineOrderForm({
   // ── Wine line helpers ─────────────────────────────────────────────────────
   const selectedWine = wines.find(w => w.id === newLineWineId)
   const selectedVintage = selectedWine?.vintages.find(v => v.id === newLineVintageId)
-  const lineTotal = selectedVintage ? (parseInt(newLineQty) || 1) * selectedVintage.price : 0
+  const lineTotal = selectedVintage ? (parseInt(newLineQty) || 1) * unitOf(selectedVintage.id, selectedVintage.price) : 0
 
   function handleNewLineWineChange(wineId: string) {
     setNewLineWineId(wineId)
@@ -472,9 +484,9 @@ export default function NewWineOrderForm({
                     <td className="px-3 py-2 text-sm" style={{ color: C.text }}>{l.wineName}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.year}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(l.price))}</td>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.muted, fontWeight: l.vintageId in negotiatedPrices ? 700 : 400 }}>{formatTetri(asTetri(unitOf(l.vintageId, l.price)))}</td>
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}
+                      {formatTetri(multiplyTetri(asTetri(unitOf(l.vintageId, l.price)), l.quantity), { decimals: true })}
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -512,7 +524,7 @@ export default function NewWineOrderForm({
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('newWineOrder.wines.colYear')}</label>
                 <select value={newLineVintageId} onChange={e => setNewLineVintageId(e.target.value)} style={inputStyle}>
                   {selectedWine.vintages.map(v => (
-                    <option key={v.id} value={v.id}>{v.year} — {formatTetri(asTetri(v.price))}</option>
+                    <option key={v.id} value={v.id}>{v.year} — {formatTetri(asTetri(unitOf(v.id, v.price)))}</option>
                   ))}
                 </select>
               </div>
@@ -558,12 +570,12 @@ export default function NewWineOrderForm({
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{l.wineName} {l.year} × {l.quantity}</span>
-              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}</span>
+              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(unitOf(l.vintageId, l.price)), l.quantity), { decimals: true })}</span>
             </div>
           ))}
-          {discountPercent != null && lines.length > 0 && (
+          {pricing.discountPercent != null && lines.length > 0 && (
             <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>{at('newWineOrder.total.discount', { percent: discountPercent })}</span>
+              <span style={{ color: C.muted }}>{at('newWineOrder.total.discount', { percent: pricing.discountPercent })}</span>
               <span style={{ color: C.text }}>−{formatTetri(asTetri(subtotal - computedTotal), { decimals: true })}</span>
             </div>
           )}
@@ -582,7 +594,7 @@ export default function NewWineOrderForm({
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
             {/* Wines + delivery fee — display only; the server recomputes both. */}
-            {formatTetri(asTetri(Math.round(computedTotal) + (chosenZone?.fee ?? 0)), { decimals: true })}
+            {formatTetri(asTetri(computedTotal + (chosenZone?.fee ?? 0)), { decimals: true })}
           </span>
         </div>
 

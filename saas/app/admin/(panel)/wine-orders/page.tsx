@@ -23,6 +23,8 @@ export default async function WineOrdersPage() {
         wineItems: true,
         // Settled, live payments — only to work out what is still owed (T-8, Chunk 6).
         payments: { where: { settledAt: { not: null }, reversedAt: null }, select: { amount: true } },
+        // T-12 — the exporter label comes from the company, live (it is a label, not a fact of the order).
+        company: { select: { isExporter: true } },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -31,7 +33,8 @@ export default async function WineOrdersPage() {
   // displayTotal: what the customer owes in all — wines + delivery fee since T-8
   // (lib/wineOrderMoney.ts); an estimate from item snapshots for old rows with no total.
   // feeOwed: on a PAID order, what is still outstanding (a delivery fee set after payment).
-  const ordersWithTotal = orders.map(({ payments, ...o }) => {
+  const ordersWithTotal = orders.map(({ payments, company, ...rest }) => {
+    const o = { ...rest, isExporter: company?.isExporter ?? false }
     const paidSoFar = payments.reduce((sum, p) => sum + p.amount, 0)
     const due = wineOrderAmountDue(o)
     const feeOwed = o.paidAt && due != null ? Math.max(0, due - paidSoFar) : 0

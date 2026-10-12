@@ -204,6 +204,8 @@ const en: Translations = {
   'wine.date_closed': 'We are closed on that day — please choose another.',
   'wine.date_too_soon': 'That day is too soon — please choose a later one.',
   'wine.date_invalid': 'Please enter a valid date (DD/MM/YYYY).',
+  // T-12 — negotiated prices that are not shown without the company code
+  'wine.prices_withheld': 'Your company’s agreed prices will be applied — we will confirm the total with you.',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -441,6 +443,7 @@ const ka: Translations = {
   'wine.date_closed': 'ამ დღეს დაკეტილი ვართ — გთხოვთ, აირჩიოთ სხვა.',
   'wine.date_too_soon': 'ეს დღე ძალიან ახლოა — გთხოვთ, აირჩიოთ უფრო გვიანი.',
   'wine.date_invalid': 'გთხოვთ, შეიყვანოთ სწორი თარიღი (DD/MM/YYYY).',
+  'wine.prices_withheld': 'გამოყენებული იქნება თქვენი კომპანიის შეთანხმებული ფასები — ჯამს თქვენთან დავაზუსტებთ.',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

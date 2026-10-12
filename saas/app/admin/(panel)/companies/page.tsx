@@ -31,6 +31,15 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
       }))
     : []
 
+  // Every active vintage with its standard price, for the per-company negotiated prices (T-12).
+  const vintages = wineOrdersOn
+    ? (await withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+        where: { tenantId, active: true, wine: { active: true } },
+        orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+        select: { id: true, year: true, price: true, wine: { select: { name: true } } },
+      }))).map(v => ({ id: v.id, label: `${v.wine.name} ${v.year}`, price: v.price }))
+    : []
+
   const companies = await withTenantDb(tenantId, tx =>
     tx.company.findMany({
       where: { tenantId },
@@ -52,6 +61,8 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           select: { id: true, label: true, address: true, workingHours: true, deliveryZoneId: true },
         },
+        // Negotiated prices (T-12) — exceptions only.
+        winePrices: { select: { wineVintageId: true, price: true } },
       },
     })
   )
@@ -70,6 +81,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
       </div>
       <CompaniesClient
         zones={zones}
+        vintages={vintages}
         roles={allRoles
           .filter(r => r.isActive && r.scope === 'PER_ORDER')
           .map(r => ({ id: r.id, key: r.key, labelEn: r.labelEn, labelKa: r.labelKa, sortOrder: r.sortOrder }))}
@@ -86,6 +98,8 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           isBookingCompany: c.isBookingCompany ?? true,
           isWineOrderCompany: c.isWineOrderCompany ?? false,
           wineDiscountPercent: c.wineDiscountPercent,
+          isExporter: c.isExporter,
+          winePrices: Object.fromEntries(c.winePrices.map(p => [p.wineVintageId, p.price])),
           skipPayment: c.skipPayment,
           identificationCode: c.identificationCode,
           addresses: c.addresses,

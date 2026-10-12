@@ -1,7 +1,6 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { applyPercent, asTetri } from '@/lib/money'
 import { withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
 import { getTenantId } from '@/lib/tenant'
@@ -14,6 +13,7 @@ import { resolveOrderDelivery, minimumOrderError } from '@/lib/orderDelivery'
 import { loadWineOrderDeliveryTx } from '@/lib/wineOrderDelivery'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { checkPreferredDate } from '@/lib/wineOrderDate'
+import { priceWineOrder } from '@/lib/winePricing'
 
 export type WineSelection = {
   vintageId: string
@@ -104,7 +104,16 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const [realVintages, realCompany, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
     companyId
-      ? tx.company.findFirst({ where: { id: companyId, tenantId }, select: { wineDiscountPercent: true } })
+      ? tx.company.findFirst({
+          where: { id: companyId, tenantId },
+          select: {
+            wineDiscountPercent: true,
+            accessCode: true,
+            // Negotiated prices for the vintages in this cart (T-12) — re-read here, never taken
+            // from the browser, which may not even have been shown them.
+            winePrices: { where: { wineVintageId: { in: vintageIds } }, select: { wineVintageId: true, price: true } },
+          },
+        })
       : Promise.resolve(null),
     // A pickup stores no address: the customer collects from the winery.
     isPickup
@@ -130,20 +139,22 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     return { error: 'One or more selected wines are no longer available. Please refresh and try again.' }
   }
 
-  const discountPercent = realCompany?.wineDiscountPercent && realCompany.wineDiscountPercent > 0
-    ? Math.min(realCompany.wineDiscountPercent, 100)
-    : null
-
-  const subtotal = selectedWines.reduce((sum, w) => sum + w.quantity * priceMap[w.vintageId], 0)
-  // `Math.round(x * (1 - p/100) * 100) / 100` lived here until 2026-09-18. It
-  // meant "round to two decimals of lari" and was correct while subtotal was a
-  // Float of lari. Against tetri it rounds at the wrong scale and leaves a
-  // fraction — 4550 at 15% gave 3867.5, which an Int column rejects, so every
-  // discounted company's wine order failed to save (bug #44). applyPercent
-  // rounds at tetri scale and always returns a whole number.
-  const totalAmount = discountPercent
-    ? applyPercent(asTetri(subtotal), discountPercent)
-    : asTetri(subtotal)
+  // Negotiated prices replace the standard price outright; the company % applies to the rest
+  // (lib/winePricing.ts — the same function the form shows its total with). Rounding at tetri
+  // scale inside applyPercent is what keeps this an Int (bug #44's lesson).
+  const negotiated = Object.fromEntries((realCompany?.winePrices ?? []).map(p => [p.wineVintageId, p.price]))
+  const pricing = priceWineOrder(
+    selectedWines.map(w => ({ vintageId: w.vintageId, quantity: w.quantity, standardPrice: priceMap[w.vintageId] })),
+    negotiated,
+    realCompany?.wineDiscountPercent ?? null,
+  )
+  const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
+  const discountPercent = pricing.discountPercent
+  const totalAmount = pricing.total
+  // A company with no access code was only picked from the public list, so its negotiated prices
+  // were never shown (T-12). Charging a total the customer did not see is the same chargeback
+  // risk bookings already refuse (§7.4): take it as a reservation instead.
+  const pricesShown = !(pricing.negotiatedTotal > 0 && !realCompany?.accessCode)
 
   // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
   // and for pickup too. The form shows the same rule first; this is the one that counts.
@@ -155,12 +166,12 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // `totalAmount` itself stays wines-only (Max, 2026-10-12).
   const amountDue = wineOrderAmountDue({ totalAmount, deliveryFee: delivery.deliveryFee })!
 
-  // Wine orders always show the customer their total, so unlike company
-  // bookings there's no hidden-price case to exclude here (§7.4).
+  // Normally the customer saw their total; the one exception is negotiated prices withheld from
+  // a code-less company (`pricesShown` above), which blocks payment like a hidden booking price.
   const sectionGate = await shouldTakePayment({
     tenantId,
     totalPrice: amountDue,
-    priceShown: true,
+    priceShown: pricesShown,
     section: 'WINE_ORDER',
     companyId: companyId || null,
   })
@@ -207,7 +218,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           wineVintageId: w.vintageId,
           wineNameSnapshot: w.name,
           vintageYearSnapshot: w.year,
-          priceSnapshot: priceMap[w.vintageId],
+          // The price actually charged per bottle: negotiated, or standard (the % sits on the order).
+          priceSnapshot: unitPrice[w.vintageId],
           quantity: w.quantity,
         })),
       })

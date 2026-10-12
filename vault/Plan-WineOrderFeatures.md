@@ -358,21 +358,41 @@ payment link for an owed fee.
   that hard-coded "Number of Guests (minimum 4)" (done; his `min_guests_tasting_lunch` = 2 stays).
 
 ### Chunk 9 — T-12 negotiated prices + exporter flag
-**Status:** 🚧 next
-- [ ] `CompanyWinePrice(companyId Cascade, wineVintageId Cascade, price Int tetri, updatedAt)`,
-      unique per pair; RLS JOIN-to-Company. `Company.isExporter Boolean @default(false)`.
-- [ ] Companies edit panel (wine-order companies): "Prices" list of every active vintage,
-      standard price greyed; edit → negotiated (bold); "Reset to standard".
-- [ ] Exporter toggle + badge on the company row and its wine orders; admin filter.
-- [ ] Resolver returns the company's negotiated prices **only on the code-gated path**; the
-      catalogue/drawer show them once the company is resolved.
-- [ ] `submitWineOrder` + `createWineOrderAdmin`: per line, negotiated price if any (no %),
-      else standard × (1 − company %). `priceSnapshot` records the price actually used.
-      The minimum-order check (Chunk 5) uses the result.
-- [ ] Tests: script for pricing rules + spec.
+**Status:** ✅ 2026-10-12 (staging; migration on the dev DB only)
+- [x] Migration `…_company_wine_prices`: `CompanyWinePrice(companyId Cascade, wineVintageId
+      Cascade, price Int tetri, unique per pair)` — **exceptions only**; CHECK price ≥ 0; RLS
+      JOIN-to-Company + app_user grant + anon/authenticated revoke inside the migration (anon REST
+      → 401), and in `setup-rls.ts`. `Company.isExporter Boolean @default(false)`.
+- [x] `lib/winePricing.ts` `priceWineOrder()` — the one pricing function (public form, admin form,
+      both server paths): negotiated price replaces the standard one, the company % applies only to
+      the standard lines (once, on their sum — so an order with no negotiated prices totals to
+      the same tetri as before; tested for 0/10/15/33.3%). `priceSnapshot` = price actually charged.
+- [x] **Visibility rule** (Max: shown only after the code): the resolver returns `winePrices`
+      only for a company proven by its access code, a person's code, or an admin (trusted);
+      a code-less company picked from the public list gets `winePrices: null` +
+      `hasNegotiatedPrices: true`.
+- [x] **Decision taken here, flag to Max:** a code-less company with negotiated prices is still
+      CHARGED its negotiated price, but **never online** — its total was never shown, and charging
+      an unseen amount is the chargeback risk bookings already refuse (§7.4, `priceShown: false`).
+      The form says "Your company's agreed prices will be applied — we will confirm the total with
+      you." and the button becomes "Place Reservation".
+- [x] Companies → Edit (wine-order companies): **Exporter** checkbox + "Exporter" badge on the row;
+      **Wine prices** list — every active vintage, standard price greyed (struck through when
+      negotiated), type a price (bold) or "Standard" to remove it; saved per row on blur.
+      Discount hint reworded to "Applied to every wine … except wines with a negotiated price".
+- [x] Wine Orders: "Exporter" mark next to the company on full + phone cards; "Exporter" filter
+      pill (from the company, live — it is a label).
+- [x] Admin manual form: line prices and total via `priceWineOrder` (also retires a lari-era
+      `Math.round(x*100)/100` that no longer matched the server).
+- [x] Tests: `scripts/test-wine-pricing.ts` **13/13**; `scripts/test-company-wine-prices.ts`
+      **12/12** (isolation, guards, resolver visibility, cascades); new spec
+      `tests/tier2-core-flows/wine-order-negotiated-prices.spec.ts` **4/4** (admin set/reset; coded
+      company sees + is charged negotiated, % not applied; code-less → reservation at negotiated
+      price, no payment; exporter flag + badge + filter). 320px panel screenshot OK.
+**Resume point:** done. Wine regression after T-12: **16/16** (all wine specs incl. payment wine test).
 
 ### Chunk 10 — T-9 Individual vs Company on the wine form
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] "Individual / Company" switch on the public wine form; Individual hides business name /
       LLC / company dropdown; name + phone + address (or pickup) only.
 - [ ] Stored on the order (enum like `BookingType`); shown on admin cards + filter.

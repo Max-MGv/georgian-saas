@@ -56,6 +56,8 @@ type CompanyProfile = {
   isBookingCompany?: boolean
   isWineOrderCompany?: boolean
   wineDiscountPercent?: number | null
+  /** T-12 — a label + filter only. */
+  isExporter?: boolean
   // Per-company payment override (#148). null = follow the tenant's Companies
   // section toggle; true = always skip (trusted); false = always require.
   // Covers both bookings and wine orders for this company — see Feature 148.
@@ -95,6 +97,7 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
         ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
         ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
         ...(profile.wineDiscountPercent !== undefined ? { wineDiscountPercent: profile.wineDiscountPercent } : {}),
+        ...(profile.isExporter !== undefined ? { isExporter: profile.isExporter } : {}),
         ...(profile.skipPayment !== undefined ? { skipPayment: profile.skipPayment } : {}),
       },
     })
