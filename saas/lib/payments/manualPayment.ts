@@ -21,6 +21,7 @@
  */
 import type { TxClient } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 
 /** Rows this module writes, as opposed to the gateway's own. */
 const MANUAL_PROVIDER = 'manual'
@@ -182,6 +183,59 @@ export async function recordAdditionalPayment(
     data: {
       tenantId: input.tenantId,
       orderId: input.orderId,
+      provider: MANUAL_PROVIDER,
+      method: input.method,
+      status: 'recorded',
+      amount: input.amount,
+      settledAt: input.at,
+    },
+  })
+  return { success: true, paymentId: created.id }
+}
+
+/**
+ * What is still owed on a wine order: wines + delivery fee (lib/wineOrderMoney.ts), minus every
+ * settled, non-reversed payment. Read inside the caller's transaction (T-8,
+ * vault/Plan-WineOrderFeatures.md Chunk 6).
+ *
+ * The ordinary case this exists for: the customer paid for the wine online, then the winery set
+ * the delivery fee for an area outside its zones — the fee is now owed on a paid order.
+ */
+export async function wineOrderBalance(
+  tx: TxClient,
+  input: { wineOrderId: string; tenantId: string | null }
+): Promise<{ balance: Tetri } | { error: string }> {
+  const order = await tx.wineOrder.findFirst({
+    where: { id: input.wineOrderId, tenantId: input.tenantId },
+    select: { totalAmount: true, deliveryFee: true },
+  })
+  if (!order) return { error: 'Wine order not found.' }
+  const settled = await tx.payment.aggregate({
+    where: { wineOrderId: input.wineOrderId, settledAt: { not: null }, reversedAt: null },
+    _sum: { amount: true },
+  })
+  return { balance: balanceDue(wineOrderAmountDue(order), settled._sum.amount ?? 0) }
+}
+
+/**
+ * The wine-order sibling of `recordAdditionalPayment` above — a genuine second payment against
+ * the balance (in practice: a delivery fee set after the wine was paid). Same rules: always a new
+ * row, amount > 0, never more than the balance computed fresh in this transaction.
+ */
+export async function recordAdditionalWinePayment(
+  tx: TxClient,
+  input: { wineOrderId: string; tenantId: string | null; amount: Tetri; at: Date; method: 'BANK_TRANSFER' | 'CASH' }
+): Promise<{ success: true; paymentId: string } | { error: string }> {
+  if (input.amount <= 0) return { error: 'Enter an amount greater than zero.' }
+  const owed = await wineOrderBalance(tx, input)
+  if ('error' in owed) return owed
+  if (input.amount > owed.balance) {
+    return { error: `That's more than the outstanding balance of ${formatTetri(owed.balance, { decimals: true })}.` }
+  }
+  const created = await tx.payment.create({
+    data: {
+      tenantId: input.tenantId,
+      wineOrderId: input.wineOrderId,
       provider: MANUAL_PROVIDER,
       method: input.method,
       status: 'recorded',

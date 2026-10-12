@@ -3,6 +3,7 @@ import { getTenantId } from '@/lib/tenant'
 import { requireWineOrdersModule } from '@/lib/requireModule'
 import { getSetting } from '@/app/actions/settings'
 import { NOT_ABANDONED } from '@/lib/orderFilters'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { adminT } from '@/lib/adminT'
 import Link from 'next/link'
 import WineOrdersClient from './WineOrdersClient'
@@ -18,16 +19,25 @@ export default async function WineOrdersPage() {
       // Abandoned checkouts are not orders and never appear here - they live
       // on /admin/abandoned. See lib/orderFilters.
       where: { tenantId, ...NOT_ABANDONED },
-      include: { wineItems: true },
+      include: {
+        wineItems: true,
+        // Settled, live payments — only to work out what is still owed (T-8, Chunk 6).
+        payments: { where: { settledAt: { not: null }, reversedAt: null }, select: { amount: true } },
+      },
       orderBy: { createdAt: 'desc' },
     })
   )
 
-  // Compute displayTotal: stored value if present, otherwise estimate from item price snapshots
-  const ordersWithTotal = orders.map(o => {
-    if (o.totalAmount != null) return { ...o, displayTotal: o.totalAmount, totalEstimated: false }
+  // displayTotal: what the customer owes in all — wines + delivery fee since T-8
+  // (lib/wineOrderMoney.ts); an estimate from item snapshots for old rows with no total.
+  // feeOwed: on a PAID order, what is still outstanding (a delivery fee set after payment).
+  const ordersWithTotal = orders.map(({ payments, ...o }) => {
+    const paidSoFar = payments.reduce((sum, p) => sum + p.amount, 0)
+    const due = wineOrderAmountDue(o)
+    const feeOwed = o.paidAt && due != null ? Math.max(0, due - paidSoFar) : 0
+    if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed }
     const estimated = o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
-    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0 }
+    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0, feeOwed }
   })
 
   return (

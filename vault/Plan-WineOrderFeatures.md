@@ -259,16 +259,33 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Resume point:** done.
 
 ### Chunk 6 — T-8 admin: see it, set the fee later, collect it
-**Status:** 🚧 next
-- [ ] Wine Orders cards (desktop + phone) + Pack view: Delivery/Pickup badge, zone, fee;
-      amber "Delivery fee to set" when DELIVERY + fee null.
-- [ ] Admin can set/edit the fee on an order (logged as an `OrderEvent`).
-- [ ] If the wine is already paid: the fee is a **balance due**. Extend
-      `lib/payments/manualPayment.ts` second-payment path to `wineOrderId` (today Order-only)
-      and allow a card-link top-up for wine orders (mirror Plan-PostPaymentExtras Chunks 3–4).
-      Investigate first; if large, split into its own chunk and tell Max.
+**Status:** 🚧 6a ✅ committed 2026-10-12; 6b not started (paused at Max's request)
+Split in two (allowed by this plan): **6a** display + set fee + manual collection; **6b** card
+payment link for an owed fee.
+- [x] 6a — migration `…_order_event_delivery_fee_set` (adds `OrderEventType.DELIVERY_FEE_SET`),
+      applied to the **dev DB**.
+- [x] 6a — `lib/payments/manualPayment.ts`: `wineOrderBalance()` (wines + fee − live settled
+      payments) and `recordAdditionalWinePayment()` (never above the balance).
+- [x] 6a — `app/actions/wineOrders.ts`: "Paid" now records **wines + fee**
+      (`wineOrderAmountDue`); new `setWineOrderDeliveryFee()` (refuses pickup; clears pending;
+      DELIVERY_FEE_SET event) and `recordWineOrderFeePayment()` (cash / bank transfer).
+- [x] 6a — Wine Orders page: card total = wines + fee; `feeOwed` per paid order. Cards (full,
+      phone compact, table, board, pack) show a Delivery/Pickup badge, "Delivery fee to set",
+      "Owes X₾"; full card has "Set fee / Change fee" and "Record payment". Incomplete page and
+      super-admin activity totals use `wineOrderAmountDue`; statistics stays wines-only.
+- [x] 6a tests: `scripts/test-wine-fee-payment.ts` 7/7; new spec
+      `tests/tier3-admin-smoke/wine-order-delivery-fee.spec.ts` 3/3; screenshots desktop / 390 /
+      320 OK.
+- [x] 6a — regression **10/10** (wine-catalogue-order, payment-amount-integrity wine test, both
+      delivery specs); lint: no new errors; test data cleaned (no rules, zones or ZZ orders left).
+- [ ] 6b — card-payment link for an owed fee (mirror `startOrderTopUpCheckout` /
+      `lib/payments/topUpCheckout.ts`, which is Order-only today).
 - [ ] Filters: Delivery / Pickup.
-**Resume point:** —
+**Resume point:** start **6b** — card-payment link for an owed fee: generalise
+`lib/payments/topUpCheckout.ts` (Order-only today) to wine orders, add a "Send card link" next to
+"Record payment" in `DeliverySection` (WineOrdersClient.tsx), reuse `QrCodeDialog`. Then the
+Delivery / Pickup filter. `saas/scripts/_scratch_shot.ts` is a local screenshot helper — never
+commit it.
 
 ### Chunk 7 — T-14 preferred date
 **Status:** ⏳

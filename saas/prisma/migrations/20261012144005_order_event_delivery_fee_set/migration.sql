@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "OrderEventType" ADD VALUE 'DELIVERY_FEE_SET';

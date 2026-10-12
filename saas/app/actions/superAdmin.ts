@@ -1,6 +1,7 @@
 'use server'
 
 import { requireSuperAdmin } from '@/lib/requireSuperAdmin'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
@@ -412,7 +413,8 @@ export async function getAllWineOrders() {
 
   return orders.map(o => {
     const tenant = o.tenantId ? tenantMap.get(o.tenantId) : undefined
-    const displayTotal = o.totalAmount ?? o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
+    // Wines + delivery fee (T-8, lib/wineOrderMoney.ts); item-snapshot estimate for old rows.
+    const displayTotal = wineOrderAmountDue(o) ?? o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
     const bottleCount = o.wineItems.reduce((sum, i) => sum + i.quantity, 0)
     return {
       id: o.id,

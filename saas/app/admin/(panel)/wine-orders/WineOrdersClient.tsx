@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent, parseMajor, toMajor } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { changeWineOrderStatus } from '@/app/actions/wineOrders'
+import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment } from '@/app/actions/wineOrders'
 import {
   wineOrderStagePatch,
   paidPatch,
@@ -82,6 +82,15 @@ type WineOrder = {
   workingHours: string | null
   /** The saved address's name at order time ("Vake branch"), T-13. Null for a typed address. */
   addressLabel: string | null
+  // ── Delivery (T-8) ──
+  fulfilment: 'DELIVERY' | 'PICKUP'
+  deliveryZoneName: string | null
+  /** Tetri. Null = none recorded. */
+  deliveryFee: number | null
+  /** "Other" area — the winery still has to set the fee. */
+  deliveryFeePending: boolean
+  /** On a paid order: what is still owed (tetri) — a fee set after payment. Computed on the page. */
+  feeOwed: number
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -216,6 +225,137 @@ function PaymentMark({ order, locale }: { order: WineOrder; locale: string }) {
   return null
 }
 
+/** Delivery or pickup at a glance (T-8) — one badge for every view, like PaymentMark. */
+function DeliveryBadge({ order, locale }: { order: WineOrder; locale: string }) {
+  const at = (key: string) => adminT(locale, key)
+  const base = 'inline-flex items-center rounded-full font-semibold flex-shrink-0 whitespace-nowrap'
+  const size = { fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5 }
+  if (order.fulfilment === 'PICKUP') {
+    return <span className={base} style={{ ...size, backgroundColor: '#e0e7ff', color: '#3730a3' }}>{at('wineOrders.delivery.pickup')}</span>
+  }
+  if (order.deliveryFeePending) {
+    return <span className={base} style={{ ...size, backgroundColor: '#fef3c7', color: '#92400e' }}>{at('wineOrders.delivery.feeToSet')}</span>
+  }
+  if (order.deliveryZoneName || order.deliveryFee != null) {
+    return (
+      <span className={base} style={{ ...size, backgroundColor: 'var(--site-bg)', color: C.muted, border: `1px solid ${C.border}` }}>
+        {order.deliveryZoneName ?? at('wineOrders.delivery.delivery')}
+        {order.deliveryFee != null && ` · ${formatTetri(asTetri(order.deliveryFee))}`}
+      </span>
+    )
+  }
+  return null
+}
+
+/** A paid order that still owes money — a delivery fee set after payment (T-8). */
+function FeeOwedMark({ order, locale }: { order: WineOrder; locale: string }) {
+  if (!isPaid(order) || order.feeOwed <= 0) return null
+  return (
+    <span className="inline-flex items-center rounded-full font-bold flex-shrink-0 whitespace-nowrap"
+      style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', padding: '0.05rem 0.4rem', lineHeight: 1.5 }}>
+      {adminT(locale, 'wineOrders.delivery.owes').replace('{amount}', formatTetri(asTetri(order.feeOwed)))}
+    </span>
+  )
+}
+
+/**
+ * The full card's delivery block (T-8, Plan-WineOrderFeatures Chunk 6): where it goes (or that it
+ * is a pickup), the fee with "Set / Change fee", and — on a paid order that still owes — "Record
+ * payment" (cash / bank transfer). A card-payment link for the balance is Chunk 6b.
+ */
+function DeliverySection({ order, locale, onPatch }: {
+  order: WineOrder
+  locale: string
+  onPatch: (patch: Partial<WineOrder>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [editing, setEditing] = useState<'fee' | 'payment' | null>(null)
+  const [value, setValue] = useState('')
+  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  if (order.fulfilment === 'PICKUP') {
+    return <p className="text-sm" style={{ color: C.muted }}>&#127991; {at('wineOrders.delivery.pickupLine')}</p>
+  }
+
+  async function saveFee() {
+    const fee = parseMajor(value)
+    if (fee === null || fee < 0) { setError(at('wineOrders.delivery.invalid')); return }
+    setBusy(true); setError('')
+    const r = await setWineOrderDeliveryFee(order.id, fee)
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    const old = order.deliveryFee ?? 0
+    onPatch({
+      deliveryFee: fee,
+      deliveryFeePending: false,
+      displayTotal: order.totalAmount != null ? order.totalAmount + fee : order.displayTotal,
+      feeOwed: isPaid(order) ? Math.max(0, order.feeOwed + fee - old) : 0,
+    })
+    setEditing(null)
+  }
+
+  async function savePayment() {
+    const amount = parseMajor(value)
+    if (amount === null || amount <= 0) { setError(at('wineOrders.delivery.invalid')); return }
+    setBusy(true); setError('')
+    const r = await recordWineOrderFeePayment(order.id, { amount, method })
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    onPatch({ feeOwed: Math.max(0, order.feeOwed - amount) })
+    setEditing(null)
+  }
+
+  const small = { borderColor: C.border, color: C.muted }
+  return (
+    <div className="flex flex-col gap-1.5 text-sm" style={{ color: C.muted }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span>&#128666; {order.deliveryZoneName ?? at('wineOrders.delivery.delivery')}</span>
+        {order.deliveryFeePending
+          ? <DeliveryBadge order={order} locale={locale} />
+          : order.deliveryFee != null && <span className="font-medium" style={{ color: C.text }}>{formatTetri(asTetri(order.deliveryFee))}</span>}
+        {editing !== 'fee' && (
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { setEditing('fee'); setError(''); setValue(order.deliveryFee != null ? String(toMajor(asTetri(order.deliveryFee))) : '') }}>
+            {order.deliveryFee != null ? at('wineOrders.delivery.changeFee') : at('wineOrders.delivery.setFee')}
+          </button>
+        )}
+        <FeeOwedMark order={order} locale={locale} />
+        {isPaid(order) && order.feeOwed > 0 && editing !== 'payment' && (
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { setEditing('payment'); setError(''); setValue(String(toMajor(asTetri(order.feeOwed)))) }}>
+            {at('wineOrders.delivery.recordPayment')}
+          </button>
+        )}
+      </div>
+      {editing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="number" min={0} step="0.01" inputMode="decimal" value={value} onChange={e => setValue(e.target.value)}
+            aria-label={editing === 'fee' ? at('wineOrders.delivery.feeLabel') : at('wineOrders.delivery.amountLabel')}
+            className="rounded-lg border px-2 py-1 text-sm" style={{ borderColor: C.border, width: 90, textAlign: 'right' }} />
+          <span>₾</span>
+          {editing === 'payment' && (
+            <select value={method} onChange={e => setMethod(e.target.value as 'CASH' | 'BANK_TRANSFER')}
+              aria-label={at('wineOrders.delivery.method')} className="rounded-lg border px-2 py-1 text-sm" style={{ borderColor: C.border }}>
+              <option value="BANK_TRANSFER">{at('wineOrders.delivery.bank')}</option>
+              <option value="CASH">{at('wineOrders.delivery.cash')}</option>
+            </select>
+          )}
+          <button type="button" disabled={busy} onClick={editing === 'fee' ? saveFee : savePayment}
+            className="text-xs px-3 py-1 rounded-lg font-medium text-white disabled:opacity-60" style={{ backgroundColor: C.wine }}>
+            {at('settings.common.save')}
+          </button>
+          <button type="button" onClick={() => { setEditing(null); setError('') }} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+            {at('settings.common.cancel')}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+    </div>
+  )
+}
+
 /**
  * True on a phone-width screen. Used where the phone gets a different
  * component rather than a restyled one, so only one of the two is in the DOM
@@ -273,6 +413,8 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
         {paid
           ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: '#dcfce7', color: '#166534' }}>₾✓ {at('orders.status.paid')}</span>
           : isOwed(order) && <OwedMark locale={locale} />}
+        <FeeOwedMark order={order} locale={locale} />
+        <DeliveryBadge order={order} locale={locale} />
         {order.discountPercent != null && order.discountPercent > 0 && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>−{order.discountPercent}%</span>
         )}
@@ -706,6 +848,8 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         {labelFor(locale, order.stage)} ▾
                       </button>
                       <PaymentMark order={order} locale={locale} />
+                      <FeeOwedMark order={order} locale={locale} />
+                      <DeliveryBadge order={order} locale={locale} />
                     </div>
                     {statusMenuId === order.id && (
                       <div
@@ -879,6 +1023,8 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                           {order.businessName}
                         </div>
                         <PaymentMark order={order} locale={locale} />
+                        <FeeOwedMark order={order} locale={locale} />
+                        <DeliveryBadge order={order} locale={locale} />
                       </div>
                       <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }}>
                         {order.wineItems.length} {order.wineItems.length === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
@@ -1048,6 +1194,8 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                   {labelFor(locale, order.stage)}
                 </span>
                 <PaymentMark order={order} locale={locale} />
+                <FeeOwedMark order={order} locale={locale} />
+                <DeliveryBadge order={order} locale={locale} />
               </div>
             </div>
           </div>
@@ -1114,6 +1262,8 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                       {labelFor(locale, order.stage)}
                     </span>
                     <PaymentMark order={order} locale={locale} />
+                    <FeeOwedMark order={order} locale={locale} />
+                    <DeliveryBadge order={order} locale={locale} />
                   </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted, fontSize: '0.8rem' }}>
@@ -1384,8 +1534,14 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 text-sm mt-3" style={{ color: C.muted }}>
-                    <p>&#128205; {order.addressLabel && <span className="font-medium">{order.addressLabel} — </span>}{order.address}</p>
-                    {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+                    {order.fulfilment !== 'PICKUP' && (
+                      <>
+                        <p>&#128205; {order.addressLabel && <span className="font-medium">{order.addressLabel} — </span>}{order.address}</p>
+                        {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+                      </>
+                    )}
+                    <DeliverySection order={order} locale={locale}
+                      onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />
                   </div>
                 </div>
 
@@ -1403,6 +1559,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     </span>
                   )}
                   {isOwed(order) && <OwedMark locale={locale} />}
+                  <FeeOwedMark order={order} locale={locale} />
                   <p>&#128100; {order.contactName}</p>
                   <p>&#128222; {order.contactPhone}</p>
                   <button

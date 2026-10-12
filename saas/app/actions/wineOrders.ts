@@ -3,7 +3,9 @@
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
 import { applyPercent, asTetri } from '@/lib/money'
-import { recordManualPayment, reverseManualPayments } from '@/lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment } from '@/lib/payments/manualPayment'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
+import type { Tetri } from '@/lib/money'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -52,7 +54,8 @@ export async function changeWineOrderStatus(
         where: { id, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
         // `totalAmount` is read for the ledger row a manual payment writes (chunk 6).
-        select: { stage: true, totalAmount: true, confirmedAt: true, deliveredAt: true, paidAt: true },
+        // `deliveryFee` too since T-8: "paid" means wines + delivery fee (lib/wineOrderMoney.ts).
+        select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
       const now = new Date()
@@ -72,7 +75,7 @@ export async function changeWineOrderStatus(
         if (change.kind === 'paid') {
           if (change.value) {
             await recordManualPayment(tx, {
-              tenantId, wineOrderId: id, amount: asTetri(current.totalAmount ?? 0), at: now,
+              tenantId, wineOrderId: id, amount: wineOrderAmountDue(current) ?? asTetri(0), at: now,
               method: change.method,
             })
           } else {
@@ -250,4 +253,76 @@ export async function createWineOrderAdmin(data: {
   revalidatePath('/admin/wine-orders')
   revalidatePath('/admin/statistics')
   return { orderId }
+}
+
+/**
+ * Set or change a wine order's delivery fee after it was placed (T-8,
+ * vault/Plan-WineOrderFeatures.md Chunk 6) — the follow-up to a customer who picked "Other — we
+ * will contact you about delivery", or a correction. Clears `deliveryFeePending`.
+ *
+ * The fee is a separate column, never folded into `totalAmount` (wines only, Max 2026-10-12). If
+ * the wine was already paid, the fee becomes a balance due — shown on the card and collected with
+ * `recordWineOrderFeePayment` below; nothing here touches existing payments.
+ */
+export async function setWineOrderDeliveryFee(
+  id: string,
+  fee: Tetri
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  if (!Number.isInteger(fee) || fee < 0 || fee > 100_000_00) return { error: 'Enter a valid fee.' }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const order = await tx.wineOrder.findFirst({
+      where: { id, tenantId },
+      select: { fulfilment: true, deliveryFee: true },
+    })
+    if (!order) return { error: 'Wine order not found.' }
+    // The database refuses it too (WineOrder_pickup_has_no_delivery); this is the readable version.
+    if (order.fulfilment === 'PICKUP') return { error: 'This order is a pickup — it has no delivery fee.' }
+    await tx.wineOrder.update({ where: { id }, data: { deliveryFee: fee, deliveryFeePending: false } })
+    await recordOrderEvent(tx, {
+      tenantId,
+      wineOrderId: id,
+      type: 'DELIVERY_FEE_SET',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      payload: { from: order.deliveryFee, to: fee },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+  revalidatePath('/admin/wine-orders')
+  return result
+}
+
+/**
+ * Record cash or a bank transfer against what is still owed on a wine order (in practice: a
+ * delivery fee set after the wine was paid). Validated against the balance inside the same
+ * transaction — see `recordAdditionalWinePayment`.
+ */
+export async function recordWineOrderFeePayment(
+  id: string,
+  data: { amount: Tetri; method: 'BANK_TRANSFER' | 'CASH' }
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const recorded = await recordAdditionalWinePayment(tx, {
+      wineOrderId: id, tenantId, amount: data.amount, method: data.method, at: new Date(),
+    })
+    if ('error' in recorded) return recorded
+    await recordOrderEvent(tx, {
+      tenantId,
+      wineOrderId: id,
+      type: 'ADDITIONAL_PAYMENT_RECORDED',
+      actorType: 'ADMIN',
+      actorId: actor?.id ?? null,
+      payload: { amount: data.amount, method: data.method },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+  revalidatePath('/admin/wine-orders')
+  return result
 }
