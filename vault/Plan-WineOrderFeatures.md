@@ -325,12 +325,25 @@ payment link for an owed fee.
 **Resume point:** done.
 
 ### Chunk 8 — T-14 calendar view in Wine Orders
-**Status:** 🚧 next
-- [ ] View toggle on Wine Orders: Cards / Calendar (by preferred date).
-- [ ] Reuse `app/admin/(panel)/orders/CalendarView.tsx` (generalise its order type) rather
-      than copy it; keep its hover-vs-tap split (MaintenanceNotes §33).
-- [ ] "No date" list for orders without a preferred date. `NOT_ABANDONED` on the query.
-**Resume point:** —
+**Status:** ✅ 2026-10-12 (staging)
+- [x] The month grid moved out of `app/admin/(panel)/orders/CalendarView.tsx` into a generic
+      `components/MonthCalendar.tsx` (items by day, caller renders rows; mouse = hover popover +
+      `onDayClick`, touch = tap → day panel; MaintenanceNotes §33's input-device rule kept).
+      `CalendarView` is now a thin booking wrapper — same props, same behaviour (click a day →
+      table filtered to it; tap → bookings under the grid). The one lint error (`setCanHover` in
+      an effect) moved with the code — it was already there.
+- [x] Wine Orders gets a **Calendar** tab (Cards / Table / Board / Calendar / Pack): orders on their
+      preferred date (stage, paid mark, delivery badge, total); clicking a day lists them under
+      the grid (no navigation — wine orders have no detail page); **"No preferred date (N)"**
+      list below (cancelled ones left out). Choosing any order switches to Cards and scrolls to
+      it (`#wine-order-<id>` on both card kinds). The filter pills still apply.
+- [x] Tests: new `tests/tier3-admin-smoke/wine-order-calendar.spec.ts` ✅ (count on the right day,
+      day panel, undated list, back to the card); booking regression `admin-orders.spec.ts` ✅.
+      Desktop + 320px screenshots, booking calendar at 320: no overflow.
+- Note: test orders left by older specs (payment-amount-integrity, wine-catalogue-order cancel but
+  never delete theirs — KNOWN-ISSUES #3) now carry a date 14 days out, so they appear on the
+  calendar on that day in the dev DB.
+**Resume point:** done.
 
 ---
 
@@ -345,7 +358,7 @@ payment link for an owed fee.
   that hard-coded "Number of Guests (minimum 4)" (done; his `min_guests_tasting_lunch` = 2 stays).
 
 ### Chunk 9 — T-12 negotiated prices + exporter flag
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] `CompanyWinePrice(companyId Cascade, wineVintageId Cascade, price Int tetri, updatedAt)`,
       unique per pair; RLS JOIN-to-Company. `Company.isExporter Boolean @default(false)`.
 - [ ] Companies edit panel (wine-order companies): "Prices" list of every active vintage,

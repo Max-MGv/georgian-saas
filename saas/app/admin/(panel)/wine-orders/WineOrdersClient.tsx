@@ -24,6 +24,7 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
+import MonthCalendar from '@/components/MonthCalendar'
 
 // Client-only, like OrderDetail.tsx: the QR is drawn in the browser (the link carries a payment token).
 const QrCodeDialog = dynamic(() => import('@/components/QrCodeDialog'), { ssr: false })
@@ -151,7 +152,7 @@ function itemLabel(i: WineOrderItem) {
   return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot} × ${i.quantity} bottle${i.quantity !== 1 ? 's' : ''}`
 }
 
-type Mode = 'cards' | 'table' | 'pack' | 'board'
+type Mode = 'cards' | 'table' | 'pack' | 'board' | 'calendar'
 type PendingChange = { orderId: string; change: WineOrderStatusChange; label: string }
 
 /**
@@ -513,6 +514,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
   const paid = isPaid(order)
   return (
     <div
+      id={`wine-order-${order.id}`}
       onClick={onOpen}
       role="button"
       className="rounded-xl border p-4 cursor-pointer active:bg-amber-50"
@@ -1570,14 +1572,14 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     return <div className="text-center py-20 text-sm" style={{ color: 'var(--site-secondary)' }}>{at('wineOrders.noOrdersYet')}</div>
   }
 
-  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : at('wineOrders.mode.pack')
+  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : m === 'calendar' ? at('orders.view.calendar') : at('wineOrders.mode.pack')
 
   const modeToggle = (
     <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start max-w-full">
       {/* min-w-0 + overflow-x-auto: Georgian labels are long, and at 320px the four tabs
           plus the "?" are wider than the screen - scroll the tabs rather than the page. */}
       <div className="flex gap-0.5 rounded-lg p-0.5 min-w-0 overflow-x-auto" style={{ backgroundColor: '#f0e8dc', scrollbarWidth: 'none' }}>
-        {(['cards', 'table', 'board', 'pack'] as const).map(m => (
+        {(['cards', 'table', 'board', 'calendar', 'pack'] as const).map(m => (
           <button
             key={m}
             onClick={() => switchMode(m)}
@@ -1637,6 +1639,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
             return (
               <div
                 key={order.id}
+                id={`wine-order-${order.id}`}
                 className="rounded-xl border overflow-hidden flex flex-col md:flex-row"
                 style={{
                   backgroundColor: C.bg, borderColor: C.border,
@@ -1756,6 +1759,81 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   }
 
   // ── Board ───────────────────────────────────────────────────
+
+  // ── Calendar (T-14, Plan-WineOrderFeatures Chunk 8) ─────────
+  // By preferred delivery / pickup date, on the same month grid as the Orders calendar. Orders
+  // with no date (everything before T-14, and admin entries left blank) are listed underneath.
+
+  if (mode === 'calendar') {
+    const byDate: Record<string, WineOrder[]> = {}
+    const undated: WineOrder[] = []
+    for (const o of filteredOrders) {
+      if (!o.preferredDate) { if (o.stage !== CANCELLED) undated.push(o); continue }
+      const d = new Date(o.preferredDate).toISOString().slice(0, 10)
+      ;(byDate[d] ??= []).push(o)
+    }
+    const now = new Date()
+    // Opening an order from the calendar goes to its card — wine orders have no detail page.
+    const openOrder = (o: WineOrder) => {
+      switchMode('cards')
+      setOpenCardId(o.id)
+      setTimeout(() => document.getElementById(`wine-order-${o.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+    }
+    const row = (o: WineOrder) => {
+      const bottles = o.wineItems.reduce((n, i) => n + i.quantity, 0)
+      return (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium truncate" style={{ color: C.text }}>{o.businessName}</p>
+            <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: styleFor(o.stage).border }}>
+              {labelFor(locale, o.stage)}
+              <PaymentMark order={o} locale={locale} />
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span className="text-xs" style={{ color: C.faint }}>{bottles} {at('wineOrders.board.bottles')}</span>
+            <DeliveryBadge order={o} locale={locale} />
+            {o.displayTotal != null && (
+              <span className="text-xs font-semibold ml-auto" style={{ color: C.wine }}>{formatTetri(asTetri(o.displayTotal))}</span>
+            )}
+          </div>
+        </>
+      )
+    }
+    return (
+      <div className="flex flex-col">
+        {modeToggle}
+        {filterBar}
+        <MonthCalendar
+          itemsByDate={byDate}
+          itemKey={o => o.id}
+          renderItem={row}
+          countLabel={n => at(n === 1 ? 'wineOrders.calendar.one' : 'wineOrders.calendar.many').replace('{n}', String(n))}
+          initialYear={now.getFullYear()}
+          initialMonth={now.getMonth()}
+          locale={locale}
+          onItemOpen={openOrder}
+          emptyHint={at('wineOrders.calendar.hint')}
+        />
+        <div className="rounded-xl border mt-4" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+          <p className="px-4 py-3 border-b text-sm font-semibold" style={{ borderColor: C.border, color: C.text }}>
+            {at('wineOrders.calendar.noDate')} ({undated.length})
+          </p>
+          {undated.length === 0
+            ? <p className="px-4 py-3 text-xs" style={{ color: C.faint }}>{at('wineOrders.calendar.noDateNone')}</p>
+            : (
+              <div className="divide-y" style={{ borderColor: C.border }}>
+                {undated.map(o => (
+                  <button key={o.id} onClick={() => openOrder(o)} className="w-full text-left px-4 py-2.5 active:bg-amber-50">
+                    {row(o)}
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+      </div>
+    )
+  }
 
   if (mode === 'board') {
     return (
