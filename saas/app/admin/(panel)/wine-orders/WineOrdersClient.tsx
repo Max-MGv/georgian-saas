@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent, parseMajor, toMajor } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment } from '@/app/actions/wineOrders'
+import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment, startWineOrderFeeCheckout } from '@/app/actions/wineOrders'
+import dynamic from 'next/dynamic'
 import {
   wineOrderStagePatch,
   paidPatch,
@@ -22,6 +23,9 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
+
+// Client-only, like OrderDetail.tsx: the QR is drawn in the browser (the link carries a payment token).
+const QrCodeDialog = dynamic(() => import('@/components/QrCodeDialog'), { ssr: false })
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -55,6 +59,9 @@ const STATUS_COLOR: Record<string, StatusStyle> = {
   PAID:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   unpaid:    { border: '#78716c', pill: '#f5f5f4', pillText: '#44403c', labelKey: 'wineOrders.status.unpaid' },
+  // Fulfilment filter words (T-8).
+  delivery:  { border: '#0f766e', pill: '#ccfbf1', pillText: '#134e4a', labelKey: 'wineOrders.delivery.delivery' },
+  pickup:    { border: '#4338ca', pill: '#e0e7ff', pillText: '#3730a3', labelKey: 'wineOrders.delivery.pickup' },
 }
 
 const UNKNOWN_STATUS_STYLE: StatusStyle = { border: '#9ca3af', pill: '#f3f4f6', pillText: '#374151', labelKey: '' }
@@ -72,6 +79,9 @@ function labelFor(locale: string, code: string | null): string {
 
 /** The payment pills. Derived from `paidAt`, not stored as a status. */
 const PAYMENT_FILTER_CODES = ['paid', 'unpaid'] as const
+
+/** The fulfilment pills (T-8) — a third axis, AND'd with the other two like payment is. */
+const FULFILMENT_FILTER_CODES = ['delivery', 'pickup'] as const
 
 type WineOrder = {
   id: string
@@ -261,7 +271,8 @@ function FeeOwedMark({ order, locale }: { order: WineOrder; locale: string }) {
 /**
  * The full card's delivery block (T-8, Plan-WineOrderFeatures Chunk 6): where it goes (or that it
  * is a pickup), the fee with "Set / Change fee", and — on a paid order that still owes — "Record
- * payment" (cash / bank transfer). A card-payment link for the balance is Chunk 6b.
+ * payment" (cash / bank transfer) or "Card payment link" (Chunk 6b): a real Flitt checkout for
+ * the balance, handed over as a link or QR code — never emailed from here.
  */
 function DeliverySection({ order, locale, onPatch }: {
   order: WineOrder
@@ -274,6 +285,8 @@ function DeliverySection({ order, locale, onPatch }: {
   const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [link, setLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   if (order.fulfilment === 'PICKUP') {
     return <p className="text-sm" style={{ color: C.muted }}>&#127991; {at('wineOrders.delivery.pickupLine')}</p>
@@ -307,6 +320,14 @@ function DeliverySection({ order, locale, onPatch }: {
     setEditing(null)
   }
 
+  async function makeLink() {
+    setBusy(true); setError(''); setLink(null)
+    const r = await startWineOrderFeeCheckout(order.id, { amount: asTetri(order.feeOwed) })
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    setLink(r.checkoutUrl)
+  }
+
   const small = { borderColor: C.border, color: C.muted }
   return (
     <div className="flex flex-col gap-1.5 text-sm" style={{ color: C.muted }}>
@@ -328,7 +349,35 @@ function DeliverySection({ order, locale, onPatch }: {
             {at('wineOrders.delivery.recordPayment')}
           </button>
         )}
+        {isPaid(order) && order.feeOwed > 0 && !editing && !link && (
+          <button type="button" disabled={busy} className="text-xs px-2 py-0.5 rounded border disabled:opacity-60" style={small} onClick={makeLink}>
+            {at('wineOrders.delivery.cardLink')}
+          </button>
+        )}
       </div>
+      {link && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.topUpCheckout.linkLabel')}</span>
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { void navigator.clipboard.writeText(link); setCopied(true) }}>
+            {copied ? at('orderDetail.topUpCheckout.copied') : at('orderDetail.topUpCheckout.copy')}
+          </button>
+          <QrCodeDialog
+            url={link}
+            triggerLabel={at('orderDetail.topUpCheckout.showQr')}
+            title={at('orderDetail.topUpCheckout.qrTitle')}
+            hint={at('wineOrders.delivery.qrHint')}
+            qrAriaLabel={at('orderDetail.topUpCheckout.qrAria')}
+            openLabel={at('orderDetail.topUpCheckout.openLink')}
+            closeLabel={at('orderDetail.topUpCheckout.closeQr')}
+            triggerClassName="text-xs px-2 py-0.5 rounded border"
+            triggerStyle={small}
+          />
+          <button type="button" className="text-xs px-2 py-0.5 rounded" style={{ color: C.faint }} onClick={() => { setLink(null); setCopied(false) }}>
+            {at('orderDetail.topUpCheckout.done')}
+          </button>
+        </div>
+      )}
       {editing && (
         <div className="flex flex-wrap items-center gap-2">
           <input type="number" min={0} step="0.01" inputMode="decimal" value={value} onChange={e => setValue(e.target.value)}
@@ -701,6 +750,10 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
             from each group narrows rather than widens. */}
         <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
         {PAYMENT_FILTER_CODES.map(code => pill(code))}
+
+        {/* Fulfilment axis (T-8). */}
+        <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
+        {FULFILMENT_FILTER_CODES.map(code => pill(code))}
 
       </div>
       <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-end`}>
@@ -1317,6 +1370,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     return {
       stage: new Set(picked.filter(f => (WINE_ORDER_STAGES as readonly string[]).includes(f))),
       payment: new Set(picked.filter(f => (PAYMENT_FILTER_CODES as readonly string[]).includes(f))),
+      fulfilment: new Set(picked.filter(f => (FULFILMENT_FILTER_CODES as readonly string[]).includes(f))),
     }
   }, [filters])
 
@@ -1337,6 +1391,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const filteredOrders = useMemo(() => orders.filter(o => {
     if (!matchesSearchAndDates(o)) return false
     if (activeFilters.stage.size > 0 && !activeFilters.stage.has(o.stage)) return false
+    if (activeFilters.fulfilment.size > 0 && !activeFilters.fulfilment.has(o.fulfilment === 'PICKUP' ? 'pickup' : 'delivery')) return false
     return matchesPayment(o)
   }), [orders, activeFilters, matchesPayment, matchesSearchAndDates])
 

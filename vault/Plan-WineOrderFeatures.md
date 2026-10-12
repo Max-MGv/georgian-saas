@@ -259,7 +259,7 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Resume point:** done.
 
 ### Chunk 6 — T-8 admin: see it, set the fee later, collect it
-**Status:** 🚧 6a ✅ committed 2026-10-12; 6b not started (paused at Max's request)
+**Status:** ✅ 2026-10-12 (6a `b9bf820`, 6b — staging)
 Split in two (allowed by this plan): **6a** display + set fee + manual collection; **6b** card
 payment link for an owed fee.
 - [x] 6a — migration `…_order_event_delivery_fee_set` (adds `OrderEventType.DELIVERY_FEE_SET`),
@@ -278,17 +278,23 @@ payment link for an owed fee.
       320 OK.
 - [x] 6a — regression **10/10** (wine-catalogue-order, payment-amount-integrity wine test, both
       delivery specs); lint: no new errors; test data cleaned (no rules, zones or ZZ orders left).
-- [ ] 6b — card-payment link for an owed fee (mirror `startOrderTopUpCheckout` /
-      `lib/payments/topUpCheckout.ts`, which is Order-only today).
-- [ ] Filters: Delivery / Pickup.
-**Resume point:** start **6b** — card-payment link for an owed fee: generalise
-`lib/payments/topUpCheckout.ts` (Order-only today) to wine orders, add a "Send card link" next to
-"Record payment" in `DeliverySection` (WineOrdersClient.tsx), reuse `QrCodeDialog`. Then the
-Delivery / Pickup filter. `saas/scripts/_scratch_shot.ts` is a local screenshot helper — never
-commit it.
+- [x] 6b — `lib/payments/topUpCheckout.ts`: the Flitt call + own-row lookup moved into a shared
+      `runTopUpCheckout(target)`; new `startWineTopUpCheckout()` (balance = `wineOrderBalance`).
+      Booking top-up unchanged (checked through the real Order detail UI: 50₾ checkout on the
+      order, fresh `…-topup-` reference). Action `startWineOrderFeeCheckout()`; full card's
+      "Card payment link" → Copy link / Show QR code (`QrCodeDialog`, client-only). No email from
+      here (no wine template) — noted for Max. Settling re-sends the wine receipt, now showing
+      Paid = wines + fee (same as bookings re-send their confirmation).
+- [x] 6b — Delivery / Pickup filter pills (third axis, AND'd like payment).
+- [x] 6b tests: spec now **5/5** (+ card link creates a 15₾ test-merchant checkout with a fresh
+      Flitt ref; filter narrows); `scripts/test-settle-wine-fee-topup.ts` **9/9** (signed
+      settlement of a fee top-up: settles, nothing owed, first paidAt unmoved, wines total
+      untouched, wrong amount refused); `scripts/test-topup-checkout.ts` **3/3** (pre-checkout
+      guards: over-balance for both, other tenant). Lint: no new errors.
+**Resume point:** done.
 
 ### Chunk 7 — T-14 preferred date
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] `WineOrder.preferredDate DateTime? @db.Date` + index `[tenantId, preferredDate]`.
 - [ ] Public form: required date field, label "Preferred delivery date" / "Preferred pickup
       date" + small note "We'll confirm the exact day". Closed Days + lead time enforced on the

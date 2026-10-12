@@ -5,6 +5,7 @@ import { writeOrderContacts } from '@/lib/orderContacts'
 import { applyPercent, asTetri } from '@/lib/money'
 import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
+import { startWineTopUpCheckout } from '@/lib/payments/topUpCheckout'
 import type { Tetri } from '@/lib/money'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
@@ -325,4 +326,29 @@ export async function recordWineOrderFeePayment(
   if ('error' in result) return result
   revalidatePath('/admin/wine-orders')
   return result
+}
+
+/**
+ * A card-payment link for what a paid wine order still owes (T-8, Plan-WineOrderFeatures
+ * Chunk 6b) — the card sibling of `recordWineOrderFeePayment`. Returns the link for the admin to
+ * copy or show as a QR code; nothing is sent to the customer from here. The balance only moves
+ * when Flitt's signed callback settles the payment (settle.ts), like every other checkout.
+ */
+export async function startWineOrderFeeCheckout(
+  id: string,
+  data: { amount: Tetri }
+): Promise<{ success: true; checkoutUrl: string; paymentId: string } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const order = await withTenantDb(tenantId, tx => tx.wineOrder.findFirst({
+    where: { id, tenantId },
+    select: { businessName: true, deliveryZoneName: true },
+  }))
+  if (!order) return { error: 'Wine order not found.' }
+  return startWineTopUpCheckout({
+    wineOrderId: id,
+    tenantId,
+    amount: data.amount,
+    orderDesc: `Wine order balance${order.deliveryZoneName ? ` (delivery ${order.deliveryZoneName})` : ''}, ${order.businessName}`,
+  })
 }

@@ -15,8 +15,12 @@ const TENANT = process.env.DEFAULT_TENANT_ID!
 const RUN = Date.now()
 const PAID_NAME = `ZZ FeeAdmin Paid ${RUN}`
 const UNPAID_NAME = `ZZ FeeAdmin Unpaid ${RUN}`
+const OWES_NAME = `ZZ FeeAdmin Owes ${RUN}`
+const PICKUP_NAME = `ZZ FeeAdmin Pickup ${RUN}`
 let paidId = ''
 let unpaidId = ''
+let owesId = ''
+let pickupId = ''
 
 const base = {
   tenantId: TENANT, address: 'ZZ Street 1', contactName: 'ZZ', contactPhone: '+995500000051',
@@ -41,10 +45,26 @@ test.beforeAll(async () => {
     },
   })
   unpaidId = unpaid.id
+  // Paid for the wine; the 15₾ fee was set afterwards and is still owed (Chunk 6b's card link).
+  const owes = await db.wineOrder.create({
+    data: {
+      ...base, businessName: OWES_NAME, deliveryZoneName: 'ZZ Zone', deliveryFee: 1500, paidAt: new Date(),
+      payments: { create: { tenantId: TENANT, provider: 'flitt', method: 'CARD', status: 'approved', amount: 3000, settledAt: new Date() } },
+      wineItems: { create: { wineNameSnapshot: 'ZZ Wine', vintageYearSnapshot: 2024, priceSnapshot: 1500, quantity: 2 } },
+    },
+  })
+  owesId = owes.id
+  const pickup = await db.wineOrder.create({
+    data: {
+      ...base, address: '', businessName: PICKUP_NAME, fulfilment: 'PICKUP',
+      wineItems: { create: { wineNameSnapshot: 'ZZ Wine', vintageYearSnapshot: 2024, priceSnapshot: 1500, quantity: 2 } },
+    },
+  })
+  pickupId = pickup.id
 })
 
 test.afterAll(async () => {
-  await db.wineOrder.deleteMany({ where: { id: { in: [paidId, unpaidId] } } })
+  await db.wineOrder.deleteMany({ where: { id: { in: [paidId, unpaidId, owesId, pickupId] } } })
 })
 
 function card(page: Page, name: string): Locator {
@@ -102,4 +122,34 @@ test('"Paid" on an unpaid order records wines + delivery fee', async ({ page }) 
   await c.getByRole('button', { name: /Paid/ }).first().click()
   await c.getByRole('button', { name: 'Bank transfer' }).click()
   await expect.poll(async () => (await db.payment.findFirst({ where: { wineOrderId: unpaidId } }))?.amount ?? null, { timeout: 20_000 }).toBe(4500)
+})
+
+test('a card payment link for an owed fee creates a checkout for exactly that amount', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openWineOrders(page)
+  const c = card(page, OWES_NAME)
+  await expect(c.getByText('Owes 15₾').first()).toBeVisible({ timeout: 20_000 })
+  await c.getByRole('button', { name: 'Card payment link' }).click()
+  await expect(c.getByRole('button', { name: 'Copy link' })).toBeVisible({ timeout: 30_000 })
+  await expect(c.getByRole('button', { name: 'Show QR code' })).toBeVisible()
+
+  // A real (test-merchant) Flitt checkout for the balance only, waiting for the customer — the
+  // balance does not move until Flitt settles it.
+  const checkout = await db.payment.findFirst({ where: { wineOrderId: owesId, provider: 'flitt', settledAt: null } })
+  expect(checkout?.amount).toBe(1500)
+  expect(checkout?.checkoutUrl).toMatch(/flitt/)
+  expect(checkout?.flittOrderId, 'a fresh Flitt reference, never the order id itself').toMatch(new RegExp(`^${owesId}-topup-`))
+})
+
+test('the Delivery / Pickup filter narrows the list', async ({ page }) => {
+  test.setTimeout(90_000)
+  await openWineOrders(page)
+  await expect(page.getByText(PICKUP_NAME, { exact: true })).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Pickup', exact: true }).first().click()
+  await expect(page.getByText(PICKUP_NAME, { exact: true })).toBeVisible()
+  await expect(page.getByText(UNPAID_NAME, { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Pickup', exact: true }).first().click() // toggle off
+  await page.getByRole('button', { name: 'Delivery', exact: true }).first().click()
+  await expect(page.getByText(UNPAID_NAME, { exact: true })).toBeVisible()
+  await expect(page.getByText(PICKUP_NAME, { exact: true })).toHaveCount(0)
 })

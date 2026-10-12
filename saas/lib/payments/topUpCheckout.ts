@@ -53,6 +53,7 @@
 import { db } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 import { startCheckout } from '@/lib/payments/startCheckout'
+import { wineOrderBalance } from '@/lib/payments/manualPayment'
 
 /**
  * A fresh, traceable-by-eye Flitt-facing order_id for one top-up checkout
@@ -106,6 +107,36 @@ export async function startTopUpCheckout(
     }
   }
 
+  return runTopUpCheckout({ orderId: input.orderId }, input)
+}
+
+/**
+ * The wine-order sibling (T-8, vault/Plan-WineOrderFeatures.md Chunk 6b): a card link for what a
+ * paid wine order still owes — in practice a delivery fee set after the wine was paid. Same
+ * rules as above; the balance is wines + fee − live payments (`wineOrderBalance`).
+ */
+export async function startWineTopUpCheckout(
+  input: { wineOrderId: string; tenantId: string; amount: Tetri; orderDesc: string; locale?: string }
+): Promise<StartTopUpCheckoutResult> {
+  if (input.amount <= 0) {
+    return { error: 'Enter an amount greater than zero.' }
+  }
+  const owed = await wineOrderBalance(db, { wineOrderId: input.wineOrderId, tenantId: input.tenantId })
+  if ('error' in owed) return owed
+  if (input.amount > owed.balance) {
+    return {
+      error: `That's more than the outstanding balance of ${formatTetri(owed.balance, { decimals: true })}.`,
+    }
+  }
+  return runTopUpCheckout({ wineOrderId: input.wineOrderId }, input)
+}
+
+/** Credentials + the Flitt call + finding our own Payment row — shared by both top-ups. */
+async function runTopUpCheckout(
+  target: { orderId: string } | { wineOrderId: string },
+  input: { tenantId: string; amount: Tetri; orderDesc: string; locale?: string }
+): Promise<StartTopUpCheckoutResult> {
+  const internalId = 'orderId' in target ? target.orderId : target.wineOrderId
   // Credentials only — deliberately NOT shouldTakePayment()/isPaymentConfigured()'s
   // module/section toggles or company override (ground rule 5). Read directly
   // from Tenant, same fields shouldTakePayment() itself reads, but with none
@@ -122,13 +153,13 @@ export async function startTopUpCheckout(
     }
   }
 
-  const flittOrderId = mintTopUpFlittOrderId(input.orderId)
+  const flittOrderId = mintTopUpFlittOrderId(internalId)
 
   const checkoutUrl = await startCheckout({
     tenantId: input.tenantId,
     merchantId,
     secretKey,
-    orderId: input.orderId,
+    ...target,
     amount: input.amount,
     orderDesc: input.orderDesc,
     locale: input.locale,
@@ -145,7 +176,7 @@ export async function startTopUpCheckout(
   // later: the follow-up "email this link" step looks the row up by this id,
   // not by a checkoutUrl/amount pair a browser could have tampered with.
   const paymentRow = await db.payment.findFirst({
-    where: { orderId: input.orderId, tenantId: input.tenantId, provider: 'flitt', checkoutUrl },
+    where: { ...target, tenantId: input.tenantId, provider: 'flitt', checkoutUrl },
     orderBy: { createdAt: 'desc' },
     select: { id: true },
   })
