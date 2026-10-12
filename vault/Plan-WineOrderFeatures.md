@@ -392,14 +392,27 @@ payment link for an owed fee.
 **Resume point:** done. Wine regression after T-12: **16/16** (all wine specs incl. payment wine test).
 
 ### Chunk 10 — T-9 Individual vs Company on the wine form
-**Status:** 🚧 next
-- [ ] "Individual / Company" switch on the public wine form; Individual hides business name /
-      LLC / company dropdown; name + phone + address (or pickup) only.
-- [ ] Stored on the order (enum like `BookingType`); shown on admin cards + filter.
-- [ ] Admin manual form gets the same switch. Same minimum + delivery rules for both.
+**Status:** ✅ 2026-10-12 (staging; migration on the dev DB only)
+- [x] Migration `…_wine_order_customer_type`: `WineOrder.customerType BookingType @default(COMPANY)`
+      (reuses the booking vocabulary; every pre-T-9 order was taken on the business form).
+- [x] Public form: **Company / Individual** switch at the top (default **Company**, so the form
+      existing B2B customers use is unchanged — bookings default to Individual; flag to Max if he
+      wants the other default). Individual hides the company dropdown, business name, LLC fields
+      and working hours, and asks "Your full name" / "Phone number" / "Delivery address"; the
+      company-discount note is hidden. Switching to Individual drops a company already chosen.
+- [x] `submitWineOrder`: INDIVIDUAL → no company, no LLC, no saved address, no company contacts
+      (a crafted request cannot attach them); `businessName` = the person's name. Same minimum
+      order, delivery, fees and date rules (Max).
+- [x] Admin manual form: "Ordering as" select; Individual hides the company card + business/LLC
+      fields; `createWineOrderAdmin` applies the same normalisation.
+- [x] Wine Orders cards (full + phone): "Individual" mark next to the name.
+- [x] Tests: new spec `tests/tier2-core-flows/wine-order-individual.spec.ts` ✅ (fields hidden,
+      chosen company dropped, stored INDIVIDUAL with the person's name, mark in admin); full wine
+      regression **20/20** after the change; 320px screenshot OK.
+**Resume point:** done.
 
 ### Chunk 11 — Verify, review, hand to Max
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] `tsc`, lint, i18n parity, full `next build`.
 - [ ] Playwright wine specs + new specs; phone 390/320 + desktop screenshots of every changed
       screen (EN + KA).

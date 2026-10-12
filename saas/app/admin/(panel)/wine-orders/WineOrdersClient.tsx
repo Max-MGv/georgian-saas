@@ -109,6 +109,8 @@ type WineOrder = {
   preferredDate: Date | string | null
   /** T-12 — the ordering company is marked as an exporter. */
   isExporter: boolean
+  /** T-9 — ordered by a private person (no company) or a business. */
+  customerType: 'INDIVIDUAL' | 'COMPANY'
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -413,6 +415,16 @@ function DeliverySection({ order, locale, onPatch }: {
   )
 }
 
+/** T-9 — "Individual" next to the name of an order placed by a private person. */
+function IndividualMark({ locale }: { locale: string }) {
+  return (
+    <span className="ml-2 align-middle inline-flex items-center rounded-full font-semibold whitespace-nowrap"
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#f0f9ff', color: '#075985', border: '1px solid #bae6fd' }}>
+      {adminT(locale, 'wineOrders.individual')}
+    </span>
+  )
+}
+
 /** T-12 — "Exporter" next to a company name. */
 function ExporterMark({ locale }: { locale: string }) {
   return (
@@ -539,7 +551,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}{order.isExporter && <ExporterMark locale={locale} />}</p>
+          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}{order.isExporter && <ExporterMark locale={locale} />}{order.customerType === 'INDIVIDUAL' && <IndividualMark locale={locale} />}</p>
           <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
@@ -1681,6 +1693,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     <p className="font-bold mb-1" style={{ color: C.text }}>
                       {order.businessName}
                       {order.isExporter && <ExporterMark locale={locale} />}
+                      {order.customerType === 'INDIVIDUAL' && <IndividualMark locale={locale} />}
                     </p>
                     <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}

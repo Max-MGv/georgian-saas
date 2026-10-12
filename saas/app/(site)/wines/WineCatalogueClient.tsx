@@ -219,6 +219,9 @@ export default function WineCatalogueClient({
   const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
   const [addressChoice, setAddressChoice] = useState('')
   // T-8 — delivery or pickup, and which delivery zone: a zone id, 'other', or '' (not chosen).
+  // T-9 — ordering as a business (the form as it always was) or as a private person.
+  const [customerType, setCustomerType] = useState<'COMPANY' | 'INDIVIDUAL'>('COMPANY')
+  const isIndividual = customerType === 'INDIVIDUAL'
   const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
   const [zoneChoice, setZoneChoice] = useState('')
   // T-14 — the customer's preferred day, YYYY-MM-DD ('' until chosen).
@@ -554,8 +557,18 @@ export default function WineCatalogueClient({
       setContactEmail('')
       clearAddresses()
       setNegotiatedPrices({}); setPricesWithheld(false)
-      setFulfilment('DELIVERY'); setZoneChoice(''); setPreferredDate('')
+      setFulfilment('DELIVERY'); setZoneChoice(''); setPreferredDate(''); setCustomerType('COMPANY')
     })
+  }
+
+  /** T-9 — an individual order has no company: leaving Company mode clears the chosen one. */
+  function chooseCustomerType(next: 'COMPANY' | 'INDIVIDUAL') {
+    setCustomerType(next)
+    if (next === 'INDIVIDUAL') {
+      if (hideCompanyDropdown) clearDirectCode()
+      else setCompanyId('')
+      setBusinessName(''); setLlcName(''); setLlcId(''); setWorkingHours('')
+    }
   }
 
   function handlePlaceAnother() {
@@ -962,7 +975,8 @@ export default function WineCatalogueClient({
                       {t(locale, 'wine.prices_withheld')}
                     </p>
                   )}
-                  {!discountPercent && (
+                  {/* Not for a private person (T-9): no company, no company discount. */}
+                  {!discountPercent && !isIndividual && (
                     <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
                       Company discounts, if applicable, are applied here at checkout.
                     </p>
@@ -979,6 +993,21 @@ export default function WineCatalogueClient({
                     <input type="hidden" name="contacts" value={JSON.stringify(buildContacts())} />
                     <input type="hidden" name="fulfilment" value={isPickup ? 'PICKUP' : 'DELIVERY'} />
                     <input type="hidden" name="deliveryZone" value={askZone ? zoneChoice : ''} />
+                    <input type="hidden" name="customerType" value={customerType} />
+
+                    {/* Company or individual (T-9) — like the booking form's own switch. */}
+                    <div role="radiogroup" aria-label={t(locale, 'wine.type_label')} className="grid grid-cols-2 gap-2">
+                      {(['COMPANY', 'INDIVIDUAL'] as const).map(option => (
+                        <button key={option} type="button" role="radio" aria-checked={customerType === option}
+                          onClick={() => chooseCustomerType(option)}
+                          className="px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors"
+                          style={customerType === option
+                            ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#fff' }
+                            : { borderColor: 'var(--site-border)', color: C.muted, backgroundColor: 'var(--site-surface)' }}>
+                          {t(locale, option === 'COMPANY' ? 'wine.type_company' : 'wine.type_individual')}
+                        </button>
+                      ))}
+                    </div>
 
                     {/* Delivery or pickup (T-8) — only when the winery offers pickup. */}
                     {pickupOffered && (
@@ -996,17 +1025,22 @@ export default function WineCatalogueClient({
                       </div>
                     )}
 
-                    {companySelectorJsx}
+                    {/* Business details — Company mode only (T-9). */}
+                    {!isIndividual && (
+                      <>
+                        {companySelectorJsx}
 
-                    <input name="businessName" required placeholder="Bar, restaurant, or individual name"
-                      value={businessName} onChange={e => setBusinessName(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="llcName" placeholder="LLC name (if applicable)"
-                      value={llcName} onChange={e => setLlcName(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="llcId" placeholder="LLC identification number"
-                      value={llcId} onChange={e => setLlcId(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        <input name="businessName" required placeholder="Bar, restaurant, or individual name"
+                          value={businessName} onChange={e => setBusinessName(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        <input name="llcName" placeholder="LLC name (if applicable)"
+                          value={llcName} onChange={e => setLlcName(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        <input name="llcId" placeholder="LLC identification number"
+                          value={llcId} onChange={e => setLlcId(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                      </>
+                    )}
                     {/* Delivery address (T-13). A saved one sends only its id — the server re-reads
                         the text (lib/orderAddress.ts), so nothing typed here can change it. */}
                     <input type="hidden" name="companyAddressId" value={isPickup ? '' : chosenSavedAddress?.id ?? ''} />
@@ -1040,12 +1074,15 @@ export default function WineCatalogueClient({
                     )}
                     {!isPickup && (addressChoice === 'other' || savedAddresses.length === 0) ? (
                       <>
-                        <input name="address" required placeholder="Actual address of bar / restaurant"
+                        <input name="address" required
+                          placeholder={isIndividual ? t(locale, 'wine.address_individual') : 'Actual address of bar / restaurant'}
                           value={address} onChange={e => setAddress(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                        <input name="workingHours" placeholder="Working hours"
-                          value={workingHours} onChange={e => setWorkingHours(e.target.value)}
-                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        {!isIndividual && (
+                          <input name="workingHours" placeholder="Working hours"
+                            value={workingHours} onChange={e => setWorkingHours(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        )}
                         {savedAddresses.length === 1 && (
                           <button type="button" onClick={() => chooseAddress(savedAddresses[0]!.id)}
                             className="self-start text-xs font-medium transition-all hover:opacity-75 active:scale-95"
@@ -1080,10 +1117,10 @@ export default function WineCatalogueClient({
                         {t(locale, 'form.contact_role_choose')}
                       </button>
                     )}
-                    <input name="contactName" required placeholder="Contact person full name"
+                    <input name="contactName" required placeholder={isIndividual ? t(locale, 'wine.name_individual') : 'Contact person full name'}
                       value={contactName} onChange={e => setContactName(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="contactPhone" required placeholder="Contact person phone number"
+                    <input name="contactPhone" required placeholder={isIndividual ? t(locale, 'wine.phone_individual') : 'Contact person phone number'}
                       value={contactPhone} onChange={e => setContactPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                     {/* Required only when paying online — that's the one case

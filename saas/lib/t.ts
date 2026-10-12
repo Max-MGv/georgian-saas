@@ -206,6 +206,13 @@ const en: Translations = {
   'wine.date_invalid': 'Please enter a valid date (DD/MM/YYYY).',
   // T-12 — negotiated prices that are not shown without the company code
   'wine.prices_withheld': 'Your company’s agreed prices will be applied — we will confirm the total with you.',
+  // T-9 — ordering as a company or as a private person
+  'wine.type_label': 'Ordering as',
+  'wine.type_company': 'Company',
+  'wine.type_individual': 'Individual',
+  'wine.name_individual': 'Your full name',
+  'wine.phone_individual': 'Phone number',
+  'wine.address_individual': 'Delivery address',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -444,6 +451,12 @@ const ka: Translations = {
   'wine.date_too_soon': 'ეს დღე ძალიან ახლოა — გთხოვთ, აირჩიოთ უფრო გვიანი.',
   'wine.date_invalid': 'გთხოვთ, შეიყვანოთ სწორი თარიღი (DD/MM/YYYY).',
   'wine.prices_withheld': 'გამოყენებული იქნება თქვენი კომპანიის შეთანხმებული ფასები — ჯამს თქვენთან დავაზუსტებთ.',
+  'wine.type_label': 'შეკვეთა როგორც',
+  'wine.type_company': 'კომპანია',
+  'wine.type_individual': 'ინდივიდუალური',
+  'wine.name_individual': 'თქვენი სახელი და გვარი',
+  'wine.phone_individual': 'ტელეფონის ნომერი',
+  'wine.address_individual': 'მიწოდების მისამართი',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

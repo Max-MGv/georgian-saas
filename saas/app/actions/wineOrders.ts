@@ -116,7 +116,10 @@ export async function changeWineOrderStatus(
  * Discount is strictly tied to a linked company's own wineDiscountPercent,
  * same as the public flow — no manual override, on Max's explicit call.
  */
-export async function createWineOrderAdmin(data: {
+export async function createWineOrderAdmin(input: {
+  /** T-9 — INDIVIDUAL drops the company, LLC and saved address; the name doubles as the
+   *  business name. Defaults to COMPANY, the shape every admin entry had before T-9. */
+  customerType?: 'INDIVIDUAL' | 'COMPANY'
   companyId: string | null
   businessName: string
   llcName: string | null
@@ -155,6 +158,11 @@ export async function createWineOrderAdmin(data: {
   wines: { vintageId: string; quantity: number }[]
 }): Promise<{ orderId: string } | { error: string }> {
   await requireAdmin()
+  const isIndividual = input.customerType === 'INDIVIDUAL'
+  const data = isIndividual
+    ? { ...input, companyId: null, companyAddressId: null, llcName: null, llcId: null, contacts: undefined,
+        businessName: input.businessName.trim() || input.contactName }
+    : input
   if (!data.businessName.trim()) return { error: 'Business / customer name is required.' }
   const isPickup = data.fulfilment === 'PICKUP'
   if (!isPickup && !data.address.trim() && !data.companyAddressId) return { error: 'Address is required.' }
@@ -225,6 +233,7 @@ export async function createWineOrderAdmin(data: {
         addressLabel: orderAddress.addressLabel,
         companyAddressId: orderAddress.companyAddressId,
         ...delivery,
+        customerType: isIndividual ? 'INDIVIDUAL' : 'COMPANY',
         preferredDate: data.preferredDate ? new Date(data.preferredDate) : null,
         contactName: data.contactName.trim(),
         contactPhone: data.contactPhone.trim(),

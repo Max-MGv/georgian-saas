@@ -36,14 +36,19 @@ export type WineOrderResult =
   | { error: string }
 
 export async function submitWineOrder(formData: FormData): Promise<WineOrderResult> {
-  const businessName = formData.get('businessName') as string
-  const llcName = formData.get('llcName') as string | null
-  const llcId = formData.get('llcId') as string | null
+  // Individual or company (T-9). An individual order is ordered by a person, not a business: it
+  // carries no company, no LLC, no saved company address, and its "business name" is the
+  // person's own name so every admin list still has something to show.
+  const isIndividual = formData.get('customerType') === 'INDIVIDUAL'
+  const contactNameField = formData.get('contactName') as string
+  const businessName = isIndividual ? contactNameField?.trim() : formData.get('businessName') as string
+  const llcName = isIndividual ? null : formData.get('llcName') as string | null
+  const llcId = isIndividual ? null : formData.get('llcId') as string | null
   // A saved company address sends only its id; a typed one sends text. lib/orderAddress.ts
   // decides which and re-reads a saved one from the DB (T-13).
   const typedAddress = formData.get('address') as string | null
   const typedWorkingHours = formData.get('workingHours') as string | null
-  const companyAddressId = (formData.get('companyAddressId') as string | null)?.trim() || null
+  const companyAddressId = isIndividual ? null : (formData.get('companyAddressId') as string | null)?.trim() || null
   // Delivery or pickup, and which delivery zone (T-8). Re-checked against the winery's own setup
   // below (lib/orderDelivery.ts) — the browser only says which, never what it costs.
   const fulfilmentInput = formData.get('fulfilment') as string | null
@@ -52,11 +57,11 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // Preferred delivery / pickup day (T-14), YYYY-MM-DD. Required here; checked below against the
   // lead time and Closed Days the winery set — the same rules the form greys days out with.
   const preferredDateInput = (formData.get('preferredDate') as string | null)?.trim() || null
-  const contactName = formData.get('contactName') as string
+  const contactName = contactNameField
   const contactPhone = formData.get('contactPhone') as string
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
   const winesJson = formData.get('wines') as string
-  const companyId = (formData.get('companyId') as string | null)?.trim() || null
+  const companyId = isIndividual ? null : (formData.get('companyId') as string | null)?.trim() || null
   // One entry per contact role, JSON like `wines` above (Plan-ContactRoles Chunk 8).
   // Written below via writeOrderContacts(), which re-verifies every roleId and personId
   // against the company under the tenant before trusting any of it. Parsed here, separately,
@@ -194,6 +199,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
       const order = await tx.wineOrder.create({
         data: {
           businessName,
+          customerType: isIndividual ? 'INDIVIDUAL' : 'COMPANY',
           llcName: llcName || null,
           llcId: llcId || null,
           address: orderAddress.address,
@@ -232,7 +238,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
         target: { wineOrderId: order.id },
         companyId: companyId || null,
         module: 'WINE_ORDER',
-        contacts,
+        // An individual has no company people to pick from (T-9); only the typed contact counts.
+        contacts: isIndividual ? [] : contacts,
         fallbackContactPerson: { name: contactName, phone: contactPhone, email: contactEmail },
       })
       return order

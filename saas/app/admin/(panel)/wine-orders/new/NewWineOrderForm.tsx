@@ -113,6 +113,9 @@ export default function NewWineOrderForm({
   const chosenSavedAddress = savedAddresses.find(a => a.id === addressChoice) ?? null
   // T-8 — an admin can record a pickup even when the public form does not offer one, and may
   // choose "Other" to set the fee later on the order. No minimum here (admin tool, like bookings).
+  // T-9 — a business (as before) or a private person.
+  const [customerType, setCustomerType] = useState<'COMPANY' | 'INDIVIDUAL'>('COMPANY')
+  const isIndividual = customerType === 'INDIVIDUAL'
   const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
   const [zoneChoice, setZoneChoice] = useState('')
   // T-14 — optional here, and not held to lead time / Closed Days (what was agreed on the phone).
@@ -280,7 +283,8 @@ export default function NewWineOrderForm({
     setError('')
 
     const result = await createWineOrderAdmin({
-      companyId: companyId || null,
+      customerType,
+      companyId: isIndividual ? null : companyId || null,
       businessName,
       llcName: llcName || null,
       llcId: llcId || null,
@@ -311,7 +315,21 @@ export default function NewWineOrderForm({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
+      {/* ── Ordering as (T-9) ── */}
+      <Card title={at('newWineOrder.type.title')}>
+        <select aria-label={at('newWineOrder.type.title')} value={customerType} style={inputStyle}
+          onChange={e => {
+            const next = e.target.value as 'COMPANY' | 'INDIVIDUAL'
+            setCustomerType(next)
+            if (next === 'INDIVIDUAL') handleCompanyChange('')
+          }}>
+          <option value="COMPANY">{at('newWineOrder.type.company')}</option>
+          <option value="INDIVIDUAL">{at('newWineOrder.type.individual')}</option>
+        </select>
+      </Card>
+
       {/* ── Company ── */}
+      {!isIndividual && (
       <Card title={at('newWineOrder.company.title')}>
         <Field label={at('newWineOrder.company.label')}>
           <select value={companyId} onChange={e => handleCompanyChange(e.target.value)} style={inputStyle}>
@@ -327,9 +345,11 @@ export default function NewWineOrderForm({
           </p>
         )}
       </Card>
+      )}
 
       {/* ── Business / Contact ── */}
       <Card title={at('newWineOrder.contact.title')}>
+        {!isIndividual && (<>
         <Field label={at('newWineOrder.contact.businessName')} required>
           <input value={businessName} onChange={e => setBusinessName(e.target.value)} style={inputStyle} />
         </Field>
@@ -341,6 +361,7 @@ export default function NewWineOrderForm({
             <input value={llcId} onChange={e => setLlcId(e.target.value)} style={inputStyle} />
           </Field>
         </div>
+        </>)}
         {/* Saved delivery addresses (T-13). A saved one sends only its id; the server re-reads
             the text, so the typed boxes only appear for "Other address". */}
         <Field label={at('newWineOrder.delivery.method')}>

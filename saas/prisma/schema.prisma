@@ -660,6 +660,11 @@ model WineOrder {
   /// The customer's PREFERRED delivery / pickup day (T-14) — a wish, not a promise; the form says
   /// so. Date only. Null on every order placed before T-14, and optional on admin-entered ones.
   preferredDate      DateTime?      @db.Date
+  /// T-9 — ordered as a private person or as a business, the same split bookings make
+  /// (BookingType is reused: one vocabulary). COMPANY by default: every wine order before T-9 was
+  /// taken on the business-shaped form. An INDIVIDUAL order has no company, and its
+  /// `businessName` holds the person's name so every list keeps something to show.
+  customerType       BookingType    @default(COMPANY)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
