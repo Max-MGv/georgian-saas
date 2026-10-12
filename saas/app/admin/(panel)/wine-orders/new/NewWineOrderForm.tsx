@@ -8,6 +8,8 @@ import { adminT } from '@/lib/adminT'
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
 import { formatAddressOption } from '@/lib/orderAddress'
+import { zoneDisplayName } from '@/lib/wineOrderRules'
+import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -75,7 +77,10 @@ export default function NewWineOrderForm({
   contactRoles = [],
   wines,
   locale = 'en',
+  zones = [],
 }: {
+  /** The winery's active delivery zones (T-8). Empty → no zone question, as before T-8. */
+  zones?: DeliveryZoneOption[]
   companies: CompanyOption[]
   wines: WineOption[]
   locale?: string
@@ -104,6 +109,17 @@ export default function NewWineOrderForm({
   const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
   const [addressChoice, setAddressChoice] = useState('other')
   const chosenSavedAddress = savedAddresses.find(a => a.id === addressChoice) ?? null
+  // T-8 — an admin can record a pickup even when the public form does not offer one, and may
+  // choose "Other" to set the fee later on the order. No minimum here (admin tool, like bookings).
+  const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
+  const [zoneChoice, setZoneChoice] = useState('')
+  const isPickup = fulfilment === 'PICKUP'
+  const chosenZone = !isPickup ? zones.find(z => z.id === zoneChoice) ?? null : null
+  function chooseAddress(choice: string) {
+    setAddressChoice(choice)
+    const zoneId = savedAddresses.find(a => a.id === choice)?.deliveryZoneId
+    if (zoneId && zones.some(z => z.id === zoneId)) setZoneChoice(zoneId)
+  }
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -185,6 +201,9 @@ export default function NewWineOrderForm({
       const list = result.company.addresses
       setSavedAddresses(list)
       setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
+      if (list.length === 1 && list[0]!.deliveryZoneId && zones.some(z => z.id === list[0]!.deliveryZoneId)) {
+        setZoneChoice(list[0]!.deliveryZoneId)
+      }
       for (const choices of result.roleChoices) {
         if (choices.people.length === 1) pickFor(choices.people[0]!, choices)
       }
@@ -250,7 +269,9 @@ export default function NewWineOrderForm({
       businessName,
       llcName: llcName || null,
       llcId: llcId || null,
-      companyAddressId: chosenSavedAddress?.id ?? null,
+      companyAddressId: isPickup ? null : chosenSavedAddress?.id ?? null,
+      fulfilment,
+      zoneChoice: isPickup ? null : zoneChoice || null,
       address,
       workingHours: workingHours || null,
       contactName,
@@ -306,9 +327,15 @@ export default function NewWineOrderForm({
         </div>
         {/* Saved delivery addresses (T-13). A saved one sends only its id; the server re-reads
             the text, so the typed boxes only appear for "Other address". */}
-        {savedAddresses.length > 0 && (
+        <Field label={at('newWineOrder.delivery.method')}>
+          <select value={fulfilment} onChange={e => setFulfilment(e.target.value as 'DELIVERY' | 'PICKUP')} style={inputStyle}>
+            <option value="DELIVERY">{at('newWineOrder.delivery.delivery')}</option>
+            <option value="PICKUP">{at('newWineOrder.delivery.pickup')}</option>
+          </select>
+        </Field>
+        {!isPickup && savedAddresses.length > 0 && (
           <Field label={at('newWineOrder.contact.savedAddress')} required>
-            <select value={addressChoice} onChange={e => setAddressChoice(e.target.value)} style={inputStyle}>
+            <select value={addressChoice} onChange={e => chooseAddress(e.target.value)} style={inputStyle}>
               {addressChoice === '' && <option value="" disabled>{at('newWineOrder.contact.savedAddressChoose')}</option>}
               {savedAddresses.map(a => <option key={a.id} value={a.id}>{formatAddressOption(a)}</option>)}
               <option value="other">{at('newWineOrder.contact.savedAddressOther')}</option>
@@ -318,7 +345,7 @@ export default function NewWineOrderForm({
             )}
           </Field>
         )}
-        {addressChoice === 'other' && (
+        {!isPickup && addressChoice === 'other' && (
           <>
             <Field label={at('newWineOrder.contact.address')} required>
               <input value={address} onChange={e => setAddress(e.target.value)} style={inputStyle} />
@@ -327,6 +354,17 @@ export default function NewWineOrderForm({
               <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
             </Field>
           </>
+        )}
+        {!isPickup && zones.length > 0 && (
+          <Field label={at('newWineOrder.delivery.zone')} required>
+            <select value={zoneChoice} onChange={e => setZoneChoice(e.target.value)} style={inputStyle}>
+              <option value="" disabled>{at('newWineOrder.delivery.zoneChoose')}</option>
+              {zones.map(z => (
+                <option key={z.id} value={z.id}>{zoneDisplayName(z, locale)} — {formatTetri(asTetri(z.fee), { decimals: true })}</option>
+              ))}
+              <option value="other">{at('newWineOrder.delivery.zoneOther')}</option>
+            </select>
+          </Field>
         )}
         {/* Choose one of the company's people, inline. The public forms reach the same
             choices through a code popup; an admin has no code step, so the list is simply a
@@ -524,10 +562,20 @@ export default function NewWineOrderForm({
           )}
         </div>
 
+        {chosenZone && (
+          <div className="flex justify-between text-sm mb-3">
+            <span style={{ color: C.muted }}>{at('newWineOrder.delivery.feeLine', { zone: zoneDisplayName(chosenZone, locale) })}</span>
+            <span style={{ color: C.text }}>{formatTetri(asTetri(chosenZone.fee), { decimals: true })}</span>
+          </div>
+        )}
+        {!isPickup && zoneChoice === 'other' && (
+          <p className="text-xs mb-3" style={{ color: C.faint }}>{at('newWineOrder.delivery.feeLater')}</p>
+        )}
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
-            {formatTetri(asTetri(computedTotal), { decimals: true })}
+            {/* Wines + delivery fee — display only; the server recomputes both. */}
+            {formatTetri(asTetri(Math.round(computedTotal) + (chosenZone?.fee ?? 0)), { decimals: true })}
           </span>
         </div>
 

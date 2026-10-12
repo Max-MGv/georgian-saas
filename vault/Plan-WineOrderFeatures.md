@@ -223,28 +223,43 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
       tetri in DB; rules saved + survive reload; address zone saved; desktop/390/320 no overflow.
       Test data removed afterwards (4 rule settings + ZZ zone) — Staging Winery is back to
       "nothing configured".
-- Noted, not mine: an intermittent React hydration warning on admin pages at 320px (seen once
-  on Settings, once earlier on Companies; not reproducible on a clean load).
+- The intermittent hydration warning seen at 320px was traced in Chunk 5 to Playwright's own
+  screenshot caret-hiding style — not an app issue.
 **Resume point:** done.
 
 ### Chunk 5 — T-8 forms: pickup/delivery, zone, fee, minimum
-**Status:** 🚧 next
-- [ ] Public wine form: Delivery / Pickup selector (pickup only when enabled). Delivery → zone
-      dropdown (pre-selected from the company address's zone) + "Other – we'll contact you".
-      Total shows wines + fee, or "+ delivery fee to be confirmed".
-- [ ] Minimum order: message + disabled submit on the client; **enforced in `submitWineOrder`**.
-- [ ] `submitWineOrder`: re-reads zone fee from DB; snapshot zone name + fee; payment gate:
-      known zone → charge wines + fee; "Other" → follow `wine_unknown_zone_payment`
-      (charge wines only, fee null; or no checkout → reservation).
-- [ ] Admin manual wine order form: same fields (admin may type a fee directly).
-- [ ] Customer receipt / admin notification emails show fulfilment, zone and fee
-      (`lib/emails/templates/wineOrderReceiptTemplate.ts` — MaintenanceNotes §23).
-- [ ] Playwright: pickup order; delivery with a zone fee (amount sent to checkout correct);
-      "Other" zone in both policy modes; minimum blocks below and passes at the limit.
-**Resume point:** —
+**Status:** ✅ 2026-10-12 (staging)
+- [x] `lib/wineOrderDelivery.ts` — one server loader for rules + active zones (public page,
+      admin form, Settings, `submitWineOrder` all use it). `lib/orderDelivery.ts` —
+      `resolveOrderDelivery()` (pure; the browser names a zone, the fee comes from the zone row;
+      pickup refused unless offered, except `admin`; no zones → exactly pre-T-8) and
+      `minimumOrderError()`.
+- [x] Public form: Delivery / Pickup buttons (only when pickup is on); pickup hides every
+      address field; zone picker "Tbilisi — 15₾" + "Other — we will contact you about delivery"
+      (only when zones exist), pre-selected from the chosen saved address's zone; summary shows
+      Wines / Delivery — zone / Total, "fee to be confirmed", "Pickup — free"; minimum shown,
+      turns red + disables submit below it; "Other" + reservation mode → button says
+      "Place Reservation".
+- [x] `submitWineOrder`: re-reads rules + zones; pickup stores address `''`; minimum enforced on
+      wines-after-company-pricing; **charges `wineOrderAmountDue()` = wines + fee**; "Other" +
+      reservation mode → no checkout. `totalAmount` stays wines-only.
+- [x] Admin manual form: Delivery/Pickup select, zone select incl. "Other — set the fee later",
+      fee line + total; server uses the same helper with `admin: true`; no minimum (admin tool).
+- [x] Receipt email (`wineOrderReceiptTemplate` + `settle.ts`): Pickup / Delivery — zone + fee /
+      "to be confirmed" row; "Paid" = wines + fee. Pre-T-8 orders render as before.
+- [x] Tests: `scripts/test-order-delivery.ts` **13/13**; new spec
+      `tests/tier2-core-flows/wine-order-delivery.spec.ts` **5/5 twice** (minimum blocks; zone fee
+      → Payment.amount = wines + fee, totalAmount wines-only; Other+pay → wines-only charge,
+      pending; Other+reservation → no checkout, no Payment; pickup → no address, no fee). It sets
+      tenant-wide rules, runs serially and restores them. Regression: `wine-catalogue-order` ✅
+      (runs again now Rkatsiteli is active), payment-amount-integrity wine test ✅, address spec ✅.
+      Phone 390/320 drawer screenshots (below minimum, zone, pickup): no overflow.
+- [x] Found: the "hydration mismatch" warnings seen earlier come from **Playwright's screenshot
+      caret-hiding** (`caret-color: transparent` injected before hydration) — not an app bug.
+**Resume point:** done.
 
 ### Chunk 6 — T-8 admin: see it, set the fee later, collect it
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] Wine Orders cards (desktop + phone) + Pack view: Delivery/Pickup badge, zone, fee;
       amber "Delivery fee to set" when DELIVERY + fee null.
 - [ ] Admin can set/edit the fee on an order (logged as an `OrderEvent`).

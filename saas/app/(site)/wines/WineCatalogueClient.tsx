@@ -7,6 +7,8 @@ import { useContactSelection } from '@/lib/useContactSelection'
 import ContactPickerPopupView from '@/components/ContactPickerPopupView'
 import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
 import { formatAddressOption } from '@/lib/orderAddress'
+import { meetsMinimum, zoneDisplayName, type WineOrderRules } from '@/lib/wineOrderRules'
+import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -110,7 +112,14 @@ export default function WineCatalogueClient({
   locale = 'en',
   paymentConfigured = false,
   onlinePaymentEnabled = false,
+  delivery = null,
 }: {
+  /**
+   * The winery's delivery setup (T-8): minimum order, pickup, zones with fees. Null or empty
+   * means the form is exactly what it was before T-8. Display only — submitWineOrder re-reads
+   * all of it and computes the real fee and minimum itself.
+   */
+  delivery?: { rules: WineOrderRules; zones: DeliveryZoneOption[] } | null
   wines: DbWine[]
   companies?: Company[]
   /**
@@ -198,6 +207,9 @@ export default function WineCatalogueClient({
    */
   const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
   const [addressChoice, setAddressChoice] = useState('')
+  // T-8 — delivery or pickup, and which delivery zone: a zone id, 'other', or '' (not chosen).
+  const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
+  const [zoneChoice, setZoneChoice] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -313,6 +325,14 @@ export default function WineCatalogueClient({
     setSavedAddresses(list)
     setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
     setAddress(''); setWorkingHours('')
+    if (list.length === 1 && list[0]!.deliveryZoneId) setZoneChoice(list[0]!.deliveryZoneId)
+  }
+
+  /** Choosing a saved address also chooses its delivery zone, when it has one (T-8). */
+  function chooseAddress(choice: string) {
+    setAddressChoice(choice)
+    const zoneId = savedAddresses.find(a => a.id === choice)?.deliveryZoneId
+    if (zoneId && zones.some(z => z.id === zoneId)) setZoneChoice(zoneId)
   }
 
   function clearAddresses() {
@@ -508,6 +528,7 @@ export default function WineCatalogueClient({
       setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       setContactEmail('')
       clearAddresses()
+      setFulfilment('DELIVERY'); setZoneChoice('')
     })
   }
 
@@ -522,13 +543,35 @@ export default function WineCatalogueClient({
   // (paymentConfigured) first — nothing beats it — then the selected company's
   // override, then the WINE_ORDER section default. Never used for the actual
   // charge decision, which stays server-side in submitWineOrder.ts.
+  // ── Delivery (T-8) — display mirror of lib/orderDelivery.ts; the server decides for real ──
+  const zones = delivery?.zones ?? []
+  const pickupOffered = !!delivery?.rules.pickupEnabled
+  const isPickup = pickupOffered && fulfilment === 'PICKUP'
+  const askZone = !isPickup && zones.length > 0
+  const chosenZone = askZone ? zones.find(z => z.id === zoneChoice) ?? null : null
+  const feeUnknown = askZone && zoneChoice === 'other'
+  const winesTotal = discountPercent && discountPercent > 0
+    ? applyPercent(asTetri(totalPrice), discountPercent)
+    : asTetri(totalPrice)
+  const grandTotal = asTetri(winesTotal + (chosenZone?.fee ?? 0))
+  const minRule = delivery?.rules.minOrder ?? { type: 'off' as const }
+  const belowMinimum = !meetsMinimum(minRule, totalBottles, winesTotal)
+  const minimumText = minRule.type === 'bottles'
+    ? t(locale, 'wine.min_bottles').replace('{n}', String(minRule.bottles))
+    : minRule.type === 'amount'
+      ? t(locale, 'wine.min_amount').replace('{amount}', formatTetri(minRule.amount))
+      : ''
+
   const paymentLabelActive = !paymentConfigured
     ? false
-    : selectedCompany?.skipPayment === true
+    // "Other" area + the winery takes those as reservations: no online payment (T-8).
+    : feeUnknown && delivery?.rules.unknownZonePayment === 'reservation'
       ? false
-      : selectedCompany?.skipPayment === false
-        ? true
-        : onlinePaymentEnabled
+      : selectedCompany?.skipPayment === true
+        ? false
+        : selectedCompany?.skipPayment === false
+          ? true
+          : onlinePaymentEnabled
   const selectedWines = WINES.filter(w => (quantities[w.vintageId] ?? 0) > 0)
 
   // ── Company selector JSX (shared between drawer and popups) ────────────────
@@ -826,7 +869,9 @@ export default function WineCatalogueClient({
                     ))}
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: 'var(--site-border)' }}>
-                    <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
+                    <span className="text-sm font-semibold" style={{ color: C.text }}>
+                      {chosenZone ? t(locale, 'wine.summary_wines') : 'Total'}
+                    </span>
                     {discountPercent && discountPercent > 0 ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs line-through" style={{ color: C.faint }}>{formatTetri(asTetri(totalPrice))}</span>
@@ -841,6 +886,36 @@ export default function WineCatalogueClient({
                       <span className="text-base font-bold" style={{ color: C.wine }}>{formatTetri(asTetri(totalPrice))}</span>
                     )}
                   </div>
+                  {/* Delivery line + the amount actually charged (T-8). */}
+                  {isPickup && (
+                    <div className="flex items-center justify-between mt-2 text-sm">
+                      <span style={{ color: C.muted }}>{t(locale, 'wine.fulfilment_pickup')}</span>
+                      <span style={{ color: C.muted }}>{t(locale, 'wine.summary_free')}</span>
+                    </div>
+                  )}
+                  {chosenZone && (
+                    <>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <span style={{ color: C.muted }}>{t(locale, 'wine.summary_delivery')} — {zoneDisplayName(chosenZone, locale)}</span>
+                        <span style={{ color: C.muted }}>{chosenZone.fee === 0 ? t(locale, 'wine.summary_free') : formatTetri(asTetri(chosenZone.fee))}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: 'var(--site-border)' }}>
+                        <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
+                        <span className="text-base font-bold" style={{ color: C.wine }}>{formatTetri(grandTotal)}</span>
+                      </div>
+                    </>
+                  )}
+                  {feeUnknown && (
+                    <div className="flex items-center justify-between mt-2 text-sm">
+                      <span style={{ color: C.muted }}>{t(locale, 'wine.summary_delivery')}</span>
+                      <span className="italic" style={{ color: C.muted }}>{t(locale, 'wine.summary_delivery_tbc')}</span>
+                    </div>
+                  )}
+                  {minRule.type !== 'off' && (
+                    <p className="text-xs mt-2" style={{ color: belowMinimum ? 'var(--color-brand)' : C.faint, fontWeight: belowMinimum ? 600 : 400 }}>
+                      {minimumText}
+                    </p>
+                  )}
                   {!discountPercent && (
                     <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
                       Company discounts, if applicable, are applied here at checkout.
@@ -856,6 +931,24 @@ export default function WineCatalogueClient({
                     {/* One entry per contact role, JSON like the `wines` field.
                         submitWineOrder turns these into OrderContact rows with snapshots. */}
                     <input type="hidden" name="contacts" value={JSON.stringify(buildContacts())} />
+                    <input type="hidden" name="fulfilment" value={isPickup ? 'PICKUP' : 'DELIVERY'} />
+                    <input type="hidden" name="deliveryZone" value={askZone ? zoneChoice : ''} />
+
+                    {/* Delivery or pickup (T-8) — only when the winery offers pickup. */}
+                    {pickupOffered && (
+                      <div role="radiogroup" aria-label={t(locale, 'wine.fulfilment_label')} className="grid grid-cols-2 gap-2">
+                        {(['DELIVERY', 'PICKUP'] as const).map(option => (
+                          <button key={option} type="button" role="radio" aria-checked={fulfilment === option}
+                            onClick={() => setFulfilment(option)}
+                            className="px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors"
+                            style={fulfilment === option
+                              ? { backgroundColor: 'var(--color-brand)', borderColor: 'var(--color-brand)', color: '#fff' }
+                              : { borderColor: 'var(--site-border)', color: C.muted, backgroundColor: 'var(--site-surface)' }}>
+                            {t(locale, option === 'DELIVERY' ? 'wine.fulfilment_delivery' : 'wine.fulfilment_pickup')}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {companySelectorJsx}
 
@@ -870,9 +963,9 @@ export default function WineCatalogueClient({
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                     {/* Delivery address (T-13). A saved one sends only its id — the server re-reads
                         the text (lib/orderAddress.ts), so nothing typed here can change it. */}
-                    <input type="hidden" name="companyAddressId" value={chosenSavedAddress?.id ?? ''} />
-                    {savedAddresses.length >= 2 && (
-                      <select required value={addressChoice} onChange={e => setAddressChoice(e.target.value)}
+                    <input type="hidden" name="companyAddressId" value={isPickup ? '' : chosenSavedAddress?.id ?? ''} />
+                    {!isPickup && savedAddresses.length >= 2 && (
+                      <select required value={addressChoice} onChange={e => chooseAddress(e.target.value)}
                         aria-label={t(locale, 'wine.address_choose')}
                         className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle}>
                         <option value="" disabled>{t(locale, 'wine.address_choose')}</option>
@@ -880,7 +973,7 @@ export default function WineCatalogueClient({
                         <option value="other">{t(locale, 'wine.address_other')}</option>
                       </select>
                     )}
-                    {chosenSavedAddress && (
+                    {!isPickup && chosenSavedAddress && (
                       <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg border text-sm"
                         style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-bg)' }}>
                         <div className="min-w-0">
@@ -899,7 +992,7 @@ export default function WineCatalogueClient({
                         )}
                       </div>
                     )}
-                    {addressChoice === 'other' || savedAddresses.length === 0 ? (
+                    {!isPickup && (addressChoice === 'other' || savedAddresses.length === 0) ? (
                       <>
                         <input name="address" required placeholder="Actual address of bar / restaurant"
                           value={address} onChange={e => setAddress(e.target.value)}
@@ -908,7 +1001,7 @@ export default function WineCatalogueClient({
                           value={workingHours} onChange={e => setWorkingHours(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                         {savedAddresses.length === 1 && (
-                          <button type="button" onClick={() => setAddressChoice(savedAddresses[0]!.id)}
+                          <button type="button" onClick={() => chooseAddress(savedAddresses[0]!.id)}
                             className="self-start text-xs font-medium transition-all hover:opacity-75 active:scale-95"
                             style={{ color: 'var(--color-brand)' }}>
                             {t(locale, 'wine.address_use_saved')}
@@ -916,6 +1009,21 @@ export default function WineCatalogueClient({
                         )}
                       </>
                     ) : null}
+                    {/* Delivery area (T-8) — only once the winery has zones. The fee comes from
+                        the zone; "Other" means the winery agrees delivery with the customer. */}
+                    {askZone && (
+                      <select required value={zoneChoice} onChange={e => setZoneChoice(e.target.value)}
+                        aria-label={t(locale, 'wine.zone_choose')}
+                        className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+                        <option value="" disabled>{t(locale, 'wine.zone_choose')}</option>
+                        {zones.map(z => (
+                          <option key={z.id} value={z.id}>
+                            {zoneDisplayName(z, locale)} — {z.fee === 0 ? t(locale, 'wine.summary_free') : formatTetri(asTetri(z.fee))}
+                          </option>
+                        ))}
+                        <option value="other">{t(locale, 'wine.zone_other')}</option>
+                      </select>
+                    )}
                     {/* Only offered when there IS a list: with person codes on the resolver
                         sends none, deliberately, and a control that opens an empty popup
                         would be a dead one. */}
@@ -980,7 +1088,10 @@ export default function WineCatalogueClient({
 
                     {error && <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{error}</p>}
 
-                    <button type="submit" disabled={isPending}
+                    {belowMinimum && (
+                      <p className="text-sm" style={{ color: 'var(--color-brand)' }}>{minimumText}</p>
+                    )}
+                    <button type="submit" disabled={isPending || belowMinimum}
                       className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">
                       {isPending
                         ? (paymentLabelActive ? 'Redirecting...' : 'Sending...')

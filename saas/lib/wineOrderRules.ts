@@ -56,3 +56,8 @@ export function meetsMinimum(rule: MinOrderRule, bottles: number, winesTotal: nu
   if (rule.type === 'amount') return winesTotal >= rule.amount
   return true
 }
+
+/** "Tbilisi" or "თბილისი" — Georgian only when the zone has one. Pure, so client-safe. */
+export function zoneDisplayName(z: { nameEn: string; nameKa: string | null }, locale: string): string {
+  return (locale === 'ka' && z.nameKa) || z.nameEn
+}

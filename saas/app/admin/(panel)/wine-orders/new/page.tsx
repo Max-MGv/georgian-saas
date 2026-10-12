@@ -6,6 +6,7 @@ import { adminT } from '@/lib/adminT'
 import Link from 'next/link'
 import NewWineOrderForm from './NewWineOrderForm'
 import { orderRolesFor } from '@/lib/contactResolution'
+import { loadWineOrderDelivery } from '@/lib/wineOrderDelivery'
 
 const C = { wine: 'var(--color-brand)' }
 
@@ -47,6 +48,7 @@ export default async function NewWineOrderPage() {
       </h1>
 
       <NewWineOrderForm
+        zones={(await loadWineOrderDelivery(tenantId)).zones}
         locale={locale}
         companies={companies}
         contactRoles={contactRoles}

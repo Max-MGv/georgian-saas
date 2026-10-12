@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation'
 import { type Metadata } from 'next'
 import WineCatalogueClient from './WineCatalogueClient'
 import { orderRolesFor } from '@/lib/contactResolution'
+import { loadWineOrderDelivery } from '@/lib/wineOrderDelivery'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +69,8 @@ export default async function WinesPage() {
     isPaymentConfigured(tenantId, { section: 'WINE_ORDER' }),
     db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
   ])
+  // Minimum order, pickup and delivery zones (T-8) — display only; submitWineOrder re-reads them.
+  const delivery = await loadWineOrderDelivery(tenantId)
   const wineDetailLevel: WineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
   // PRODUCT: always read the wine's values. VINTAGE: always read the vintage's
   // values, with no fallback to the wine's — an unset vintage field must reach
@@ -95,6 +98,7 @@ export default async function WinesPage() {
       locale={locale}
       paymentConfigured={paymentConfigured}
       onlinePaymentEnabled={wineOrderPaymentReady}
+      delivery={delivery}
     />
   )
 }

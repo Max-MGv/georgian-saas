@@ -9,7 +9,10 @@ import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
-import { resolveOrderAddress } from '@/lib/orderAddress'
+import { resolveOrderAddress, type OrderAddress } from '@/lib/orderAddress'
+import { resolveOrderDelivery, minimumOrderError } from '@/lib/orderDelivery'
+import { loadWineOrderDeliveryTx } from '@/lib/wineOrderDelivery'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 
 export type WineSelection = {
   vintageId: string
@@ -40,6 +43,11 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const typedAddress = formData.get('address') as string | null
   const typedWorkingHours = formData.get('workingHours') as string | null
   const companyAddressId = (formData.get('companyAddressId') as string | null)?.trim() || null
+  // Delivery or pickup, and which delivery zone (T-8). Re-checked against the winery's own setup
+  // below (lib/orderDelivery.ts) — the browser only says which, never what it costs.
+  const fulfilmentInput = formData.get('fulfilment') as string | null
+  const zoneChoice = formData.get('deliveryZone') as string | null
+  const isPickup = fulfilmentInput === 'PICKUP'
   const contactName = formData.get('contactName') as string
   const contactPhone = formData.get('contactPhone') as string
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
@@ -60,7 +68,9 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     }
   }
 
-  if (!businessName || (!typedAddress?.trim() && !companyAddressId) || !contactName || !contactPhone || !winesJson) {
+  // A pickup needs no address (T-8); a delivery needs a saved or typed one.
+  const hasAddress = isPickup || !!typedAddress?.trim() || !!companyAddressId
+  if (!businessName || !hasAddress || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
   }
 
@@ -86,14 +96,21 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // never trust the client's `price`/`discountPercent` for the amount
   // actually charged/recorded. See KnownBugs.md #22.
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
-  const [realVintages, realCompany, orderAddress] = await withTenantDb(tenantId, tx => Promise.all([
+  const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null }
+  const [realVintages, realCompany, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
     companyId
       ? tx.company.findFirst({ where: { id: companyId, tenantId }, select: { wineDiscountPercent: true } })
       : Promise.resolve(null),
-    resolveOrderAddress(tx, tenantId, { companyId, companyAddressId, typedAddress, typedWorkingHours }),
+    // A pickup stores no address: the customer collects from the winery.
+    isPickup
+      ? Promise.resolve(pickupAddress)
+      : resolveOrderAddress(tx, tenantId, { companyId, companyAddressId, typedAddress, typedWorkingHours }),
+    loadWineOrderDeliveryTx(tx, tenantId),
   ]))
   if ('error' in orderAddress) return { error: orderAddress.error }
+  const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice })
+  if ('error' in delivery) return { error: delivery.error }
   const priceMap = Object.fromEntries(realVintages.map(v => [v.id, v.price]))
 
   if (selectedWines.some(w => !(w.vintageId in priceMap))) {
@@ -115,15 +132,30 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     ? applyPercent(asTetri(subtotal), discountPercent)
     : asTetri(subtotal)
 
+  // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
+  // and for pickup too. The form shows the same rule first; this is the one that counts.
+  const bottleCount = selectedWines.reduce((n, w) => n + w.quantity, 0)
+  const belowMinimum = minimumOrderError(deliverySetup.rules.minOrder, bottleCount, totalAmount)
+  if (belowMinimum) return { error: belowMinimum }
+
+  // What the customer is charged: wines + delivery fee, added in one place (lib/wineOrderMoney.ts).
+  // `totalAmount` itself stays wines-only (Max, 2026-10-12).
+  const amountDue = wineOrderAmountDue({ totalAmount, deliveryFee: delivery.deliveryFee })!
+
   // Wine orders always show the customer their total, so unlike company
   // bookings there's no hidden-price case to exclude here (§7.4).
-  const gate = await shouldTakePayment({
+  const sectionGate = await shouldTakePayment({
     tenantId,
-    totalPrice: totalAmount,
+    totalPrice: amountDue,
     priceShown: true,
     section: 'WINE_ORDER',
     companyId: companyId || null,
   })
+  // "Other – we'll contact you" leaves the fee unknown. The winery chose (Settings) whether the
+  // customer still pays for the wine now, or the order is taken as a reservation.
+  const reservationBecauseFeeUnknown =
+    delivery.deliveryFeePending && deliverySetup.rules.unknownZonePayment === 'reservation'
+  const gate = reservationBecauseFeeUnknown ? { ...sectionGate, takePayment: false as const } : sectionGate
 
   // A B2B buyer who pays online needs something in writing for their books, and
   // WineOrder has no other address to send it to. Required only on the paying
@@ -144,6 +176,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           workingHours: orderAddress.workingHours,
           addressLabel: orderAddress.addressLabel,
           companyAddressId: orderAddress.companyAddressId,
+          ...delivery,
           contactName,
           contactPhone,
           contactEmail,
@@ -191,7 +224,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
         secretKey: gate.secretKey,
         wineOrderId: createdOrder.id,
         // Already tetri — see the equivalent note in createBooking.ts.
-        amount: asTetri(totalAmount),
+        // Wines + delivery fee (just the wines when the fee is still to be agreed).
+        amount: amountDue,
         // Built from the real order, not a hardcoded site name like the old site.
         orderDesc: `Wine order — ${bottles} bottle${bottles === 1 ? '' : 's'}, ${businessName}`,
         locale,

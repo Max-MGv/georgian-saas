@@ -53,6 +53,8 @@ export type ResolvedAddress = {
   label: string | null
   address: string
   workingHours: string | null
+  /** The address's delivery zone (T-8) — pre-selects the zone, and so the fee, on the form. */
+  deliveryZoneId: string | null
 }
 
 export type ResolvedCompany = {
@@ -72,7 +74,7 @@ export type ResolvedCompany = {
 const ADDRESS_SELECT = {
   where: { isActive: true },
   orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
-  select: { id: true, label: true, address: true, workingHours: true },
+  select: { id: true, label: true, address: true, workingHours: true, deliveryZoneId: true },
 }
 
 export type ResolveContactsResult =

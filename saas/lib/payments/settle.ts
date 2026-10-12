@@ -386,6 +386,13 @@ export async function sendSettlementEmail(
       })),
       totalAmount: wineOrder.totalAmount ?? 0,
       discountPercent: wineOrder.discountPercent,
+      // T-8: the receipt's "Paid" adds the fee — the same wines + fee the checkout charged.
+      delivery: {
+        fulfilment: wineOrder.fulfilment,
+        zoneName: wineOrder.deliveryZoneName,
+        fee: wineOrder.deliveryFee,
+        pending: wineOrder.deliveryFeePending,
+      },
       introText: messages.email_wine_receipt_intro
         ?? (emailLocale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
       ...common,
