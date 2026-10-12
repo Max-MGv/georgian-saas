@@ -9,6 +9,7 @@ import { shouldTakePayment } from '@/lib/payments/shouldTakePayment'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
+import { resolveOrderAddress } from '@/lib/orderAddress'
 
 export type WineSelection = {
   vintageId: string
@@ -34,8 +35,11 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const businessName = formData.get('businessName') as string
   const llcName = formData.get('llcName') as string | null
   const llcId = formData.get('llcId') as string | null
-  const address = formData.get('address') as string
-  const workingHours = formData.get('workingHours') as string | null
+  // A saved company address sends only its id; a typed one sends text. lib/orderAddress.ts
+  // decides which and re-reads a saved one from the DB (T-13).
+  const typedAddress = formData.get('address') as string | null
+  const typedWorkingHours = formData.get('workingHours') as string | null
+  const companyAddressId = (formData.get('companyAddressId') as string | null)?.trim() || null
   const contactName = formData.get('contactName') as string
   const contactPhone = formData.get('contactPhone') as string
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
@@ -56,7 +60,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     }
   }
 
-  if (!businessName || !address || !contactName || !contactPhone || !winesJson) {
+  if (!businessName || (!typedAddress?.trim() && !companyAddressId) || !contactName || !contactPhone || !winesJson) {
     return { error: 'Please fill in all required fields.' }
   }
 
@@ -82,12 +86,14 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // never trust the client's `price`/`discountPercent` for the amount
   // actually charged/recorded. See KnownBugs.md #22.
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
-  const [realVintages, realCompany] = await withTenantDb(tenantId, tx => Promise.all([
+  const [realVintages, realCompany, orderAddress] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
     companyId
       ? tx.company.findFirst({ where: { id: companyId, tenantId }, select: { wineDiscountPercent: true } })
       : Promise.resolve(null),
+    resolveOrderAddress(tx, tenantId, { companyId, companyAddressId, typedAddress, typedWorkingHours }),
   ]))
+  if ('error' in orderAddress) return { error: orderAddress.error }
   const priceMap = Object.fromEntries(realVintages.map(v => [v.id, v.price]))
 
   if (selectedWines.some(w => !(w.vintageId in priceMap))) {
@@ -134,8 +140,10 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           businessName,
           llcName: llcName || null,
           llcId: llcId || null,
-          address,
-          workingHours: workingHours || null,
+          address: orderAddress.address,
+          workingHours: orderAddress.workingHours,
+          addressLabel: orderAddress.addressLabel,
+          companyAddressId: orderAddress.companyAddressId,
           contactName,
           contactPhone,
           contactEmail,

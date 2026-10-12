@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createWineOrderAdmin } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
 import { useContactSelection } from '@/lib/useContactSelection'
-import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
+import { formatAddressOption } from '@/lib/orderAddress'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -34,7 +35,7 @@ type CompanyOption = {
   // (Plan-ContactRoles Chunk 1). This form's old autofill from those columns, under a comment
   // reading "Mirrors WineCatalogueClient.tsx's applyProfile()", is what produced decision 10 -
   // the same job implemented twice and drifting. Both now call one resolver and one hook.
-  address: string | null
+  // Saved addresses arrive through that same resolver too (T-13).
   identificationCode: string | null
 }
 type VintageOption = { id: string; year: number; price: number }
@@ -98,6 +99,11 @@ export default function NewWineOrderForm({
   const [llcId, setLlcId] = useState('')
   const [address, setAddress] = useState('')
   const [workingHours, setWorkingHours] = useState('')
+  // The company's saved delivery addresses (T-13) and which one: an id, 'other' (typed), or
+  // '' (not chosen yet). Same three states as the public form.
+  const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
+  const [addressChoice, setAddressChoice] = useState('other')
+  const chosenSavedAddress = savedAddresses.find(a => a.id === addressChoice) ?? null
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -164,15 +170,21 @@ export default function NewWineOrderForm({
   function handleCompanyChange(id: string) {
     setCompanyId(id)
     resetContacts()
+    // Never carry one company's saved address over to another; typed text stays (see above).
+    setSavedAddresses([])
+    setAddressChoice('other')
     if (!id) return
     const company = companies.find(c => c.id === id)
     if (!company) return
     setBusinessName(company.name)
     setLlcName(company.name)
     if (company.identificationCode) setLlcId(company.identificationCode)
-    if (company.address) setAddress(company.address)
     void resolveContacts({ companyId: id }).then(result => {
       if ('error' in result) return
+      // One saved address is used straight away; several must be chosen; none → typed.
+      const list = result.company.addresses
+      setSavedAddresses(list)
+      setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
       for (const choices of result.roleChoices) {
         if (choices.people.length === 1) pickFor(choices.people[0]!, choices)
       }
@@ -238,6 +250,7 @@ export default function NewWineOrderForm({
       businessName,
       llcName: llcName || null,
       llcId: llcId || null,
+      companyAddressId: chosenSavedAddress?.id ?? null,
       address,
       workingHours: workingHours || null,
       contactName,
@@ -291,12 +304,30 @@ export default function NewWineOrderForm({
             <input value={llcId} onChange={e => setLlcId(e.target.value)} style={inputStyle} />
           </Field>
         </div>
-        <Field label={at('newWineOrder.contact.address')} required>
-          <input value={address} onChange={e => setAddress(e.target.value)} style={inputStyle} />
-        </Field>
-        <Field label={at('newWineOrder.contact.workingHours')}>
-          <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
-        </Field>
+        {/* Saved delivery addresses (T-13). A saved one sends only its id; the server re-reads
+            the text, so the typed boxes only appear for "Other address". */}
+        {savedAddresses.length > 0 && (
+          <Field label={at('newWineOrder.contact.savedAddress')} required>
+            <select value={addressChoice} onChange={e => setAddressChoice(e.target.value)} style={inputStyle}>
+              {addressChoice === '' && <option value="" disabled>{at('newWineOrder.contact.savedAddressChoose')}</option>}
+              {savedAddresses.map(a => <option key={a.id} value={a.id}>{formatAddressOption(a)}</option>)}
+              <option value="other">{at('newWineOrder.contact.savedAddressOther')}</option>
+            </select>
+            {chosenSavedAddress?.workingHours && (
+              <p className="text-xs mt-1" style={{ color: C.faint }}>{chosenSavedAddress.workingHours}</p>
+            )}
+          </Field>
+        )}
+        {addressChoice === 'other' && (
+          <>
+            <Field label={at('newWineOrder.contact.address')} required>
+              <input value={address} onChange={e => setAddress(e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label={at('newWineOrder.contact.workingHours')}>
+              <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
+            </Field>
+          </>
+        )}
         {/* Choose one of the company's people, inline. The public forms reach the same
             choices through a code popup; an admin has no code step, so the list is simply a
             dropdown (plan §4b). Rendered only when there is someone to choose: no company

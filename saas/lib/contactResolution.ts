@@ -47,12 +47,32 @@ export type RoleChoices = OrderRole & {
   people: ContactChoice[]
 }
 
+/** One of the company's saved delivery addresses (T-13). Active ones only, in list order. */
+export type ResolvedAddress = {
+  id: string
+  label: string | null
+  address: string
+  workingHours: string | null
+}
+
 export type ResolvedCompany = {
   id: string
   name: string
   identificationCode: string | null
-  address: string | null
+  /**
+   * Replaces the single `address` (T-13, vault/Plan-WineOrderFeatures.md). Travels through this
+   * code-gated resolver rather than the public `/wines` page props, so a company's branches are
+   * only shown to someone who could already resolve the company.
+   */
+  addresses: ResolvedAddress[]
   wineDiscountPercent: number | null
+}
+
+/** The select both resolver paths use for a company's addresses — one shape, one order. */
+const ADDRESS_SELECT = {
+  where: { isActive: true },
+  orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
+  select: { id: true, label: true, address: true, workingHours: true },
 }
 
 export type ResolveContactsResult =
@@ -201,7 +221,8 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
           id: true, name: true, phone: true, email: true, roleId: true,
           company: {
             select: {
-              id: true, name: true, identificationCode: true, address: true,
+              id: true, name: true, identificationCode: true,
+              addresses: ADDRESS_SELECT,
               wineDiscountPercent: true,
             },
           },
@@ -234,7 +255,8 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         ? { id: input.companyId, tenantId, isIndividual: false, ...moduleWhere }
         : { tenantId, accessCode: typed, isIndividual: false, ...moduleWhere },
       select: {
-        id: true, name: true, accessCode: true, identificationCode: true, address: true,
+        id: true, name: true, accessCode: true, identificationCode: true,
+        addresses: ADDRESS_SELECT,
         wineDiscountPercent: true,
       },
     })
@@ -285,7 +307,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         id: company.id,
         name: company.name,
         identificationCode: company.identificationCode,
-        address: company.address,
+        addresses: company.addresses,
         wineDiscountPercent: company.wineDiscountPercent,
       },
       matchType: 'company' as const,

@@ -5,7 +5,8 @@ import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, 
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { useContactSelection } from '@/lib/useContactSelection'
 import ContactPickerPopupView from '@/components/ContactPickerPopupView'
-import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
+import { formatAddressOption } from '@/lib/orderAddress'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
 import { dispatchDemoBooked } from '@/lib/demoEvents'
@@ -58,7 +59,8 @@ type Company = {
   // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows in a
   // contact_person role (Plan-ContactRoles Chunk 1). People arrive per company through
   // resolveCompanyContacts(), via useContactSelection() below.
-  address: string | null
+  // No address either: a company's saved addresses arrive through the same code-gated resolver
+  // (T-13), not on this public prop.
   /** Whether the company has an access code — never the code itself (KnownBugs #57). */
   hasAccessCode: boolean
   wineDiscountPercent: number | null
@@ -189,6 +191,13 @@ export default function WineCatalogueClient({
   const [llcId, setLlcId] = useState('')
   const [address, setAddress] = useState('')
   const [workingHours, setWorkingHours] = useState('')
+  /**
+   * The chosen company's saved delivery addresses (T-13) and which one this order goes to:
+   * a CompanyAddress id, `'other'` for a typed address, or `''` for "not chosen yet" (only
+   * possible with 2+ saved). With none saved the typed inputs show, exactly as before T-13.
+   */
+  const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
+  const [addressChoice, setAddressChoice] = useState('')
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -287,12 +296,27 @@ export default function WineCatalogueClient({
   const roleLabel = (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn
 
   /** Company-level facts. These are still Company columns; only the people moved. */
-  function applyCompanyProfile(company: { name: string; identificationCode: string | null; address: string | null; wineDiscountPercent: number | null }) {
+  function applyCompanyProfile(company: { name: string; identificationCode: string | null; wineDiscountPercent: number | null }) {
     setBusinessName(company.name)
     setLlcName(company.name)
     if (company.identificationCode) setLlcId(company.identificationCode)
-    if (company.address) setAddress(company.address)
     setDiscountPercent(company.wineDiscountPercent ?? null)
+  }
+
+  /**
+   * A resolved company's saved addresses (T-13). One is simply used; with several the customer
+   * must choose, because a wrong-branch delivery is worse than one extra tap; none means the
+   * typed inputs, as before. The typed inputs are cleared either way so a previous company's
+   * address never rides along (the MaintenanceNotes §30 trap, for addresses).
+   */
+  function applyAddresses(list: ResolvedAddress[]) {
+    setSavedAddresses(list)
+    setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
+    setAddress(''); setWorkingHours('')
+  }
+
+  function clearAddresses() {
+    setSavedAddresses([]); setAddressChoice(''); setAddress(''); setWorkingHours('')
   }
 
   /**
@@ -339,6 +363,8 @@ export default function WineCatalogueClient({
     if (prevCompanyIdRef.current && prevCompanyIdRef.current !== companyId) {
       setContactName(''); setContactPhone(''); setContactEmail('')
     }
+    // Addresses are always the current company's, filled only once it resolves.
+    clearAddresses()
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
     if (!companyId) {
@@ -357,7 +383,11 @@ export default function WineCatalogueClient({
     // No code gate — resolve straight away so this company's people can be offered. Before
     // Chunk 8 this branch copied the company's own contact columns, and those are gone.
     applyCompanyProfile(company)
-    void resolveContacts({ companyId })
+    void resolveContacts({ companyId }).then(result => {
+      // Ignore a late answer for a company the customer has already moved away from.
+      if ('error' in result || prevCompanyIdRef.current !== result.company.id) return
+      applyAddresses(result.company.addresses)
+    })
   }, [companyId, hideCompanyDropdown])
 
   async function handleCodeSubmit() {
@@ -371,6 +401,7 @@ export default function WineCatalogueClient({
       return
     }
     applyCompanyProfile(result.company)
+    applyAddresses(result.company.addresses)
     setShowCodePopup(false)
     // The picker below opens itself off `activeRole`. A person's own code has already named
     // them; person codes on means no choices at all, deliberately.
@@ -397,6 +428,7 @@ export default function WineCatalogueClient({
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
     applyCompanyProfile(result.company)
+    applyAddresses(result.company.addresses)
   }
 
   function clearDirectCode() {
@@ -406,6 +438,7 @@ export default function WineCatalogueClient({
     setDirectCodeError('')
     setDiscountPercent(null)
     resetContacts()
+    clearAddresses()
     setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone(''); setContactEmail('')
   }
 
@@ -474,6 +507,7 @@ export default function WineCatalogueClient({
       setDiscountPercent(null)
       setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       setContactEmail('')
+      clearAddresses()
     })
   }
 
@@ -483,6 +517,7 @@ export default function WineCatalogueClient({
   }
 
   const selectedCompany = companies.find(c => c.id === companyId)
+  const chosenSavedAddress = savedAddresses.find(a => a.id === addressChoice) ?? null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (paymentConfigured) first — nothing beats it — then the selected company's
   // override, then the WINE_ORDER section default. Never used for the actual
@@ -833,12 +868,54 @@ export default function WineCatalogueClient({
                     <input name="llcId" placeholder="LLC identification number"
                       value={llcId} onChange={e => setLlcId(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="address" required placeholder="Actual address of bar / restaurant"
-                      value={address} onChange={e => setAddress(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="workingHours" placeholder="Working hours"
-                      value={workingHours} onChange={e => setWorkingHours(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                    {/* Delivery address (T-13). A saved one sends only its id — the server re-reads
+                        the text (lib/orderAddress.ts), so nothing typed here can change it. */}
+                    <input type="hidden" name="companyAddressId" value={chosenSavedAddress?.id ?? ''} />
+                    {savedAddresses.length >= 2 && (
+                      <select required value={addressChoice} onChange={e => setAddressChoice(e.target.value)}
+                        aria-label={t(locale, 'wine.address_choose')}
+                        className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle}>
+                        <option value="" disabled>{t(locale, 'wine.address_choose')}</option>
+                        {savedAddresses.map(a => <option key={a.id} value={a.id}>{formatAddressOption(a)}</option>)}
+                        <option value="other">{t(locale, 'wine.address_other')}</option>
+                      </select>
+                    )}
+                    {chosenSavedAddress && (
+                      <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg border text-sm"
+                        style={{ borderColor: 'var(--site-border)', backgroundColor: 'var(--site-bg)' }}>
+                        <div className="min-w-0">
+                          <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'wine.address_delivering_to')}</p>
+                          <p className="break-words" style={{ color: C.text }}>{formatAddressOption(chosenSavedAddress)}</p>
+                          {chosenSavedAddress.workingHours && (
+                            <p className="text-xs" style={{ color: C.muted }}>{chosenSavedAddress.workingHours}</p>
+                          )}
+                        </div>
+                        {savedAddresses.length === 1 && (
+                          <button type="button" onClick={() => setAddressChoice('other')}
+                            className="flex-shrink-0 text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                            style={{ color: 'var(--color-brand)' }}>
+                            {t(locale, 'wine.address_use_other')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {addressChoice === 'other' || savedAddresses.length === 0 ? (
+                      <>
+                        <input name="address" required placeholder="Actual address of bar / restaurant"
+                          value={address} onChange={e => setAddress(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        <input name="workingHours" placeholder="Working hours"
+                          value={workingHours} onChange={e => setWorkingHours(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
+                        {savedAddresses.length === 1 && (
+                          <button type="button" onClick={() => setAddressChoice(savedAddresses[0]!.id)}
+                            className="self-start text-xs font-medium transition-all hover:opacity-75 active:scale-95"
+                            style={{ color: 'var(--color-brand)' }}>
+                            {t(locale, 'wine.address_use_saved')}
+                          </button>
+                        )}
+                      </>
+                    ) : null}
                     {/* Only offered when there IS a list: with person codes on the resolver
                         sends none, deliberately, and a control that opens an empty popup
                         would be a dead one. */}

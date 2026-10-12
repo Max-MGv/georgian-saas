@@ -80,6 +80,8 @@ type WineOrder = {
   llcId: string | null
   address: string
   workingHours: string | null
+  /** The saved address's name at order time ("Vake branch"), T-13. Null for a typed address. */
+  addressLabel: string | null
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -1382,7 +1384,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 text-sm mt-3" style={{ color: C.muted }}>
-                    <p>&#128205; {order.address}</p>
+                    <p>&#128205; {order.addressLabel && <span className="font-medium">{order.addressLabel} — </span>}{order.address}</p>
                     {order.workingHours && <p>&#128336; {order.workingHours}</p>}
                   </div>
                 </div>

@@ -42,7 +42,8 @@ export default async function WinesPage() {
       // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows
       // (Plan-ContactRoles Chunk 1). Contact details now arrive per company through
       // resolveCompanyContacts(), not on this prop.
-      select: { id: true, name: true, identificationCode: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
+      // No address: saved addresses come through the code-gated resolver instead (T-13).
+      select: { id: true, name: true, identificationCode: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
     })).then(rows => rows.map(({ accessCode, ...rest }) => ({
       ...rest,
       // Never the code itself — only whether one exists. Passing whole Company rows

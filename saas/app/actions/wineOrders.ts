@@ -8,6 +8,7 @@ import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import { resolveOrderAddress } from '@/lib/orderAddress'
 import {
   wineOrderStagePatch,
   paidPatch,
@@ -113,6 +114,9 @@ export async function createWineOrderAdmin(data: {
   businessName: string
   llcName: string | null
   llcId: string | null
+  /** A saved CompanyAddress (T-13). When set, `address`/`workingHours` are ignored and the
+   *  saved row's text is used — see lib/orderAddress.ts. */
+  companyAddressId?: string | null
   address: string
   workingHours: string | null
   contactName: string
@@ -139,7 +143,7 @@ export async function createWineOrderAdmin(data: {
 }): Promise<{ orderId: string } | { error: string }> {
   await requireAdmin()
   if (!data.businessName.trim()) return { error: 'Business / customer name is required.' }
-  if (!data.address.trim()) return { error: 'Address is required.' }
+  if (!data.address.trim() && !data.companyAddressId) return { error: 'Address is required.' }
   if (!data.contactName.trim()) return { error: 'Contact name is required.' }
   if (!data.contactPhone.trim()) return { error: 'Contact phone is required.' }
 
@@ -149,12 +153,21 @@ export async function createWineOrderAdmin(data: {
   const tenantId = await getTenantId()
 
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
-  const [vintages, company] = await withTenantDb(tenantId, tx => Promise.all([
+  const [vintages, company, orderAddress] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, include: { wine: true } }),
     data.companyId
       ? tx.company.findFirst({ where: { id: data.companyId, tenantId }, select: { wineDiscountPercent: true } })
       : Promise.resolve(null),
+    // Same helper as the public path: requireAdmin() proves who is calling, not that the
+    // address id belongs to this company.
+    resolveOrderAddress(tx, tenantId, {
+      companyId: data.companyId,
+      companyAddressId: data.companyAddressId ?? null,
+      typedAddress: data.address,
+      typedWorkingHours: data.workingHours,
+    }),
   ]))
+  if ('error' in orderAddress) return { error: orderAddress.error }
   const vintageMap = Object.fromEntries(vintages.map(v => [v.id, v]))
 
   if (selectedWines.some(w => !(w.vintageId in vintageMap))) {
@@ -178,8 +191,10 @@ export async function createWineOrderAdmin(data: {
         businessName: data.businessName.trim(),
         llcName: data.llcName?.trim() || null,
         llcId: data.llcId?.trim() || null,
-        address: data.address.trim(),
-        workingHours: data.workingHours?.trim() || null,
+        address: orderAddress.address,
+        workingHours: orderAddress.workingHours,
+        addressLabel: orderAddress.addressLabel,
+        companyAddressId: orderAddress.companyAddressId,
         contactName: data.contactName.trim(),
         contactPhone: data.contactPhone.trim(),
         contactEmail: data.contactEmail?.trim() || null,

@@ -179,6 +179,12 @@ const en: Translations = {
   'form.mc_choose': 'Add a masterclass ({n} available)',
   'form.mc_selected': '{n} selected',
   'form.contact_edit': 'Edit',
+  // T-13 — a company's saved delivery addresses on the wine order form
+  'wine.address_choose': 'Choose a delivery address',
+  'wine.address_other': 'Other address…',
+  'wine.address_delivering_to': 'Delivering to',
+  'wine.address_use_other': 'Use another address',
+  'wine.address_use_saved': 'Use the saved address',
   // Direct-entry variant (hideCompanyDropdown tenants) — its own inline field,
   // not a popup, but shares the same "wrong code" concept.
   'form.access_code_direct_placeholder': 'Enter your company code',
@@ -394,6 +400,11 @@ const ka: Translations = {
   'form.mc_choose': 'მასტერკლასის დამატება ({n} ხელმისაწვდომი)',
   'form.mc_selected': '{n} არჩეული',
   'form.contact_edit': 'შეცვლა',
+  'wine.address_choose': 'აირჩიეთ მიწოდების მისამართი',
+  'wine.address_other': 'სხვა მისამართი…',
+  'wine.address_delivering_to': 'მიწოდების მისამართი',
+  'wine.address_use_other': 'სხვა მისამართის მითითება',
+  'wine.address_use_saved': 'შენახული მისამართის გამოყენება',
   'form.access_code_direct_placeholder': 'შეიყვანეთ კომპანიის კოდი',
   'form.access_code_direct_not_recognised': 'კოდი ვერ მოიძებნა.',
 

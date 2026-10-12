@@ -144,22 +144,48 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Resume point:** done.
 
 ### Chunk 3 — T-13 forms: pick an address
-**Status:** 🚧 next
-- [ ] Resolver (`ResolvedCompany`) returns active `addresses` (code-gated path). Remove
-      `address` from the public `/wines` companies prop.
-- [ ] Public wine form: 0 addresses → typed address as today; 1 → filled in, no picker;
-      2+ → picker "Name — address" + "Other address" (typed).
-- [ ] Admin manual wine order form: same picker (via `resolveCompanyContactsAsAdmin`).
-- [ ] `submitWineOrder` + `createWineOrderAdmin`: verify `companyAddressId` belongs to the
-      chosen company under the tenant; write snapshot (`address`, `workingHours`, `addressLabel`).
-- [ ] Wine Orders admin card (desktop + `CompactWineCard`) shows the address name.
-- [ ] Reset the address when the company changes (the trap in MaintenanceNotes §30).
-- [ ] Playwright: wine order with a 2-address company picks the second; `wine-catalogue-order`
-      and admin wine-order specs still pass.
-**Resume point:** —
+**Status:** ✅ 2026-10-12 (staging)
+- [x] `lib/orderAddress.ts` → `resolveOrderAddress()`: the one place both write paths turn the
+      form's address into order columns. A saved address sends **only its id**; the server
+      re-reads text/hours/name from the row, which must be active and belong to the order's
+      company under the tenant. Typed address stored as typed. `formatAddressOption()` shared by
+      both forms ("Vake branch — 12 Chavchavadze Ave").
+- [x] Resolver (`ResolvedCompany`) returns `addresses` (active, list order) on both paths;
+      `address` removed. `useContactSelection` now types its outcome as `ResolvedCompany`.
+      `/wines` companies prop no longer carries `address` (it was public page source).
+- [x] Public wine form: 0 saved → typed boxes (as before); 1 → "Delivering to …" card + "Use
+      another address"; 2+ → required picker + "Other address…". Cleared on every company
+      change, "not on this list", direct-code clear and after submit. A late resolver answer
+      for a company the customer already left is ignored.
+- [x] Admin manual wine order form: same choices as a dropdown; typed boxes only for "Other".
+- [x] `submitWineOrder` + `createWineOrderAdmin` call `resolveOrderAddress`; write
+      `companyAddressId` + `addressLabel` + snapshot.
+- [x] Wine Orders card shows "**Vake branch** — address". (Compact phone card and Pack view
+      show no address at all — unchanged.) Emails show only the winery's own address — unchanged.
+- [x] Tests: `scripts/test-order-address.ts` **8/8** (tampered text ignored; other company /
+      other tenant / inactive / no-company ids refused). New spec
+      `tests/tier2-core-flows/wine-order-company-address.spec.ts` **passes** (2 saved addresses →
+      picker, "Other" shows boxes, picks the 2nd → DB has link + snapshot of the 2nd).
+- [x] **Found while re-running related specs (not caused by T-13):**
+  - **T-6 bug, fixed:** after "Add company" opened the edit form, `?edit=<id>` came **back**
+    into the URL on the next save (e.g. a price tier). Cause: `replaceState(window.history.state…)`
+    — Next.js treats its own state object as an internal call and never updates its router.
+    Fixed to `replaceState(null, …)` (the documented form). Reproduced before, gone after.
+  - `companies-crud.spec.ts` had not been run since T-6 (create now opens the edit panel) —
+    updated; **2 clean passes**.
+  - `payment-amount-integrity.spec.ts` hung 180 s on `'Number of Guests (minimum 4)'`: Staging
+    Winery's `min_guests_tasting_lunch` is **2** on the dev DB (data, left as found). Locator
+    made minimum-independent in that spec. **Same exact string is in** `booking-simple`,
+    `booking-enhanced` and 4 tier-5 specs — not touched; tell Max (either set the minimum back
+    to 4 or let me loosen them too).
+  - `wine-catalogue-order.spec.ts` fails as before — dev wine "Rkatsiteli" inactive (known).
+  - `contact-orphan-safety.spec.ts` failed once under load, **passed alone** (known pattern).
+  - My first version of the new spec deleted its order while `submitWineOrder` was still
+    writing `abandonedAt` → P2025 in the server log. Spec now waits for the action to finish.
+**Resume point:** done.
 
 ### Chunk 4 — T-8 data + Settings
-**Status:** ⏳
+**Status:** 🚧 next
 - [ ] `DeliveryZone` model: `id, tenantId, nameEn, nameKa, fee Int (tetri), sortOrder,
       isActive, createdAt, updatedAt`; RLS direct-tenantId policy; both setup-rls lists.
 - [ ] `CompanyAddress.deliveryZoneId String?` (SetNull).

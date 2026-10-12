@@ -21,7 +21,8 @@ export default async function NewWineOrderPage() {
       // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows
       // (Plan-ContactRoles Chunk 1). This form resolves people per company instead — it was
       // the missed fourth form that produced decision 10 (build the picker once, §4b).
-      select: { id: true, name: true, wineDiscountPercent: true, address: true, identificationCode: true },
+      // No address: saved addresses come per company through the resolver (T-13).
+      select: { id: true, name: true, wineDiscountPercent: true, identificationCode: true },
       orderBy: { name: 'asc' },
     }),
     tx.wine.findMany({
