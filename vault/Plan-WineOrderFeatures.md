@@ -179,6 +179,13 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
     `booking-enhanced` and 4 tier-5 specs — not touched; tell Max (either set the minimum back
     to 4 or let me loosen them too).
   - `wine-catalogue-order.spec.ts` fails as before — dev wine "Rkatsiteli" inactive (known).
+    **Same cause** stops `payment-amount-integrity`'s wine test (it waits 480 s for the
+    "Rkatsiteli 2026" card — confirmed from a trace) before it reaches the company step, so the
+    wine-payment path is covered only by the new address spec until that wine is active again.
+    The company step needs no change (it never typed an address; the saved one fills in).
+  - Phone screenshots (390, 320) of the picker + "Delivering to" card: no horizontal overflow.
+  - Lint: no new errors (the 4 in WineCatalogueClient and 1 in WineOrdersClient pre-date this).
+  - Commits: `0c26ac9` (chunk 3), `926b572` (T-6 fix + spec fixes).
   - `contact-orphan-safety.spec.ts` failed once under load, **passed alone** (known pattern).
   - My first version of the new spec deleted its order while `submitWineOrder` was still
     writing `abandonedAt` → P2025 in the server log. Spec now waits for the action to finish.

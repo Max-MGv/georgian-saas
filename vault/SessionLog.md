@@ -8,6 +8,18 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-12 — Wine order features: plan + T-13 (company addresses) built on `staging` — NOT on production
+
+Max moved four wine-order tickets to Backlog (T-8, T-12, T-13, T-14), answered my review questions, then asked for chunks + start on the clear ones. **Plan:** [[Plan-WineOrderFeatures]] (Chunks 1–11, resume points). T-8, T-13, T-14 → In progress (decisions recorded as ticket comments); T-12 (price storage approach — I recommend "exceptions only") and T-9 (include? same rules for individuals?) got question comments and wait for Max. FeatureLog #225.
+- **Chunk 1** `7dbd9d2` — `CompanyAddress` table + `WineOrder.companyAddressId/addressLabel`; migration applied to the **dev DB only**, backfilled 18/18; RLS + anon revoke inside the migration; `test-company-addresses-rls.ts` 13/13; anon REST 401.
+- **Chunk 2** `ed3829f` — Addresses list in the Companies edit panel; `updateCompany` stops writing `Company.address` (column kept until production backfill); demo seed gives Restaurant Kakhuri two branches.
+- **Chunk 3** `0c26ac9` — both wine forms pick a saved address; server re-reads it (`lib/orderAddress.ts`, `test-order-address.ts` 8/8); new spec `wine-order-company-address.spec.ts` passes; phone 390/320 checked.
+- **Found + fixed** `926b572` — T-6 left `?edit=` in Next's router (replaceState with Next's own state) so it came back after the next save; `companies-crud.spec` updated for T-6 (it had not been run since) — 2 clean passes.
+- **Dev data findings, left as found:** `min_guests_tasting_lunch` = 2 on Staging Winery (6 specs hard-code "minimum 4"; only payment-amount-integrity loosened); "Rkatsiteli" still inactive (blocks wine-catalogue-order and payment-amount-integrity's wine test).
+**Production untouched.** Next: Chunk 4 (delivery zones + Settings).
+
+---
+
 ## 2026-10-09 — iOS bookmark icons (FeatureLog #224) — on `staging`; production step blocked
 
 Max bookmarked nikalasmarani.vineworks.ge (for his father: bookings/wine orders) and /admin in Safari; no icons. Cause: no `apple-touch-icon` anywhere (only the tenant `faviconUrl` → `<link rel="icon">`). Built a per-tenant `/touch-icon` route: Nikalas Marani gets the logo's red "ნმ" (cream tile, thin frame); admin gets the inverted wine tile + "ADMIN"; any other tenant gets its initials in its own theme colours (checked with the Vineworks Demo host). Committed `50c9fbf`, live on staging. Max said "push without asking"; I cherry-picked **only `50c9fbf`** onto `master` (a full staging merge would also ship the 5 unverified tickets and the ticket tool, which needs its production migration first). The first attempt was blocked by the permission system; Max then gave an explicit go ("i will approve manually … push to prod"). Checked on master: tsc, lint, full `next build`; pushed as `ec97186`; **verified live on nikalasmarani.vineworks.ge** (both icons, apple-touch-icon + title tags on `/` and `/admin/login`, 6 pages 200, home prices intact). Back on `staging`. Max must delete + re-add the iPhone bookmarks (iOS caches the icon at creation).
