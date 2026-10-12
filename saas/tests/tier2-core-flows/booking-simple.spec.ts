@@ -111,7 +111,7 @@ test.describe('Booking form — simple/individual variant', () => {
     // not a dedicated route; real finding, resolves the note's open question)
     await page.goto('/');
 
-    const guestInput = page.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' });
+    const guestInput = page.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */);
     const dateInput = page.getByRole('textbox', { name: 'DD/MM/YYYY' });
     const timeSlot = page.getByRole('combobox');
 

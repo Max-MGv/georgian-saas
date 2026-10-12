@@ -226,7 +226,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(tastingGuests).toBeVisible();
     await expect(lunchGuests).toBeVisible();
     await expect(freeGuests).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' })).toHaveCount(0);
+    await expect(page.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */)).toHaveCount(0);
 
     // 5. Hot Dish Selection and Masterclass Add-ons blocks are present (the
     // tenant has real MenuItem/MasterclassItem rows — confirmed live, no

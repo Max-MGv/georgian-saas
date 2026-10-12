@@ -18,11 +18,11 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 
 | Ticket | What | Status on the board |
 |---|---|---|
-| **T-13** | Several delivery addresses per company; customer picks one | In progress (Chunks 1–3) |
+| **T-13** | Several delivery addresses per company; customer picks one | Built on staging (Chunks 1–3) |
 | **T-8** | Minimum order, pickup vs delivery, delivery zones + fees | In progress (Chunks 4–6) |
 | **T-14** | Preferred delivery/pickup date + admin calendar | In progress (Chunks 7–8) |
-| **T-12** | Negotiated price per vintage per company + exporter flag | **Backlog — blocked on Max** (storage approach) |
-| **T-9** | Individual vs Company wine orders (like bookings) | **Inbox — blocked on Max** (include? same rules?) |
+| **T-12** | Negotiated price per vintage per company + exporter flag | In progress (Chunk 9) |
+| **T-9** | Individual vs Company wine orders (like bookings) | In progress (Chunk 10) |
 
 ---
 
@@ -192,7 +192,7 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 **Resume point:** done.
 
 ### Chunk 4 — T-8 data + Settings
-**Status:** 🚧 next
+**Status:** 🚧 started 2026-10-12
 - [ ] `DeliveryZone` model: `id, tenantId, nameEn, nameKa, fee Int (tetri), sortOrder,
       isActive, createdAt, updatedAt`; RLS direct-tenantId policy; both setup-rls lists.
 - [ ] `CompanyAddress.deliveryZoneId String?` (SetNull).
@@ -260,7 +260,40 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
 - [ ] "No date" list for orders without a preferred date. `NOT_ABANDONED` on the query.
 **Resume point:** —
 
-### Chunk 9 — Verify, review, hand to Max
+---
+
+## Decisions added 2026-10-12 (second round)
+- **T-12:** Max approved **exceptions only** — store just the negotiated prices; everything
+  else = standard price + company %. Admin screen lists every vintage pre-filled with the
+  standard price; "Reset to standard" removes an exception.
+- **T-9:** include it; individuals follow the **same** minimum order and delivery fees.
+- **Money rule (Chunk 4):** `WineOrder.totalAmount` stays **wines only**; the delivery fee is a
+  separate column; amount due = wines + fee through one helper.
+- Dev data: Max OK'd re-activating "Rkatsiteli" (done 2026-10-12) and loosening the six specs
+  that hard-coded "Number of Guests (minimum 4)" (done; his `min_guests_tasting_lunch` = 2 stays).
+
+### Chunk 9 — T-12 negotiated prices + exporter flag
+**Status:** ⏳
+- [ ] `CompanyWinePrice(companyId Cascade, wineVintageId Cascade, price Int tetri, updatedAt)`,
+      unique per pair; RLS JOIN-to-Company. `Company.isExporter Boolean @default(false)`.
+- [ ] Companies edit panel (wine-order companies): "Prices" list of every active vintage,
+      standard price greyed; edit → negotiated (bold); "Reset to standard".
+- [ ] Exporter toggle + badge on the company row and its wine orders; admin filter.
+- [ ] Resolver returns the company's negotiated prices **only on the code-gated path**; the
+      catalogue/drawer show them once the company is resolved.
+- [ ] `submitWineOrder` + `createWineOrderAdmin`: per line, negotiated price if any (no %),
+      else standard × (1 − company %). `priceSnapshot` records the price actually used.
+      The minimum-order check (Chunk 5) uses the result.
+- [ ] Tests: script for pricing rules + spec.
+
+### Chunk 10 — T-9 Individual vs Company on the wine form
+**Status:** ⏳
+- [ ] "Individual / Company" switch on the public wine form; Individual hides business name /
+      LLC / company dropdown; name + phone + address (or pickup) only.
+- [ ] Stored on the order (enum like `BookingType`); shown on admin cards + filter.
+- [ ] Admin manual form gets the same switch. Same minimum + delivery rules for both.
+
+### Chunk 11 — Verify, review, hand to Max
 **Status:** ⏳
 - [ ] `tsc`, lint, i18n parity, full `next build`.
 - [ ] Playwright wine specs + new specs; phone 390/320 + desktop screenshots of every changed
@@ -269,30 +302,13 @@ questions the same day (decisions below). Tickets: `cd saas && npx tsx scripts/t
       `feedback_blind_reviews`).
 - [ ] Vault: FeatureLog #225, SessionLog, MaintenanceNotes (new couplings), MyToDo checklist,
       Feature note `Features/Feature 225 - Wine order delivery features.md`.
-- [ ] Tickets T-13, T-8, T-14 → Ready to test with review cards.
+- [ ] Tickets T-13, T-8, T-14, T-12, T-9 → Ready to test with review cards.
 - [ ] Production runbook drafted (migrations order) — **waits for Max's go**.
 **Resume point:** —
 
 ---
 
-## Blocked — waiting for Max
-
-### T-12 — negotiated prices (Chunk 10 once unblocked)
-Open: **storage approach.** Claude recommended *exceptions only* (store just the negotiated
-prices; everything else falls back to the standard price + company %), with an admin screen
-that lists every vintage pre-filled with the standard price so it *feels* like a full copy.
-Reason: a full copy silently freezes old prices when the standard price goes up. Waiting for
-Max to confirm. Sketch: `CompanyWinePrice(companyId, wineVintageId, price, updatedAt)`
-unique per pair; `Company.isExporter Boolean`; resolver returns prices only on the code-gated
-path; `submitWineOrder` re-reads them (never trust the client).
-
-### T-9 — Individual vs Company wine orders (Chunk 11 once unblocked)
-Open: include it in this work (Claude recommends yes — it reshapes the same form Chunks 5 and
-7 rebuild), and should individuals have the same minimum order and delivery fees (Claude's
-default: yes).
-
----
-
 ## Log
+- 2026-10-12 — Max unblocked T-12 + T-9 (moved to In progress); verify chunk renumbered 11.
 - 2026-10-12 — plan written; Max's answers recorded on T-8/T-13/T-14 (comments); T-8, T-13,
   T-14 moved to In progress. Chunk 1 started.
