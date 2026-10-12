@@ -65,6 +65,10 @@ model Company {
   id                  String          @id @default(cuid())
   name                String
   identificationCode  String?
+  // ⚠️ BEING REPLACED by CompanyAddress (T-13, vault/Plan-WineOrderFeatures.md Chunk 1). The
+  // migration copied every non-empty value into a CompanyAddress row; once plan Chunk 3 lands
+  // nothing reads this, and it is dropped after production has run the backfill. Do not add
+  // new readers.
   address             String?
   // The company-level gate, distinct from a person's own code (CompanyPerson.code).
   // NOT governed by `person_codes_enabled` — it works in both modes, because it is the only
@@ -99,8 +103,35 @@ model Company {
   wineOrders          WineOrder[]
   prices              Price[]
   people              CompanyPerson[]
+  addresses           CompanyAddress[]
 
   @@index([tenantId])
+}
+
+/// One delivery address of a company — "Vake branch, 12 Chavchavadze Ave" (T-13,
+/// vault/Plan-WineOrderFeatures.md). A company with several branches picks which one a wine
+/// order goes to, the same way it picks a Contact Person.
+///
+/// Replaces `Company.address` as the thing the wine forms autofill from. The migration copied
+/// every non-empty `Company.address` in as that company's first row; the column itself is kept
+/// until production has run that backfill, then dropped (plan Chunk 1).
+///
+/// No own tenantId — RLS is JOIN-to-Company, the same shape as CompanyPerson and Price.
+model CompanyAddress {
+  id           String      @id @default(cuid())
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Optional display name ("Vake branch"). A company with one address rarely needs one.
+  label        String?
+  address      String
+  workingHours String?
+  sortOrder    Int         @default(0)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  wineOrders   WineOrder[]
+
+  @@index([companyId])
 }
 
 /// A kind of contact a company can have — "Guide", "Contact Person", later "CEO".
@@ -537,6 +568,14 @@ model WineOrder {
   tenantId        String?
   companyId       String?
   company         Company?        @relation(fields: [companyId], references: [id])
+  // Which of the company's saved addresses this order went to (T-13). Only the link —
+  // `address`, `workingHours` and `addressLabel` are the snapshot of what it said at the time,
+  // the same rule as OrderContact: deleting or editing a CompanyAddress must not move a past
+  // order, so this may go null and nothing is lost. Null also when the customer typed an
+  // "Other address" or ordered without a company.
+  companyAddressId String?
+  companyAddress   CompanyAddress? @relation(fields: [companyAddressId], references: [id], onDelete: SetNull)
+  addressLabel     String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]

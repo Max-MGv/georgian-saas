@@ -40,6 +40,9 @@ async function main() {
     // company), CompanyPerson is JOIN-to-Company like Price, and OrderContact carries its
     // own tenantId like OrderEvent despite being a child of Order/WineOrder.
     'ContactRole', 'CompanyPerson', 'OrderContact',
+    // Company delivery addresses (T-13, Plan-WineOrderFeatures Chunk 1). JOIN-to-Company like
+    // CompanyPerson; its policy is created below AND in its own migration.
+    'CompanyAddress',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
     // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
     // child of Order. See MaintenanceNotes on why this exists.
@@ -209,6 +212,28 @@ async function main() {
         EXISTS (
           SELECT 1 FROM "Company" c
           WHERE c.id = "CompanyPerson"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  // CompanyAddress: JOIN to Company, identical to CompanyPerson above (T-13). The migration
+  // 20261012121359_company_addresses creates the same policy; this keeps a re-run identical.
+  console.log('Creating policy on "CompanyAddress" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyAddress";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyAddress"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyAddress"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyAddress"."companyId"
             AND c."tenantId" = current_setting('app.tenant_id', true)
         )
       );
