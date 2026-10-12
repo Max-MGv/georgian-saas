@@ -907,11 +907,18 @@ export default function CompaniesClient({ companies: initial, roles = [], person
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<Company | null>(initialEdit)
   // Drop `?edit=` from the address bar once used, so a later reload doesn't reopen the form.
+  //
+  // `null`, not `window.history.state`: Next.js's patched replaceState treats a state carrying
+  // its own `__NA` marker as an internal call and skips updating the router. Passing the
+  // current state did exactly that — the bar changed, the router kept `?edit=`, and the next
+  // server-action refresh (e.g. saving a price tier) wrote `?edit=<id>` back into the URL.
+  // Found by companies-crud.spec.ts on 2026-10-12; the documented form is `null`
+  // (node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md).
   useEffect(() => {
     const url = new URL(window.location.href)
     if (!url.searchParams.has('edit')) return
     url.searchParams.delete('edit')
-    window.history.replaceState(window.history.state, '', url)
+    window.history.replaceState(null, '', url)
   }, [])
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')

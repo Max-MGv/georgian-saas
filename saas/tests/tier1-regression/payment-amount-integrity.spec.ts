@@ -169,7 +169,10 @@ test.describe('Individual booking — payment on/off carries the correct amount 
       tomorrow.setDate(tomorrow.getDate() + 1);
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
       await formPage.getByRole('combobox').selectOption({ index: 1 });
-      await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4');
+      // The "(minimum N)" in this label is the tenant's own setting, not a constant: on
+      // 2026-10-12 Staging Winery's Tasting + Lunch minimum was 2, and the old exact
+      // 'minimum 4' name hung this test for its full 180s. 4 guests is valid for any minimum <= 4.
+      await formPage.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ }).fill('4');
       // Contact Person merged First/Last Name into one Name field 2026-09-30
       // (MaintenanceNotes.md §1) — exact: true, same reason as the Phone/Email
       // fix below: a company with a guide also has a "Guide — Name" field.
