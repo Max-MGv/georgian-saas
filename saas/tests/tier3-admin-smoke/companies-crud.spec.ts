@@ -159,6 +159,16 @@ test.describe('Companies CRUD', () => {
     await expect(companyRow(page)).toBeVisible({ timeout: 15_000 });
     await expectBookingCount(page, beforeBookingCount + 1);
 
+    // Since T-6 (2026-10-08) "Add company" reloads with `?edit=<id>` and opens the new company's
+    // full edit form straight away. Its overlay then sat over the tabs below and every click on
+    // them was intercepted (found 2026-10-12 — this spec had not been run since T-6 landed).
+    // Assert that behaviour, then close the panel and carry on.
+    const autoOpenedPanel = page.getByRole('heading', { name: 'Edit Company', exact: true });
+    await expect(autoOpenedPanel).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('textbox', { name: 'Company name' })).toHaveValue(COMPANY_NAME);
+    await page.getByRole('button', { name: '×', exact: true }).click();
+    await expect(autoOpenedPanel).not.toBeVisible();
+
     // 4. Check: module scoping is correct — not silently defaulting to the
     // wrong module regardless of what was selected. Direct regression check
     // for KnownBugs #11 ("always defaulted isBookingCompany:true,
