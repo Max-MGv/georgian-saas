@@ -8,7 +8,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-12/13 — Wine order features T-13, T-8, T-14, T-12, T-9 built on `staging` (Chunks 1–10) — NOT on production
+## 2026-10-12/13 — Wine order features T-13, T-8, T-14, T-12, T-9 built on `staging` (Chunks 1–11) — NOT on production
 
 Max moved T-8/T-12/T-13/T-14 to Backlog, answered review questions twice (decisions in [[Plan-WineOrderFeatures]] + ticket comments), unblocked T-12 ("exceptions only") and T-9 (include; same rules for individuals), approved the money rule (`totalAmount` = wines only, fee separate), and said "proceed". All five tickets → In progress. FeatureLog #225, [[Feature 225 - Wine order delivery features]], MaintenanceNotes §35.
 - **T-13** (`7dbd9d2`, `ed3829f`, `0c26ac9`) — `CompanyAddress` (backfilled 18/18 dev companies), Addresses list on Companies, address picker on both wine forms.
@@ -17,10 +17,15 @@ Max moved T-8/T-12/T-13/T-14 to Backlog, answered review questions twice (decisi
 - **T-12** (`c99621a`) — `CompanyWinePrice` (exceptions only), one pricing function, prices shown only to a proven company; **my call:** a code-less company with negotiated prices is charged them but as a reservation (never online) — flagged to Max. Exporter flag + filter.
 - **T-9** (`32b7c33`) — Company/Individual switch (default Company — flagged to Max).
 - **Found + fixed:** T-6 `?edit=` returning to the URL (KnownBugs #76, `926b572`); card date box covering Save (#77). Six specs that hard-coded "minimum 4" loosened; dev wine "Rkatsiteli" re-activated (Max OK'd); Caucasus Vine Travel override reset to Default after an interrupted test.
-- **Found, NOT fixed yet:** KnownBugs **#78** — write actions trust the `companyId` sent, so a crafted request gets a coded company's discount/negotiated prices (wine) or price tiers (bookings) without the code. Wine fix designed (plan Chunk 11), not applied; bookings = Max's call.
-- **Verification so far:** ~111 script checks across 10 new scripts, 6 new specs, wine regression 20/20, production build OK, whole-project lint unchanged (83 = baseline). Full suite 51/58 with **5 failures not yet investigated** (list in plan Chunk 11).
-- 6 migrations applied to the **dev DB only**. **Production untouched** — runbook drafted in the plan, needs Max's go.
-**Next session:** plan Chunk 11 resume point (investigate 5 failures → apply #78 wine fix → review cards → finish logs).
+- **KnownBugs #78** — write actions trusted the `companyId` sent, so a crafted request got a coded company's discount/negotiated prices (wine) or price tiers (bookings) without the code. **Wine half fixed 2026-10-13** (`f7ad134`): server re-checks the code (`companyCodeMatches`), 24/24 script + a tampered-request browser test (fails with the check removed). **Bookings still open — Max's call.**
+- **Full-suite failures (5) investigated 2026-10-13**, each reproduced alone on a clean, warmed dev server (toggles checked first: Individuals on / Companies off / Wine on, no overrides — correct):
+  - `wine-catalogue-order`, `tickets.spec` token test → **pass alone** (environmental in the long run; the token test's leftover ticket T-73 closed as obsolete).
+  - `onboarding-wizard` → the documented "needs reset" shape; reset with `lib/onboardingWizardReset.ts` → passes.
+  - `payment-label-precedence` + `payment-amount-integrity` company test → **real, but in the tests' time budgets, not the app**: a trace showed every step passing, ~13 / ~50 admin page loads at 5–10 s each (dev DB round trip ~360 ms, same as the July baseline), finishing at ~185 s / ~530 s against 180 s / 480 s budgets — so their `finally` never ran and left **Alazani Valley Tours + Caucasus Vine Travel on "Always require"** (both restored to Default). My Companies/Settings additions cost ~1.6 s / ~0.7 s per load locally and tipped them over. Fixed: those page reads now run in parallel, budgets 300 s / 720 s with the measurements in comments. Both pass; all 4 payment-amount tests pass.
+  - One mid-investigation failure was self-inflicted: editing files while a test ran made the dev server recompile and exhausted the DB pool (P2028); re-run clean → passes. Don't edit app code during a run.
+- **Final verification:** wine specs 21/21 (+ wine payment test), `tsc` clean, lint 83 = baseline. Review cards posted → T-13, T-8, T-14, T-12, T-9 are **Ready to test**.
+- 6 migrations applied to the **dev DB only**. **Production untouched** — runbook in the plan, needs Max's go.
+**Open for Max:** (a) fix the booking half of #78? (b) code-less company with negotiated prices → reservation only, never online — OK? (c) Company/Individual switch defaults to Company — OK? (d) blind sub-agent review before production? Then the production runbook, step by step, on his go.
 
 ---
 

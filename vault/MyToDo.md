@@ -28,6 +28,8 @@ two named addresses; set one address's zone; in *Wine prices* type a lower price
    reservation (no card payment) — *I decided this; tell me if you want it different.* "Exporter" mark + filter.
 5. **T-9 individuals** — the form starts on **Company** (as today); tap **Individual**: only name / phone / address
    remain. Admin card shows "Individual". *Tell me if Individual should be the default instead.*
+**Security fix included (2026-10-13):** a wine order now needs the company's code again on the server, so nobody can claim a
+company's discount or agreed prices by doctoring the request. *Your call:* the same gap exists on **bookings** — fix it too?
 **Please check:** the Georgian wording (all new Georgian text is mine); a real iPhone. Then Verified / Send back on
 each card. Shipping to production needs your separate go — runbook in `Plan-WineOrderFeatures.md`.
 

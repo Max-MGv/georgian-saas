@@ -412,54 +412,41 @@ payment link for an owed fee.
 **Resume point:** done.
 
 ### Chunk 11 — Verify, review, hand to Max
-**Status:** 🚧 in progress — paused 2026-10-13 at Max's request (context handoff)
+**Status:** ✅ 2026-10-13 (staging) — only Max's decisions + the production runbook remain
 - [x] `tsc` clean; i18n parity ✅; **full `next build` ✅**.
-- [x] Whole-project lint: **83 errors now = 83 at the starting commit `dbfa5d1`** (measured in a
-      temporary worktree) — this work added none.
+- [x] Whole-project lint: **83 errors = 83 at the starting commit `dbfa5d1`** (re-measured after the #78 fix: still 83).
 - [x] Vault: Feature note `Features/Feature 225 - Wine order delivery features.md`;
       MaintenanceNotes **§35**; FeatureLog #225; MyToDo 2026-10-12 checklist; KnownBugs #76–#78;
-      production runbook (above).
-- [x] Full local Playwright suite (tiers 1–4, `--workers=1`, 42.9 min): **51 passed, 5 failed,
-      2 did not run** — failures NOT yet investigated:
-      1. `payment-amount-integrity` "Company booking …" (8.1 min timeout) — the same test timed out
-         earlier today under load (booking flow, 5 scenarios); likely environmental, confirm.
-      2. `payment-label-precedence` "company booking label … override always wins" (3.0 min).
-      3. `wine-catalogue-order` (1.8 min) — **passed in every wine regression run today
-         (16/16, 20/20)**; must be reproduced alone before blaming anything. Check: the payment
-         tests above flip tenant toggles / company overrides and may have left one changed.
-      4. `tickets.spec` "token API …" (30 s) — ticket tool, untouched by this work.
-      5. `onboarding-wizard` (37 s) — documented as needing its reset (SessionLog 2026-10-07).
-      **First:** check Staging Winery's payment toggles + Caucasus Vine Travel / Sighnaghi Wine Bar
-      overrides were restored (an interrupted payment test leaves them changed — KNOWN-ISSUES), then
-      re-run each failing spec alone on a freshly restarted dev server (`rm -rf .next`, warm routes).
-- [ ] **Apply the prepared security fix (KnownBugs #78, wine half)** — designed, NOT applied:
-      1. `lib/contactResolution.ts`: export `companyCodeMatches(tx, tenantId, {id, accessCode}, code)`
-         → true if the company has no `accessCode`; else typed (trim + upper-case) equals the
-         company code, or — only when setting `person_codes_enabled` = 'true' — an active
-         `CompanyPerson` at that company has that code.
-      2. `submitWineOrder.ts`: read `formData.get('companyCode')`; add `id: true` to the company
-         select; after the address check: `if (companyId && !realCompany)` → "Please choose your
-         company again."; `if (realCompany && !companyCodeMatches(...))` → "Please enter your company
-         code again."
-      3. `WineCatalogueClient.tsx`: next to the hidden `companyId` input add
-         `<input type="hidden" name="companyCode" value={hideCompanyDropdown ? directCode : codeInput} />`.
-      4. Also in `submitWineOrder.ts`: `pricesShown` should use
-         `pricing.lines.some(l => l.negotiated)` instead of `pricing.negotiatedTotal > 0` (a
-         negotiated price of 0₾ must still count as "not shown").
-      5. Test: a script for `companyCodeMatches` (no code company / right / wrong / person code with
-         codes on and off) + re-run the wine specs (payment-amount-integrity wine test enters a
-         code; the negotiated spec too).
-      Bookings (`createBooking`) have the same gap — **Max's call**, not part of these tickets.
-- [ ] Ticket review cards: `cd saas && npx tsx scripts/tix.ts review T-n --changed "…" --test "…"`
-      for **T-13, T-8, T-14, T-12, T-9** (steps are in MyToDo 2026-10-12), which moves them to
-      Ready to test.
-- [ ] SessionLog: finish the 2026-10-12 entry with the full-suite and #78 outcome.
-- [ ] Offer Max a blind, context-free sub-agent code review (his standing preference — memory
-      `feedback_blind_reviews`); only run it if he says yes.
-- [ ] Production stays untouched until Max's go (runbook above).
-**Resume point:** start at "First:" under the full-suite bullet, then apply the #78 fix, then the
-review cards. Local helper `saas/scripts/_scratch_shot.ts` (untracked; never commit) logs in with the
-suite's credentials helper and takes screenshots — steps: warm, companies, cards, wcal, drawer, …
+      production runbook (below).
+- [x] Full local Playwright suite (tiers 1–4, `--workers=1`, 42.9 min): 51 passed, 5 failed, 2 did not run.
+      **Investigated 2026-10-13** — toggles checked first (Individuals on, Companies off, Wine on, no
+      overrides: correct), dev server restarted with `.next` wiped and routes warmed, each spec alone:
+      1. `wine-catalogue-order` → passes alone (environmental).
+      2. `tickets.spec` token test → 4/4 alone (environmental; its leftover T-73 closed OBSOLETE).
+      3. `onboarding-wizard` → documented "needs reset"; reset via `lib/onboardingWizardReset.ts` → passes.
+      4+5. `payment-label-precedence` + `payment-amount-integrity` company test → **reproduced; time budget,
+         not the app.** Trace: every step passes, but ~13 / ~50 admin page loads at 5–10 s (dev DB round
+         trip ~360 ms = July baseline) end at ~185 s / ~530 s vs 180 s / 480 s, so `finally` never ran
+         and left Alazani Valley Tours / Caucasus Vine Travel on "Always require" (restored to Default).
+         This work's Companies (+~1.6 s/load) and Settings (+~0.7 s/load) reads tipped them over → those
+         reads now run in parallel; budgets 300 s / 720 s, measurements in the comments. Both pass; all 4
+         payment-amount tests pass.
+- [x] **Security fix KnownBugs #78, wine half** (`f7ad134`): `companyCodeMatches()` in
+      `lib/contactResolution.ts` (company code, or — person codes on — an active person's code at that
+      company with the resolver's PER_ORDER/module role filter); hidden `companyCode` on `/wines`;
+      `submitWineOrder` refuses "Please choose your company again." / "Please enter your company code
+      again."; `pricesShown` counts negotiated lines. `scripts/test-company-code-check.ts` **24/24** (each
+      case also asked of the resolver — they agree); new browser test (tampered code refused, no order
+      created) — **fails with the check removed**. Wine specs **21/21** + wine payment test.
+      Bookings (`createBooking`) have the same gap — **Max's call**.
+- [x] Review cards posted: **T-13, T-8, T-14, T-12, T-9 → Ready to test** (open decisions in the cards).
+- [x] SessionLog 2026-10-12/13 entry finished.
+- [ ] Offer Max a blind, context-free sub-agent code review (memory `feedback_blind_reviews`) — offered
+      2026-10-13; run only on his yes.
+- [ ] Production stays untouched until Max's go (runbook below).
+**Resume point:** waiting on Max — (a) booking half of #78, (b) code-less negotiated prices = reservation
+only, (c) Company default on the switch, (d) blind review yes/no, then the runbook step by step on his go.
+Local helper `saas/scripts/_scratch_shot.ts` (untracked; never commit).
 
 ---
 
@@ -491,6 +478,8 @@ schema: `Company.address` still exists, every new column is nullable or has a de
 ---
 
 ## Log
+- 2026-10-13 — Chunk 11 done: 5 suite failures explained (3 environmental, 2 test budgets), #78 wine fix
+  (`f7ad134`), five review cards posted.
 - 2026-10-12 — Max unblocked T-12 + T-9 (moved to In progress); verify chunk renumbered 11.
 - 2026-10-12 — plan written; Max's answers recorded on T-8/T-13/T-14 (comments); T-8, T-13,
   T-14 moved to In progress. Chunk 1 started.

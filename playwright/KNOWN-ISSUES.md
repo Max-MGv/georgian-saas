@@ -267,6 +267,21 @@ before assuming a code or locator bug** — read the three `Tenant` columns dire
 compare against the values above. This session hit the drift three separate times investigating
 Chunk 6 alone.
 
+### Payment specs running out of time leave a company override changed (2026-10-13)
+
+**Symptom:** `payment-label-precedence` (company test) or `payment-amount-integrity` (company booking test)
+fails with "Test timeout exceeded" inside `setCompanyPaymentOverride` — in the **`finally`** block.
+**Cause:** not a hang. A trace showed every step passing; these tests make ~13 / ~50 admin page loads and each
+costs 5–10 s on a dev machine (~360 ms per dev-DB round trip). They ended at ~185 s / ~530 s against budgets of
+180 s / 480 s, so the restore in `finally` never ran and left **Alazani Valley Tours** (label spec) /
+**Caucasus Vine Travel** (amount spec) on "Always require". Budgets are now 300 s / 720 s.
+**If it recurs:** read `Company.skipPayment` for those two companies on Staging Winery (resting value: `null` =
+Default) and `show_company_price_after_booking` (resting value `'false'`), restore, then look at page-load times
+before suspecting the app.
+**Also seen the same day:** editing app files while a test runs makes the dev server recompile mid-request and
+can exhaust the DB pool (P2028 "Unable to start a transaction"), failing whatever test is running. Don't edit
+during a run.
+
 ### Real, confirmed test-locator bugs found 2026-09-30 and 2026-10-01 (not app bugs)
 
 Both found by getting a full run's failures to actually pass in isolation, then reading the
