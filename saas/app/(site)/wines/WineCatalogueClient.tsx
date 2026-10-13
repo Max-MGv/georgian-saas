@@ -987,6 +987,8 @@ export default function WineCatalogueClient({
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                   <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <input type="hidden" name="companyId" value={companyId} />
+                    {/* The code the guest confirmed — the server checks it again (KnownBugs #78). */}
+                    <input type="hidden" name="companyCode" value={hideCompanyDropdown ? directCode : codeInput} />
                     <input type="hidden" name="discountPercent" value={discountPercent ?? ''} />
                     {/* One entry per contact role, JSON like the `wines` field.
                         submitWineOrder turns these into OrderContact rows with snapshots. */}

@@ -20,27 +20,28 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   // Gates the per-company payment override (#148) — same source PaymentSetupBanner
   // and shouldTakePayment() use. A tenant without the module never sees the control.
   const paymentModuleOn = h.get('x-tenant-modules-online-payment') === 'true'
-  await ensureIndividualsCompany(tenantId)
-
+  // The three reads below are independent database round trips, so they run at the same time
+  // (each one costs ~0.7s from a dev machine; one after another they added up — Chunk 11).
   // Delivery zones (T-8) for each address's zone dropdown. Only when the module is on.
-  const zones = wineOrdersOn
-    ? await withTenantDb(tenantId, tx => tx.deliveryZone.findMany({
+  const zonesP = wineOrdersOn
+    ? withTenantDb(tenantId, tx => tx.deliveryZone.findMany({
         where: { tenantId, isActive: true },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, nameEn: true, nameKa: true },
       }))
-    : []
+    : Promise.resolve([])
 
   // Every active vintage with its standard price, for the per-company negotiated prices (T-12).
-  const vintages = wineOrdersOn
-    ? (await withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+  const vintagesP = wineOrdersOn
+    ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
         where: { tenantId, active: true, wine: { active: true } },
         orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
         select: { id: true, year: true, price: true, wine: { select: { name: true } } },
-      }))).map(v => ({ id: v.id, label: `${v.wine.name} ${v.year}`, price: v.price }))
-    : []
+      })).then(vs => vs.map(v => ({ id: v.id, label: `${v.wine.name} ${v.year}`, price: v.price })))
+    : Promise.resolve([])
 
-  const companies = await withTenantDb(tenantId, tx =>
+  // The Individuals company must exist before the list is read.
+  const companiesP = ensureIndividualsCompany(tenantId).then(() => withTenantDb(tenantId, tx =>
     tx.company.findMany({
       where: { tenantId },
       orderBy: { name: 'asc' },
@@ -65,7 +66,9 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         winePrices: { select: { wineVintageId: true, price: true } },
       },
     })
-  )
+  ))
+
+  const [zones, vintages, companies] = await Promise.all([zonesP, vintagesP, companiesP])
 
   const tourOperators = companies.filter(c => !c.isIndividual)
   const bookingCount = tourOperators.filter(c => c.isBookingCompany ?? true).length

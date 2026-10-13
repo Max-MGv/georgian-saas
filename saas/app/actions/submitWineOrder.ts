@@ -14,6 +14,7 @@ import { loadWineOrderDeliveryTx } from '@/lib/wineOrderDelivery'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { checkPreferredDate } from '@/lib/wineOrderDate'
 import { priceWineOrder } from '@/lib/winePricing'
+import { companyCodeMatches } from '@/lib/contactResolution'
 
 export type WineSelection = {
   vintageId: string
@@ -62,6 +63,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const contactEmail = (formData.get('contactEmail') as string | null)?.trim() || null
   const winesJson = formData.get('wines') as string
   const companyId = isIndividual ? null : (formData.get('companyId') as string | null)?.trim() || null
+  // The code the guest confirmed on the form, checked again below (KnownBugs #78).
+  const companyCode = formData.get('companyCode') as string | null
   // One entry per contact role, JSON like `wines` above (Plan-ContactRoles Chunk 8).
   // Written below via writeOrderContacts(), which re-verifies every roleId and personId
   // against the company under the tenant before trusting any of it. Parsed here, separately,
@@ -112,13 +115,14 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
       ? tx.company.findFirst({
           where: { id: companyId, tenantId },
           select: {
+            id: true,
             wineDiscountPercent: true,
             accessCode: true,
             // Negotiated prices for the vintages in this cart (T-12) — re-read here, never taken
             // from the browser, which may not even have been shown them.
             winePrices: { where: { wineVintageId: { in: vintageIds } }, select: { wineVintageId: true, price: true } },
           },
-        })
+        }).then(async c => c && { ...c, codeOk: await companyCodeMatches(tx, tenantId, c, companyCode, 'WINE_ORDER') })
       : Promise.resolve(null),
     // A pickup stores no address: the customer collects from the winery.
     isPickup
@@ -127,6 +131,11 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     loadWineOrderDeliveryTx(tx, tenantId),
   ]))
   if ('error' in orderAddress) return { error: orderAddress.error }
+  // The browser names the company; the server decides whether it may order as that company.
+  // Without this a crafted request could take a coded company's discount and negotiated prices
+  // (KnownBugs #78) — the form's code check alone is a gate only the client enforced.
+  if (companyId && !realCompany) return { error: 'Please choose your company again.' }
+  if (realCompany && !realCompany.codeOk) return { error: 'Please enter your company code again.' }
   const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice })
   if ('error' in delivery) return { error: delivery.error }
   const dateProblem = checkPreferredDate(preferredDateInput, deliverySetup.dateRules)
@@ -159,7 +168,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // A company with no access code was only picked from the public list, so its negotiated prices
   // were never shown (T-12). Charging a total the customer did not see is the same chargeback
   // risk bookings already refuse (§7.4): take it as a reservation instead.
-  const pricesShown = !(pricing.negotiatedTotal > 0 && !realCompany?.accessCode)
+  // Counted by line, not by sum: a negotiated price of 0 ₾ was still never shown.
+  const pricesShown = !(pricing.lines.some(l => l.negotiated) && !realCompany?.accessCode)
 
   // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
   // and for pickup too. The form shows the same rule first; this is the one that counts.

@@ -97,11 +97,13 @@ export default async function SettingsPage() {
   // the lookup either. getPaymentCredentials returns `secretKeySet`, never the key.
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
   const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
-  const credentials = onlinePaymentOn ? await getPaymentCredentials() : null
-
   // Wine-order rules + delivery zones (T-8). Only for tenants with the module; read here as four
   // named keys + the zone list — never the whole settings map (MaintenanceNotes §9).
-  const wineRules = wineOrdersOn ? await loadWineOrderDelivery(await getTenantId()) : null
+  // Both lookups at once: each is a database round trip, and they do not depend on each other.
+  const [credentials, wineRules] = await Promise.all([
+    onlinePaymentOn ? getPaymentCredentials() : null,
+    wineOrdersOn ? getTenantId().then(loadWineOrderDelivery) : null,
+  ])
 
   return (
     <div className="max-w-2xl">

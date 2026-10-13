@@ -266,7 +266,10 @@ test.describe('Company booking — section × per-company override × hidden-pri
     // dev server — a 300s budget cut off cleanup after every scenario's own
     // assertion had already passed. 480s leaves real headroom rather than
     // trimming the scenario count to fit an arbitrary budget.
-    test.setTimeout(480_000);
+    // Measured again 2026-10-13 with a trace: ~50 admin page loads at 5-10 s each, ~530 s end to
+    // end — every step passing, but past 480 s, so cleanup never ran and Caucasus Vine Travel was
+    // left on "Always require". 720 s keeps the same kind of headroom.
+    test.setTimeout(720_000);
     await loginAsTenantAdmin(page);
 
     const originalSection = await readPaymentSectionToggle(page, 'Company bookings');

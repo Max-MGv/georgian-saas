@@ -104,6 +104,24 @@ test('a company proven by its code sees and is charged its negotiated price (no 
   if (o.payments.length) expect(o.payments[0]!.amount).toBe(negotiated * 2)
 })
 
+test('a request naming a coded company with the wrong code is refused by the server (KnownBugs #78)', async ({ page }) => {
+  test.setTimeout(120_000)
+  const before = await db.wineOrder.count({ where: { companyId: codedId } })
+  await addTwoAndOpenDrawer(page)
+  await page.locator('select').filter({ has: page.locator('option', { hasText: CODED }) }).selectOption({ label: CODED })
+  await page.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(CODE)
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible()
+  await fillRest(page)
+  // What a crafted request looks like: the company named, but not proven. The form only ever
+  // sends the code the guest confirmed; the server must not take the company's word for it.
+  await page.locator('input[name="companyCode"]').evaluate((el: HTMLInputElement) => { el.value = 'ZZWRONG' })
+  await page.getByRole('button', { name: /^(Order & Pay|Place Reservation)$/ }).click()
+  await expect(page.getByText('Please enter your company code again.')).toBeVisible({ timeout: 30_000 })
+  expect(page.url()).not.toMatch(/flitt/)
+  expect(await db.wineOrder.count({ where: { companyId: codedId } }), 'no order was created').toBe(before)
+})
+
 test('a code-less company gets its price applied, but never charged online', async ({ page }) => {
   test.setTimeout(120_000)
   await addTwoAndOpenDrawer(page)

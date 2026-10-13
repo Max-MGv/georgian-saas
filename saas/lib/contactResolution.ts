@@ -395,6 +395,47 @@ async function pickableRoles(
 }
 
 /**
+ * Does `code` still prove this company at submit time? (KnownBugs #78)
+ *
+ * The form checks the code through `resolveCompanyContactsFor` when the guest types it, but the
+ * order itself only carries a `companyId` — and a crafted request can name any company. Without
+ * this re-check, naming a coded company was enough to get its discount and negotiated prices.
+ *
+ * Accepts exactly what the resolver accepts, and nothing more:
+ *   • a company with no access code → true (it can be picked from the public list; the resolver
+ *     does not gate it either, and its negotiated prices are never shown — `pricesShown`);
+ *   • the company's own access code (trimmed, case-insensitive);
+ *   • when `person_codes_enabled` is on, an active person's own code at THIS company, with the
+ *     same role filter as the resolver's step 1 (PER_ORDER, applies to this module).
+ */
+export async function companyCodeMatches(
+  tx: TxClient,
+  tenantId: string,
+  company: { id: string; accessCode: string | null },
+  code: string | null | undefined,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<boolean> {
+  if (!company.accessCode) return true
+  const typed = code?.trim().toUpperCase() ?? ''
+  if (!typed) return false
+  if (company.accessCode.toUpperCase() === typed) return true
+  const codesOn =
+    (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
+      ?.value === 'true'
+  if (!codesOn) return false
+  const person = await tx.companyPerson.findFirst({
+    where: {
+      code: typed,
+      isActive: true,
+      companyId: company.id,
+      role: { isActive: true, scope: 'PER_ORDER', appliesTo: { in: [module, 'BOTH'] } },
+    },
+    select: { id: true },
+  })
+  return person !== null
+}
+
+/**
  * Company-level contact reference data (COMPANY_LEVEL roles — Max's CEO example).
  *
  * Deliberately a separate function from `resolveCompanyContacts`, which only ever returns
