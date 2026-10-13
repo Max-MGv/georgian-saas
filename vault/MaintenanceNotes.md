@@ -1148,3 +1148,55 @@ Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
   *and* Max's go. API tokens are per database (`ticket-token.ts`); `credentials.txt` holds `TICKETS_TOKEN_DEV` (and, later, `_PROD`).
 - **`proxy.ts` exempts `/api/tickets`** from tenant/auth redirects (the API authenticates itself with the bearer token).
 - Phone/desktop: the board uses native drag-and-drop on desktop and a per-card status `<select>` everywhere (no DnD on touch).
+
+---
+
+## 35. Wine orders: one helper per concern, and both write paths must call each one
+
+Added 2026-10-12 ([[Feature 225 - Wine order delivery features]], [[Plan-WineOrderFeatures]]).
+A wine order can be created two ways — **`submitWineOrder`** (public) and **`createWineOrderAdmin`**
+(admin manual entry). Since T-8/T-9/T-12/T-13/T-14 each concern has exactly one helper, and
+**both** paths call it. A third write path (an import, a duplicate-order button, an API) must call
+all of them too, or it will quietly skip a rule:
+
+| Concern | Helper | Notes |
+|---|---|---|
+| Address | `resolveOrderAddress` (`lib/orderAddress.ts`) | Re-reads a saved address by id; never trusts the browser's text. Pickup stores `''`. |
+| Delivery / pickup / fee | `resolveOrderDelivery` (`lib/orderDelivery.ts`) | Fee comes from the zone row. `admin: true` allows pickup when the public form does not offer it. |
+| Minimum order | `minimumOrderError` | Public path only (admin tool is exempt, like bookings). On the wines total after company pricing — never the fee. |
+| Preferred date | `checkPreferredDate` (`lib/wineOrderDate.ts`) | Public path required + lead time + Closed Days; admin optional and unrestricted. |
+| Prices | `priceWineOrder` (`lib/winePricing.ts`) | Negotiated replaces standard, the % only on the rest. `priceSnapshot` = price charged. |
+| Individual | `customerType` normalisation in each action | INDIVIDUAL → no company, LLC, saved address or company contacts. |
+| Winery setup | `loadWineOrderDelivery[Tx]` (`lib/wineOrderDelivery.ts`) | Rules + zones + date rules; the one loader for page, admin, Settings and the actions. |
+
+**Money: never add the fee by hand.** `totalAmount` is wines only; what is owed / charged is
+`wineOrderAmountDue()` (`lib/wineOrderMoney.ts`) — checkout, "Paid" (manual payment), cards,
+Incomplete, super-admin and the receipt all go through it. **Statistics deliberately use
+`totalAmount`** (wine revenue). The balance on a paid order (a fee set later) is
+`wineOrderBalance()` in `lib/payments/manualPayment.ts`; card top-ups go through
+`startWineTopUpCheckout` (`lib/payments/topUpCheckout.ts`, shared with bookings via
+`runTopUpCheckout`).
+
+**Negotiated prices are only sent to a proven company.** `resolveCompanyContactsFor` returns
+`winePrices` only when the company's code was checked, a person's code matched, or the caller is
+`trusted` (admin); otherwise `null` + `hasNegotiatedPrices`. `submitWineOrder` then sets
+`priceShown: false` (no online payment). If you add another way to resolve a company, keep that
+rule — the dropdown lists code-less companies to anyone.
+
+**Forms mirror, never decide.** `WineCatalogueClient` / `NewWineOrderForm` compute totals, fees,
+minimum and date validity with the same pure helpers, purely for display; the server recomputes
+everything. If you change a rule, change the helper — not a copy in a form.
+
+**Tables:** `CompanyAddress`, `DeliveryZone`, `CompanyWinePrice` each have RLS + grant + anon revoke
+**in their migration** and in `scripts/setup-rls.ts` (both lists for `DeliveryZone`, which has its
+own tenantId — §26 H18). `Company.address` is **retired** (no reader or writer since T-13) and is to
+be dropped by a cleanup migration after production has run the backfill.
+
+**Calendars:** the month grid is `components/MonthCalendar.tsx`, shared by the Orders calendar
+(`orders/CalendarView.tsx`, a thin wrapper) and the Wine Orders Calendar tab. §33's mouse-vs-touch
+rule now lives there once.
+
+**Tests:** every spec that submits the public wine form must fill the preferred date — use
+`tests/helpers/wineForm.ts` `fillPreferredWineDate()`. `wine-order-delivery.spec.ts` changes
+tenant-wide rules + zones while it runs (serial, restored in `afterAll`): do not run it in parallel
+with other `/wines` specs.

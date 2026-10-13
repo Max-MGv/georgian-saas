@@ -412,17 +412,81 @@ payment link for an owed fee.
 **Resume point:** done.
 
 ### Chunk 11 — Verify, review, hand to Max
-**Status:** 🚧 next
-- [ ] `tsc`, lint, i18n parity, full `next build`.
-- [ ] Playwright wine specs + new specs; phone 390/320 + desktop screenshots of every changed
-      screen (EN + KA).
-- [ ] Blind context-free sub-agent code review (fenced off from the vault — see memory
-      `feedback_blind_reviews`).
-- [ ] Vault: FeatureLog #225, SessionLog, MaintenanceNotes (new couplings), MyToDo checklist,
-      Feature note `Features/Feature 225 - Wine order delivery features.md`.
-- [ ] Tickets T-13, T-8, T-14, T-12, T-9 → Ready to test with review cards.
-- [ ] Production runbook drafted (migrations order) — **waits for Max's go**.
-**Resume point:** —
+**Status:** 🚧 in progress — paused 2026-10-13 at Max's request (context handoff)
+- [x] `tsc` clean; i18n parity ✅; **full `next build` ✅**.
+- [x] Whole-project lint: **83 errors now = 83 at the starting commit `dbfa5d1`** (measured in a
+      temporary worktree) — this work added none.
+- [x] Vault: Feature note `Features/Feature 225 - Wine order delivery features.md`;
+      MaintenanceNotes **§35**; FeatureLog #225; MyToDo 2026-10-12 checklist; KnownBugs #76–#78;
+      production runbook (above).
+- [x] Full local Playwright suite (tiers 1–4, `--workers=1`, 42.9 min): **51 passed, 5 failed,
+      2 did not run** — failures NOT yet investigated:
+      1. `payment-amount-integrity` "Company booking …" (8.1 min timeout) — the same test timed out
+         earlier today under load (booking flow, 5 scenarios); likely environmental, confirm.
+      2. `payment-label-precedence` "company booking label … override always wins" (3.0 min).
+      3. `wine-catalogue-order` (1.8 min) — **passed in every wine regression run today
+         (16/16, 20/20)**; must be reproduced alone before blaming anything. Check: the payment
+         tests above flip tenant toggles / company overrides and may have left one changed.
+      4. `tickets.spec` "token API …" (30 s) — ticket tool, untouched by this work.
+      5. `onboarding-wizard` (37 s) — documented as needing its reset (SessionLog 2026-10-07).
+      **First:** check Staging Winery's payment toggles + Caucasus Vine Travel / Sighnaghi Wine Bar
+      overrides were restored (an interrupted payment test leaves them changed — KNOWN-ISSUES), then
+      re-run each failing spec alone on a freshly restarted dev server (`rm -rf .next`, warm routes).
+- [ ] **Apply the prepared security fix (KnownBugs #78, wine half)** — designed, NOT applied:
+      1. `lib/contactResolution.ts`: export `companyCodeMatches(tx, tenantId, {id, accessCode}, code)`
+         → true if the company has no `accessCode`; else typed (trim + upper-case) equals the
+         company code, or — only when setting `person_codes_enabled` = 'true' — an active
+         `CompanyPerson` at that company has that code.
+      2. `submitWineOrder.ts`: read `formData.get('companyCode')`; add `id: true` to the company
+         select; after the address check: `if (companyId && !realCompany)` → "Please choose your
+         company again."; `if (realCompany && !companyCodeMatches(...))` → "Please enter your company
+         code again."
+      3. `WineCatalogueClient.tsx`: next to the hidden `companyId` input add
+         `<input type="hidden" name="companyCode" value={hideCompanyDropdown ? directCode : codeInput} />`.
+      4. Also in `submitWineOrder.ts`: `pricesShown` should use
+         `pricing.lines.some(l => l.negotiated)` instead of `pricing.negotiatedTotal > 0` (a
+         negotiated price of 0₾ must still count as "not shown").
+      5. Test: a script for `companyCodeMatches` (no code company / right / wrong / person code with
+         codes on and off) + re-run the wine specs (payment-amount-integrity wine test enters a
+         code; the negotiated spec too).
+      Bookings (`createBooking`) have the same gap — **Max's call**, not part of these tickets.
+- [ ] Ticket review cards: `cd saas && npx tsx scripts/tix.ts review T-n --changed "…" --test "…"`
+      for **T-13, T-8, T-14, T-12, T-9** (steps are in MyToDo 2026-10-12), which moves them to
+      Ready to test.
+- [ ] SessionLog: finish the 2026-10-12 entry with the full-suite and #78 outcome.
+- [ ] Offer Max a blind, context-free sub-agent code review (his standing preference — memory
+      `feedback_blind_reviews`); only run it if he says yes.
+- [ ] Production stays untouched until Max's go (runbook above).
+**Resume point:** start at "First:" under the full-suite bullet, then apply the #78 fix, then the
+review cards. Local helper `saas/scripts/_scratch_shot.ts` (untracked; never commit) logs in with the
+suite's credentials helper and takes screenshots — steps: warm, companies, cards, wcal, drawer, …
+
+---
+
+## Production runbook — DRAFT, needs Max's explicit go for each step (Rule 0)
+
+**What `staging` holds that production does not:** this plan (T-13, T-8, T-14, T-12, T-9), the
+2026-10-08 easy wins (T-5, T-23, T-6 + its `?edit=` fix, T-11, T-21), and the internal ticket tool
+(Feature 222, which has its own runbook in [[Plan-VerifyBeforeProduction]]: migration + the
+`ticket-attachments` bucket **before** the code merge). A `staging → master` merge ships all of it.
+
+**Order (migrations first — all additive, so today's production code keeps working on the new
+schema: `Company.address` still exists, every new column is nullable or has a default):**
+1. Production DB: `prisma migrate deploy` — applies, in order, `20261007143059_add_tickets` (ticket
+   tool) and this plan's six: `20261012121359_company_addresses` (also **backfills**
+   `CompanyAddress` from `Company.address`), `…141158_delivery_zones`,
+   `…144005_order_event_delivery_fee_set`, `…155548_wine_order_preferred_date`,
+   `…162751_company_wine_prices`, `…165501_wine_order_customer_type`.
+2. Check on production: the 4 new tables refuse the anon key (401); `CompanyAddress` row count =
+   production companies with an address; `select count(*) from "WineOrder" where "customerType" <> 'COMPANY'` = 0.
+3. Ticket tool's bucket step (its own runbook).
+4. Merge `staging → master`, push; wait for the Vercel deploy.
+5. Live check on nikalasmarani.vineworks.ge: `/wines` renders, a reservation order with a preferred
+   date goes through, Wine Orders shows it; Companies → Edit shows Addresses + Wine prices;
+   Settings shows the new panel (nothing configured → form as before).
+6. Later, separately: a cleanup migration dropping `Company.address` (no code reads it).
+
+**Not on production until then. Nothing in this list has been run.**
 
 ---
 

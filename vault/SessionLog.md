@@ -8,15 +8,19 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-12 — Wine order features: plan + T-13 (company addresses) built on `staging` — NOT on production
+## 2026-10-12/13 — Wine order features T-13, T-8, T-14, T-12, T-9 built on `staging` (Chunks 1–10) — NOT on production
 
-Max moved four wine-order tickets to Backlog (T-8, T-12, T-13, T-14), answered my review questions, then asked for chunks + start on the clear ones. **Plan:** [[Plan-WineOrderFeatures]] (Chunks 1–11, resume points). T-8, T-13, T-14 → In progress (decisions recorded as ticket comments); T-12 (price storage approach — I recommend "exceptions only") and T-9 (include? same rules for individuals?) got question comments and wait for Max. FeatureLog #225.
-- **Chunk 1** `7dbd9d2` — `CompanyAddress` table + `WineOrder.companyAddressId/addressLabel`; migration applied to the **dev DB only**, backfilled 18/18; RLS + anon revoke inside the migration; `test-company-addresses-rls.ts` 13/13; anon REST 401.
-- **Chunk 2** `ed3829f` — Addresses list in the Companies edit panel; `updateCompany` stops writing `Company.address` (column kept until production backfill); demo seed gives Restaurant Kakhuri two branches.
-- **Chunk 3** `0c26ac9` — both wine forms pick a saved address; server re-reads it (`lib/orderAddress.ts`, `test-order-address.ts` 8/8); new spec `wine-order-company-address.spec.ts` passes; phone 390/320 checked.
-- **Found + fixed** `926b572` — T-6 left `?edit=` in Next's router (replaceState with Next's own state) so it came back after the next save; `companies-crud.spec` updated for T-6 (it had not been run since) — 2 clean passes.
-- **Dev data findings, left as found:** `min_guests_tasting_lunch` = 2 on Staging Winery (6 specs hard-code "minimum 4"; only payment-amount-integrity loosened); "Rkatsiteli" still inactive (blocks wine-catalogue-order and payment-amount-integrity's wine test).
-**Production untouched.** Next: Chunk 4 (delivery zones + Settings).
+Max moved T-8/T-12/T-13/T-14 to Backlog, answered review questions twice (decisions in [[Plan-WineOrderFeatures]] + ticket comments), unblocked T-12 ("exceptions only") and T-9 (include; same rules for individuals), approved the money rule (`totalAmount` = wines only, fee separate), and said "proceed". All five tickets → In progress. FeatureLog #225, [[Feature 225 - Wine order delivery features]], MaintenanceNotes §35.
+- **T-13** (`7dbd9d2`, `ed3829f`, `0c26ac9`) — `CompanyAddress` (backfilled 18/18 dev companies), Addresses list on Companies, address picker on both wine forms.
+- **T-8** (`55ba44b`, `c361201`, `b9bf820`, `e3e8057`) — zones/minimum/pickup Settings panel; Delivery/Pickup + area + fee + minimum on both forms; charge = wines + fee; admin set fee later, owed balance, cash/bank/card-link (QR) collection; Delivery/Pickup filter.
+- **T-14** (`6095d7b`, `20a7c48`) — required *preferred* date (lead time + Closed Days), admin change, Wine Orders Calendar tab (grid shared with Orders via `components/MonthCalendar.tsx`).
+- **T-12** (`c99621a`) — `CompanyWinePrice` (exceptions only), one pricing function, prices shown only to a proven company; **my call:** a code-less company with negotiated prices is charged them but as a reservation (never online) — flagged to Max. Exporter flag + filter.
+- **T-9** (`32b7c33`) — Company/Individual switch (default Company — flagged to Max).
+- **Found + fixed:** T-6 `?edit=` returning to the URL (KnownBugs #76, `926b572`); card date box covering Save (#77). Six specs that hard-coded "minimum 4" loosened; dev wine "Rkatsiteli" re-activated (Max OK'd); Caucasus Vine Travel override reset to Default after an interrupted test.
+- **Found, NOT fixed yet:** KnownBugs **#78** — write actions trust the `companyId` sent, so a crafted request gets a coded company's discount/negotiated prices (wine) or price tiers (bookings) without the code. Wine fix designed (plan Chunk 11), not applied; bookings = Max's call.
+- **Verification so far:** ~111 script checks across 10 new scripts, 6 new specs, wine regression 20/20, production build OK, whole-project lint unchanged (83 = baseline). Full suite 51/58 with **5 failures not yet investigated** (list in plan Chunk 11).
+- 6 migrations applied to the **dev DB only**. **Production untouched** — runbook drafted in the plan, needs Max's go.
+**Next session:** plan Chunk 11 resume point (investigate 5 failures → apply #78 wine fix → review cards → finish logs).
 
 ---
 

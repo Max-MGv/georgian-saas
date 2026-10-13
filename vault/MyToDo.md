@@ -8,6 +8,31 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🍷 2026-10-12 — Five wine-order tickets ready to test on STAGING (T-13, T-8, T-14, T-12, T-9). Not on production.
+
+All on **staging.vineworks.ge** (admin + `/wines`). Each ticket has a review card under Tickets → "Ready to test".
+**Setup first (2 min):** Admin → Settings → *Wine Orders — Delivery & Minimum*: add a zone (e.g. "Tbilisi" 15₾),
+turn on "Offer pickup", set a minimum (e.g. 3 bottles), Save. Companies → edit a wine company → *Addresses*: give it
+two named addresses; set one address's zone; in *Wine prices* type a lower price for one wine; tick *Exporter*.
+
+1. **T-13 addresses** — `/wines` → add wine → Checkout → choose that company (+ its code): you must pick one of the two
+   addresses ("Other address…" also there). Admin → Wine Orders: the card shows "**name** — address".
+2. **T-8 delivery** — the form shows Delivery / Pickup and the area list with fees; the total adds the fee; below the
+   minimum the button is greyed. Try "Other — we will contact you". In admin, that order shows "Delivery fee to set" →
+   **Set fee**. On a paid one it then shows "Owes 15₾" → **Record payment** or **Card payment link** (QR).
+   Filter pills **Delivery / Pickup** on Wine Orders.
+3. **T-14 date** — the form requires a *Preferred delivery date* ("we will confirm the exact day"); a Closed Day is
+   refused. Admin card: "Preferred: …" → Change. Wine Orders → **Calendar** tab; undated orders listed underneath.
+4. **T-12 prices** — with the company **code**, `/wines` shows its negotiated price and the total uses it (no % off it).
+   A company **without a code** that has negotiated prices: the form says the agreed prices will apply, and it is a
+   reservation (no card payment) — *I decided this; tell me if you want it different.* "Exporter" mark + filter.
+5. **T-9 individuals** — the form starts on **Company** (as today); tap **Individual**: only name / phone / address
+   remain. Admin card shows "Individual". *Tell me if Individual should be the default instead.*
+**Please check:** the Georgian wording (all new Georgian text is mine); a real iPhone. Then Verified / Send back on
+each card. Shipping to production needs your separate go — runbook in `Plan-WineOrderFeatures.md`.
+
+---
+
 ## ✅ 2026-10-08 — Five tickets ready to test on STAGING (Tickets → "Ready to test"). Not on production.
 
 Each ticket has a review card with exact steps. Quick version, on **staging.vineworks.ge** (phone where it says so):
