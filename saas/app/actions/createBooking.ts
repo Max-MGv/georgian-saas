@@ -25,12 +25,19 @@ import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
+import { companyCodeMatches } from '@/lib/contactResolution'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   companyId?: string
+  /**
+   * The access code the guest confirmed for `companyId`. Checked again on the server
+   * (`companyCodeMatches`, KnownBugs #78): naming a company is not proving it, and the
+   * company's price tiers are only for someone who knows its code.
+   */
+  companyCode?: string
   /**
    * One entry per contact role, built by `buildBookingPayload()` in BookingForm.tsx —
    * the only place a booking field may be added (MaintenanceNotes #1 / hurdle H3).
@@ -310,9 +317,19 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         : 0
 
     if (data.bookingType === 'COMPANY' && data.companyId) {
-      const company = await withTenantDb(tenantId, tx =>
-        tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
-      )
+      // The browser names the company; the server decides whether this guest may book as it.
+      // Without the code check a crafted request got a coded company's price tiers (KnownBugs #78).
+      const checked = await withTenantDb(tenantId, async tx => {
+        const c = await tx.company.findFirst({
+          where: { id: data.companyId, tenantId, isIndividual: false },
+          include: { prices: true },
+        })
+        return c && { company: c, codeOk: await companyCodeMatches(tx, tenantId, c, data.companyCode, 'BOOKING') }
+      })
+      if (!checked || !checked.codeOk) {
+        return { success: false, error: await mc('onsite_access_code_error', 'form.access_code_error') }
+      }
+      const company = checked.company
 
       if (company?.prices.length) {
         // One lookup on the party size, and one call: priceBooking already

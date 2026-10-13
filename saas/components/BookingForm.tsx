@@ -531,6 +531,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
+      // The code the guest confirmed for that company — the server checks it again (KnownBugs #78).
+      companyCode: bookingType === 'COMPANY' && companyId && companyId !== '__new__'
+        ? (hideCompanyDropdown ? directCode : codeInput) || undefined
+        : undefined,
       // Replaces `guideId` (Plan-ContactRoles Chunk 7). That column was write-only —
       // written on every company booking and read by nothing, so the attribution the
       // guides feature existed for was never actually delivered anywhere (finding F1).
