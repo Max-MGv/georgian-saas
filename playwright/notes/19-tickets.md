@@ -19,6 +19,12 @@ tags: [playwright, test, tier3, tickets]
 
 Every test creates `ZZ…`-prefixed tickets and closes them at the end; nothing else is touched.
 
+## Since Tickets v2 Tier 1 (2026-10-14)
+
+The ticket opens in a **side panel** (`[data-ticket-panel]`, URL `?t=N`), not a page. Status is a menu button named "Status"
+(`menuitemradio` options), closing is one tap on a reason button, Verify is "Works — Done". The panel shows the board's title
+instantly while loading: wait for the **Status** button (only in the loaded ticket), not the heading. Still 4/4 after the change.
+
 ## Selector and timing traps (each cost a failed run once)
 
 - `getByText('Verified')` also matches the **button** — it raced the state change. Wait on the outcome text (`Ready to test → Done`) instead.

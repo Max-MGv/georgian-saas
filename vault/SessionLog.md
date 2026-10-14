@@ -8,6 +8,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-14 (late) — Tickets v2 analysis (T-84) — no code changed
+
+Max: enhance and fine-tune the ticket tool; analyse first, agree, then build. Read all v1 code + real usage on the dev board
+(83 tickets: 13 waiting in Ready to test, 0 really verified, Max writes ~no comments, decisions/questions buried in Claude's
+comments, 28 empty descriptions, MyToDo.md duplicating test steps). Findings + 3-tier proposal + Decision 0 (one board on
+production vs two) in [[Plan-TicketsV2]]. Max: keep two boards (staging = only his own, valid tickets), forward production
+reports to staging with their own prefix; all three tiers; client replies on the page only, email only on a button.
+I recommended P-numbers forwarded one way (production → staging) — awaiting his OK.
+- **Tier 1 built on `staging`** (FeatureLog #229): side panel instead of pages, image viewer + paste/drop, URL filters + one-tap
+  views, icons, de-duplication, quieter timeline, old inbox deleted. Verified: 17 + 11 scripted checks (untracked
+  `saas/scripts/_qa/_tickets_flow*.ts`), `tickets.spec.ts` 4/4 (updated for the panel), desktop + phone screenshots, tsc + lint.
+  Test tickets T-85/T-86/T-87 closed. NOT on production.
+**Next:** Max tries Tier 1 on staging; answers Decision 0 (revised) + the MyToDo question; then Tier 2.
+
+---
+
 ## 2026-10-14 (evening) — QA + stress test of the wine order features, then every finding fixed (T-83) — NOT on production
 
 Max: "stress test it and QA test it to make sure it is ready for production", then "apply any fixes to bugs you

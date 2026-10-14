@@ -11,18 +11,16 @@
  */
 
 import { headers } from 'next/headers'
-import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
-import { requireSuperAdmin } from '@/lib/requireSuperAdmin'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
 import type { BugReportStatus } from '@prisma/client'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
-import { createTicket, changeStatus, TicketError } from '@/lib/ticketService'
+import { createTicket } from '@/lib/ticketService'
 import {
-  ALLOWED_IMAGE_TYPES, TENANT_STATUS_FOR, TICKET_STATUS_FOR_REPORT, deriveTitle, environmentFromHost, escapeHtml, safeHttpUrl,
+  ALLOWED_IMAGE_TYPES, deriveTitle, environmentFromHost, escapeHtml, safeHttpUrl,
   sniffImageType, ticketRef,
 } from '@/lib/tickets'
 
@@ -32,7 +30,6 @@ const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024 // 4MB — matches widget's client-
 
 const REPORT_TYPES = ['BUG', 'FEATURE'] as const
 const SURFACES = ['PUBLIC_SITE', 'ADMIN', 'SUPER_ADMIN'] as const
-const STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'WONT_FIX'] as const
 
 type ReportType = (typeof REPORT_TYPES)[number]
 type Surface = (typeof SURFACES)[number]
@@ -265,132 +262,6 @@ async function sendBugReportNotification(args: {
     subject: `[${env}] [${typeLabel}] ${ticketRef(args.ticketNumber)} ${args.ticketTitle} — ${tenantLabel}`,
     html,
   })
-}
-
-// ── Phase 5 — Super-admin inbox ─────────────────────────────────────────
-// Unlike submitBugReport above (deliberately open), everything below is
-// inbox-only and MUST require super_admin. BugReport has no tenant RLS by
-// design (see Phase 1 result + RLS-Architecture.md), so a plain db.bugReport
-// call here is correct, not a gap — but that's exactly why the auth check
-// below is the only thing gating cross-tenant read/write access to it.
-
-export type BugReportListItem = {
-  id: string
-  type: ReportType
-  status: BugReportStatus
-  surface: Surface
-  comment: string
-  createdAt: string
-  tenantId: string | null
-  tenantName: string | null
-  submitterEmail: string | null
-}
-
-export async function getBugReports(): Promise<BugReportListItem[]> {
-  await requireSuperAdmin()
-
-  const [reports, tenants] = await Promise.all([
-    db.bugReport.findMany({ orderBy: { createdAt: 'desc' } }),
-    db.tenant.findMany({ select: { id: true, name: true, displayName: true } }),
-  ])
-  const tenantMap = new Map(tenants.map(t => [t.id, t.displayName ?? t.name]))
-
-  return reports.map(r => ({
-    id: r.id,
-    type: r.type,
-    status: r.status,
-    surface: r.surface,
-    comment: r.comment,
-    createdAt: r.createdAt.toISOString(),
-    tenantId: r.tenantId,
-    tenantName: r.tenantId ? (tenantMap.get(r.tenantId) ?? 'Unknown tenant') : null,
-    submitterEmail: r.submitterEmail,
-  }))
-}
-
-export type BugReportDetail = {
-  id: string
-  type: ReportType
-  status: BugReportStatus
-  surface: Surface
-  comment: string
-  screenshotSignedUrl: string | null
-  breadcrumbs: { type: 'click' | 'navigation'; target: string; path: string; timestamp: number }[]
-  pageUrl: string
-  userAgent: string | null
-  tenantId: string | null
-  tenantName: string | null
-  submitterEmail: string | null
-  submitterUserId: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export async function getBugReport(id: string): Promise<BugReportDetail | null> {
-  await requireSuperAdmin()
-
-  const report = await db.bugReport.findUnique({ where: { id } })
-  if (!report) return null
-
-  const tenant = report.tenantId
-    ? await db.tenant.findUnique({ where: { id: report.tenantId }, select: { displayName: true, name: true } })
-    : null
-
-  let screenshotSignedUrl: string | null = null
-  if (report.screenshotUrl) {
-    const supabase = createServiceClient()
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(report.screenshotUrl, 60 * 60) // 1 hour — fresh page load each time
-    if (!error) screenshotSignedUrl = data.signedUrl
-    else console.error('[getBugReport] failed to sign screenshot URL', error)
-  }
-
-  const breadcrumbs = Array.isArray(report.breadcrumbs)
-    ? (report.breadcrumbs as BugReportDetail['breadcrumbs'])
-    : []
-
-  return {
-    id: report.id,
-    type: report.type,
-    status: report.status,
-    surface: report.surface,
-    comment: report.comment,
-    screenshotSignedUrl,
-    breadcrumbs,
-    pageUrl: report.pageUrl,
-    userAgent: report.userAgent,
-    tenantId: report.tenantId,
-    tenantName: tenant ? (tenant.displayName ?? tenant.name) : null,
-    submitterEmail: report.submitterEmail,
-    submitterUserId: report.submitterUserId,
-    createdAt: report.createdAt.toISOString(),
-    updatedAt: report.updatedAt.toISOString(),
-  }
-}
-
-export async function updateBugReportStatus(id: string, status: BugReportStatus) {
-  await requireSuperAdmin()
-  if (!(STATUSES as readonly string[]).includes(status)) {
-    throw new Error('Invalid status.')
-  }
-  const report = await db.bugReport.findUnique({ where: { id }, select: { ticketId: true, ticket: { select: { status: true } } } })
-  if (report?.ticketId) {
-    // The ticket is authoritative; moving it also updates every linked report's tenant-visible status.
-    // The old four-value dropdown cannot express the finer ticket states, so it must not drag a ticket
-    // backwards (e.g. "New" must not pull a Ready-to-test ticket back to Inbox): only act when the
-    // tenant-visible meaning actually changes.
-    const current = report.ticket ? TENANT_STATUS_FOR[report.ticket.status] : null
-    if (current !== status) {
-      await changeStatus(report.ticketId, TICKET_STATUS_FOR_REPORT[status], 'max', {
-        closeReason: status === 'WONT_FIX' ? 'WONT_FIX' : undefined,
-      }).catch(e => { if (e instanceof TicketError) throw new Error(e.message); throw e })
-    }
-  } else {
-    await db.bugReport.update({ where: { id }, data: { status } })
-  }
-  revalidatePath('/super-admin/bug-reports')
-  revalidatePath(`/super-admin/bug-reports/${id}`)
 }
 
 // ── Phase 6 — Tenant admin "my reports" status view ─────────────────────

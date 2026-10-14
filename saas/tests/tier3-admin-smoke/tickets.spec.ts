@@ -21,11 +21,16 @@ async function loginSuperAdmin(page: Page) {
   await page.waitForURL(u => !u.pathname.includes('/login'), { timeout: 60_000 });
 }
 
+// The ticket opens in a side panel over the board (Plan-TicketsV2); every ticket action happens inside it.
+const panelOf = (page: Page) => page.locator('[data-ticket-panel]');
+
 async function closeTicketOnPage(page: Page) {
-  await page.getByLabel('Status').selectOption('CLOSED');
-  await expect(page.getByText('Close this ticket')).toBeVisible();
-  await page.getByRole('button', { name: 'Close ticket' }).click();
-  await expect(page.getByText(/Closed · /).first()).toBeVisible({ timeout: 20_000 });
+  const panel = panelOf(page);
+  await panel.getByRole('button', { name: 'Status' }).click();
+  await page.getByRole('menuitemradio', { name: 'Closed' }).click();
+  await expect(page.getByText('Close this ticket — why?')).toBeVisible();
+  await page.getByRole('button', { name: /Obsolete/ }).click();
+  await expect(panel.getByRole('button', { name: 'Status' })).toContainText('Closed · Obsolete', { timeout: 20_000 });
 }
 
 test.describe('Internal tickets (super-admin)', () => {
@@ -95,9 +100,11 @@ test.describe('Internal tickets (super-admin)', () => {
     const card = page.locator('a', { hasText: TITLE }).first();
     await expect(card).toBeVisible({ timeout: 20_000 });
     await card.click();
-    // Wait for the navigation, and match the label exactly: the board's "New ticket title" box also contains the word Title.
-    await page.waitForURL(/\/super-admin\/tickets\/\d+$/, { timeout: 60_000 });
-    await expect(page.getByLabel('Title', { exact: true })).toHaveValue(TITLE, { timeout: 30_000 });
+    // Opens in the side panel (?t=N), not a new page; wait for the full ticket, not the instant title.
+    await page.waitForURL(/\/super-admin\/tickets\?.*t=\d+/, { timeout: 60_000 });
+    const panel = panelOf(page);
+    await expect(panel.getByRole('heading', { name: TITLE })).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByRole('button', { name: 'Status' })).toBeVisible({ timeout: 30_000 });
 
     // Review card: both "what changed" and "how to test" are required.
     await page.getByRole('button', { name: /Mark ready to test/ }).click();
@@ -113,16 +120,17 @@ test.describe('Internal tickets (super-admin)', () => {
     await expect(page.locator('[role="alert"]', { hasText: 'what is still wrong' })).toBeVisible({ timeout: 20_000 });
     await page.getByLabel('Review note').fill('Still wrong - automated test.');
     await page.getByRole('button', { name: /send back/ }).click();
-    await expect(page.getByText('Sent back').first()).toBeVisible({ timeout: 20_000 });
+    await expect(panel.getByText('sent it back').first()).toBeVisible({ timeout: 20_000 });
 
     // Back to review, then verify -> Done.
     await page.getByRole('button', { name: /Mark ready to test/ }).click();
     await page.getByLabel('What changed').fill('Second pass.');
     await page.getByLabel('How to test').fill('Second pass.');
     await page.getByRole('button', { name: 'Move to Ready to test' }).click();
-    await page.getByRole('button', { name: /Verified/ }).click();
-    // Not getByText('Verified'): that also matches the "Verified - mark Done" button, which exists before the action has finished.
-    await expect(page.getByText('Ready to test → Done')).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: /Works — Done/ }).click();
+    // Wait on the outcome (the status control), not on the button text, which exists before the action has finished.
+    await expect(panel.getByRole('button', { name: 'Status' })).toContainText('Done', { timeout: 30_000 });
+    await expect(panel.getByText('verified it works')).toBeVisible();
 
     // Closing asks for a reason (a Done ticket can still be closed out).
     await closeTicketOnPage(page);
@@ -146,7 +154,8 @@ test.describe('Internal tickets (super-admin)', () => {
     const card = admin.locator('a', { hasText: `ZZ Tickets E2E widget ${STAMP}` }).first();
     await expect(card).toBeVisible({ timeout: 30_000 });
     await card.click();
-    await expect(admin.getByText('Widget', { exact: true }).first()).toBeVisible();
+    await expect(panelOf(admin).getByRole('img', { name: /^Widget/ }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(panelOf(admin).getByRole('button', { name: 'Status' })).toBeVisible({ timeout: 30_000 });
     await closeTicketOnPage(admin);
     await adminCtx.close();
   });

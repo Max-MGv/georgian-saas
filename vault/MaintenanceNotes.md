@@ -1147,7 +1147,15 @@ Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
 - **Two boards, two databases.** Staging + localhost share the dev DB; production is separate. `tix` defaults to staging; `--prod` writes need `--yes-prod`
   *and* Max's go. API tokens are per database (`ticket-token.ts`); `credentials.txt` holds `TICKETS_TOKEN_DEV` (and, later, `_PROD`).
 - **`proxy.ts` exempts `/api/tickets`** from tenant/auth redirects (the API authenticates itself with the bearer token).
-- Phone/desktop: the board uses native drag-and-drop on desktop and a per-card status `<select>` everywhere (no DnD on touch).
+- Phone/desktop: the board uses native drag-and-drop on desktop and a per-card ⋯ "Move" menu everywhere (no DnD on touch).
+- **Since Tickets v2 Tier 1 (2026-10-14, [[Plan-TicketsV2]]):** a ticket opens in a **side panel** on the board (`?t=12`), not a page.
+  `/super-admin/tickets/[number]` and `/super-admin/bug-reports/[id]` only **redirect** there — keep them: notification emails, commits and bookmarks
+  link to them. All board filters live in the URL (`f`, `q`, `type`, `priority`, `area`, `source`, `tenant`, `status`, `v`, `group`, `sort`, `closed`),
+  written with `window.history.replaceState/pushState` (no server round trip). The panel is `z-index: 9000` (above the bug widget at 8900); its
+  image viewer, menus and close dialog sit above it (9100–9300) — keep that order. Ticket text renders through `tickets/Markdown.tsx`, which builds
+  React elements only (no HTML strings) because widget text is untrusted. Files: `TicketsClient.tsx` (board, list, panel, quick add),
+  `TicketDetail.tsx` (one ticket), `ui.tsx` (icons, Picker menu, close dialog), `Lightbox.tsx`, `Markdown.tsx`. The old inbox
+  (`BugReportsClient`, `getBugReports/getBugReport/updateBugReportStatus`) is deleted.
 
 ---
 

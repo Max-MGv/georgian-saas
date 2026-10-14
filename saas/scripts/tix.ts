@@ -93,7 +93,7 @@ async function main() {
       for (const a of d.attachments) console.log(`image: ${a.fileName} ${a.signedUrl ?? '(unavailable)'}`)
       console.log('\n-- timeline --')
       for (const e of d.events) {
-        console.log(`${String(e.createdAt).slice(0, 16)} ${e.kind} (${safe(e.actor)})${e.fromValue ? ` ${e.fromValue} -> ${e.toValue}` : ''} ${safe(e.body)}`)
+        console.log(`${String(e.createdAt).slice(0, 16)} ${e.kind} (${safe(e.actor)})${e.fromValue ? ` ${e.fromValue} -> ${e.toValue}` : ''} ${e.meta ? '' : safe(e.body)}`)
         if (e.meta) console.log(`   changed: ${safe(e.meta.changed)}\n   how to test: ${safe(e.meta.howToTest)}${e.meta.leftOver ? `\n   left over: ${safe(e.meta.leftOver)}` : ''}`)
       }
       break
