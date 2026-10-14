@@ -206,7 +206,6 @@ const en: Translations = {
   'wine.date_too_soon': 'That day is too soon — please choose a later one.',
   'wine.date_invalid': 'Please enter a valid date (DD/MM/YYYY).',
   // T-12 — negotiated prices that are not shown without the company code
-  'wine.prices_withheld': 'Your company’s agreed prices will be applied — we will confirm the total with you.',
   // T-9 — ordering as a company or as a private person
   'wine.type_label': 'Ordering as',
   'wine.type_company': 'Company',
@@ -452,7 +451,6 @@ const ka: Translations = {
   'wine.date_closed': 'ამ დღეს დაკეტილი ვართ — გთხოვთ, აირჩიოთ სხვა.',
   'wine.date_too_soon': 'ეს დღე ძალიან ახლოა — გთხოვთ, აირჩიოთ უფრო გვიანი.',
   'wine.date_invalid': 'გთხოვთ, შეიყვანოთ სწორი თარიღი (DD/MM/YYYY).',
-  'wine.prices_withheld': 'გამოყენებული იქნება თქვენი კომპანიის შეთანხმებული ფასები — ჯამს თქვენთან დავაზუსტებთ.',
   'wine.type_label': 'შეკვეთა როგორც',
   'wine.type_company': 'კომპანია',
   'wine.type_individual': 'ინდივიდუალური',

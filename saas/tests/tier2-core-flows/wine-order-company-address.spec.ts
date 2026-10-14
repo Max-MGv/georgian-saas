@@ -13,14 +13,15 @@ const COMPANY = `ZZ Address Test ${Date.now()}`
 
 let companyId = ''
 let firstId = ''
+const CODE = `ZZADDR${String(Date.now()).slice(-5)}`
 let secondId = ''
 
 test.beforeAll(async () => {
-  // Test fixture, written directly: no access code and no people, so selecting it opens no
-  // popup — this spec is about the address picker only.
+  // Test fixture, written directly: no people, so the code is the only step before the address
+  // picker. It needs a code: a company without one is never listed (Max, 2026-10-14).
   const company = await db.company.create({
     data: {
-      name: COMPANY, tenantId: TENANT, isBookingCompany: false, isWineOrderCompany: true,
+      name: COMPANY, tenantId: TENANT, isBookingCompany: false, isWineOrderCompany: true, accessCode: CODE,
       addresses: {
         create: [
           { label: 'ZZ Vake', address: 'ZZ Chavchavadze Ave 1', workingHours: '10-22', sortOrder: 0 },
@@ -52,6 +53,8 @@ test('picking the second saved address files the order against it', async ({ pag
   await page.getByRole('button', { name: /^(Checkout|Place Reservation) →$/ }).click()
 
   await page.locator('select').filter({ has: page.locator('option', { hasText: COMPANY }) }).selectOption({ label: COMPANY })
+  await page.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(CODE)
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
 
   // Two saved addresses → a required picker, nothing chosen yet, typed boxes hidden.
   const picker = page.getByRole('combobox', { name: 'Choose a delivery address' })

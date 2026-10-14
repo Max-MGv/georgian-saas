@@ -5,7 +5,7 @@ import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri }
 import { submitWineOrder } from '@/app/actions/submitWineOrder'
 import { useContactSelection } from '@/lib/useContactSelection'
 import ContactPickerPopupView from '@/components/ContactPickerPopupView'
-import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, ResolvedAddress, ResolvedCompany } from '@/lib/contactResolution'
 import { formatAddressOption } from '@/lib/orderAddress'
 import { meetsMinimum, zoneDisplayName, type WineOrderRules } from '@/lib/wineOrderRules'
 import { priceWineOrder } from '@/lib/winePricing'
@@ -60,23 +60,9 @@ function wineMeta(wine: DbWine, typeLabel: Record<WineTypeValue, string>, sweetn
 type Company = {
   id: string
   name: string
-  identificationCode: string | null
-  // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows in a
-  // contact_person role (Plan-ContactRoles Chunk 1). People arrive per company through
-  // resolveCompanyContacts(), via useContactSelection() below.
-  // No address either: a company's saved addresses arrive through the same code-gated resolver
-  // (T-13), not on this public prop.
-  /** Whether the company has an access code — never the code itself (KnownBugs #57). */
-  hasAccessCode: boolean
-  wineDiscountPercent: number | null
-  // Per-company payment override (#148). null/undefined = follow the WINE_ORDER
-  // section default; true = always skip; false = always require. Optional
-  // because `findCompanyByCode()`'s result (direct-code entry path) doesn't
-  // select it — harmless, since the payment label always re-resolves the
-  // selected company from the full `companies` prop (which does have it), not
-  // from this synthetic object. Label-only either way — the real gate is
-  // shouldTakePayment(), server-side, in submitWineOrder.ts.
-  skipPayment?: boolean | null
+  // Nothing else, on purpose (Max, 2026-10-14: no code = unknown company). Discount, negotiated
+  // prices, addresses, people and the payment override arrive through the code-gated resolver
+  // (resolveCompanyContacts) — only for a company the customer proved with its code.
 }
 
 const C = {
@@ -174,12 +160,11 @@ export default function WineCatalogueClient({
   const [companyId, setCompanyId] = useState('')
   const [discountPercent, setDiscountPercent] = useState<number | null>(null)
   /**
-   * The chosen company's negotiated prices (T-12), per vintage, tetri — only once the company was
-   * proven by its code (the resolver withholds them otherwise). `pricesWithheld` = the company has
-   * agreed prices we may not show: the form says they will apply and does not offer to charge.
+   * The chosen company's negotiated prices (T-12), per vintage, tetri, and its payment override
+   * (#148, label only) — both from the resolver, so only once the customer proved the company.
    */
   const [negotiatedPrices, setNegotiatedPrices] = useState<Record<string, number>>({})
-  const [pricesWithheld, setPricesWithheld] = useState(false)
+  const [provenSkipPayment, setProvenSkipPayment] = useState<boolean | null>(null)
   const priceOf = (vintageId: string, standard: number) => negotiatedPrices[vintageId] ?? standard
 
   // Access code popup
@@ -353,9 +338,9 @@ export default function WineCatalogueClient({
   }
 
   /** A resolved company's negotiated prices (T-12) — see the state above. */
-  function applyPrices(c: { winePrices: Record<string, number> | null; hasNegotiatedPrices: boolean }) {
-    setNegotiatedPrices(c.winePrices ?? {})
-    setPricesWithheld(c.hasNegotiatedPrices && c.winePrices === null)
+  function applyPrices(c: ResolvedCompany) {
+    setNegotiatedPrices(c.winePrices)
+    setProvenSkipPayment(c.skipPayment)
   }
 
   function clearAddresses() {
@@ -408,31 +393,16 @@ export default function WineCatalogueClient({
     }
     // Addresses are always the current company's, filled only once it resolves.
     clearAddresses()
-    setNegotiatedPrices({}); setPricesWithheld(false)
+    setNegotiatedPrices({}); setProvenSkipPayment(null); setDiscountPercent(null)
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
-    if (!companyId) {
-      setDiscountPercent(null)
-      return
-    }
-    const company = companies.find(c => c.id === companyId)
-    if (!company) return
-    if (company.hasAccessCode) {
-      setCodeInput('')
-      setCodeError('')
-      setShowCodeText(false)
-      setShowCodePopup(true)
-      return
-    }
-    // No code gate — resolve straight away so this company's people can be offered. Before
-    // Chunk 8 this branch copied the company's own contact columns, and those are gone.
-    applyCompanyProfile(company)
-    void resolveContacts({ companyId }).then(result => {
-      // Ignore a late answer for a company the customer has already moved away from.
-      if ('error' in result || prevCompanyIdRef.current !== result.company.id) return
-      applyAddresses(result.company.addresses)
-      applyPrices(result.company)
-    })
+    if (!companyId || !companies.some(c => c.id === companyId)) return
+    // Every listed company is proven by its code first — nothing about it is filled in before
+    // (Max, 2026-10-14). The list only holds companies that have a code to give.
+    setCodeInput('')
+    setCodeError('')
+    setShowCodeText(false)
+    setShowCodePopup(true)
   }, [companyId, hideCompanyDropdown])
 
   async function handleCodeSubmit() {
@@ -486,7 +456,7 @@ export default function WineCatalogueClient({
     setDiscountPercent(null)
     resetContacts()
     clearAddresses()
-    setNegotiatedPrices({}); setPricesWithheld(false)
+    setNegotiatedPrices({}); setProvenSkipPayment(null)
     setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setContactName(''); setContactPhone(''); setContactEmail('')
   }
 
@@ -556,7 +526,7 @@ export default function WineCatalogueClient({
       setBusinessName(''); setLlcName(''); setLlcId(''); setAddress(''); setWorkingHours(''); setContactName(''); setContactPhone('')
       setContactEmail('')
       clearAddresses()
-      setNegotiatedPrices({}); setPricesWithheld(false)
+      setNegotiatedPrices({}); setProvenSkipPayment(null)
       setFulfilment('DELIVERY'); setZoneChoice(''); setPreferredDate(''); setCustomerType('COMPANY')
     })
   }
@@ -623,12 +593,9 @@ export default function WineCatalogueClient({
     // "Other" area + the winery takes those as reservations: no online payment (T-8).
     : feeUnknown && delivery?.rules.unknownZonePayment === 'reservation'
       ? false
-    // T-12 — a total built on prices the customer was not shown is never charged online.
-    : pricesWithheld
-      ? false
-      : selectedCompany?.skipPayment === true
+    : provenSkipPayment === true
         ? false
-        : selectedCompany?.skipPayment === false
+        : provenSkipPayment === false
           ? true
           : onlinePaymentEnabled
   const selectedWines = WINES.filter(w => (quantities[w.vintageId] ?? 0) > 0)
@@ -977,12 +944,6 @@ export default function WineCatalogueClient({
                   {minRule.type !== 'off' && (
                     <p className="text-xs mt-2" style={{ color: belowMinimum ? 'var(--color-brand)' : C.faint, fontWeight: belowMinimum ? 600 : 400 }}>
                       {minimumText}
-                    </p>
-                  )}
-                  {/* T-12 — agreed prices we may not show (company proven by name only). */}
-                  {pricesWithheld && (
-                    <p className="text-xs mt-2 font-medium" style={{ color: 'var(--color-brand)' }}>
-                      {t(locale, 'wine.prices_withheld')}
                     </p>
                   )}
                   {/* Not for a private person (T-9): no company, no company discount. */}

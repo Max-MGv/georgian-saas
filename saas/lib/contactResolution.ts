@@ -69,14 +69,29 @@ export type ResolvedCompany = {
   addresses: ResolvedAddress[]
   wineDiscountPercent: number | null
   /**
-   * Negotiated price per vintage id, tetri (T-12). Only when the company was proven — its access
-   * code, a person's code, or an admin screen — because anyone can pick a company with no code
-   * from the public dropdown (Max, 2026-10-12: shown only after the code). Null otherwise.
+   * Negotiated price per vintage id, tetri (T-12). The resolver only answers for a company that
+   * was proven — its access code, a person's code, or an admin screen — so these are always the
+   * company's own (Max, 2026-10-14: no code = unknown company, nothing is filled in).
    */
-  winePrices: Record<string, number> | null
-  /** True when the company has negotiated prices, even when `winePrices` is withheld — so the
-   *  form can say the agreed prices will be applied (and not offer to charge a total it can't show). */
-  hasNegotiatedPrices: boolean
+  winePrices: Record<string, number>
+  /**
+   * The company's booking price tiers, tetri — BOOKING lookups only, [] otherwise. They used to be
+   * shipped for every company in the public homepage's source; now only to someone with the code.
+   */
+  bookingPrices: ResolvedPriceTier[]
+  /** Per-company payment override (#148) — label only on the form; shouldTakePayment() decides. */
+  skipPayment: boolean | null
+}
+
+export type ResolvedPriceTier = {
+  id: string; minGuests: number; maxGuests: number
+  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
+}
+
+/** A company's booking tiers, as the resolver selects them. */
+const TIER_SELECT = {
+  orderBy: { minGuests: 'asc' as const },
+  select: { id: true, minGuests: true, maxGuests: true, pricePerPerson: true, tastingLunchPricePerPerson: true, registrationPrice: true },
 }
 
 /** Negotiated prices, as the resolver selects them (T-12). */
@@ -106,6 +121,41 @@ export type ResolveContactsResult =
       /** Empty when person codes are ON (deliberate — see below) or when nobody is configured. */
       roleChoices: RoleChoices[]
     }
+
+/**
+ * The companies a public form may list: only those a customer can prove (Max, 2026-10-14 — a
+ * company with no access code is an unknown entity, "fill nothing without an access code").
+ * Provable = it has an access code, or — person codes on — an active person whose own code would
+ * resolve on this kind of order (the resolver's step-1 role filter). Name and id only: everything
+ * else about a company arrives through the resolver, after the code.
+ */
+export async function listableCompaniesFor(
+  tenantId: string,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<{ id: string; name: string }[]> {
+  return withTenantDb(tenantId, async tx => {
+    const codesOn =
+      (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
+        ?.value === 'true'
+    const moduleWhere = module === 'BOOKING' ? { isBookingCompany: true } : { isWineOrderCompany: true }
+    return tx.company.findMany({
+      where: {
+        tenantId, isIndividual: false, ...moduleWhere,
+        OR: [
+          { accessCode: { not: null } },
+          ...(codesOn
+            ? [{ people: { some: {
+                code: { not: null }, isActive: true,
+                role: { isActive: true, scope: 'PER_ORDER' as const, appliesTo: { in: [module, 'BOTH' as const] } },
+              } } }]
+            : []),
+        ],
+      },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    })
+  })
+}
 
 /**
  * The per-order roles a tenant has defined for this kind of order, with no people.
@@ -243,6 +293,8 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
               addresses: ADDRESS_SELECT,
               winePrices: PRICE_SELECT,
               wineDiscountPercent: true,
+              skipPayment: true,
+              prices: TIER_SELECT,
             },
           },
         },
@@ -251,8 +303,8 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         return {
           success: true as const,
           // A person's own code proves the company, so its prices may be shown.
-          company: (({ winePrices, ...c }) => ({
-            ...c, winePrices: priceMap(winePrices), hasNegotiatedPrices: winePrices.length > 0,
+          company: (({ winePrices, prices, ...c }) => ({
+            ...c, winePrices: priceMap(winePrices), bookingPrices: input.module === 'BOOKING' ? prices : [],
           }))(person.company),
           matchType: 'person' as const,
           matchedPerson: {
@@ -281,6 +333,8 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         addresses: ADDRESS_SELECT,
         winePrices: PRICE_SELECT,
         wineDiscountPercent: true,
+        skipPayment: true,
+        prices: TIER_SELECT,
       },
     })
     if (!company) return { error: 'Code not recognised.' }
@@ -316,6 +370,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         : 0
       return { error: peopleWithCodes > 0 ? 'Incorrect code.' : 'No code set.' }
     }
+    // No code = an unknown company (Max, 2026-10-14: "fill nothing without an access code"). A
+    // company with no access code can only be proven by a person's own code (step 1 above); merely
+    // naming it gets nothing — no people, no addresses, no prices. Admin screens pass `trusted`.
+    if (!input.trusted && !company.accessCode) return { error: 'Code required.' }
 
     // ── 3. Who can be picked ─────────────────────────────────────────────────
     // Empty when person codes are on: the guest proves identity instead of choosing it, and
@@ -332,10 +390,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         identificationCode: company.identificationCode,
         addresses: company.addresses,
         wineDiscountPercent: company.wineDiscountPercent,
-        // Proven = an admin (trusted) or a company whose code was just checked above. A company
-        // with no code was only *named*, so its prices stay private (applied server-side anyway).
-        winePrices: input.trusted || company.accessCode ? priceMap(company.winePrices) : null,
-        hasNegotiatedPrices: company.winePrices.length > 0,
+        // Reached only by an admin (trusted) or with the company's code checked above.
+        winePrices: priceMap(company.winePrices),
+        bookingPrices: input.module === 'BOOKING' ? company.prices : [],
+        skipPayment: company.skipPayment,
       },
       matchType: 'company' as const,
       matchedPerson: null,
@@ -441,7 +499,10 @@ export async function companyCodeProof(
   return company.accessCode ? null : 'named'
 }
 
-/** `companyCodeProof` as a yes/no: may this order be placed as this company? */
+/**
+ * `companyCodeProof` as a yes/no: may this order be placed as this company? Only when a code
+ * proved it — a company merely named ('named') is an unknown company (Max, 2026-10-14).
+ */
 export async function companyCodeMatches(
   tx: TxClient,
   tenantId: string,
@@ -449,7 +510,8 @@ export async function companyCodeMatches(
   code: string | null | undefined,
   module: 'BOOKING' | 'WINE_ORDER',
 ): Promise<boolean> {
-  return (await companyCodeProof(tx, tenantId, company, code, module)) !== null
+  const proof = await companyCodeProof(tx, tenantId, company, code, module)
+  return proof === 'company' || proof === 'person'
 }
 
 /**

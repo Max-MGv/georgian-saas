@@ -1,8 +1,8 @@
 // T-12 (vault/Plan-WineOrderFeatures.md Chunk 9): negotiated prices per company.
 // - The admin sets / resets one on Companies → Edit → Wine prices.
 // - A company proven by its access code SEES its price on /wines, and is charged exactly it.
-// - A company with no code is charged its price too, but never online (the customer could not be
-//   shown it) — the order is a reservation, and the form says the agreed prices will apply.
+// - A company with no code is an unknown company (Max, 2026-10-14): not listed, and a request
+//   naming it is refused — its negotiated prices never apply without the code.
 import { test, expect, Page } from '@playwright/test'
 import * as dotenv from 'dotenv'
 import path from 'path'
@@ -21,7 +21,6 @@ const CODE = `ZZNEG${String(RUN).slice(-5)}`
 let codedId = ''
 let openId = ''
 let vintageId = ''
-let standard = 0
 let negotiated = 0
 
 test.beforeAll(async () => {
@@ -31,7 +30,6 @@ test.beforeAll(async () => {
     orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
   })
   vintageId = v.id
-  standard = v.price
   negotiated = Math.max(100, v.price - 500)
   const coded = await db.company.create({ data: { tenantId: TENANT, name: CODED, isBookingCompany: false, isWineOrderCompany: true, accessCode: CODE, wineDiscountPercent: 10 } })
   const open = await db.company.create({ data: { tenantId: TENANT, name: OPEN, isBookingCompany: false, isWineOrderCompany: true,
@@ -163,23 +161,20 @@ test('a fractional bottle count gets an answer, not a crash (blind review 2026-1
   expect(tampered).toBe(true)
 })
 
-test('a code-less company gets its price applied, but never charged online', async ({ page }) => {
+test('a company without a code is not offered, and a request naming it is refused (Max, 2026-10-14)', async ({ page }) => {
   test.setTimeout(120_000)
+  // OPEN has negotiated prices but no access code: an unknown company — "fill nothing without an
+  // access code". It is not in the list at all…
   await addTwoAndOpenDrawer(page)
-  await page.locator('select').filter({ has: page.locator('option', { hasText: OPEN }) }).selectOption({ label: OPEN })
-  await expect(page.getByText('Your company’s agreed prices will be applied — we will confirm the total with you.')).toBeVisible({ timeout: 20_000 })
-  // The page never learned the negotiated amount: it still shows the standard price…
-  await expect(page.getByText(`${(standard * 2) / 100}₾`).first()).toBeVisible()
-  // …and does not offer to charge it.
-  await expect(page.getByRole('button', { name: 'Place Reservation', exact: true })).toBeVisible()
+  await expect(page.locator('option', { hasText: CODED })).toHaveCount(1) // the list itself is there
+  await expect(page.locator('option', { hasText: OPEN })).toHaveCount(0)
+  // …and naming it anyway (a doctored request) gets nothing: no order, no negotiated price.
+  await page.getByPlaceholder('Bar, restaurant, or individual name').fill('ZZ Crafted Open')
   await fillRest(page)
-  await page.getByRole('button', { name: 'Place Reservation', exact: true }).click()
-  await expect(page.getByText(/Order received/i)).toBeVisible({ timeout: 30_000 })
-
-  const o = await db.wineOrder.findFirstOrThrow({ where: { companyId: openId }, include: { wineItems: true, payments: true } })
-  expect(o.wineItems[0]!.priceSnapshot, 'charged the negotiated price').toBe(negotiated)
-  expect(o.totalAmount).toBe(negotiated * 2)
-  expect(o.payments).toHaveLength(0)
+  await page.locator('input[name="companyId"]').evaluate((el: HTMLInputElement, id: string) => { el.value = id }, openId)
+  await page.getByRole('button', { name: /^(Order & Pay|Place Reservation)$/ }).click()
+  await expect(page.getByText('Please enter your company code again.')).toBeVisible({ timeout: 30_000 })
+  expect(await db.wineOrder.count({ where: { companyId: openId } })).toBe(0)
 })
 
 test('exporter flag: set on the company, shown and filterable on Wine Orders', async ({ page }) => {

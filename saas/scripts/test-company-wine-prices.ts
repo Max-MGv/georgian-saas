@@ -56,9 +56,9 @@ async function main() {
 
   // ── The resolver's visibility rule ──
   const viaDropdownNoCode = await resolveCompanyContactsFor(A, { module: 'WINE_ORDER', companyId: made[A]!.open })
-  check('Code-less company named from the dropdown: prices withheld, flag set',
-    !('error' in viaDropdownNoCode) && viaDropdownNoCode.company.winePrices === null && viaDropdownNoCode.company.hasNegotiatedPrices,
-    JSON.stringify(!('error' in viaDropdownNoCode) && viaDropdownNoCode.company))
+  // Max, 2026-10-14: no code = unknown company — merely naming it gets nothing at all.
+  check('Code-less company named from the dropdown: refused, nothing returned (no prices, no people)',
+    'error' in viaDropdownNoCode, JSON.stringify(viaDropdownNoCode))
   const withCode = await resolveCompanyContactsFor(A, { module: 'WINE_ORDER', companyId: made[A]!.coded, code: 'ZZACODE1' })
   check('Company proven by its code: prices shown',
     !('error' in withCode) && withCode.company.winePrices?.[made[A]!.vintage] === 2500)

@@ -25,7 +25,7 @@ import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
-import { companyCodeMatches } from '@/lib/contactResolution'
+import { companyCodeProof } from '@/lib/contactResolution'
 import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
@@ -326,9 +326,11 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           where: { id: data.companyId, tenantId, isIndividual: false },
           include: { prices: true },
         })
-        return c && { company: c, codeOk: await companyCodeMatches(tx, tenantId, c, data.companyCode, 'BOOKING') }
+        return c && { company: c, proof: await companyCodeProof(tx, tenantId, c, data.companyCode, 'BOOKING') }
       })
-      if (!checked || !checked.codeOk) {
+      // Proven by its code or a person's code only. A company merely named — including one with no
+      // access code at all — is an unknown company (Max, 2026-10-14: "otherwise the code loses meaning").
+      if (!checked || !checked.proof || checked.proof === 'named') {
         return { success: false, error: await mc('onsite_access_code_error', 'form.access_code_error') }
       }
       const company = checked.company

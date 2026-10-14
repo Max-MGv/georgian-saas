@@ -13,10 +13,12 @@ const TENANT = process.env.DEFAULT_TENANT_ID!
 const RUN = Date.now()
 const PERSON = `ZZ Individual ${RUN}`
 const COMPANY = `ZZ Individual Co ${RUN}`
+const CODE = `ZZINDV${String(RUN).slice(-5)}`
 let companyId = ''
 
 test.beforeAll(async () => {
-  companyId = (await db.company.create({ data: { tenantId: TENANT, name: COMPANY, isBookingCompany: false, isWineOrderCompany: true } })).id
+  // A code: a company without one is never listed (Max, 2026-10-14).
+  companyId = (await db.company.create({ data: { tenantId: TENANT, name: COMPANY, isBookingCompany: false, isWineOrderCompany: true, accessCode: CODE } })).id
 })
 test.afterAll(async () => {
   await db.wineOrder.deleteMany({ where: { tenantId: TENANT, businessName: PERSON } })
@@ -32,6 +34,9 @@ test('an individual wine order: business fields hidden, stored as INDIVIDUAL, ma
 
   // Company first (the default), pick one, then switch: the company must not ride along.
   await page.locator('select').filter({ has: page.locator('option', { hasText: COMPANY }) }).selectOption({ label: COMPANY })
+  await page.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(CODE)
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible()
   await page.getByRole('radio', { name: 'Individual' }).click()
   await expect(page.getByPlaceholder('Bar, restaurant, or individual name')).toHaveCount(0)
   await expect(page.getByPlaceholder('LLC identification number')).toHaveCount(0)

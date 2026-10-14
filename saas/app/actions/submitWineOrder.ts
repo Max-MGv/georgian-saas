@@ -147,7 +147,9 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // Without this a crafted request could take a coded company's discount and negotiated prices
   // (KnownBugs #78) — the form's code check alone is a gate only the client enforced.
   if (companyId && !realCompany) return { error: 'Please choose your company again.' }
-  if (realCompany && !realCompany.proof) return { error: 'Please enter your company code again.' }
+  // …and only a company proven by its code (or a person's code) counts: one merely picked or named
+  // is an unknown company (Max, 2026-10-14: "fill nothing without an access code").
+  if (realCompany && (!realCompany.proof || realCompany.proof === 'named')) return { error: 'Please enter your company code again.' }
   const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice, addressZoneId: orderAddress.deliveryZoneId })
   if ('error' in delivery) return { error: delivery.error }
   const dateProblem = checkPreferredDate(preferredDateInput, deliverySetup.dateRules)
@@ -177,35 +179,23 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
   const discountPercent = pricing.discountPercent
   const totalAmount = pricing.total
-  // A company that was only picked from the public list (no code proved it) never saw its
-  // negotiated prices — the form's lookup withheld them (T-12). Charging a total the customer did
-  // not see is the same chargeback risk bookings already refuse (§7.4): take it as a reservation.
-  // A person's own code DOES show them, so it counts as shown (blind review, 2026-10-13).
-  // Counted by line, not by sum: a negotiated price of 0 ₾ was still never shown.
-  const pricesShown = !(pricing.lines.some(l => l.negotiated) && realCompany?.proof === 'named')
-
   // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
-  // and for pickup too. The form shows the same rule first; this is the one that counts. When the
-  // negotiated prices were withheld, the form could only check the total it showed (standard
-  // prices less the %), so that is the total the minimum is held to — otherwise the form says
-  // "minimum met" and the server refuses.
+  // and for pickup too. The form shows the same rule first; this is the one that counts.
+  // (Every company here was proven by its code, so the customer saw exactly these prices — the
+  // T-12 "prices withheld → reservation" case for code-less companies no longer exists.)
   const bottleCount = selectedWines.reduce((n, w) => n + w.quantity, 0)
-  const minimumTotal = pricesShown
-    ? totalAmount
-    : priceWineOrder(pricing.lines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity, standardPrice: priceMap[l.vintageId] })), {}, realCompany?.wineDiscountPercent ?? null).total
-  const belowMinimum = minimumOrderError(deliverySetup.rules.minOrder, bottleCount, minimumTotal)
+  const belowMinimum = minimumOrderError(deliverySetup.rules.minOrder, bottleCount, totalAmount)
   if (belowMinimum) return { error: belowMinimum }
 
   // What the customer is charged: wines + delivery fee, added in one place (lib/wineOrderMoney.ts).
   // `totalAmount` itself stays wines-only (Max, 2026-10-12).
   const amountDue = wineOrderAmountDue({ totalAmount, deliveryFee: delivery.deliveryFee })!
 
-  // Normally the customer saw their total; the one exception is negotiated prices withheld from
-  // a code-less company (`pricesShown` above), which blocks payment like a hidden booking price.
+  // The customer always saw this total on the form (prices only ever come after the code).
   const sectionGate = await shouldTakePayment({
     tenantId,
     totalPrice: amountDue,
-    priceShown: pricesShown,
+    priceShown: true,
     section: 'WINE_ORDER',
     companyId: companyId || null,
   })

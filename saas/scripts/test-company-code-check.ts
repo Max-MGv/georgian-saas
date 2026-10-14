@@ -7,7 +7,7 @@
  */
 import { PrismaClient } from '@prisma/client'
 import { withTenantDb } from '../lib/db'
-import { companyCodeMatches, companyCodeProof, resolveCompanyContactsFor } from '../lib/contactResolution'
+import { companyCodeMatches, companyCodeProof, listableCompaniesFor, resolveCompanyContactsFor } from '../lib/contactResolution'
 
 const db = new PrismaClient()
 const T = 'zz-test-company-code'
@@ -80,8 +80,11 @@ async function main() {
     await same('Company-level (CEO) code', coded, 'ZZCEO001', false)
     await same('Inactive person\'s code', coded, 'ZZGONE01', false)
     check('No code at all for a coded company → refused', (await matches(coded, null)) === false && (await matches(coded, '   ')) === false)
-    check('A company with no access code → accepted without one (only named; prices stay hidden)',
-      (await matches(open, null)) === true && (await matches(open, 'ANYTHING')) === true)
+    // Max, 2026-10-14: no code = unknown company — naming it is not enough, on either form.
+    check('A company with no access code, named without a code → refused',
+      (await matches(open, null)) === false && (await matches(open, 'ANYTHING')) === false)
+    check('…and the form\'s lookup refuses it too (nothing filled in)',
+      'error' in await resolveCompanyContactsFor(T, { module: 'WINE_ORDER', companyId: open.id }))
   }
 
   // ── How the company was proven (decides whether its negotiated prices counted as shown) ──
@@ -101,6 +104,27 @@ async function main() {
   check('Coded company, wrong code → null (refused)', (await proof(coded, 'ZZNOPE')) === null)
   await setCodes(false)
   check("Codes off: the code-less company's person code no longer counts → 'named'", (await proof(open, 'ZZOPENP1')) === 'named')
+
+  // ── Which companies a public form may list (Max, 2026-10-14) ──
+  console.log('\n  public company list\n')
+  const listed = async (module: 'BOOKING' | 'WINE_ORDER') => (await listableCompaniesFor(T, module)).map(c => c.name).sort()
+  const bare = await db.company.create({ data: { tenantId: T, name: 'ZZ Bare', isWineOrderCompany: true, isBookingCompany: true } })
+  await setCodes(false)
+  check('Codes off: only companies with an access code are listed (wine)', JSON.stringify(await listed('WINE_ORDER')) === JSON.stringify(['ZZ Coded', 'ZZ Other']),
+    JSON.stringify(await listed('WINE_ORDER')))
+  await setCodes(true)
+  check("Codes on: a code-less company whose person has a code is listed too", (await listed('WINE_ORDER')).includes('ZZ Open'))
+  check('…but never a company nobody can prove', !(await listed('WINE_ORDER')).includes('ZZ Bare'))
+  // A code-less company whose only coded person is a booking-only guide: provable on bookings only.
+  const guideOnly = await db.company.create({ data: { tenantId: T, name: 'ZZ GuideOnly', isWineOrderCompany: true, isBookingCompany: true } })
+  await person(guideOnly.id, guideRole.id, 'ZZGONLY1')
+  check("A guide's code (booking-only role) lists the company on the booking form…", (await listed('BOOKING')).includes('ZZ GuideOnly'))
+  check('…but not on the wine form, where that code would not resolve', !(await listed('WINE_ORDER')).includes('ZZ GuideOnly'))
+  await db.companyPerson.deleteMany({ where: { companyId: guideOnly.id } })
+  await db.company.delete({ where: { id: guideOnly.id } })
+  const listRow = (await listableCompaniesFor(T, 'WINE_ORDER'))[0]!
+  check('The list carries a name and an id — nothing else', JSON.stringify(Object.keys(listRow).sort()) === JSON.stringify(['id', 'name']))
+  await db.company.delete({ where: { id: bare.id } })
 
   await cleanup()
   console.log('\n──────────────────────────────────────────────────')

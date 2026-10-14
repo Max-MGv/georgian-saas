@@ -769,6 +769,11 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.accessCode')}</p>
             <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.accessCodeHint')}</p>
+            {!code.trim() && (
+              <p className="text-xs rounded px-2 py-1.5" style={{ backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+                {at('companies.editPanel.noCodeWarning')}
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -1263,9 +1268,14 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
                       <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
                     </span>
                     {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>{at('companies.idLabel')} {company.identificationCode}</span>}
-                    {company.accessCode && (
+                    {company.accessCode ? (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
                         {at('companies.codeSet')}
+                      </span>
+                    ) : !company.isIndividual && (
+                      // No code = customers can't choose it (Max, 2026-10-14) — say so where it shows.
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }}>
+                        {at('companies.noCodeBadge')}
                       </span>
                     )}
                     {company.isExporter && (
