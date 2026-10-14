@@ -395,19 +395,53 @@ async function pickableRoles(
 }
 
 /**
- * Does `code` still prove this company at submit time? (KnownBugs #78)
+ * How the code sent with an order proves its company at submit time (KnownBugs #78).
  *
  * The form checks the code through `resolveCompanyContactsFor` when the guest types it, but the
  * order itself only carries a `companyId` — and a crafted request can name any company. Without
  * this re-check, naming a coded company was enough to get its discount and negotiated prices.
  *
  * Accepts exactly what the resolver accepts, and nothing more:
- *   • a company with no access code → true (it can be picked from the public list; the resolver
- *     does not gate it either, and its negotiated prices are never shown — `pricesShown`);
- *   • the company's own access code (trimmed, case-insensitive);
- *   • when `person_codes_enabled` is on, an active person's own code at THIS company, with the
- *     same role filter as the resolver's step 1 (PER_ORDER, applies to this module).
+ *   • 'company' — the company's own access code (trimmed, case-insensitive);
+ *   • 'person'  — when `person_codes_enabled` is on, an active person's own code at THIS company,
+ *                 with the same role filter as the resolver's step 1 (PER_ORDER, this module);
+ *   • 'named'   — a company with no access code, only picked from the public list. Allowed (the
+ *                 resolver does not gate it either), but the resolver withheld its negotiated
+ *                 prices, so callers must treat them as never shown;
+ *   • null      — not proven: refuse the order.
  */
+export type CompanyProof = 'company' | 'person' | 'named'
+
+export async function companyCodeProof(
+  tx: TxClient,
+  tenantId: string,
+  company: { id: string; accessCode: string | null },
+  code: string | null | undefined,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<CompanyProof | null> {
+  const typed = code?.trim().toUpperCase() ?? ''
+  if (company.accessCode && typed && company.accessCode.toUpperCase() === typed) return 'company'
+  if (typed) {
+    const codesOn =
+      (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
+        ?.value === 'true'
+    if (codesOn) {
+      const person = await tx.companyPerson.findFirst({
+        where: {
+          code: typed,
+          isActive: true,
+          companyId: company.id,
+          role: { isActive: true, scope: 'PER_ORDER', appliesTo: { in: [module, 'BOTH'] } },
+        },
+        select: { id: true },
+      })
+      if (person) return 'person'
+    }
+  }
+  return company.accessCode ? null : 'named'
+}
+
+/** `companyCodeProof` as a yes/no: may this order be placed as this company? */
 export async function companyCodeMatches(
   tx: TxClient,
   tenantId: string,
@@ -415,24 +449,7 @@ export async function companyCodeMatches(
   code: string | null | undefined,
   module: 'BOOKING' | 'WINE_ORDER',
 ): Promise<boolean> {
-  if (!company.accessCode) return true
-  const typed = code?.trim().toUpperCase() ?? ''
-  if (!typed) return false
-  if (company.accessCode.toUpperCase() === typed) return true
-  const codesOn =
-    (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
-      ?.value === 'true'
-  if (!codesOn) return false
-  const person = await tx.companyPerson.findFirst({
-    where: {
-      code: typed,
-      isActive: true,
-      companyId: company.id,
-      role: { isActive: true, scope: 'PER_ORDER', appliesTo: { in: [module, 'BOTH'] } },
-    },
-    select: { id: true },
-  })
-  return person !== null
+  return (await companyCodeProof(tx, tenantId, company, code, module)) !== null
 }
 
 /**

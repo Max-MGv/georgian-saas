@@ -170,6 +170,10 @@ export async function createWineOrderAdmin(input: {
   if (!data.contactName.trim()) return { error: 'Contact name is required.' }
   if (!data.contactPhone.trim()) return { error: 'Contact phone is required.' }
 
+  // Whole bottles only (same rule as the public form) — a fraction crashed the pricing.
+  if (data.wines.some(w => !Number.isInteger(w.quantity) || w.quantity < 0 || w.quantity > 1000)) {
+    return { error: 'Please check the number of bottles.' }
+  }
   const selectedWines = data.wines.filter(w => w.quantity > 0)
   if (selectedWines.length === 0) return { error: 'Please select at least one wine.' }
 

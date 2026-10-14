@@ -14,7 +14,11 @@ import { loadWineOrderDeliveryTx } from '@/lib/wineOrderDelivery'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { checkPreferredDate } from '@/lib/wineOrderDate'
 import { priceWineOrder } from '@/lib/winePricing'
-import { companyCodeMatches } from '@/lib/contactResolution'
+import { companyCodeProof } from '@/lib/contactResolution'
+
+/** Per wine, per order — far above any real order, low enough to keep totals sane. Not exported:
+ *  a 'use server' file may only export async functions. */
+const MAX_BOTTLES_PER_WINE = 1000
 
 export type WineSelection = {
   vintageId: string
@@ -86,7 +90,14 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     return { error: 'Please fill in all required fields.' }
   }
 
-  const wines: WineSelection[] = JSON.parse(winesJson)
+  let wines: WineSelection[]
+  try { wines = JSON.parse(winesJson) } catch { return { error: 'Please select at least one wine.' } }
+  if (!Array.isArray(wines)) return { error: 'Please select at least one wine.' }
+  // Whole bottles only, and a sane ceiling. The form can only send these; a crafted request
+  // with 0.3 bottles used to crash the pricing (a fraction of a tetri) instead of getting an answer.
+  if (wines.some(w => !Number.isInteger(w?.quantity) || w.quantity < 0 || w.quantity > MAX_BOTTLES_PER_WINE)) {
+    return { error: 'Please check the number of bottles.' }
+  }
   const selectedWines = wines.filter(w => w.quantity > 0)
 
   if (selectedWines.length === 0) {
@@ -113,7 +124,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
     companyId
       ? tx.company.findFirst({
-          where: { id: companyId, tenantId },
+          // Only a wine-order company can be named here — the same filter the form's lookup uses.
+          where: { id: companyId, tenantId, isWineOrderCompany: true, isIndividual: false },
           select: {
             id: true,
             wineDiscountPercent: true,
@@ -122,7 +134,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
             // from the browser, which may not even have been shown them.
             winePrices: { where: { wineVintageId: { in: vintageIds } }, select: { wineVintageId: true, price: true } },
           },
-        }).then(async c => c && { ...c, codeOk: await companyCodeMatches(tx, tenantId, c, companyCode, 'WINE_ORDER') })
+        }).then(async c => c && { ...c, proof: await companyCodeProof(tx, tenantId, c, companyCode, 'WINE_ORDER') })
       : Promise.resolve(null),
     // A pickup stores no address: the customer collects from the winery.
     isPickup
@@ -135,7 +147,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // Without this a crafted request could take a coded company's discount and negotiated prices
   // (KnownBugs #78) — the form's code check alone is a gate only the client enforced.
   if (companyId && !realCompany) return { error: 'Please choose your company again.' }
-  if (realCompany && !realCompany.codeOk) return { error: 'Please enter your company code again.' }
+  if (realCompany && !realCompany.proof) return { error: 'Please enter your company code again.' }
   const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice })
   if ('error' in delivery) return { error: delivery.error }
   const dateProblem = checkPreferredDate(preferredDateInput, deliverySetup.dateRules)
@@ -165,16 +177,23 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
   const discountPercent = pricing.discountPercent
   const totalAmount = pricing.total
-  // A company with no access code was only picked from the public list, so its negotiated prices
-  // were never shown (T-12). Charging a total the customer did not see is the same chargeback
-  // risk bookings already refuse (§7.4): take it as a reservation instead.
+  // A company that was only picked from the public list (no code proved it) never saw its
+  // negotiated prices — the form's lookup withheld them (T-12). Charging a total the customer did
+  // not see is the same chargeback risk bookings already refuse (§7.4): take it as a reservation.
+  // A person's own code DOES show them, so it counts as shown (blind review, 2026-10-13).
   // Counted by line, not by sum: a negotiated price of 0 ₾ was still never shown.
-  const pricesShown = !(pricing.lines.some(l => l.negotiated) && !realCompany?.accessCode)
+  const pricesShown = !(pricing.lines.some(l => l.negotiated) && realCompany?.proof === 'named')
 
   // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
-  // and for pickup too. The form shows the same rule first; this is the one that counts.
+  // and for pickup too. The form shows the same rule first; this is the one that counts. When the
+  // negotiated prices were withheld, the form could only check the total it showed (standard
+  // prices less the %), so that is the total the minimum is held to — otherwise the form says
+  // "minimum met" and the server refuses.
   const bottleCount = selectedWines.reduce((n, w) => n + w.quantity, 0)
-  const belowMinimum = minimumOrderError(deliverySetup.rules.minOrder, bottleCount, totalAmount)
+  const minimumTotal = pricesShown
+    ? totalAmount
+    : priceWineOrder(pricing.lines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity, standardPrice: priceMap[l.vintageId] })), {}, realCompany?.wineDiscountPercent ?? null).total
+  const belowMinimum = minimumOrderError(deliverySetup.rules.minOrder, bottleCount, minimumTotal)
   if (belowMinimum) return { error: belowMinimum }
 
   // What the customer is charged: wines + delivery fee, added in one place (lib/wineOrderMoney.ts).

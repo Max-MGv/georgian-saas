@@ -7,7 +7,7 @@
  */
 import { PrismaClient } from '@prisma/client'
 import { withTenantDb } from '../lib/db'
-import { companyCodeMatches, resolveCompanyContactsFor } from '../lib/contactResolution'
+import { companyCodeMatches, companyCodeProof, resolveCompanyContactsFor } from '../lib/contactResolution'
 
 const db = new PrismaClient()
 const T = 'zz-test-company-code'
@@ -83,6 +83,24 @@ async function main() {
     check('A company with no access code → accepted without one (only named; prices stay hidden)',
       (await matches(open, null)) === true && (await matches(open, 'ANYTHING')) === true)
   }
+
+  // ── How the company was proven (decides whether its negotiated prices counted as shown) ──
+  console.log('\n  proof type\n')
+  await person(open.id, contactRole.id, 'ZZOPENP1') // a person at the company WITHOUT an access code
+  const proof = (c: { id: string; accessCode: string | null }, code: string | null) =>
+    withTenantDb(T, tx => companyCodeProof(tx, T, c, code, 'WINE_ORDER'))
+  await setCodes(true)
+  check("Company code → 'company'", (await proof(coded, 'zzcoded1')) === 'company')
+  check("Person code at a coded company → 'person'", (await proof(coded, 'ZZKETI01')) === 'person')
+  check("Person code at a code-less company → 'person' (the form showed its prices)", (await proof(open, 'ZZOPENP1')) === 'person')
+  const formShows = await resolveCompanyContactsFor(T, { module: 'WINE_ORDER', code: 'ZZOPENP1' })
+  check('…and the form really did show them (resolver returns prices, not null)',
+    !('error' in formShows) && formShows.company.winePrices !== null)
+  check("Code-less company, no code → 'named' (prices withheld)", (await proof(open, null)) === 'named')
+  check("Code-less company, a wrong code → still only 'named'", (await proof(open, 'ZZNOPE')) === 'named')
+  check('Coded company, wrong code → null (refused)', (await proof(coded, 'ZZNOPE')) === null)
+  await setCodes(false)
+  check("Codes off: the code-less company's person code no longer counts → 'named'", (await proof(open, 'ZZOPENP1')) === 'named')
 
   await cleanup()
   console.log('\n──────────────────────────────────────────────────')

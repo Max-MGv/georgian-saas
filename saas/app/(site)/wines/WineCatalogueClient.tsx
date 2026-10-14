@@ -929,7 +929,11 @@ export default function WineCatalogueClient({
                       <div className="flex items-center gap-2">
                         <span className="text-xs line-through" style={{ color: C.faint }}>{formatTetri(asTetri(totalPrice))}</span>
                         <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: STATUS.successBg, color: STATUS.successText }}>
-                          −{pricing.discountPercent}%
+                          {/* With negotiated prices the % only touches the other wines, so show
+                              the amount taken off instead of a % that overstates it (T-12). */}
+                          {pricing.negotiatedTotal > 0
+                            ? `−${formatTetri(asTetri(totalPrice - winesTotal))}`
+                            : `−${pricing.discountPercent}%`}
                         </span>
                         <span className="text-base font-bold" style={{ color: C.wine }}>
                           {formatTetri(winesTotal)}

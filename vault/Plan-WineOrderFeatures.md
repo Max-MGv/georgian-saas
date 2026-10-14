@@ -438,15 +438,48 @@ payment link for an owed fee.
       again."; `pricesShown` counts negotiated lines. `scripts/test-company-code-check.ts` **24/24** (each
       case also asked of the resolver — they agree); new browser test (tampered code refused, no order
       created) — **fails with the check removed**. Wine specs **21/21** + wine payment test.
-      Bookings (`createBooking`) have the same gap — **Max's call**.
+      Bookings (`createBooking`) had the same gap — Max said fix it (2026-10-13): **done**, `ac9316d`
+      (`companyCode` in `buildBookingPayload`, re-checked in `createBooking`; new spec
+      `booking-company-code-check` alters the code in flight → refused, fails with the check removed;
+      booking + payment regression 14/14).
 - [x] Review cards posted: **T-13, T-8, T-14, T-12, T-9 → Ready to test** (open decisions in the cards).
 - [x] SessionLog 2026-10-12/13 entry finished.
-- [ ] Offer Max a blind, context-free sub-agent code review (memory `feedback_blind_reviews`) — offered
-      2026-10-13; run only on his yes.
+- [x] Blind, context-free sub-agent code review — Max said yes 2026-10-13. Results below.
 - [ ] Production stays untouched until Max's go (runbook below).
-**Resume point:** waiting on Max — (a) booking half of #78, (b) code-less negotiated prices = reservation
-only, (c) Company default on the switch, (d) blind review yes/no, then the runbook step by step on his go.
-Local helper `saas/scripts/_scratch_shot.ts` (untracked; never commit).
+**Resume point:** Max's answers on the review's 4 decision items (below), then the runbook step by step
+on his go. Max still to confirm (b) code-less negotiated prices = reservation only and (c) Company default
+(he asked "which choices?" — explained 2026-10-13). Local helper `saas/scripts/_scratch_shot.ts`
+(untracked; never commit).
+
+### Blind review 2026-10-13 (dbfa5d1..f7ad134) — every finding checked against the code
+Reviewer had no vault, no commit messages. Fixed on staging (same day):
+1. **Fee top-up re-sent the full receipt with "Paid" = whole order** → `settle.ts` passes the settled,
+   unreversed payment sum; the receipt shows it, plus "Still to pay" when short. `scripts/test-wine-receipt.ts` 7/7.
+3. **Wine order could name a booking-only (or Individuals) company** → lookup now requires
+   `isWineOrderCompany: true, isIndividual: false`, like the form's resolver. Spec test added.
+4. **Person code at a code-less company: form showed prices + "pay", server took a reservation** →
+   `companyCodeProof()` returns 'company' | 'person' | 'named' | null; `pricesShown` is false only for
+   'named'. `test-company-code-check.ts` now 32/32 (proof type, and the resolver really shows the prices).
+8. **Fractional / huge quantities crashed pricing** → whole bottles 0–1000 on both write paths; a bad
+   `wines` JSON gets an answer too. Spec test (quantity altered in flight).
+9. **Minimum checked against different totals when prices are withheld; "−10%" overstated with negotiated
+   lines** → server holds the minimum to the total the form showed; badge + receipt show the amount off.
+10. **Address backfill window** → runbook step 4b (idempotent catch-up copy).
+**Decisions for Max (not changed):**
+2. Overpayment: the balance counts settled payments only — two card links (or link + cash) can both be
+   paid; no row lock between read and insert; a fee lowered below what was paid is clamped to "owes 0" and
+   the overpayment shows nowhere. Same design as bookings' top-ups ("UX guard, not final authority").
+   Proposed: show "Overpaid X₾" instead of clamping, and warn when an unpaid link already exists.
+5. A saved address's delivery zone is only pre-selected; the customer can pick a cheaper zone or "Other".
+   Enforce it for saved addresses?
+6. "Mark unpaid" reverses every manual payment, including a separately recorded delivery fee; re-marking
+   paid does not restore it (fee shows owed again). Proposed: "Mark unpaid" leaves fee payments alone.
+11. The date check uses the server clock (UTC on Vercel), so 00:00–04:00 Georgian time a crafted request
+   can still pick "yesterday's" earliest day. Bookings work the same way (checked: `slotMeetsLeadTime`
+   builds the slot with server-local `new Date(y, m, d, h)`, so on Vercel the server-side lead-time check
+   is 4 h too lenient; the form filters slots in the guest's own time, so ordinary guests are unaffected) —
+   KnownBugs #79. Proposed: a small separate fix for both to use Georgian time.
+Accepted as is: 7 (stale page data → "please choose again" / generic error; Flitt shows the amount).
 
 ---
 
@@ -468,6 +501,18 @@ schema: `Company.address` still exists, every new column is nullable or has a de
    production companies with an address; `select count(*) from "WineOrder" where "customerType" <> 'COMPANY'` = 0.
 3. Ticket tool's bucket step (its own runbook).
 4. Merge `staging → master`, push; wait for the Vercel deploy.
+4b. **Catch-up address copy** (blind review 2026-10-13): between step 1 and the new code going live, the
+   old code still writes `Company.address` only, so a company created or edited in that window has no
+   `CompanyAddress`. Right after the deploy, copy those (idempotent — only companies with an address
+   and no saved address yet):
+   ```sql
+   INSERT INTO "CompanyAddress" ("id","companyId","label","address","workingHours","sortOrder","isActive","createdAt","updatedAt")
+   SELECT gen_random_uuid()::text, c."id", NULL, btrim(c."address"), NULL, 0, true, c."createdAt", CURRENT_TIMESTAMP
+   FROM "Company" c
+   WHERE c."address" IS NOT NULL AND btrim(c."address") <> ''
+     AND NOT EXISTS (SELECT 1 FROM "CompanyAddress" a WHERE a."companyId" = c."id");
+   ```
+   Expect 0 rows unless an admin edited companies during the window.
 5. Live check on nikalasmarani.vineworks.ge: `/wines` renders, a reservation order with a preferred
    date goes through, Wine Orders shows it; Companies → Edit shows Addresses + Wine prices;
    Settings shows the new panel (nothing configured → form as before).

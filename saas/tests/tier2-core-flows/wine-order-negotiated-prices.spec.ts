@@ -122,6 +122,47 @@ test('a request naming a coded company with the wrong code is refused by the ser
   expect(await db.wineOrder.count({ where: { companyId: codedId } }), 'no order was created').toBe(before)
 })
 
+test('a request naming a booking-only company is refused (blind review 2026-10-13)', async ({ page }) => {
+  test.setTimeout(120_000)
+  // No code, a discount, and not a wine-order company: it is in the public BOOKING dropdown, so
+  // its id is easy to find — it must not be usable to file a discounted wine order.
+  const bookingOnly = await db.company.create({ data: { tenantId: TENANT, name: `ZZ Booking Only ${RUN}`,
+    isBookingCompany: true, isWineOrderCompany: false, wineDiscountPercent: 50 } })
+  try {
+    await addTwoAndOpenDrawer(page)
+    await page.getByPlaceholder('Bar, restaurant, or individual name').fill('ZZ Crafted')
+    await fillRest(page)
+    await page.locator('input[name="companyId"]').evaluate((el: HTMLInputElement, id: string) => { el.value = id }, bookingOnly.id)
+    await page.getByRole('button', { name: /^(Order & Pay|Place Reservation)$/ }).click()
+    await expect(page.getByText('Please choose your company again.')).toBeVisible({ timeout: 30_000 })
+    expect(await db.wineOrder.count({ where: { companyId: bookingOnly.id } })).toBe(0)
+  } finally {
+    await db.wineOrder.deleteMany({ where: { companyId: bookingOnly.id } })
+    await db.company.delete({ where: { id: bookingOnly.id } })
+  }
+})
+
+test('a fractional bottle count gets an answer, not a crash (blind review 2026-10-13)', async ({ page }) => {
+  test.setTimeout(120_000)
+  let tampered = false
+  // The cart is sent as JSON inside the server action's form body; alter it in flight.
+  await page.route('**/*', async route => {
+    const body = route.request().postData()
+    if (route.request().method() === 'POST' && route.request().headers()['next-action'] && body?.includes('"quantity":2')) {
+      tampered = true
+      await route.continue({ postData: body.replace('"quantity":2', '"quantity":0.3') })
+      return
+    }
+    await route.continue()
+  })
+  await addTwoAndOpenDrawer(page)
+  await page.getByPlaceholder('Bar, restaurant, or individual name').fill('ZZ Fraction')
+  await fillRest(page)
+  await page.getByRole('button', { name: /^(Order & Pay|Place Reservation)$/ }).click()
+  await expect(page.getByText('Please check the number of bottles.')).toBeVisible({ timeout: 30_000 })
+  expect(tampered).toBe(true)
+})
+
 test('a code-less company gets its price applied, but never charged online', async ({ page }) => {
   test.setTimeout(120_000)
   await addTwoAndOpenDrawer(page)
