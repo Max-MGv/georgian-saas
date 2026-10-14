@@ -34,9 +34,10 @@ Company/Individual switch, which defaults to Company).
 - **Snapshots, as everywhere else:** an order keeps its address text, address name, zone name,
   fee and per-line price; links (`companyAddressId`, `deliveryZoneId`) are SetNull.
 - **Negotiated prices are only shown to a proven company** (its access code, a person's code, or
-  an admin). A code-less company is still *charged* its negotiated price, but **never online** —
-  the customer could not be shown the total (same rule as hidden booking prices, §7.4). The form
-  says the agreed prices will apply. *Decided during the build — flagged to Max.*
+  an admin). ~~A code-less company is still charged its negotiated price, but never online~~ —
+  replaced 2026-10-14 by Max's rule: **no code = unknown company**, on bookings and wine orders
+  alike. A company without a code is not listed on either public form, nothing about it is filled
+  in, and a request naming it is refused (plan Chunk 15, MaintenanceNotes §35).
 - **`deliveryFeePending`** is a separate flag from "fee is null", so every pre-T-8 order is not
   suddenly "waiting for a fee".
 - **Security:** four new tables (`CompanyAddress`, `DeliveryZone`, `CompanyWinePrice`; plus columns)

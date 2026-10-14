@@ -8,6 +8,26 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🔐 2026-10-14 — Round 2 on STAGING (your decisions of 13–14 Oct). Not on production.
+
+All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.
+1. **No code = unknown company (bookings + wine)** — on the booking form ("Tour Company") and on `/wines`, the
+   dropdown lists **only companies that have an access code**; picking one always asks for the code, and nothing
+   (prices, discount, addresses, contact people) appears before it. Companies → a company without a code shows a
+   yellow **"No code"** badge, and its edit panel explains that customers can't choose it. *Before this goes live:
+   every company your customers use needs a code — I'll list the ones that don't have one, on your go.*
+2. **Delivery area fixed by the address** — a company address that has a delivery area: on `/wines` the area shows as
+   text ("Delivery area: Tbilisi — 15₾"), not a choice.
+3. **Overpaid wine orders** — on a paid order, lower the delivery fee below what was paid: the card shows
+   **"Credit (overpaid) X₾"**. After creating a card payment link and reloading, the card says the link isn't paid yet.
+4. **Receipts** — paying a delivery fee by card sends a receipt whose "Paid" is what was really paid
+   (+ "Still to pay" if anything is left).
+5. **Georgian time** — nothing to click: the booking lead time and the wine "earliest date" now follow Tbilisi time on
+   the server too (they were 4 h off there).
+6. **T-79 Settings** — Admin → Settings still shows every value. (No speed change — explained on the ticket.)
+
+---
+
 ## 🍷 2026-10-12 — Five wine-order tickets ready to test on STAGING (T-13, T-8, T-14, T-12, T-9). Not on production.
 
 All on **staging.vineworks.ge** (admin + `/wines`). Each ticket has a review card under Tickets → "Ready to test".
@@ -24,8 +44,8 @@ two named addresses; set one address's zone; in *Wine prices* type a lower price
 3. **T-14 date** — the form requires a *Preferred delivery date* ("we will confirm the exact day"); a Closed Day is
    refused. Admin card: "Preferred: …" → Change. Wine Orders → **Calendar** tab; undated orders listed underneath.
 4. **T-12 prices** — with the company **code**, `/wines` shows its negotiated price and the total uses it (no % off it).
-   A company **without a code** that has negotiated prices: the form says the agreed prices will apply, and it is a
-   reservation (no card payment) — *I decided this; tell me if you want it different.* "Exporter" mark + filter.
+   A company **without a code** is no longer offered at all (your rule, 2026-10-14 — see the 2026-10-14 entry).
+   "Exporter" mark + filter.
 5. **T-9 individuals** — the form starts on **Company** (as today); tap **Individual**: only name / phone / address
    remain. Admin card shows "Individual". *Tell me if Individual should be the default instead.*
 **Security fix included (2026-10-13):** a wine order now needs the company's code again on the server, so nobody can claim a

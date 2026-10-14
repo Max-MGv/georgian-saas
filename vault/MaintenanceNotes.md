@@ -1177,11 +1177,19 @@ Incomplete, super-admin and the receipt all go through it. **Statistics delibera
 `startWineTopUpCheckout` (`lib/payments/topUpCheckout.ts`, shared with bookings via
 `runTopUpCheckout`).
 
-**Negotiated prices are only sent to a proven company.** `resolveCompanyContactsFor` returns
-`winePrices` only when the company's code was checked, a person's code matched, or the caller is
-`trusted` (admin); otherwise `null` + `hasNegotiatedPrices`. `submitWineOrder` then sets
-`priceShown: false` (no online payment). If you add another way to resolve a company, keep that
-rule — the dropdown lists code-less companies to anyone.
+**No code = unknown company — bookings AND wine orders (Max, 2026-10-14, plan Chunk 15).** A customer
+only ever learns about a company they proved with its access code (or, person codes on, a person's
+own code). Three places hold this line and must stay in step:
+1. **The lists** — both public pages build their dropdown with `listableCompaniesFor(tenantId, module)`
+   (`lib/contactResolution.ts`): id + name only, only provable companies. Never put price tiers,
+   discount, override, people or addresses on a public page prop again (they were all there once).
+2. **The resolver** — `resolveCompanyContactsFor` refuses a code-less company named without a code
+   ("Code required."); everything about a company (people, addresses, `winePrices`, `bookingPrices`,
+   `wineDiscountPercent`, `skipPayment`) comes back only with proof. Admin screens pass `trusted`
+   via `resolveCompanyContactsAsAdmin`.
+3. **The write paths** — `submitWineOrder` and `createBooking` re-check the code the form sends
+   (`companyCode`) with `companyCodeProof()` and refuse 'named' or no proof (KnownBugs #78).
+If you add a fourth way to pick or price a company, it needs all three.
 
 **Forms mirror, never decide.** `WineCatalogueClient` / `NewWineOrderForm` compute totals, fees,
 minimum and date validity with the same pure helpers, purely for display; the server recomputes

@@ -8,6 +8,36 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-13/14 — Wine orders round 2: #78 both halves, blind review fixes, Max's decisions (Chunks 12–15), T-79 — NOT on production
+
+Max: fix the booking half of #78 (yes), run the blind review (yes), Settings speed ticket (build it). Then his
+decisions on the review: show overpayment (yes), enforce a saved address's delivery area (yes), Georgian time
+(yes); "Mark unpaid" investigated — no screen offers un-pay on bookings or wine orders, no change; T-9 default fine;
+**T-12 rethink: no code = unknown company — "fill nothing without an access code", bookings too.**
+- **#78 booking half** `ac9316d` — `companyCode` from the form, re-checked in `createBooking`; tampered-request spec.
+- **Blind review** (context-free agent, no vault, no commit messages): 11 findings, every one checked in code and
+  real. Fixed `7312ddd`: fee top-up receipt claimed the whole order paid; wine order could name a booking-only
+  company; person code at a code-less company showed "pay" but reserved; fractional bottles crashed pricing;
+  minimum/discount display mismatch; runbook step 4b (address catch-up copy). Plan has the full list.
+- **T-79** `b7b15f8` — Settings reads its 33 settings in one query. **Measured: no speed gain** (5.27 → 5.50 s,
+  untouched page drifted the same); kept for 1 pooled connection instead of 33. The ~5 s is the shared admin layout.
+- **Chunk 12** `f4b8755` overpayment shown as "Credit (overpaid)" on wine cards + unpaid fee-link notice.
+  **Chunk 13** `5f091b4` saved address's area enforced (form shows it as text; server ignores another area / "Other").
+  **Chunk 14** `f292703` `lib/tbilisiTime.ts` — booking lead time + wine earliest date in Georgian time (KnownBugs #79;
+  old code shown wrong under TZ=UTC: 14:00 allowed at noon with 3 h lead).
+- **Chunk 15** (no code = unknown company): both public dropdowns list only provable companies, id + name only
+  (`listableCompaniesFor`) — the booking page no longer ships every company's **price tiers**, the wine page every
+  **discount %**; resolver refuses a code-less company without a code and returns tiers/override/prices only with
+  proof; both write paths refuse 'named'; T-12's "withheld prices → reservation" branch removed; Companies screen
+  "No code" badge + explanation. Tests: `test-company-code-check` 40/40 (list + proof + refusals), wine-prices 12/12, contact-resolution 26/26; regression of every wine/booking/payment/companies spec **44/44** (booking-simple failed once on a cold order page after the server restart, passed alone); new specs: code-less company not offered + doctored booking/wine order refused; page source no longer holds a coded company's tier. Lint 83 errors = baseline.
+- Environment, not code: last night's run was cut off (machine asleep) and left Caucasus Vine Travel on "Always
+  require" (restored); onboarding wizard needed its reset (twice); dev server bloat at ~1 GB made `/admin/orders`
+  take 9–19 s and timed out booking-enhanced — fresh server fixed it (6.6 s, passes).
+**Next:** Max tests on staging (MyToDo 2026-10-14). Before production: read-only list of production companies
+customers use that have no code (needs Max's go — Chunk 15 would hide them), then the runbook step by step.
+
+---
+
 ## 2026-10-12/13 — Wine order features T-13, T-8, T-14, T-12, T-9 built on `staging` (Chunks 1–11) — NOT on production
 
 Max moved T-8/T-12/T-13/T-14 to Backlog, answered review questions twice (decisions in [[Plan-WineOrderFeatures]] + ticket comments), unblocked T-12 ("exceptions only") and T-9 (include; same rules for individuals), approved the money rule (`totalAmount` = wines only, fee separate), and said "proceed". All five tickets → In progress. FeatureLog #225, [[Feature 225 - Wine order delivery features]], MaintenanceNotes §35.

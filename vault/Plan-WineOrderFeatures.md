@@ -481,6 +481,76 @@ Reviewer had no vault, no commit messages. Fixed on staging (same day):
    KnownBugs #79. Proposed: a small separate fix for both to use Georgian time.
 Accepted as is: 7 (stale page data → "please choose again" / generic error; Flitt shows the amount).
 
+## Round 2 — Max's decisions 2026-10-13/14
+- Review #2 overpayment → **show it to the admin** (yes). #5 saved-address zone → **enforce it** (yes).
+  #11 server clock → **Georgian time** (yes). #6 "Mark unpaid" → investigated: no screen offers un-pay on
+  bookings or wine orders (the step only offers *unreached* steps; the wine card's comment says reversal is
+  a deliberate correction) — the server branch is dormant. **No change**; if an "undo payment" button is ever
+  built, it undoes one chosen payment, not "all manual ones", on both.
+- **T-12 rethink (Max):** a company with no access code is an **unknown entity** — "fill nothing without an
+  access code" (a), and **bookings follow the same rule** (b) "otherwise the code loses meaning".
+  The dropdown → code popup flow stays as on dinner booking. T-9 default (Company) confirmed fine.
+- T-79 (Settings page in one read) built 2026-10-14, `b7b15f8`: **no measurable speed gain** (5.27 → 5.50 s,
+  control page drifted the same); kept for 1 pooled connection instead of 33. Ready to test.
+
+### Chunk 12 — Overpayment visible on wine orders
+**Status:** ✅ 2026-10-14 `f4b8755` (staging) — wine-order-delivery-fee spec 8/8 (2 new)
+- [x] `wine-orders/page.tsx`: keep the signed balance (due − settled), not `Math.max(0, …)`. Card shows
+      "Owes X" when > 0 and **"Credit (overpaid) X"** when < 0 (the wording bookings already use,
+      `orders.credit`, EN+KA). Optimistic patches in `WineOrdersClient` stop clamping too.
+- [x] Unpaid card link warning: a `Payment` row for the order with `status 'created'`, not settled → the card
+      shows "Card link for X sent <date>, not paid yet", so a second link / cash record is a conscious choice.
+- [x] Test: spec — record a fee payment, lower the fee below it → "Credit" shows; create a link → warning.
+
+### Chunk 13 — A saved address's delivery area is enforced
+**Status:** ✅ 2026-10-14 `5f091b4` (staging) — test-order-delivery 18/18, specs 8/8
+- [x] `lib/orderDelivery.ts` `resolveOrderDelivery`: when the order uses a saved `CompanyAddress` that has a
+      `deliveryZoneId`, that zone is used (an active zone of this tenant) and `zoneChoice` is ignored;
+      if that zone is no longer active → "Please choose your delivery area" fallback stays as today.
+      Saved address **without** a zone, or a typed "Other address" → the customer chooses, as today
+      (assumption told to Max 2026-10-14).
+- [x] Public form: the area shows as fixed text ("Delivery area: X — fee"). Admin form unchanged — the admin
+      may still choose (trusted; `opts.admin`).
+- [x] Tests: script (address zone wins over a crafted `zoneChoice`, incl. "other"; switched-off zone → choice;
+      admin may choose; pickup unaffected); spec (fixed text, doctored "other" still gets the fee).
+
+### Chunk 14 — Date checks in Georgian time (wine + bookings) — KnownBugs #79
+**Status:** ✅ 2026-10-14 `f292703` (staging) — 20/20 in local time and TZ=UTC; old code shown wrong under UTC
+- [x] One helper `lib/tbilisiTime.ts`: today's date / an instant's wall-clock parts in `Asia/Tbilisi`
+      (Intl, no DST in Georgia but don't hard-code +4).
+- [x] `wineOrderDate.earliestPreferredDate` and `bookingHours.slotMeetsLeadTime` / `createBooking`'s
+      "future date" check use it. The forms use the same helpers, so they now also work in Georgian time.
+- [x] Tests: script with fixed `now` values around 00:00–04:00 Tbilisi (= 20:00–24:00 UTC the day before),
+      run with `TZ=UTC` to mimic Vercel.
+
+### Chunk 15 — No access code = unknown company (wine orders AND bookings)
+**Status:** ✅ 2026-10-14 (staging) — 44/44 regression; **production needs the code list first (below)**
+**Rule:** a company is only *known* to a customer who proved it — its access code, or (person codes on) a
+person's own code. Until then: no autofill (people, addresses), no special prices (wine discount %,
+negotiated wine prices, booking price tiers), not even the company's name in a list it can't be proven from.
+- [x] **Dropdown lists only provable companies:** has an access code, or (person codes on) has an active
+      person with a code. Picking one opens the code popup (as now). Code-less companies disappear from
+      both public dropdowns; their customers use "Individual / no company" or "New company?" until the
+      winery gives them a code. Hide-dropdown mode is unchanged (already code-only).
+- [x] **Nothing about a company reaches the page before its code.** Today the booking page ships every
+      company's **price tiers** in the page source and the wine page every company's **discount %** —
+      both move behind the resolver (returned only with proof). The form shows company pricing only after
+      the code; until then, standard/individual prices.
+- [x] **Server:** `companyCodeProof` 'named' is no longer enough — both `submitWineOrder` and `createBooking`
+      refuse it ("Please enter your company code again."). The T-12 "withheld prices → reservation" branch
+      (`pricesShown` false) then cannot occur and is removed — simpler.
+- [x] Resolver: a code-less company named without a code returns an error (no people, no addresses) —
+      check what else calls `resolveCompanyContactsFor` without a code (admin screens pass `trusted`).
+- [x] **Admin Companies screen:** a company with a discount, negotiated prices, price tiers, people or
+      addresses but **no access code** shows a warning: "Customers can't choose this company until it has
+      an access code" + the existing Generate button. (Warn, don't block.)
+- [x] Tests: update the specs that pick a code-less company (negotiated "open" company, any booking spec that
+      uses one); new spec: code-less company not in either dropdown; crafted request naming it is refused.
+- [ ] **Production impact (runbook step 0):** before this ships, every company customers should be able to pick
+      needs a code — on the dev copy of Nikalas Marani, Restaurant Kakhuri, Vinoteka Batumi, Marani Import
+      GmbH, Sighnaghi Wine Bar (wine, 5–20 % discounts) have none. Read-only check of production first, list
+      for Max, he sets the codes and tells the customers. Booking companies: same check.
+
 ---
 
 ## Production runbook — DRAFT, needs Max's explicit go for each step (Rule 0)
@@ -489,6 +559,10 @@ Accepted as is: 7 (stale page data → "please choose again" / generic error; Fl
 2026-10-08 easy wins (T-5, T-23, T-6 + its `?edit=` fix, T-11, T-21), and the internal ticket tool
 (Feature 222, which has its own runbook in [[Plan-VerifyBeforeProduction]]: migration + the
 `ticket-attachments` bucket **before** the code merge). A `staging → master` merge ships all of it.
+
+0. **Before anything ships (Chunk 15):** read-only list of production companies that customers use but that
+   have **no access code** — with Chunk 15 live they disappear from both public forms and get no special prices.
+   Max gives each a code (Companies → Generate) and tells the company. Needs Max's go to read production.
 
 **Order (migrations first — all additive, so today's production code keeps working on the new
 schema: `Company.address` still exists, every new column is nullable or has a default):**
