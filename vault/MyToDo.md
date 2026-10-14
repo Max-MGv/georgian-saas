@@ -14,8 +14,8 @@ All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.
 1. **No code = unknown company (bookings + wine)** — on the booking form ("Tour Company") and on `/wines`, the
    dropdown lists **only companies that have an access code**; picking one always asks for the code, and nothing
    (prices, discount, addresses, contact people) appears before it. Companies → a company without a code shows a
-   yellow **"No code"** badge, and its edit panel explains that customers can't choose it. *Before this goes live:
-   every company your customers use needs a code — I'll list the ones that don't have one, on your go.*
+   yellow **"No code"** badge, and its edit panel explains that customers can't choose it. (Nikalas Marani hides the
+   dropdown, so nothing changes for them.)
 2. **Delivery area fixed by the address** — a company address that has a delivery area: on `/wines` the area shows as
    text ("Delivery area: Tbilisi — 15₾"), not a choice.
 3. **Overpaid wine orders** — on a paid order, lower the delivery fee below what was paid: the card shows

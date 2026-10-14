@@ -78,6 +78,13 @@ export type BookingCompanySpec = {
    * any company that has one, and a prospect on the demo has nowhere to obtain
    * a code — the booking form is step one of the guided tour, so gating it
    * would dead-end the sales story.
+   *
+   * ⚠️ Since 2026-10-14 (Max: no code = unknown company, plan Chunk 15) a company
+   * without a code is never listed on a public form and gets nothing filled in, so
+   * on the demo these companies are reachable only through the admin screens. The
+   * demo tenant also has `hide_company_dropdown` on, so its public forms show a
+   * code box and "New company?" — which is what a prospect uses. If the demo ever
+   * needs a pickable company again, seed codes and show one on the tour.
    */
   accessCode: string
   /**

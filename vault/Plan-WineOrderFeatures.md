@@ -546,10 +546,12 @@ negotiated wine prices, booking price tiers), not even the company's name in a l
       an access code" + the existing Generate button. (Warn, don't block.)
 - [x] Tests: update the specs that pick a code-less company (negotiated "open" company, any booking spec that
       uses one); new spec: code-less company not in either dropdown; crafted request naming it is refused.
-- [ ] **Production impact (runbook step 0):** before this ships, every company customers should be able to pick
-      needs a code — on the dev copy of Nikalas Marani, Restaurant Kakhuri, Vinoteka Batumi, Marani Import
-      GmbH, Sighnaghi Wine Bar (wine, 5–20 % discounts) have none. Read-only check of production first, list
-      for Max, he sets the codes and tells the customers. Booking companies: same check.
+- [x] **Production impact — settled by Max 2026-10-14: no production read.** The one live customer, Nikalas
+      Marani, hides the company dropdown (code box only), so code-less companies were already unreachable on
+      their forms; they manage their own codes. Dev check: Staging Winery 11/11 companies have codes; the 9
+      code-less ones are all in **Vineworks Demo** (deliberately seeded without codes — `lib/demoSeed.ts` — and
+      `hide_company_dropdown` is on there too, so nothing changes for it). (Earlier I mislabelled that tenant
+      "the dev copy of Nikalas Marani".)
 
 ---
 
@@ -560,9 +562,9 @@ negotiated wine prices, booking price tiers), not even the company's name in a l
 (Feature 222, which has its own runbook in [[Plan-VerifyBeforeProduction]]: migration + the
 `ticket-attachments` bucket **before** the code merge). A `staging → master` merge ships all of it.
 
-0. **Before anything ships (Chunk 15):** read-only list of production companies that customers use but that
-   have **no access code** — with Chunk 15 live they disappear from both public forms and get no special prices.
-   Max gives each a code (Companies → Generate) and tells the company. Needs Max's go to read production.
+0. ~~Read-only list of production companies without a code~~ — not needed (Max, 2026-10-14): Nikalas Marani
+   hides the company dropdown and manages its own codes. If the live demo shows a company dropdown, its
+   (code-less) demo companies disappear from it — check the demo on staging first.
 
 **Order (migrations first — all additive, so today's production code keeps working on the new
 schema: `Company.address` still exists, every new column is nullable or has a default):**

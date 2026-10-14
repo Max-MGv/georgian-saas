@@ -33,8 +33,9 @@ decisions on the review: show overpayment (yes), enforce a saved address's deliv
 - Environment, not code: last night's run was cut off (machine asleep) and left Caucasus Vine Travel on "Always
   require" (restored); onboarding wizard needed its reset (twice); dev server bloat at ~1 GB made `/admin/orders`
   take 9–19 s and timed out booking-enhanced — fresh server fixed it (6.6 s, passes).
-**Next:** Max tests on staging (MyToDo 2026-10-14). Before production: read-only list of production companies
-customers use that have no code (needs Max's go — Chunk 15 would hide them), then the runbook step by step.
+**Next:** Max tests on staging (MyToDo 2026-10-14), then the production runbook step by step on his go. No
+production read needed for Chunk 15 (Max: Nikalas Marani hides the dropdown and manages its own codes); the only
+code-less companies on dev are the Vineworks Demo's (seed comment updated).
 
 ---
 
