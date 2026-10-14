@@ -5,7 +5,8 @@ import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, 
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment, startWineOrderFeeCheckout, setWineOrderPreferredDate } from '@/app/actions/wineOrders'
-import { formatPreferredDate } from '@/lib/wineOrderDate'
+import { formatPreferredDate, formatIsoDay } from '@/lib/wineOrderDate'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
 import dynamic from 'next/dynamic'
 import {
   wineOrderStagePatch,
@@ -379,7 +380,7 @@ function DeliverySection({ order, locale, onPatch }: {
         <p className="text-xs" style={{ color: '#92400e' }}>
           {at('wineOrders.delivery.pendingLink')
             .replace('{amount}', formatTetri(asTetri(order.pendingLink.amount)))
-            .replace('{date}', new Date(order.pendingLink.createdAt).toLocaleDateString(locale === 'ka' ? 'ka-GE' : 'en-GB', { day: 'numeric', month: 'short' }))}
+            .replace('{date}', formatIsoDay(tbilisiDateIso(new Date(order.pendingLink.createdAt)), locale, { withYear: false }))}
         </p>
       )}
       {link && (
@@ -1813,14 +1814,16 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   // ── Board ───────────────────────────────────────────────────
 
   // ── Calendar (T-14, Plan-WineOrderFeatures Chunk 8) ─────────
-  // By preferred delivery / pickup date, on the same month grid as the Orders calendar. Orders
-  // with no date (everything before T-14, and admin entries left blank) are listed underneath.
+  // By preferred delivery / pickup date, on the same month grid as the Orders calendar. OPEN orders
+  // with no date (admin entries left blank, anything from before T-14 still in progress) are listed
+  // underneath. Delivered and cancelled ones are not — on a winery with history every past order
+  // has no date, and the list would be all of them (QA 2026-10-14 F2). Same rule as the Pack view.
 
   if (mode === 'calendar') {
     const byDate: Record<string, WineOrder[]> = {}
     const undated: WineOrder[] = []
     for (const o of filteredOrders) {
-      if (!o.preferredDate) { if (o.stage !== CANCELLED) undated.push(o); continue }
+      if (!o.preferredDate) { if (o.stage !== CANCELLED && o.stage !== 'DELIVERED') undated.push(o); continue }
       const d = new Date(o.preferredDate).toISOString().slice(0, 10)
       ;(byDate[d] ??= []).push(o)
     }

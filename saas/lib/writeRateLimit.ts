@@ -47,13 +47,16 @@ type RateLimitRule = {
   windowMs: number
 }
 
-type RateLimitAction = 'booking' | 'wine-order' | 'bug-report'
+type RateLimitAction = 'booking' | 'wine-order' | 'bug-report' | 'code-lookup'
 
 /** The demo tenant's tight bucket, unchanged from before this generalized: nobody legitimately makes five bookings a minute on a shared public sandbox. */
 const DEMO_RULES: Record<RateLimitAction, RateLimitRule> = {
   booking: { limit: 5, windowMs: 10 * 60 * 1000 },
   'wine-order': { limit: 5, windowMs: 10 * 60 * 1000 },
   'bug-report': { limit: 5, windowMs: 10 * 60 * 1000 },
+  // Typed access codes (QA 2026-10-14 F10). Not a write, but the same per-IP speed bump: a guest
+  // mistypes a few times; a script trying codes does not get far.
+  'code-lookup': { limit: 30, windowMs: 10 * 60 * 1000 },
 }
 
 /** Every real tenant's bucket — generous enough that a coach party or a shared office network is never blocked, while still stopping a bot/retry-loop. */
@@ -63,6 +66,7 @@ const DEFAULT_RULES: Record<RateLimitAction, RateLimitRule> = {
   // A person reporting a few things in a row is normal; a bot or a retry loop is not. Each
   // submission also writes a ticket, may upload up to 4 MB and sends an email.
   'bug-report': { limit: 8, windowMs: 10 * 60 * 1000 },
+  'code-lookup': { limit: 30, windowMs: 10 * 60 * 1000 },
 }
 
 /**

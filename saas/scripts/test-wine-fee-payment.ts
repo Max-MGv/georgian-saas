@@ -46,6 +46,11 @@ async function main() {
   check('More than the balance is refused', 'error' in tooMuch)
   const zero = await run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: asTetri(0), at: new Date(), method: 'CASH' }))
   check('Zero is refused', 'error' in zero)
+  // QA 2026-10-14 F8: 12.5 used to be stored as 12; a string reached the database.
+  const frac = await run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: 12.5 as never, at: new Date(), method: 'CASH' }))
+  check('A fraction of a tetri is refused', 'error' in frac)
+  const str = await run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: '100' as never, at: new Date(), method: 'CASH' }))
+  check('A string amount is refused', 'error' in str)
   const otherTenant = await withTenantDb('zz-someone-else', tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: 'zz-someone-else', amount: asTetri(100), at: new Date(), method: 'CASH' }))
   check("Another tenant cannot record against this order", 'error' in otherTenant)
   const part = await run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: asTetri(500), at: new Date(), method: 'BANK_TRANSFER' }))
@@ -55,6 +60,14 @@ async function main() {
   const rest = await run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: asTetri(1000), at: new Date(), method: 'CASH' }))
   const b3 = await run(tx => wineOrderBalance(tx, { wineOrderId: o.id, tenantId: T }))
   check('Paying exactly the rest leaves nothing owed', !('error' in rest) && !('error' in b3) && b3.balance === 0)
+
+  // QA 2026-10-14 F9: two admins recording the same owed amount at the same instant — the row lock
+  // makes the second one see the first, so only one is accepted (both were, before).
+  await db.wineOrder.update({ where: { id: o.id }, data: { deliveryFee: 2500 } }) // owes 10₾ again
+  const both = await Promise.all([1, 2, 3].map(() => run(tx => recordAdditionalWinePayment(tx, { wineOrderId: o.id, tenantId: T, amount: asTetri(1000), at: new Date(), method: 'CASH' }))))
+  const b4 = await run(tx => wineOrderBalance(tx, { wineOrderId: o.id, tenantId: T }))
+  check('Three simultaneous recordings of the same 10₾: exactly one accepted, nothing overpaid',
+    both.filter(r => !('error' in r)).length === 1 && !('error' in b4) && b4.balance === 0, JSON.stringify(b4))
 
   await cleanup()
   console.log('\n──────────────────────────────────────────────────')

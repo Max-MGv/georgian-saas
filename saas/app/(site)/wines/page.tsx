@@ -28,7 +28,7 @@ export default async function WinesPage() {
   ])
   if (h.get('x-tenant-modules-wine-orders') !== 'true') redirect('/')
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
+  const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant, delivery] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
@@ -53,9 +53,11 @@ export default async function WinesPage() {
     isPaymentConfigured(tenantId),
     isPaymentConfigured(tenantId, { section: 'WINE_ORDER' }),
     db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
+    // Minimum order, pickup and delivery zones (T-8) — display only; submitWineOrder re-reads them.
+    // In this Promise.all, not after it: awaited on its own it added a whole transaction's round
+    // trips to every page load (QA 2026-10-14 F13, +0.9 s against a distant DB).
+    loadWineOrderDelivery(tenantId),
   ])
-  // Minimum order, pickup and delivery zones (T-8) — display only; submitWineOrder re-reads them.
-  const delivery = await loadWineOrderDelivery(tenantId)
   const wineDetailLevel: WineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
   // PRODUCT: always read the wine's values. VINTAGE: always read the vintage's
   // values, with no fallback to the wine's — an unset vintage field must reach

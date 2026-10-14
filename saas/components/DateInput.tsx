@@ -6,6 +6,7 @@ type Props = {
   value: string          // YYYY-MM-DD or ''
   onChange: (v: string) => void  // called with YYYY-MM-DD or ''
   min?: string           // YYYY-MM-DD
+  max?: string           // YYYY-MM-DD
   style?: React.CSSProperties
   className?: string
 }
@@ -24,7 +25,7 @@ function displayToIso(display: string) {
   return `${y}-${m}-${d}`
 }
 
-export default function DateInput({ value, onChange, min, style, className }: Props) {
+export default function DateInput({ value, onChange, min, max, style, className }: Props) {
   const [text, setText] = useState(() => isoToDisplay(value))
   const nativeRef = useRef<HTMLInputElement>(null)
 
@@ -82,6 +83,7 @@ export default function DateInput({ value, onChange, min, style, className }: Pr
         ref={nativeRef}
         type="date"
         min={min}
+        max={max}
         value={value}
         aria-label="Open calendar"
         onChange={handleNative}

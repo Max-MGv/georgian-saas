@@ -15,19 +15,24 @@ import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { checkPreferredDate } from '@/lib/wineOrderDate'
 import { priceWineOrder } from '@/lib/winePricing'
 import { companyCodeProof } from '@/lib/contactResolution'
+import { wineDisplayName } from '@/lib/wineName'
 
 /** Per wine, per order — far above any real order, low enough to keep totals sane. Not exported:
  *  a 'use server' file may only export async functions. */
 const MAX_BOTTLES_PER_WINE = 1000
 
+/** Text-field ceilings — far above anything a real order needs; a crafted request sent a
+ *  50,000-character address and it was stored (QA 2026-10-14 F7). */
+const MAX_LEN = { name: 200, address: 500, hours: 200, phone: 50, email: 254, code: 64 } as const
+
 export type WineSelection = {
   vintageId: string
+  quantity: number
+  // Client-supplied — display-only. Never trusted: the server re-fetches the real
+  // WineVintage price (KnownBugs.md #22) and, since QA 2026-10-14 F4, the name and year
+  // the order line stores too.
   name: string
   year: number
-  quantity: number
-  // Client-supplied — display-only. Never trusted for pricing; the server
-  // re-fetches the real WineVintage.price for every line before computing
-  // any total. See KnownBugs.md #22.
   price: number
 }
 
@@ -74,11 +79,24 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // against the company under the tenant before trusting any of it. Parsed here, separately,
   // so a malformed value fails on the form that sent it rather than deeper in the write.
   const contactsJson = formData.get('contacts') as string | null
+  const tooLong = (v: string | null | undefined, max: number) => !!v && v.length > max
+  if (
+    tooLong(businessName, MAX_LEN.name) || tooLong(llcName, MAX_LEN.name) || tooLong(llcId, MAX_LEN.name) ||
+    tooLong(typedAddress, MAX_LEN.address) || tooLong(typedWorkingHours, MAX_LEN.hours) ||
+    tooLong(contactName, MAX_LEN.name) || tooLong(formData.get('contactPhone') as string | null, MAX_LEN.phone) ||
+    tooLong(contactEmail, MAX_LEN.email) || tooLong(companyCode, MAX_LEN.code)
+  ) {
+    return { error: 'One of the fields is too long — please shorten it.' }
+  }
   let contacts: { roleId: string; personId?: string; name: string; phone: string | null; email: string | null }[] = []
   if (contactsJson) {
     try {
       const parsed = JSON.parse(contactsJson)
       if (Array.isArray(parsed)) contacts = parsed
+      // One entry per contact role — a handful at most. The snapshots are stored as sent.
+      if (contacts.length > 20 || contacts.some(c => tooLong(c?.name, MAX_LEN.name) || tooLong(c?.phone, MAX_LEN.phone) || tooLong(c?.email, MAX_LEN.email))) {
+        return { error: 'One of the fields is too long — please shorten it.' }
+      }
     } catch {
       return { error: 'Please fill in all required fields.' }
     }
@@ -97,6 +115,11 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // with 0.3 bottles used to crash the pricing (a fraction of a tetri) instead of getting an answer.
   if (wines.some(w => !Number.isInteger(w?.quantity) || w.quantity < 0 || w.quantity > MAX_BOTTLES_PER_WINE)) {
     return { error: 'Please check the number of bottles.' }
+  }
+  // A wine is named by its id, a string. A number or "constructor" used to reach the database /
+  // a plain-object lookup and end in a server error instead of an answer (QA 2026-10-14 F6).
+  if (wines.some(w => typeof w.vintageId !== 'string' || w.vintageId.length === 0 || w.vintageId.length > 64)) {
+    return { error: 'One or more selected wines are no longer available. Please refresh and try again.' }
   }
   const selectedWines = wines.filter(w => w.quantity > 0)
 
@@ -121,7 +144,13 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
   const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null, deliveryZoneId: null }
   const [realVintages, realCompany, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
-    tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
+    // Only what the catalogue shows: an active vintage of an active wine. A hidden wine could be
+    // ordered by naming its id (QA 2026-10-14 F5). Name + year come back too — the order line's
+    // snapshot is taken from here, never from the browser's copy (F4).
+    tx.wineVintage.findMany({
+      where: { id: { in: vintageIds }, tenantId, active: true, wine: { active: true } },
+      select: { id: true, price: true, year: true, wine: { select: { name: true, nameKa: true } } },
+    }),
     companyId
       ? tx.company.findFirst({
           // Only a wine-order company can be named here — the same filter the form's lookup uses.
@@ -158,12 +187,14 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
       error: dateProblem === 'missing' ? 'Please choose a preferred date.'
         : dateProblem === 'closed' ? 'We are closed on that day — please choose another date.'
         : dateProblem === 'too_soon' ? 'That date is too soon — please choose a later date.'
+        : dateProblem === 'too_far' ? 'That date is too far ahead — please choose a date within a year.'
         : 'Please choose a valid date.',
     }
   }
-  const priceMap = Object.fromEntries(realVintages.map(v => [v.id, v.price]))
+  // A Map, not a plain object: `"constructor" in {}` is true (F6).
+  const vintageById = new Map(realVintages.map(v => [v.id, v]))
 
-  if (selectedWines.some(w => !(w.vintageId in priceMap))) {
+  if (selectedWines.some(w => !vintageById.has(w.vintageId))) {
     return { error: 'One or more selected wines are no longer available. Please refresh and try again.' }
   }
 
@@ -172,7 +203,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // scale inside applyPercent is what keeps this an Int (bug #44's lesson).
   const negotiated = Object.fromEntries((realCompany?.winePrices ?? []).map(p => [p.wineVintageId, p.price]))
   const pricing = priceWineOrder(
-    selectedWines.map(w => ({ vintageId: w.vintageId, quantity: w.quantity, standardPrice: priceMap[w.vintageId] })),
+    selectedWines.map(w => ({ vintageId: w.vintageId, quantity: w.quantity, standardPrice: vintageById.get(w.vintageId)!.price })),
     negotiated,
     realCompany?.wineDiscountPercent ?? null,
   )
@@ -213,6 +244,8 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     return { error: 'Please provide an email address so we can send your receipt.' }
   }
 
+  const siteLocale = (await cookies()).get('site_locale')?.value ?? 'en'
+
   try {
     const createdOrder = await withTenantDb(tenantId, async (tx) => {
       const order = await tx.wineOrder.create({
@@ -241,8 +274,9 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
         data: selectedWines.map(w => ({
           wineOrderId: order.id,
           wineVintageId: w.vintageId,
-          wineNameSnapshot: w.name,
-          vintageYearSnapshot: w.year,
+          // From the database, in the customer's language — the form's copy was display-only (F4).
+          wineNameSnapshot: wineDisplayName(vintageById.get(w.vintageId)!.wine, siteLocale),
+          vintageYearSnapshot: vintageById.get(w.vintageId)!.year,
           // The price actually charged per bottle: negotiated, or standard (the % sits on the order).
           priceSnapshot: unitPrice[w.vintageId],
           quantity: w.quantity,

@@ -5,6 +5,8 @@ import { resolveCompanyContactsFor, companyLevelContactsFor } from '@/lib/contac
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import { accessCodeProblem } from '@/lib/accessCodeRules'
+import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 
 // Not exported: MaintenanceNotes #24 — a 'use server' file may only export async functions,
 // and this one is synchronous. generateUniqueTenantCode (below) is the async wrapper other
@@ -125,9 +127,10 @@ export async function regenerateAccessCode(id: string) {
 
 export async function setAccessCode(id: string, code: string) {
   await requireAdmin()
-  if (!code.trim()) return { error: 'Code cannot be empty.' }
-  const tenantId = await getTenantId()
   const normalized = code.trim().toUpperCase()
+  const problem = accessCodeProblem(normalized)
+  if (problem) return { error: problem }
+  const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
     const existing = await tx.company.findFirst({ where: { id, tenantId } })
     if (!existing) return { error: 'Company not found.' as const }
@@ -181,7 +184,14 @@ export async function resolveCompanyContacts(input: {
   // the page open, so forwarding the caller's object wholesale would let a crafted request set
   // `trusted: true` and skip the access-code gate — which is the very hole this call was
   // found to have. Adding a field to the resolver means adding it here on purpose.
-  return resolveCompanyContactsFor(await getTenantId(), {
+  const tenantId = await getTenantId()
+  // A typed code is the only key to a company's prices and people, so guessing is throttled
+  // (QA 2026-10-14 F10). Picking from the list without a code is not counted.
+  if (input.code?.trim()) {
+    const rate = await checkWriteRateLimit(tenantId, 'code-lookup')
+    if (rate.limited) return { error: 'Too many attempts — please wait a few minutes and try again.' }
+  }
+  return resolveCompanyContactsFor(tenantId, {
     module: input.module,
     companyId: input.companyId,
     code: input.code,

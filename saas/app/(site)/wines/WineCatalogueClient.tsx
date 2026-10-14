@@ -10,7 +10,7 @@ import { formatAddressOption } from '@/lib/orderAddress'
 import { meetsMinimum, zoneDisplayName, type WineOrderRules } from '@/lib/wineOrderRules'
 import { priceWineOrder } from '@/lib/winePricing'
 import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
-import { checkPreferredDate, earliestPreferredDate, type PreferredDateRules } from '@/lib/wineOrderDate'
+import { checkPreferredDate, earliestPreferredDate, latestPreferredDate, type PreferredDateRules } from '@/lib/wineOrderDate'
 import DateInput from '@/components/DateInput'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { t } from '@/lib/t'
@@ -412,7 +412,7 @@ export default function WineCatalogueClient({
     const result = await resolveContacts({ companyId, code: codeInput })
     setCodeLoading(false)
     if ('error' in result) {
-      setCodeError('Incorrect code — please try again or contact the winery.')
+      setCodeError(t(locale, 'form.access_code_error'))
       return
     }
     applyCompanyProfile(result.company)
@@ -438,7 +438,7 @@ export default function WineCatalogueClient({
     const result = await resolveContacts({ code: directCode })
     setDirectCodeLoading(false)
     if ('error' in result) {
-      setDirectCodeError('Code not recognised.')
+      setDirectCodeError(t(locale, 'wine.ui.code_not_recognised'))
       return
     }
     setCompanyId(result.company.id)
@@ -610,7 +610,7 @@ export default function WineCatalogueClient({
           className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:opacity-75 active:scale-95"
           style={{ color: 'var(--color-brand)', borderColor: 'var(--color-brand)' }}
         >
-          New Company?
+          {t(locale, 'form.new_company_chip')}
         </button>
         {directCompanyName ? (
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border"
@@ -627,7 +627,7 @@ export default function WineCatalogueClient({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Enter your company code"
+              placeholder={t(locale, 'form.access_code_title')}
               value={directCode}
               onChange={e => { setDirectCode(e.target.value.toUpperCase()); setDirectCodeError('') }}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleDirectCodeSubmit() } }}
@@ -641,7 +641,7 @@ export default function WineCatalogueClient({
               className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white flex-shrink-0 transition-opacity"
               style={{ backgroundColor: 'var(--color-brand)', opacity: (directCodeLoading || !directCode.trim()) ? 0.6 : 1 }}
             >
-              {directCodeLoading ? '…' : 'Confirm'}
+              {directCodeLoading ? '…' : t(locale, 'form.access_code_confirm')}
             </button>
           </div>
         )}
@@ -653,7 +653,7 @@ export default function WineCatalogueClient({
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="block text-sm font-medium" style={{ color: C.muted }}>
-            Ordering as a company? <span className="font-normal" style={{ color: C.faint }}>(optional — auto-fills your details)</span>
+            {t(locale, 'wine.ui.company_question')} <span className="font-normal" style={{ color: C.faint }}>{t(locale, 'wine.ui.company_question_hint')}</span>
           </label>
           <button
             type="button"
@@ -661,7 +661,7 @@ export default function WineCatalogueClient({
             className="text-xs font-medium transition-all hover:opacity-75 active:scale-95 flex-shrink-0 ml-3"
             style={{ color: 'var(--color-brand)' }}
           >
-            New Company?
+            {t(locale, 'form.new_company_chip')}
           </button>
         </div>
         <select
@@ -670,7 +670,7 @@ export default function WineCatalogueClient({
           className="w-full px-4 py-3 rounded-lg border text-sm outline-none"
           style={inputStyle}
         >
-          <option value="">— Individual / no company —</option>
+          <option value="">{t(locale, 'wine.ui.no_company_option')}</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
@@ -707,9 +707,9 @@ export default function WineCatalogueClient({
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-4" style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
             <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>Enter your company code</h3>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{t(locale, 'form.access_code_title')}</h3>
               <p className="text-sm" style={{ color: C.muted }}>
-                {selectedCompany.name} — enter the access code provided by the winery.
+                {t(locale, 'form.access_code_intro', { company: selectedCompany.name })}
               </p>
             </div>
             <div className="relative">
@@ -719,7 +719,7 @@ export default function WineCatalogueClient({
                 value={codeInput}
                 onChange={e => { setCodeInput(e.target.value.toUpperCase()); setCodeError('') }}
                 onKeyDown={e => { if (e.key === 'Enter') handleCodeSubmit() }}
-                placeholder="e.g. MARANI42"
+                placeholder={t(locale, 'form.access_code_placeholder')}
                 className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono"
                 style={{ ...inputStyle, paddingRight: '40px', letterSpacing: '0.08em' }}
               />
@@ -748,10 +748,10 @@ export default function WineCatalogueClient({
               className="w-full py-2.5 rounded-lg font-semibold text-sm text-white"
               style={{ backgroundColor: C.wine, opacity: (codeLoading || !codeInput.trim()) ? 0.6 : 1 }}
             >
-              {codeLoading ? 'Checking…' : 'Confirm'}
+              {codeLoading ? t(locale, 'form.access_code_checking') : t(locale, 'form.access_code_confirm')}
             </button>
             <button type="button" onClick={handleNotARep} className="w-full py-2 rounded-lg text-xs font-medium border text-center transition-colors hover:bg-gray-50" style={{ color: C.muted, borderColor: C.border }}>
-              Enter Manually
+              {t(locale, 'form.access_code_enter_manually')}
             </button>
           </div>
         </div>
@@ -763,46 +763,46 @@ export default function WineCatalogueClient({
           <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col gap-3"
             style={{ backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}` }}>
             <div>
-              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>New Company?</h3>
-              <p className="text-sm" style={{ color: C.muted }}>Fill in your details and we'll get in touch to set up your account.</p>
+              <h3 className="font-semibold text-base mb-1" style={{ color: C.text }}>{t(locale, 'form.new_company_title')}</h3>
+              <p className="text-sm" style={{ color: C.muted }}>{t(locale, 'form.new_company_body_no_booking')}</p>
             </div>
             {newCoStatus === 'sent' ? (
               <div className="py-4 text-center">
-                <p className="font-medium" style={{ color: STATUS.successText }}>Request received!</p>
-                <p className="text-sm mt-1" style={{ color: C.muted }}>We'll be in touch to set up your account.</p>
+                <p className="font-medium" style={{ color: STATUS.successText }}>{t(locale, 'form.new_company_success_title')}</p>
+                <p className="text-sm mt-1" style={{ color: C.muted }}>{t(locale, 'form.new_company_success_body')}</p>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="mt-4 px-4 py-2 rounded-lg text-sm font-medium border"
                   style={{ borderColor: C.border, color: C.text }}>
-                  Close
+                  {t(locale, 'form.new_company_close')}
                 </button>
               </div>
             ) : (
               <>
-                <input type="text" placeholder="Company Name *" value={newCoName}
+                <input type="text" placeholder={t(locale, 'form.new_company_name_placeholder')} value={newCoName}
                   onChange={e => setNewCoName(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
-                <input type="text" placeholder="Your Name *" value={newCoContact}
+                <input type="text" placeholder={t(locale, 'form.new_company_contact_placeholder')} value={newCoContact}
                   onChange={e => setNewCoContact(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
-                <input type="tel" placeholder="Phone Number *" value={newCoPhone}
+                <input type="tel" placeholder={t(locale, 'form.new_company_phone_placeholder')} value={newCoPhone}
                   onChange={e => setNewCoPhone(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
-                <input type="email" placeholder="Email (optional)" value={newCoEmail}
+                <input type="email" placeholder={t(locale, 'form.new_company_email_placeholder')} value={newCoEmail}
                   onChange={e => setNewCoEmail(e.target.value)}
                   className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: C.inputBg, borderColor: C.border, color: C.text }} />
                 {newCoStatus === 'error' && (
-                  <p className="text-xs" style={{ color: STATUS.errorText }}>Something went wrong. Please try again.</p>
+                  <p className="text-xs" style={{ color: STATUS.errorText }}>{t(locale, 'form.new_company_error')}</p>
                 )}
                 <button type="button" onClick={handleNewCompanySubmit}
                   disabled={newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()}
                   className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-opacity"
                   style={{ backgroundColor: 'var(--color-brand)', opacity: (newCoStatus === 'submitting' || !newCoName.trim() || !newCoContact.trim() || !newCoPhone.trim()) ? 0.6 : 1 }}>
-                  {newCoStatus === 'submitting' ? 'Sending…' : 'Send Request'}
+                  {newCoStatus === 'submitting' ? t(locale, 'form.new_company_sending') : t(locale, 'form.new_company_send_request')}
                 </button>
                 <button type="button" onClick={() => setShowNewCompanyPopup(false)}
                   className="w-full py-2 rounded-lg text-xs font-medium border text-center"
                   style={{ color: C.muted, borderColor: C.border }}>
-                  Cancel
+                  {t(locale, 'form.new_company_cancel')}
                 </button>
               </>
             )}
@@ -832,7 +832,7 @@ export default function WineCatalogueClient({
               onClick={() => setShowDrawer(true)}
               className="btn-wine font-semibold px-5 py-2.5 rounded-lg text-sm flex-shrink-0"
             >
-              {paymentLabelActive ? 'Checkout →' : 'Place Reservation →'}
+              {paymentLabelActive ? t(locale, 'wine.ui.bar_pay') : t(locale, 'wine.ui.bar_reserve')}
             </button>
           </div>
         </div>
@@ -856,10 +856,10 @@ export default function WineCatalogueClient({
                 <div className="text-5xl mb-6">🍷</div>
                 <h2 className="text-2xl font-bold mb-3" style={{ color: 'var(--site-text)' }}>Order received!</h2>
                 <p className="text-base mb-8" style={{ color: 'var(--site-muted)' }}>
-                  Thank you. We will contact you shortly to confirm the details.
+                  {t(locale, 'wine.ui.success')}
                 </p>
                 <button onClick={handlePlaceAnother} className="btn-wine font-semibold px-8 py-3 rounded-lg">
-                  Place another order
+                  {t(locale, 'wine.ui.another')}
                 </button>
               </div>
             ) : (
@@ -867,7 +867,7 @@ export default function WineCatalogueClient({
                 {/* Drawer header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border }}>
                   <h2 className="text-lg font-bold" style={{ color: C.text }}>
-                    {paymentLabelActive ? 'Your Order' : 'Place a Reservation'}
+                    {paymentLabelActive ? t(locale, 'wine.ui.title_pay') : t(locale, 'wine.ui.title_reserve')}
                   </h2>
                   <button
                     type="button"
@@ -883,7 +883,7 @@ export default function WineCatalogueClient({
 
                 {/* Order summary (read-only) */}
                 <div className="px-6 py-4 border-b flex-shrink-0" style={{ borderColor: C.border, backgroundColor: 'var(--site-bg)' }}>
-                  <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: C.faint }}>Your order</p>
+                  <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: C.faint }}>{t(locale, 'wine.ui.your_order')}</p>
                   <div className="flex flex-col gap-1.5">
                     {selectedWines.map(w => (
                       <div key={w.vintageId} className="flex items-center justify-between text-sm">
@@ -896,7 +896,7 @@ export default function WineCatalogueClient({
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: 'var(--site-border)' }}>
                     <span className="text-sm font-semibold" style={{ color: C.text }}>
-                      {chosenZone ? t(locale, 'wine.summary_wines') : 'Total'}
+                      {chosenZone ? t(locale, 'wine.summary_wines') : t(locale, 'wine.ui.total')}
                     </span>
                     {pricing.discountPercent ? (
                       <div className="flex items-center gap-2">
@@ -930,7 +930,7 @@ export default function WineCatalogueClient({
                         <span style={{ color: C.muted }}>{chosenZone.fee === 0 ? t(locale, 'wine.summary_free') : formatTetri(asTetri(chosenZone.fee))}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: 'var(--site-border)' }}>
-                        <span className="text-sm font-semibold" style={{ color: C.text }}>Total</span>
+                        <span className="text-sm font-semibold" style={{ color: C.text }}>{t(locale, 'wine.ui.total')}</span>
                         <span className="text-base font-bold" style={{ color: C.wine }}>{formatTetri(grandTotal)}</span>
                       </div>
                     </>
@@ -949,7 +949,7 @@ export default function WineCatalogueClient({
                   {/* Not for a private person (T-9): no company, no company discount. */}
                   {!discountPercent && !isIndividual && (
                     <p className="text-xs mt-2 italic" style={{ color: C.faint }}>
-                      Company discounts, if applicable, are applied here at checkout.
+                      {t(locale, 'wine.ui.discount_note')}
                     </p>
                   )}
                 </div>
@@ -1003,13 +1003,13 @@ export default function WineCatalogueClient({
                       <>
                         {companySelectorJsx}
 
-                        <input name="businessName" required placeholder="Bar, restaurant, or individual name"
+                        <input name="businessName" required placeholder={t(locale, 'wine.ui.business_name')}
                           value={businessName} onChange={e => setBusinessName(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                        <input name="llcName" placeholder="LLC name (if applicable)"
+                        <input name="llcName" placeholder={t(locale, 'wine.ui.llc_name')}
                           value={llcName} onChange={e => setLlcName(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                        <input name="llcId" placeholder="LLC identification number"
+                        <input name="llcId" placeholder={t(locale, 'wine.ui.llc_id')}
                           value={llcId} onChange={e => setLlcId(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                       </>
@@ -1048,11 +1048,11 @@ export default function WineCatalogueClient({
                     {!isPickup && (addressChoice === 'other' || savedAddresses.length === 0) ? (
                       <>
                         <input name="address" required
-                          placeholder={isIndividual ? t(locale, 'wine.address_individual') : 'Actual address of bar / restaurant'}
+                          placeholder={isIndividual ? t(locale, 'wine.address_individual') : t(locale, 'wine.ui.address')}
                           value={address} onChange={e => setAddress(e.target.value)}
                           className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                         {!isIndividual && (
-                          <input name="workingHours" placeholder="Working hours"
+                          <input name="workingHours" placeholder={t(locale, 'wine.ui.working_hours')}
                             value={workingHours} onChange={e => setWorkingHours(e.target.value)}
                             className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                         )}
@@ -1095,10 +1095,10 @@ export default function WineCatalogueClient({
                         {t(locale, 'form.contact_role_choose')}
                       </button>
                     )}
-                    <input name="contactName" required placeholder={isIndividual ? t(locale, 'wine.name_individual') : 'Contact person full name'}
+                    <input name="contactName" required placeholder={isIndividual ? t(locale, 'wine.name_individual') : t(locale, 'wine.ui.contact_name')}
                       value={contactName} onChange={e => setContactName(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
-                    <input name="contactPhone" required placeholder={isIndividual ? t(locale, 'wine.phone_individual') : 'Contact person phone number'}
+                    <input name="contactPhone" required placeholder={isIndividual ? t(locale, 'wine.phone_individual') : t(locale, 'wine.ui.contact_phone')}
                       value={contactPhone} onChange={e => setContactPhone(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                     {/* Required only when paying online — that's the one case
@@ -1106,7 +1106,7 @@ export default function WineCatalogueClient({
                         to send it. Optional otherwise, so tenants on the plain
                         reservation flow keep the form they have today. */}
                     <input name="contactEmail" type="email" required={paymentLabelActive}
-                      placeholder={paymentLabelActive ? 'Email address (for your receipt)' : 'Email address (optional)'}
+                      placeholder={paymentLabelActive ? t(locale, 'wine.ui.email_receipt') : t(locale, 'wine.ui.email_optional')}
                       value={contactEmail} onChange={e => setContactEmail(e.target.value)}
                       className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
 
@@ -1158,10 +1158,12 @@ export default function WineCatalogueClient({
                       <input type="hidden" name="preferredDate" value={preferredDate} />
                       <DateInput value={preferredDate} onChange={setPreferredDate}
                         min={earliestPreferredDate(new Date(), dateRules.leadHours)}
+                        max={latestPreferredDate(new Date())}
                         className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle} />
                       <p className="text-xs" style={{ color: dateProblem ? 'var(--color-brand)' : C.faint }}>
                         {dateProblem === 'closed' ? t(locale, 'wine.date_closed')
                           : dateProblem === 'too_soon' ? t(locale, 'wine.date_too_soon')
+                          : dateProblem === 'too_far' ? t(locale, 'wine.date_too_far')
                           : dateProblem === 'invalid' ? t(locale, 'wine.date_invalid')
                           : t(locale, 'wine.date_note')}
                       </p>
@@ -1173,8 +1175,8 @@ export default function WineCatalogueClient({
                     <button type="submit" disabled={isPending || belowMinimum || dateMissing || !!dateProblem}
                       className="btn-wine font-semibold py-3 rounded-lg mt-2 disabled:opacity-60 transition-opacity">
                       {isPending
-                        ? (paymentLabelActive ? 'Redirecting...' : 'Sending...')
-                        : (paymentLabelActive ? 'Order & Pay' : 'Place Reservation')}
+                        ? (paymentLabelActive ? t(locale, 'wine.ui.redirecting') : t(locale, 'wine.ui.sending'))
+                        : (paymentLabelActive ? t(locale, 'wine.ui.submit_pay') : t(locale, 'wine.ui.submit_reserve'))}
                     </button>
                   </form>
                 </div>
@@ -1363,10 +1365,10 @@ export default function WineCatalogueClient({
           <div data-tour="wine-catalogue" className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--site-border)' }}>
             <div className="grid items-center text-xs font-medium uppercase tracking-wider px-4 py-3 border-b"
               style={{ gridTemplateColumns: '3fr 1fr 1fr 1fr', backgroundColor: 'var(--site-bg)', borderColor: 'var(--site-border)', color: 'var(--site-secondary)' }}>
-              <span>Wine</span>
-              <span className="text-center">Unit price</span>
-              <span className="text-center">Quantity</span>
-              <span className="text-right">Total</span>
+              <span>{t(locale, 'wine.ui.col_wine')}</span>
+              <span className="text-center">{t(locale, 'wine.ui.col_unit')}</span>
+              <span className="text-center">{t(locale, 'wine.ui.col_qty')}</span>
+              <span className="text-right">{t(locale, 'wine.ui.total')}</span>
             </div>
 
             {visibleWines.map((wine, i) => {

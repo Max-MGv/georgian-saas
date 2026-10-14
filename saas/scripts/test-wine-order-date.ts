@@ -2,7 +2,7 @@
  * Preferred-date rules (lib/wineOrderDate.ts, T-14 Chunk 7). Pure; no database.
  * Run: npx tsx scripts/test-wine-order-date.ts
  */
-import { checkPreferredDate, earliestPreferredDate, wineLeadHours, formatPreferredDate } from '../lib/wineOrderDate'
+import { checkPreferredDate, earliestPreferredDate, latestPreferredDate, wineLeadHours, formatPreferredDate, formatIsoDay } from '../lib/wineOrderDate'
 import { minBookableInstant, slotMeetsLeadTime } from '../lib/bookingHours'
 import { tbilisiDateIso, tbilisiInstant } from '../lib/tbilisiTime'
 
@@ -51,6 +51,19 @@ const min3h = minBookableInstant(noon, 3) // 15:00 Tbilisi
 check('Booking at noon with a 3 h lead: the 13:00 slot is refused', slotMeetsLeadTime('2026-10-13', '13:00', min3h) === false)
 check('…and the 15:00 slot is allowed', slotMeetsLeadTime('2026-10-13', '15:00', min3h) === true)
 check('…and 14:00 is still refused (on a UTC server it used to pass)', slotMeetsLeadTime('2026-10-13', '14:00', min3h) === false)
+
+// QA 2026-10-14 F3 — no more than a year ahead (the server took 9999-12-31).
+check('A year ahead is the last day', latestPreferredDate(morning) === '2027-10-12', latestPreferredDate(morning))
+check('The last day itself is fine', checkPreferredDate('2027-10-12', rules, morning) === null)
+check('The day after → "too_far"', checkPreferredDate('2027-10-13', rules, morning) === 'too_far')
+check('9999-12-31 → "too_far"', checkPreferredDate('9999-12-31', rules, morning) === 'too_far')
+
+// QA 2026-10-14 F1 — fixed month names, no ICU: the same text on Vercel's Node, any browser, any TZ.
+check('Georgian label from the fixed table', formatPreferredDate(new Date('2026-10-28T00:00:00Z'), 'ka') === '28 ოქტ. 2026',
+  formatPreferredDate(new Date('2026-10-28T00:00:00Z'), 'ka'))
+check('English label', formatPreferredDate('2026-01-05T00:00:00.000Z', 'en') === '5 Jan 2026', formatPreferredDate('2026-01-05T00:00:00.000Z', 'en'))
+check('Day + month only', formatIsoDay('2026-12-31', 'ka', { withYear: false }) === '31 დეკ.')
+check('An unreadable value gives an empty label, not "Invalid Date"', formatPreferredDate('nonsense', 'en') === '')
 
 console.log('\n──────────────────────────────────────────────────')
 console.log(`Results: ${passed} passed, ${failed} failed\n`)

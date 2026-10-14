@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { adminT } from '@/lib/adminT'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 /**
  * The admin month grid, shared by Orders (bookings by visit date) and Wine Orders (by preferred
@@ -73,7 +74,8 @@ export default function MonthCalendar<T>({
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  const today = new Date().toISOString().split('T')[0]
+  // The winery's day, not UTC's (which is still yesterday until 04:00 in Georgia — KnownBugs #79).
+  const today = tbilisiDateIso(new Date())
 
   const firstDay = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()

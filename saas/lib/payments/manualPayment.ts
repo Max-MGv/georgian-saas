@@ -155,9 +155,15 @@ export async function recordAdditionalPayment(
     method: 'BANK_TRANSFER' | 'CASH'
   }
 ): Promise<{ success: true; paymentId: string } | { error: string }> {
+  // Whole tetri only: 12.5 used to be stored as 12, and a string reached the DB (QA 2026-10-14 F8).
+  if (!Number.isInteger(input.amount)) return { error: 'Enter a valid amount.' }
   if (input.amount <= 0) {
     return { error: 'Enter an amount greater than zero.' }
   }
+  // Lock the order row for the rest of this transaction, so two admins recording at the same
+  // moment are checked one after the other against the balance — without it both read the same
+  // balance and both were accepted (QA 2026-10-14 F9, reproduced 2 of 2).
+  await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${input.orderId} FOR UPDATE`
 
   const order = await tx.order.findFirst({
     where: { id: input.orderId, tenantId: input.tenantId },
@@ -226,7 +232,10 @@ export async function recordAdditionalWinePayment(
   tx: TxClient,
   input: { wineOrderId: string; tenantId: string | null; amount: Tetri; at: Date; method: 'BANK_TRANSFER' | 'CASH' }
 ): Promise<{ success: true; paymentId: string } | { error: string }> {
+  if (!Number.isInteger(input.amount)) return { error: 'Enter a valid amount.' }
   if (input.amount <= 0) return { error: 'Enter an amount greater than zero.' }
+  // Same row lock as recordAdditionalPayment above (F9).
+  await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${input.wineOrderId} FOR UPDATE`
   const owed = await wineOrderBalance(tx, input)
   if ('error' in owed) return owed
   if (input.amount > owed.balance) {

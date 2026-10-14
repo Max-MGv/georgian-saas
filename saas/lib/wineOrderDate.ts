@@ -26,7 +26,15 @@ export function earliestPreferredDate(now: Date, leadHours: number): string {
   return tbilisiDateIso(new Date(now.getTime() + Math.max(0, leadHours) * 60 * 60 * 1000))
 }
 
-export type PreferredDateProblem = 'missing' | 'invalid' | 'too_soon' | 'closed'
+/** How far ahead a customer may ask for (QA 2026-10-14 F3: the server took 9999-12-31). */
+export const PREFERRED_DATE_MAX_DAYS = 365
+
+/** The last day that can be asked for: a year from today, Georgian calendar. */
+export function latestPreferredDate(now: Date): string {
+  return tbilisiDateIso(new Date(now.getTime() + PREFERRED_DATE_MAX_DAYS * 24 * 60 * 60 * 1000))
+}
+
+export type PreferredDateProblem = 'missing' | 'invalid' | 'too_soon' | 'too_far' | 'closed'
 
 /** Null when the date is fine; otherwise why not. */
 export function checkPreferredDate(
@@ -40,6 +48,7 @@ export function checkPreferredDate(
   const probe = new Date(y!, m! - 1, d!)
   if (probe.getFullYear() !== y || probe.getMonth() !== m! - 1 || probe.getDate() !== d) return 'invalid'
   if (dateStr < earliestPreferredDate(now, rules.leadHours)) return 'too_soon'
+  if (dateStr > latestPreferredDate(now)) return 'too_far'
   if (rules.blockedDates.includes(dateStr)) return 'closed'
   return null
 }
@@ -52,9 +61,25 @@ export function wineLeadHours(settings: { split: boolean; single: number; tastin
   return settings.split ? Math.min(settings.tasting, settings.lunch) : settings.single
 }
 
-/** "14 Oct 2026" / "14 ოქტ 2026" style label for a stored date (UTC midnight from @db.Date). */
+// Fixed month names, deliberately not toLocaleDateString('ka-GE'): Vercel's Node has no Georgian
+// ICU data and falls back to an English shape, while the guest's browser has it — so the server
+// and the browser printed different text (a React hydration error on Wine Orders) and Georgian
+// receipt emails got an English date. Same lesson as lib/emails/templates/dateFormat.ts (QA
+// 2026-10-14, vault/QA-WineOrderFeatures-2026-10-14.md F1).
+const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_SHORT_KA = ['იან.', 'თებ.', 'მარ.', 'აპრ.', 'მაი.', 'ივნ.', 'ივლ.', 'აგვ.', 'სექ.', 'ოქტ.', 'ნოე.', 'დეკ.']
+
+/** "28 Oct 2026" / "28 ოქტ. 2026" from a `YYYY-MM-DD` day; `withYear: false` → "28 Oct". */
+export function formatIsoDay(iso: string, locale: string, opts: { withYear?: boolean } = {}): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const month = (locale === 'ka' ? MONTHS_SHORT_KA : MONTHS_SHORT_EN)[m! - 1]
+  return opts.withYear === false ? `${d} ${month}` : `${d} ${month} ${y}`
+}
+
+/** "14 Oct 2026" / "14 ოქტ. 2026" label for a stored date (UTC midnight from @db.Date). */
 export function formatPreferredDate(value: Date | string | null | undefined, locale: string): string {
   if (!value) return ''
   const d = typeof value === 'string' ? new Date(value) : value
-  return d.toLocaleDateString(locale === 'ka' ? 'ka-GE' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  if (Number.isNaN(d.getTime())) return ''
+  return formatIsoDay(d.toISOString().slice(0, 10), locale)
 }
