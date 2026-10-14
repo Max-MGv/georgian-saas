@@ -14,6 +14,8 @@ import { meetsMinimum, type MinOrderRule } from '@/lib/wineOrderRules'
 export type OrderDeliveryInput = {
   fulfilment: string | null
   zoneChoice: string | null
+  /** The chosen saved address's own delivery area (lib/orderAddress.ts), if it has one. */
+  addressZoneId?: string | null
 }
 
 export type OrderDelivery = {
@@ -39,6 +41,15 @@ export function resolveOrderDelivery(
   // No zones configured: delivery as it always was — no area asked, no fee recorded.
   if (setup.zones.length === 0) {
     return { fulfilment, deliveryZoneId: null, deliveryZoneName: null, deliveryFee: null, deliveryFeePending: false }
+  }
+
+  // A saved address that has a delivery area is delivered there, whatever area the request names
+  // (Max, 2026-10-14: "it should be enforced") — otherwise a company could pick a cheaper area, or
+  // "Other", for an address the winery has already priced. The admin's manual form may still
+  // choose (trusted). If that area has since been switched off, the customer chooses as usual.
+  if (!opts.admin && input.addressZoneId) {
+    const own = setup.zones.find(z => z.id === input.addressZoneId)
+    if (own) return { fulfilment, deliveryZoneId: own.id, deliveryZoneName: own.nameEn, deliveryFee: own.fee, deliveryFeePending: false }
   }
 
   const choice = input.zoneChoice?.trim() || ''

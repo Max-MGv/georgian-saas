@@ -587,8 +587,14 @@ export default function WineCatalogueClient({
   const pickupOffered = !!delivery?.rules.pickupEnabled
   const isPickup = pickupOffered && fulfilment === 'PICKUP'
   const askZone = !isPickup && zones.length > 0
-  const chosenZone = askZone ? zones.find(z => z.id === zoneChoice) ?? null : null
-  const feeUnknown = askZone && zoneChoice === 'other'
+  // A saved address with its own delivery area is delivered there — not a choice (Max, 2026-10-14);
+  // the server enforces the same (lib/orderDelivery.ts). Its area is shown as plain text.
+  const fixedZone = askZone && addressChoice !== 'other' && chosenSavedAddress?.deliveryZoneId
+    ? zones.find(z => z.id === chosenSavedAddress.deliveryZoneId) ?? null
+    : null
+  const effectiveZoneChoice = fixedZone ? fixedZone.id : zoneChoice
+  const chosenZone = askZone ? zones.find(z => z.id === effectiveZoneChoice) ?? null : null
+  const feeUnknown = askZone && effectiveZoneChoice === 'other'
   // The same function the server charges with (lib/winePricing.ts): negotiated lines as they
   // are, the company % on the rest. `pricing.discountPercent` is null when it touches nothing.
   const pricing = priceWineOrder(
@@ -998,7 +1004,7 @@ export default function WineCatalogueClient({
                         submitWineOrder turns these into OrderContact rows with snapshots. */}
                     <input type="hidden" name="contacts" value={JSON.stringify(buildContacts())} />
                     <input type="hidden" name="fulfilment" value={isPickup ? 'PICKUP' : 'DELIVERY'} />
-                    <input type="hidden" name="deliveryZone" value={askZone ? zoneChoice : ''} />
+                    <input type="hidden" name="deliveryZone" value={askZone ? effectiveZoneChoice : ''} />
                     <input type="hidden" name="customerType" value={customerType} />
 
                     {/* Company or individual (T-9) — like the booking form's own switch. */}
@@ -1100,7 +1106,12 @@ export default function WineCatalogueClient({
                     ) : null}
                     {/* Delivery area (T-8) — only once the winery has zones. The fee comes from
                         the zone; "Other" means the winery agrees delivery with the customer. */}
-                    {askZone && (
+                    {fixedZone && (
+                      <p className="text-sm px-1" style={{ color: C.muted }}>
+                        {t(locale, 'wine.zone_fixed').replace('{zone}', zoneDisplayName(fixedZone, locale))} — {fixedZone.fee === 0 ? t(locale, 'wine.summary_free') : formatTetri(asTetri(fixedZone.fee))}
+                      </p>
+                    )}
+                    {askZone && !fixedZone && (
                       <select required value={zoneChoice} onChange={e => setZoneChoice(e.target.value)}
                         aria-label={t(locale, 'wine.zone_choose')}
                         className="w-full px-4 py-3 rounded-lg border text-sm outline-none" style={inputStyle}>

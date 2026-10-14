@@ -192,3 +192,40 @@ test('preferred date: a Closed Day is refused, and the chosen day is stored (T-1
     if (made) await db.blockedDate.delete({ where: { id: made.id } })
   }
 })
+
+test("a saved address's delivery area is used, not chosen — even by a doctored request (Max, 2026-10-14)", async ({ page }) => {
+  test.setTimeout(150_000)
+  await setRules({ wine_min_order_type: 'off', wine_pickup_enabled: 'false' })
+  const code = `ZZAREA${String(RUN).slice(-5)}`
+  const company = await db.company.create({ data: {
+    tenantId: TENANT, name: `ZZ Delivery ${RUN} Area Co`, isWineOrderCompany: true, isBookingCompany: false, accessCode: code,
+    addresses: { create: { label: 'Main bar', address: 'ZZ Area Street 7', deliveryZoneId: zoneId } },
+  } })
+  try {
+    await openDrawerWith(page, 2)
+    await page.locator('select').filter({ has: page.locator('option', { hasText: company.name }) }).selectOption({ label: company.name })
+    await page.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(code)
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Enter your company code' })).not.toBeVisible()
+
+    // The one saved address is chosen, and its area is shown as fact, not offered as a choice.
+    await expect(page.getByText(`Delivery area: ZZ Zone ${RUN} — 15₾`)).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('combobox', { name: 'Choose your delivery area' })).toHaveCount(0)
+
+    await page.getByPlaceholder('Contact person full name').fill('ZZ Area Tester')
+    await page.getByPlaceholder('Contact person phone number').fill('+995500000042')
+    await page.getByPlaceholder(/Email address/).fill(`zz-area-${RUN}@example.invalid`)
+    await fillPreferredWineDate(page)
+    // A doctored request: "Other" would mean no fee now. The server must use the address's area.
+    await page.locator('input[name="deliveryZone"]').evaluate((el: HTMLInputElement) => { el.value = 'other' })
+    await submit(page)
+
+    const o = await db.wineOrder.findFirstOrThrow({ where: { companyId: company.id } })
+    expect(o.deliveryZoneId).toBe(zoneId)
+    expect(o.deliveryFee).toBe(ZONE_FEE)
+    expect(o.deliveryFeePending).toBe(false)
+  } finally {
+    await db.wineOrder.deleteMany({ where: { companyId: company.id } })
+    await db.company.delete({ where: { id: company.id } })
+  }
+})

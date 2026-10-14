@@ -28,6 +28,9 @@ export type OrderAddress = {
   address: string
   workingHours: string | null
   addressLabel: string | null
+  /** The saved address's own delivery area (T-8), when it has one — the area that address is
+   *  delivered to. Public orders must use it (Max, 2026-10-14); a typed address has none. */
+  deliveryZoneId: string | null
 }
 
 export async function resolveOrderAddress(
@@ -44,7 +47,7 @@ export async function resolveOrderAddress(
         isActive: true,
         company: { tenantId },
       },
-      select: { id: true, label: true, address: true, workingHours: true },
+      select: { id: true, label: true, address: true, workingHours: true, deliveryZoneId: true },
     })
     // Most likely the admin deleted it while the form was open. Asking again beats silently
     // filing the order with no address.
@@ -54,6 +57,7 @@ export async function resolveOrderAddress(
       address: saved.address,
       workingHours: saved.workingHours,
       addressLabel: saved.label,
+      deliveryZoneId: saved.deliveryZoneId,
     }
   }
   const typed = input.typedAddress?.trim()
@@ -63,6 +67,7 @@ export async function resolveOrderAddress(
     address: typed,
     workingHours: input.typedWorkingHours?.trim() || null,
     addressLabel: null,
+    deliveryZoneId: null,
   }
 }
 

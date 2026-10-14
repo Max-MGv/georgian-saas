@@ -54,6 +54,24 @@ const amt = rules({ wine_min_order_type: 'amount', wine_min_order_value: '20000'
 check('Minimum 200₾: 199.99₾ refused', minimumOrderError(amt, 1, 19999)?.startsWith('The minimum order is') === true)
 check('No minimum: anything accepted', minimumOrderError(rules({}).minOrder, 0, 0) === null)
 
+// A saved address's own delivery area is enforced on public orders (Max, 2026-10-14).
+const two = [...zones, { id: 'z0', nameEn: 'Free zone', nameKa: null, fee: 0 }]
+const own = resolveOrderDelivery(setup({}, two), { fulfilment: 'DELIVERY', zoneChoice: 'z0', addressZoneId: 'z1' })
+check("Saved address in Tbilisi, request names the free zone → Tbilisi's fee anyway",
+  !('error' in own) && own.deliveryZoneId === 'z1' && own.deliveryFee === 1500, JSON.stringify(own))
+const ownOther = resolveOrderDelivery(setup({}, two), { fulfilment: 'DELIVERY', zoneChoice: 'other', addressZoneId: 'z1' })
+check('…and naming "Other" does not dodge the fee either',
+  !('error' in ownOther) && ownOther.deliveryZoneId === 'z1' && !ownOther.deliveryFeePending)
+const gone = resolveOrderDelivery(setup({}, two), { fulfilment: 'DELIVERY', zoneChoice: 'z0', addressZoneId: 'zz-switched-off' })
+check("The address's area was switched off → the customer's own choice, as before",
+  !('error' in gone) && gone.deliveryZoneId === 'z0')
+const adminPick = resolveOrderDelivery(setup({}, two), { fulfilment: 'DELIVERY', zoneChoice: 'z0', addressZoneId: 'z1' }, { admin: true })
+check("The admin's manual form may still choose another area (trusted)",
+  !('error' in adminPick) && adminPick.deliveryZoneId === 'z0')
+const pickupOwn = resolveOrderDelivery(setup({ wine_pickup_enabled: 'true' }, two), { fulfilment: 'PICKUP', zoneChoice: '', addressZoneId: 'z1' })
+check('Pickup is still pickup — no delivery area forced onto it',
+  !('error' in pickupOwn) && pickupOwn.fulfilment === 'PICKUP' && pickupOwn.deliveryFee === null)
+
 console.log('\n──────────────────────────────────────────────────')
 console.log(`Results: ${passed} passed, ${failed} failed\n`)
 if (failed > 0) process.exitCode = 1

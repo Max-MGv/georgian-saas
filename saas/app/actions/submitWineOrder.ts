@@ -119,7 +119,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // never trust the client's `price`/`discountPercent` for the amount
   // actually charged/recorded. See KnownBugs.md #22.
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
-  const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null }
+  const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null, deliveryZoneId: null }
   const [realVintages, realCompany, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, select: { id: true, price: true } }),
     companyId
@@ -148,7 +148,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
   // (KnownBugs #78) — the form's code check alone is a gate only the client enforced.
   if (companyId && !realCompany) return { error: 'Please choose your company again.' }
   if (realCompany && !realCompany.proof) return { error: 'Please enter your company code again.' }
-  const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice })
+  const delivery = resolveOrderDelivery(deliverySetup, { fulfilment: fulfilmentInput, zoneChoice, addressZoneId: orderAddress.deliveryZoneId })
   if ('error' in delivery) return { error: delivery.error }
   const dateProblem = checkPreferredDate(preferredDateInput, deliverySetup.dateRules)
   if (dateProblem) {

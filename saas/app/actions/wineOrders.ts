@@ -180,7 +180,7 @@ export async function createWineOrderAdmin(input: {
   const tenantId = await getTenantId()
 
   const vintageIds = [...new Set(selectedWines.map(w => w.vintageId))]
-  const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null }
+  const pickupAddress: OrderAddress = { companyAddressId: null, address: '', workingHours: null, addressLabel: null, deliveryZoneId: null }
   const [vintages, company, orderAddress, deliverySetup] = await withTenantDb(tenantId, tx => Promise.all([
     tx.wineVintage.findMany({ where: { id: { in: vintageIds }, tenantId }, include: { wine: true } }),
     data.companyId
