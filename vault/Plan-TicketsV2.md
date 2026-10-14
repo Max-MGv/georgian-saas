@@ -34,7 +34,20 @@ tags: [plan, super-admin, tickets]
   only when it's really live) without any automatic staging → production writes.
 - Data: no new table — staging stores the production number in the existing `externalRef` (`prod:12`), plus a `CLIENT` source.
 
-### Forwarding route (proposed 2026-10-15, awaiting Max's OK on the details)
+### Forwarding route — APPROVED 2026-10-15
+**Max: "just copy the whole tickets, that's fine — one-way copy, so there is no risk of data cross-contamination."**
+→ The *whole* report is copied (text, screenshots, reporter email, browser, click trail); no auto-delete. The "minimum data" bullet
+below is superseded. Everything else stands: production pushes, one way, narrow create-only token, never waits on staging.
+
+**What flows back: nothing (by design).** Changes on the staging P-ticket never reach production. Only two things on production
+ever matter to the client — its status and our reply — so the production side stays tiny:
+- The staging P-ticket shows **"Open on production"** (a link straight to the same ticket on the production board).
+- When a fix ships, the production merge's **"Next release" list (Tier 2 2.5) includes the P-tickets in it**; marking them
+  Resolved on production + the reply text (written on the staging ticket) is **one step of the release**, done by Max or by Claude
+  with `tix ... --prod --yes-prod` on Max's go for that release (Rule 0). No automatic staging → production writes.
+- Until then the client sees "Received" (= New) — honest, and nothing to keep in sync.
+
+### (Superseded) first proposal 2026-10-15
 Why the split exists: production holds real customers' data and must never depend on, or be reachable from, the test
 side; the dev DB is the place where Claude, scripts and tests work freely. So the route must keep three properties:
 **(a)** production never waits on staging, **(b)** staging holds no key to production, **(c)** customer personal data stays in production.
