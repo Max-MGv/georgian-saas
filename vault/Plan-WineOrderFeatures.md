@@ -553,6 +553,21 @@ negotiated wine prices, booking price tiers), not even the company's name in a l
       `hide_company_dropdown` is on there too, so nothing changes for it). (Earlier I mislabelled that tenant
       "the dev copy of Nikalas Marani".)
 
+### Chunk 16 — QA + stress test, and its fixes
+**Status:** ✅ 2026-10-14 (staging) — Max: "stress test it and QA test it", then "apply any fixes to bugs you found"
+Full report: [[QA-WineOrderFeatures-2026-10-14]]. Migration rehearsal on a production-shaped copy (all 7
+pending migrations apply in 9.5 s, backfill right, no schema drift, step 4b idempotent); ~90 crafted
+requests; load test vs the pre-feature build; full suite 63/65 (the 2 environmental, pass alone twice).
+- [x] F1 Georgian dates without ICU (`formatIsoDay`) — receipt email + Wine Orders hydration (KnownBugs #80)
+- [x] F2 "No preferred date" = open orders only (#82)
+- [x] F3–F7 public wine order: date ≤ 1 year, name/year from DB, active wines only, clean errors, length caps (#83)
+- [x] F8/F9 manual top-ups: whole tetri, order row locked (bookings + wine) (#84)
+- [x] F10 hand-set access codes ≥ 6 chars, typed-code lookup throttled (#85)
+- [x] F11/F12 wine drawer through `t()`; "— Not on the list —" (#86)
+- [x] F13 `/wines` delivery setup loaded in parallel; calendar "today" in Georgian time
+- [x] F14 runbook 4b note (below)
+**Resume point:** done. Max: check the Georgian drawer wording on staging.
+
 ---
 
 ## Production runbook — DRAFT, needs Max's explicit go for each step (Rule 0)
@@ -568,7 +583,7 @@ negotiated wine prices, booking price tiers), not even the company's name in a l
 
 **Order (migrations first — all additive, so today's production code keeps working on the new
 schema: `Company.address` still exists, every new column is nullable or has a default):**
-1. Production DB: `prisma migrate deploy` — applies, in order, `20261007143059_add_tickets` (ticket
+1. Production DB: `prisma migrate deploy` (rehearsed 2026-10-14 on a production-shaped copy — 9.5 s, see [[QA-WineOrderFeatures-2026-10-14]]) — applies, in order, `20261007143059_add_tickets` (ticket
    tool) and this plan's six: `20261012121359_company_addresses` (also **backfills**
    `CompanyAddress` from `Company.address`), `…141158_delivery_zones`,
    `…144005_order_event_delivery_fee_set`, `…155548_wine_order_preferred_date`,
@@ -589,6 +604,10 @@ schema: `Company.address` still exists, every new column is nullable or has a de
      AND NOT EXISTS (SELECT 1 FROM "CompanyAddress" a WHERE a."companyId" = c."id");
    ```
    Expect 0 rows unless an admin edited companies during the window.
+   Note (QA 2026-10-14 F14): this only fills companies with **no** saved address. A company that already
+   had one and whose address an admin *changed* during the window keeps the old text in `CompanyAddress` —
+   check the Companies screen if anyone edited addresses during the deploy. Rehearsed: 0 rows → 1 after a
+   simulated old-code edit → 0 again.
 5. Live check on nikalasmarani.vineworks.ge: `/wines` renders, a reservation order with a preferred
    date goes through, Wine Orders shows it; Companies → Edit shows Addresses + Wine prices;
    Settings shows the new panel (nothing configured → form as before).

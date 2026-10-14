@@ -502,6 +502,7 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [x] Overpayment shown as a credit · saved address's delivery area enforced · Georgian time for date checks (#79)
 - [x] **No code = unknown company** on both public forms (Max, 2026-10-14) — lists, resolver, write paths
 - [x] T-79 Settings in one read (no speed gain measured; fewer DB connections)
+- [x] **QA + stress test 2026-10-14** ([[QA-WineOrderFeatures-2026-10-14]]): migration rehearsal on a production-shaped copy, ~90 crafted requests, load vs pre-feature build, full suite — 14 findings, all fixed on staging (KnownBugs #80, #82–#86; #81 left open)
 - [ ] **Max tests on staging** (MyToDo 2026-10-14 + 2026-10-12)
 - [ ] **Production** — needs Max's go per step: 7 migrations, ticket-tool bucket, merge `staging → master`, address catch-up copy, live check
 - [ ] Later: cleanup migration dropping `Company.address`

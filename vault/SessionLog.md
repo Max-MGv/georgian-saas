@@ -8,6 +8,39 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-14 (evening) — QA + stress test of the wine order features, then every finding fixed (T-83) — NOT on production
+
+Max: "stress test it and QA test it to make sure it is ready for production", then "apply any fixes to bugs you
+found, update docs". Report: [[QA-WineOrderFeatures-2026-10-14]]; plan Chunk 16; FeatureLog #228; KnownBugs #80–#86.
+- **Tested:** tsc / lint (= baseline) / i18n / production build; **migration rehearsal** — production's structure
+  (migrations up to `20261007120000`) rebuilt in a throwaway schema on the dev DB, filled with dev's rows + awkward
+  addresses, the 7 pending migrations applied with `migrate deploy`: 9.5 s, backfill 16/16, defaults, RLS + grants,
+  CHECKs, **no drift vs schema.prisma**, runbook 4b idempotent; schema dropped. ~50 crafted public requests + ~40
+  admin ones (captured server-action request replayed; DB checked each time); burst load vs the pre-feature build
+  (`dbfa5d1`, same machine) — same breaking point; staging `/wines` 0.4 s; full suite 63/65 (both failures pass alone
+  twice — dev server at 1.5 GB); 16 scripts 284/284; phone 375/320 + Georgian on staging and admin.
+- **Found → fixed (`f1ff942`):** Georgian dates via `toLocaleDateString('ka-GE')` → English on Vercel (receipt email)
+  + hydration error on Georgian Wine Orders (#80, fixed tables `formatIsoDay`); undated calendar list held delivered
+  orders (#82); preferred date had no upper bound, order-line names came from the browser, hidden wines orderable,
+  odd ids → 500, no length caps (#83); simultaneous manual top-ups both accepted, fractions truncated — now row lock
+  + whole tetri, bookings too (#84); custom access codes of any length + unthrottled lookup → ≥ 6 chars + 30/10 min
+  (#85); wine drawer English in Georgian + overlapping "Individual / no company" option (#86, 29 `wine.ui.*` keys,
+  Georgian drafted); `/wines` delivery setup now parallel; calendar "today" in Georgian time. #81 (other `ka-GE`
+  dates: My Reports, onboarding review) left open.
+- **Verified after the fixes:** date script 28/28 in local / UTC / New York; fee script 10/10 (3 at once → 1);
+  new `test-access-code-rules` 5/5; 16 related scripts; 44 related specs (Georgian wine spec updated to the
+  translated labels — it had pinned the English); probe re-run all clean; Georgian admin: 0 hydration errors, no
+  overflow; production build ✅; lint no new errors. T-83 → Ready to test.
+- **My mistake, disclosed:** deleting the temporary "before" git worktree followed its `node_modules` junction and
+  removed ~180 packages from `saas/node_modules`. No source/data touched; restored with `npm ci` + `prisma generate`.
+  Lesson recorded in the QA report (remove a junction with `rmdir` and check it is gone before any recursive delete).
+- Environment notes: another project's dev server (MaxFinances) held port 3000, so re-tests ran on 3002 with a
+  throwaway config; QA helpers left untracked in `saas/scripts/_qa/` + `saas/tests/_qa/` (never commit).
+**Next:** Max tests on staging (MyToDo 2026-10-14 later + earlier lists), reads the Georgian wording, then the
+production runbook step by step on his go.
+
+---
+
 ## 2026-10-13/14 — Wine orders round 2: #78 both halves, blind review fixes, Max's decisions (Chunks 12–15), T-79 — NOT on production
 
 Max: fix the booking half of #78 (yes), run the blind review (yes), Settings speed ticket (build it). Then his

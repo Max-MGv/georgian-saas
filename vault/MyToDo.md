@@ -8,6 +8,21 @@ Things Max needs to test or do manually. Claude updates this after each session.
 
 ---
 
+## 🧪 2026-10-14 (later) — QA fixes on STAGING. Not on production.
+
+Report: [[QA-WineOrderFeatures-2026-10-14]]. Quick checks on **staging.vineworks.ge**:
+1. **Georgian wine form** — switch the site to ქართული, add a wine, open the order: the code box, buttons
+   ("შეკვეთა →", "დაჯავშნა"), field hints and the "New Company?" popup are now Georgian. **Please read the
+   wording** — I drafted it.
+2. **Preferred date** — the date picker stops a year ahead; a date further out says it is too far.
+3. **Admin in Georgian** (Settings → admin language ქართ.) → Wine Orders: the preferred date reads "28 ოქტ. 2026"
+   and the page loads without errors. Calendar tab: "No preferred date" lists only open orders.
+4. **Access codes** — Companies → set a custom code of 4 letters: refused ("at least 6 characters"). Existing
+   codes keep working.
+5. **Record payment** — on a wine order that owes a fee, recording it twice quickly only goes through once.
+
+---
+
 ## 🔐 2026-10-14 — Round 2 on STAGING (your decisions of 13–14 Oct). Not on production.
 
 All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.

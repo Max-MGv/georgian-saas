@@ -1200,6 +1200,24 @@ everything. If you change a rule, change the helper — not a copy in a form.
 own tenantId — §26 H18). `Company.address` is **retired** (no reader or writer since T-13) and is to
 be dropped by a cleanup migration after production has run the backfill.
 
+**Dates shown to people: never `toLocaleDateString('ka-GE')`** (QA 2026-10-14, KnownBugs #80). Vercel's Node
+has no Georgian ICU data, so it prints an English shape while the browser prints Georgian — a wrong email and
+a React hydration error. Use the fixed tables: `formatIsoDay` / `formatPreferredDate` (`lib/wineOrderDate.ts`)
+or `lib/emails/templates/dateFormat.ts`. "Today" for the winery is `tbilisiDateIso(new Date())`, not
+`toISOString()` (that is UTC).
+
+**Order lines are named by the server** (KnownBugs #83): `submitWineOrder` takes the wine name / year snapshot
+from the vintage row it priced, and only active vintages of active wines. The browser's `name`/`year`/`price`
+are display-only.
+
+**Manual top-ups lock the order row** (`SELECT … FOR UPDATE` in `recordAdditionalPayment` /
+`recordAdditionalWinePayment`, KnownBugs #84). Any new "record a payment against a balance" path must take
+the same lock inside its transaction, or two simultaneous records both pass the balance check.
+
+**Access codes** (KnownBugs #85): a hand-set code goes through `accessCodeProblem()` (`lib/accessCodeRules.ts`,
+≥ 6 chars); the public `resolveCompanyContacts` throttles typed codes (`writeRateLimit` 'code-lookup'). A new
+public way to look up a code must be throttled the same way.
+
 **Calendars:** the month grid is `components/MonthCalendar.tsx`, shared by the Orders calendar
 (`orders/CalendarView.tsx`, a thin wrapper) and the Wine Orders Calendar tab. §33's mouse-vs-touch
 rule now lives there once.

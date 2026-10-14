@@ -80,6 +80,13 @@ over-collection refused; a fee top-up settling must not move the first `paidAt`;
 too-soon dates; 30 Feb; negotiated price of 0; % applied to nothing when every line is negotiated;
 an individual order sent with a company id (dropped).
 
+## QA pass 2026-10-14
+
+Stress + QA test and fixes: [[QA-WineOrderFeatures-2026-10-14]] (plan Chunk 16, KnownBugs #80, #82–#86).
+Notable rules it added: dates for people never via `toLocaleDateString('ka-GE')` (`formatIsoDay`); order-line
+names come from the DB; preferred date ≤ one year; manual top-ups lock the order row; hand-set access codes
+≥ 6 characters and typed-code lookups throttled. MaintenanceNotes §35.
+
 ## What to test (Max)
 
 See [[MyToDo]] (2026-10-12 entry).
