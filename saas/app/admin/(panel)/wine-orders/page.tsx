@@ -22,7 +22,9 @@ export default async function WineOrdersPage() {
       include: {
         wineItems: true,
         // Settled, live payments — only to work out what is still owed (T-8, Chunk 6).
-        payments: { where: { settledAt: { not: null }, reversedAt: null }, select: { amount: true } },
+        // Live payments: settled ones count towards what is owed; an unsettled delivery-fee card link
+        // (its Flitt reference carries '-topup-') is shown so a second link is a conscious choice.
+        payments: { where: { reversedAt: null }, select: { amount: true, settledAt: true, status: true, flittOrderId: true, createdAt: true } },
         // T-12 — the exporter label comes from the company, live (it is a label, not a fact of the order).
         company: { select: { isExporter: true } },
       },
@@ -32,15 +34,21 @@ export default async function WineOrdersPage() {
 
   // displayTotal: what the customer owes in all — wines + delivery fee since T-8
   // (lib/wineOrderMoney.ts); an estimate from item snapshots for old rows with no total.
-  // feeOwed: on a PAID order, what is still outstanding (a delivery fee set after payment).
+  // feeOwed: on a PAID order, due − paid, SIGNED: > 0 still owed (a delivery fee set after payment),
+  // < 0 paid too much (shown as a credit, the way bookings show it — blind review 2026-10-13).
+  // pendingLink: the newest delivery-fee card link that has not been paid.
   const ordersWithTotal = orders.map(({ payments, company, ...rest }) => {
     const o = { ...rest, isExporter: company?.isExporter ?? false }
-    const paidSoFar = payments.reduce((sum, p) => sum + p.amount, 0)
+    const paidSoFar = payments.filter(p => p.settledAt).reduce((sum, p) => sum + p.amount, 0)
     const due = wineOrderAmountDue(o)
-    const feeOwed = o.paidAt && due != null ? Math.max(0, due - paidSoFar) : 0
-    if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed }
+    const feeOwed = o.paidAt && due != null ? due - paidSoFar : 0
+    const link = payments
+      .filter(p => !p.settledAt && p.status === 'created' && p.flittOrderId?.includes('-topup-'))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+    const pendingLink = link ? { amount: link.amount, createdAt: link.createdAt.toISOString() } : null
+    if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed, pendingLink }
     const estimated = o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
-    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0, feeOwed }
+    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0, feeOwed, pendingLink }
   })
 
   return (

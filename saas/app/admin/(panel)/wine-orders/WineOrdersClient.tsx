@@ -104,7 +104,10 @@ type WineOrder = {
   /** "Other" area — the winery still has to set the fee. */
   deliveryFeePending: boolean
   /** On a paid order: what is still owed (tetri) — a fee set after payment. Computed on the page. */
+  /** Paid orders: due − paid. > 0 owed, < 0 overpaid (a credit). */
   feeOwed: number
+  /** The newest unpaid delivery-fee card link, if any. */
+  pendingLink: { amount: number; createdAt: string } | null
   /** T-14 — the customer's preferred delivery / pickup day (date only). */
   preferredDate: Date | string | null
   /** T-12 — the ordering company is marked as an exporter. */
@@ -267,13 +270,20 @@ function DeliveryBadge({ order, locale }: { order: WineOrder; locale: string }) 
   return null
 }
 
-/** A paid order that still owes money — a delivery fee set after payment (T-8). */
+/**
+ * A paid order whose payments do not match what is due (T-8): it still owes (a delivery fee set
+ * after payment), or it was paid too much — e.g. two card links both paid, or the fee lowered
+ * after it was collected. Shown as a credit, the same way bookings show it (`orders.credit`).
+ */
 function FeeOwedMark({ order, locale }: { order: WineOrder; locale: string }) {
-  if (!isPaid(order) || order.feeOwed <= 0) return null
+  if (!isPaid(order) || order.feeOwed === 0) return null
+  const credit = order.feeOwed < 0
   return (
     <span className="inline-flex items-center rounded-full font-bold flex-shrink-0 whitespace-nowrap"
-      style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', padding: '0.05rem 0.4rem', lineHeight: 1.5 }}>
-      {adminT(locale, 'wineOrders.delivery.owes').replace('{amount}', formatTetri(asTetri(order.feeOwed)))}
+      style={{ backgroundColor: credit ? '#dbeafe' : '#fef3c7', color: credit ? '#1e40af' : '#92400e', fontSize: '0.65rem', padding: '0.05rem 0.4rem', lineHeight: 1.5 }}>
+      {credit
+        ? `${adminT(locale, 'orders.credit')} ${formatTetri(asTetri(-order.feeOwed))}`
+        : adminT(locale, 'wineOrders.delivery.owes').replace('{amount}', formatTetri(asTetri(order.feeOwed)))}
     </span>
   )
 }
@@ -314,7 +324,7 @@ function DeliverySection({ order, locale, onPatch }: {
       deliveryFee: fee,
       deliveryFeePending: false,
       displayTotal: order.totalAmount != null ? order.totalAmount + fee : order.displayTotal,
-      feeOwed: isPaid(order) ? Math.max(0, order.feeOwed + fee - old) : 0,
+      feeOwed: isPaid(order) ? order.feeOwed + fee - old : 0,
     })
     setEditing(null)
   }
@@ -326,7 +336,7 @@ function DeliverySection({ order, locale, onPatch }: {
     const r = await recordWineOrderFeePayment(order.id, { amount, method })
     setBusy(false)
     if ('error' in r) { setError(r.error); return }
-    onPatch({ feeOwed: Math.max(0, order.feeOwed - amount) })
+    onPatch({ feeOwed: order.feeOwed - amount })
     setEditing(null)
   }
 
@@ -365,6 +375,13 @@ function DeliverySection({ order, locale, onPatch }: {
           </button>
         )}
       </div>
+      {order.pendingLink && !link && (
+        <p className="text-xs" style={{ color: '#92400e' }}>
+          {at('wineOrders.delivery.pendingLink')
+            .replace('{amount}', formatTetri(asTetri(order.pendingLink.amount)))
+            .replace('{date}', new Date(order.pendingLink.createdAt).toLocaleDateString(locale === 'ka' ? 'ka-GE' : 'en-GB', { day: 'numeric', month: 'short' }))}
+        </p>
+      )}
       {link && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.topUpCheckout.linkLabel')}</span>

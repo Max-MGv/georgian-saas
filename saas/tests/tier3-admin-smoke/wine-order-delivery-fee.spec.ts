@@ -141,6 +141,28 @@ test('a card payment link for an owed fee creates a checkout for exactly that am
   expect(checkout?.flittOrderId, 'a fresh Flitt reference, never the order id itself').toMatch(new RegExp(`^${owesId}-topup-`))
 })
 
+test('an unpaid card link is shown on the card, so it is not collected twice by accident', async ({ page }) => {
+  test.setTimeout(90_000)
+  await openWineOrders(page) // a fresh load: the link from the test above is read back from the DB
+  const c = card(page, OWES_NAME)
+  await expect(c.getByText(/A card link for 15₾ was created on .* and is not paid yet/)).toBeVisible({ timeout: 20_000 })
+})
+
+test('paying more than is owed shows as a credit, not as "nothing owed" (blind review 2026-10-13)', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openWineOrders(page)
+  // PAID_NAME: wine 30₾ by card + the 15₾ fee recorded in cash above → 45₾ paid. Lower the fee to 10₾.
+  const c = card(page, PAID_NAME)
+  await c.getByRole('button', { name: 'Change fee' }).click()
+  await c.getByRole('spinbutton', { name: 'Delivery fee' }).fill('10')
+  await c.getByRole('button', { name: 'Save' }).click()
+  await expect(c.getByText('Credit (overpaid) 5₾').first()).toBeVisible()
+  // …and it survives a reload (the server's figure, not just the optimistic one).
+  await openWineOrders(page)
+  await expect(card(page, PAID_NAME).getByText('Credit (overpaid) 5₾').first()).toBeVisible({ timeout: 20_000 })
+  await expect(card(page, PAID_NAME).getByRole('button', { name: 'Record payment' })).toHaveCount(0)
+})
+
 test('the Delivery / Pickup filter narrows the list', async ({ page }) => {
   test.setTimeout(90_000)
   await openWineOrders(page)
