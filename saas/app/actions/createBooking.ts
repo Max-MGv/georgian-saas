@@ -26,6 +26,7 @@ import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMe
 import { COUNTRIES } from '@/lib/countries'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
 import { companyCodeMatches } from '@/lib/contactResolution'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
@@ -155,7 +156,8 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
 
     // Guard: past dates
     const dateStr = new Date(data.date).toISOString().split('T')[0]
-    const todayStr = new Date().toISOString().split('T')[0]
+    // Today on the winery's calendar, not the server's (UTC on Vercel — KnownBugs #79).
+    const todayStr = tbilisiDateIso(new Date())
     if (dateStr < todayStr) {
       return { success: false, error: await mc('onsite_err_future_date', 'form.err_future_date') }
     }

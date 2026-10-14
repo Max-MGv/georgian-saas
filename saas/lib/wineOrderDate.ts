@@ -4,8 +4,8 @@
  * Days — and it is a PREFERENCE, not a promise.
  *
  * Pure and client-safe: the public form uses it to grey out days, `submitWineOrder` uses it to
- * refuse them. Dates are `YYYY-MM-DD` strings, compared the way lib/bookingHours.ts compares
- * booking slots (the runtime's local calendar), so a wine order and a booking agree on "today".
+ * refuse them. Dates are `YYYY-MM-DD` strings on the winery's calendar — Georgian time
+ * (lib/tbilisiTime.ts), like lib/bookingHours.ts — so a wine order and a booking agree on "today".
  */
 
 export type PreferredDateRules = {
@@ -15,19 +15,15 @@ export type PreferredDateRules = {
   blockedDates: string[]
 }
 
-function localIso(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 /**
  * The first day that can be asked for: the calendar day of "now + lead time". A day counts once
  * any part of it is far enough ahead — there is no time slot to compare, only a day.
  */
 export function earliestPreferredDate(now: Date, leadHours: number): string {
-  return localIso(new Date(now.getTime() + Math.max(0, leadHours) * 60 * 60 * 1000))
+  // The Georgian calendar day — the server runs in UTC (KnownBugs #79).
+  return tbilisiDateIso(new Date(now.getTime() + Math.max(0, leadHours) * 60 * 60 * 1000))
 }
 
 export type PreferredDateProblem = 'missing' | 'invalid' | 'too_soon' | 'closed'

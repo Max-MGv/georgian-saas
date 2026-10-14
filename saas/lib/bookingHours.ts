@@ -1,3 +1,4 @@
+import { tbilisiInstant } from '@/lib/tbilisiTime'
 /**
  * Booking lead time + working hours/days — shared between the public booking
  * form (client) and createBooking.ts (server), so the two can't drift apart.
@@ -92,10 +93,15 @@ export function minBookableInstant(now: Date, leadHours: number): Date {
   return new Date(now.getTime() + leadHours * 60 * 60 * 1000)
 }
 
-/** True if `dateStr` + `timeSlot` ("HH:00") falls at or after the minimum bookable instant. */
+/**
+ * True if `dateStr` + `timeSlot` ("HH:00") falls at or after the minimum bookable instant.
+ * The slot is the winery's wall clock — Georgian time — not the runtime's: on Vercel (UTC) the
+ * old local reading put "13:00" four hours late, so the server's lead-time check let through
+ * slots the form had already greyed out (KnownBugs #79).
+ */
 export function slotMeetsLeadTime(dateStr: string, timeSlot: string, minInstant: Date): boolean {
   const [y, m, d] = dateStr.split('-').map(Number)
   const [h] = timeSlot.split(':').map(Number)
-  const slotInstant = new Date(y, (m || 1) - 1, d || 1, h || 0, 0, 0, 0)
+  const slotInstant = tbilisiInstant(y || 1970, m || 1, d || 1, h || 0)
   return slotInstant.getTime() >= minInstant.getTime()
 }

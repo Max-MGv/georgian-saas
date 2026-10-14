@@ -55,7 +55,7 @@ check('Minimum 200₾: 199.99₾ refused', minimumOrderError(amt, 1, 19999)?.sta
 check('No minimum: anything accepted', minimumOrderError(rules({}).minOrder, 0, 0) === null)
 
 // A saved address's own delivery area is enforced on public orders (Max, 2026-10-14).
-const two = [...zones, { id: 'z0', nameEn: 'Free zone', nameKa: null, fee: 0 }]
+const two = [...zones, { id: 'z0', nameEn: 'Free zone', nameKa: 'უფასო', fee: 0 }]
 const own = resolveOrderDelivery(setup({}, two), { fulfilment: 'DELIVERY', zoneChoice: 'z0', addressZoneId: 'z1' })
 check("Saved address in Tbilisi, request names the free zone → Tbilisi's fee anyway",
   !('error' in own) && own.deliveryZoneId === 'z1' && own.deliveryFee === 1500, JSON.stringify(own))
