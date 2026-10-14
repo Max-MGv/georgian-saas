@@ -4,7 +4,11 @@ tags: [todo, testing]
 
 # My To-Do List
 
-Things Max needs to test or do manually. Claude updates this after each session.
+Things Max needs to do manually that are **not tickets**. Claude updates this after each session.
+
+> **Since 2026-10-15 (Max):** test steps for ticket work are **not copied here any more** — they live on the ticket
+> (Super Admin → Tickets → **Waiting for me**). This file keeps only chores that aren't tickets. The dated sections below
+> are history. Later, the ticket tool may be connected to Obsidian directly.
 
 ---
 

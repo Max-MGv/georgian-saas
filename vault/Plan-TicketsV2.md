@@ -14,7 +14,10 @@ tags: [plan, super-admin, tickets]
    production should reach the staging board, ideally automatically, with their own prefix. → see **Decision 0 (revised)** below.
 2. **All three tiers.**
 3. **Client replies: on the page only.** An email to the client only when Max presses a "send confirmation" button.
-4. (MyToDo question was unclear — re-asked in plain words.)
+4. (MyToDo question was unclear — re-asked in plain words.) **2026-10-15: yes** — test steps stay on tickets, MyToDo keeps
+   non-ticket chores only (done: MyToDo header + ClaudeInstructions Rule 11). "In the future we may connect the ticket tool to Obsidian."
+5. **2026-10-15: forwarding approved in principle** ("yes you can") — Max asked which route, given staging and production are
+   deliberately separate. Answer + proposed route: see "Forwarding route" below (awaiting his OK on the details).
 
 ### Decision 0 (revised) — my recommendation for the two boards (awaiting Max's OK)
 - **Production board = client reports only.** That's where the client-facing side lives: their status, your reply, the
@@ -30,6 +33,22 @@ tags: [plan, super-admin, tickets]
   production ticket resolved / write the reply there. The P-ticket on staging links to it. This matches 3.2 (client sees Resolved
   only when it's really live) without any automatic staging → production writes.
 - Data: no new table — staging stores the production number in the existing `externalRef` (`prod:12`), plus a `CLIENT` source.
+
+### Forwarding route (proposed 2026-10-15, awaiting Max's OK on the details)
+Why the split exists: production holds real customers' data and must never depend on, or be reachable from, the test
+side; the dev DB is the place where Claude, scripts and tests work freely. So the route must keep three properties:
+**(a)** production never waits on staging, **(b)** staging holds no key to production, **(c)** customer personal data stays in production.
+- **Route: production pushes to staging's ticket API over HTTPS** (the same `/api/tickets` Claude uses), right after the report is saved,
+  fire-and-forget with a 3-second timeout. Direction of trust = from the protected side to the less-protected side, never back.
+- **Its own narrow token**: can only *create a P-ticket* — cannot list, read, edit or close anything. Stored as a production env var
+  (needs Max's go, part of the production runbook). If leaked, the worst case is junk tickets on the test board; revoke it in one step.
+- **Minimum data crosses**: production number, title, the report text, type, tenant name, page path, and a link to the ticket on
+  production. **Not** forwarded: submitter email / user id, browser, click trail, screenshots (they can show customer orders) — the
+  P-ticket says "📎 1 screenshot — view on production".
+- **If staging is down**: the client never notices; the production ticket shows "not forwarded" and a **Forward** button (and
+  `tix sync-prod`) sends it again. Forwarding the same report twice is harmless (`externalRef = prod:<n>` is unique).
+- Rejected: staging *pulling* from production (gives staging a key to production); Claude syncing by hand at session start
+  (needs a production token on this machine and isn't automatic).
 
 ---
 
