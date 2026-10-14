@@ -6,8 +6,8 @@ tags: [plan, super-admin, tickets]
 
 **Status: 🚧 APPROVED 2026-10-14 — all three tiers.**
 - **Tier 1 ✅ built + verified on `staging` 2026-10-14** (FeatureLog #229, T-84 review card). Not on production.
-- Tier 2 — next. Tier 3 + the production→staging forwarding — after Max OKs Decision 0 (revised).
-- Still open with Max: Decision 0 (revised) below; MyToDo question (re-asked in plain words).
+- **Tier 2 ✅ built + verified on `staging` 2026-10-15** (FeatureLog #230): Request / Analysis / Solution sections, questions with one-tap answers → decisions, links (related tickets link back), test checklist (✓/✗, ✗ fills the send-back note), where-is-it-live marker + "Next release" view, `tix analysis|solution|ask|answer|decide|link|unlink|live`. Migration `20261014203238_tickets_v2_sections` on the dev DB only. Not on production.
+- Tier 3 (incl. the approved production → staging forwarding) — next.
 
 ## Max's decisions (2026-10-14)
 1. **Two boards, kept separate** — "all tickets [on staging] are created by me, so they are valid". Client reports from

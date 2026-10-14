@@ -1070,6 +1070,14 @@ model Ticket {
   closedAt    DateTime?
   /// Who created it: "max", "claude", "reporter", "system".
   createdBy   String?
+  /// Plan-TicketsV2 2.1: what is really going on (root cause, options) and what we agreed to do. Markdown.
+  analysis    String             @default("")
+  solution    String             @default("")
+  /// Plan-TicketsV2 2.3: [{ kind: "plan"|"commit"|"bug"|"ticket"|"url", ref: string, label?: string }] (lib/tickets.ts TicketLink).
+  links       Json               @default("[]")
+  /// Plan-TicketsV2 2.5: where the work is live. Set by Claude (tix live) or Max; production = merged to master.
+  liveOnStagingAt    DateTime?
+  liveOnProductionAt DateTime?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -1087,14 +1095,14 @@ model TicketEvent {
   id        String   @id @default(cuid())
   ticketId  String
   ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  /// CREATED | COMMENT | STATUS | FIELD | REVIEW | VERIFIED | SENT_BACK | REPORT_LINKED (lib/tickets.ts)
+  /// CREATED | COMMENT | STATUS | FIELD | REVIEW | VERIFIED | SENT_BACK | REPORT_LINKED | QUESTION | ANSWER | DECISION (lib/tickets.ts)
   kind      String
   body      String   @default("")
   fromValue String?
   toValue   String?
   /// "max" | "claude" | "system" | "reporter" | an API token's name.
   actor     String
-  /// Structured review card: { changed, howToTest, leftOver, commit }.
+  /// REVIEW: { changed, howToTest, steps?, url?, leftOver, commit }. QUESTION: { options? }. ANSWER: { questionId, choice? }.
   meta      Json?
   createdAt DateTime @default(now())
 

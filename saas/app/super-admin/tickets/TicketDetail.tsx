@@ -8,15 +8,17 @@
 
 import { useRef, useState, type ReactNode } from 'react'
 import {
-  Building2, Check, ChevronDown, ChevronRight, FlaskConical, ImagePlus, Info, MapPin, Pencil, RotateCcw, Send, Undo2, X,
+  Building2, Check, ChevronDown, ChevronRight, FlaskConical, ImagePlus, Info, Lightbulb, MapPin, MessageCircleQuestion, Pencil,
+  RotateCcw, Search, Send, Undo2, X,
 } from 'lucide-react'
 import type { TicketDetail as Ticket } from '@/lib/ticketService'
 import {
-  CLOSE_REASON_LABEL, MAX_TITLE, PRIORITY_LABEL, SOURCE_LABEL, STATUS_LABEL, TICKET_AREAS, TYPE_LABEL, safeHttpUrl,
-  type TicketCloseReasonValue, type TicketStatusValue,
+  CLOSE_REASON_LABEL, LIVE_LABEL, MAX_TITLE, PRIORITY_LABEL, SOURCE_LABEL, STATUS_LABEL, TICKET_AREAS, TYPE_LABEL, liveStage, parseSteps,
+  safeHttpUrl, type TicketCloseReasonValue, type TicketStatusValue,
 } from '@/lib/tickets'
 import {
-  commentOnTicket, moveTicket, postReviewCard, sendTicketBack, updateTicketFields, uploadTicketAttachment, verifyTicket,
+  addTicketLink, answerTicketQuestion, commentOnTicket, moveTicket, postReviewCard, removeTicketLink, sendTicketBack, setTicketLive,
+  updateTicketFields, uploadTicketAttachment, verifyTicket,
 } from '@/app/actions/tickets'
 import {
   C, CloseReasonDialog, PRIORITY_ICON, PRIORITY_COLOR, PRIORITY_OPTIONS, Picker, SOURCE_HINT, STATUS_ICON, STATUS_OPTIONS, STATUS_TONE,
@@ -24,16 +26,35 @@ import {
 } from './ui'
 import Markdown from './Markdown'
 import Lightbox from './Lightbox'
+import {
+  Decisions, LIVE_COLOR, LIVE_ICON, LIVE_OPTIONS, Links, OpenQuestions, TestChecklist, TextSection, actorName, sectionTitle,
+  type DecisionItem, type QuestionItem,
+} from './TicketSections'
 
 type Result = { ok: true } | { error: string }
-type ReviewMeta = { changed?: string; howToTest?: string; leftOver?: string; commit?: string }
+type ReviewMeta = { changed?: string; howToTest?: string; steps?: string[]; url?: string; leftOver?: string; commit?: string }
 type Ev = Ticket['events'][number]
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 
-const sectionTitle = (t: ReactNode) => <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>{t}</div>
-const actorName = (a: string) => ({ max: 'Max', claude: 'Claude', reporter: 'Reporter', system: 'System' } as Record<string, string>)[a] ?? a
+/** Open questions and the decisions taken so far, from the timeline (Plan-TicketsV2 2.2). */
+function questionsAndDecisions(events: Ev[]): { open: QuestionItem[]; decisions: DecisionItem[] } {
+  const answers = new Map<string, Ev>()
+  for (const e of events) if (e.kind === 'ANSWER') { const q = (e.meta as { questionId?: string } | null)?.questionId; if (q) answers.set(q, e) }
+  const open: QuestionItem[] = []
+  const decisions: DecisionItem[] = []
+  for (const e of events) {
+    if (e.kind === 'QUESTION') {
+      const a = answers.get(e.id)
+      if (a) decisions.push({ id: a.id, question: e.body, answer: a.body, actor: a.actor, createdAt: a.createdAt })
+      else open.push({ id: e.id, text: e.body, options: (e.meta as { options?: string[] } | null)?.options ?? [], actor: e.actor, createdAt: e.createdAt })
+    }
+    if (e.kind === 'DECISION') decisions.push({ id: e.id, answer: e.body, actor: e.actor, createdAt: e.createdAt })
+  }
+  decisions.sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+  return { open, decisions }
+}
 
 export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
   t: Ticket
@@ -45,7 +66,6 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editingTitle, setEditingTitle] = useState<string | null>(null)
-  const [editingDesc, setEditingDesc] = useState<string | null>(null)
   const [comment, setComment] = useState('')
   const [note, setNote] = useState('')
   const [showHandOver, setShowHandOver] = useState(false)
@@ -105,6 +125,8 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
   const finished = t.status === 'DONE' || t.status === 'CLOSED'
   const reviews = t.events.filter(e => e.kind === 'REVIEW')
   const latestReview = reviews[reviews.length - 1]
+  const qd = questionsAndDecisions(t.events)
+  const live = liveStage(t)
   const tenantName = (id: string | null) => (id ? tenants.find(x => x.id === id)?.name ?? 'Unknown tenant' : null)
   const images = t.attachments.filter(a => a.signedUrl).map(a => ({ src: a.signedUrl!, name: a.fileName }))
 
@@ -174,16 +196,37 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
           <Building2 size={14} color={C.faint} aria-hidden />
           <span style={{ color: t.tenantName ? C.muted : C.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.tenantName ?? 'Internal'}</span>
         </Picker>
+        <Picker label={`Where is it live: ${LIVE_LABEL[live]}`} value={live} options={LIVE_OPTIONS} disabled={busy}
+          onChange={v => void run(() => setTicketLive(t.number, v))}
+          buttonStyle={{ borderColor: live === 'NONE' ? C.border : LIVE_COLOR[live] + '66' }}>
+          {(() => { const I = LIVE_ICON[live]; return <I size={14} color={LIVE_COLOR[live]} aria-hidden /> })()}
+          <span style={{ color: live === 'NONE' ? C.faint : LIVE_COLOR[live] }}>{LIVE_LABEL[live]}</span>
+        </Picker>
       </div>
       {error && <div style={{ color: '#fca5a5', fontSize: 13, marginTop: 10 }} role="alert">{error}</div>}
 
-      {/* ── Waiting for Max: the latest hand-over + Verify / Send back ── */}
+      {/* ── Questions waiting for Max: answer with one tap ── */}
+      <OpenQuestions questions={qd.open} busy={busy} onOpenTicket={onOpenTicket}
+        onAnswer={(questionId, answer) => run(() => answerTicketQuestion(t.number, questionId, answer))} />
+
+      {/* ── Waiting for Max: the latest hand-over as a checklist + Verify / Send back ── */}
       {t.status === 'REVIEW' && (
         <div style={{ marginTop: 16, borderRadius: 12, border: '1px solid #0f766e', backgroundColor: '#052b2a', padding: 14 }}>
           <div className="flex items-center gap-2" style={{ fontWeight: 700, color: '#5eead4', marginBottom: 8 }}>
             <FlaskConical size={16} aria-hidden /> Ready to test — waiting for you
           </div>
-          {latestReview && <ReviewCard meta={latestReview.meta as ReviewMeta | null} fallback={latestReview.body} onOpenTicket={onOpenTicket} />}
+          {latestReview && (() => {
+            const m = latestReview.meta as ReviewMeta | null
+            if (!m) return <Markdown text={latestReview.body} onTicket={onOpenTicket} />
+            const steps = m.steps?.length ? m.steps : parseSteps(m.howToTest ?? '')
+            return (
+              <>
+                <ReviewCard meta={{ changed: m.changed }} fallback="" onOpenTicket={onOpenTicket} />
+                {steps.length > 0 && <TestChecklist reviewId={latestReview.id} steps={steps} url={m.url} onFail={line => setNote(n => (n.trim() ? n.trimEnd() + '\n' + line : line))} />}
+                <ReviewCard meta={{ leftOver: m.leftOver, commit: m.commit }} fallback="" onOpenTicket={onOpenTicket} />
+              </>
+            )
+          })()}
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Note (needed to send back, optional when verifying)" style={{ ...inputStyle, width: '100%', resize: 'vertical', marginTop: 10 }} aria-label="Review note" />
           <div className="flex flex-wrap gap-2 mt-2">
             <button style={{ ...buttonStyle, backgroundColor: '#15803d', borderColor: '#16a34a' }} disabled={busy} onClick={() => void run(() => verifyTicket(t.number, note), () => setNote(''))}><Check size={15} aria-hidden /> Works — Done</button>
@@ -192,31 +235,21 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
         </div>
       )}
 
-      {/* ── Description ────────────────────────────────────────── */}
-      <section style={{ marginTop: 20 }}>
-        {sectionTitle(<>Description {editingDesc === null && t.description && <button onClick={() => setEditingDesc(t.description)} aria-label="Edit description" title="Edit description" style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', padding: 2, display: 'inline-flex' }}><Pencil size={13} /></button>}</>)}
-        {editingDesc !== null ? (
-          <div>
-            <textarea
-              autoFocus value={editingDesc} onChange={e => setEditingDesc(e.target.value)} rows={8} aria-label="Description"
-              placeholder={'What is this about? Steps, expected vs actual, links…\nTip: "- " makes a list, `code`, **bold**, T-12 links a ticket.'}
-              onKeyDown={e => {
-                if (e.key === 'Escape') { e.stopPropagation(); setEditingDesc(null) }
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void patch({ description: editingDesc }, () => setEditingDesc(null))
-              }}
-              style={{ ...inputStyle, width: '100%', resize: 'vertical', lineHeight: 1.5, fontSize: 14 }}
-            />
-            <SaveCancel busy={busy} onSave={() => void patch({ description: editingDesc }, () => setEditingDesc(null))} onCancel={() => setEditingDesc(null)} />
-          </div>
-        ) : t.description ? (
-          <div onDoubleClick={() => setEditingDesc(t.description)}>
-            {t.source === 'WIDGET' && <div style={{ fontSize: 11, color: C.faint, marginBottom: 4 }}>The reporter&apos;s own words</div>}
-            <Markdown text={t.description} onTicket={onOpenTicket} />
-          </div>
-        ) : (
-          <button onClick={() => setEditingDesc('')} style={{ ...ghostButtonStyle, borderStyle: 'dashed', width: '100%', justifyContent: 'center', color: C.faint }}><Pencil size={14} aria-hidden /> Add a description</button>
-        )}
-      </section>
+      {/* ── The ticket as a short document: Request → Analysis → Solution (+ decisions) → Links ── */}
+      <TextSection title="Request" value={t.description} busy={busy} onOpenTicket={onOpenTicket}
+        hint={t.source === 'WIDGET' ? 'The reporter’s own words' : undefined} emptyLabel="Add a description"
+        placeholder={'What is this about? Steps, expected vs actual, links…\nTip: "- " makes a list, `code`, **bold**, T-12 links a ticket.'}
+        onSave={v => patch({ description: v })} />
+      <TextSection title="Analysis" icon={Search} value={t.analysis} busy={busy} onOpenTicket={onOpenTicket} emptyLabel="Add the analysis"
+        placeholder={'What is really going on? Root cause, what we found, options considered…'}
+        onSave={v => patch({ analysis: v })} />
+      <TextSection title="Solution" icon={Lightbulb} value={t.solution} busy={busy} onOpenTicket={onOpenTicket} emptyLabel="Add the agreed solution"
+        placeholder={'What we agreed to do (or did), and why this way.'}
+        onSave={v => patch({ solution: v })}>
+        <Decisions items={qd.decisions} onOpenTicket={onOpenTicket} />
+      </TextSection>
+      <Links links={t.links} titles={t.linkedTitles} busy={busy} onOpenTicket={onOpenTicket}
+        onAdd={l => run(() => addTicketLink(t.number, l))} onRemove={l => void run(() => removeTicketLink(t.number, l))} />
 
       {/* ── Images ─────────────────────────────────────────────── */}
       <section style={{ marginTop: 20 }}>
@@ -473,6 +506,17 @@ function EventRow({ ev, first, shownAbove, onOpenTicket }: { ev: Ev; first: bool
       )
     case 'VERIFIED':
       return <div>{line(<span style={{ color: '#86efac', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} aria-hidden /> verified it works → Done</span>)}{body}</div>
+    case 'QUESTION':
+      return (
+        <div style={{ borderLeft: '3px solid #6d28d9', paddingLeft: 10 }}>
+          {line(<span style={{ color: '#c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}><MessageCircleQuestion size={13} aria-hidden /> asked</span>)}
+          <div style={{ marginTop: 4 }}><Markdown text={ev.body} onTicket={onOpenTicket} /></div>
+        </div>
+      )
+    case 'ANSWER':
+      return <div>{line(<span style={{ color: '#c4b5fd' }}>answered</span>)}{body}</div>
+    case 'DECISION':
+      return <div>{line(<span style={{ color: '#86efac', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} aria-hidden /> recorded a decision</span>)}{body}</div>
     case 'SENT_BACK':
       return <div>{line(<span style={{ color: '#fca5a5', display: 'inline-flex', alignItems: 'center', gap: 4 }}><RotateCcw size={13} aria-hidden /> sent it back</span>)}{body}</div>
     default:

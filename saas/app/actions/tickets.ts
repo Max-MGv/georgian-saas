@@ -11,11 +11,11 @@ import { db } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/requireSuperAdmin'
 import { createServiceClient } from '@/lib/supabase/service'
 import {
-  TicketError, addAttachmentRow, addComment, changeStatus, createTicket, findIdByNumber, getTicketByNumber,
-  listTickets, postReview, sendBack, updateFields, verify,
+  TicketError, addAttachmentRow, addComment, addDecision, addLink, answerQuestion, askQuestion, changeStatus, createTicket,
+  findIdByNumber, getTicketByNumber, listTickets, postReview, removeLink, sendBack, setLive, updateFields, verify,
   type ReviewCard, type TicketDetail, type TicketListItem, type TicketPatch,
 } from '@/lib/ticketService'
-import { ALLOWED_IMAGE_TYPES, sniffImageType, type TicketStatusValue } from '@/lib/tickets'
+import { ALLOWED_IMAGE_TYPES, sniffImageType, type LiveStage, type TicketLink, type TicketStatusValue } from '@/lib/tickets'
 import type { TicketCloseReason, TicketPriority, TicketType } from '@prisma/client'
 
 const ACTOR = 'max'
@@ -115,6 +115,32 @@ export async function verifyTicket(number: number, note?: string): Promise<Actio
 
 export async function sendTicketBack(number: number, note: string): Promise<ActionResult> {
   return guard(async () => { await sendBack(await findIdByNumber(number), note, ACTOR); return {} })
+}
+
+// ── Tickets v2: questions, decisions, links, where-is-it-live ───────────
+
+export async function askTicketQuestion(number: number, question: string, options: string[] = []): Promise<ActionResult> {
+  return guard(async () => { await askQuestion(await findIdByNumber(number), question, options, ACTOR); return {} })
+}
+
+export async function answerTicketQuestion(number: number, questionId: string, answer: { choice?: string; text?: string }): Promise<ActionResult> {
+  return guard(async () => { await answerQuestion(await findIdByNumber(number), questionId, answer, ACTOR); return {} })
+}
+
+export async function addTicketDecision(number: number, decision: string): Promise<ActionResult> {
+  return guard(async () => { await addDecision(await findIdByNumber(number), decision, ACTOR); return {} })
+}
+
+export async function addTicketLink(number: number, link: TicketLink): Promise<ActionResult> {
+  return guard(async () => { await addLink(await findIdByNumber(number), link, ACTOR); return {} })
+}
+
+export async function removeTicketLink(number: number, link: Pick<TicketLink, 'kind' | 'ref'>): Promise<ActionResult> {
+  return guard(async () => { await removeLink(await findIdByNumber(number), link, ACTOR); return {} })
+}
+
+export async function setTicketLive(number: number, stage: LiveStage): Promise<ActionResult> {
+  return guard(async () => { await setLive(await findIdByNumber(number), stage, ACTOR); return {} })
 }
 
 // ── Attachments ─────────────────────────────────────────────────────────

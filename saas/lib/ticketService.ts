@@ -12,6 +12,7 @@ import { db } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { Prisma, TicketStatus, TicketType, TicketPriority, TicketSource, TicketCloseReason } from '@prisma/client'
 import {
+  LINK_KINDS, MAX_LINKS, MAX_OPTION, MAX_OPTIONS, parseSteps, type LiveStage, type TicketLink,
   MAX_COMMENT, MAX_DESCRIPTION, MAX_TITLE, TENANT_STATUS_FOR, TICKET_CLOSE_REASONS, TICKET_PRIORITIES,
   TICKET_STATUSES, TICKET_TYPES, type TicketStatusValue,
 } from '@/lib/tickets'
@@ -153,15 +154,171 @@ export async function changeStatus(
   })
 }
 
-export type ReviewCard = { changed: string; howToTest: string; leftOver?: string; commit?: string }
+export type ReviewCard = { changed: string; howToTest: string; leftOver?: string; commit?: string; steps?: string[]; url?: string }
 
-/** Claude (or Max) says the work is done: ticket moves to "Ready to test" with a structured card. */
+/**
+ * Claude (or Max) says the work is done: ticket moves to "Ready to test" with a structured card.
+ * The card lives in `meta` only (the event body stays empty, so it is never stored or shown twice).
+ * "How to test" is also kept as separate steps for the checklist (Plan-TicketsV2 2.4). A card with a
+ * commit means the work is on `staging` (Rule 0: every change goes there first), so the ticket is marked live there.
+ */
 export async function postReview(id: string, card: ReviewCard, actor: string) {
   const changed = clean(card.changed, MAX_COMMENT)
   const howToTest = clean(card.howToTest, MAX_COMMENT)
   if (!changed || !howToTest) throw new TicketError('A review card needs "what changed" and "how to test".')
-  const meta = { changed, howToTest, leftOver: clean(card.leftOver, MAX_COMMENT), commit: clean(card.commit, 100) }
-  return changeStatus(id, 'REVIEW', actor, { kind: 'REVIEW', note: changed, meta })
+  const given = Array.isArray(card.steps) ? card.steps.map(s => clean(s, 500)).filter(Boolean).slice(0, 20) : []
+  const url = card.url ? safeUrl(card.url) : null
+  if (card.url && !url) throw new TicketError('The test link must be an http(s) address.')
+  const meta = {
+    changed, howToTest, steps: given.length ? given : parseSteps(howToTest), ...(url && { url }),
+    leftOver: clean(card.leftOver, MAX_COMMENT), commit: clean(card.commit, 100),
+  }
+  const updated = await changeStatus(id, 'REVIEW', actor, { kind: 'REVIEW', meta })
+  if (meta.commit && !updated.liveOnStagingAt) await setLive(id, 'STAGING', actor)
+  return updated
+}
+
+function safeUrl(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > 2000) return null
+  try { const u = new URL(v.trim()); return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null } catch { return null }
+}
+
+// ── Tickets v2: questions, decisions, links, where-is-it-live (Plan-TicketsV2 Tier 2) ─────────
+
+/** A question that waits for an answer (usually Claude asking Max). Optional one-tap answer buttons. */
+export async function askQuestion(id: string, question: string, options: unknown, actor: string) {
+  const text = clean(question, MAX_COMMENT)
+  if (!text) throw new TicketError('Write the question first.')
+  const opts = Array.isArray(options) ? [...new Set(options.map(o => clean(o, MAX_OPTION)).filter(Boolean))].slice(0, MAX_OPTIONS) : []
+  await load(db, id)
+  return db.$transaction(async tx => {
+    const ev = await tx.ticketEvent.create({ data: { ticketId: id, kind: 'QUESTION', body: text, actor, meta: { options: opts } } })
+    await tx.ticket.update({ where: { id }, data: { updatedAt: new Date() } })
+    return ev
+  })
+}
+
+/**
+ * Answers one open question. The answer is recorded as a decision (who, when). `choice` must be one of the
+ * question's buttons; free text can be added to it or stand alone. Answering twice is refused, also when two
+ * answers race (the check and the write share a transaction that locks the question row).
+ */
+export async function answerQuestion(id: string, questionId: string, input: { choice?: string; text?: string }, actor: string) {
+  const text = clean(input.text, MAX_COMMENT)
+  return db.$transaction(async tx => {
+    const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "TicketEvent" WHERE id = ${questionId} AND "ticketId" = ${id} AND kind = 'QUESTION' FOR UPDATE`
+    if (rows.length === 0) throw new TicketError('Question not found.')
+    const q = await tx.ticketEvent.findUniqueOrThrow({ where: { id: questionId } })
+    const options = ((q.meta as { options?: string[] } | null)?.options) ?? []
+    const choice = input.choice ? clean(input.choice, MAX_OPTION) : ''
+    if (choice && !options.includes(choice)) throw new TicketError('That is not one of the answers offered.')
+    if (!choice && !text) throw new TicketError('Pick an answer or write one.')
+    const already = await tx.ticketEvent.findFirst({ where: { ticketId: id, kind: 'ANSWER', meta: { path: ['questionId'], equals: questionId } } })
+    if (already) throw new TicketError('This question has already been answered.')
+    const body = [choice, text].filter(Boolean).join(' — ')
+    const ev = await tx.ticketEvent.create({ data: { ticketId: id, kind: 'ANSWER', body, actor, meta: { questionId, ...(choice && { choice }) } } })
+    await tx.ticket.update({ where: { id }, data: { updatedAt: new Date() } })
+    return ev
+  })
+}
+
+/** A decision taken elsewhere (in chat, on a call) written onto the ticket so it is not lost in comments. */
+export async function addDecision(id: string, decision: string, actor: string) {
+  const text = clean(decision, MAX_COMMENT)
+  if (!text) throw new TicketError('Write the decision first.')
+  await load(db, id)
+  return db.$transaction(async tx => {
+    const ev = await tx.ticketEvent.create({ data: { ticketId: id, kind: 'DECISION', body: text, actor } })
+    await tx.ticket.update({ where: { id }, data: { updatedAt: new Date() } })
+    return ev
+  })
+}
+
+function cleanLink(raw: unknown): TicketLink {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const kind = oneOf(r.kind, LINK_KINDS, 'link kind')
+  let ref = clean(r.ref, 300)
+  if (!ref) throw new TicketError('A link needs something to point at.')
+  if (kind === 'url' && !safeUrl(ref)) throw new TicketError('A web link must be an http(s) address.')
+  if (kind === 'url') ref = safeUrl(ref)!
+  if (kind === 'commit' && !/^[0-9a-f]{7,40}$/i.test(ref)) throw new TicketError('A commit is 7 to 40 hex characters.')
+  if (kind === 'ticket') {
+    const n = Number(ref.replace(/^t-/i, ''))
+    if (!Number.isInteger(n) || n < 1 || n > 2_000_000_000) throw new TicketError('A related ticket is a number like T-12.')
+    ref = String(n)
+  }
+  if (kind === 'bug') ref = ref.replace(/^#/, '')
+  const label = clean(r.label, 80)
+  return { kind, ref, ...(label && { label }) }
+}
+
+const sameLink = (a: TicketLink, b: TicketLink) => a.kind === b.kind && a.ref.toLowerCase() === b.ref.toLowerCase()
+const readLinks = (v: unknown): TicketLink[] => (Array.isArray(v) ? (v as TicketLink[]) : [])
+
+/** Adds a link. A related ticket is linked both ways, so each ticket shows the other. */
+export async function addLink(id: string, raw: unknown, actor: string) {
+  const link = cleanLink(raw)
+  return db.$transaction(async tx => {
+    const t = await load(tx, id)
+    const links = readLinks(t.links)
+    if (links.some(l => sameLink(l, link))) return t
+    if (links.length >= MAX_LINKS) throw new TicketError(`A ticket can have at most ${MAX_LINKS} links.`)
+    if (link.kind === 'ticket') {
+      if (Number(link.ref) === t.number) throw new TicketError('A ticket cannot be related to itself.')
+      const other = await tx.ticket.findUnique({ where: { number: Number(link.ref) } })
+      if (!other) throw new TicketError(`T-${link.ref} does not exist.`)
+      const back: TicketLink = { kind: 'ticket', ref: String(t.number) }
+      const otherLinks = readLinks(other.links)
+      if (!otherLinks.some(l => sameLink(l, back)) && otherLinks.length < MAX_LINKS) {
+        await tx.ticket.update({ where: { id: other.id }, data: { links: [...otherLinks, back] } })
+        await tx.ticketEvent.create({ data: { ticketId: other.id, kind: 'FIELD', body: 'link added', toValue: `T-${t.number}`, actor } })
+      }
+    }
+    const updated = await tx.ticket.update({ where: { id }, data: { links: [...links, link] } })
+    await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'link added', toValue: link.kind === 'ticket' ? `T-${link.ref}` : link.ref, actor } })
+    return updated
+  })
+}
+
+export async function removeLink(id: string, raw: unknown, actor: string) {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const kind = oneOf(r.kind, LINK_KINDS, 'link kind')
+  const ref = clean(r.ref, 300).replace(/^t-/i, '')
+  return db.$transaction(async tx => {
+    const t = await load(tx, id)
+    const links = readLinks(t.links)
+    const next = links.filter(l => !(l.kind === kind && l.ref.toLowerCase() === ref.toLowerCase()))
+    if (next.length === links.length) return t
+    if (kind === 'ticket') {
+      const other = await tx.ticket.findUnique({ where: { number: Number(ref) } })
+      if (other) {
+        const otherNext = readLinks(other.links).filter(l => !(l.kind === 'ticket' && l.ref === String(t.number)))
+        await tx.ticket.update({ where: { id: other.id }, data: { links: otherNext } })
+      }
+    }
+    const updated = await tx.ticket.update({ where: { id }, data: { links: next } })
+    await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'link removed', fromValue: kind === 'ticket' ? `T-${ref}` : ref, actor } })
+    return updated
+  })
+}
+
+/** Where the work is live. Production implies staging (everything goes to staging first). */
+export async function setLive(id: string, stage: LiveStage, actor: string) {
+  oneOf(stage, ['NONE', 'STAGING', 'PRODUCTION'] as const, 'live stage')
+  return db.$transaction(async tx => {
+    const t = await load(tx, id)
+    const now = new Date()
+    const data = stage === 'NONE'
+      ? { liveOnStagingAt: null, liveOnProductionAt: null }
+      : stage === 'STAGING'
+        ? { liveOnStagingAt: t.liveOnStagingAt ?? now, liveOnProductionAt: null }
+        : { liveOnStagingAt: t.liveOnStagingAt ?? now, liveOnProductionAt: t.liveOnProductionAt ?? now }
+    const before: LiveStage = t.liveOnProductionAt ? 'PRODUCTION' : t.liveOnStagingAt ? 'STAGING' : 'NONE'
+    if (before === stage) return t
+    const updated = await tx.ticket.update({ where: { id }, data })
+    await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'live changed', fromValue: before, toValue: stage, actor } })
+    return updated
+  })
 }
 
 export async function verify(id: string, actor: string, note?: string) {
@@ -187,6 +344,8 @@ export async function addComment(id: string, body: string, actor: string) {
 export type TicketPatch = {
   title?: string
   description?: string
+  analysis?: string
+  solution?: string
   type?: TicketType
   priority?: TicketPriority
   area?: string | null
@@ -208,6 +367,14 @@ export async function updateFields(id: string, patch: TicketPatch, actor: string
     if (patch.description !== undefined) {
       const v = clean(patch.description, MAX_DESCRIPTION)
       if (v !== t.description) { data.description = v; events.push({ body: 'description edited' }) }
+    }
+    if (patch.analysis !== undefined) {
+      const v = clean(patch.analysis, MAX_DESCRIPTION)
+      if (v !== t.analysis) { data.analysis = v; events.push({ body: 'analysis edited' }) }
+    }
+    if (patch.solution !== undefined) {
+      const v = clean(patch.solution, MAX_DESCRIPTION)
+      if (v !== t.solution) { data.solution = v; events.push({ body: 'solution edited' }) }
     }
     if (patch.type !== undefined) {
       const v = oneOf(patch.type, TICKET_TYPES, 'type')
@@ -275,6 +442,11 @@ export type TicketListItem = {
   updatedAt: string
   attachmentCount: number
   commentCount: number
+  /** Questions still waiting for an answer (Plan-TicketsV2 2.2). */
+  openQuestions: number
+  hasSolution: boolean
+  liveOnStagingAt: string | null
+  liveOnProductionAt: string | null
 }
 
 async function tenantNames(): Promise<Map<string, string>> {
@@ -283,23 +455,35 @@ async function tenantNames(): Promise<Map<string, string>> {
 }
 
 export async function listTickets(): Promise<TicketListItem[]> {
-  const [rows, names] = await Promise.all([
+  const [rows, names, qa] = await Promise.all([
     db.ticket.findMany({
       orderBy: { updatedAt: 'desc' },
+      omit: { description: true, analysis: true, links: true },
       include: { _count: { select: { attachments: true, events: { where: { kind: 'COMMENT' } } } } },
     }),
     tenantNames(),
+    // One answer per question is enforced by answerQuestion, so open = questions - answers.
+    db.ticketEvent.groupBy({ by: ['ticketId', 'kind'], where: { kind: { in: ['QUESTION', 'ANSWER'] } }, _count: { _all: true } }),
   ])
+  const open = new Map<string, number>()
+  for (const g of qa) open.set(g.ticketId, (open.get(g.ticketId) ?? 0) + (g.kind === 'QUESTION' ? 1 : -1) * g._count._all)
   return rows.map(t => ({
     id: t.id, number: t.number, title: t.title, type: t.type, status: t.status, priority: t.priority,
     area: t.area, labels: t.labels, tenantId: t.tenantId, tenantName: t.tenantId ? (names.get(t.tenantId) ?? 'Unknown tenant') : null,
     source: t.source, closeReason: t.closeReason, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
     attachmentCount: t._count.attachments, commentCount: t._count.events,
+    openQuestions: Math.max(0, open.get(t.id) ?? 0), hasSolution: t.solution.trim() !== '',
+    liveOnStagingAt: t.liveOnStagingAt?.toISOString() ?? null, liveOnProductionAt: t.liveOnProductionAt?.toISOString() ?? null,
   }))
 }
 
 export type TicketDetail = TicketListItem & {
   description: string
+  analysis: string
+  solution: string
+  links: TicketLink[]
+  /** Titles of the tickets in `links`, so a related ticket shows its name, not just its number. */
+  linkedTitles: Record<string, string>
   createdBy: string | null
   externalRef: string | null
   closedAt: string | null
@@ -334,11 +518,21 @@ export async function getTicketByNumber(number: number): Promise<TicketDetail | 
     return { id: a.id, fileName: a.fileName, mimeType: a.mimeType, sizeBytes: a.sizeBytes, signedUrl, createdAt: a.createdAt.toISOString() }
   }))
 
+  const links = Array.isArray(t.links) ? (t.links as TicketLink[]) : []
+  const relatedNumbers = links.filter(l => l.kind === 'ticket').map(l => Number(l.ref)).filter(n => Number.isInteger(n))
+  const related = relatedNumbers.length
+    ? await db.ticket.findMany({ where: { number: { in: relatedNumbers } }, select: { number: true, title: true } })
+    : []
+  const answered = new Set(t.events.filter(e => e.kind === 'ANSWER').map(e => (e.meta as { questionId?: string } | null)?.questionId))
+
   return {
     id: t.id, number: t.number, title: t.title, type: t.type, status: t.status, priority: t.priority, area: t.area, labels: t.labels,
     tenantId: t.tenantId, tenantName: t.tenantId ? (names.get(t.tenantId) ?? 'Unknown tenant') : null, source: t.source, closeReason: t.closeReason,
     createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
     attachmentCount: t.attachments.length, commentCount: t.events.filter(e => e.kind === 'COMMENT').length,
+    openQuestions: t.events.filter(e => e.kind === 'QUESTION' && !answered.has(e.id)).length, hasSolution: t.solution.trim() !== '',
+    liveOnStagingAt: t.liveOnStagingAt?.toISOString() ?? null, liveOnProductionAt: t.liveOnProductionAt?.toISOString() ?? null,
+    analysis: t.analysis, solution: t.solution, links, linkedTitles: Object.fromEntries(related.map(r => [String(r.number), r.title])),
     description: t.description, createdBy: t.createdBy, externalRef: t.externalRef, closedAt: t.closedAt?.toISOString() ?? null,
     events: t.events.map(e => ({ id: e.id, kind: e.kind, body: e.body, fromValue: e.fromValue, toValue: e.toValue, actor: e.actor, meta: e.meta, createdAt: e.createdAt.toISOString() })),
     attachments,

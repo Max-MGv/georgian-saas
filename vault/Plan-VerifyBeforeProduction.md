@@ -56,4 +56,10 @@ tags: [plan, verification, tickets]
 7. **Post-deploy checks on `nikalasmarani.vineworks.ge`:** home + wines load; a text report and a screenshot report from the public widget become tickets; `/super-admin/tickets` shows the backfilled board; API returns 401 without a token and 200 with the prod token; anonymous REST on all tables unchanged.
 8. **Rollback:** revert the merge on `master` (old code ignores the additive schema). Nothing to undo in the database; the new tables simply sit unused.
 
-**Knowing about, accepted:** a ticket closed as Duplicate/Obsolete/Not-reproducible shows the reporter "Won't Fix" (no re-link action yet); notification email subject now starts with `[PRODUCTION]` / `[STAGING]` — update any inbox filter; `BugReportsClient.tsx` / `getBugReports()` are dead code (harmless).
+**Knowing about, accepted:** a ticket closed as Duplicate/Obsolete/Not-reproducible shows the reporter "Won't Fix" (no re-link action yet — Tickets v2 Tier 3 fixes it); notification email subject now starts with `[PRODUCTION]` / `[STAGING]` — update any inbox filter.
+
+**Update 2026-10-15 — Tickets v2 ([[Plan-TicketsV2]]) changes this runbook:**
+- **A second ticket migration** now ships too: `20261014203238_tickets_v2_sections` (additive: 5 columns on `Ticket` — `analysis`, `solution`, `links`, `liveOnStagingAt`, `liveOnProductionAt`, all with defaults or nullable). Step 1's "exactly one pending" is no longer true: expect both ticket migrations **plus** the wine-order migrations ([[Plan-WineOrderFeatures]] runbook) if those ship in the same merge.
+- **The old report inbox is deleted** (Tier 1), not just hidden: on production, before step 4's backfill, reports are reachable **nowhere** in the UI. Run step 4 **before** step 6, as written — not after.
+- After the merge, mark what shipped: `tix live T-n production` on the **staging** board for each ticket in the "Next release" view (no production write).
+- Tier 3 will add the production → staging forwarding: a production env var holding a create-only staging token. That is its own runbook step, on Max's go.

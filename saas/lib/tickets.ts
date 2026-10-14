@@ -19,7 +19,7 @@ export const TICKET_CLOSE_REASONS = ['WONT_FIX', 'DUPLICATE', 'NOT_REPRODUCIBLE'
 export type TicketCloseReasonValue = (typeof TICKET_CLOSE_REASONS)[number]
 
 /** Event kinds written to TicketEvent.kind. */
-export const TICKET_EVENT_KINDS = ['CREATED', 'COMMENT', 'STATUS', 'FIELD', 'REVIEW', 'VERIFIED', 'SENT_BACK', 'REPORT_LINKED'] as const
+export const TICKET_EVENT_KINDS = ['CREATED', 'COMMENT', 'STATUS', 'FIELD', 'REVIEW', 'VERIFIED', 'SENT_BACK', 'REPORT_LINKED', 'QUESTION', 'ANSWER', 'DECISION'] as const
 export type TicketEventKind = (typeof TICKET_EVENT_KINDS)[number]
 
 /** Where the ticket lives, for filtering. A fixed list; `area` is text so adding one needs no migration. */
@@ -68,6 +68,41 @@ export const TICKET_STATUS_FOR_REPORT: Record<TenantVisibleStatus, TicketStatusV
   IN_PROGRESS: 'IN_PROGRESS',
   RESOLVED: 'DONE',
   WONT_FIX: 'CLOSED',
+}
+
+// ── Tickets v2 (Plan-TicketsV2 Tier 2) ─────────────────────────────────────
+
+/** Links on a ticket: a vault plan, a commit, a KnownBugs number, another ticket, or any web page. */
+export const LINK_KINDS = ['plan', 'commit', 'bug', 'ticket', 'url'] as const
+export type LinkKind = (typeof LINK_KINDS)[number]
+export type TicketLink = { kind: LinkKind; ref: string; label?: string }
+export const LINK_KIND_LABEL: Record<LinkKind, string> = { plan: 'Plan / note', commit: 'Commit', bug: 'Known bug', ticket: 'Related ticket', url: 'Web link' }
+export const MAX_LINKS = 30
+
+/** Where the work is live (derived from Ticket.liveOnStagingAt / liveOnProductionAt). */
+export type LiveStage = 'NONE' | 'STAGING' | 'PRODUCTION'
+export const LIVE_LABEL: Record<LiveStage, string> = { NONE: 'Not shipped', STAGING: 'On staging', PRODUCTION: 'Live on production' }
+export function liveStage(t: { liveOnStagingAt: Date | string | null; liveOnProductionAt: Date | string | null }): LiveStage {
+  return t.liveOnProductionAt ? 'PRODUCTION' : t.liveOnStagingAt ? 'STAGING' : 'NONE'
+}
+
+/** Answer buttons on a question. */
+export const MAX_OPTIONS = 6
+export const MAX_OPTION = 80
+
+/**
+ * "How to test" as separate steps for the checklist: one step per line, or - when it is one long line -
+ * split at "1) … 2) …" / "1. … 2. …" markers. A text with no structure stays one step.
+ */
+export function parseSteps(text: string): string[] {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const out = lines.length > 1 ? lines : (lines[0] ?? '').split(/\s+(?=\d{1,2}[.)]\s)/)
+  const marker = /^(?:[-*•]|\d{1,2}[.)])\s+/
+  // "On staging: 1) … 2) …" - the unnumbered lead-in is not a step of its own; it belongs with step 1.
+  if (out.length > 1 && !marker.test(out[0]) && out.slice(1).every(l => marker.test(l))) {
+    out.splice(0, 2, `${out[0].trim()} ${out[1].replace(marker, '')}`)
+  }
+  return out.map(l => l.replace(marker, '').trim()).filter(Boolean).slice(0, 20)
 }
 
 export const MAX_TITLE = 140

@@ -20,7 +20,14 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
   views, icons, de-duplication, quieter timeline, old inbox deleted. Verified: 17 + 11 scripted checks (untracked
   `saas/scripts/_qa/_tickets_flow*.ts`), `tickets.spec.ts` 4/4 (updated for the panel), desktop + phone screenshots, tsc + lint.
   Test tickets T-85/T-86/T-87 closed. NOT on production.
-**Next:** Max tries Tier 1 on staging; answers Decision 0 (revised) + the MyToDo question; then Tier 2.
+- 2026-10-15: Max — MyToDo keeps non-ticket chores only (done: header + Rule 11); forwarding approved as **whole-ticket, one-way copy**
+  (production → staging); updates never flow back — the client-facing "fixed" + reply is one step of each production release.
+- **Tier 2 built on `staging`** (FeatureLog #230): Request/Analysis/Solution, questions + one-tap answers → decisions, links, ✓/✗ test
+  checklist, where-is-it-live + "Next release" view, new `tix` commands (ClaudeInstructions Rule 11 updated). Migration
+  `20261014203238_tickets_v2_sections` on the **dev DB only**. Verified: 12 scripted UI checks (desktop + phone), `tickets.spec.ts` 5/5
+  (new Tier 2 test), tsc + lint. Live markers back-filled from git (13 staging, T-10 production). Production runbook updated
+  (Plan-VerifyBeforeProduction: 2nd ticket migration; backfill BEFORE merge since the old inbox is deleted). NOT on production.
+**Next:** Tier 3 (client replies, Resolved only when live, merge duplicates, forwarding P-tickets). Max tries Tiers 1–2 on staging.
 
 ---
 

@@ -136,6 +136,49 @@ test.describe('Internal tickets (super-admin)', () => {
     await closeTicketOnPage(page);
   });
 
+  // Plan-TicketsV2 Tier 2: the ticket holds our thinking - analysis/solution, questions with one-tap answers,
+  // decisions, links (a related ticket links back), where-is-it-live and the test checklist.
+  test('Tier 2: analysis, question answered in the panel, decision, links, live marker, checklist', async ({ page, request }) => {
+    test.setTimeout(150_000);
+    const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
+    const mk = async (title: string) => (await (await request.post('/api/tickets', { headers: auth, data: { title, type: 'TASK' } })).json()).number as number;
+    const a = await mk(`ZZ Tickets E2E tier2 A ${STAMP}`);
+    const b = await mk(`ZZ Tickets E2E tier2 B ${STAMP}`);
+
+    expect((await request.patch(`/api/tickets/${a}`, { headers: auth, data: { analysis: 'Root cause found.', solution: 'Do the simple thing.' } })).status()).toBe(200);
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'QUESTION', text: 'Which way?', options: ['Left', 'Right'] } })).status()).toBe(201);
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'DECISION', text: 'Decided in chat.' } })).status()).toBe(201);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: `T-${b}` } })).status()).toBe(201);
+    // Refused: a non-web URL, a ticket that does not exist, a link to itself, an unknown live stage.
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'url', ref: 'javascript:alert(1)' } })).status()).toBe(400);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: '999999999' } })).status()).toBe(400);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: String(a) } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${a}`, { headers: auth, data: { live: 'MOON' } })).status()).toBe(400);
+    // The related ticket links back.
+    const bDetail = await (await request.get(`/api/tickets/${b}`, { headers: auth })).json();
+    expect(bDetail.links).toEqual([{ kind: 'ticket', ref: String(a) }]);
+    // A hand-over with a commit marks the ticket live on staging and splits "how to test" into steps.
+    expect((await request.post(`/api/tickets/${a}/review`, { headers: auth, data: { changed: 'x', howToTest: 'On staging: 1) open it 2) click it', commit: 'f1ff942' } })).status()).toBe(201);
+    const aDetail = await (await request.get(`/api/tickets/${a}`, { headers: auth })).json();
+    expect(aDetail.liveOnStagingAt).not.toBeNull();
+    expect(aDetail.events.find((e: { kind: string }) => e.kind === 'REVIEW').meta.steps).toEqual(['On staging: open it', 'click it']);
+
+    // Max answers with one tap in the panel; the question becomes a decision.
+    await loginSuperAdmin(page);
+    await page.goto(`/super-admin/tickets?t=${a}`);
+    const panel = panelOf(page);
+    await expect(panel.getByText('Question for you')).toBeVisible({ timeout: 60_000 });
+    await expect(panel.getByRole('button', { name: 'Step 1 works' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Right', exact: true }).click();
+    await expect(panel.getByText('Question for you')).toHaveCount(0, { timeout: 30_000 });
+    await expect(panel.getByText('Decisions', { exact: true })).toBeVisible();
+    // Answering the same question again is refused.
+    const qId = aDetail.events.find((e: { kind: string }) => e.kind === 'QUESTION').id;
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'ANSWER', questionId: qId, choice: 'Left' } })).status()).toBe(400);
+
+    for (const n of [a, b]) await request.patch(`/api/tickets/${n}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } });
+  });
+
   test('a public widget report becomes a Widget ticket', async ({ page, browser }) => {
     test.setTimeout(120_000);
     // Send the report from the public site as an anonymous visitor.

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type 
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ChevronDown, ChevronUp, Ellipsis, Eye, EyeOff, Hourglass, ImagePlus, LayoutGrid, Link2, List, ListFilter, ListPlus, Megaphone,
-  Bug, Search, SlidersHorizontal, X, Inbox,
+  Bug, Search, SlidersHorizontal, X, Inbox, Rocket, MessageCircleQuestion, Server,
 } from 'lucide-react'
 import type { TicketDetail as Ticket, TicketListItem } from '@/lib/ticketService'
 import {
@@ -26,7 +26,7 @@ import {
 import TicketDetail from './TicketDetail'
 
 type Mode = 'board' | 'list'
-type Preset = 'all' | 'waiting' | 'reports' | 'bugs'
+type Preset = 'all' | 'waiting' | 'reports' | 'bugs' | 'release'
 type GroupBy = 'none' | 'tenant' | 'type' | 'priority' | 'area' | 'status'
 type SortBy = 'updated' | 'priority' | 'number' | 'status'
 type Env = 'PRODUCTION' | 'STAGING' | 'LOCAL'
@@ -41,9 +41,10 @@ const byPriorityThenRecent = (a: TicketListItem, b: TicketListItem) =>
 
 const PRESETS: { id: Preset; label: string; hint: string; icon: typeof Inbox; test: (t: TicketListItem) => boolean }[] = [
   { id: 'all', label: 'All', hint: 'Every ticket', icon: Inbox, test: () => true },
-  { id: 'waiting', label: 'Waiting for me', hint: 'Finished work waiting for you to test', icon: Hourglass, test: t => t.status === 'REVIEW' },
+  { id: 'waiting', label: 'Waiting for me', hint: 'Work to test, and questions waiting for your answer', icon: Hourglass, test: t => t.status === 'REVIEW' || t.openQuestions > 0 },
   { id: 'reports', label: 'Reports', hint: 'Sent with the report button', icon: Megaphone, test: t => t.source === 'WIDGET' },
   { id: 'bugs', label: 'Open bugs', hint: 'Bugs not yet done or closed', icon: Bug, test: t => t.type === 'BUG' && isOpen(t) },
+  { id: 'release', label: 'Next release', hint: 'On staging, not yet on production - what the next production update would ship', icon: Rocket, test: t => !!t.liveOnStagingAt && !t.liveOnProductionAt && t.status !== 'CLOSED' },
 ]
 
 function typingIn(el: EventTarget | null) {
@@ -434,6 +435,7 @@ function Card({ t, active, onOpen, onDragStart, onDragEnd, onMove }: {
         <PriorityIcon priority={t.priority} size={14} />
         <TypeIcon type={t.type} size={14} />
         {t.source === 'WIDGET' && <SourceIcon source={t.source} size={13} />}
+        <Signals t={t} />
         {/* "5m" depends on the current time: server and browser render a moment apart, so this text may differ. */}
         <span style={{ marginLeft: 'auto' }} suppressHydrationWarning>{age(t.updatedAt)}</span>
         <span onClick={e => e.stopPropagation()}><MoveMenu t={t} onMove={onMove} /></span>
@@ -453,6 +455,25 @@ function Card({ t, active, onOpen, onDragStart, onDragEnd, onMove }: {
       )}
       <style>{'.ticket-card:hover{border-color:#334155 !important}'}</style>
     </div>
+  )
+}
+
+/** The two things worth seeing at a glance on a card: a question waiting for Max, and where the work is live. */
+function Signals({ t }: { t: TicketListItem }) {
+  return (
+    <>
+      {t.openQuestions > 0 && (
+        <span title={`${t.openQuestions} question(s) waiting for your answer`} role="img" aria-label="Question waiting for you"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: '#c4b5fd', fontWeight: 700 }}>
+          <MessageCircleQuestion size={14} aria-hidden />{t.openQuestions > 1 ? t.openQuestions : ''}
+        </span>
+      )}
+      {t.liveOnProductionAt
+        ? <span title="Live on production" role="img" aria-label="Live on production" style={{ display: 'inline-flex', color: '#86efac' }}><Rocket size={13} aria-hidden /></span>
+        : t.liveOnStagingAt
+          ? <span title="On staging, not yet on production" role="img" aria-label="On staging" style={{ display: 'inline-flex', color: '#fbbf24' }}><Server size={13} aria-hidden /></span>
+          : null}
+    </>
   )
 }
 
@@ -505,6 +526,7 @@ function ListView({ rows, groupBy, openNumber, onOpen, onMove }: {
                 <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, width: 42, flexShrink: 0 }}>{ticketRef(t.number)}</span>
                 <PriorityIcon priority={t.priority} size={14} />
                 <TypeIcon type={t.type} size={14} />
+                <Signals t={t} />
                 <a href={`?t=${t.number}`} onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) e.preventDefault() }}
                   style={{ flex: 1, minWidth: 0, color: C.text, textDecoration: 'none', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</a>
                 <span className="hidden md:inline" style={{ fontSize: 11, color: C.faint, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.tenantName ?? ''}</span>

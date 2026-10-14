@@ -25,6 +25,9 @@ The ticket opens in a **side panel** (`[data-ticket-panel]`, URL `?t=N`), not a 
 (`menuitemradio` options), closing is one tap on a reason button, Verify is "Works — Done". The panel shows the board's title
 instantly while loading: wait for the **Status** button (only in the loaded ticket), not the heading. Still 4/4 after the change.
 
+**Tier 2 (2026-10-15):** a 5th test covers analysis/solution, a question answered with one tap in the panel (then refused a second time),
+a decision, links (both ways; bad URL / missing ticket / self-link refused), the live marker and the checklist steps. 5/5.
+
 ## Selector and timing traps (each cost a failed run once)
 
 - `getByText('Verified')` also matches the **button** — it raced the state change. Wait on the outcome text (`Ready to test → Done`) instead.

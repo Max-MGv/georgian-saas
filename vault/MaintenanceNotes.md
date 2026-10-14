@@ -1156,6 +1156,11 @@ Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
   React elements only (no HTML strings) because widget text is untrusted. Files: `TicketsClient.tsx` (board, list, panel, quick add),
   `TicketDetail.tsx` (one ticket), `ui.tsx` (icons, Picker menu, close dialog), `Lightbox.tsx`, `Markdown.tsx`. The old inbox
   (`BugReportsClient`, `getBugReports/getBugReport/updateBugReportStatus`) is deleted.
+- **Tier 2 (2026-10-15):** new event kinds `QUESTION` (meta `{options}`), `ANSWER` (meta `{questionId, choice?}` — one per question, enforced
+  under a row lock in `answerQuestion`; the board's open-question count is questions − answers, so never write an ANSWER by hand), `DECISION`.
+  `Ticket.links` is JSON `[{kind, ref, label?}]` — related-ticket links are written **on both tickets** by `addLink/removeLink`; keep it that way.
+  `liveOnStagingAt/liveOnProductionAt`: production implies staging (`setLive`); `postReview` with a commit sets staging. Review-card `meta.steps`
+  is fixed at hand-over time (`parseSteps`), so changing the parser does not change old cards. API: `/api/tickets/[n]/notes`, `/links`, PATCH `live`.
 
 ---
 

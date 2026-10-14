@@ -45,6 +45,19 @@ export async function GET(request: Request) {
   const latestReview = new Map<string, unknown>()
   for (const e of reviews) if (!latestReview.has(e.ticketId)) latestReview.set(e.ticketId, e.meta)
 
+  // Questions still waiting for Max (Plan-TicketsV2 2.2), so `tix list/export` shows what is blocked on him.
+  const qa = rows.length
+    ? await db.ticketEvent.findMany({ where: { ticketId: { in: rows.map(t => t.id) }, kind: { in: ['QUESTION', 'ANSWER'] } }, select: { id: true, ticketId: true, kind: true, body: true, meta: true } })
+    : []
+  const answeredIds = new Set(qa.filter(e => e.kind === 'ANSWER').map(e => (e.meta as { questionId?: string } | null)?.questionId))
+  const openQuestions = new Map<string, { id: string; text: string; options: string[] }[]>()
+  for (const e of qa) {
+    if (e.kind !== 'QUESTION' || answeredIds.has(e.id)) continue
+    const list = openQuestions.get(e.ticketId) ?? []
+    list.push({ id: e.id, text: e.body, options: (e.meta as { options?: string[] } | null)?.options ?? [] })
+    openQuestions.set(e.ticketId, list)
+  }
+
   return NextResponse.json({
     count: rows.length,
     total,
@@ -56,6 +69,8 @@ export async function GET(request: Request) {
       untrustedText: t.source === 'WIDGET',
       tenant: t.tenantId ? { id: t.tenantId, name: names.get(t.tenantId) ?? null } : null,
       closeReason: t.closeReason, createdAt: t.createdAt, updatedAt: t.updatedAt,
+      live: t.liveOnProductionAt ? 'PRODUCTION' : t.liveOnStagingAt ? 'STAGING' : 'NONE',
+      openQuestions: openQuestions.get(t.id) ?? [],
       ...(latestReview.has(t.id) && { reviewCard: latestReview.get(t.id) }),
     })),
   })

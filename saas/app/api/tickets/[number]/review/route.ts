@@ -4,7 +4,8 @@ import { TicketError, findIdByNumber, postReview } from '@/lib/ticketService'
 
 export const dynamic = 'force-dynamic'
 
-/** POST { changed, howToTest, leftOver?, commit? } - hands the work to Max: the ticket moves to "Ready to test". */
+/** POST { changed, howToTest, leftOver?, commit?, steps?: string[], url? } - hands the work to Max: the ticket moves to
+ *  "Ready to test". `steps` become the test checklist (otherwise they are split out of howToTest); `url` is the page to open. */
 export async function POST(request: Request, { params }: { params: Promise<{ number: string }> }) {
   const auth = await authenticateTicketRequest(request)
   if ('response' in auth) return auth.response
@@ -17,6 +18,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ num
       changed: String(body.changed ?? ''), howToTest: String(body.howToTest ?? ''),
       leftOver: typeof body.leftOver === 'string' ? body.leftOver : undefined,
       commit: typeof body.commit === 'string' ? body.commit : undefined,
+      steps: Array.isArray(body.steps) ? body.steps.map(String) : undefined,
+      url: typeof body.url === 'string' ? body.url : undefined,
     }, auth.name)
     return NextResponse.json({ ok: true, status: 'REVIEW' }, { status: 201 })
   } catch (e) {
