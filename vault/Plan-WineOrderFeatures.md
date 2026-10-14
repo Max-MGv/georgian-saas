@@ -524,7 +524,7 @@ Accepted as is: 7 (stale page data → "please choose again" / generic error; Fl
       run with `TZ=UTC` to mimic Vercel.
 
 ### Chunk 15 — No access code = unknown company (wine orders AND bookings)
-**Status:** ✅ 2026-10-14 (staging) — 44/44 regression; **production needs the code list first (below)**
+**Status:** ✅ 2026-10-14 `2affd7d` (staging) — 44/44 regression; no production read needed (Max)
 **Rule:** a company is only *known* to a customer who proved it — its access code, or (person codes on) a
 person's own code. Until then: no autofill (people, addresses), no special prices (wine discount %,
 negotiated wine prices, booking price tiers), not even the company's name in a list it can't be proven from.
