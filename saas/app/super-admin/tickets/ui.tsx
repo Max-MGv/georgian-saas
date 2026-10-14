@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Bot, Bug, CircleCheck, CircleDashed, CircleDot, CircleSlash, Cog, Download, FlaskConical, Inbox, Lightbulb,
-  Megaphone, OctagonAlert, PenLine, SignalHigh, SignalLow, SignalMedium, Sparkles, SquareCheck, User, type LucideIcon,
+  Megaphone, OctagonAlert, PenLine, Store, SignalHigh, SignalLow, SignalMedium, Sparkles, SquareCheck, User, type LucideIcon,
 } from 'lucide-react'
 import {
   CLOSE_REASON_LABEL, PRIORITY_LABEL, SOURCE_LABEL, STATUS_LABEL, TICKET_CLOSE_REASONS, TYPE_LABEL,
@@ -53,9 +53,10 @@ export const STATUS_ICON: Record<TicketStatusValue, LucideIcon> = {
 }
 export const TYPE_ICON: Record<TicketTypeValue, LucideIcon> = { BUG: Bug, FEATURE: Sparkles, TASK: SquareCheck, IDEA: Lightbulb }
 export const PRIORITY_ICON: Record<TicketPriorityValue, LucideIcon> = { URGENT: OctagonAlert, HIGH: SignalHigh, NORMAL: SignalMedium, LOW: SignalLow }
-export const SOURCE_ICON: Record<TicketSourceValue, LucideIcon> = { WIDGET: Megaphone, MANUAL: PenLine, ASSISTANT: Bot, IMPORT: Download }
+export const SOURCE_ICON: Record<TicketSourceValue, LucideIcon> = { WIDGET: Megaphone, MANUAL: PenLine, ASSISTANT: Bot, IMPORT: Download, PRODUCTION: Store }
 export const SOURCE_HINT: Record<TicketSourceValue, string> = {
   WIDGET: 'Sent with the report button', MANUAL: 'Added by you', ASSISTANT: 'Added by Claude', IMPORT: 'Imported from the vault',
+  PRODUCTION: 'A client report, copied from the production board',
 }
 
 /** Who did something on the timeline. */
@@ -288,7 +289,16 @@ export function Picker<V extends string>({ value, options, onChange, label, chil
 
 // ── Closing needs a reason: one tap on the reason closes the ticket ───────────────────────────────
 
-export function CloseReasonDialog({ title, onPick, onCancel }: { title: string; onPick: (r: TicketCloseReasonValue) => void; onCancel: () => void }) {
+/**
+ * Closing needs a reason: one tap on it closes the ticket. "Duplicate" asks one more thing - which ticket it
+ * duplicates - because the reporters are moved there and follow that ticket instead (Plan-TicketsV2 3.3).
+ */
+export function CloseReasonDialog({ title, onPick, onCancel }: {
+  title: string
+  onPick: (r: TicketCloseReasonValue, duplicateOf?: number) => void
+  onCancel: () => void
+}) {
+  const [dup, setDup] = useState<string | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }
     window.addEventListener('keydown', onKey, true)
@@ -300,19 +310,33 @@ export function CloseReasonDialog({ title, onPick, onCancel }: { title: string; 
     NOT_REPRODUCIBLE: 'Could not make it happen',
     OBSOLETE: 'No longer relevant',
   }
+  const dupNumber = dup !== null ? Number(dup.trim().replace(/^[tT]-/, '')) : NaN
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(2,6,23,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9100, padding: 16 }} onClick={onCancel}>
       <div role="dialog" aria-modal="true" aria-label="Close this ticket - why?" onClick={e => e.stopPropagation()} style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, width: 'min(400px, 100%)' }}>
-        <div style={{ fontWeight: 700, marginBottom: 2, color: C.text }}>Close this ticket — why?</div>
+        <div style={{ fontWeight: 700, marginBottom: 2, color: C.text }}>{dup === null ? 'Close this ticket — why?' : 'Duplicate of which ticket?'}</div>
         <div style={{ fontSize: 13, color: C.muted, marginBottom: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
-        <div className="flex flex-col gap-2">
-          {TICKET_CLOSE_REASONS.map((r, i) => (
-            <button key={r} autoFocus={i === 0} onClick={() => onPick(r)} style={{ ...ghostButtonStyle, justifyContent: 'space-between', color: C.text, padding: '10px 12px' }}>
-              <strong>{CLOSE_REASON_LABEL[r]}</strong><span style={{ fontSize: 12, color: C.faint }}>{hint[r]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-end mt-3"><button style={ghostButtonStyle} onClick={onCancel}>Cancel</button></div>
+        {dup === null ? (
+          <div className="flex flex-col gap-2">
+            {TICKET_CLOSE_REASONS.map((r, i) => (
+              <button key={r} autoFocus={i === 0} onClick={() => (r === 'DUPLICATE' ? setDup('') : onPick(r))} style={{ ...ghostButtonStyle, justifyContent: 'space-between', color: C.text, padding: '10px 12px' }}>
+                <strong>{CLOSE_REASON_LABEL[r]}</strong><span style={{ fontSize: 12, color: C.faint }}>{hint[r]}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <input autoFocus value={dup} onChange={e => setDup(e.target.value)} placeholder="T-12" aria-label="Original ticket number"
+              onKeyDown={e => { if (e.key === 'Enter' && Number.isInteger(dupNumber) && dupNumber > 0) onPick('DUPLICATE', dupNumber) }}
+              style={{ ...inputStyle, width: '100%', fontSize: 15 }} />
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>Its reporters move to that ticket and see its progress instead of &ldquo;closed&rdquo;.</div>
+            <div className="flex gap-2 justify-end mt-3">
+              <button style={ghostButtonStyle} onClick={() => setDup(null)}>Back</button>
+              <button style={{ ...buttonStyle, opacity: Number.isInteger(dupNumber) && dupNumber > 0 ? 1 : 0.5 }} disabled={!(Number.isInteger(dupNumber) && dupNumber > 0)} onClick={() => onPick('DUPLICATE', dupNumber)}>Close as duplicate</button>
+            </div>
+          </div>
+        )}
+        {dup === null && <div className="flex justify-end mt-3"><button style={ghostButtonStyle} onClick={onCancel}>Cancel</button></div>}
       </div>
     </div>
   )

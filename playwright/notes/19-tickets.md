@@ -35,3 +35,7 @@ a decision, links (both ways; bad URL / missing ticket / self-link refused), the
 - `getByRole('alert')` also matches Next's route announcer — scope to the app container.
 - First run after a dev-server start compiles the ticket routes cold: timeouts are 150 s, and the server should be warmed with one visit first.
 - Closing a Widget-source ticket in the UI needs the reason dialog; the API deliberately refuses it for tokens.
+
+**Tier 3 (2026-10-15):** a 6th test covers the client status (Resolved only when live on production, Obsolete → Closed), the
+duplicate merge (self / missing original refused), and a P-ticket copy through `/api/tickets/forward` (idempotent; an image link
+from outside the production storage is never fetched). 6/6. The forwarding itself is not configured in tests (no env vars).

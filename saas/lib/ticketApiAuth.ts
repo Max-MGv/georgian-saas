@@ -22,7 +22,11 @@ const WINDOW_MS = 60_000
 const LIMIT = 120
 const hits = new Map<string, { count: number; resetAt: number }>()
 
-export async function authenticateTicketRequest(request: Request): Promise<{ name: string } | { response: NextResponse }> {
+/**
+ * `scopes`: which kinds of token this endpoint accepts. Claude's tokens are "full"; production's copy-to-staging
+ * token is "forward" and is accepted ONLY by POST /api/tickets/forward (Plan-TicketsV2 3.5) - everywhere else it is a 403.
+ */
+export async function authenticateTicketRequest(request: Request, scopes: readonly string[] = ['full']): Promise<{ name: string; scope: string } | { response: NextResponse }> {
   const header = request.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
   if (!token) return { response: NextResponse.json({ error: 'Missing bearer token.' }, { status: 401 }) }
@@ -30,6 +34,7 @@ export async function authenticateTicketRequest(request: Request): Promise<{ nam
   const hash = hashToken(token)
   const row = await db.ticketApiToken.findUnique({ where: { tokenHash: hash } })
   if (!row || row.revokedAt) return { response: NextResponse.json({ error: 'Invalid or revoked token.' }, { status: 401 }) }
+  if (!scopes.includes(row.scope)) return { response: NextResponse.json({ error: 'This token is not allowed to do that.' }, { status: 403 }) }
 
   const now = Date.now()
   const w = hits.get(hash)
@@ -38,7 +43,7 @@ export async function authenticateTicketRequest(request: Request): Promise<{ nam
 
   // Best-effort; a failed timestamp write must never fail the request.
   void db.ticketApiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
-  return { name: row.name }
+  return { name: row.name, scope: row.scope }
 }
 
 /** "12" or "T-12". Digits only (no "0x1F", "1e3"), and small enough for a Postgres INT. */

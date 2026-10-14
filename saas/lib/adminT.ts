@@ -110,6 +110,9 @@ const en: Translations = {
   'myReports.status.resolved': 'Resolved',
   'myReports.status.wontFix': "Won't Fix",
   'myReports.submitted': 'Submitted',
+  'myReports.status.closed': 'Closed',
+  'myReports.reply': 'Reply from VineWorks',
+  'myReports.screenshot': 'Your screenshot - tap to enlarge',
 
   // Settings — Admin Panel Language section
   'settings.adminLanguage.sectionTitle': 'Admin Panel Language',
@@ -1480,6 +1483,9 @@ const ka: Translations = {
   'myReports.status.resolved': 'გადაწყვეტილია',
   'myReports.status.wontFix': 'არ გამოსწორდება',
   'myReports.submitted': 'გაგზავნილია',
+  'myReports.status.closed': 'დახურულია',
+  'myReports.reply': 'VineWorks-ის პასუხი',
+  'myReports.screenshot': 'თქვენი სკრინშოტი - შეეხეთ გასადიდებლად',
 
   // Settings — Admin Panel Language section
   'settings.adminLanguage.sectionTitle': 'ადმინ პანელის ენა',

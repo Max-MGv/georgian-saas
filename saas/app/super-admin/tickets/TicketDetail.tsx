@@ -17,7 +17,8 @@ import {
   safeHttpUrl, type TicketCloseReasonValue, type TicketStatusValue,
 } from '@/lib/tickets'
 import {
-  addTicketLink, answerTicketQuestion, commentOnTicket, moveTicket, postReviewCard, removeTicketLink, sendTicketBack, setTicketLive,
+  addTicketLink, answerTicketQuestion, commentOnTicket, emailTicketReporters, forwardTicketAgain, moveTicket, postReviewCard, removeTicketLink,
+  sendTicketBack, setTicketClientReply, setTicketLive,
   updateTicketFields, uploadTicketAttachment, verifyTicket,
 } from '@/app/actions/tickets'
 import {
@@ -25,9 +26,9 @@ import {
   SourceIcon, StatusPill, TYPE_ICON, TYPE_OPTIONS, TYPE_TONE, ActorIcon, age, buttonStyle, fullDate, ghostButtonStyle, inputStyle,
 } from './ui'
 import Markdown from './Markdown'
-import Lightbox from './Lightbox'
+import Lightbox from '@/components/Lightbox'
 import {
-  Decisions, LIVE_COLOR, LIVE_ICON, LIVE_OPTIONS, Links, OpenQuestions, TestChecklist, TextSection, actorName, sectionTitle,
+  ClientSection, Decisions, LIVE_COLOR, LIVE_ICON, LIVE_OPTIONS, Links, OpenQuestions, TestChecklist, TextSection, actorName, sectionTitle,
   type DecisionItem, type QuestionItem,
 } from './TicketSections'
 
@@ -237,7 +238,7 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
 
       {/* ── The ticket as a short document: Request → Analysis → Solution (+ decisions) → Links ── */}
       <TextSection title="Request" value={t.description} busy={busy} onOpenTicket={onOpenTicket}
-        hint={t.source === 'WIDGET' ? 'The reporter’s own words' : undefined} emptyLabel="Add a description"
+        hint={t.source === 'WIDGET' || t.source === 'PRODUCTION' ? 'The reporter’s own words' : undefined} emptyLabel="Add a description"
         placeholder={'What is this about? Steps, expected vs actual, links…\nTip: "- " makes a list, `code`, **bold**, T-12 links a ticket.'}
         onSave={v => patch({ description: v })} />
       <TextSection title="Analysis" icon={Search} value={t.analysis} busy={busy} onOpenTicket={onOpenTicket} emptyLabel="Add the analysis"
@@ -250,6 +251,12 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
       </TextSection>
       <Links links={t.links} titles={t.linkedTitles} busy={busy} onOpenTicket={onOpenTicket}
         onAdd={l => run(() => addTicketLink(t.number, l))} onRemove={l => void run(() => removeTicketLink(t.number, l))} />
+      {(t.source === 'WIDGET' || t.source === 'PRODUCTION' || t.reports.length > 0) && (
+        <ClientSection t={t} busy={busy} onOpenTicket={onOpenTicket}
+          onSaveReply={v => run(() => setTicketClientReply(t.number, v))}
+          onEmail={() => run(() => emailTicketReporters(t.number))}
+          onForward={() => run(() => forwardTicketAgain(t.number))} />
+      )}
 
       {/* ── Images ─────────────────────────────────────────────── */}
       <section style={{ marginTop: 20 }}>
@@ -346,7 +353,7 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
 
       {closing && (
         <CloseReasonDialog title={t.title} onCancel={() => setClosing(false)}
-          onPick={r => { setClosing(false); void run(() => moveTicket(t.number, 'CLOSED', r)) }} />
+          onPick={(r, dup) => { setClosing(false); void run(() => moveTicket(t.number, 'CLOSED', r, dup ?? null)) }} />
       )}
       {viewer !== null && images.length > 0 && (
         <Lightbox images={images} index={Math.min(viewer, images.length - 1)} onIndex={setViewer} onClose={() => setViewer(null)} />
@@ -515,6 +522,10 @@ function EventRow({ ev, first, shownAbove, onOpenTicket }: { ev: Ev; first: bool
       )
     case 'ANSWER':
       return <div>{line(<span style={{ color: '#c4b5fd' }}>answered</span>)}{body}</div>
+    case 'CLIENT_REPLY':
+      return <div>{line(<span style={{ color: '#7dd3fc' }}>{ev.body ? 'wrote to the client' : 'removed the message to the client'}</span>)}{body}</div>
+    case 'CLIENT_EMAILED':
+      return <div>{line(<span style={{ color: '#7dd3fc' }}>emailed the client</span>)}{body}</div>
     case 'DECISION':
       return <div>{line(<span style={{ color: '#86efac', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} aria-hidden /> recorded a decision</span>)}{body}</div>
     case 'SENT_BACK':

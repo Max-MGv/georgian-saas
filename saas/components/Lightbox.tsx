@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Full-screen image viewer for ticket screenshots (Plan-TicketsV2 1.2): opens over the page instead of a
+ * Full-screen image viewer (Plan-TicketsV2 1.2) - ticket screenshots, and a client's own screenshot on My Reports: opens over the page instead of a
  * new tab. Esc / click on the dark area / ✕ closes; ← → (keys, buttons or a swipe) step between images;
  * click the image to zoom to its real size and scroll around.
  */

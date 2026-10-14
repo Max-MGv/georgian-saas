@@ -1034,6 +1034,8 @@ enum BugReportStatus {
   IN_PROGRESS
   RESOLVED
   WONT_FIX
+  /// Closed as obsolete / not reproducible (Plan-TicketsV2 3.3) - not "won't fix", which says we refused.
+  CLOSED
 }
 
 enum BugReportSurface {
@@ -1078,6 +1080,13 @@ model Ticket {
   /// Plan-TicketsV2 2.5: where the work is live. Set by Claude (tix live) or Max; production = merged to master.
   liveOnStagingAt    DateTime?
   liveOnProductionAt DateTime?
+  /// Plan-TicketsV2 3.1: our message to the reporter, shown on their My Reports page. Emailed only when Max presses the button.
+  clientReply        String    @default("")
+  clientReplyAt      DateTime?
+  clientNotifiedAt   DateTime?
+  /// Plan-TicketsV2 3.5 (production only): when this client report was copied to the staging board, or why it was not.
+  forwardedAt        DateTime?
+  forwardError       String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -1129,6 +1138,9 @@ model TicketAttachment {
 model TicketApiToken {
   id         String    @id @default(cuid())
   name       String
+  /// "full" = Claude's token (lib/ticketApiAuth.ts). "forward" = production's token on the STAGING board: it can only
+  /// create P-tickets through POST /api/tickets/forward (Plan-TicketsV2 3.5), nothing else.
+  scope      String    @default("full")
   tokenHash  String    @unique
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
@@ -1164,6 +1176,8 @@ enum TicketSource {
   MANUAL
   ASSISTANT
   IMPORT
+  /// A client report copied from the production board (shown as P-<production number>, externalRef "prod:<n>").
+  PRODUCTION
 }
 
 enum TicketCloseReason {

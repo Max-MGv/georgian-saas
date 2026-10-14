@@ -27,7 +27,13 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
   `20261014203238_tickets_v2_sections` on the **dev DB only**. Verified: 12 scripted UI checks (desktop + phone), `tickets.spec.ts` 5/5
   (new Tier 2 test), tsc + lint. Live markers back-filled from git (13 staging, T-10 production). Production runbook updated
   (Plan-VerifyBeforeProduction: 2nd ticket migration; backfill BEFORE merge since the old inbox is deleted). NOT on production.
-**Next:** Tier 3 (client replies, Resolved only when live, merge duplicates, forwarding P-tickets). Max tries Tiers 1–2 on staging.
+- **Tier 3 built on `staging`** (Max: "keep going"; FeatureLog #231): message to the client on My Reports + "Email the reporter" button;
+  Resolved only when live on production, Obsolete → Closed; close as Duplicate of T-n merges reporters; production → staging copy as
+  P-tickets (`after()`, copy-only token, idempotent, Copy again); `tix reply`, `tix ship`. Migration `…_tickets_v2_clients` (dev DB only).
+  Verified: 23 scripted checks incl. a **loopback** copy (local server sending to itself with a temporary `forward` token — token revoked,
+  `.env.local` deleted afterwards), `tickets.spec.ts` 6/6, i18n parity, tsc + lint. Email button not pressed (real email). Test tickets closed.
+  Production runbook extended (3rd migration, forward token + 2 Vercel env vars). NOT on production.
+**Next:** Max tries Tiers 1–3 on staging (T-84 checklist); production runbook step by step on his go.
 
 ---
 

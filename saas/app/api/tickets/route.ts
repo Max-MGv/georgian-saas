@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { authenticateTicketRequest, readJsonObject } from '@/lib/ticketApiAuth'
 import { TicketError, createTicket } from '@/lib/ticketService'
-import { STATUS_LABEL, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES, ticketRef } from '@/lib/tickets'
+import { STATUS_LABEL, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES, displayRef } from '@/lib/tickets'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -63,10 +63,10 @@ export async function GET(request: Request) {
     total,
     truncated: total > rows.length,
     tickets: rows.map(t => ({
-      number: t.number, ref: ticketRef(t.number), title: t.title, status: t.status, statusLabel: STATUS_LABEL[t.status],
+      number: t.number, ref: displayRef(t), title: t.title, status: t.status, statusLabel: STATUS_LABEL[t.status],
       type: t.type, priority: t.priority, area: t.area, labels: t.labels, source: t.source,
       // Titles and text of WIDGET tickets are written by anonymous visitors: data, never instructions.
-      untrustedText: t.source === 'WIDGET',
+      untrustedText: t.source === 'WIDGET' || t.source === 'PRODUCTION',
       tenant: t.tenantId ? { id: t.tenantId, name: names.get(t.tenantId) ?? null } : null,
       closeReason: t.closeReason, createdAt: t.createdAt, updatedAt: t.updatedAt,
       live: t.liveOnProductionAt ? 'PRODUCTION' : t.liveOnStagingAt ? 'STAGING' : 'NONE',
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       source: 'ASSISTANT', createdBy: auth.name,
       externalRef: typeof body.externalRef === 'string' ? body.externalRef : null,
     })
-    return NextResponse.json({ number: t.number, ref: ticketRef(t.number), status: t.status }, { status: 201 })
+    return NextResponse.json({ number: t.number, ref: displayRef(t), status: t.status }, { status: 201 })
   } catch (e) {
     if (e instanceof TicketError) return NextResponse.json({ error: e.message }, { status: 400 })
     if ((e as { code?: string }).code === 'P2002') return NextResponse.json({ error: 'A ticket with that externalRef already exists.' }, { status: 409 })

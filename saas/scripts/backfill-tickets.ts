@@ -25,7 +25,9 @@ async function main() {
           description: r.comment,
           type: r.type === 'FEATURE' ? 'FEATURE' : 'BUG',
           status,
-          closeReason: status === 'CLOSED' ? 'WONT_FIX' : null,
+          closeReason: status === 'CLOSED' ? (r.status === 'WONT_FIX' ? 'WONT_FIX' : 'OBSOLETE') : null,
+          // A report already marked Resolved was fixed on production: keep it "Resolved" for the reporter (Plan-TicketsV2 3.2).
+          liveOnProductionAt: r.status === 'RESOLVED' ? r.updatedAt : null,
           closedAt: status === 'DONE' || status === 'CLOSED' ? r.updatedAt : null,
           area: SURFACE_AREA[r.surface] ?? null,
           tenantId: r.tenantId,

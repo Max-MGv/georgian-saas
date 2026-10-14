@@ -12,8 +12,8 @@ import { db } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { Prisma, TicketStatus, TicketType, TicketPriority, TicketSource, TicketCloseReason } from '@prisma/client'
 import {
-  LINK_KINDS, MAX_LINKS, MAX_OPTION, MAX_OPTIONS, parseSteps, type LiveStage, type TicketLink,
-  MAX_COMMENT, MAX_DESCRIPTION, MAX_TITLE, TENANT_STATUS_FOR, TICKET_CLOSE_REASONS, TICKET_PRIORITIES,
+  LINK_KINDS, MAX_LINKS, MAX_OPTION, MAX_OPTIONS, parseSteps, type LiveStage, type TenantVisibleStatus, type TicketLink,
+  MAX_COMMENT, MAX_DESCRIPTION, MAX_TITLE, tenantStatusFor, displayRef, TICKET_CLOSE_REASONS, TICKET_PRIORITIES,
   TICKET_STATUSES, TICKET_TYPES, type TicketStatusValue,
 } from '@/lib/tickets'
 
@@ -93,8 +93,12 @@ export async function createTicket(input: NewTicketInput, tx: Tx | typeof db = d
   return ticket
 }
 
-async function syncTenantVisibleStatus(tx: Tx, ticketId: string, status: TicketStatusValue) {
-  await tx.bugReport.updateMany({ where: { ticketId }, data: { status: TENANT_STATUS_FOR[status] } })
+/** Rewrites what the reporters of this ticket see on My Reports (lib/tickets.ts tenantStatusFor). Call after
+ *  anything that changes the status, the close reason or the live-on-production marker. */
+async function syncTenantVisibleStatus(tx: Tx, ticketId: string) {
+  const t = await tx.ticket.findUnique({ where: { id: ticketId }, select: { status: true, closeReason: true, liveOnProductionAt: true } })
+  if (!t) return
+  await tx.bugReport.updateMany({ where: { ticketId }, data: { status: tenantStatusFor(t) } })
 }
 
 async function load(tx: Tx | typeof db, id: string) {
@@ -107,7 +111,11 @@ export async function changeStatus(
   id: string,
   to: TicketStatusValue,
   actor: string,
-  opts: { closeReason?: TicketCloseReason | null; note?: string; kind?: 'STATUS' | 'VERIFIED' | 'SENT_BACK' | 'REVIEW'; meta?: Prisma.InputJsonValue } = {},
+  opts: {
+    closeReason?: TicketCloseReason | null; note?: string; kind?: 'STATUS' | 'VERIFIED' | 'SENT_BACK' | 'REVIEW'; meta?: Prisma.InputJsonValue
+    /** Closing as Duplicate: the original ticket's number. Its reporters move there (Plan-TicketsV2 3.3). */
+    duplicateOf?: number | null
+  } = {},
 ) {
   oneOf(to, TICKET_STATUSES, 'status')
   return db.$transaction(async tx => {
@@ -116,6 +124,10 @@ export async function changeStatus(
     if (to === 'CLOSED') {
       if (!opts.closeReason) throw new TicketError('A reason is required to close a ticket.')
       reason = oneOf(opts.closeReason, TICKET_CLOSE_REASONS, 'close reason')
+    }
+    if (opts.duplicateOf != null) {
+      if (reason !== 'DUPLICATE') throw new TicketError('"Duplicate of" only goes with closing as Duplicate.')
+      await mergeInto(tx, t, opts.duplicateOf, actor)
     }
     const finished = to === 'DONE' || to === 'CLOSED'
     const reasonChanged = to === 'CLOSED' && t.status === 'CLOSED' && t.closeReason !== reason
@@ -149,9 +161,38 @@ export async function changeStatus(
         },
       })
     }
-    await syncTenantVisibleStatus(tx, id, to)
+    await syncTenantVisibleStatus(tx, id)
     return updated
   })
+}
+
+/**
+ * Closing a ticket as a duplicate of another: its reports (the people who reported it) move to the original, so
+ * they see the original's progress instead of "Won't fix"; both tickets get a link to each other and the original's
+ * timeline says where the reports came from.
+ */
+async function mergeInto(tx: Tx, dup: { id: string; number: number; links: Prisma.JsonValue }, originalNumber: number, actor: string) {
+  if (!Number.isInteger(originalNumber) || originalNumber < 1) throw new TicketError('"Duplicate of" must be a ticket number.')
+  if (originalNumber === dup.number) throw new TicketError('A ticket cannot be a duplicate of itself.')
+  const original = await tx.ticket.findUnique({ where: { number: originalNumber } })
+  if (!original) throw new TicketError(`T-${originalNumber} does not exist.`)
+  if (original.status === 'CLOSED') throw new TicketError(`T-${originalNumber} is closed itself - pick the ticket that is still being worked on.`)
+  const moved = await tx.bugReport.updateMany({ where: { ticketId: dup.id }, data: { ticketId: original.id } })
+  const dupLinks = Array.isArray(dup.links) ? (dup.links as TicketLink[]) : []
+  const origLinks = Array.isArray(original.links) ? (original.links as TicketLink[]) : []
+  if (!dupLinks.some(l => l.kind === 'ticket' && l.ref === String(original.number))) {
+    await tx.ticket.update({ where: { id: dup.id }, data: { links: [...dupLinks, { kind: 'ticket', ref: String(original.number), label: 'Duplicate of' }] } })
+  }
+  if (!origLinks.some(l => l.kind === 'ticket' && l.ref === String(dup.number))) {
+    await tx.ticket.update({ where: { id: original.id }, data: { links: [...origLinks, { kind: 'ticket', ref: String(dup.number), label: 'Duplicate' }] } })
+  }
+  await tx.ticketEvent.create({
+    data: {
+      ticketId: original.id, kind: 'REPORT_LINKED', actor,
+      body: `T-${dup.number} was closed as a duplicate of this ticket${moved.count ? ` - ${moved.count} report(s) moved here; their reporters now follow this ticket` : ''}.`,
+    },
+  })
+  await syncTenantVisibleStatus(tx, original.id)
 }
 
 export type ReviewCard = { changed: string; howToTest: string; leftOver?: string; commit?: string; steps?: string[]; url?: string }
@@ -317,7 +358,42 @@ export async function setLive(id: string, stage: LiveStage, actor: string) {
     if (before === stage) return t
     const updated = await tx.ticket.update({ where: { id }, data })
     await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'live changed', fromValue: before, toValue: stage, actor } })
+    // Live on production is what turns a reporter's status into "Resolved" (Plan-TicketsV2 3.2).
+    await syncTenantVisibleStatus(tx, id)
     return updated
+  })
+}
+
+// ── Tickets v2 Tier 3: the client side ───────────────────────────────────
+
+/** Our message to the people who reported this ticket - shown on their My Reports page (Plan-TicketsV2 3.1). */
+export async function setClientReply(id: string, reply: string, actor: string) {
+  const text = clean(reply, MAX_COMMENT)
+  return db.$transaction(async tx => {
+    const t = await load(tx, id)
+    if (text === t.clientReply) return t
+    const updated = await tx.ticket.update({ where: { id }, data: { clientReply: text, clientReplyAt: text ? new Date() : null } })
+    await tx.ticketEvent.create({ data: { ticketId: id, kind: 'CLIENT_REPLY', body: text, actor } })
+    return updated
+  })
+}
+
+/** Recorded after the "email the reporter" button sent its email(s). The email itself is sent by the caller. */
+export async function markClientNotified(id: string, recipients: string[], actor: string) {
+  await db.$transaction(async tx => {
+    await tx.ticket.update({ where: { id }, data: { clientNotifiedAt: new Date() } })
+    await tx.ticketEvent.create({ data: { ticketId: id, kind: 'CLIENT_EMAILED', body: `Emailed ${recipients.length} reporter(s).`, actor } })
+  })
+}
+
+/** Production side of the copy to staging: remember whether it worked, so the board can offer "Copy again". */
+export async function markForwarded(id: string, result: { ok: true; stagingRef: string } | { ok: false; error: string }) {
+  await db.$transaction(async tx => {
+    await tx.ticket.update({
+      where: { id },
+      data: result.ok ? { forwardedAt: new Date(), forwardError: null } : { forwardError: result.error.slice(0, 300) },
+    })
+    if (result.ok) await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'copied to the staging board', toValue: result.stagingRef, actor: 'system' } })
   })
 }
 
@@ -442,6 +518,8 @@ export type TicketListItem = {
   updatedAt: string
   attachmentCount: number
   commentCount: number
+  /** "T-42", or "P-12" for a client report copied from production (displayRef). */
+  ref: string
   /** Questions still waiting for an answer (Plan-TicketsV2 2.2). */
   openQuestions: number
   hasSolution: boolean
@@ -471,7 +549,7 @@ export async function listTickets(): Promise<TicketListItem[]> {
     id: t.id, number: t.number, title: t.title, type: t.type, status: t.status, priority: t.priority,
     area: t.area, labels: t.labels, tenantId: t.tenantId, tenantName: t.tenantId ? (names.get(t.tenantId) ?? 'Unknown tenant') : null,
     source: t.source, closeReason: t.closeReason, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(),
-    attachmentCount: t._count.attachments, commentCount: t._count.events,
+    attachmentCount: t._count.attachments, commentCount: t._count.events, ref: displayRef(t),
     openQuestions: Math.max(0, open.get(t.id) ?? 0), hasSolution: t.solution.trim() !== '',
     liveOnStagingAt: t.liveOnStagingAt?.toISOString() ?? null, liveOnProductionAt: t.liveOnProductionAt?.toISOString() ?? null,
   }))
@@ -484,6 +562,15 @@ export type TicketDetail = TicketListItem & {
   links: TicketLink[]
   /** Titles of the tickets in `links`, so a related ticket shows its name, not just its number. */
   linkedTitles: Record<string, string>
+  /** Tier 3: what the reporters see, our message to them, and (production) the copy to staging. */
+  clientStatus: TenantVisibleStatus
+  clientReply: string
+  clientReplyAt: string | null
+  clientNotifiedAt: string | null
+  forwardedAt: string | null
+  forwardError: string | null
+  /** True when this environment copies client reports to the staging board (TICKETS_FORWARD_URL is set). */
+  forwardConfigured: boolean
   createdBy: string | null
   externalRef: string | null
   closedAt: string | null
@@ -533,6 +620,9 @@ export async function getTicketByNumber(number: number): Promise<TicketDetail | 
     openQuestions: t.events.filter(e => e.kind === 'QUESTION' && !answered.has(e.id)).length, hasSolution: t.solution.trim() !== '',
     liveOnStagingAt: t.liveOnStagingAt?.toISOString() ?? null, liveOnProductionAt: t.liveOnProductionAt?.toISOString() ?? null,
     analysis: t.analysis, solution: t.solution, links, linkedTitles: Object.fromEntries(related.map(r => [String(r.number), r.title])),
+    ref: displayRef(t), clientStatus: tenantStatusFor(t), clientReply: t.clientReply, clientReplyAt: t.clientReplyAt?.toISOString() ?? null,
+    clientNotifiedAt: t.clientNotifiedAt?.toISOString() ?? null, forwardedAt: t.forwardedAt?.toISOString() ?? null, forwardError: t.forwardError,
+    forwardConfigured: !!process.env.TICKETS_FORWARD_URL && !!process.env.TICKETS_FORWARD_TOKEN,
     description: t.description, createdBy: t.createdBy, externalRef: t.externalRef, closedAt: t.closedAt?.toISOString() ?? null,
     events: t.events.map(e => ({ id: e.id, kind: e.kind, body: e.body, fromValue: e.fromValue, toValue: e.toValue, actor: e.actor, meta: e.meta, createdAt: e.createdAt.toISOString() })),
     attachments,

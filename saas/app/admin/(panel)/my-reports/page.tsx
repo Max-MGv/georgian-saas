@@ -1,6 +1,9 @@
 import { getSetting } from '@/app/actions/settings'
 import { getMyBugReports } from '@/app/actions/bugReports'
 import { adminT } from '@/lib/adminT'
+import { formatIsoDay } from '@/lib/wineOrderDate'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
+import ReportScreenshot from '@/components/ReportScreenshot'
 
 // Phase 6 of Plan-BugReportWidget.md — a read-only status view of the
 // reports THIS logged-in admin personally submitted (never other admins',
@@ -16,6 +19,7 @@ const STATUS_COLOR: Record<string, { bg: string; border: string; color: string }
   IN_PROGRESS: { bg: '#fffbeb', border: '#fde68a', color: '#92400e' },
   RESOLVED: { bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' },
   WONT_FIX: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b' },
+  CLOSED: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b' },
 }
 
 const STATUS_KEY: Record<string, string> = {
@@ -23,12 +27,15 @@ const STATUS_KEY: Record<string, string> = {
   IN_PROGRESS: 'myReports.status.inProgress',
   RESOLVED: 'myReports.status.resolved',
   WONT_FIX: 'myReports.status.wontFix',
+  CLOSED: 'myReports.status.closed',
 }
 
+// Fixed month names + Georgian time, not toLocaleString('ka-GE'): Vercel's Node has no Georgian ICU data, so
+// the server printed English while the browser printed Georgian (KnownBugs #81, same fix as #80).
 function fmtDate(iso: string, locale: string) {
-  return new Date(iso).toLocaleString(locale === 'ka' ? 'ka-GE' : 'en-GB', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+  const d = new Date(iso)
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tbilisi' })
+  return `${formatIsoDay(tbilisiDateIso(d), locale)}, ${time}`
 }
 
 export default async function MyReportsPage() {
@@ -85,6 +92,15 @@ export default async function MyReportsPage() {
                 <p className="text-sm mt-2" style={{ color: 'var(--site-text)', whiteSpace: 'pre-line' }}>
                   {r.comment}
                 </p>
+                {r.screenshotSignedUrl && <ReportScreenshot src={r.screenshotSignedUrl} label={at('myReports.screenshot')} />}
+                {r.reply && (
+                  <div className="mt-3 rounded-lg p-3 text-sm" style={{ backgroundColor: 'var(--site-bg)', border: '1px solid var(--site-border)' }}>
+                    <div className="text-xs font-semibold mb-1" style={{ color: 'var(--site-muted)' }}>
+                      {at('myReports.reply')}{r.replyAt ? ` · ${fmtDate(r.replyAt, locale)}` : ''}
+                    </div>
+                    <p style={{ color: 'var(--site-text)', whiteSpace: 'pre-line' }}>{r.reply}</p>
+                  </div>
+                )}
               </div>
             )
           })}

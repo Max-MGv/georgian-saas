@@ -7,7 +7,14 @@ tags: [plan, super-admin, tickets]
 **Status: 🚧 APPROVED 2026-10-14 — all three tiers.**
 - **Tier 1 ✅ built + verified on `staging` 2026-10-14** (FeatureLog #229, T-84 review card). Not on production.
 - **Tier 2 ✅ built + verified on `staging` 2026-10-15** (FeatureLog #230): Request / Analysis / Solution sections, questions with one-tap answers → decisions, links (related tickets link back), test checklist (✓/✗, ✗ fills the send-back note), where-is-it-live marker + "Next release" view, `tix analysis|solution|ask|answer|decide|link|unlink|live`. Migration `20261014203238_tickets_v2_sections` on the dev DB only. Not on production.
-- Tier 3 (incl. the approved production → staging forwarding) — next.
+- **Tier 3 ✅ built + verified on `staging` 2026-10-15** (FeatureLog #231): client message on My Reports (+ "Email the reporter" button, never automatic);
+  what the client sees is computed by `tenantStatusFor` — **Resolved only when live on production**, Obsolete/Not reproducible → **Closed**
+  (new `BugReportStatus.CLOSED`); **close as Duplicate of T-n** moves the reports to the original; **production → staging copy** of every new
+  client report as **P-<production number>** (whole ticket incl. screenshots; `after()` so the client never waits; `forward`-scope token that
+  can only create P-tickets; "Copy again" button; idempotent); `tix reply`, `tix ship [--yes-prod]`; My Reports shows the reply, the
+  screenshot (viewer) and Georgian-safe dates (KnownBugs #81 part). Migration `…_tickets_v2_clients` (dev only).
+- **Not done / for the production runbook:** create the `forward` token on the dev DB, set `TICKETS_FORWARD_URL` + `TICKETS_FORWARD_TOKEN` on
+  Vercel **Production** (Max's go). The email button was not pressed in testing (it would send a real email) — only the email body was built.
 
 ## Max's decisions (2026-10-14)
 1. **Two boards, kept separate** — "all tickets [on staging] are created by me, so they are valid". Client reports from

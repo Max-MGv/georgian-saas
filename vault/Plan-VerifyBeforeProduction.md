@@ -62,4 +62,9 @@ tags: [plan, verification, tickets]
 - **A second ticket migration** now ships too: `20261014203238_tickets_v2_sections` (additive: 5 columns on `Ticket` — `analysis`, `solution`, `links`, `liveOnStagingAt`, `liveOnProductionAt`, all with defaults or nullable). Step 1's "exactly one pending" is no longer true: expect both ticket migrations **plus** the wine-order migrations ([[Plan-WineOrderFeatures]] runbook) if those ship in the same merge.
 - **The old report inbox is deleted** (Tier 1), not just hidden: on production, before step 4's backfill, reports are reachable **nowhere** in the UI. Run step 4 **before** step 6, as written — not after.
 - After the merge, mark what shipped: `tix live T-n production` on the **staging** board for each ticket in the "Next release" view (no production write).
-- Tier 3 will add the production → staging forwarding: a production env var holding a create-only staging token. That is its own runbook step, on Max's go.
+- **Tier 3 adds a third ticket migration** `…_tickets_v2_clients` (2 enum values — `BugReportStatus.CLOSED`, `TicketSource.PRODUCTION` — 5 Ticket
+  columns, `TicketApiToken.scope`; all additive). Run `backfill-tickets.ts` from the **new** code (it now keeps Resolved reports "Resolved").
+- **Production → staging copy (approved in principle, each step on Max's go):** (a) on the **dev DB**: `npx tsx scripts/ticket-token.ts create
+  production-forward --scope forward`; (b) on Vercel **Production** env: `TICKETS_FORWARD_URL=https://staging.vineworks.ge` and
+  `TICKETS_FORWARD_TOKEN=<that token>` (a production config change); (c) after deploy, send one widget report on production → a P-ticket
+  appears on staging and the production ticket shows "Copied to the staging board". Without (b) nothing is copied and nothing breaks.

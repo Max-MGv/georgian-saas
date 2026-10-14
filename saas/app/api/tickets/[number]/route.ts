@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { authenticateTicketRequest, parseTicketNumber, readJsonObject } from '@/lib/ticketApiAuth'
-import { TicketError, assertApiStatusChange, changeStatus, getTicketByNumber, setLive, updateFields, type TicketPatch } from '@/lib/ticketService'
-import { TICKET_STATUSES, ticketRef } from '@/lib/tickets'
+import { TicketError, assertApiStatusChange, changeStatus, getTicketByNumber, setClientReply, setLive, updateFields, type TicketPatch } from '@/lib/ticketService'
+import { TICKET_STATUSES } from '@/lib/tickets'
 import type { LiveStage, TicketStatusValue } from '@/lib/tickets'
 import type { TicketCloseReason } from '@prisma/client'
 
@@ -19,14 +19,15 @@ export async function GET(request: Request, { params }: Ctx) {
     const t = await getTicketByNumber(n)
     if (!t) return NextResponse.json({ error: 'Ticket not found.' }, { status: 404 })
     // WIDGET tickets (and their description and comments) are written by anonymous visitors.
-    return NextResponse.json({ ...t, ref: ticketRef(t.number), untrustedText: t.source === 'WIDGET' })
+    // P-tickets carry a client's words too (copied from production).
+    return NextResponse.json({ ...t, ref: t.ref, untrustedText: t.source === 'WIDGET' || t.source === 'PRODUCTION' })
   } catch (e) {
     console.error('[api/tickets GET]', e)
     return NextResponse.json({ error: 'Server error.' }, { status: 500 })
   }
 }
 
-/** PATCH { title?, description?, analysis?, solution?, type?, priority?, area?, labels?, live?, status?, closeReason?, note? }.
+/** PATCH { title?, description?, analysis?, solution?, type?, priority?, area?, labels?, live?, clientReply?, status?, closeReason?, duplicateOf?, note? }.
  *  What the token may do to status is limited (assertApiStatusChange): never Done, never Ready to test
  *  (use /review), never touch a finished ticket, never close a reporter's ticket. It cannot change the
  *  tenant. Everything is validated BEFORE anything is written, so a bad status cannot leave a half-applied edit. */
@@ -52,6 +53,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
       if (body.live !== 'NONE' && body.live !== 'STAGING' && body.live !== 'PRODUCTION') throw new TicketError('Invalid live stage (NONE, STAGING or PRODUCTION).')
       live = body.live
     }
+    // Our message to the reporter (shown on their My Reports). The token can write it; emailing it is Max's button only.
+    const clientReply = typeof body.clientReply === 'string' ? body.clientReply : null
     let to: TicketStatusValue | null = null
     if (body.status !== undefined) {
       if (typeof body.status !== 'string' || !(TICKET_STATUSES as readonly string[]).includes(body.status)) throw new TicketError('Invalid status.')
@@ -62,10 +65,12 @@ export async function PATCH(request: Request, { params }: Ctx) {
 
     if (Object.keys(patch).length) await updateFields(ticket.id, patch, auth.name)
     if (live) await setLive(ticket.id, live, auth.name)
+    if (clientReply !== null) await setClientReply(ticket.id, clientReply, auth.name)
     if (to) {
       await changeStatus(ticket.id, to, auth.name, {
         closeReason: (body.closeReason as TicketCloseReason) ?? null,
         note: typeof body.note === 'string' ? body.note : undefined,
+        duplicateOf: body.duplicateOf != null ? Number(String(body.duplicateOf).replace(/^t-/i, '')) : null,
       })
     }
     return NextResponse.json({ ok: true })

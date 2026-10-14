@@ -9,9 +9,10 @@
 import { useState, type ReactNode } from 'react'
 import {
   Bug as BugIcon, Check, CircleDashed, ExternalLink, FileText, GitCommitHorizontal, Link2, MessageCircleQuestion, Pencil, Plus,
-  Rocket, Server, SquareCheck, Ticket as TicketIcon, X, type LucideIcon,
+  Mail, Rocket, Send, Server, SquareCheck, Ticket as TicketIcon, UserRound, X, type LucideIcon,
 } from 'lucide-react'
-import { LINK_KINDS, LINK_KIND_LABEL, LIVE_LABEL, type LinkKind, type LiveStage, type TicketLink } from '@/lib/tickets'
+import { LINK_KINDS, LINK_KIND_LABEL, LIVE_LABEL, type LinkKind, type LiveStage, type TenantVisibleStatus, type TicketLink } from '@/lib/tickets'
+import type { TicketDetail as Ticket } from '@/lib/ticketService'
 import { C, ActorIcon, age, buttonStyle, fullDate, ghostButtonStyle, inputStyle } from './ui'
 import Markdown from './Markdown'
 
@@ -223,6 +224,78 @@ export function Links({ links, titles, busy, onAdd, onRemove, onOpenTicket }: {
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+// ── The client side (Tier 3) ─────────────────────────────────────────────
+
+const CLIENT_SEES: Record<TenantVisibleStatus, { label: string; color: string }> = {
+  NEW: { label: 'Received', color: '#a5b4fc' },
+  IN_PROGRESS: { label: 'In progress', color: '#fbbf24' },
+  RESOLVED: { label: 'Resolved', color: '#86efac' },
+  WONT_FIX: { label: "Won't fix", color: '#a1a1aa' },
+  CLOSED: { label: 'Closed', color: '#a1a1aa' },
+}
+
+/**
+ * Who reported it, what they see on their My Reports page right now, our message to them, and the "email them"
+ * button (the only way they are ever emailed - Max, 2026-10-15). On production: whether it was copied to staging.
+ */
+export function ClientSection({ t, busy, onSaveReply, onEmail, onForward, onOpenTicket }: {
+  t: Ticket
+  busy: boolean
+  onSaveReply: (v: string) => Promise<boolean>
+  onEmail: () => Promise<boolean>
+  onForward: () => Promise<boolean>
+  onOpenTicket: (n: number) => void
+}) {
+  const [confirmEmail, setConfirmEmail] = useState(false)
+  const copy = t.source === 'PRODUCTION'
+  const emails = [...new Set(t.reports.map(r => r.submitterEmail).filter((e): e is string => !!e))]
+  const sees = CLIENT_SEES[t.clientStatus]
+  const doneNotLive = t.status === 'DONE' && !t.liveOnProductionAt
+  return (
+    <section style={{ marginTop: 20, border: '1px solid #1e3a5f', borderRadius: 12, padding: 14, backgroundColor: '#0b1628' }}>
+      {sectionTitle(<><UserRound size={13} aria-hidden /> Client</>)}
+      {copy ? (
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+          A copy of client report <strong style={{ color: C.text }}>{t.ref}</strong> from the production board — the client sees the production ticket,
+          not this one. Write the message below; when the fix ships it is copied there (<code>tix ship {t.ref}</code>, on your go).
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 13, color: C.muted }}>
+          <span>{t.reports.length ? (emails.length ? emails.join(', ') : 'An anonymous visitor') : 'No report linked'} sees on My Reports:</span>
+          <strong style={{ color: sees.color }}>{sees.label}</strong>
+          {doneNotLive && <span style={{ fontSize: 12, color: C.faint }}>— stays &ldquo;In progress&rdquo; until the fix is live on production</span>}
+        </div>
+      )}
+      <TextSection title="Message to the client" value={t.clientReply} busy={busy} onOpenTicket={onOpenTicket}
+        hint={t.clientReplyAt ? `${copy ? 'Saved' : 'Shown on their My Reports page'} · ${fullDate(t.clientReplyAt)}` : undefined}
+        emptyLabel="Write a message to the client" placeholder={'What we did, or why not - in their language. It appears under their report.'}
+        onSave={onSaveReply} />
+      {!copy && emails.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 10 }}>
+          {!confirmEmail ? (
+            <button style={ghostButtonStyle} disabled={busy} onClick={() => setConfirmEmail(true)}><Mail size={14} aria-hidden /> Email the reporter</button>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, color: C.text }}>Send &ldquo;{sees.label}&rdquo;{t.clientReply ? ' and your message' : ''} to {emails.join(', ')}?</span>
+              <button style={buttonStyle} disabled={busy} onClick={() => void onEmail().then(ok => { if (ok) setConfirmEmail(false) })}><Send size={14} aria-hidden /> Send</button>
+              <button style={ghostButtonStyle} onClick={() => setConfirmEmail(false)}>Cancel</button>
+            </>
+          )}
+          {t.clientNotifiedAt && <span style={{ fontSize: 12, color: C.faint }}>Last emailed {fullDate(t.clientNotifiedAt)}</span>}
+        </div>
+      )}
+      {!copy && t.source === 'WIDGET' && t.forwardConfigured && (
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 10, fontSize: 12, color: C.faint }}>
+          {t.forwardedAt
+            ? <span style={{ color: '#86efac', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} aria-hidden /> Copied to the staging board {fullDate(t.forwardedAt)}</span>
+            : <span style={{ color: '#fca5a5' }}>Not copied to the staging board yet{t.forwardError ? ` — ${t.forwardError}` : ''}</span>}
+          <button style={{ ...ghostButtonStyle, padding: '3px 9px', fontSize: 12 }} disabled={busy} onClick={() => void onForward()}>{t.forwardedAt ? 'Copy again' : 'Copy now'}</button>
+        </div>
+      )}
     </section>
   )
 }

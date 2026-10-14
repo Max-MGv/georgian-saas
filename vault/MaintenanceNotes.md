@@ -1161,6 +1161,15 @@ Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
   `Ticket.links` is JSON `[{kind, ref, label?}]` — related-ticket links are written **on both tickets** by `addLink/removeLink`; keep it that way.
   `liveOnStagingAt/liveOnProductionAt`: production implies staging (`setLive`); `postReview` with a commit sets staging. Review-card `meta.steps`
   is fixed at hand-over time (`parseSteps`), so changing the parser does not change old cards. API: `/api/tickets/[n]/notes`, `/links`, PATCH `live`.
+- **Tier 3 (2026-10-15) — what reporters see is no longer a fixed map:** `TENANT_STATUS_FOR` was replaced by `tenantStatusFor(ticket)` in
+  `lib/tickets.ts` (status + close reason + **liveOnProductionAt**). `syncTenantVisibleStatus` therefore runs after **status changes AND
+  `setLive`** — anything new that changes those three fields must call it too, or My Reports goes stale. `BugReportStatus` gained `CLOSED`
+  (My Reports colour + `myReports.status.closed` EN/KA must stay in step). Duplicates: `changeStatus(..., { duplicateOf })` moves the
+  BugReports to the original (`mergeInto`). **Forwarding** (`lib/ticketForward.ts`): production pushes, staging receives at
+  `/api/tickets/forward`; token `scope` "forward" is accepted ONLY there (`authenticateTicketRequest(req, scopes)`, default `['full']`);
+  staging only downloads images from `*.supabase.co/storage/v1/object/sign/` links; P-tickets carry `externalRef "prod:<n>"` and are shown
+  with `displayRef` (use `t.ref`, never `ticketRef(t.number)`, in ticket UI). P-tickets have BugReport rows with `submitterUserId: null`
+  on purpose (never in anyone's My Reports on staging). `backfill-tickets.ts` sets `liveOnProductionAt` for already-Resolved reports.
 
 ---
 

@@ -12,14 +12,14 @@ export type TicketTypeValue = (typeof TICKET_TYPES)[number]
 export const TICKET_PRIORITIES = ['URGENT', 'HIGH', 'NORMAL', 'LOW'] as const
 export type TicketPriorityValue = (typeof TICKET_PRIORITIES)[number]
 
-export const TICKET_SOURCES = ['WIDGET', 'MANUAL', 'ASSISTANT', 'IMPORT'] as const
+export const TICKET_SOURCES = ['WIDGET', 'MANUAL', 'ASSISTANT', 'IMPORT', 'PRODUCTION'] as const
 export type TicketSourceValue = (typeof TICKET_SOURCES)[number]
 
 export const TICKET_CLOSE_REASONS = ['WONT_FIX', 'DUPLICATE', 'NOT_REPRODUCIBLE', 'OBSOLETE'] as const
 export type TicketCloseReasonValue = (typeof TICKET_CLOSE_REASONS)[number]
 
 /** Event kinds written to TicketEvent.kind. */
-export const TICKET_EVENT_KINDS = ['CREATED', 'COMMENT', 'STATUS', 'FIELD', 'REVIEW', 'VERIFIED', 'SENT_BACK', 'REPORT_LINKED', 'QUESTION', 'ANSWER', 'DECISION'] as const
+export const TICKET_EVENT_KINDS = ['CREATED', 'COMMENT', 'STATUS', 'FIELD', 'REVIEW', 'VERIFIED', 'SENT_BACK', 'REPORT_LINKED', 'QUESTION', 'ANSWER', 'DECISION', 'CLIENT_REPLY', 'CLIENT_EMAILED'] as const
 export type TicketEventKind = (typeof TICKET_EVENT_KINDS)[number]
 
 /** Where the ticket lives, for filtering. A fixed list; `area` is text so adding one needs no migration. */
@@ -39,7 +39,7 @@ export const STATUS_LABEL: Record<TicketStatusValue, string> = {
 
 export const TYPE_LABEL: Record<TicketTypeValue, string> = { BUG: 'Bug', FEATURE: 'Feature', TASK: 'Task', IDEA: 'Idea' }
 export const PRIORITY_LABEL: Record<TicketPriorityValue, string> = { URGENT: 'Urgent', HIGH: 'High', NORMAL: 'Normal', LOW: 'Low' }
-export const SOURCE_LABEL: Record<TicketSourceValue, string> = { WIDGET: 'Widget', MANUAL: 'Manual', ASSISTANT: 'Claude', IMPORT: 'Import' }
+export const SOURCE_LABEL: Record<TicketSourceValue, string> = { WIDGET: 'Widget', MANUAL: 'Manual', ASSISTANT: 'Claude', IMPORT: 'Import', PRODUCTION: 'Client (production)' }
 export const CLOSE_REASON_LABEL: Record<TicketCloseReasonValue, string> = {
   WONT_FIX: "Won't fix", DUPLICATE: 'Duplicate', NOT_REPRODUCIBLE: 'Not reproducible', OBSOLETE: 'Obsolete',
 }
@@ -52,14 +52,20 @@ export const PRIORITY_RANK: Record<TicketPriorityValue, number> = { URGENT: 4, H
  * BugReport.status keeps its four old values so that page needs no change; the
  * ticket is authoritative and this mapping is applied whenever it moves.
  */
-export type TenantVisibleStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'WONT_FIX'
-export const TENANT_STATUS_FOR: Record<TicketStatusValue, TenantVisibleStatus> = {
-  INBOX: 'NEW',
-  BACKLOG: 'NEW',
-  IN_PROGRESS: 'IN_PROGRESS',
-  REVIEW: 'IN_PROGRESS',
-  DONE: 'RESOLVED',
-  CLOSED: 'WONT_FIX',
+export type TenantVisibleStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'WONT_FIX' | 'CLOSED'
+
+/**
+ * Since Tickets v2 Tier 3 (Plan-TicketsV2 3.2-3.3) this depends on more than the status:
+ * - **Resolved only when the fix is live on production** (a ticket verified on staging still reads "In progress" to the client),
+ *   and a ticket marked live on production reads "Resolved" even before Max closes it as Done;
+ * - Closed as Won't fix → "Won't fix"; as Obsolete / Not reproducible → "Closed" (not "won't fix", which says we refused);
+ *   a Duplicate's reports are moved to the original ticket, so they follow that one.
+ */
+export function tenantStatusFor(t: { status: TicketStatusValue; closeReason: TicketCloseReasonValue | null; liveOnProductionAt: Date | string | null }): TenantVisibleStatus {
+  if (t.status === 'CLOSED') return t.closeReason === 'WONT_FIX' ? 'WONT_FIX' : 'CLOSED'
+  if (t.liveOnProductionAt) return 'RESOLVED'
+  if (t.status === 'INBOX' || t.status === 'BACKLOG') return 'NEW'
+  return 'IN_PROGRESS'
 }
 
 /** The inverse, used once when old reports are turned into tickets. */
@@ -68,6 +74,13 @@ export const TICKET_STATUS_FOR_REPORT: Record<TenantVisibleStatus, TicketStatusV
   IN_PROGRESS: 'IN_PROGRESS',
   RESOLVED: 'DONE',
   WONT_FIX: 'CLOSED',
+  CLOSED: 'CLOSED',
+}
+
+/** "T-42" for our own tickets, "P-12" for a client report copied from the production board (externalRef "prod:12"). */
+export function displayRef(t: { number: number; externalRef?: string | null }): string {
+  const m = t.externalRef ? /^prod:(\d+)$/.exec(t.externalRef) : null
+  return m ? `P-${m[1]}` : `T-${t.number}`
 }
 
 // ── Tickets v2 (Plan-TicketsV2 Tier 2) ─────────────────────────────────────
@@ -168,4 +181,20 @@ export function safeHttpUrl(value: string, maxLength = 2000): string | null {
 /** Escape text for inclusion in HTML (notification emails). */
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+/** The widget's click trail, cut to a safe shape: it is stored and shown to the super-admin, and it comes from the visitor. */
+export function sanitizeBreadcrumbs(value: unknown): { type: string; target: string; path: string; timestamp: number }[] {
+  if (!Array.isArray(value)) return []
+  const out: { type: string; target: string; path: string; timestamp: number }[] = []
+  for (const c of value.slice(-25)) {
+    if (!c || typeof c !== 'object') continue
+    const { type, target, path, timestamp } = c as Record<string, unknown>
+    if (typeof type !== 'string' || typeof target !== 'string' || typeof path !== 'string') continue
+    out.push({
+      type: type.slice(0, 20), target: target.slice(0, 200), path: path.slice(0, 300),
+      timestamp: typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : 0,
+    })
+  }
+  return out
 }

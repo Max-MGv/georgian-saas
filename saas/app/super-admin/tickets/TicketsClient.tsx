@@ -42,7 +42,7 @@ const byPriorityThenRecent = (a: TicketListItem, b: TicketListItem) =>
 const PRESETS: { id: Preset; label: string; hint: string; icon: typeof Inbox; test: (t: TicketListItem) => boolean }[] = [
   { id: 'all', label: 'All', hint: 'Every ticket', icon: Inbox, test: () => true },
   { id: 'waiting', label: 'Waiting for me', hint: 'Work to test, and questions waiting for your answer', icon: Hourglass, test: t => t.status === 'REVIEW' || t.openQuestions > 0 },
-  { id: 'reports', label: 'Reports', hint: 'Sent with the report button', icon: Megaphone, test: t => t.source === 'WIDGET' },
+  { id: 'reports', label: 'Reports', hint: 'Sent with the report button - here, or by a client on production (P-)', icon: Megaphone, test: t => t.source === 'WIDGET' || t.source === 'PRODUCTION' },
   { id: 'bugs', label: 'Open bugs', hint: 'Bugs not yet done or closed', icon: Bug, test: t => t.type === 'BUG' && isOpen(t) },
   { id: 'release', label: 'Next release', hint: 'On staging, not yet on production - what the next production update would ship', icon: Rocket, test: t => !!t.liveOnStagingAt && !t.liveOnProductionAt && t.status !== 'CLOSED' },
 ]
@@ -112,7 +112,7 @@ export default function TicketsClient({ tickets, tenants, env }: { tickets: Tick
       if (f.source !== 'ALL' && t.source !== f.source) return false
       if (f.status !== 'ALL' && t.status !== f.status) return false
       if (needle) {
-        const hay = `t-${t.number} ${t.title} ${t.area ?? ''} ${t.labels.join(' ')} ${t.tenantName ?? ''}`.toLowerCase()
+        const hay = `t-${t.number} ${t.ref} ${t.title} ${t.area ?? ''} ${t.labels.join(' ')} ${t.tenantName ?? ''}`.toLowerCase()
         if (!hay.includes(needle)) return false
       }
       return true
@@ -163,12 +163,12 @@ export default function TicketsClient({ tickets, tenants, env }: { tickets: Tick
     return () => window.removeEventListener('keydown', onKey)
   }, [openNumber, closePanel, step])
 
-  async function move(t: TicketListItem, to: TicketStatusValue, reason?: TicketCloseReasonValue) {
+  async function move(t: TicketListItem, to: TicketStatusValue, reason?: TicketCloseReasonValue, duplicateOf?: number) {
     if (t.status === to) return
     if (to === 'CLOSED' && !reason) { setClosing(t); return }
     setError(null)
     setOverrides(prev => ({ ...prev, [t.id]: { status: to, closeReason: to === 'CLOSED' ? (reason ?? null) : null, updatedAt: new Date().toISOString() } }))
-    const res = await moveTicket(t.number, to, reason ?? null)
+    const res = await moveTicket(t.number, to, reason ?? null, duplicateOf ?? null)
     if ('error' in res) setError(res.error)
     startTransition(() => router.refresh())
   }
@@ -316,8 +316,8 @@ export default function TicketsClient({ tickets, tenants, env }: { tickets: Tick
       )}
 
       {closing && (
-        <CloseReasonDialog title={`${ticketRef(closing.number)} · ${closing.title}`} onCancel={() => setClosing(null)}
-          onPick={r => { const t = closing; setClosing(null); void move(t, 'CLOSED', r) }} />
+        <CloseReasonDialog title={`${closing.ref} · ${closing.title}`} onCancel={() => setClosing(null)}
+          onPick={(r, dup) => { const t = closing; setClosing(null); void move(t, 'CLOSED', r, dup) }} />
       )}
     </div>
   )
@@ -342,12 +342,12 @@ function Panel({ number, listItem, tenants, onClose, onStep, hasPrev, hasNext, o
     <div style={{ position: 'fixed', inset: 0, zIndex: 9000 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(2,6,23,0.55)' }} aria-hidden />
       <div
-        role="dialog" aria-modal="true" aria-label={`Ticket ${ticketRef(number)}`} data-ticket-panel
+        role="dialog" aria-modal="true" aria-label={`Ticket ${listItem?.ref ?? ticketRef(number)}`} data-ticket-panel
         className="ticket-panel"
         style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(760px, 100vw)', backgroundColor: C.bg, borderLeft: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', boxShadow: '-20px 0 50px rgba(0,0,0,0.45)' }}
       >
         <div className="flex items-center gap-2" style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, backgroundColor: C.card }}>
-          <strong style={{ fontSize: 14, color: C.muted }}>{ticketRef(number)}</strong>
+          <strong style={{ fontSize: 14, color: C.muted }}>{listItem?.ref ?? ticketRef(number)}</strong>
           {listItem && <SourceIcon source={listItem.source} />}
           <div style={{ marginLeft: 'auto' }} className="flex items-center gap-1.5">
             <IconButton icon={ChevronUp} label="Previous ticket (k)" disabled={!hasPrev} onClick={() => onStep(-1)} />
@@ -412,7 +412,7 @@ function PanelBody({ number, listItem, tenants, onOpenTicket, onBoardChanged }: 
 
 function MoveMenu({ t, onMove }: { t: TicketListItem; onMove: (to: TicketStatusValue) => void }) {
   return (
-    <Picker label={`Move ${ticketRef(t.number)}`} value={t.status} options={STATUS_OPTIONS} onChange={onMove}
+    <Picker label={`Move ${t.ref}`} value={t.status} options={STATUS_OPTIONS} onChange={onMove}
       buttonStyle={{ border: 'none', padding: 4, color: C.faint }}>
       <Ellipsis size={16} aria-hidden />
     </Picker>
@@ -431,10 +431,10 @@ function Card({ t, active, onOpen, onDragStart, onDragEnd, onMove }: {
       style={{ backgroundColor: active ? '#1e1b4b' : C.bg, border: `1px solid ${active ? '#6366f1' : C.border}`, borderRadius: 10, padding: '9px 10px', cursor: 'pointer' }}
     >
       <div className="flex items-center gap-2" style={{ fontSize: 11, color: C.faint }}>
-        <span style={{ fontWeight: 700, color: C.muted }}>{ticketRef(t.number)}</span>
+        <span style={{ fontWeight: 700, color: C.muted }}>{t.ref}</span>
         <PriorityIcon priority={t.priority} size={14} />
         <TypeIcon type={t.type} size={14} />
-        {t.source === 'WIDGET' && <SourceIcon source={t.source} size={13} />}
+        {(t.source === 'WIDGET' || t.source === 'PRODUCTION') && <SourceIcon source={t.source} size={13} />}
         <Signals t={t} />
         {/* "5m" depends on the current time: server and browser render a moment apart, so this text may differ. */}
         <span style={{ marginLeft: 'auto' }} suppressHydrationWarning>{age(t.updatedAt)}</span>
@@ -523,7 +523,7 @@ function ListView({ rows, groupBy, openNumber, onOpen, onMove }: {
               <div key={t.id} onClick={e => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey) onOpen(t.number) }} className="flex items-center gap-3 ticket-row"
                 style={{ padding: '9px 12px', borderTop: i ? `1px solid ${C.border}` : 'none', cursor: 'pointer', backgroundColor: t.number === openNumber ? '#1e1b4b' : undefined }}>
                 <StatusPill status={t.status} closeReason={t.closeReason} compact />
-                <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, width: 42, flexShrink: 0 }}>{ticketRef(t.number)}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, width: 42, flexShrink: 0 }}>{t.ref}</span>
                 <PriorityIcon priority={t.priority} size={14} />
                 <TypeIcon type={t.type} size={14} />
                 <Signals t={t} />

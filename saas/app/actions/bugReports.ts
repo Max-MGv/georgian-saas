@@ -11,6 +11,8 @@
  */
 
 import { headers } from 'next/headers'
+import { after } from 'next/server'
+import { forwardToStaging, forwardingConfigured } from '@/lib/ticketForward'
 import { db } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
@@ -20,7 +22,7 @@ import type { BugReportStatus } from '@prisma/client'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { createTicket } from '@/lib/ticketService'
 import {
-  ALLOWED_IMAGE_TYPES, deriveTitle, environmentFromHost, escapeHtml, safeHttpUrl,
+  ALLOWED_IMAGE_TYPES, deriveTitle, sanitizeBreadcrumbs, environmentFromHost, escapeHtml, safeHttpUrl,
   sniffImageType, ticketRef,
 } from '@/lib/tickets'
 
@@ -63,21 +65,6 @@ const CUID_LIKE = /^[a-z0-9]{10,40}$/i
  * renders them as text; an object or null in the wrong place makes React throw and the whole page
  * stop rendering (found by code review). Keep only well-formed entries, cap the count and lengths.
  */
-function sanitizeBreadcrumbs(value: unknown): { type: string; target: string; path: string; timestamp: number }[] {
-  if (!Array.isArray(value)) return []
-  const out: { type: string; target: string; path: string; timestamp: number }[] = []
-  for (const c of value.slice(-25)) {
-    if (!c || typeof c !== 'object') continue
-    const { type, target, path, timestamp } = c as Record<string, unknown>
-    if (typeof type !== 'string' || typeof target !== 'string' || typeof path !== 'string') continue
-    out.push({
-      type: type.slice(0, 20), target: target.slice(0, 200), path: path.slice(0, 300),
-      timestamp: typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : 0,
-    })
-  }
-  return out
-}
-
 export async function submitBugReport(formData: FormData): Promise<SubmitResult> {
   // ── Identity is NEVER taken from the form (KnownBugs #74). Anyone can post any
   //    field to this unauthenticated action, so `tenantId`, `submitterEmail` and
@@ -171,6 +158,7 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
   //    the REST API by migration, KnownBugs #73), so plain db is correct. ──
   let ticketNumber: number
   let ticketTitle: string
+  let ticketId: string
   try {
     const result = await db.$transaction(async tx => {
       const report = await tx.bugReport.create({
@@ -197,13 +185,22 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
           data: { ticketId: ticket.id, storagePath: screenshotPath, bucket: BUCKET, fileName: `screenshot.${screenshot.ext}`, mimeType: screenshot.mime, sizeBytes: screenshot.bytes.length },
         })
       }
-      return { number: ticket.number, title: ticket.title }
+      return { id: ticket.id, number: ticket.number, title: ticket.title }
     })
+    ticketId = result.id
     ticketNumber = result.number
     ticketTitle = result.title
   } catch (err) {
     console.error('[submitBugReport] failed to save report/ticket', err)
     return { error: 'Failed to save your report. Please try again.' }
+  }
+
+  // ── Copy to the staging board (Plan-TicketsV2 3.5) - production only (needs TICKETS_FORWARD_URL/TOKEN). It runs
+  //    after the response, so the visitor never waits for staging, and a failure is recorded on the ticket. ──
+  if (forwardingConfigured()) {
+    const host = h.get('host') ?? ''
+    const linkBase = `${h.get('x-forwarded-proto') ?? 'https'}://${host}`
+    after(() => forwardToStaging(ticketId, linkBase).then(() => undefined))
   }
 
   // ── Notify Max via Resend — never fails the submission. Not from local development: every dev
@@ -238,7 +235,7 @@ async function sendBugReportNotification(args: {
   const host = h.get('host') ?? 'localhost:3000'
   const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
   const env = environmentFromHost(host)
-  const ticketUrl = `${proto}://${host}/super-admin/tickets/${args.ticketNumber}`
+  const ticketUrl = `${proto}://${host}/super-admin/tickets?t=${args.ticketNumber}`
 
   const typeLabel = args.type === 'BUG' ? 'Bug' : 'Feature request'
   // Everything user-supplied is escaped: this HTML is built from unauthenticated input.
@@ -281,6 +278,11 @@ export type MyBugReportListItem = {
   status: BugReportStatus
   comment: string
   createdAt: string
+  /** Our message to the reporter (Plan-TicketsV2 3.1), from the ticket this report belongs to. */
+  reply: string | null
+  replyAt: string | null
+  /** A one-hour link to their own screenshot (private bucket). */
+  screenshotSignedUrl: string | null
 }
 
 const MY_REPORTS_COMMENT_PREVIEW_LENGTH = 160
@@ -298,10 +300,19 @@ export async function getMyBugReports(): Promise<MyBugReportListItem[]> {
   const reports = await db.bugReport.findMany({
     where: { submitterUserId: user.id },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, type: true, status: true, comment: true, createdAt: true },
+    select: { id: true, type: true, status: true, comment: true, createdAt: true, screenshotUrl: true, ticket: { select: { clientReply: true, clientReplyAt: true } } },
   })
 
-  return reports.map(r => ({
+  const storage = createServiceClient().storage
+  const signed = await Promise.all(reports.map(async r => {
+    if (!r.screenshotUrl) return null
+    try {
+      const { data } = await storage.from(BUCKET).createSignedUrl(r.screenshotUrl, 60 * 60)
+      return data?.signedUrl ?? null
+    } catch { return null }
+  }))
+
+  return reports.map((r, i) => ({
     id: r.id,
     type: r.type,
     status: r.status,
@@ -309,5 +320,8 @@ export async function getMyBugReports(): Promise<MyBugReportListItem[]> {
       ? `${r.comment.slice(0, MY_REPORTS_COMMENT_PREVIEW_LENGTH)}…`
       : r.comment,
     createdAt: r.createdAt.toISOString(),
+    reply: r.ticket?.clientReply || null,
+    replyAt: r.ticket?.clientReplyAt?.toISOString() ?? null,
+    screenshotSignedUrl: signed[i],
   }))
 }

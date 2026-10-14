@@ -179,6 +179,53 @@ test.describe('Internal tickets (super-admin)', () => {
     for (const n of [a, b]) await request.patch(`/api/tickets/${n}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } });
   });
 
+  // Plan-TicketsV2 Tier 3: what the client sees follows the ticket (Resolved only when live on production; obsolete =
+  // Closed; a duplicate's reporters move to the original), and a client report copied from production becomes a P-ticket.
+  test('Tier 3: client status, duplicate merge, P-ticket copy', async ({ request }) => {
+    test.setTimeout(120_000);
+    const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
+    const mk = async (title: string) => (await (await request.post('/api/tickets', { headers: auth, data: { title, type: 'BUG' } })).json()).number as number;
+    const original = await mk(`ZZ Tickets E2E tier3 original ${STAMP}`);
+    const dup = await mk(`ZZ Tickets E2E tier3 duplicate ${STAMP}`);
+
+    // A client report copied from production (no screenshot - this environment does not copy).
+    const prodNumber = 900_000_000 + (STAMP % 99_999_999);
+    const payload = { prodNumber, prodUrl: 'https://example.com/super-admin/tickets?t=1', title: `ZZ Tickets E2E tier3 copy ${STAMP}`, description: 'client words', type: 'BUG', priority: 'HIGH', tenant: null, reports: [{ type: 'BUG', surface: 'ADMIN', comment: 'client words', pageUrl: 'https://example.com/x', submitterEmail: 'client@example.com', breadcrumbs: [] }], images: [{ url: 'https://evil.example.com/x.png', fileName: 'x.png' }] };
+    const first = await request.post('/api/tickets/forward', { headers: auth, data: payload });
+    expect(first.status()).toBe(201);
+    const { ref, number: copyNumber } = await first.json();
+    expect(ref).toBe(`P-${prodNumber}`);
+    const second = await request.post('/api/tickets/forward', { headers: auth, data: payload });
+    expect(second.status()).toBe(200); // idempotent
+    const copy = await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json();
+    expect(copy.source).toBe('PRODUCTION');
+    expect(copy.untrustedText).toBe(true);
+    expect(copy.attachments).toHaveLength(0); // an image from anywhere but the production storage is never fetched
+    expect(copy.reports[0].submitterEmail).toBe('client@example.com');
+    expect(copy.clientStatus).toBe('NEW');
+
+    // Client status: Done is not enough - only live on production reads "Resolved".
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { status: 'IN_PROGRESS', clientReply: 'Working on it.' } })).status()).toBe(200);
+    expect((await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json()).clientStatus).toBe('IN_PROGRESS');
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { live: 'PRODUCTION' } })).status()).toBe(200);
+    const live = await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json();
+    expect(live.clientStatus).toBe('RESOLVED');
+    expect(live.clientReply).toBe('Working on it.');
+
+    // Duplicate: its reports move to the original; refusing a self-duplicate and a missing original.
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: dup } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: 999999999 } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: `T-${original}` } })).status()).toBe(200);
+    const orig = await (await request.get(`/api/tickets/${original}`, { headers: auth })).json();
+    expect(orig.links).toContainEqual({ kind: 'ticket', ref: String(dup), label: 'Duplicate' });
+
+    // Obsolete reads "Closed" to the client, not "Won't fix".
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { live: 'NONE' } })).status()).toBe(200);
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } })).status()).toBe(200);
+    expect((await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json()).clientStatus).toBe('CLOSED');
+    await request.patch(`/api/tickets/${original}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } });
+  });
+
   test('a public widget report becomes a Widget ticket', async ({ page, browser }) => {
     test.setTimeout(120_000);
     // Send the report from the public site as an anonymous visitor.
