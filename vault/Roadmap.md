@@ -490,6 +490,24 @@ Max's mission (2026-10-07): an internal tool to manage bugs/features/tasks/ideas
 
 ---
 
+## v1.15 — Wine order features + access-code rule 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+
+Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production runbook at the end) ·
+[[Feature 225 - Wine order delivery features]] · MaintenanceNotes §35. Tickets T-13, T-8, T-14, T-12, T-9, T-79 in Ready to test.
+
+- [x] T-13 several delivery addresses per company · T-8 minimum order, pickup, delivery zones + fees, fee set later
+- [x] T-14 preferred date + Wine Orders calendar · T-12 negotiated prices + exporter flag · T-9 individual wine orders
+- [x] KnownBugs #78 (both halves): server re-checks the company code on wine orders and bookings
+- [x] Blind review fixes (receipt paid amount, company checks, quantities, minimum/discount display)
+- [x] Overpayment shown as a credit · saved address's delivery area enforced · Georgian time for date checks (#79)
+- [x] **No code = unknown company** on both public forms (Max, 2026-10-14) — lists, resolver, write paths
+- [x] T-79 Settings in one read (no speed gain measured; fewer DB connections)
+- [ ] **Max tests on staging** (MyToDo 2026-10-14 + 2026-10-12)
+- [ ] **Production** — needs Max's go per step: 7 migrations, ticket-tool bucket, merge `staging → master`, address catch-up copy, live check
+- [ ] Later: cleanup migration dropping `Company.address`
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.
