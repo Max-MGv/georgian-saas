@@ -49,6 +49,7 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
 - Max: "kind of okay — change the default to client view, we are also users; make it changeable to edit and developer view; commit
   everything to staging". Done (FeatureLog #234): Releases opens in Read (timeline), a release in Client view, switches to Edit /
   Developer. Token may delete drafts; the spec cleans up in `finally`. Stale-cache 404 recorded in playwright/KNOWN-ISSUES.md.
+- Releases Read view: collapsed by default, counts on top, simple filters (FeatureLog #235).
 **Next:** Max reads the 7 Oct / 9 Oct drafts in Super Admin → Releases (T-115), plus T-84; production runbook on his go.
 
 ---

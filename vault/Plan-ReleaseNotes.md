@@ -60,8 +60,10 @@ Max: *"the release section looks terrible and unreadable"* and *"without includi
   taking the production pictures.
 
 ## Views (Max, 2026-10-15: "change the default to client view — we are also users — and make it changeable to edit and developer view")
-- **Releases** opens in **Read**: every release as one What's new timeline in client colours (drafts / not-shown marked, "Open →"),
-  EN/ქართული switch. **Manage** = the list with status, counts and "New release".
+- **Releases** opens in **Read** (`ReleaseTimeline.tsx`): **collapsed by default** for a macro overview (Max, 2026-10-15) — counts
+  on top (releases · published/drafts, shown to clients, changes for clients + internal, screenshots), simple filters (All /
+  Published / Drafts, Shown to clients, search in EN + KA text), each release = date + summary + one line per change (📷 count);
+  a click opens that change, "Expand" a release, "Expand all / Collapse all". **Manage** = the list with status, counts and "New release".
 - **A release** opens in **Client view** (default): exactly the clients' page — internal changes left out, no buttons on the changes,
   the Publish / Show-to-clients bar hidden (status pills stay at the top). **Edit** = the editor (✎ per change, reorder, internal,
   add, Publish / Show to clients, delete draft). **Developer** = all changes incl. internal + a box per change: clients see it,

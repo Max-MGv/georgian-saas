@@ -1,26 +1,22 @@
 'use client'
 
 /**
- * Super Admin → Releases (vault/Plan-ReleaseNotes.md). Opens in the READING view - every release as one What's new
- * timeline, the way clients read it (Max, 2026-10-15: "we are also users"); drafts are marked. "Manage" shows the
+ * Super Admin → Releases (vault/Plan-ReleaseNotes.md). Opens in the READING view (ReleaseTimeline: collapsed timeline,
+ * counts, simple filters - the way clients read it; Max, 2026-10-15: "we are also users"); drafts are marked. "Manage" shows the
  * list with status, counts and "New release".
  */
 
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, BookOpen, Eye, EyeOff, Images, ListChecks, Plus, Rocket } from 'lucide-react'
+import { BookOpen, Eye, EyeOff, Images, ListChecks, Plus, Rocket } from 'lucide-react'
 import type { ReleaseDetail, ReleaseListItem } from '@/lib/releaseService'
 import { createReleaseAction } from '@/app/actions/releases'
 import { formatIsoDay } from '@/lib/wineOrderDate'
-import { ChangeCard, ReleaseHeading, WHATS_NEW_LABELS, pick } from '@/components/WhatsNew'
+import ReleaseTimeline from './ReleaseTimeline'
 import { C, EnvPill, buttonStyle, inputStyle } from '../tickets/ui'
 
 type Lang = 'en' | 'ka'
-const LIGHT = {
-  '--site-bg': '#f5efe6', '--site-surface': '#fffaf3', '--site-border': '#e6d9c6', '--site-text': '#1c1008',
-  '--site-muted': '#6b5a47', '--site-secondary': '#8a7a66', '--color-brand': '#7a2e2e',
-} as React.CSSProperties
 
 export default function ReleasesClient({ releases, details, env, today }: {
   releases: ReleaseListItem[]; details: ReleaseDetail[]; env: 'PRODUCTION' | 'STAGING' | 'LOCAL'; today: string
@@ -67,29 +63,7 @@ export default function ReleasesClient({ releases, details, env, today }: {
       </p>
 
       {!manage ? (
-        <div style={{ ...LIGHT, backgroundColor: 'var(--site-bg)', borderRadius: 16, padding: '24px 24px 28px' }}>
-          {details.length === 0 && <div style={{ color: '#8a7a66' }}>No releases yet — switch to Manage to start one.</div>}
-          <div className="flex flex-col" style={{ gap: 44 }}>
-            {details.map(r => {
-              const forClients = r.entries.filter(e => e.clientVisible)
-              const internal = r.entries.length - forClients.length
-              return (
-                <section key={r.id}>
-                  <ReleaseHeading releasedOn={r.releasedOn} summary={pick(r.summary, r.summaryKa, lang)} locale={lang}
-                    action={<>
-                      {r.status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, backgroundColor: '#e6d9c6', color: '#6b5a47' }}>Draft</span>}
-                      {r.status === 'PUBLISHED' && !r.clientVisible && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, backgroundColor: '#e6d9c6', color: '#6b5a47' }}>Not shown to clients</span>}
-                      <Link href={`/super-admin/releases/${r.id}`} style={{ marginLeft: 'auto', fontSize: 13, color: '#7a2e2e', display: 'inline-flex', alignItems: 'center', gap: 4 }}>Open <ArrowRight size={14} aria-hidden /></Link>
-                    </>} />
-                  <div className="flex flex-col gap-4">
-                    {forClients.map(e => <ChangeCard key={e.id} e={e} locale={lang} labels={WHATS_NEW_LABELS[lang]} />)}
-                  </div>
-                  {internal > 0 && <div style={{ fontSize: 12, color: '#8a7a66', marginTop: 8 }}>+ {internal} internal change{internal === 1 ? '' : 's'} (Open → Developer view)</div>}
-                </section>
-              )
-            })}
-          </div>
-        </div>
+        <ReleaseTimeline details={details} lang={lang} />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-5" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12 }}>
