@@ -15,6 +15,7 @@ const en: Translations = {
   'nav.platform': 'Platform',
   'nav.signOut': 'Sign out',
   'nav.myReports': 'My Reports',
+  'nav.whatsNew': "What's new",
   'nav.abandoned': 'Incomplete',
 
   // Automatic Messages page (Feature 181) — catalog of every automated email,
@@ -110,6 +111,15 @@ const en: Translations = {
   'myReports.status.resolved': 'Resolved',
   'myReports.status.wontFix': "Won't Fix",
   'myReports.submitted': 'Submitted',
+  // What's new - release notes for clients (Plan-ReleaseNotes.md)
+  'whatsNew.pageTitle': "What's new",
+  'whatsNew.pageHint': 'Recent improvements to your site and admin panel, newest first.',
+  'whatsNew.empty': 'Nothing here yet.',
+  'whatsNew.before': 'Before',
+  'whatsNew.after': 'After',
+  'whatsNew.howTo': 'How to use it',
+  'whatsNew.takeMeThere': 'Take me there',
+  'whatsNew.dragHint': 'Drag to compare - or open:',
   'myReports.status.closed': 'Closed',
   'myReports.reply': 'Reply from VineWorks',
   'myReports.screenshot': 'Your screenshot - tap to enlarge',
@@ -1391,6 +1401,7 @@ const ka: Translations = {
   'nav.platform': 'პლატფორმა',
   'nav.signOut': 'გასვლა',
   'nav.myReports': 'ჩემი შეტყობინებები',
+  'nav.whatsNew': 'სიახლეები',
   'nav.abandoned': 'დაუსრულებელი',
 
   // Automatic Messages page (Feature 181)
@@ -1483,6 +1494,15 @@ const ka: Translations = {
   'myReports.status.resolved': 'გადაწყვეტილია',
   'myReports.status.wontFix': 'არ გამოსწორდება',
   'myReports.submitted': 'გაგზავნილია',
+  // What's new - release notes for clients (Plan-ReleaseNotes.md). Drafted by Claude - Max to check.
+  'whatsNew.pageTitle': 'სიახლეები',
+  'whatsNew.pageHint': 'თქვენი საიტისა და ადმინ პანელის ბოლო გაუმჯობესებები, უახლესი პირველად.',
+  'whatsNew.empty': 'აქ ჯერ არაფერია.',
+  'whatsNew.before': 'მანამდე',
+  'whatsNew.after': 'შემდეგ',
+  'whatsNew.howTo': 'როგორ გამოვიყენოთ',
+  'whatsNew.takeMeThere': 'გადასვლა',
+  'whatsNew.dragHint': 'გადაათრიეთ შესადარებლად - ან გახსენით:',
   'myReports.status.closed': 'დახურულია',
   'myReports.reply': 'VineWorks-ის პასუხი',
   'myReports.screenshot': 'თქვენი სკრინშოტი - შეეხეთ გასადიდებლად',

@@ -509,6 +509,19 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 
 ---
 
+## v1.16 — Tickets v2 + Release notes 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+
+[[Plan-TicketsV2]] (T-84) · [[Plan-ReleaseNotes]] (T-115) · FeatureLog #229–#232 · MaintenanceNotes §34, §36.
+
+- [x] Tickets Tier 1: side panel, image viewer, icons, URL filters, show everything once
+- [x] Tickets Tier 2: Request/Analysis/Solution, questions + one-tap answers, decisions, links, test checklist, where-is-it-live, Next release
+- [x] Tickets Tier 3: client replies on My Reports (+ email button), Resolved only when live on production, duplicates, production → staging P-tickets
+- [x] Release notes: Super Admin → Releases (Draft/Publish, Show to clients), before/after screenshots, clients' What's new page
+- [ ] **Max tests on staging** (T-84, T-115 checklists)
+- [ ] **Production** — Max's go per step: ticket migrations ×3 + release-notes migration, buckets `ticket-attachments` + `release-images`, report import, tokens, forward config, merge, history release notes
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

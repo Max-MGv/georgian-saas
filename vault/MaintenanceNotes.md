@@ -1248,3 +1248,22 @@ rule now lives there once.
 `tests/helpers/wineForm.ts` `fillPreferredWineDate()`. `wine-order-delivery.spec.ts` changes
 tenant-wide rules + zones while it runs (serial, restored in `afterAll`): do not run it in parallel
 with other `/wines` specs.
+
+## 36. Release notes (Super Admin → Releases, clients' What's new)
+
+Added 2026-10-15 ([[Plan-ReleaseNotes]], FeatureLog #232).
+
+- **`lib/releaseService.ts` is the only writer** (super-admin actions `app/actions/releases.ts` and the token API `/api/releases/**` both call it).
+- **Clients see a release only when `status = PUBLISHED` AND `clientVisible`**, and only its entries with `clientVisible`. Unpublishing forces
+  `clientVisible = false`; "show to clients" is refused on a draft. The token API refuses `status`/`clientVisible` (403) and any change to a
+  published release (`lib/releaseApi.ts`) — keep both, they are the "only Max publishes" rule.
+- **The real release notes live on PRODUCTION** (they describe what clients have). Staging's are test data.
+- The **What's new** menu item (`app/admin/(panel)/layout.tsx`) calls `clientReleaseBadge` on every admin page load (two small queries,
+  wrapped so a failure never breaks the admin). `ReleaseView` (per auth user) drives the dot; `getWhatsNew()` marks it seen.
+- `components/WhatsNew.tsx` is used by BOTH the client page and the Super Admin preview — change it once, both follow. Labels: `whatsNew.*`
+  + `nav.whatsNew` in `lib/adminT.ts` (EN + KA). Release dates use `formatIsoDay` (no `ka-GE` ICU, KnownBugs #80/#81).
+- **Bucket `release-images` (private)** must exist in BOTH Supabase projects (dev created 2026-10-15; production in the runbook).
+  Images are shown through 1-hour signed links; deleting an entry/draft also removes its files.
+- "Take me there" accepts `/admin...` paths only (`cleanAdminPath`). `proxy.ts` exempts `/api/releases` like `/api/tickets`.
+- New tables (`Release`, `ReleaseEntry`, `ReleaseImage`, `ReleaseView`) are RLS-on/no-policy + revoked in their migration (§34 rule).
+- Screenshots: `scripts/release-shots.ts` refuses non-local URLs on purpose (no real customer data in client-facing pictures).

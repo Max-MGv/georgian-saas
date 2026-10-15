@@ -128,7 +128,8 @@ export async function proxy(request: NextRequest) {
   // survives a tenant changing domain mid-payment.
   // /api/tickets authenticates itself with a bearer token (lib/ticketApiAuth.ts) and carries no
   // cookies either - same reasoning, so it skips the tenant redirects and the Supabase round trip below.
-  if (request.nextUrl.pathname.startsWith('/api/payments/') || request.nextUrl.pathname.startsWith('/api/tickets')) {
+  // /api/releases (release notes, Plan-ReleaseNotes.md) uses the same token.
+  if (request.nextUrl.pathname.startsWith('/api/payments/') || request.nextUrl.pathname.startsWith('/api/tickets') || request.nextUrl.pathname.startsWith('/api/releases')) {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 

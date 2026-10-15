@@ -1147,6 +1147,89 @@ model TicketApiToken {
   revokedAt  DateTime?
 }
 
+/// Release notes (vault/Plan-ReleaseNotes.md): one production update. The real ones live on the PRODUCTION database
+/// (they describe what clients have); clients see a release only when it is PUBLISHED and clientVisible.
+model Release {
+  id            String         @id @default(cuid())
+  /// The day the update went to production.
+  releasedOn    DateTime       @db.Date
+  summary       String         @default("")
+  summaryKa     String         @default("")
+  status        ReleaseStatus  @default(DRAFT)
+  /// Max's switch: off by default, flipped on the production Super Admin.
+  clientVisible Boolean        @default(false)
+  publishedAt   DateTime?
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  entries       ReleaseEntry[]
+
+  @@index([status, releasedOn])
+}
+
+/// One change in a release, in plain client language (EN + KA).
+model ReleaseEntry {
+  id            String         @id @default(cuid())
+  releaseId     String
+  release       Release        @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  position      Int            @default(0)
+  title         String
+  titleKa       String         @default("")
+  body          String         @default("")
+  bodyKa        String         @default("")
+  /// "How to use it" - one step per line.
+  howTo         String         @default("")
+  howToKa       String         @default("")
+  /// "Take me there": an admin path such as /admin/settings (never an outside address).
+  linkPath      String?
+  /// Off = internal (e.g. the ticket tool): shown in Super Admin only.
+  clientVisible Boolean        @default(true)
+  /// Ticket refs this entry came from, e.g. ["T-12", "P-4"] (staging board numbers).
+  ticketRefs    String[]       @default([])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  images        ReleaseImage[]
+
+  @@index([releaseId, position])
+}
+
+/// A screenshot on an entry. BEFORE/AFTER with the same `pair` are shown side by side (slider); IMAGE stands alone.
+model ReleaseImage {
+  id          String           @id @default(cuid())
+  entryId     String
+  entry       ReleaseEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  kind        ReleaseImageKind @default(IMAGE)
+  /// Groups a BEFORE and an AFTER of the same screen.
+  pair        Int              @default(0)
+  /// "desktop" | "phone" - how wide to show it.
+  viewport    String           @default("desktop")
+  caption     String           @default("")
+  /// Path inside the private `release-images` bucket.
+  storagePath String
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime         @default(now())
+
+  @@index([entryId])
+}
+
+/// When an admin user last opened What's new (drives the "new" dot). Keyed by the Supabase auth user id.
+model ReleaseView {
+  userId     String   @id
+  lastSeenAt DateTime @default(now())
+}
+
+enum ReleaseStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ReleaseImageKind {
+  BEFORE
+  AFTER
+  IMAGE
+}
+
 enum TicketType {
   BUG
   FEATURE

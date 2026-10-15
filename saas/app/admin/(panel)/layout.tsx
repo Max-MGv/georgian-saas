@@ -14,12 +14,16 @@ import { DEMO_TENANT_ID } from '@/lib/demoTenant'
 import LogoutButton from './LogoutButton'
 import OnboardingBanner from './OnboardingBanner'
 import FinishDetailsBanner from './FinishDetailsBanner'
+import { clientReleaseBadge } from '@/lib/releaseService'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [supabase, h, adminLanguage, showAdminHints, tenantId] = await Promise.all([
     createClient(), headers(), getSetting('admin_language'), getSetting('show_admin_hints'), getTenantId(),
   ])
   const { data: { user } } = await supabase.auth.getUser()
+  // "What's new" appears only once Max has published a release and shown it to clients (Plan-ReleaseNotes.md);
+  // a failure here must never take the admin panel down.
+  const whatsNew = await clientReleaseBadge(user?.id ?? null).catch(() => ({ show: false, unseen: false }))
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
   const tenantName = h.get('x-tenant-name') ?? ''
@@ -85,6 +89,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: '/admin/content', label: at('nav.content'), show: true },
             { href: '/admin/settings', label: at('nav.settings'), show: true },
             { href: '/admin/my-reports', label: at('nav.myReports'), show: true },
+            { href: '/admin/whats-new', label: at('nav.whatsNew'), show: whatsNew.show, dot: whatsNew.unseen },
             // Last, and off the end of the normal run of screens on purpose:
             // incomplete orders are not orders (Feature 191), so they sit
             // beside the admin's own housekeeping rather than among the work.
@@ -97,6 +102,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               style={{ color: 'var(--site-muted)' }}
             >
               {link.label}
+              {'dot' in link && link.dot && <span aria-label="new" style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 999, backgroundColor: 'var(--color-brand)', marginLeft: 6, verticalAlign: 'middle' }} />}
             </a>
           ))}
         </div>

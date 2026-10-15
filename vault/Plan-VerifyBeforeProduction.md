@@ -68,3 +68,10 @@ tags: [plan, verification, tickets]
   production-forward --scope forward`; (b) on Vercel **Production** env: `TICKETS_FORWARD_URL=https://staging.vineworks.ge` and
   `TICKETS_FORWARD_TOKEN=<that token>` (a production config change); (c) after deploy, send one widget report on production → a P-ticket
   appears on staging and the production ticket shows "Copied to the staging board". Without (b) nothing is copied and nothing breaks.
+
+**Update 2026-10-15 — Release notes ([[Plan-ReleaseNotes]]) also ride this merge:**
+- **A fourth migration** `…_release_notes` (4 new tables + 2 enums, RLS on / no policy / revoke — additive). Re-run the anonymous-REST test on the 4 tables.
+- **Create the private bucket `release-images`** in the production Supabase project (like `ticket-attachments`) **before** the merge.
+- Nothing is visible to clients until Max publishes a release AND flips "Show to clients" on the production Super Admin.
+- After the merge (each on Max's go): the history entries for the last production updates, then the first real release drafted with
+  `tix release … --prod --yes-prod` — needs the production ticket token from step 5.

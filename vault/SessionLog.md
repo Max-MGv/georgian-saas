@@ -33,7 +33,14 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
   Verified: 23 scripted checks incl. a **loopback** copy (local server sending to itself with a temporary `forward` token — token revoked,
   `.env.local` deleted afterwards), `tickets.spec.ts` 6/6, i18n parity, tsc + lint. Email button not pressed (real email). Test tickets closed.
   Production runbook extended (3rd migration, forward token + 2 Vercel env vars). NOT on production.
-**Next:** Max tries Tiers 1–3 on staging (T-84 checklist); production runbook step by step on his go.
+- **Release notes** (Max: "a section for release notes … with screenshots, so me and users can track progress"; decisions:
+  start in Super Admin with a client toggle — on the production board; no per-winery targeting; Claude takes before/after shots on
+  the test winery; write history). Built on `staging` (T-115, FeatureLog #232, [[Plan-ReleaseNotes]]): Super Admin → Releases editor
+  (EN/KA, publish, show to clients, preview), clients' What's new (+ unseen dot), before/after slider, token API that only drafts,
+  `tix release …`, `scripts/release-shots.ts`. Migration `…_release_notes` + bucket `release-images` on **dev only**.
+  Verified: 22 scripted UI checks, `releases.spec.ts` 1/1, `tickets.spec.ts` 6/6 (one cold-server flake in the first run, not
+  reproduced), parity, tsc + lint. Dev server needed `rm -rf .next` once (new API routes 404'd — stale Turbopack cache).
+**Next:** Max tries Tiers 1–3 (T-84) and release notes (T-115) on staging; production runbook step by step on his go.
 
 ---
 

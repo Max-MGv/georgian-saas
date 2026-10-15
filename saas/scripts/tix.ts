@@ -69,6 +69,7 @@ async function main() {
   const [cmd, ...rest] = pos
   const env = flags.prod ? ENVS.prod : flags.local ? ENVS.local : ENVS.staging
   const isWrite = ['add', 'comment', 'move', 'review', 'analysis', 'solution', 'ask', 'answer', 'decide', 'link', 'unlink', 'live', 'reply', 'ship'].includes(cmd ?? '')
+    || (cmd === 'release' && !['list', 'show', undefined].includes(rest[0]))
   if (flags.prod && isWrite && !flags['yes-prod']) {
     console.error('Refusing to WRITE to PRODUCTION without --yes-prod (and Max\'s explicit go - ClaudeInstructions Rule 0).')
     process.exit(2)
@@ -175,6 +176,64 @@ async function main() {
     }
     case 'live':
       await call('PATCH', `/api/tickets/${num(rest[0])}`, { live: String(rest[1] ?? '').toUpperCase() }); console.log('live marker set'); break
+    case 'release': {
+      // Release notes (vault/Plan-ReleaseNotes.md). The real ones live on PRODUCTION: --prod --yes-prod, on Max's go for that release.
+      // Claude only drafts - publishing and "show to clients" are Max's switches in Super Admin (the API refuses them).
+      const [sub, ...a] = rest
+      const csv = (v: unknown) => (typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(Boolean) : undefined)
+      const entryBody = () => ({
+        body: flags.body, howTo: typeof flags.howto === 'string' ? (flags.howto as string).replace(/\\n/g, '\n') : undefined,
+        titleKa: flags['title-ka'], bodyKa: flags['body-ka'], howToKa: typeof flags['howto-ka'] === 'string' ? (flags['howto-ka'] as string).replace(/\\n/g, '\n') : undefined,
+        linkPath: flags.link, ticketRefs: csv(flags.tickets), ...(flags.internal ? { clientVisible: false } : {}),
+      })
+      if (sub === 'list') {
+        const d = await call('GET', '/api/releases') as { releases: { id: string; releasedOn: string; status: string; clientVisible: boolean; entryCount: number; imageCount: number }[] }
+        console.log(`# ${env.label} - ${d.releases.length} release(s)`)
+        for (const r of d.releases) console.log(`${r.releasedOn}  ${r.status.padEnd(9)} ${r.clientVisible ? 'clients' : 'hidden '}  ${r.entryCount} change(s), ${r.imageCount} image(s)  ${r.id}`)
+      } else if (sub === 'show') {
+        const r = await call('GET', `/api/releases/${a[0]}`) as { releasedOn: string; status: string; clientVisible: boolean; summary: string; entries: { id: string; title: string; clientVisible: boolean; ticketRefs: string[]; images: { kind: string; pair: number; viewport: string }[] }[] }
+        console.log(`${r.releasedOn} [${r.status}${r.clientVisible ? ', shown to clients' : ''}] ${safe(r.summary)}`)
+        for (const e of r.entries) console.log(`- ${e.id}  ${safe(e.title)}${e.clientVisible ? '' : '  (internal)'}${e.ticketRefs.length ? `  [${e.ticketRefs.join(', ')}]` : ''}${e.images.length ? `  ${e.images.map(i => `${i.kind.toLowerCase()}${i.kind === 'IMAGE' ? '' : i.pair}/${i.viewport}`).join(' ')}` : ''}`)
+      } else if (sub === 'new') {
+        const d = await call('POST', '/api/releases', { releasedOn: a[0], summary: flags.summary, summaryKa: flags['summary-ka'] })
+        console.log(`draft release ${d.id} (${env.label})`)
+      } else if (sub === 'add') {
+        const d = await call('POST', `/api/releases/${a[0]}/entries`, { title: a[1], ...entryBody() })
+        console.log(`added change ${d.id}`)
+      } else if (sub === 'edit') {
+        await call('PATCH', `/api/releases/entries/${a[0]}`, { ...(a[1] ? { title: a[1] } : {}), ...entryBody() })
+        console.log('change updated')
+      } else if (sub === 'image') {
+        // release image <entryId> <file.png> [--kind BEFORE|AFTER|IMAGE] [--pair 1] [--viewport desktop|phone] [--caption ..]
+        const bytes = fs.readFileSync(a[1])
+        const fd = new FormData()
+        fd.set('file', new Blob([bytes], { type: a[1].toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg' }), path.basename(a[1]))
+        for (const k of ['kind', 'pair', 'viewport', 'caption']) if (typeof flags[k] === 'string') fd.set(k, k === 'kind' ? String(flags[k]).toUpperCase() : String(flags[k]))
+        const res = await fetch(`${env.url}/api/releases/entries/${a[0]}/images`, { method: 'POST', headers: { Authorization: `Bearer ${token(env.key)}` }, body: fd })
+        const d = await res.json().catch(() => ({})) as { id?: string; error?: string }
+        if (!res.ok) { console.error(`HTTP ${res.status}: ${d.error ?? 'error'}`); process.exit(1) }
+        console.log(`image ${d.id} added`)
+      } else if (sub === 'draft-from-next') {
+        // The "Next release" tickets (on staging, not yet on production) always come from the staging board; the draft goes to the
+        // environment chosen with --local / --prod (production = the real release notes).
+        const board = flags.local ? ENVS.local : ENVS.staging
+        const res = await fetch(`${board.url}/api/tickets?limit=500`, { headers: { Authorization: `Bearer ${token(board.key)}` } })
+        const d = await res.json() as { tickets: (Row & { number: number; live?: string; status: string; area: string | null })[] }
+        const next = d.tickets.filter(t => t.live === 'STAGING' && t.status !== 'CLOSED')
+        if (!next.length) { console.log('Nothing in "Next release" on the staging board.'); break }
+        const day = typeof flags.date === 'string' ? flags.date as string : new Date().toISOString().slice(0, 10)
+        const rel = await call('POST', '/api/releases', { releasedOn: day })
+        for (const t of next) {
+          // Titles are drafts in internal wording - Claude rewrites them in client language before Max publishes.
+          await call('POST', `/api/releases/${rel.id}/entries`, { title: t.title, ticketRefs: [t.ref], clientVisible: t.area !== 'Super-admin' && t.area !== 'Infrastructure' })
+        }
+        console.log(`draft release ${rel.id} on ${env.label} with ${next.length} change(s) from: ${next.map(t => t.ref).join(', ')}`)
+        console.log('Next: rewrite each title/text for clients (tix release edit), add screenshots (scripts/release-shots.ts + tix release image).')
+      } else {
+        console.log('release list | show <id> | new YYYY-MM-DD [--summary ..] | add <releaseId> "Title" [--body ..] [--howto "a\\nb"] [--link /admin/..] [--tickets T-1,P-2] [--internal] [--title-ka ..] | edit <entryId> ["Title"] [same flags] | image <entryId> <file> [--kind BEFORE|AFTER|IMAGE] [--pair 1] [--viewport phone] | draft-from-next [--date YYYY-MM-DD]')
+      }
+      break
+    }
     case 'export': {
       const d = await call('GET', '/api/tickets?limit=500')
       const rows = d.tickets as Row[]
