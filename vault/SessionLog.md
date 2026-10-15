@@ -8,6 +8,28 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-15 — Easy-wins release to production (T-5, T-6, T-11, T-21, T-23)
+
+Max: push the easy wins to production after testing them like a user. **Shipped:** six commits cherry-picked alone onto
+`master` (branch `release/easy-wins`, worktree `C:\Users\Max\Desktop\claude-projects\gs-release-easy-wins`) → `aa760cf`,
+Vercel production deploy `dpl_9G1UgK2g8UDTTR1XwWecj4RMUWAK` READY. Code only — no migrations, buckets or config.
+**T-79 NOT shipped** (cherry-pick conflicted: it builds on the unreleased wine delivery settings). Everything else on `staging`
+(tickets, Tickets v2, release notes, wine features) is still NOT on production.
+- Verified before the push: `tsc` + `next build` of the exact release combination; release build run locally on :3100
+  (dev DB) — click-through of all six; full-page screenshots release vs production at 390px + 1440px for `/wines` and the
+  booking form (only intended differences); Playwright `booking-enhanced` + `contact-role-picker` (codes off) passed.
+- **Not verified (Max chose to push anyway):** admin screens on a phone after T-5's site-wide 16px rule, the T-21 contact-autofill
+  summary by hand, and `companies-crud` / `contact-role-picker` (codes on) — the dev DB ran out of connections (P2028) and then
+  became unreachable (P1001) mid-testing, so admin login failed. Worth a look on a phone in the production admin.
+- Verified after the push on `nikalasmarani.vineworks.ge` (phone + desktop): `/wines` shows the winery name once; the company
+  booking form has the collapsed masterclass row; no horizontal scroll, no JS errors.
+- Found while testing: KnownBugs #87 (individual "per person" card price vs total use different tiers) — pre-existing.
+- `master` now holds cherry-picked copies of these six commits; the later `staging` → `master` merge should resolve them
+  automatically (same changes). Ticket "live on production" markers not set yet (dev DB down) — run
+  `tix live T-5 production` (and T-6, T-11, T-21, T-23) once it is back.
+
+---
+
 ## 2026-10-14 (late) — Tickets v2 analysis (T-84) — no code changed
 
 Max: enhance and fine-tune the ticket tool; analyse first, agree, then build. Read all v1 code + real usage on the dev board
