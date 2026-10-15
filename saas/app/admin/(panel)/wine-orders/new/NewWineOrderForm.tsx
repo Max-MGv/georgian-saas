@@ -65,9 +65,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 function Field({ label, children, half, required }: { label: string; children: React.ReactNode; half?: boolean; required?: boolean }) {
   return (
-    <div className={half ? '' : 'mb-3'}>
+    // Half fields sit two to a row: when one label wraps to two lines on a phone, mt-auto
+    // keeps both boxes on the same line instead of pushing one down. (QA 2026-10-15 F3)
+    <div className={half ? 'flex flex-col min-w-0' : 'mb-3'}>
       <label className="text-xs block mb-1" style={{ color: C.faint }}>{label}{required ? ' *' : ''}</label>
-      {children}
+      {half ? <div className="mt-auto">{children}</div> : children}
     </div>
   )
 }
@@ -490,8 +492,10 @@ export default function NewWineOrderForm({
       {/* ── Wines ── */}
       <Card title={at('newWineOrder.wines.title')}>
         {lines.length > 0 && (
-          <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
-            <table className="w-full text-sm">
+          // overflow-x-auto, not hidden: six columns don't fit a phone, and hidden cut off the
+          // Total column. The table now scrolls sideways inside its box. (QA 2026-10-15 F11)
+          <div className="rounded-lg border overflow-x-auto mb-3" style={{ borderColor: C.border }}>
+            <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
                   {[at('newWineOrder.wines.colWine'), at('newWineOrder.wines.colYear'), at('newWineOrder.wines.colQty'), at('newWineOrder.wines.colPrice'), at('newWineOrder.wines.colTotal'), ''].map(h => (
@@ -541,7 +545,7 @@ export default function NewWineOrderForm({
               </select>
             </div>
             {selectedWine && (
-              <div style={{ flex: '1 1 100px' }}>
+              <div style={{ flex: '1 1 130px' }}>
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('newWineOrder.wines.colYear')}</label>
                 <select value={newLineVintageId} onChange={e => setNewLineVintageId(e.target.value)} style={inputStyle}>
                   {selectedWine.vintages.map(v => (

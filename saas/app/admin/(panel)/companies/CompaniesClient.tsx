@@ -575,6 +575,10 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // The error line sits at the top of this tall panel; bring it into view when it appears,
+  // otherwise a refused Save at the bottom looks like nothing happened. (QA 2026-10-15 F13)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [error])
   const [people, setPeopleState] = useState(company.people)
   // Guides/reps are edited live in this panel (unlike the other fields, which only save on the
   // main Save button) — propagate to the parent's list immediately so reopening the panel later
@@ -664,7 +668,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
           <button onClick={onClose} style={{ color: C.faint }} className="hover:opacity-70 text-xl leading-none">×</button>
         </div>
         <div className="flex flex-col gap-5 px-6 py-6 flex-1">
-          {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
+          {error && <p ref={errorRef} className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
 
           {/* Modules */}
           <div className="flex flex-col gap-3">

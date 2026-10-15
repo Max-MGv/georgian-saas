@@ -569,7 +569,13 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}{order.isExporter && <ExporterMark locale={locale} />}{order.customerType === 'INDIVIDUAL' && <IndividualMark locale={locale} />}</p>
+          {/* Only the name truncates — the Exporter / Individual marks sit outside it, so a long
+              name can't push them into the "…" and hide them. (QA 2026-10-15 F10) */}
+          <p className="font-semibold flex items-center min-w-0" style={{ color: C.text, fontSize: '1rem' }}>
+            <span className="truncate">{order.businessName}</span>
+            {order.isExporter && <span className="flex-shrink-0"><ExporterMark locale={locale} /></span>}
+            {order.customerType === 'INDIVIDUAL' && <span className="flex-shrink-0"><IndividualMark locale={locale} /></span>}
+          </p>
           <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"

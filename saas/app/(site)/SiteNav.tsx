@@ -129,7 +129,9 @@ export default function SiteNav({ locale, navContent = {}, logoUrl, logoAlt = ''
           >
             {bookLabel}
           </Link>
-          <div className="pt-1">
+          {/* self-start: the menu is a flex column, which stretched the EN | KA pill to full
+              width with both labels squeezed left. (QA 2026-10-15 F14) */}
+          <div className="pt-1 self-start">
             <LocaleSwitcher locale={locale} onChanged={() => setOpen(false)} />
           </div>
         </div>
