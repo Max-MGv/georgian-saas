@@ -1267,3 +1267,6 @@ Added 2026-10-15 ([[Plan-ReleaseNotes]], FeatureLog #232).
 - "Take me there" accepts `/admin...` paths only (`cleanAdminPath`). `proxy.ts` exempts `/api/releases` like `/api/tickets`.
 - New tables (`Release`, `ReleaseEntry`, `ReleaseImage`, `ReleaseView`) are RLS-on/no-policy + revoked in their migration (§34 rule).
 - Screenshots: `scripts/release-shots.ts` refuses non-local URLs on purpose (no real customer data in client-facing pictures).
+- Views: the release page has Client view (default) / Edit / Developer (`?mode=`), the Releases page Read (default) / Manage.
+  Client view must stay identical to the clients' page — both render `ReleaseHeading` + `ChangeCard` from `components/WhatsNew.tsx`.
+- The token may delete a **draft** release (`DELETE /api/releases/[id]`, used by `releases.spec.ts` clean-up); published ones never.

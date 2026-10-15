@@ -1,15 +1,16 @@
 'use client'
 
 /**
- * One release, shown the way clients will read it (vault/Plan-ReleaseNotes.md). Each change has a small toolbar -
+ * One release (vault/Plan-ReleaseNotes.md) in three views: **Client view** (the default - exactly what clients read),
+ * **Edit**, and **Developer** (internal changes, tickets, links, translations, screenshot details, ids). In Edit each change has a small toolbar -
  * ✎ opens that one change in a form; ↑ ↓ reorder; the eye makes it internal. The language switch changes what you
  * read AND what you edit. Publish + "Show to clients" are Max's switches (the token API can never flip them).
  */
 
 import { useRef, useState, useTransition, type CSSProperties, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Eye, EyeOff, ImagePlus, Monitor, Pencil, Plus, Rocket, Smartphone, Trash2, Undo2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Check, Code2, Eye, EyeOff, ImagePlus, Monitor, Pencil, Plus, Rocket, Smartphone, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
 import type { ReleaseDetail, ReleaseEntryView, ReleaseImageView } from '@/lib/releaseService'
 import {
   addEntryAction, deleteEntryAction, deleteReleaseAction, deleteReleaseImageAction, moveEntryAction, updateEntryAction,
@@ -19,6 +20,7 @@ import { ChangeCard, ReleaseHeading, WHATS_NEW_LABELS, pick } from '@/components
 import { C, EnvPill, buttonStyle, ghostButtonStyle } from '../../tickets/ui'
 
 type Lang = 'en' | 'ka'
+type Mode = 'client' | 'edit' | 'dev'
 type Run = (fn: () => Promise<ReleaseResult>) => Promise<boolean>
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 
@@ -40,6 +42,15 @@ export default function ReleaseEditor({ release: r, env }: { release: ReleaseDet
   const [acting, setActing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lang, setLang] = useState<Lang>('en')
+  // Client view is the default - we read our own release notes the way clients do (Max, 2026-10-15). The mode is in
+  // the URL (?mode=edit / ?mode=dev) so a reload or a shared link keeps it.
+  const sp = useSearchParams()
+  const mode: Mode = sp.get('mode') === 'edit' ? 'edit' : sp.get('mode') === 'dev' ? 'dev' : 'client'
+  const setMode = (m: Mode) => {
+    const p = new URLSearchParams(window.location.search)
+    if (m === 'client') p.delete('mode'); else p.set('mode', m)
+    window.history.replaceState(null, '', p.toString() ? `?${p}` : window.location.pathname)
+  }
   const [editing, setEditing] = useState<string | null>(null) // an entry id, or 'summary'
   const [newTitle, setNewTitle] = useState('')
   const busy = acting || refreshing
@@ -77,15 +88,14 @@ export default function ReleaseEditor({ release: r, env }: { release: ReleaseDet
         <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, border: `1px solid ${published ? '#14532d' : '#334155'}`, color: published ? '#86efac' : C.muted }}>
           {published ? 'Published' : 'Draft'}
         </span>
-        <div style={{ marginLeft: 'auto', display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }} role="group" aria-label="Language">
-          {(['en', 'ka'] as const).map(l => (
-            <button key={l} onClick={() => setLang(l)} aria-pressed={lang === l} style={{ padding: '6px 12px', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', backgroundColor: lang === l ? '#312e81' : 'transparent', color: lang === l ? '#e0e7ff' : C.muted }}>
-              {l === 'en' ? 'English' : 'ქართული'}
-            </button>
-          ))}
+        {shownToClients && <span style={{ fontSize: 12, color: '#7dd3fc', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Eye size={13} aria-hidden /> Clients see it</span>}
+        <div style={{ marginLeft: 'auto' }} className="flex flex-wrap items-center gap-2">
+          <Segmented label="View" value={mode} onChange={v => { setEditing(null); setMode(v) }}
+            options={[['client', 'Client view', BookOpen], ['edit', 'Edit', Pencil], ['dev', 'Developer', Code2]]} />
+          <Segmented label="Language" value={lang} onChange={setLang} options={[['en', 'English'], ['ka', 'ქართული']]} />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 mb-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', color: C.text }}>
+      {mode !== 'client' && <div className="flex flex-wrap items-center gap-3 mb-4" style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', color: C.text }}>
         {published ? (
           <button style={ghostButtonStyle} disabled={busy} onClick={() => void run(() => updateReleaseAction(r.id, { status: 'DRAFT' }))} title="Back to draft - also hides it from clients"><Undo2 size={14} aria-hidden /> Unpublish</button>
         ) : (
@@ -106,22 +116,49 @@ export default function ReleaseEditor({ release: r, env }: { release: ReleaseDet
             <Trash2 size={14} aria-hidden />
           </button>
         )}
-      </div>
-      {error && <div role="alert" style={{ color: '#fca5a5', fontSize: 13, margin: '-6px 0 12px' }}>{error}</div>}
+      </div>}
+      {error &&<div role="alert" style={{ color: '#fca5a5', fontSize: 13, margin: '-6px 0 12px' }}>{error}</div>}
 
       {/* ── The release, as clients read it ── */}
       <div style={{ ...LIGHT, backgroundColor: 'var(--site-bg)', borderRadius: 16, padding: '24px 24px 28px' }} className="release-doc">
-        {editing === 'summary' ? (
+        {mode === 'edit' && editing === 'summary' ? (
           <SummaryForm r={r} lang={lang} busy={busy} run={run} onDone={() => setEditing(null)} />
         ) : (
           <>
             <ReleaseHeading releasedOn={r.releasedOn} summary={summary} locale={lang}
-              action={<button style={tool} title="Edit date and summary" aria-label="Edit date and summary" onClick={() => setEditing('summary')}><Pencil size={14} /></button>} />
-            {!summary && <button onClick={() => setEditing('summary')} style={{ fontSize: 14, color: '#8a7a66', textDecoration: 'underline', margin: '-6px 0 14px' }}>+ Add a one-line summary</button>}
+              action={mode === 'edit' ? <button style={tool} title="Edit date and summary" aria-label="Edit date and summary" onClick={() => setEditing('summary')}><Pencil size={14} /></button> : undefined} />
+            {mode === 'edit' && !summary && <button onClick={() => setEditing('summary')} style={{ fontSize: 14, color: '#8a7a66', textDecoration: 'underline', margin: '-6px 0 14px' }}>+ Add a one-line summary</button>}
           </>
         )}
+        {mode === 'dev' && <DevReleaseInfo r={r} />}
 
-        <div className="flex flex-col gap-4">
+        {/* Client view: exactly the clients' page - internal changes left out, nothing to click but the content. */}
+        {mode === 'client' && (
+          <div className="flex flex-col gap-4">
+            {r.entries.filter(e => e.clientVisible).map(e => <ChangeCard key={e.id} e={e} locale={lang} labels={WHATS_NEW_LABELS[lang]} />)}
+            {r.entries.every(e => !e.clientVisible) && <div style={{ color: '#8a7a66', fontSize: 14 }}>No changes for clients in this release yet.</div>}
+            {internalCount > 0 && (
+              <button onClick={() => setMode('dev')} style={{ alignSelf: 'flex-start', fontSize: 13, color: '#8a7a66', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <EyeOff size={13} aria-hidden /> {internalCount} internal change{internalCount === 1 ? '' : 's'} not shown — <span style={{ textDecoration: 'underline' }}>Developer view</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Developer view: everything, with what is behind each change. */}
+        {mode === 'dev' && (
+          <div className="flex flex-col gap-5">
+            {r.entries.map(e => (
+              <div key={e.id}>
+                {!e.clientVisible && <div style={{ fontSize: 12, fontWeight: 700, color: '#8a7a66', margin: '0 0 4px 4px', display: 'flex', alignItems: 'center', gap: 5 }}><EyeOff size={13} aria-hidden /> Internal — clients never see this change</div>}
+                <ChangeCard e={e} locale={lang} labels={WHATS_NEW_LABELS[lang]} muted={!e.clientVisible} />
+                <DevEntryInfo e={e} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mode === 'edit' && <div className="flex flex-col gap-4">
           {r.entries.map((e, i) => editing === e.id ? (
             <EntryForm key={e.id} e={e} lang={lang} busy={busy} run={run} setError={setError} onDone={() => setEditing(null)} />
           ) : (
@@ -142,16 +179,71 @@ export default function ReleaseEditor({ release: r, env }: { release: ReleaseDet
               )}
             </div>
           ))}
-        </div>
+        </div>}
 
-        <div className="flex flex-wrap gap-2 mt-5">
-          <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="+ Add a change — its title, in plain client language" aria-label="New change title"
-            onKeyDown={e => { if (e.key === 'Enter' && newTitle.trim()) addEntry() }}
-            style={{ ...field, flex: '1 1 280px', width: 'auto' }} />
-          <button style={brandButton} disabled={busy || !newTitle.trim()} onClick={addEntry}><Plus size={15} aria-hidden /> Add</button>
-        </div>
+        {mode === 'edit' && (
+          <div className="flex flex-wrap gap-2 mt-5">
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="+ Add a change — its title, in plain client language" aria-label="New change title"
+              onKeyDown={e => { if (e.key === 'Enter' && newTitle.trim()) addEntry() }}
+              style={{ ...field, flex: '1 1 280px', width: 'auto' }} />
+            <button style={brandButton} disabled={busy || !newTitle.trim()} onClick={addEntry}><Plus size={15} aria-hidden /> Add</button>
+          </div>
+        )}
         <style>{'.release-doc button:disabled{opacity:.45;cursor:default}'}</style>
       </div>
+    </div>
+  )
+}
+
+/** A small dark segmented switch for the control bar. */
+function Segmented<V extends string>({ label, value, onChange, options }: { label: string; value: V; onChange: (v: V) => void; options: [V, string, LucideIcon?][] }) {
+  return (
+    <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }} role="group" aria-label={label}>
+      {options.map(([v, text, I]) => (
+        <button key={v} onClick={() => onChange(v)} aria-pressed={value === v}
+          style={{ padding: '6px 12px', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, backgroundColor: value === v ? '#312e81' : 'transparent', color: value === v ? '#e0e7ff' : C.muted }}>
+          {I && <I size={13} aria-hidden />}{text}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Developer view: what is behind each change ──────────────────────────
+
+const devBox: CSSProperties = { marginTop: 6, border: '1px dashed #cdb99c', borderRadius: 10, backgroundColor: '#fbf6ee', padding: '10px 14px', fontSize: 12.5, color: '#4a3b2b', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: 1.7 }
+const devRow = (k: string, v: ReactNode) => <div className="flex gap-3"><span style={{ color: '#8a7a66', minWidth: 120 }}>{k}</span><span style={{ minWidth: 0, wordBreak: 'break-word' }}>{v}</span></div>
+const tick = (ok: boolean) => <span style={{ color: ok ? '#15803d' : '#b45309' }}>{ok ? '✓' : '✗'}</span>
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tbilisi' }) : '—')
+
+function DevReleaseInfo({ r }: { r: ReleaseDetail }) {
+  const images = r.entries.reduce((n, e) => n + e.images.length, 0)
+  return (
+    <div style={{ ...devBox, marginBottom: 18, marginTop: -4 }}>
+      {devRow('release', r.id)}
+      {devRow('status', `${r.status}${r.clientVisible ? ' · shown to clients' : ' · hidden from clients'}`)}
+      {devRow('published', when(r.publishedAt))}
+      {devRow('last change', `${when(r.updatedAt)}${r.createdBy ? ` · drafted by ${r.createdBy}` : ''}`)}
+      {devRow('changes', `${r.entries.length} (${r.entries.filter(e => !e.clientVisible).length} internal) · ${images} screenshot${images === 1 ? '' : 's'}`)}
+      {devRow('summary', <>EN {tick(!!r.summary)} · KA {tick(!!r.summaryKa)}</>)}
+    </div>
+  )
+}
+
+function DevEntryInfo({ e }: { e: ReleaseEntryView }) {
+  return (
+    <div style={devBox}>
+      {devRow('clients see it', e.clientVisible ? 'yes' : 'no — internal')}
+      {devRow('tickets', e.ticketRefs.length ? e.ticketRefs.map((t, k) => (
+        <span key={t}>{k > 0 && ', '}<a href={/^T-\d+$/.test(t) ? `/super-admin/tickets?t=${t.slice(2)}` : `/super-admin/tickets?q=${encodeURIComponent(t)}`} style={{ color: '#7a2e2e', textDecoration: 'underline' }}>{t}</a></span>
+      )) : '—')}
+      {devRow('take me there', e.linkPath ? <a href={e.linkPath} style={{ color: '#7a2e2e', textDecoration: 'underline' }}>{e.linkPath}</a> : '—')}
+      {devRow('english', <>title {tick(!!e.title)} · text {tick(!!e.body)} · steps {e.howTo ? tick(true) : '—'}</>)}
+      {devRow('georgian', <>title {tick(!!e.titleKa)} · text {e.body ? tick(!!e.bodyKa) : '—'} · steps {e.howTo ? tick(!!e.howToKa) : '—'}</>)}
+      {devRow('screenshots', e.images.length
+        ? e.images.map(i => `${i.kind.toLowerCase()}${i.kind === 'IMAGE' ? '' : ` #${i.pair}`} (${i.viewport})${i.caption ? ` “${i.caption}”` : ''}${i.url ? '' : ' — MISSING FILE'}`).join(' · ')
+        : '—')}
+      {devRow('id', `${e.id} · position ${e.position}`)}
     </div>
   )
 }

@@ -29,6 +29,7 @@ test('release notes: token drafts, Max publishes and shows, clients see only cli
   const created = await request.post('/api/releases', { headers: auth, data: { releasedOn: '2026-10-15', summary: SUMMARY } });
   expect(created.status()).toBe(201);
   const { id } = await created.json();
+  try {
   expect((await request.post('/api/releases', { headers: auth, data: { releasedOn: '2026-13-45' } })).status()).toBe(400);
   expect((await request.post(`/api/releases/${id}/entries`, { headers: auth, data: { title: CLIENT_TITLE, body: 'What changed.', howTo: 'Step one\nStep two', linkPath: '/admin/settings' } })).status()).toBe(201);
   expect((await request.post(`/api/releases/${id}/entries`, { headers: auth, data: { title: INTERNAL_TITLE, clientVisible: false } })).status()).toBe(201);
@@ -39,7 +40,15 @@ test('release notes: token drafts, Max publishes and shows, clients see only cli
 
   // ── Max publishes and shows it ──
   await loginSuperAdmin(page);
+  // Client view is the default: no management buttons, the client change visible, the internal one left out.
   await page.goto(`/super-admin/releases/${id}`);
+  await expect(page.getByText(CLIENT_TITLE)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(INTERNAL_TITLE)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toHaveCount(0);
+  // Developer view shows the internal change; Edit has the switches.
+  await page.getByRole('button', { name: 'Developer', exact: true }).click();
+  await expect(page.getByText(INTERNAL_TITLE)).toBeVisible();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel('Show to clients')).toBeDisabled();
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -57,16 +66,20 @@ test('release notes: token drafts, Max publishes and shows, clients see only cli
   await expect(page.getByRole('link', { name: /What's new/ })).toBeVisible();
 
   // ── Unpublish hides it again; then clean up ──
-  await page.goto(`/super-admin/releases/${id}`);
+  await page.goto(`/super-admin/releases/${id}?mode=edit`);
   await page.getByRole('button', { name: 'Unpublish', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByLabel('Show to clients')).not.toBeChecked();
   await page.goto('/admin/whats-new');
   await expect(page.getByRole('heading', { name: "What's new" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(CLIENT_TITLE)).toHaveCount(0);
-  await page.goto(`/super-admin/releases/${id}`);
+  await page.goto(`/super-admin/releases/${id}?mode=edit`);
   page.once('dialog', d => void d.accept());
   await page.getByRole('button', { name: 'Delete this draft' }).click();
   await page.waitForURL(/\/super-admin\/releases$/, { timeout: 30_000 });
   await expect(page.getByText(SUMMARY)).toHaveCount(0);
+  } finally {
+    // A failed run must not leave its draft on the board (the token may delete drafts only; a no-op once deleted).
+    await request.delete(`/api/releases/${id}`, { headers: auth }).catch(() => {});
+  }
 });

@@ -59,6 +59,16 @@ Max: *"the release section looks terrible and unreadable"* and *"without includi
 - Known: the test data shows test names in screenshots (e.g. "ZZ Wine Integrity Off…") — clean those test orders before
   taking the production pictures.
 
+## Views (Max, 2026-10-15: "change the default to client view — we are also users — and make it changeable to edit and developer view")
+- **Releases** opens in **Read**: every release as one What's new timeline in client colours (drafts / not-shown marked, "Open →"),
+  EN/ქართული switch. **Manage** = the list with status, counts and "New release".
+- **A release** opens in **Client view** (default): exactly the clients' page — internal changes left out, no buttons on the changes,
+  the Publish / Show-to-clients bar hidden (status pills stay at the top). **Edit** = the editor (✎ per change, reorder, internal,
+  add, Publish / Show to clients, delete draft). **Developer** = all changes incl. internal + a box per change: clients see it,
+  tickets (links to the board), "take me there", EN/KA completeness, screenshot details, ids; plus release status/dates/counts.
+  The view is in the URL (`?mode=edit`, `?mode=dev`).
+- The token may now **delete drafts** (`DELETE /api/releases/[id]`; published → refused) so a failed test cleans up after itself.
+
 ## How a release is drafted (Claude's routine, after Max approves a production merge)
 1. `tix release draft-from-next --date YYYY-MM-DD --prod --yes-prod` — one entry per "Next release" ticket (internal areas marked internal).
 2. Rewrite each entry for clients: `tix release edit <entryId> "Title" --body .. --howto "a\nb" --link /admin/.. --title-ka .. --body-ka ..`.

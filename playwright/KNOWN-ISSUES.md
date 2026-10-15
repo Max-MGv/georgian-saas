@@ -135,6 +135,14 @@ These come from running this suite (or the app in general) hard, not from any si
 **Cause:** in the shared dev data the wine has `active:false`, so it is hidden from the catalogue. Not a code regression — proven by disabling the proxy change (still failed) and temporarily activating the wine (passed).
 **Fix:** re-activate the wine on the Wines admin page (Max's data; left as found).
 
+### Stale Turbopack cache: existing routes answer 404 (2026-10-15, three times in one day)
+
+**Symptom:** a route that exists and worked before (`/api/releases`, `/api/tickets`, `/super-admin/releases/[id]`) returns Next's
+HTML **404 "This page could not be found"** — the log shows `proxy.ts` and application time, then 404. It does not go away with
+retries or warm-up. Seen after adding new route folders, after creating git worktrees elsewhere, and once on a plain restart.
+**Fix:** stop the dev server, `rm -rf saas/.next`, start again; check `curl localhost:3000/api/releases` answers **401** (needs
+a token), not 404, before running specs. Not an app bug — nothing changes on staging/production builds.
+
 ### First run after a dev-server start times out on cold-compiled routes (2026-10-07)
 
 **Symptom:** a test's first navigation to a rarely-visited route (e.g. `/super-admin/tickets/[number]`) times out.

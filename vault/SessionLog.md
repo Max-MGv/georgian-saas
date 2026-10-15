@@ -46,6 +46,9 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
   before/after pairs from the 2 Oct build vs the production build — two temporary worktrees on ports 3001/3002 against the dev DB,
   removed safely afterwards (links checked first; main node_modules verified intact). Dev server needed `rm -rf .next` twice
   today (new dynamic routes 404'd — stale Turbopack cache). The SAMPLE draft was deleted.
+- Max: "kind of okay — change the default to client view, we are also users; make it changeable to edit and developer view; commit
+  everything to staging". Done (FeatureLog #234): Releases opens in Read (timeline), a release in Client view, switches to Edit /
+  Developer. Token may delete drafts; the spec cleans up in `finally`. Stale-cache 404 recorded in playwright/KNOWN-ISSUES.md.
 **Next:** Max reads the 7 Oct / 9 Oct drafts in Super Admin → Releases (T-115), plus T-84; production runbook on his go.
 
 ---
