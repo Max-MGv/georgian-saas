@@ -40,7 +40,13 @@ I recommended P-numbers forwarded one way (production → staging) — awaiting 
   `tix release …`, `scripts/release-shots.ts`. Migration `…_release_notes` + bucket `release-images` on **dev only**.
   Verified: 22 scripted UI checks, `releases.spec.ts` 1/1, `tickets.spec.ts` 6/6 (one cold-server flake in the first run, not
   reproduced), parity, tsc + lint. Dev server needed `rm -rf .next` once (new API routes 404'd — stale Turbopack cache).
-**Next:** Max tries Tiers 1–3 (T-84) and release notes (T-115) on staging; production runbook step by step on his go.
+- Max on the first look: "terrible and unreadable"; "without the last release I can't assess it". **Redesigned** (FeatureLog #233):
+  the release page is the release as clients read it with ✎ per change; readable, cropped 2× screenshots (phone pairs side by side,
+  desktop wipe only for same-shape pairs). Wrote the **real 7 Oct and 9 Oct 2026 releases** as drafts on staging (EN + KA) with
+  before/after pairs from the 2 Oct build vs the production build — two temporary worktrees on ports 3001/3002 against the dev DB,
+  removed safely afterwards (links checked first; main node_modules verified intact). Dev server needed `rm -rf .next` twice
+  today (new dynamic routes 404'd — stale Turbopack cache). The SAMPLE draft was deleted.
+**Next:** Max reads the 7 Oct / 9 Oct drafts in Super Admin → Releases (T-115), plus T-84; production runbook on his go.
 
 ---
 

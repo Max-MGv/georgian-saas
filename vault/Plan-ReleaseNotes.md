@@ -43,12 +43,32 @@ where applicable, so me and users can track the progress of the website and see 
 | 6 | Tests (Playwright + scripted checks), screenshots, vault |
 | 7 | Production (with the ticket tool's runbook): migration, bucket, then history entries + first real release — **each on Max's go** |
 
+## Redesign after Max's first look (2026-10-15)
+Max: *"the release section looks terrible and unreadable"* and *"without including the last release I can't even assess it"*.
+- **Editor = the release itself.** The Super Admin page now shows the release exactly as clients read it (light, client colours),
+  each change with a small toolbar (↑ ↓, eye = internal, ✎). ✎ opens only that change in a clean white form with its screenshots
+  shown large; the summary/date has its own ✎. The old wall of dark form boxes is gone.
+- **Readable screenshots:** cropped to the part that changed (`--focus`), 2× pixels, 1100px desktop width. Phone before/after pairs
+  are shown **side by side**; a desktop pair uses the **wipe slider only when both pictures have the same shape**, otherwise they
+  are **stacked** (Before above After). Every picture opens full size in the viewer.
+- **Real content to judge it by:** draft releases for the last production updates — **7 Oct 2026** (8 client changes + 1 internal:
+  orders on the phone's first screen, settings fit, Pack on phone, calendar tap, unpaid chip, New Order contact fields,
+  QR payment link, 4 MB uploads) and **9 Oct 2026** (home-screen icons) — EN + KA, with before/after pairs taken from the
+  **2 Oct build vs the production build**, both run locally on the dev DB. These ARE the planned "history entries"; on staging
+  for now (dev DB) — they get re-created on production with the first release, on Max's go.
+- Known: the test data shows test names in screenshots (e.g. "ZZ Wine Integrity Off…") — clean those test orders before
+  taking the production pictures.
+
 ## How a release is drafted (Claude's routine, after Max approves a production merge)
 1. `tix release draft-from-next --date YYYY-MM-DD --prod --yes-prod` — one entry per "Next release" ticket (internal areas marked internal).
 2. Rewrite each entry for clients: `tix release edit <entryId> "Title" --body .. --howto "a\nb" --link /admin/.. --title-ka .. --body-ka ..`.
-3. Screenshots on the **dev DB only**: the old build (`master`, a separate checkout on port 3001) vs the new build (port 3000),
-   `npx tsx scripts/release-shots.ts --path /admin/x --before http://localhost:3001 --after http://localhost:3000 [--viewport phone]`
-   (the script refuses non-local addresses), then `tix release image <entryId> <file> --kind before|after --pair N --viewport ..`.
+3. Screenshots on the **dev DB only**: `git worktree add --detach <scratchpad>/wt-before <old master>` and `…/wt-after <new master>`,
+   copy `saas/.env` (dev DB) into each, `npm ci` + `npx prisma generate` (real node_modules — **no junctions**), run `npx next dev
+   --port 3001/3002` in each, then e.g. `npx tsx scripts/release-shots.ts --path /admin/settings --before http://localhost:3001
+   --after http://localhost:3002 --viewport phone --focus "Payment Details"` (also `--click "Pack"`, `--select "<company>"`);
+   the script refuses non-local addresses. Upload with `tix release image <entryId> <file> --kind before|after --pair N --viewport ..`.
+   Cleanup: stop both servers, `find <wt> -type l` (Turbopack leaves a link inside `.next` pointing into the same checkout — remove
+   it), then `git worktree remove --force` and check the main `saas/node_modules` is intact (lesson: [[feedback_windows_junction_delete]]).
 4. Max reads it in Super Admin → Releases (Preview as client, EN/KA), presses **Publish**, and flips **Show to clients** when he wants.
 5. Git Bash note: run tix/shots with `MSYS_NO_PATHCONV=1`, or `/admin/...` arguments are rewritten into Windows paths.
 
