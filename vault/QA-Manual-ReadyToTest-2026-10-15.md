@@ -32,7 +32,9 @@ Legend: `[x]` passed · `[!]` problem found (see note) · `[ ]` not done yet · 
 ### T-11 — Site Content → Messages on phone
 - [x] Booking Confirmation preview looks like a small desktop version, 320.00₾, variant pills wrap (390px)
 - [x] Wine Order Receipt (150 + 120 − 27 = 243.00₾) and Invoice Email (240 + 80 = 320.00₾) readable on phone → F5
-- [ ] Desktop unchanged — Brave window is stuck at 737px (snapped?); at 737px it looks right. Needs a wide window.
+- [x] Desktop unchanged (2026-10-16, Brave full screen 1920px): Booking Confirmation preview at full email width,
+  320.00₾, readable. Also re-checked on desktop that the fixes changed nothing there: New wine order field pairs aligned,
+  working hours 150px boxes on one line, bug button hides while the wine checkout drawer is open.
 
 ### T-21 — booking form: masterclass row + contact summary
 - [x] Tour Company → Alazani Valley Tours → code → picker "Who should we put on this booking?" → Levan (contact) +
