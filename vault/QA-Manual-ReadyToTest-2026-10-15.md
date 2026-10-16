@@ -229,3 +229,18 @@ Phone checks run at 390px inside a same-origin frame in Max's signed-in Brave (B
   no plural (`saas/lib/emails/templates/invoiceEmailTemplate.ts:46`, used at lines 142–144). Goes out on real invoices.
   Georgian ("კაცი") is fine.
 - **F4 (pre-existing, KnownBugs #87)** Individual booking card price can differ from the total (display tier vs matched tier).
+
+## Production release 2026-10-16 (Max: "go", then bypass permissions) — progress log
+- [x] 1. migrate status (prod `dshsfkffcsgerdqinqst`): exactly the 10 expected migrations pending
+- [x] 2. buckets `ticket-attachments` + `release-images` created on prod (private, no limits — same as dev)
+- [x] 3. migrate deploy: all 10 applied; checks OK — 11 companies w/ address = 11 CompanyAddress rows, 0 non-company wine orders, all 11 new tables → 401 for anon
+- [x] 4. backfill: 12 reports → tickets T-1..T-12 on the PRODUCTION board (T-2..T-5 are old Claude TEST reports — close later)
+- [x] 5. prod token "claude" (scope full) created, saved as TICKETS_TOKEN_PROD in credentials.txt
+- [x] 6. pushed e317fe1 to master (aa760cf..e317fe1) — Vercel production deploy dpl_HGr9o5G1LT8PZBp5SdRrsNvX4kLh READY
+- [x] 7. CompanyAddress catch-up: 0 rows inserted (as expected); still 11 = 11
+- [x] 8. live checks: /, /wines, /about, /contact, /admin/login → 200; /wines new checkout (Company/Individual, code box), bug
+  button hides under the drawer; widget report + screenshot → production ticket T-13 (Max to close — reporter tickets are
+  Max-only); prod token works (tix --prod); admin Companies (Wine Orders tab "3 orders"), Settings new wine panel (nothing
+  set), Super Admin → Tickets "PRODUCTION · 13 open". Skipped on purpose: a real test reservation (would land in the
+  winery's real orders). Live markers set on the staging board for all shipped tickets.
+  **RELEASE COMPLETE 2026-10-16.**
