@@ -8,6 +8,21 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-16 — FULL PRODUCTION RELEASE (staging → master, `e317fe1`)
+
+Max: "go" for runbook steps 1–8, then granted bypass permissions (the auto-mode classifier had blocked the production
+steps). Done in order, each verified (log in [[QA-Manual-ReadyToTest-2026-10-15]] → "Production release"):
+1. prod `migrate status`: exactly 10 pending. 2. buckets `ticket-attachments` + `release-images` created (private).
+3. `migrate deploy`: 10 applied; 11 companies w/ address = 11 `CompanyAddress`; 0 non-company wine orders; all 11 new
+   tables 401 for anon. 4. backfill: 12 prod reports → tickets T-1..T-12 (T-2..T-5 are old Claude TEST reports).
+5. prod token `claude` → `credentials.txt` `TICKETS_TOKEN_PROD`. 6. merge (4 conflicts from the 2026-10-15 cherry-picks,
+   all → staging's version; tree == staging) pushed `aa760cf..e317fe1`; Vercel `dpl_HGr9o5G1LT8PZBp5SdRrsNvX4kLh` READY.
+7. address catch-up: 0 rows. 8. live checks passed (see log); test report = prod ticket **T-13 — Max to close**.
+**Now on production:** ticket tool v1+v2, release notes (nothing shown to clients until published + "Show to clients"),
+wine order features (T-13/T-8/T-14/T-12/T-9 + QA fixes), T-79, QA fixes F1–F14 (KnownBugs #88–#90 resolved).
+**Not done (optional, each needs Max):** production→staging P-ticket copy (forward token + 2 Vercel env vars); first
+real release notes on the production board; cleanup migration dropping `Company.address`; KnownBugs #91.
+
 ## 2026-10-15/16 — Manual QA of every "Ready to test" ticket + fixes (staging only)
 
 Max: "test the tickets as the user instead of me … make a list and tick off one by one", then "fix any visual bugs you
