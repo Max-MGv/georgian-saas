@@ -8,6 +8,26 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-16 (later) — Post-release safety check + finishing up
+
+Max: "nikalas marani now contains live data, was our push to prod safe? and what's left? finish that up too".
+- **Safety check (all read-only):** Vercel runtime errors since the deploy: none. Nikalas Marani: 3/3 companies have
+  access codes (customers unaffected by the "no code = unknown company" rule), 2 bookings + 5 wine orders intact; all
+  50 wine orders intact. Demo tenant: 9/10 companies code-less **by design**, but the live demo hides the company
+  dropdown (code box + "New Company?" only) → unchanged by the release (checked on demo.vineworks.ge).
+- **KnownBugs #91 fixed** (`deba5a6`): closed-day date built from the string → no hydration mismatch; verified on staging
+  (test closed day added + removed, clean console); shipped `60f0929`, Vercel `dpl_BNbyfPMi2scWhpuYpspAg2Nid3X2` READY.
+- **Production → staging report copy switched on:** copy-only token `production-forward` (scope forward) on the DEV DB,
+  saved as `TICKETS_FORWARD_TOKEN` in credentials.txt; Vercel Production env `TICKETS_FORWARD_URL` (plain) +
+  `TICKETS_FORWARD_TOKEN` (sensitive) added; verified: prod T-14 → staging **P-14**, prod ticket shows "copied to the
+  staging board".
+- Housekeeping: release worktree `gs-release-easy-wins` removed (its 2 `.next` links pointed inside itself; removed the
+  links first with `rmdir`, then `git worktree remove`; main node_modules verified intact), branches `release/*` deleted.
+  FeatureLog #222, #225–#235 marked on production; #236 added for the QA round.
+- **Left for Max:** close prod tickets T-13, T-14 (my tests) and T-2..T-5 (old tests) — reporter tickets are Max-only;
+  close staging P-14; T-84 Ctrl+V paste test; first client-facing release notes on the production board (publish +
+  "Show to clients" are Max's call); optional cleanup migration dropping `Company.address` (destructive — needs Max).
+
 ## 2026-10-16 — FULL PRODUCTION RELEASE (staging → master, `e317fe1`)
 
 Max: "go" for runbook steps 1–8, then granted bypass permissions (the auto-mode classifier had blocked the production
