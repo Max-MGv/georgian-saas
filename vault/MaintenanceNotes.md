@@ -1270,3 +1270,18 @@ Added 2026-10-15 ([[Plan-ReleaseNotes]], FeatureLog #232).
 - Views: the release page has Client view (default) / Edit / Developer (`?mode=`), the Releases page Read (default) / Manage.
   Client view must stay identical to the clients' page — both render `ReleaseHeading` + `ChangeCard` from `components/WhatsNew.tsx`.
 - The token may delete a **draft** release (`DELETE /api/releases/[id]`, used by `releases.spec.ts` clean-up); published ones never.
+
+---
+
+## 37. Floating bug button hides under overlays — new popups must be a real full-screen fixed layer (2026-10-16)
+
+`components/BugReportWidget.tsx` hides its trigger while **any** element with `position: fixed` covers ≥ 90% of the
+viewport (MutationObserver + resize, checked once per frame; its own elements at z-index ≥ 8900 are ignored). Every
+popup / drawer / slide-over today has such a backdrop (`fixed inset-0 …`). **If you build a popup without a full-screen
+fixed backdrop** (e.g. a small floating card), the bug button will stay on top of it and can cover its buttons on
+phones (QA F2). Either give it a full-screen backdrop or make the check aware of it. Conversely, a permanent
+full-screen fixed element (e.g. a page background layer) would hide the button everywhere — avoid, or exclude it.
+
+Related, same day: Settings → Closed days formats dates from the `YYYY-MM-DD` string (`formatClosedDay`), not with
+`toLocaleDateString` — server and browser ICU differ (KnownBugs #91). Use the same approach for any date rendered in a
+client component that is also server-rendered.

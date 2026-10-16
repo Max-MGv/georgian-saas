@@ -4,7 +4,7 @@ tags: [plan, super-admin, releases]
 
 # Plan — Release notes ("What's new")
 
-**Status: ✅ Chunks 1–6 built + verified on `staging` 2026-10-15** (T-115, FeatureLog #232). **Chunk 7 (production) waits for Max's go.**
+**Status: ✅ ON PRODUCTION since 2026-10-16** (Chunks 1–7; bucket `release-images` created on prod). Nothing is visible to clients until Max publishes a release and turns on "Show to clients".
 Builds on [[Plan-TicketsV2]].
 
 Max: "we are now working on features that actually impact users — a section in super-admin for release notes, with screenshots

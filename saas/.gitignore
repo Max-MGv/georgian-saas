@@ -56,3 +56,9 @@ node_modules/
 # manual exploration via `playwright-cli` — ephemeral, not test output)
 .playwright-cli/
 release-shots/
+
+# Local QA helpers (manual-QA scripts, throwaway specs, screenshots, probe output) - kept on disk, never committed.
+# _scratch_shot.ts must never be committed (MEMORY). See vault/QA-Manual-ReadyToTest-2026-10-15.md.
+scripts/_qa/
+tests/_qa/
+scripts/_scratch_shot.ts

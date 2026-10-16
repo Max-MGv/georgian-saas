@@ -12,7 +12,21 @@ Things Max needs to do manually that are **not tickets**. Claude updates this af
 
 ---
 
-## 🧪 2026-10-14 (later) — QA fixes on STAGING. Not on production.
+## 🚀 2026-10-16 — EVERYTHING IS LIVE. Your few chores.
+
+All of staging went to production today (tickets, wine order features, release notes, QA fixes). Safety-checked: no
+errors, live data intact, Nikalas Marani's companies all have codes. Details: [[SessionLog]] 2026-10-16.
+
+- [ ] **Close my test tickets** (only you can close reporter tickets): production board **T-13, T-14** (my release
+      checks) and **T-2 … T-5** (old Claude test reports); staging board **P-14** (the copy test).
+- [ ] **T-84 paste test:** take any screenshot, open a ticket, press Ctrl+V — it should attach.
+- [ ] **First release notes for clients** (Super Admin → Releases on production): write/approve, Publish, then
+      "Show to clients" when you want clients to see it.
+- [ ] Optional: tell me if you want the unused `Company.address` column dropped (can't be undone).
+
+---
+
+## 🧪 2026-10-14 (later) — QA fixes on STAGING. Not on production.  — ✅ **SHIPPED 2026-10-16** (tested by Claude, see [[QA-Manual-ReadyToTest-2026-10-15]]; history below)
 
 Report: [[QA-WineOrderFeatures-2026-10-14]]. Quick checks on **staging.vineworks.ge**:
 1. **Georgian wine form** — switch the site to ქართული, add a wine, open the order: the code box, buttons
@@ -27,7 +41,7 @@ Report: [[QA-WineOrderFeatures-2026-10-14]]. Quick checks on **staging.vineworks
 
 ---
 
-## 🔐 2026-10-14 — Round 2 on STAGING (your decisions of 13–14 Oct). Not on production.
+## 🔐 2026-10-14 — Round 2 on STAGING (your decisions of 13–14 Oct). Not on production.  — ✅ **SHIPPED 2026-10-16** (tested by Claude, see [[QA-Manual-ReadyToTest-2026-10-15]]; history below)
 
 All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.
 1. **No code = unknown company (bookings + wine)** — on the booking form ("Tour Company") and on `/wines`, the
@@ -47,7 +61,7 @@ All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.
 
 ---
 
-## 🍷 2026-10-12 — Five wine-order tickets ready to test on STAGING (T-13, T-8, T-14, T-12, T-9). Not on production.
+## 🍷 2026-10-12 — Five wine-order tickets ready to test on STAGING (T-13, T-8, T-14, T-12, T-9). Not on production.  — ✅ **SHIPPED 2026-10-16** (tested by Claude, see [[QA-Manual-ReadyToTest-2026-10-15]]; history below)
 
 All on **staging.vineworks.ge** (admin + `/wines`). Each ticket has a review card under Tickets → "Ready to test".
 **Setup first (2 min):** Admin → Settings → *Wine Orders — Delivery & Minimum*: add a zone (e.g. "Tbilisi" 15₾),
@@ -74,7 +88,7 @@ each card. Shipping to production needs your separate go — runbook in `Plan-Wi
 
 ---
 
-## ✅ 2026-10-08 — Five tickets ready to test on STAGING (Tickets → "Ready to test"). Not on production.
+## ✅ 2026-10-08 — Five tickets ready to test on STAGING (Tickets → "Ready to test"). Not on production.  — ✅ **SHIPPED 2026-10-16** (tested by Claude, see [[QA-Manual-ReadyToTest-2026-10-15]]; history below)
 
 Each ticket has a review card with exact steps. Quick version, on **staging.vineworks.ge** (phone where it says so):
 1. **T-5** (phone) Admin → Orders → New order → tap "Total guests". The page should **not** zoom in.
@@ -87,7 +101,7 @@ Then: Verified / Send back on each card. Shipping to `master` needs your separat
 
 ---
 
-## 🎫 2026-10-07 — The ticket tool is built and verified on STAGING. Nothing is on production. Your go is needed.
+## 🎫 2026-10-07 — The ticket tool is built and verified on STAGING. Nothing is on production. Your go is needed.  — ✅ **SHIPPED 2026-10-16** (tested by Claude, see [[QA-Manual-ReadyToTest-2026-10-15]]; history below)
 
 **What it is:** Super Admin → **Tickets** (staging.vineworks.ge/super-admin/tickets). One board for bugs / features / tasks / ideas; widget reports land there as tickets; you and I use it day to day; I can read and write it through the `tix` CLI / token API. Details: [[Feature 222 - Internal ticket tool]], design: [[Plan-Tickets]].
 
