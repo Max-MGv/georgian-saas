@@ -106,6 +106,18 @@ const inputStyle = {
   width: '100%',
 }
 
+// Closed days arrive as 'YYYY-MM-DD'. toLocaleDateString gave the server "Wed 25 November 2026" and
+// the browser "Wed, 25 November 2026" (different ICU data) - a hydration mismatch (KnownBugs #91) -
+// and new Date('YYYY-MM-DD') is UTC midnight, so a browser west of UTC showed the previous day.
+// Built from the string itself: identical on server and client, no time zone involved.
+const CLOSED_DAY_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const CLOSED_DAY_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+function formatClosedDay(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const weekday = CLOSED_DAY_WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
+  return `${weekday}, ${d} ${CLOSED_DAY_MONTHS[m - 1]} ${y}`
+}
+
 export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, visitDurationTasting: initialDurationTasting, visitDurationTastingLunch: initialDurationLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
@@ -1587,7 +1599,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                 <div key={d.id} className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: 'var(--site-surface)' }}>
                   <div>
                     <span className="text-sm font-medium" style={{ color: C.text }}>
-                      {new Date(d.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                      {formatClosedDay(d.date)}
                     </span>
                     {d.reason && <span className="ml-2 text-xs" style={{ color: C.faint }}>{d.reason}</span>}
                   </div>
