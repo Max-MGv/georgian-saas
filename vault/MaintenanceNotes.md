@@ -92,6 +92,18 @@ change, so a one-word name is accepted with an empty `surname` rather than block
   behavior needed real semantic changes, not just a locator swap, since `applyPickedPerson` no
   longer splits a picked person's name before writing it.
 
+**Since T-21 (2026-10-08):** two blocks of the detailed variant have a **compact state**, which
+changes what is in the DOM — tests must account for it:
+- **Masterclass Add-ons** start collapsed to one `aria-expanded` button ("Add a masterclass (N
+  available)" / "N selected · X₾"); the checkboxes only exist after it is clicked (`mcOpen`).
+  `BookingFormVisualPanel.tsx` mirrors the collapsed row.
+- **Contact Person**, when filled by the picker (`applyPickedPerson` sets `contactCompact`), shows
+  one summary line + an "Edit Contact Person" button and **no Name/Phone/Email inputs** until Edit
+  is pressed. It falls back to the boxes when the name is empty, both phone and email are empty,
+  or `contactHasError`. Every place that clears these fields must also `setContactCompact(false)`,
+  or the summary would snap shut while the guest is typing. Typed and "I am not on this list"
+  contacts never collapse, which is why most specs were unaffected.
+
 **Since Feature 180 (2026-09-13):** the company-code check in `handleSubmit` runs *last*,
 after every other field validates — on failure it opens the "New Company?" popup (pre-filled
 from the form) instead of erroring, and `buildBookingPayload()` is the one place both the
@@ -1113,3 +1125,148 @@ reads the same `Order` type but picks fields by hand. The "faded/inactive" predi
 (`isInactiveOrder`, `isOwed`, `PaymentMark` in `WineOrdersClient.tsx`) — change them there, not per view.
 **Tests:** Playwright runs desktop; a phone-only regression needs a 390px context (`devices['iPhone 13']`).
 `useIsPhone` starts `false`, so a phone sees the full wine card for one frame before it swaps to the compact one.
+
+---
+
+## 34. The ticket tool: one writer, four things that must stay in sync
+
+Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
+
+- **`lib/ticketService.ts` is the ONLY place that changes a ticket.** The super-admin server actions (`app/actions/tickets.ts`), the widget
+  submit (`bugReports.ts`), the token API (`app/api/tickets/**`) and the scripts all call it. Do not `db.ticket.update(...)` from anywhere else: you
+  would skip the timeline event, the "reason required to close" rule, and the tenant-visible `BugReport.status` sync.
+- **The status vocabulary lives in four places that must change together:** the `TicketStatus` enum (`schema.prisma` + a migration), `TICKET_STATUSES` /
+  `STATUS_LABEL` / `TENANT_STATUS_FOR` / `TICKET_STATUS_FOR_REPORT` in `lib/tickets.ts`, the colours in `app/super-admin/tickets/ui.tsx`, and the CLI
+  export order in `scripts/tix.ts`. Postgres enum values are painful to remove — add sparingly.
+- **`BugReport.status` is now a *derived, tenant-facing* value.** The ticket is authoritative; every ticket status change rewrites its linked reports'
+  status through `TENANT_STATUS_FOR`. `/admin/my-reports` reads `BugReport.status` and needs no change. The old inbox pages redirect to the ticket.
+- **New server-only table ⇒ RLS on, NO policy, `REVOKE ALL … FROM anon, authenticated`, in the SAME migration** (copy the tail of `…add_tickets/migration.sql`).
+  A table in `public` is otherwise open to Supabase's REST API with the public anon key (KnownBugs #73). After migrating, re-run the anon read test.
+- **Every storage bucket must exist in BOTH Supabase projects** (dev `jpbkkngpgtvqmsocitjx`, prod `dshsfkffcsgerdqinqst`). `ticket-attachments` (private) is created
+  in dev; **production still needs it** before the production deploy.
+- **Two boards, two databases.** Staging + localhost share the dev DB; production is separate. `tix` defaults to staging; `--prod` writes need `--yes-prod`
+  *and* Max's go. API tokens are per database (`ticket-token.ts`); `credentials.txt` holds `TICKETS_TOKEN_DEV` (and, later, `_PROD`).
+- **`proxy.ts` exempts `/api/tickets`** from tenant/auth redirects (the API authenticates itself with the bearer token).
+- Phone/desktop: the board uses native drag-and-drop on desktop and a per-card ⋯ "Move" menu everywhere (no DnD on touch).
+- **Since Tickets v2 Tier 1 (2026-10-14, [[Plan-TicketsV2]]):** a ticket opens in a **side panel** on the board (`?t=12`), not a page.
+  `/super-admin/tickets/[number]` and `/super-admin/bug-reports/[id]` only **redirect** there — keep them: notification emails, commits and bookmarks
+  link to them. All board filters live in the URL (`f`, `q`, `type`, `priority`, `area`, `source`, `tenant`, `status`, `v`, `group`, `sort`, `closed`),
+  written with `window.history.replaceState/pushState` (no server round trip). The panel is `z-index: 9000` (above the bug widget at 8900); its
+  image viewer, menus and close dialog sit above it (9100–9300) — keep that order. Ticket text renders through `tickets/Markdown.tsx`, which builds
+  React elements only (no HTML strings) because widget text is untrusted. Files: `TicketsClient.tsx` (board, list, panel, quick add),
+  `TicketDetail.tsx` (one ticket), `ui.tsx` (icons, Picker menu, close dialog), `Lightbox.tsx`, `Markdown.tsx`. The old inbox
+  (`BugReportsClient`, `getBugReports/getBugReport/updateBugReportStatus`) is deleted.
+- **Tier 2 (2026-10-15):** new event kinds `QUESTION` (meta `{options}`), `ANSWER` (meta `{questionId, choice?}` — one per question, enforced
+  under a row lock in `answerQuestion`; the board's open-question count is questions − answers, so never write an ANSWER by hand), `DECISION`.
+  `Ticket.links` is JSON `[{kind, ref, label?}]` — related-ticket links are written **on both tickets** by `addLink/removeLink`; keep it that way.
+  `liveOnStagingAt/liveOnProductionAt`: production implies staging (`setLive`); `postReview` with a commit sets staging. Review-card `meta.steps`
+  is fixed at hand-over time (`parseSteps`), so changing the parser does not change old cards. API: `/api/tickets/[n]/notes`, `/links`, PATCH `live`.
+- **Tier 3 (2026-10-15) — what reporters see is no longer a fixed map:** `TENANT_STATUS_FOR` was replaced by `tenantStatusFor(ticket)` in
+  `lib/tickets.ts` (status + close reason + **liveOnProductionAt**). `syncTenantVisibleStatus` therefore runs after **status changes AND
+  `setLive`** — anything new that changes those three fields must call it too, or My Reports goes stale. `BugReportStatus` gained `CLOSED`
+  (My Reports colour + `myReports.status.closed` EN/KA must stay in step). Duplicates: `changeStatus(..., { duplicateOf })` moves the
+  BugReports to the original (`mergeInto`). **Forwarding** (`lib/ticketForward.ts`): production pushes, staging receives at
+  `/api/tickets/forward`; token `scope` "forward" is accepted ONLY there (`authenticateTicketRequest(req, scopes)`, default `['full']`);
+  staging only downloads images from `*.supabase.co/storage/v1/object/sign/` links; P-tickets carry `externalRef "prod:<n>"` and are shown
+  with `displayRef` (use `t.ref`, never `ticketRef(t.number)`, in ticket UI). P-tickets have BugReport rows with `submitterUserId: null`
+  on purpose (never in anyone's My Reports on staging). `backfill-tickets.ts` sets `liveOnProductionAt` for already-Resolved reports.
+
+---
+
+## 35. Wine orders: one helper per concern, and both write paths must call each one
+
+Added 2026-10-12 ([[Feature 225 - Wine order delivery features]], [[Plan-WineOrderFeatures]]).
+A wine order can be created two ways — **`submitWineOrder`** (public) and **`createWineOrderAdmin`**
+(admin manual entry). Since T-8/T-9/T-12/T-13/T-14 each concern has exactly one helper, and
+**both** paths call it. A third write path (an import, a duplicate-order button, an API) must call
+all of them too, or it will quietly skip a rule:
+
+| Concern | Helper | Notes |
+|---|---|---|
+| Address | `resolveOrderAddress` (`lib/orderAddress.ts`) | Re-reads a saved address by id; never trusts the browser's text. Pickup stores `''`. |
+| Delivery / pickup / fee | `resolveOrderDelivery` (`lib/orderDelivery.ts`) | Fee comes from the zone row. `admin: true` allows pickup when the public form does not offer it. |
+| Minimum order | `minimumOrderError` | Public path only (admin tool is exempt, like bookings). On the wines total after company pricing — never the fee. |
+| Preferred date | `checkPreferredDate` (`lib/wineOrderDate.ts`) | Public path required + lead time + Closed Days; admin optional and unrestricted. |
+| Prices | `priceWineOrder` (`lib/winePricing.ts`) | Negotiated replaces standard, the % only on the rest. `priceSnapshot` = price charged. |
+| Individual | `customerType` normalisation in each action | INDIVIDUAL → no company, LLC, saved address or company contacts. |
+| Winery setup | `loadWineOrderDelivery[Tx]` (`lib/wineOrderDelivery.ts`) | Rules + zones + date rules; the one loader for page, admin, Settings and the actions. |
+
+**Money: never add the fee by hand.** `totalAmount` is wines only; what is owed / charged is
+`wineOrderAmountDue()` (`lib/wineOrderMoney.ts`) — checkout, "Paid" (manual payment), cards,
+Incomplete, super-admin and the receipt all go through it. **Statistics deliberately use
+`totalAmount`** (wine revenue). The balance on a paid order (a fee set later) is
+`wineOrderBalance()` in `lib/payments/manualPayment.ts`; card top-ups go through
+`startWineTopUpCheckout` (`lib/payments/topUpCheckout.ts`, shared with bookings via
+`runTopUpCheckout`).
+
+**No code = unknown company — bookings AND wine orders (Max, 2026-10-14, plan Chunk 15).** A customer
+only ever learns about a company they proved with its access code (or, person codes on, a person's
+own code). Three places hold this line and must stay in step:
+1. **The lists** — both public pages build their dropdown with `listableCompaniesFor(tenantId, module)`
+   (`lib/contactResolution.ts`): id + name only, only provable companies. Never put price tiers,
+   discount, override, people or addresses on a public page prop again (they were all there once).
+2. **The resolver** — `resolveCompanyContactsFor` refuses a code-less company named without a code
+   ("Code required."); everything about a company (people, addresses, `winePrices`, `bookingPrices`,
+   `wineDiscountPercent`, `skipPayment`) comes back only with proof. Admin screens pass `trusted`
+   via `resolveCompanyContactsAsAdmin`.
+3. **The write paths** — `submitWineOrder` and `createBooking` re-check the code the form sends
+   (`companyCode`) with `companyCodeProof()` and refuse 'named' or no proof (KnownBugs #78).
+If you add a fourth way to pick or price a company, it needs all three.
+
+**Forms mirror, never decide.** `WineCatalogueClient` / `NewWineOrderForm` compute totals, fees,
+minimum and date validity with the same pure helpers, purely for display; the server recomputes
+everything. If you change a rule, change the helper — not a copy in a form.
+
+**Tables:** `CompanyAddress`, `DeliveryZone`, `CompanyWinePrice` each have RLS + grant + anon revoke
+**in their migration** and in `scripts/setup-rls.ts` (both lists for `DeliveryZone`, which has its
+own tenantId — §26 H18). `Company.address` is **retired** (no reader or writer since T-13) and is to
+be dropped by a cleanup migration after production has run the backfill.
+
+**Dates shown to people: never `toLocaleDateString('ka-GE')`** (QA 2026-10-14, KnownBugs #80). Vercel's Node
+has no Georgian ICU data, so it prints an English shape while the browser prints Georgian — a wrong email and
+a React hydration error. Use the fixed tables: `formatIsoDay` / `formatPreferredDate` (`lib/wineOrderDate.ts`)
+or `lib/emails/templates/dateFormat.ts`. "Today" for the winery is `tbilisiDateIso(new Date())`, not
+`toISOString()` (that is UTC).
+
+**Order lines are named by the server** (KnownBugs #83): `submitWineOrder` takes the wine name / year snapshot
+from the vintage row it priced, and only active vintages of active wines. The browser's `name`/`year`/`price`
+are display-only.
+
+**Manual top-ups lock the order row** (`SELECT … FOR UPDATE` in `recordAdditionalPayment` /
+`recordAdditionalWinePayment`, KnownBugs #84). Any new "record a payment against a balance" path must take
+the same lock inside its transaction, or two simultaneous records both pass the balance check.
+
+**Access codes** (KnownBugs #85): a hand-set code goes through `accessCodeProblem()` (`lib/accessCodeRules.ts`,
+≥ 6 chars); the public `resolveCompanyContacts` throttles typed codes (`writeRateLimit` 'code-lookup'). A new
+public way to look up a code must be throttled the same way.
+
+**Calendars:** the month grid is `components/MonthCalendar.tsx`, shared by the Orders calendar
+(`orders/CalendarView.tsx`, a thin wrapper) and the Wine Orders Calendar tab. §33's mouse-vs-touch
+rule now lives there once.
+
+**Tests:** every spec that submits the public wine form must fill the preferred date — use
+`tests/helpers/wineForm.ts` `fillPreferredWineDate()`. `wine-order-delivery.spec.ts` changes
+tenant-wide rules + zones while it runs (serial, restored in `afterAll`): do not run it in parallel
+with other `/wines` specs.
+
+## 36. Release notes (Super Admin → Releases, clients' What's new)
+
+Added 2026-10-15 ([[Plan-ReleaseNotes]], FeatureLog #232).
+
+- **`lib/releaseService.ts` is the only writer** (super-admin actions `app/actions/releases.ts` and the token API `/api/releases/**` both call it).
+- **Clients see a release only when `status = PUBLISHED` AND `clientVisible`**, and only its entries with `clientVisible`. Unpublishing forces
+  `clientVisible = false`; "show to clients" is refused on a draft. The token API refuses `status`/`clientVisible` (403) and any change to a
+  published release (`lib/releaseApi.ts`) — keep both, they are the "only Max publishes" rule.
+- **The real release notes live on PRODUCTION** (they describe what clients have). Staging's are test data.
+- The **What's new** menu item (`app/admin/(panel)/layout.tsx`) calls `clientReleaseBadge` on every admin page load (two small queries,
+  wrapped so a failure never breaks the admin). `ReleaseView` (per auth user) drives the dot; `getWhatsNew()` marks it seen.
+- `components/WhatsNew.tsx` is used by BOTH the client page and the Super Admin preview — change it once, both follow. Labels: `whatsNew.*`
+  + `nav.whatsNew` in `lib/adminT.ts` (EN + KA). Release dates use `formatIsoDay` (no `ka-GE` ICU, KnownBugs #80/#81).
+- **Bucket `release-images` (private)** must exist in BOTH Supabase projects (dev created 2026-10-15; production in the runbook).
+  Images are shown through 1-hour signed links; deleting an entry/draft also removes its files.
+- "Take me there" accepts `/admin...` paths only (`cleanAdminPath`). `proxy.ts` exempts `/api/releases` like `/api/tickets`.
+- New tables (`Release`, `ReleaseEntry`, `ReleaseImage`, `ReleaseView`) are RLS-on/no-policy + revoked in their migration (§34 rule).
+- Screenshots: `scripts/release-shots.ts` refuses non-local URLs on purpose (no real customer data in client-facing pictures).
+- Views: the release page has Client view (default) / Edit / Developer (`?mode=`), the Releases page Read (default) / Manage.
+  Client view must stay identical to the clients' page — both render `ReleaseHeading` + `ChangeCard` from `components/WhatsNew.tsx`.
+- The token may delete a **draft** release (`DELETE /api/releases/[id]`, used by `releases.spec.ts` clean-up); published ones never.

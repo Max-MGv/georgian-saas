@@ -1,0 +1,252 @@
+// spec: vault/Plan-Tickets.md - the internal ticket tool (super-admin).
+//
+// Covers the parts that are easy to break silently: the workflow rules (a reason is required to
+// close, a note is required to send back, review card -> verify), that the token API refuses
+// unauthenticated callers, and that a report sent through the public widget becomes a ticket.
+// Every ticket it creates is closed again at the end (there is deliberately no delete), and is
+// titled "ZZ Tickets E2E ..." so a leftover is easy to spot.
+import { test, expect, type Page } from '@playwright/test';
+import { getSuperAdminCredentials, getTicketsDevToken } from '../helpers/credentials';
+
+const STAMP = Date.now();
+const TITLE = `ZZ Tickets E2E ${STAMP}`;
+const WIDGET_TEXT = `ZZ Tickets E2E widget ${STAMP} - please ignore`;
+
+async function loginSuperAdmin(page: Page) {
+  const { email, password } = getSuperAdminCredentials();
+  await page.goto('/admin/login');
+  await page.locator('input[type="email"]').fill(email);
+  await page.locator('input[type="password"]').fill(password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.waitForURL(u => !u.pathname.includes('/login'), { timeout: 60_000 });
+}
+
+// The ticket opens in a side panel over the board (Plan-TicketsV2); every ticket action happens inside it.
+const panelOf = (page: Page) => page.locator('[data-ticket-panel]');
+
+async function closeTicketOnPage(page: Page) {
+  const panel = panelOf(page);
+  await panel.getByRole('button', { name: 'Status' }).click();
+  await page.getByRole('menuitemradio', { name: 'Closed' }).click();
+  await expect(page.getByText('Close this ticket — why?')).toBeVisible();
+  await page.getByRole('button', { name: /Obsolete/ }).click();
+  await expect(panel.getByRole('button', { name: 'Status' })).toContainText('Closed · Obsolete', { timeout: 20_000 });
+}
+
+test.describe('Internal tickets (super-admin)', () => {
+  test('API refuses a missing or wrong token', async ({ request }) => {
+    expect((await request.get('/api/tickets')).status()).toBe(401);
+    const bad = await request.get('/api/tickets', { headers: { Authorization: 'Bearer tkt_not_a_real_token' } });
+    expect(bad.status()).toBe(401);
+    expect((await request.post('/api/tickets', { data: { title: 'x' } })).status()).toBe(401);
+  });
+
+  test('token API: create, comment, hand over for review - and refuses what a token must not do', async ({ request }) => {
+    const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
+    const title = `ZZ Tickets E2E api ${STAMP}`;
+
+    // A ticket may only START in Inbox / Backlog / In progress.
+    for (const status of ['DONE', 'REVIEW', 'CLOSED']) {
+      const bad = await request.post('/api/tickets', { headers: auth, data: { title, status } });
+      expect(bad.status(), `create as ${status}`).toBe(400);
+    }
+    expect((await request.post('/api/tickets', { headers: auth, data: { title, tenantId: 'not-a-real-tenant' } })).status()).toBe(400);
+    expect((await request.post('/api/tickets', { headers: auth, data: null })).status()).toBe(400);
+
+    const created = await request.post('/api/tickets', { headers: auth, data: { title, description: 'created by the API test', type: 'TASK', area: 'Infrastructure' } });
+    expect(created.status()).toBe(201);
+    const { number } = await created.json();
+
+    expect((await request.post(`/api/tickets/${number}/comments`, { headers: auth, data: { body: 'hello from the API test' } })).status()).toBe(201);
+
+    // The token can never mark Done, move to Ready to test without a card, or change the tenant.
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { status: 'DONE' } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { status: 'REVIEW' } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { tenantId: 'x' } })).status()).toBe(400);
+    // One bad field must not leave a half-applied edit: the new title must NOT have been saved.
+    const refused = await request.patch(`/api/tickets/${number}`, { headers: auth, data: { title: 'SHOULD NOT SAVE', status: 'DONE' } });
+    expect(refused.status()).toBe(400);
+    expect((await (await request.get(`/api/tickets/${number}`, { headers: auth })).json()).title).toBe(title);
+    // Closing needs a reason; garbage numbers are a clean 400, not a 500.
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { status: 'CLOSED' } })).status()).toBe(400);
+    expect((await request.get('/api/tickets/3000000000', { headers: auth })).status()).toBe(400);
+    expect((await request.get('/api/tickets/0x1F', { headers: auth })).status()).toBe(400);
+
+    // The review hand-over needs both fields, then moves the ticket to Ready to test.
+    expect((await request.post(`/api/tickets/${number}/review`, { headers: auth, data: { changed: 'x' } })).status()).toBe(400);
+    expect((await request.post(`/api/tickets/${number}/review`, { headers: auth, data: { changed: 'x', howToTest: 'y' } })).status()).toBe(201);
+    const detail = await (await request.get(`/api/tickets/${number}`, { headers: auth })).json();
+    expect(detail.status).toBe('REVIEW');
+    expect(detail.untrustedText).toBe(false);
+
+    // The list reports totals, and an own ticket may be closed with a reason (clean-up).
+    const list = await (await request.get('/api/tickets?q=ZZ%20Tickets%20E2E%20api&limit=1', { headers: auth })).json();
+    expect(list.total).toBeGreaterThanOrEqual(1);
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } })).status()).toBe(200);
+    // ...after which it is finished and the token cannot reopen it.
+    expect((await request.patch(`/api/tickets/${number}`, { headers: auth, data: { status: 'BACKLOG' } })).status()).toBe(400);
+  });
+
+  test('board → quick add → review card → send back needs a note → verify → close needs a reason', async ({ page }) => {
+    // A dozen chained server actions, each slow on a cold dev server.
+    test.setTimeout(150_000);
+    await loginSuperAdmin(page);
+    await page.goto('/super-admin/tickets');
+
+    // Quick add lands in Inbox and is searchable.
+    await page.getByLabel('New ticket title').fill(TITLE);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.getByLabel('Search tickets').fill(TITLE);
+    const card = page.locator('a', { hasText: TITLE }).first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await card.click();
+    // Opens in the side panel (?t=N), not a new page; wait for the full ticket, not the instant title.
+    await page.waitForURL(/\/super-admin\/tickets\?.*t=\d+/, { timeout: 60_000 });
+    const panel = panelOf(page);
+    await expect(panel.getByRole('heading', { name: TITLE })).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByRole('button', { name: 'Status' })).toBeVisible({ timeout: 30_000 });
+
+    // Review card: both "what changed" and "how to test" are required.
+    await page.getByRole('button', { name: /Mark ready to test/ }).click();
+    await page.getByLabel('What changed').fill('Nothing - automated test.');
+    await page.getByRole('button', { name: 'Move to Ready to test' }).click();
+    await expect(page.locator('[role="alert"]', { hasText: 'how to test' })).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('How to test').fill('Nothing - automated test.');
+    await page.getByRole('button', { name: 'Move to Ready to test' }).click();
+    await expect(page.getByText('Ready to test — waiting for you')).toBeVisible({ timeout: 20_000 });
+
+    // Sending back without a note is refused; with a note it returns to In progress.
+    await page.getByRole('button', { name: /send back/ }).click();
+    await expect(page.locator('[role="alert"]', { hasText: 'what is still wrong' })).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('Review note').fill('Still wrong - automated test.');
+    await page.getByRole('button', { name: /send back/ }).click();
+    await expect(panel.getByText('sent it back').first()).toBeVisible({ timeout: 20_000 });
+
+    // Back to review, then verify -> Done.
+    await page.getByRole('button', { name: /Mark ready to test/ }).click();
+    await page.getByLabel('What changed').fill('Second pass.');
+    await page.getByLabel('How to test').fill('Second pass.');
+    await page.getByRole('button', { name: 'Move to Ready to test' }).click();
+    await page.getByRole('button', { name: /Works — Done/ }).click();
+    // Wait on the outcome (the status control), not on the button text, which exists before the action has finished.
+    await expect(panel.getByRole('button', { name: 'Status' })).toContainText('Done', { timeout: 30_000 });
+    await expect(panel.getByText('verified it works')).toBeVisible();
+
+    // Closing asks for a reason (a Done ticket can still be closed out).
+    await closeTicketOnPage(page);
+  });
+
+  // Plan-TicketsV2 Tier 2: the ticket holds our thinking - analysis/solution, questions with one-tap answers,
+  // decisions, links (a related ticket links back), where-is-it-live and the test checklist.
+  test('Tier 2: analysis, question answered in the panel, decision, links, live marker, checklist', async ({ page, request }) => {
+    test.setTimeout(150_000);
+    const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
+    const mk = async (title: string) => (await (await request.post('/api/tickets', { headers: auth, data: { title, type: 'TASK' } })).json()).number as number;
+    const a = await mk(`ZZ Tickets E2E tier2 A ${STAMP}`);
+    const b = await mk(`ZZ Tickets E2E tier2 B ${STAMP}`);
+
+    expect((await request.patch(`/api/tickets/${a}`, { headers: auth, data: { analysis: 'Root cause found.', solution: 'Do the simple thing.' } })).status()).toBe(200);
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'QUESTION', text: 'Which way?', options: ['Left', 'Right'] } })).status()).toBe(201);
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'DECISION', text: 'Decided in chat.' } })).status()).toBe(201);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: `T-${b}` } })).status()).toBe(201);
+    // Refused: a non-web URL, a ticket that does not exist, a link to itself, an unknown live stage.
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'url', ref: 'javascript:alert(1)' } })).status()).toBe(400);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: '999999999' } })).status()).toBe(400);
+    expect((await request.post(`/api/tickets/${a}/links`, { headers: auth, data: { kind: 'ticket', ref: String(a) } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${a}`, { headers: auth, data: { live: 'MOON' } })).status()).toBe(400);
+    // The related ticket links back.
+    const bDetail = await (await request.get(`/api/tickets/${b}`, { headers: auth })).json();
+    expect(bDetail.links).toEqual([{ kind: 'ticket', ref: String(a) }]);
+    // A hand-over with a commit marks the ticket live on staging and splits "how to test" into steps.
+    expect((await request.post(`/api/tickets/${a}/review`, { headers: auth, data: { changed: 'x', howToTest: 'On staging: 1) open it 2) click it', commit: 'f1ff942' } })).status()).toBe(201);
+    const aDetail = await (await request.get(`/api/tickets/${a}`, { headers: auth })).json();
+    expect(aDetail.liveOnStagingAt).not.toBeNull();
+    expect(aDetail.events.find((e: { kind: string }) => e.kind === 'REVIEW').meta.steps).toEqual(['On staging: open it', 'click it']);
+
+    // Max answers with one tap in the panel; the question becomes a decision.
+    await loginSuperAdmin(page);
+    await page.goto(`/super-admin/tickets?t=${a}`);
+    const panel = panelOf(page);
+    await expect(panel.getByText('Question for you')).toBeVisible({ timeout: 60_000 });
+    await expect(panel.getByRole('button', { name: 'Step 1 works' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Right', exact: true }).click();
+    await expect(panel.getByText('Question for you')).toHaveCount(0, { timeout: 30_000 });
+    await expect(panel.getByText('Decisions', { exact: true })).toBeVisible();
+    // Answering the same question again is refused.
+    const qId = aDetail.events.find((e: { kind: string }) => e.kind === 'QUESTION').id;
+    expect((await request.post(`/api/tickets/${a}/notes`, { headers: auth, data: { kind: 'ANSWER', questionId: qId, choice: 'Left' } })).status()).toBe(400);
+
+    for (const n of [a, b]) await request.patch(`/api/tickets/${n}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } });
+  });
+
+  // Plan-TicketsV2 Tier 3: what the client sees follows the ticket (Resolved only when live on production; obsolete =
+  // Closed; a duplicate's reporters move to the original), and a client report copied from production becomes a P-ticket.
+  test('Tier 3: client status, duplicate merge, P-ticket copy', async ({ request }) => {
+    test.setTimeout(120_000);
+    const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
+    const mk = async (title: string) => (await (await request.post('/api/tickets', { headers: auth, data: { title, type: 'BUG' } })).json()).number as number;
+    const original = await mk(`ZZ Tickets E2E tier3 original ${STAMP}`);
+    const dup = await mk(`ZZ Tickets E2E tier3 duplicate ${STAMP}`);
+
+    // A client report copied from production (no screenshot - this environment does not copy).
+    const prodNumber = 900_000_000 + (STAMP % 99_999_999);
+    const payload = { prodNumber, prodUrl: 'https://example.com/super-admin/tickets?t=1', title: `ZZ Tickets E2E tier3 copy ${STAMP}`, description: 'client words', type: 'BUG', priority: 'HIGH', tenant: null, reports: [{ type: 'BUG', surface: 'ADMIN', comment: 'client words', pageUrl: 'https://example.com/x', submitterEmail: 'client@example.com', breadcrumbs: [] }], images: [{ url: 'https://evil.example.com/x.png', fileName: 'x.png' }] };
+    const first = await request.post('/api/tickets/forward', { headers: auth, data: payload });
+    expect(first.status()).toBe(201);
+    const { ref, number: copyNumber } = await first.json();
+    expect(ref).toBe(`P-${prodNumber}`);
+    const second = await request.post('/api/tickets/forward', { headers: auth, data: payload });
+    expect(second.status()).toBe(200); // idempotent
+    const copy = await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json();
+    expect(copy.source).toBe('PRODUCTION');
+    expect(copy.untrustedText).toBe(true);
+    expect(copy.attachments).toHaveLength(0); // an image from anywhere but the production storage is never fetched
+    expect(copy.reports[0].submitterEmail).toBe('client@example.com');
+    expect(copy.clientStatus).toBe('NEW');
+
+    // Client status: Done is not enough - only live on production reads "Resolved".
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { status: 'IN_PROGRESS', clientReply: 'Working on it.' } })).status()).toBe(200);
+    expect((await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json()).clientStatus).toBe('IN_PROGRESS');
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { live: 'PRODUCTION' } })).status()).toBe(200);
+    const live = await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json();
+    expect(live.clientStatus).toBe('RESOLVED');
+    expect(live.clientReply).toBe('Working on it.');
+
+    // Duplicate: its reports move to the original; refusing a self-duplicate and a missing original.
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: dup } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: 999999999 } })).status()).toBe(400);
+    expect((await request.patch(`/api/tickets/${dup}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'DUPLICATE', duplicateOf: `T-${original}` } })).status()).toBe(200);
+    const orig = await (await request.get(`/api/tickets/${original}`, { headers: auth })).json();
+    expect(orig.links).toContainEqual({ kind: 'ticket', ref: String(dup), label: 'Duplicate' });
+
+    // Obsolete reads "Closed" to the client, not "Won't fix".
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { live: 'NONE' } })).status()).toBe(200);
+    expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } })).status()).toBe(200);
+    expect((await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json()).clientStatus).toBe('CLOSED');
+    await request.patch(`/api/tickets/${original}`, { headers: auth, data: { status: 'CLOSED', closeReason: 'OBSOLETE' } });
+  });
+
+  test('a public widget report becomes a Widget ticket', async ({ page, browser }) => {
+    test.setTimeout(120_000);
+    // Send the report from the public site as an anonymous visitor.
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Report a bug or feature request' }).click();
+    await page.getByPlaceholder(/Describe the bug/).fill(WIDGET_TEXT);
+    await page.getByRole('button', { name: 'Send report' }).click();
+    await expect(page.getByRole('button', { name: 'Send report' })).toHaveCount(0, { timeout: 30_000 });
+
+    // The super-admin sees it as a ticket from the Widget source.
+    const adminCtx = await browser.newContext();
+    const admin = await adminCtx.newPage();
+    await loginSuperAdmin(admin);
+    await admin.goto('/super-admin/tickets');
+    await admin.getByLabel('Search tickets').fill(`ZZ Tickets E2E widget ${STAMP}`);
+    const card = admin.locator('a', { hasText: `ZZ Tickets E2E widget ${STAMP}` }).first();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.click();
+    await expect(panelOf(admin).getByRole('img', { name: /^Widget/ }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(panelOf(admin).getByRole('button', { name: 'Status' })).toBeVisible({ timeout: 30_000 });
+    await closeTicketOnPage(admin);
+    await adminCtx.close();
+  });
+});

@@ -27,8 +27,28 @@ export type WineOrderReceiptData = {
   contactName: string
   businessName: string
   lines: WineOrderLine[]
+  /** Wines total, tetri (WineOrder.totalAmount — wines only since T-8). */
   totalAmount: number
   discountPercent?: number | null
+  /**
+   * How the order reaches the customer (T-8). Absent on orders from before T-8, which render
+   * exactly as they always did. The "Paid" line adds `fee` — wines + delivery, the same sum
+   * lib/wineOrderMoney.ts charges.
+   */
+  delivery?: {
+    fulfilment: 'DELIVERY' | 'PICKUP'
+    zoneName: string | null
+    fee: number | null
+    /** "Other" area — the fee is agreed later and was not part of this payment. */
+    pending: boolean
+  }
+  /**
+   * Tetri actually paid so far (settled, not reversed). Shown as "Paid"; when it is less than
+   * wines + fee, the difference is shown as still to pay. Absent → wines + fee, as before.
+   */
+  paidAmount?: number
+  /** T-14 — the customer's preferred day, already formatted ("14 Oct 2026"). A preference. */
+  preferredDate?: string
   wineryName?: string
   wineryAddress?: string
   wineryPhone?: string
@@ -70,8 +90,32 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
     </tr>
   `).join('')
 
-  const discountRow = data.discountPercent && data.discountPercent > 0
-    ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Discount</td><td style="color: ${th.muted}; text-align: right;">−${data.discountPercent}%</td></tr>`
+  // Shown as the amount taken off, not just the %: with negotiated prices (T-12) the % applies to
+  // the standard-priced wines only, so "−10%" next to the full list would overstate it.
+  const linesTotal = data.lines.reduce((n, l) => n + l.price * l.quantity, 0)
+  const discountAmount = linesTotal - data.totalAmount
+  const discountRow = data.discountPercent && data.discountPercent > 0 && discountAmount > 0
+    ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Discount (${data.discountPercent}%)</td><td style="color: ${th.muted}; text-align: right;">−${formatTetri(asTetri(discountAmount), { decimals: true })}</td></tr>`
+    : ''
+
+  const d = data.delivery
+  const deliveryRow = !d ? ''
+    : d.fulfilment === 'PICKUP'
+      ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Pickup at the winery</td><td style="color: ${th.muted}; text-align: right;">—</td></tr>`
+      : d.pending
+        ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Delivery</td><td style="color: ${th.muted}; text-align: right;">to be confirmed</td></tr>`
+        : d.fee !== null
+          ? `<tr><td style="color: ${th.text}; padding: 5px 0;">Delivery${d.zoneName ? ` — ${d.zoneName}` : ''}</td><td style="color: ${th.text}; text-align: right;">${formatTetri(asTetri(d.fee), { decimals: true })}</td></tr>`
+          : ''
+  const due = data.totalAmount + (d?.fee ?? 0)
+  const paid = data.paidAmount ?? due
+  const stillToPay = due - paid
+  const stillToPayRow = stillToPay > 0
+    ? `<tr><td style="color: ${th.muted}; padding: 5px 0;">Still to pay</td><td style="color: ${th.muted}; text-align: right;">${formatTetri(asTetri(stillToPay), { decimals: true })}</td></tr>`
+    : ''
+  const dateLabel = d?.fulfilment === 'PICKUP' ? 'Preferred pickup date' : 'Preferred delivery date'
+  const dateLine = data.preferredDate
+    ? `<p style="font-size: 13px; color: ${th.muted}; margin: 12px 0 0;">📅 ${dateLabel}: <strong style="color: ${th.text};">${data.preferredDate}</strong> — we will confirm the exact day with you.</p>`
     : ''
 
   const introHtml = renderTokenizedText(data.introText?.trim() || DEFAULT_WINE_RECEIPT_INTRO, { name: data.contactName })
@@ -95,12 +139,15 @@ export function renderWineOrderReceiptEmail(data: WineOrderReceiptData): { subje
           <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             ${itemRows}
             ${discountRow}
+            ${deliveryRow}
             <tr style="border-top: 1px solid ${th.border};">
               <td style="color: ${th.muted}; padding: 10px 0 5px;">Paid</td>
-              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${formatTetri(asTetri(data.totalAmount), { decimals: true })}</td>
+              <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${formatTetri(asTetri(paid), { decimals: true })}</td>
             </tr>
+            ${stillToPayRow}
           </table>
           <p style="font-size: 12px; color: ${th.secondary}; margin: 12px 0 0;">${bottles} bottle${bottles === 1 ? '' : 's'} · ${data.businessName}</p>
+          ${dateLine}
         </div>
 
         ${contactLines}

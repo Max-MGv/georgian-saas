@@ -52,6 +52,7 @@ import {
   clickUntil, PaymentOverride,
 } from '../helpers/payments';
 import { openReviewSheet, abandonedRow } from '../helpers/bookingForm';
+import { fillPreferredWineDate } from '../helpers/wineForm';
 
 // Every test in this file mutates the SAME tenant-wide payment settings
 // (section toggles, a company's payment override, the Flitt merchant ID) —
@@ -265,7 +266,10 @@ test.describe('Company booking — section × per-company override × hidden-pri
     // dev server — a 300s budget cut off cleanup after every scenario's own
     // assertion had already passed. 480s leaves real headroom rather than
     // trimming the scenario count to fit an arbitrary budget.
-    test.setTimeout(480_000);
+    // Measured again 2026-10-13 with a trace: ~50 admin page loads at 5-10 s each, ~530 s end to
+    // end — every step passing, but past 480 s, so cleanup never ran and Caucasus Vine Travel was
+    // left on "Always require". 720 s keeps the same kind of headroom.
+    test.setTimeout(720_000);
     await loginAsTenantAdmin(page);
 
     const originalSection = await readPaymentSectionToggle(page, 'Company bookings');
@@ -512,6 +516,7 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       await formPageOn.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street');
       await formPageOn.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact');
       await formPageOn.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000031');
+      await fillPreferredWineDate(formPageOn); // T-14: the form requires a preferred date
       await formPageOn.getByRole('textbox', { name: /Email address/ }).fill(`zz-wine-on-${Date.now()}@example.invalid`);
       await Promise.all([
         formPageOn.waitForURL(/pay\.flitt\.com/, { timeout: 15_000, waitUntil: 'commit' }),
@@ -559,6 +564,7 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       await formPageOff.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street');
       await formPageOff.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact');
       await formPageOff.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000032');
+      await fillPreferredWineDate(formPageOff); // T-14: the form requires a preferred date
       await formPageOff.getByRole('button', { name: 'Place Reservation', exact: true }).click();
       await expect(formPageOff.getByRole('heading', { name: 'Order received!' })).toBeVisible({ timeout: 15_000 });
       expect(formPageOff.url()).not.toMatch(/pay\.flitt\.com/);
@@ -625,6 +631,7 @@ test.describe('Wine orders — payment on/off, and a company override applies he
       // with no thrown error until reproduced live.
       await formPageCo.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact');
       await formPageCo.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000033');
+      await fillPreferredWineDate(formPageCo); // T-14: the form requires a preferred date
       await formPageCo.getByRole('button', { name: 'Place Reservation', exact: true }).click();
       await expect(formPageCo.getByRole('heading', { name: 'Order received!' })).toBeVisible({ timeout: 15_000 });
       expect(formPageCo.url()).not.toMatch(/pay\.flitt\.com/);

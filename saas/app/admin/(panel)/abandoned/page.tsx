@@ -1,4 +1,5 @@
 import { withTenantDb } from '@/lib/db'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { getTenantId } from '@/lib/tenant'
 import { getSetting } from '@/app/actions/settings'
 import { ONLY_ABANDONED } from '@/lib/orderFilters'
@@ -43,7 +44,7 @@ export default async function AbandonedOrdersPage() {
       where: { tenantId, ...ONLY_ABANDONED },
       select: {
         id: true, businessName: true, contactName: true, contactPhone: true,
-        contactEmail: true, totalAmount: true, abandonedAt: true, createdAt: true,
+        contactEmail: true, totalAmount: true, deliveryFee: true, abandonedAt: true, createdAt: true,
         wineItems: { select: { quantity: true } },
       },
       orderBy: { abandonedAt: 'desc' },
@@ -76,7 +77,8 @@ export default async function AbandonedOrdersPage() {
           companyName: null,
           contact: o.contactEmail || o.contactPhone || null,
           detail: `${o.contactName} · ${o.wineItems.reduce((s, i) => s + i.quantity, 0)}`,
-          total: o.totalAmount,
+          // What the checkout asked for: wines + delivery fee (T-8, lib/wineOrderMoney.ts).
+          total: wineOrderAmountDue(o),
           abandonedAt: o.abandonedAt ?? o.createdAt,
         }))}
       />

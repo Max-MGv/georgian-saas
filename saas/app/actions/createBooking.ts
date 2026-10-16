@@ -25,12 +25,20 @@ import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 import { parseWeeklyHours, getDayHours, getLeadHours, minBookableInstant, slotMeetsLeadTime } from '@/lib/bookingHours'
 import { COUNTRIES } from '@/lib/countries'
 import { NEW_ORDER_COLUMNS } from '@/lib/statusWrite'
+import { companyCodeProof } from '@/lib/contactResolution'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   companyId?: string
+  /**
+   * The access code the guest confirmed for `companyId`. Checked again on the server
+   * (`companyCodeMatches`, KnownBugs #78): naming a company is not proving it, and the
+   * company's price tiers are only for someone who knows its code.
+   */
+  companyCode?: string
   /**
    * One entry per contact role, built by `buildBookingPayload()` in BookingForm.tsx —
    * the only place a booking field may be added (MaintenanceNotes #1 / hurdle H3).
@@ -148,7 +156,8 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
 
     // Guard: past dates
     const dateStr = new Date(data.date).toISOString().split('T')[0]
-    const todayStr = new Date().toISOString().split('T')[0]
+    // Today on the winery's calendar, not the server's (UTC on Vercel — KnownBugs #79).
+    const todayStr = tbilisiDateIso(new Date())
     if (dateStr < todayStr) {
       return { success: false, error: await mc('onsite_err_future_date', 'form.err_future_date') }
     }
@@ -310,9 +319,21 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         : 0
 
     if (data.bookingType === 'COMPANY' && data.companyId) {
-      const company = await withTenantDb(tenantId, tx =>
-        tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
-      )
+      // The browser names the company; the server decides whether this guest may book as it.
+      // Without the code check a crafted request got a coded company's price tiers (KnownBugs #78).
+      const checked = await withTenantDb(tenantId, async tx => {
+        const c = await tx.company.findFirst({
+          where: { id: data.companyId, tenantId, isIndividual: false },
+          include: { prices: true },
+        })
+        return c && { company: c, proof: await companyCodeProof(tx, tenantId, c, data.companyCode, 'BOOKING') }
+      })
+      // Proven by its code or a person's code only. A company merely named — including one with no
+      // access code at all — is an unknown company (Max, 2026-10-14: "otherwise the code loses meaning").
+      if (!checked || !checked.proof || checked.proof === 'named') {
+        return { success: false, error: await mc('onsite_access_code_error', 'form.access_code_error') }
+      }
+      const company = checked.company
 
       if (company?.prices.length) {
         // One lookup on the party size, and one call: priceBooking already

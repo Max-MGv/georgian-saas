@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { getAllSettings } from '@/app/actions/settings'
@@ -370,7 +371,15 @@ export async function sendSettlementEmail(
 
   if (wineOrderId) {
     const wineOrder = await withTenantDb(tenantId, tx =>
-      tx.wineOrder.findUnique({ where: { id: wineOrderId }, include: { wineItems: true } })
+      tx.wineOrder.findUnique({
+        where: { id: wineOrderId },
+        include: {
+          wineItems: true,
+          // What has really been paid so far — a delivery-fee top-up settles here too, and its
+          // receipt must not claim the whole order was paid again (blind review, 2026-10-13).
+          payments: { where: { settledAt: { not: null }, reversedAt: null }, select: { amount: true } },
+        },
+      })
     )
     if (!wineOrder?.contactEmail) return
 
@@ -386,6 +395,16 @@ export async function sendSettlementEmail(
       })),
       totalAmount: wineOrder.totalAmount ?? 0,
       discountPercent: wineOrder.discountPercent,
+      paidAmount: wineOrder.payments.reduce((n, p) => n + p.amount, 0),
+      // T-8: the receipt's "Paid" adds the fee — the same wines + fee the checkout charged.
+      delivery: {
+        fulfilment: wineOrder.fulfilment,
+        zoneName: wineOrder.deliveryZoneName,
+        fee: wineOrder.deliveryFee,
+        pending: wineOrder.deliveryFeePending,
+      },
+      // T-14 — shown as a preference, in the email's language.
+      preferredDate: formatPreferredDate(wineOrder.preferredDate, emailLocale) || undefined,
       introText: messages.email_wine_receipt_intro
         ?? (emailLocale === 'ka' ? DEFAULT_WINE_RECEIPT_INTRO_KA : DEFAULT_WINE_RECEIPT_INTRO),
       ...common,

@@ -1,4 +1,5 @@
-import { getSetting } from '@/app/actions/settings'
+import { getAllSettings } from '@/app/actions/settings'
+import { settingValue } from '@/lib/settings'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getPaymentCredentials } from '@/app/actions/paymentCredentials'
 import { headers } from 'next/headers'
@@ -6,84 +7,56 @@ import { adminT } from '@/lib/adminT'
 import PaymentSetupBanner from '../PaymentSetupBanner'
 import SettingsClient from './SettingsClient'
 import ContactRolesPanel from './ContactRolesPanel'
+import WineOrderSettingsPanel from './WineOrderSettingsPanel'
+import { getTenantId } from '@/lib/tenant'
+import { loadWineOrderDelivery } from '@/lib/wineOrderDelivery'
 import { listContactRoles } from '@/app/actions/contactRoles'
 
 export default async function SettingsPage() {
-  const [
-    showCompanyPrice,
-    enhancedBooking,
-    invoiceDetailed,
-    hideCompanyDropdown,
-    showAdminHints,
-    recipientName,
-    personalNumber,
-    bankName,
-    bankCode,
-    iban,
-    minGuestsTasting,
-    minGuestsTastingLunch,
-    maxGuestsTasting,
-    maxGuestsTastingLunch,
-    bookingLeadSplit,
-    bookingLeadHours,
-    bookingLeadHoursTasting,
-    bookingLeadHoursTastingLunch,
-    visitDurationTasting,
-    visitDurationTastingLunch,
-    workingHoursCustom,
-    workingHoursOpen,
-    workingHoursClose,
-    workingHoursDaysJson,
-    blockedDates,
-    defaultLocale,
-    mapsEmbedUrl,
-    contactEmail,
-    contactPhone,
-    contactAddress,
-    contactFacebook,
-    contactInstagram,
-    adminLanguage,
-    personCodesEnabled,
-    contactRoles,
-    h,
-  ] = await Promise.all([
-    getSetting('show_company_price_after_booking'),
-    getSetting('enable_enhanced_company_booking'),
-    getSetting('invoice_detailed'),
-    getSetting('hide_company_dropdown'),
-    getSetting('show_admin_hints'),
-    getSetting('payment_recipient_name'),
-    getSetting('payment_personal_number'),
-    getSetting('payment_bank_name'),
-    getSetting('payment_bank_code'),
-    getSetting('payment_iban'),
-    getSetting('min_guests_tasting'),
-    getSetting('min_guests_tasting_lunch'),
-    getSetting('max_guests_tasting'),
-    getSetting('max_guests_tasting_lunch'),
-    getSetting('booking_lead_split'),
-    getSetting('booking_lead_hours'),
-    getSetting('booking_lead_hours_tasting'),
-    getSetting('booking_lead_hours_tasting_lunch'),
-    getSetting('visit_duration_tasting'),
-    getSetting('visit_duration_tasting_lunch'),
-    getSetting('working_hours_custom'),
-    getSetting('working_hours_open'),
-    getSetting('working_hours_close'),
-    getSetting('working_hours_days_json'),
+  // All of this tenant's settings in ONE database read (T-79). This page used to make one round
+  // trip per key — 34 of them — which on a dev machine was most of its ~5 s load and crowded the
+  // connection pool. Same answer per key as getSetting(): the stored value, else the default.
+  const tenantId = await getTenantId()
+  const [settings, blockedDates, contactRoles, h] = await Promise.all([
+    getAllSettings(tenantId),
     getBlockedDates(),
-    getSetting('default_locale'),
-    getSetting('maps_embed_url'),
-    getSetting('contact_email'),
-    getSetting('contact_phone'),
-    getSetting('contact_address'),
-    getSetting('contact_facebook'),
-    getSetting('contact_instagram'),
-    getSetting('admin_language'),
-    getSetting('person_codes_enabled'),
     listContactRoles(),
     headers(),
   ])
+  const get = (key: string) => settingValue(settings, key)
+  const showCompanyPrice = get('show_company_price_after_booking')
+  const enhancedBooking = get('enable_enhanced_company_booking')
+  const invoiceDetailed = get('invoice_detailed')
+  const hideCompanyDropdown = get('hide_company_dropdown')
+  const showAdminHints = get('show_admin_hints')
+  const recipientName = get('payment_recipient_name')
+  const personalNumber = get('payment_personal_number')
+  const bankName = get('payment_bank_name')
+  const bankCode = get('payment_bank_code')
+  const iban = get('payment_iban')
+  const minGuestsTasting = get('min_guests_tasting')
+  const minGuestsTastingLunch = get('min_guests_tasting_lunch')
+  const maxGuestsTasting = get('max_guests_tasting')
+  const maxGuestsTastingLunch = get('max_guests_tasting_lunch')
+  const bookingLeadSplit = get('booking_lead_split')
+  const bookingLeadHours = get('booking_lead_hours')
+  const bookingLeadHoursTasting = get('booking_lead_hours_tasting')
+  const bookingLeadHoursTastingLunch = get('booking_lead_hours_tasting_lunch')
+  const visitDurationTasting = get('visit_duration_tasting')
+  const visitDurationTastingLunch = get('visit_duration_tasting_lunch')
+  const workingHoursCustom = get('working_hours_custom')
+  const workingHoursOpen = get('working_hours_open')
+  const workingHoursClose = get('working_hours_close')
+  const workingHoursDaysJson = get('working_hours_days_json')
+  const defaultLocale = get('default_locale')
+  const mapsEmbedUrl = get('maps_embed_url')
+  const contactEmail = get('contact_email')
+  const contactPhone = get('contact_phone')
+  const contactAddress = get('contact_address')
+  const contactFacebook = get('contact_facebook')
+  const contactInstagram = get('contact_instagram')
+  const adminLanguage = get('admin_language')
+  const personCodesEnabled = get('person_codes_enabled')
 
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
@@ -94,7 +67,13 @@ export default async function SettingsPage() {
   // the lookup either. getPaymentCredentials returns `secretKeySet`, never the key.
   const wineOrdersOn = h.get('x-tenant-modules-wine-orders') === 'true'
   const onlinePaymentOn = h.get('x-tenant-modules-online-payment') === 'true'
-  const credentials = onlinePaymentOn ? await getPaymentCredentials() : null
+  // Wine-order rules + delivery zones (T-8). Only for tenants with the module; read here as four
+  // named keys + the zone list — never the whole settings map (MaintenanceNotes §9).
+  // Both lookups at once: each is a database round trip, and they do not depend on each other.
+  const [credentials, wineRules] = await Promise.all([
+    onlinePaymentOn ? getPaymentCredentials() : null,
+    wineOrdersOn ? loadWineOrderDelivery(tenantId) : null,
+  ])
 
   return (
     <div className="max-w-2xl">
@@ -164,6 +143,16 @@ export default async function SettingsPage() {
         locale={adminLanguage || 'en'}
         wineOrdersOn={wineOrdersOn}
       />
+
+      {/* Wine orders — minimum, pickup, delivery zones (T-8). Sibling panel, like the one above. */}
+      {wineRules && (
+        <WineOrderSettingsPanel
+          rules={wineRules.rules}
+          zones={wineRules.zones}
+          onlinePaymentOn={onlinePaymentOn}
+          locale={adminLanguage || 'en'}
+        />
+      )}
     </div>
   )
 }

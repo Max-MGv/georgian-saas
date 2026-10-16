@@ -2,6 +2,8 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
 import { setSiteLanguage } from '../helpers/locale';
+import { fillPreferredWineDate } from '../helpers/wineForm';
+import { t } from '../../lib/t';
 
 const TEST_BUSINESS_NAME = `Playwright Wine Test ${Date.now()}`;
 const TEST_EMAIL = `playwright-wine-order-${Date.now()}@example.com`;
@@ -160,12 +162,10 @@ test.describe('Wine catalogue → order', () => {
     // differently in Georgian — match the digit only, not the full phrase.
     await expect(page.getByText(/^2\s/).first()).toBeVisible();
 
-    // 4. Open the checkout drawer. Real finding: "Checkout →" (and every
-    // other checkout-drawer string used below — field placeholders, "Order &
-    // Pay") is a hardcoded literal in WineCatalogueClient.tsx, not run
-    // through t(locale, ...) — confirmed by reading the source. It stays in
-    // English even with the site in Georgian, unlike the rest of the page.
-    await page.getByRole('button', { name: 'Checkout →', exact: true }).click();
+    // 4. Open the checkout drawer. The drawer used to stay in English with the site in Georgian
+    // (its strings were hard-coded); since the QA pass of 2026-10-14 (KnownBugs #86) they go
+    // through t(), so this test now asks for the Georgian labels — and fails if they slip back.
+    await page.getByRole('button', { name: t('ka', 'wine.ui.bar_pay'), exact: true }).click();
     // expect: line-item prices shown match the prices displayed on the
     // catalogue cards for the same wines (qty 1 each, so unit price === line total)
     await expect(page.getByText(`${kaUnitPrice}₾`, { exact: true }).last()).toBeVisible();
@@ -177,11 +177,12 @@ test.describe('Wine catalogue → order', () => {
     // orders (submitting without them returns a validation error with no
     // visible page navigation, which is what silently "did nothing" the
     // first time this was explored manually).
-    await page.getByRole('textbox', { name: 'Bar, restaurant, or individual name' }).fill(TEST_BUSINESS_NAME);
-    await page.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street, Tbilisi');
-    await page.getByRole('textbox', { name: 'Contact person full name' }).fill('Wine PlaywrightTest');
-    await page.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000003');
-    await page.getByRole('textbox', { name: /Email address/ }).fill(TEST_EMAIL);
+    await page.getByRole('textbox', { name: t('ka', 'wine.ui.business_name') }).fill(TEST_BUSINESS_NAME);
+    await page.getByRole('textbox', { name: t('ka', 'wine.ui.address') }).fill('1 Test Street, Tbilisi');
+    await page.getByRole('textbox', { name: t('ka', 'wine.ui.contact_name') }).fill('Wine PlaywrightTest');
+    await page.getByRole('textbox', { name: t('ka', 'wine.ui.contact_phone') }).fill('+995500000003');
+    await fillPreferredWineDate(page); // T-14: the form requires a preferred date
+    await page.getByRole('textbox', { name: t('ka', 'wine.ui.email_receipt') }).fill(TEST_EMAIL);
 
     // Real finding, same shape as the booking forms: online payment is
     // enabled for wine orders too, so submit redirects to the real Flitt
@@ -191,7 +192,7 @@ test.describe('Wine catalogue → order', () => {
     // card details, per this suite's rule against financial transactions.
     await Promise.all([
       page.waitForURL(/pay\.flitt\.com/, { timeout: 15_000, waitUntil: 'commit' }),
-      page.getByRole('button', { name: 'Order & Pay', exact: true }).click(),
+      page.getByRole('button', { name: t('ka', 'wine.ui.submit_pay'), exact: true }).click(),
     ]);
 
     // 6. Verify via admin order detail (not just the confirmation toast).

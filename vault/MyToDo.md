@@ -4,15 +4,108 @@ tags: [todo, testing]
 
 # My To-Do List
 
-Things Max needs to test or do manually. Claude updates this after each session.
+Things Max needs to do manually that are **not tickets**. Claude updates this after each session.
+
+> **Since 2026-10-15 (Max):** test steps for ticket work are **not copied here any more** — they live on the ticket
+> (Super Admin → Tickets → **Waiting for me**). This file keeps only chores that aren't tickets. The dated sections below
+> are history. Later, the ticket tool may be connected to Obsidian directly.
 
 ---
 
-## 📱 2026-10-07 — Check your seven phone fixes (they are pushed to `staging` — check them at staging.vineworks.ge once Vercel has deployed; NOT on the real site)
+## 🧪 2026-10-14 (later) — QA fixes on STAGING. Not on production.
+
+Report: [[QA-WineOrderFeatures-2026-10-14]]. Quick checks on **staging.vineworks.ge**:
+1. **Georgian wine form** — switch the site to ქართული, add a wine, open the order: the code box, buttons
+   ("შეკვეთა →", "დაჯავშნა"), field hints and the "New Company?" popup are now Georgian. **Please read the
+   wording** — I drafted it.
+2. **Preferred date** — the date picker stops a year ahead; a date further out says it is too far.
+3. **Admin in Georgian** (Settings → admin language ქართ.) → Wine Orders: the preferred date reads "28 ოქტ. 2026"
+   and the page loads without errors. Calendar tab: "No preferred date" lists only open orders.
+4. **Access codes** — Companies → set a custom code of 4 letters: refused ("at least 6 characters"). Existing
+   codes keep working.
+5. **Record payment** — on a wine order that owes a fee, recording it twice quickly only goes through once.
+
+---
+
+## 🔐 2026-10-14 — Round 2 on STAGING (your decisions of 13–14 Oct). Not on production.
+
+All on **staging.vineworks.ge**. Test together with the 2026-10-12 list below.
+1. **No code = unknown company (bookings + wine)** — on the booking form ("Tour Company") and on `/wines`, the
+   dropdown lists **only companies that have an access code**; picking one always asks for the code, and nothing
+   (prices, discount, addresses, contact people) appears before it. Companies → a company without a code shows a
+   yellow **"No code"** badge, and its edit panel explains that customers can't choose it. (Nikalas Marani hides the
+   dropdown, so nothing changes for them.)
+2. **Delivery area fixed by the address** — a company address that has a delivery area: on `/wines` the area shows as
+   text ("Delivery area: Tbilisi — 15₾"), not a choice.
+3. **Overpaid wine orders** — on a paid order, lower the delivery fee below what was paid: the card shows
+   **"Credit (overpaid) X₾"**. After creating a card payment link and reloading, the card says the link isn't paid yet.
+4. **Receipts** — paying a delivery fee by card sends a receipt whose "Paid" is what was really paid
+   (+ "Still to pay" if anything is left).
+5. **Georgian time** — nothing to click: the booking lead time and the wine "earliest date" now follow Tbilisi time on
+   the server too (they were 4 h off there).
+6. **T-79 Settings** — Admin → Settings still shows every value. (No speed change — explained on the ticket.)
+
+---
+
+## 🍷 2026-10-12 — Five wine-order tickets ready to test on STAGING (T-13, T-8, T-14, T-12, T-9). Not on production.
+
+All on **staging.vineworks.ge** (admin + `/wines`). Each ticket has a review card under Tickets → "Ready to test".
+**Setup first (2 min):** Admin → Settings → *Wine Orders — Delivery & Minimum*: add a zone (e.g. "Tbilisi" 15₾),
+turn on "Offer pickup", set a minimum (e.g. 3 bottles), Save. Companies → edit a wine company → *Addresses*: give it
+two named addresses; set one address's zone; in *Wine prices* type a lower price for one wine; tick *Exporter*.
+
+1. **T-13 addresses** — `/wines` → add wine → Checkout → choose that company (+ its code): you must pick one of the two
+   addresses ("Other address…" also there). Admin → Wine Orders: the card shows "**name** — address".
+2. **T-8 delivery** — the form shows Delivery / Pickup and the area list with fees; the total adds the fee; below the
+   minimum the button is greyed. Try "Other — we will contact you". In admin, that order shows "Delivery fee to set" →
+   **Set fee**. On a paid one it then shows "Owes 15₾" → **Record payment** or **Card payment link** (QR).
+   Filter pills **Delivery / Pickup** on Wine Orders.
+3. **T-14 date** — the form requires a *Preferred delivery date* ("we will confirm the exact day"); a Closed Day is
+   refused. Admin card: "Preferred: …" → Change. Wine Orders → **Calendar** tab; undated orders listed underneath.
+4. **T-12 prices** — with the company **code**, `/wines` shows its negotiated price and the total uses it (no % off it).
+   A company **without a code** is no longer offered at all (your rule, 2026-10-14 — see the 2026-10-14 entry).
+   "Exporter" mark + filter.
+5. **T-9 individuals** — the form starts on **Company** (as today); tap **Individual**: only name / phone / address
+   remain. Admin card shows "Individual". *Tell me if Individual should be the default instead.*
+**Security fix included (2026-10-13):** a wine order now needs the company's code again on the server, so nobody can claim a
+company's discount or agreed prices by doctoring the request. *Your call:* the same gap exists on **bookings** — fix it too?
+**Please check:** the Georgian wording (all new Georgian text is mine); a real iPhone. Then Verified / Send back on
+each card. Shipping to production needs your separate go — runbook in `Plan-WineOrderFeatures.md`.
+
+---
+
+## ✅ 2026-10-08 — Five tickets ready to test on STAGING (Tickets → "Ready to test"). Not on production.
+
+Each ticket has a review card with exact steps. Quick version, on **staging.vineworks.ge** (phone where it says so):
+1. **T-5** (phone) Admin → Orders → New order → tap "Total guests". The page should **not** zoom in.
+2. **T-23** `/wines` — the winery name/logo appears **once** (in the header).
+3. **T-6** Admin → Companies → Add company → type a name → Save → the **full Edit Company form** opens.
+4. **T-11** (phone) Admin → Site Content → Messages → open "Booking Confirmation": the email preview looks like a small version of the desktop one; all 3 buttons visible.
+5. **T-21** Public site → book as Tour Company → enter the company code → pick a contact: Contact Person becomes **one line + Edit**; Masterclass is **one row** that opens on tap.
+Also: the 3 new Georgian words on the booking form ("მასტერკლასის დამატება…", "არჩეული", "შეცვლა") are mine — check them.
+Then: Verified / Send back on each card. Shipping to `master` needs your separate go.
+
+---
+
+## 🎫 2026-10-07 — The ticket tool is built and verified on STAGING. Nothing is on production. Your go is needed.
+
+**What it is:** Super Admin → **Tickets** (staging.vineworks.ge/super-admin/tickets). One board for bugs / features / tasks / ideas; widget reports land there as tickets; you and I use it day to day; I can read and write it through the `tix` CLI / token API. Details: [[Feature 222 - Internal ticket tool]], design: [[Plan-Tickets]].
+
+**What I verified** (full table: [[Plan-VerifyBeforeProduction]]): static checks + a real production build, dependency audit, DB/anon-REST security on dev and production, full Playwright tiers 1–4, the widget on all 3 surfaces, tenant "My reports" status mapping, an independent blind review, and the deployed staging site (real 3.3 MB screenshot report → ticket). Found and fixed along the way: line-ending noise, lint errors, widget file picker mismatch, flaky selectors, a React hydration error only visible in production builds.
+
+**For you to do:**
+1. Open the tickets page on staging; click around (board, list, a ticket, "Ready to test" → Verified / Send back, quick add). Tell me what feels wrong or missing.
+2. **Decide on production.** The runbook is in [[Plan-VerifyBeforeProduction]]: bucket `ticket-attachments` + migration come BEFORE the code merge. I will not run any step until you say "go".
+3. The dev wine **"Rkatsiteli"** is inactive in the staging data, so the Playwright test `wine-catalogue-order` fails until you re-activate it on the Wines page. Your data, so I left it.
+
+Known and accepted: closing a ticket as Duplicate shows the reporter "Won't fix" (no re-link action yet); notification email subjects now start with `[PRODUCTION]` / `[STAGING]`.
+
+---
+
+## 📱 2026-10-07 — Check your seven phone fixes (already LIVE on `master`, shipped with your go — a real-phone check is still wanted)
 
 I fixed everything from your 9 screenshots (details: [[Feature 221 - Mobile bug reports 2026-10-05]]). I could only test in a
-simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust. Once you're happy, say so and I'll
-ask before anything goes near `master`.
+simulated iPhone, so **I need your eyes on a real phone** — tell me what looks off and I'll adjust.
 
 1. **Settings → Payment details** — IBAN now fully visible, pencil on screen. (Try the pencil → type → save.)
 2. **Settings → Closed Days** and **Wine Orders → Filters** — the date boxes now say `DD/MM/YYYY`, have a calendar icon and a small label. Does tapping open the iPhone date picker?

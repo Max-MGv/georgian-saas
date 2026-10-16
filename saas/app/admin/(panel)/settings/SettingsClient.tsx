@@ -794,7 +794,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       placeholder={placeholder}
                       autoFocus
                       onChange={e => setPaymentFields(prev => ({ ...prev, [key]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Escape') setPaymentEditing(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handlePaymentSave(key) } if (e.key === 'Escape') setPaymentEditing(null) }}
                     />
                   ) : (
                     <div style={{ ...inputStyle, flex: 1, minWidth: 0, cursor: 'default', overflowWrap: 'anywhere' }}>
@@ -1032,7 +1032,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         value={row.value}
                         autoFocus
                         onChange={e => { row.set(e.target.value); if (bookingRulesError) setBookingRulesError(null) }}
-                        onKeyDown={e => { if (e.key === 'Escape') { setBookingRulesEditing(null); setBookingRulesError(null) } }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleBookingRuleSave(row.key) } if (e.key === 'Escape') { setBookingRulesEditing(null); setBookingRulesError(null) } }}
                       />
                     ) : (
                       <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
@@ -1199,21 +1199,25 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
               <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at('settings.workingHours.dailyHours')}</label>
               <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="time"
-                  style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
-                  value={hoursOpen}
-                  onChange={e => setHoursOpen(e.target.value)}
-                  onBlur={() => handleUniformHoursBlur('open')}
-                />
-                <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
-                <input
-                  type="time"
-                  style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
-                  value={hoursClose}
-                  onChange={e => setHoursClose(e.target.value)}
-                  onBlur={() => handleUniformHoursBlur('close')}
-                />
+                {/* "open – to – close" stays on one line and shrinks to fit a phone, instead of
+                    wrapping the close time onto its own line with "to" left dangling. */}
+                <div className="flex items-center gap-2 min-w-0 max-w-full">
+                  <input
+                    type="time"
+                    style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
+                    value={hoursOpen}
+                    onChange={e => setHoursOpen(e.target.value)}
+                    onBlur={() => handleUniformHoursBlur('open')}
+                  />
+                  <span className="text-xs flex-shrink-0" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
+                  <input
+                    type="time"
+                    style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
+                    value={hoursClose}
+                    onChange={e => setHoursClose(e.target.value)}
+                    onBlur={() => handleUniformHoursBlur('close')}
+                  />
+                </div>
                 {(savedKey === 'working_hours_open' || savedKey === 'working_hours_close') && !isPending && (
                   <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
                 )}
@@ -1223,7 +1227,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             weeklyDays.map((day, i) => (
               <div key={i} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4 px-5 py-3 flex-wrap" style={{ backgroundColor: C.bg }}>
                 <label className="text-sm sm:w-48 sm:flex-shrink-0" style={{ color: C.muted }}>{at(`settings.workingHours.day.${WEEKDAY_KEYS[i]}`)}</label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap min-w-0">
                   <label className="flex items-center gap-1.5 text-xs" style={{ color: C.faint }}>
                     <input
                       type="checkbox"
@@ -1233,21 +1237,21 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     {at('settings.workingHours.closedDay')}
                   </label>
                   {!day.closed && (
-                    <>
+                    <div className="flex items-center gap-2 min-w-0 max-w-full">
                       <input
                         type="time"
                         style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                         value={day.open}
                         onChange={e => handleWeeklyDayChange(i, { open: e.target.value })}
                       />
-                      <span className="text-xs" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
+                      <span className="text-xs flex-shrink-0" style={{ color: C.faint }}>{at('settings.workingHours.to')}</span>
                       <input
                         type="time"
                         style={{ ...inputStyle, width: 150, padding: '8px 6px 8px 10px' }}
                         value={day.close}
                         onChange={e => handleWeeklyDayChange(i, { close: e.target.value })}
                       />
-                    </>
+                    </div>
                   )}
                   {savedKey === 'working_hours_days_json' && !isPending && (
                     <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
@@ -1387,7 +1391,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       placeholder={at('settings.branding.altTextPh')}
                       autoFocus
                       onChange={e => setLogoAlt(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') setAltEditing(false) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAltTextSave() } if (e.key === 'Escape') setAltEditing(false) }}
                     />
                   ) : (
                     <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
@@ -1485,7 +1489,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         value={value}
                         autoFocus
                         onChange={e => set(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Escape') setContactEditing(null) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleContactSave(key, value) } if (e.key === 'Escape') setContactEditing(null) }}
                       />
                     ) : (
                       <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>

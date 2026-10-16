@@ -4,6 +4,7 @@ import { withTenantDb } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import { accessCodeProblem } from '@/lib/accessCodeRules'
 import { generateUniqueTenantCode, codeExistsInTenant } from './companies'
 
 /**
@@ -151,9 +152,10 @@ function isDuplicateCodeError(e: unknown): boolean {
 
 export async function setPersonCode(id: string, companyId: string, code: string) {
   await requireAdmin()
-  if (!code.trim()) return { error: 'Code cannot be empty.' }
-  const tenantId = await getTenantId()
   const normalized = code.trim().toUpperCase()
+  const problem = accessCodeProblem(normalized)
+  if (problem) return { error: problem }
+  const tenantId = await getTenantId()
 
   const result = await withTenantDb(tenantId, async tx => {
     const person = await findOwnedPerson(tx, id, companyId, tenantId)

@@ -8,7 +8,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { useContactSelection } from '@/lib/useContactSelection'
-import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
@@ -29,21 +29,19 @@ type Price = {
   id: string; minGuests: number; maxGuests: number
   pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
 }
-type Company = {
-  id: string; name: string; prices: Price[]
-  /**
-   * Whether the company has an access code — **never the code itself**. Passing whole
-   * Company rows here put every booking company's code in the public homepage's source
-   * (KnownBugs #57 / Plan-ContactRoles F3); the form only ever used it as a boolean.
-   */
-  hasAccessCode: boolean
-  // No contactName/contactPhone/contactEmail: those three columns are gone, replaced by
-  // CompanyPerson rows in a contact_person role (Plan-ContactRoles Chunk 1). Contact
-  // details now arrive per company through resolveCompanyContacts(), not on this prop.
-  // Per-company payment override (#148). null = follow the Companies section
-  // default; true = always skip; false = always require. Label-only here —
-  // the real gate is shouldTakePayment(), server-side, in createBooking.ts.
-  skipPayment?: boolean | null
+/**
+ * A company in the public list: its name, nothing else (Max, 2026-10-14: no code = unknown
+ * company). Price tiers, the payment override, people and details arrive through
+ * resolveCompanyContacts() once the guest has entered the code — see `proven` below. Before that,
+ * every company's tiers and override were in the homepage's source (and earlier its code, KnownBugs #57).
+ */
+type Company = { id: string; name: string }
+/** What the resolver tells the form about a company proven by its code. */
+type ProvenCompany = {
+  prices: ResolvedPriceTier[]
+  // Per-company payment override (#148). null = follow the Companies section default; true =
+  // always skip; false = always require. Label-only — the real gate is shouldTakePayment().
+  skipPayment: boolean | null
 }
 type MenuItem = { id: string; name: string; type: string }
 type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
@@ -145,6 +143,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [guestInput, setGuestInput] = useState('4')
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
+  /** The chosen company, once proven by its code — null until then (and for "New company"). */
+  const [proven, setProven] = useState<ProvenCompany | null>(null)
   // Company-booking nationality tags (Plan-CompanyNationality) — ISO codes, no per-country
   // count. Reset whenever the visitor switches to an INDIVIDUAL booking (see the toggle below).
   const [nationalities, setNationalities] = useState<string[]>([])
@@ -319,7 +319,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Independent of isEnhanced by design (Plan-CompanyNationality Chunk 1) — shows for any
   // COMPANY booking once the tenant flag is on, enhanced mode or not.
   const showNationalityPicker = !!nationalityBreakdownEnabled && bookingType === 'COMPANY'
-  const selectedCompany = bookingType === 'COMPANY' ? companies.find(c => c.id === companyId) : null
+  // Only a proven company counts for pricing and the payment label — never one merely picked.
+  const selectedCompany = bookingType === 'COMPANY' && companyId ? proven : null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (configured) first — nothing beats it — then, for COMPANY bookings, the
   // selected company's override, then the section default. INDIVIDUAL bookings
@@ -368,17 +369,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     prevCompanyIdRef.current = companyId
     setShowCodePopup(false)
+    setProven(null)
     // '__new__' is the dropdown's sentinel, not a company — handleSubmit deals with it.
     if (!companyId || companyId === '__new__') return
-    const company = companies.find(c => c.id === companyId)
-    if (!company) return
-    if (company.hasAccessCode) {
-      setCodeInput('')
-      setCodeError('')
-      setShowCodePopup(true)
-      return
-    }
-    void resolveContacts({ companyId })
+    if (!companies.some(c => c.id === companyId)) return
+    // Every listed company is proven by its code before anything about it is used
+    // (Max, 2026-10-14). The list only holds companies that have a code to give.
+    setCodeInput('')
+    setCodeError('')
+    setShowCodePopup(true)
   }, [companyId, bookingType, hideCompanyDropdown])
 
   async function handleCodeSubmit(e?: React.FormEvent) {
@@ -392,6 +391,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
+    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
     if (typeof window !== 'undefined' && 'PasswordCredential' in window) {
       try {
@@ -411,6 +411,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   function handleNotARep() {
     setShowCodePopup(false)
     setCompanyId('')
+    setProven(null)
     resetContacts()
     setBookingType('INDIVIDUAL')
   }
@@ -429,10 +430,12 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
+    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
   }
 
   function clearDirectCode() {
     setCompanyId('')
+    setProven(null)
     setDirectCompanyName('')
     setDirectCode('')
     setDirectCodeError('')
@@ -531,6 +534,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       // '__new__' is the dropdown's "+ New Company" sentinel (see the <select>
       // above) — never a real id, so it must never reach the server as one.
       companyId: bookingType === 'COMPANY' && companyId && companyId !== '__new__' ? companyId : undefined,
+      // The code the guest confirmed for that company — the server checks it again (KnownBugs #78).
+      companyCode: bookingType === 'COMPANY' && companyId && companyId !== '__new__'
+        ? (hideCompanyDropdown ? directCode : codeInput) || undefined
+        : undefined,
       // Replaces `guideId` (Plan-ContactRoles Chunk 7). That column was write-only —
       // written on every company booking and read by nothing, so the attribution the
       // guides feature existed for was never actually delivered anywhere (finding F1).
@@ -627,11 +634,34 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [dateY, dateM, dateD] = selectedDate ? selectedDate.split('-') : ['', '', '']
   const confirmDateLabel = selectedDate ? `${dateD}/${dateM}/${dateY}` : ''
 
+  // Masterclass add-ons are part of the total, so the guest sees them listed — one row each,
+  // "name × qty" and its price. (Max, QA 2026-10-16 F7)
+  const masterclassReviewRows: ReviewRow[] = isEnhanced
+    ? activeMcLines.map(l => {
+        const item = masterclassItems.find(m => m.id === l.masterclassItemId)
+        return {
+          label: `${item?.name ?? fc('form_masterclass_header', 'form.masterclass')}${l.quantity > 1 ? ` × ${l.quantity}` : ''}`,
+          value: formatTetri(asTetri(l.quantity * l.pricePerUnit)),
+        }
+      })
+    : []
+
   const confirmVisitRows: ReviewRow[] = [
     { label: fc('form_visit_type', 'form.visit_type'), value: fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
     { label: fc('form_date', 'form.date'), value: confirmDateLabel },
     { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
+    ...masterclassReviewRows,
   ]
+
+  // The other contact roles (Guide, …) the guest filled in — shown like Contact Person. (F7)
+  const extraRoleReviewRows: ReviewRow[] = isEnhanced
+    ? extraRoles.flatMap(role => {
+        const chosen = selectedContacts[role.roleId]
+        const name = chosen?.name?.trim()
+        if (!name) return []
+        return [{ label: roleLabel(role), value: chosen?.phone ? `${name} · ${chosen.phone}` : name }]
+      })
+    : []
 
   // Shown on the review sheet for either branch below — nationality tagging is independent
   // of isEnhanced, so it isn't specific to one guest-count layout or the other.
@@ -648,6 +678,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         { label: contactPersonTitle, value: fullName.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...extraRoleReviewRows,
         ...nationalityReviewRows,
       ]
     : [

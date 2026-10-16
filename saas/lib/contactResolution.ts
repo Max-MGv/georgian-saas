@@ -47,12 +47,65 @@ export type RoleChoices = OrderRole & {
   people: ContactChoice[]
 }
 
+/** One of the company's saved delivery addresses (T-13). Active ones only, in list order. */
+export type ResolvedAddress = {
+  id: string
+  label: string | null
+  address: string
+  workingHours: string | null
+  /** The address's delivery zone (T-8) — pre-selects the zone, and so the fee, on the form. */
+  deliveryZoneId: string | null
+}
+
 export type ResolvedCompany = {
   id: string
   name: string
   identificationCode: string | null
-  address: string | null
+  /**
+   * Replaces the single `address` (T-13, vault/Plan-WineOrderFeatures.md). Travels through this
+   * code-gated resolver rather than the public `/wines` page props, so a company's branches are
+   * only shown to someone who could already resolve the company.
+   */
+  addresses: ResolvedAddress[]
   wineDiscountPercent: number | null
+  /**
+   * Negotiated price per vintage id, tetri (T-12). The resolver only answers for a company that
+   * was proven — its access code, a person's code, or an admin screen — so these are always the
+   * company's own (Max, 2026-10-14: no code = unknown company, nothing is filled in).
+   */
+  winePrices: Record<string, number>
+  /**
+   * The company's booking price tiers, tetri — BOOKING lookups only, [] otherwise. They used to be
+   * shipped for every company in the public homepage's source; now only to someone with the code.
+   */
+  bookingPrices: ResolvedPriceTier[]
+  /** Per-company payment override (#148) — label only on the form; shouldTakePayment() decides. */
+  skipPayment: boolean | null
+}
+
+export type ResolvedPriceTier = {
+  id: string; minGuests: number; maxGuests: number
+  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
+}
+
+/** A company's booking tiers, as the resolver selects them. */
+const TIER_SELECT = {
+  orderBy: { minGuests: 'asc' as const },
+  select: { id: true, minGuests: true, maxGuests: true, pricePerPerson: true, tastingLunchPricePerPerson: true, registrationPrice: true },
+}
+
+/** Negotiated prices, as the resolver selects them (T-12). */
+const PRICE_SELECT = { select: { wineVintageId: true, price: true } }
+
+function priceMap(rows: { wineVintageId: string; price: number }[]): Record<string, number> {
+  return Object.fromEntries(rows.map(r => [r.wineVintageId, r.price]))
+}
+
+/** The select both resolver paths use for a company's addresses — one shape, one order. */
+const ADDRESS_SELECT = {
+  where: { isActive: true },
+  orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
+  select: { id: true, label: true, address: true, workingHours: true, deliveryZoneId: true },
 }
 
 export type ResolveContactsResult =
@@ -68,6 +121,41 @@ export type ResolveContactsResult =
       /** Empty when person codes are ON (deliberate — see below) or when nobody is configured. */
       roleChoices: RoleChoices[]
     }
+
+/**
+ * The companies a public form may list: only those a customer can prove (Max, 2026-10-14 — a
+ * company with no access code is an unknown entity, "fill nothing without an access code").
+ * Provable = it has an access code, or — person codes on — an active person whose own code would
+ * resolve on this kind of order (the resolver's step-1 role filter). Name and id only: everything
+ * else about a company arrives through the resolver, after the code.
+ */
+export async function listableCompaniesFor(
+  tenantId: string,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<{ id: string; name: string }[]> {
+  return withTenantDb(tenantId, async tx => {
+    const codesOn =
+      (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
+        ?.value === 'true'
+    const moduleWhere = module === 'BOOKING' ? { isBookingCompany: true } : { isWineOrderCompany: true }
+    return tx.company.findMany({
+      where: {
+        tenantId, isIndividual: false, ...moduleWhere,
+        OR: [
+          { accessCode: { not: null } },
+          ...(codesOn
+            ? [{ people: { some: {
+                code: { not: null }, isActive: true,
+                role: { isActive: true, scope: 'PER_ORDER' as const, appliesTo: { in: [module, 'BOTH' as const] } },
+              } } }]
+            : []),
+        ],
+      },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    })
+  })
+}
 
 /**
  * The per-order roles a tenant has defined for this kind of order, with no people.
@@ -201,8 +289,12 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
           id: true, name: true, phone: true, email: true, roleId: true,
           company: {
             select: {
-              id: true, name: true, identificationCode: true, address: true,
+              id: true, name: true, identificationCode: true,
+              addresses: ADDRESS_SELECT,
+              winePrices: PRICE_SELECT,
               wineDiscountPercent: true,
+              skipPayment: true,
+              prices: TIER_SELECT,
             },
           },
         },
@@ -210,7 +302,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
       if (person) {
         return {
           success: true as const,
-          company: person.company,
+          // A person's own code proves the company, so its prices may be shown.
+          company: (({ winePrices, prices, ...c }) => ({
+            ...c, winePrices: priceMap(winePrices), bookingPrices: input.module === 'BOOKING' ? prices : [],
+          }))(person.company),
           matchType: 'person' as const,
           matchedPerson: {
             id: person.id,
@@ -234,8 +329,12 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         ? { id: input.companyId, tenantId, isIndividual: false, ...moduleWhere }
         : { tenantId, accessCode: typed, isIndividual: false, ...moduleWhere },
       select: {
-        id: true, name: true, accessCode: true, identificationCode: true, address: true,
+        id: true, name: true, accessCode: true, identificationCode: true,
+        addresses: ADDRESS_SELECT,
+        winePrices: PRICE_SELECT,
         wineDiscountPercent: true,
+        skipPayment: true,
+        prices: TIER_SELECT,
       },
     })
     if (!company) return { error: 'Code not recognised.' }
@@ -271,6 +370,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         : 0
       return { error: peopleWithCodes > 0 ? 'Incorrect code.' : 'No code set.' }
     }
+    // No code = an unknown company (Max, 2026-10-14: "fill nothing without an access code"). A
+    // company with no access code can only be proven by a person's own code (step 1 above); merely
+    // naming it gets nothing — no people, no addresses, no prices. Admin screens pass `trusted`.
+    if (!input.trusted && !company.accessCode) return { error: 'Code required.' }
 
     // ── 3. Who can be picked ─────────────────────────────────────────────────
     // Empty when person codes are on: the guest proves identity instead of choosing it, and
@@ -285,8 +388,12 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         id: company.id,
         name: company.name,
         identificationCode: company.identificationCode,
-        address: company.address,
+        addresses: company.addresses,
         wineDiscountPercent: company.wineDiscountPercent,
+        // Reached only by an admin (trusted) or with the company's code checked above.
+        winePrices: priceMap(company.winePrices),
+        bookingPrices: input.module === 'BOOKING' ? company.prices : [],
+        skipPayment: company.skipPayment,
       },
       matchType: 'company' as const,
       matchedPerson: null,
@@ -343,6 +450,68 @@ async function pickableRoles(
         email: p.email,
       })),
     }))
+}
+
+/**
+ * How the code sent with an order proves its company at submit time (KnownBugs #78).
+ *
+ * The form checks the code through `resolveCompanyContactsFor` when the guest types it, but the
+ * order itself only carries a `companyId` — and a crafted request can name any company. Without
+ * this re-check, naming a coded company was enough to get its discount and negotiated prices.
+ *
+ * Accepts exactly what the resolver accepts, and nothing more:
+ *   • 'company' — the company's own access code (trimmed, case-insensitive);
+ *   • 'person'  — when `person_codes_enabled` is on, an active person's own code at THIS company,
+ *                 with the same role filter as the resolver's step 1 (PER_ORDER, this module);
+ *   • 'named'   — a company with no access code, only picked from the public list. Allowed (the
+ *                 resolver does not gate it either), but the resolver withheld its negotiated
+ *                 prices, so callers must treat them as never shown;
+ *   • null      — not proven: refuse the order.
+ */
+export type CompanyProof = 'company' | 'person' | 'named'
+
+export async function companyCodeProof(
+  tx: TxClient,
+  tenantId: string,
+  company: { id: string; accessCode: string | null },
+  code: string | null | undefined,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<CompanyProof | null> {
+  const typed = code?.trim().toUpperCase() ?? ''
+  if (company.accessCode && typed && company.accessCode.toUpperCase() === typed) return 'company'
+  if (typed) {
+    const codesOn =
+      (await tx.setting.findUnique({ where: { key_tenantId: { key: 'person_codes_enabled', tenantId } } }))
+        ?.value === 'true'
+    if (codesOn) {
+      const person = await tx.companyPerson.findFirst({
+        where: {
+          code: typed,
+          isActive: true,
+          companyId: company.id,
+          role: { isActive: true, scope: 'PER_ORDER', appliesTo: { in: [module, 'BOTH'] } },
+        },
+        select: { id: true },
+      })
+      if (person) return 'person'
+    }
+  }
+  return company.accessCode ? null : 'named'
+}
+
+/**
+ * `companyCodeProof` as a yes/no: may this order be placed as this company? Only when a code
+ * proved it — a company merely named ('named') is an unknown company (Max, 2026-10-14).
+ */
+export async function companyCodeMatches(
+  tx: TxClient,
+  tenantId: string,
+  company: { id: string; accessCode: string | null },
+  code: string | null | undefined,
+  module: 'BOOKING' | 'WINE_ORDER',
+): Promise<boolean> {
+  const proof = await companyCodeProof(tx, tenantId, company, code, module)
+  return proof === 'company' || proof === 'person'
 }
 
 /**

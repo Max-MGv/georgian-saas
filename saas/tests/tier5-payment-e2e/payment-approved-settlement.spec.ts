@@ -41,6 +41,7 @@ import { openReviewSheet, abandonedRow } from '../helpers/bookingForm'
 import { FLITT_TEST_CARDS, payAtFlittCheckout } from '../helpers/flittPayment'
 import { getResendApiKey } from '../helpers/credentials'
 import { fetchRecentResendEmails, findMatchingEmail } from '../helpers/resendCheck'
+import { fillPreferredWineDate } from '../helpers/wineForm'
 
 // Deliberately NOT `test.describe.configure({ mode: 'serial' })` at the file
 // level: the three describes below touch three independent tenant settings
@@ -157,7 +158,7 @@ test.describe('Individual booking — approved settlement, full cross-view check
       tomorrow.setDate(tomorrow.getDate() + 1)
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow))
       await formPage.getByRole('combobox').selectOption({ index: 1 })
-      await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill('4')
+      await formPage.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */).fill('4')
       // Contact Person merged First/Last Name into one Name field 2026-09-30
       // (MaintenanceNotes.md §1).
       await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentE2E ${marker}`)
@@ -371,6 +372,7 @@ test.describe('Wine order — approved settlement, light check (shares startChec
       await formPage.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street')
       await formPage.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact')
       await formPage.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000043')
+      await fillPreferredWineDate(formPage) // T-14: the form requires a preferred date
       // The receipt email — a required field on this form (found live while
       // debugging: HTML5 `required` on `contactEmail`, invisible in a plain
       // page-text dump, only surfaced by inspecting the form's own

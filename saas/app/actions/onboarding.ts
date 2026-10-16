@@ -238,7 +238,7 @@ export async function getFinishDetailsStatus(): Promise<FinishDetailsStatus> {
       select: {
         identificationCode: true,
         people: { select: { id: true } },
-        address: true,
+        addresses: { select: { id: true } },
         isBookingCompany: true,
         prices: { select: { id: true } },
       },
@@ -267,7 +267,7 @@ export async function getFinishDetailsStatus(): Promise<FinishDetailsStatus> {
   // missingDetails() — keep both in sync if this changes.
   const companiesNeedingDetails = companies.filter(c =>
     c.identificationCode === null
-    || (c.people.length === 0 && !c.address)
+    || (c.people.length === 0 && c.addresses.length === 0)
     || (c.isBookingCompany && c.prices.length === 0)
   ).length
 

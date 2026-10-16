@@ -5,6 +5,8 @@ import { resolveCompanyContactsFor, companyLevelContactsFor } from '@/lib/contac
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import { accessCodeProblem } from '@/lib/accessCodeRules'
+import { checkWriteRateLimit } from '@/lib/writeRateLimit'
 
 // Not exported: MaintenanceNotes #24 — a 'use server' file may only export async functions,
 // and this one is synchronous. generateUniqueTenantCode (below) is the async wrapper other
@@ -51,10 +53,13 @@ type CompanyProfile = {
   // No contactName/contactPhone/contactEmail: those three columns are gone, replaced by
   // CompanyPerson rows in a contact_person role (Plan-ContactRoles Chunk 1). People are
   // managed through companyPeople.ts, not by updating the company.
-  address?: string
+  // No address either: addresses are CompanyAddress rows, managed through companyAddresses.ts
+  // (T-13). Company.address is being retired — nothing writes it any more.
   isBookingCompany?: boolean
   isWineOrderCompany?: boolean
   wineDiscountPercent?: number | null
+  /** T-12 — a label + filter only. */
+  isExporter?: boolean
   // Per-company payment override (#148). null = follow the tenant's Companies
   // section toggle; true = always skip (trusted); false = always require.
   // Covers both bookings and wine orders for this company — see Feature 148.
@@ -91,10 +96,10 @@ export async function updateCompany(id: string, profile: CompanyProfile) {
       data: {
         name: profile.name.trim(),
         identificationCode: profile.identificationCode?.trim() || null,
-        address: profile.address?.trim() || null,
         ...(profile.isBookingCompany !== undefined ? { isBookingCompany: profile.isBookingCompany } : {}),
         ...(profile.isWineOrderCompany !== undefined ? { isWineOrderCompany: profile.isWineOrderCompany } : {}),
         ...(profile.wineDiscountPercent !== undefined ? { wineDiscountPercent: profile.wineDiscountPercent } : {}),
+        ...(profile.isExporter !== undefined ? { isExporter: profile.isExporter } : {}),
         ...(profile.skipPayment !== undefined ? { skipPayment: profile.skipPayment } : {}),
       },
     })
@@ -122,9 +127,10 @@ export async function regenerateAccessCode(id: string) {
 
 export async function setAccessCode(id: string, code: string) {
   await requireAdmin()
-  if (!code.trim()) return { error: 'Code cannot be empty.' }
-  const tenantId = await getTenantId()
   const normalized = code.trim().toUpperCase()
+  const problem = accessCodeProblem(normalized)
+  if (problem) return { error: problem }
+  const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
     const existing = await tx.company.findFirst({ where: { id, tenantId } })
     if (!existing) return { error: 'Company not found.' as const }
@@ -178,7 +184,14 @@ export async function resolveCompanyContacts(input: {
   // the page open, so forwarding the caller's object wholesale would let a crafted request set
   // `trusted: true` and skip the access-code gate — which is the very hole this call was
   // found to have. Adding a field to the resolver means adding it here on purpose.
-  return resolveCompanyContactsFor(await getTenantId(), {
+  const tenantId = await getTenantId()
+  // A typed code is the only key to a company's prices and people, so guessing is throttled
+  // (QA 2026-10-14 F10). Picking from the list without a code is not counted.
+  if (input.code?.trim()) {
+    const rate = await checkWriteRateLimit(tenantId, 'code-lookup')
+    if (rate.limited) return { error: 'Too many attempts — please wait a few minutes and try again.' }
+  }
+  return resolveCompanyContactsFor(tenantId, {
     module: input.module,
     companyId: input.companyId,
     code: input.code,

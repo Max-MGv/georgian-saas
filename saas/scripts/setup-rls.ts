@@ -40,6 +40,13 @@ async function main() {
     // company), CompanyPerson is JOIN-to-Company like Price, and OrderContact carries its
     // own tenantId like OrderEvent despite being a child of Order/WineOrder.
     'ContactRole', 'CompanyPerson', 'OrderContact',
+    // Company delivery addresses (T-13, Plan-WineOrderFeatures Chunk 1). JOIN-to-Company like
+    // CompanyPerson; its policy is created below AND in its own migration.
+    'CompanyAddress',
+    // Negotiated wine prices (T-12). JOIN-to-Company; policy below AND in its own migration.
+    'CompanyWinePrice',
+    // Delivery zones (T-8). Own tenantId → also in tenantedTables below (H18: both lists).
+    'DeliveryZone',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
     // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
     // child of Order. See MaintenanceNotes on why this exists.
@@ -94,6 +101,8 @@ async function main() {
     // Both tenantId columns are nullable, and NULL compares as NULL — never true — so a row
     // written without one is invisible to every tenant. The write path must always set it.
     'ContactRole', 'OrderContact', 'InvoiceSent',
+    // Delivery zones (T-8) — also in writableTables above; its migration creates the same policy.
+    'DeliveryZone',
   ]
 
   for (const t of tenantedTables) {
@@ -209,6 +218,50 @@ async function main() {
         EXISTS (
           SELECT 1 FROM "Company" c
           WHERE c.id = "CompanyPerson"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  // CompanyAddress: JOIN to Company, identical to CompanyPerson above (T-13). The migration
+  // 20261012121359_company_addresses creates the same policy; this keeps a re-run identical.
+  console.log('Creating policy on "CompanyAddress" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyAddress";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyAddress"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyAddress"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyAddress"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      );
+  `)
+
+  // CompanyWinePrice: JOIN to Company, same as CompanyAddress (T-12). Its migration
+  // 20261012…_company_wine_prices creates the same policy; this keeps a re-run identical.
+  console.log('Creating policy on "CompanyWinePrice" (JOIN to Company)...')
+  await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "CompanyWinePrice";`)
+  await db.$executeRawUnsafe(`
+    CREATE POLICY tenant_isolation ON "CompanyWinePrice"
+      USING (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyWinePrice"."companyId"
+            AND c."tenantId" = current_setting('app.tenant_id', true)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "Company" c
+          WHERE c.id = "CompanyWinePrice"."companyId"
             AND c."tenantId" = current_setting('app.tenant_id', true)
         )
       );

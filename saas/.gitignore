@@ -55,3 +55,4 @@ node_modules/
 # playwright-cli session artifacts (snapshots, console/network logs from
 # manual exploration via `playwright-cli` — ephemeral, not test output)
 .playwright-cli/
+release-shots/

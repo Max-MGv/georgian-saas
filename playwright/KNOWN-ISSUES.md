@@ -129,6 +129,31 @@ seed-owned codes so a hand-created guide is never touched.
 
 These come from running this suite (or the app in general) hard, not from any single test being wrong. Recognize the shape before assuming a regression.
 
+### `wine-catalogue-order` fails because fixture wine "Rkatsiteli" is inactive (2026-10-07)
+
+**Symptom:** the test can't find the wine "Rkatsiteli" in the public catalogue.
+**Cause:** in the shared dev data the wine has `active:false`, so it is hidden from the catalogue. Not a code regression — proven by disabling the proxy change (still failed) and temporarily activating the wine (passed).
+**Fix:** re-activate the wine on the Wines admin page (Max's data; left as found).
+
+### Stale Turbopack cache: existing routes answer 404 (2026-10-15, three times in one day)
+
+**Symptom:** a route that exists and worked before (`/api/releases`, `/api/tickets`, `/super-admin/releases/[id]`) returns Next's
+HTML **404 "This page could not be found"** — the log shows `proxy.ts` and application time, then 404. It does not go away with
+retries or warm-up. Seen after adding new route folders, after creating git worktrees elsewhere, and once on a plain restart.
+**Fix:** stop the dev server, `rm -rf saas/.next`, start again; check `curl localhost:3000/api/releases` answers **401** (needs
+a token), not 404, before running specs. Not an app bug — nothing changes on staging/production builds.
+
+### First run after a dev-server start times out on cold-compiled routes (2026-10-07)
+
+**Symptom:** a test's first navigation to a rarely-visited route (e.g. `/super-admin/tickets/[number]`) times out.
+**Fix:** warm the route with one real visit first; the tickets spec uses 150 s timeouts for the same reason.
+
+### `next build` fails with EPERM while a dev process is running (Windows, 2026-10-07)
+
+**Symptom:** `prisma generate` / `next build` fails with EPERM on the Prisma query-engine DLL.
+**Cause:** a stray `next dev` / node process still holds the engine file (ClaudeInstructions Rule 10).
+**Fix:** stop the project's node processes, then rebuild.
+
 ### Dev database connection pool exhaustion
 
 **Symptom:** `PrismaClientKnownRequestError` with code `P1001` ("Can't reach database server") or `P2028` ("Transaction already closed" / "Unable to start a transaction in the given time"), appearing even on ordinary `/admin/*` page loads — including immediately on a *freshly restarted* dev server.
@@ -249,6 +274,21 @@ before assuming a code or locator bug** — read the three `Tenant` columns dire
 `Setting` table, which is a different mechanism entirely despite the shared admin-UI look) and
 compare against the values above. This session hit the drift three separate times investigating
 Chunk 6 alone.
+
+### Payment specs running out of time leave a company override changed (2026-10-13)
+
+**Symptom:** `payment-label-precedence` (company test) or `payment-amount-integrity` (company booking test)
+fails with "Test timeout exceeded" inside `setCompanyPaymentOverride` — in the **`finally`** block.
+**Cause:** not a hang. A trace showed every step passing; these tests make ~13 / ~50 admin page loads and each
+costs 5–10 s on a dev machine (~360 ms per dev-DB round trip). They ended at ~185 s / ~530 s against budgets of
+180 s / 480 s, so the restore in `finally` never ran and left **Alazani Valley Tours** (label spec) /
+**Caucasus Vine Travel** (amount spec) on "Always require". Budgets are now 300 s / 720 s.
+**If it recurs:** read `Company.skipPayment` for those two companies on Staging Winery (resting value: `null` =
+Default) and `show_company_price_after_booking` (resting value `'false'`), restore, then look at page-load times
+before suspecting the app.
+**Also seen the same day:** editing app files while a test runs makes the dev server recompile mid-request and
+can exhaust the DB pool (P2028 "Unable to start a transaction"), failing whatever test is running. Don't edit
+during a run.
 
 ### Real, confirmed test-locator bugs found 2026-09-30 and 2026-10-01 (not app bugs)
 

@@ -636,3 +636,9 @@ false / Wine orders true; zero leftover `ZZPaymentE2E…` Orders or WineOrders o
 `KNOWN-ISSUES.md`) and were not touched.
 
 Changed files: `saas/tests/tier5-payment-e2e/payment-book-later.spec.ts`.
+
+---
+
+## 2026-10-07 — Tickets spec + pre-production verification run
+
+Added `saas/tests/tier3-admin-smoke/tickets.spec.ts` (4 tests, see `notes/19-tickets.md`). Full tiers 1–4 on a clean dev server: 36 passed, 1 failed — the failure was the new spec's own ambiguous selector (fixed; 4/4 on rerun, also 4/4 on a production build). Two earlier failures were environmental and reproduced before being explained: `wine-catalogue-order` (fixture wine "Rkatsiteli" inactive in dev data) and the onboarding wizard (documented reset precondition). The wine, cold-compile and Prisma-EPERM patterns are now in `KNOWN-ISSUES.md`. Full verification table: `vault/Plan-VerifyBeforeProduction.md`.

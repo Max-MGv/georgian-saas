@@ -8,7 +8,8 @@ import { headers, cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { type Metadata } from 'next'
 import WineCatalogueClient from './WineCatalogueClient'
-import { orderRolesFor } from '@/lib/contactResolution'
+import { orderRolesFor, listableCompaniesFor } from '@/lib/contactResolution'
+import { loadWineOrderDelivery } from '@/lib/wineOrderDelivery'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,30 +28,16 @@ export default async function WinesPage() {
   ])
   if (h.get('x-tenant-modules-wine-orders') !== 'true') redirect('/')
   const locale = cookieStore.get('site_locale')?.value ?? defaultLocale ?? 'en'
-  const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant] = await Promise.all([
+  const [wineProducts, companies, contactRoles, hideCompanyDropdownStr, paymentConfigured, wineOrderPaymentReady, tenant, delivery] = await Promise.all([
     withTenantDb(tenantId, tx => tx.wine.findMany({
       where: { active: true, tenantId },
       orderBy: { sortOrder: 'asc' },
       include: { vintages: { where: { active: true }, orderBy: { year: 'desc' } } },
     })),
-    withTenantDb(tenantId, tx => tx.company.findMany({
-      where: { tenantId, isIndividual: false, isWineOrderCompany: true },
-      orderBy: { name: 'asc' },
-      // skipPayment (#148) — not used server-side here (that's shouldTakePayment()'s
-      // job), but threaded through to the client so the checkout button label can
-      // reflect a company's own override once selected, not just the section default.
-      // No contactName/contactPhone: those columns are gone, replaced by CompanyPerson rows
-      // (Plan-ContactRoles Chunk 1). Contact details now arrive per company through
-      // resolveCompanyContacts(), not on this prop.
-      select: { id: true, name: true, identificationCode: true, address: true, accessCode: true, wineDiscountPercent: true, skipPayment: true },
-    })).then(rows => rows.map(({ accessCode, ...rest }) => ({
-      ...rest,
-      // Never the code itself — only whether one exists. Passing whole Company rows
-      // into this client component put every wine-order company's access code in the
-      // page source (KnownBugs #57 / Plan-ContactRoles F3), and the catalogue only
-      // ever used it as a boolean. Same one-line fix as app/(site)/page.tsx.
-      hasAccessCode: !!accessCode,
-    }))),
+    // Only companies a customer can prove, and only their names (Max, 2026-10-14: no code =
+    // unknown company). Discount, negotiated prices, addresses, people and the payment override
+    // all arrive through the code-gated resolver — they used to ride along here for every company.
+    listableCompaniesFor(tenantId, 'WINE_ORDER'),
     // The tenant's per-order roles that apply to wine orders, with no people attached. Same
     // shape the booking form takes: the form's layout comes from the role list, the people
     // come per company from the resolver.
@@ -66,6 +53,10 @@ export default async function WinesPage() {
     isPaymentConfigured(tenantId),
     isPaymentConfigured(tenantId, { section: 'WINE_ORDER' }),
     db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
+    // Minimum order, pickup and delivery zones (T-8) — display only; submitWineOrder re-reads them.
+    // In this Promise.all, not after it: awaited on its own it added a whole transaction's round
+    // trips to every page load (QA 2026-10-14 F13, +0.9 s against a distant DB).
+    loadWineOrderDelivery(tenantId),
   ])
   const wineDetailLevel: WineDetailLevel = tenant?.wineDetailLevel ?? 'PRODUCT'
   // PRODUCT: always read the wine's values. VINTAGE: always read the vintage's
@@ -94,6 +85,7 @@ export default async function WinesPage() {
       locale={locale}
       paymentConfigured={paymentConfigured}
       onlinePaymentEnabled={wineOrderPaymentReady}
+      delivery={delivery}
     />
   )
 }

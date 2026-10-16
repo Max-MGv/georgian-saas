@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
 import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
-import { asTetri, fromMajor, toMajor, formatTetri, type Tetri } from '@/lib/money'
+import { asTetri, fromMajor, toMajor, formatTetri, parseMajor, type Tetri } from '@/lib/money'
 import {
   createPerson, updatePerson, deletePerson, regeneratePersonCode,
 } from '@/app/actions/companyPeople'
+import { createAddress, updateAddress, deleteAddress } from '@/app/actions/companyAddresses'
+import { setCompanyWinePrice } from '@/app/actions/companyWinePrices'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
@@ -37,6 +39,17 @@ type Person = {
   /** Null unless the tenant has person codes switched on. Never rendered when they are off. */
   code: string | null
 }
+/** One delivery address of this company (T-13). The customer picks one on the wine form. */
+type CompanyAddressRow = {
+  id: string
+  label: string | null
+  address: string
+  workingHours: string | null
+  /** Delivery zone (T-8) — its fee fills in on the wine form. */
+  deliveryZoneId: string | null
+}
+/** A delivery zone, as much as the address form needs. */
+type ZoneLite = { id: string; nameEn: string; nameKa: string | null }
 /** Just enough of a ContactRole to label and group a list. */
 type RoleLite = { id: string; key: string; labelEn: string; labelKa: string; sortOrder: number }
 type Company = {
@@ -46,13 +59,18 @@ type Company = {
   isBookingCompany: boolean
   isWineOrderCompany: boolean
   wineDiscountPercent: number | null
+  /** T-12 — label + filter only. */
+  isExporter: boolean
+  /** T-12 — negotiated price per vintage id (tetri). Exceptions only. */
+  winePrices: Record<string, number>
   // Per-company payment override (#148). null = follow the tenant's Companies
   // section toggle; true = always skip (trusted); false = always require.
   skipPayment: boolean | null
   identificationCode: string | null
-  address: string | null
+  addresses: CompanyAddressRow[]
   accessCode: string | null
   orderCount: number
+  wineOrderCount: number
   prices: Price[]
   people: Person[]
 }
@@ -66,10 +84,10 @@ type Module = 'BOOKING' | 'WINE_ORDER'
 function missingDetails(at: (key: string) => string, company: Company): string[] {
   const missing: string[] = []
   if (company.identificationCode === null) missing.push(at('companies.missing.idCode'))
-  // Was three scalar columns; now it is simply whether anyone is on file. `address` still
-  // counts, because a company with a billing address and no named person is configured enough
-  // to invoice.
-  if (company.people.length === 0 && !company.address) {
+  // Was three scalar columns; now it is simply whether anyone is on file. An address still
+  // counts, because a company with an address and no named person is configured enough to
+  // invoice. (Was the single Company.address column until T-13.)
+  if (company.people.length === 0 && company.addresses.length === 0) {
     missing.push(at('companies.missing.contact'))
   }
   if (company.isBookingCompany && company.prices.length === 0) missing.push(at('companies.missing.pricing'))
@@ -311,8 +329,225 @@ function PeopleSection({ companyId, role, people, setPeople, personCodesOn, loca
   )
 }
 
+type AddressFormData = { label: string; address: string; workingHours: string; deliveryZoneId: string | null }
+
+function AddressForm({ initial, onSave, onCancel, loading, locale, zones }: {
+  initial?: CompanyAddressRow
+  onSave: (data: AddressFormData) => void
+  onCancel: () => void
+  loading: boolean
+  locale: string
+  zones: ZoneLite[]
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [label, setLabel] = useState(initial?.label ?? '')
+  const [address, setAddress] = useState(initial?.address ?? '')
+  const [workingHours, setWorkingHours] = useState(initial?.workingHours ?? '')
+  const [zoneId, setZoneId] = useState(initial?.deliveryZoneId ?? '')
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <SmallInput label={at('companies.addresses.label')} value={label} onChange={setLabel} width={130} />
+      <SmallInput label={at('companies.addresses.address')} value={address} onChange={setAddress} width={220} />
+      <SmallInput label={at('companies.addresses.hours')} value={workingHours} onChange={setWorkingHours} width={120} />
+      {/* Only once the winery has zones (Settings → Wine Orders — Delivery & Minimum). */}
+      {zones.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <label style={{ fontSize: '0.7rem', color: C.faint }}>{at('companies.addresses.zone')}</label>
+          <select value={zoneId} onChange={e => setZoneId(e.target.value)} style={{ ...inputStyle, width: 150 }}>
+            <option value="">{at('companies.addresses.zoneNone')}</option>
+            {zones.map(z => <option key={z.id} value={z.id}>{(locale === 'ka' && z.nameKa) || z.nameEn}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="flex gap-2 pb-0.5">
+        <button onClick={() => onSave({ label, address, workingHours, deliveryZoneId: zoneId || null })} disabled={loading || !address.trim()} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A company's delivery addresses (T-13, vault/Plan-WineOrderFeatures.md). Replaces the single
+ * Address field. Same live-edit shape as `PeopleSection`: each row saves on its own, not on the
+ * panel's main Save button.
+ */
+function AddressesSection({ companyId, addresses, setAddresses, locale, zones }: {
+  companyId: string
+  addresses: CompanyAddressRow[]
+  setAddresses: (a: CompanyAddressRow[]) => void
+  locale: string
+  zones: ZoneLite[]
+}) {
+  const zoneName = (id: string | null) => {
+    const z = id ? zones.find(zz => zz.id === id) : null
+    return z ? (locale === 'ka' && z.nameKa) || z.nameEn : null
+  }
+  const at = (key: string) => adminT(locale, key)
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleAdd(data: AddressFormData) {
+    setLoading(true); setError('')
+    const result = await createAddress(companyId, data)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); return }
+    setAddresses([...addresses, result.address])
+    setAdding(false)
+  }
+
+  async function handleUpdate(id: string, data: AddressFormData) {
+    setLoading(true); setError('')
+    const result = await updateAddress(id, companyId, data)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); return }
+    setAddresses(addresses.map(a => a.id === id
+      ? { ...a, label: data.label.trim() || null, address: data.address.trim(), workingHours: data.workingHours.trim() || null, deliveryZoneId: data.deliveryZoneId }
+      : a))
+    setEditingId(null)
+  }
+
+  async function handleDelete(id: string) {
+    setLoading(true); setError('')
+    const result = await deleteAddress(id, companyId)
+    setLoading(false)
+    if ('error' in result) { setError(result.error ?? ''); setDeletingId(null); return }
+    setAddresses(addresses.filter(a => a.id !== id))
+    setDeletingId(null)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.addresses.title')}</p>
+        <HelpHint text={at('companies.addresses.hint')} />
+      </div>
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+      {addresses.length === 0 && !adding && (
+        <p className="text-xs" style={{ color: C.faint }}>{at('companies.addresses.noneYet')}</p>
+      )}
+      {addresses.map(a => (
+        <div key={a.id}>
+          {editingId === a.id ? (
+            <AddressForm initial={a} onSave={data => handleUpdate(a.id, data)} onCancel={() => setEditingId(null)} loading={loading} locale={locale} zones={zones} />
+          ) : deletingId === a.id ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span style={{ color: C.muted }}>{at('companies.addresses.deleteConfirm')}</span>
+              <button onClick={() => handleDelete(a.id)} disabled={loading} className="px-3 py-1 rounded-lg text-white text-xs font-medium" style={{ backgroundColor: '#b91c1c' }}>{at('orders.yes')}</button>
+              <button onClick={() => setDeletingId(null)} className="px-3 py-1 rounded-lg border text-xs" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="min-w-0 break-words" style={{ color: C.text }}>
+                {a.label && <span className="font-medium">{a.label} — </span>}
+                {a.address}
+              </span>
+              {a.workingHours && <span className="text-xs" style={{ color: C.faint }}>{a.workingHours}</span>}
+              {zoneName(a.deliveryZoneId) && (
+                <span className="text-xs px-1.5 py-0.5 rounded border" style={{ borderColor: C.border, color: C.muted }}>{zoneName(a.deliveryZoneId)}</span>
+              )}
+              <button onClick={() => setEditingId(a.id)} className="text-xs px-2 py-1 rounded border ml-auto" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+              <button onClick={() => setDeletingId(a.id)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {adding ? (
+        <AddressForm onSave={handleAdd} onCancel={() => setAdding(false)} loading={loading} locale={locale} zones={zones} />
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs px-3 py-1.5 rounded-lg border w-fit" style={{ borderColor: C.border, color: C.muted }}>
+          {at('companies.addresses.add')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** One vintage as the price list needs it (T-12). `price` is the standard price, tetri. */
+type VintageLite = { id: string; label: string; price: number }
+
+/**
+ * Negotiated prices (T-12, vault/Plan-WineOrderFeatures.md Chunk 9) — every active vintage with
+ * its standard price greyed; type a price to negotiate it (bold), clear it or press "Standard"
+ * to go back. Exceptions only: only typed prices are stored. Saves per row, live, like the
+ * addresses and people lists.
+ */
+function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
+  companyId: string
+  vintages: VintageLite[]
+  prices: Record<string, number>
+  setPrices: (p: Record<string, number>) => void
+  locale: string
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  async function save(vintageId: string, text: string) {
+    const trimmed = text.trim()
+    const price = trimmed === '' ? null : parseMajor(trimmed)
+    if (trimmed !== '' && (price === null || price < 0)) { setError(at('companies.winePrices.invalid')); return }
+    const current = prices[vintageId] ?? null
+    if (price === current) return
+    setBusyId(vintageId); setError('')
+    const r = await setCompanyWinePrice(companyId, vintageId, price)
+    setBusyId(null)
+    if ('error' in r) { setError(r.error); return }
+    const next = { ...prices }
+    if (price === null) delete next[vintageId]; else next[vintageId] = price
+    setPrices(next)
+    setDrafts(d => { const { [vintageId]: _drop, ...rest } = d; return rest })
+  }
+
+  if (vintages.length === 0) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.winePrices.title')}</p>
+        <HelpHint text={at('companies.winePrices.hint')} />
+      </div>
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+      {vintages.map(v => {
+        const negotiated = prices[v.id]
+        const draft = drafts[v.id] ?? (negotiated !== undefined ? String(toMajor(asTetri(negotiated))) : '')
+        return (
+          <div key={v.id} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 break-words" style={{ color: C.text, fontWeight: negotiated !== undefined ? 600 : 400 }}>{v.label}</span>
+            <span className="text-xs" style={{ color: C.faint, textDecoration: negotiated !== undefined ? 'line-through' : undefined }}>
+              {formatTetri(asTetri(v.price))}
+            </span>
+            <input
+              type="number" min={0} step="0.01" inputMode="decimal"
+              aria-label={`${v.label} — ${at('companies.winePrices.negotiated')}`}
+              placeholder={String(toMajor(asTetri(v.price)))}
+              value={draft}
+              disabled={busyId === v.id}
+              onChange={e => setDrafts(d => ({ ...d, [v.id]: e.target.value }))}
+              onBlur={e => save(v.id, e.target.value)}
+              style={{ ...inputStyle, width: 80, textAlign: 'right', fontWeight: negotiated !== undefined ? 700 : 400 }}
+            />
+            <span className="text-xs" style={{ color: C.muted }}>₾</span>
+            {negotiated !== undefined && (
+              <button type="button" disabled={busyId === v.id} onClick={() => save(v.id, '')}
+                className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>
+                {at('companies.winePrices.reset')}
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages }: {
+  zones: ZoneLite[]
+  vintages: VintageLite[]
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
@@ -324,11 +559,14 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
   const at = (key: string) => adminT(locale, key)
   const [name, setName] = useState(company.name)
   const [idCode, setIdCode] = useState(company.identificationCode ?? '')
-  const [address, setAddress] = useState(company.address ?? '')
   const [code, setCode] = useState(company.accessCode ?? '')
   const [isBooking, setIsBooking] = useState(company.isBookingCompany)
   const [isWineOrder, setIsWineOrder] = useState(company.isWineOrderCompany)
   const [wineDiscount, setWineDiscount] = useState(company.wineDiscountPercent != null ? String(company.wineDiscountPercent) : '')
+  const [isExporter, setIsExporter] = useState(company.isExporter)
+  // Negotiated prices save live, per row — propagated up like addresses and people.
+  const [winePrices, setWinePricesState] = useState(company.winePrices)
+  function setWinePrices(next: Record<string, number>) { setWinePricesState(next); onSaved({ winePrices: next }) }
   // #148 — three-way override, stored as null/true/false; the UI works with a
   // string so "no override" is a distinct selectable state, not just "unchecked".
   const [skipPayment, setSkipPayment] = useState<'default' | 'skip' | 'require'>(
@@ -338,11 +576,18 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // The error line sits at the top of this tall panel; bring it into view when it appears,
+  // otherwise a refused Save at the bottom looks like nothing happened. (QA 2026-10-15 F13)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [error])
   const [people, setPeopleState] = useState(company.people)
   // Guides/reps are edited live in this panel (unlike the other fields, which only save on the
   // main Save button) — propagate to the parent's list immediately so reopening the panel later
   // in the same session doesn't show a stale list.
   function setPeople(next: Person[]) { setPeopleState(next); onSaved({ people: next }) }
+  // Addresses are edited live too, for the same reason.
+  const [addresses, setAddressesState] = useState(company.addresses)
+  function setAddresses(next: CompanyAddressRow[]) { setAddressesState(next); onSaved({ addresses: next }) }
 
   async function handleSave() {
     if (!isBooking && !isWineOrder) {
@@ -357,20 +602,21 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
       ? (skipPayment === 'skip' ? true : skipPayment === 'require' ? false : null)
       : undefined
     const result = await updateCompany(company.id, {
-      name, identificationCode: idCode, address,
+      name, identificationCode: idCode,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
       skipPayment: parsedSkipPayment,
+      isExporter,
     })
     if ('error' in result) { setError(result.error ?? ''); setLoading(false); return }
     onSaved({
       name: name.trim(),
       identificationCode: idCode.trim() || null,
-      address: address.trim() || null,
       isBookingCompany: isBooking,
       isWineOrderCompany: isWineOrder,
       wineDiscountPercent: parsedDiscount,
+      isExporter,
       ...(parsedSkipPayment !== undefined ? { skipPayment: parsedSkipPayment } : {}),
     })
     onClose()
@@ -423,7 +669,7 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
           <button onClick={onClose} style={{ color: C.faint }} className="hover:opacity-70 text-xl leading-none">×</button>
         </div>
         <div className="flex flex-col gap-5 px-6 py-6 flex-1">
-          {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
+          {error && <p ref={errorRef} className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
 
           {/* Modules */}
           <div className="flex flex-col gap-3">
@@ -474,7 +720,13 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
                   />
                   <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
+                  <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
+                </label>
               </div>
+              <div className="h-px" style={{ backgroundColor: C.border }} />
+              <WinePricesSection companyId={company.id} vintages={vintages} prices={winePrices} setPrices={setWinePrices} locale={locale} />
               <div className="h-px" style={{ backgroundColor: C.border }} />
             </>
           )}
@@ -511,18 +763,22 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.companyInfo')}</p>
             {field(at('companies.editPanel.companyName'), name, setName, at('companies.editPanel.companyName'))}
             {field(at('companies.editPanel.idCode'), idCode, setIdCode, at('companies.editPanel.optional'))}
-            {field(at('companies.editPanel.address'), address, setAddress, at('companies.editPanel.addressPh'))}
           </div>
           <div className="h-px" style={{ backgroundColor: C.border }} />
-          <div className="flex flex-col gap-4">
-            {/* The three company contact columns are gone (Plan-ContactRoles Chunk 1). The
-                people lists below replace them — a company's contact person is now a row in a
-                role, so there is one place to edit it rather than two that could disagree. */}
-          </div>
+          <AddressesSection companyId={company.id} addresses={addresses} setAddresses={setAddresses} locale={locale} zones={zones} />
+          {/* The three company contact columns are gone (Plan-ContactRoles Chunk 1). The people
+              lists below replace them — a company's contact person is now a row in a role, so
+              there is one place to edit it rather than two that could disagree. (An empty block
+              stood here until T-13, drawing a double divider.) */}
           <div className="h-px" style={{ backgroundColor: C.border }} />
           <div className="flex flex-col gap-3">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.accessCode')}</p>
             <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.accessCodeHint')}</p>
+            {!code.trim() && (
+              <p className="text-xs rounded px-2 py-1.5" style={{ backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+                {at('companies.editPanel.noCodeWarning')}
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <input
@@ -756,7 +1012,7 @@ function TabToggle({ active, onChange, modules, locale }: { active: Module; onCh
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export default function CompaniesClient({ companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
+export default function CompaniesClient({ zones = [], vintages = [], companies: initial, roles = [], personCodesOn = false, bookingOn = true, wineOrdersOn = false, paymentModuleOn = false, locale = 'en', initialEditId = null }: { zones?: ZoneLite[]; vintages?: VintageLite[]; companies: Company[]; roles?: RoleLite[]; personCodesOn?: boolean; bookingOn?: boolean; wineOrdersOn?: boolean; paymentModuleOn?: boolean; locale?: string; initialEditId?: string | null }) {
   const at = (key: string) => adminT(locale, key)
   const availableModules: Module[] = [
     ...(bookingOn ? (['BOOKING'] as const) : []),
@@ -906,6 +1162,8 @@ export default function CompaniesClient({ companies: initial, roles = [], person
           roles={roles}
           personCodesOn={personCodesOn}
           paymentModuleOn={paymentModuleOn}
+          zones={zones}
+          vintages={vintages}
         />
       )}
 
@@ -1015,9 +1273,19 @@ export default function CompaniesClient({ companies: initial, roles = [], person
                       <span className="font-medium" style={{ color: C.text }}>{company.name}</span>
                     </span>
                     {company.identificationCode && <span className="text-xs" style={{ color: C.faint }}>{at('companies.idLabel')} {company.identificationCode}</span>}
-                    {company.accessCode && (
+                    {company.accessCode ? (
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
                         {at('companies.codeSet')}
+                      </span>
+                    ) : !company.isIndividual && (
+                      // No code = customers can't choose it (Max, 2026-10-14) — say so where it shows.
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }}>
+                        {at('companies.noCodeBadge')}
+                      </span>
+                    )}
+                    {company.isExporter && (
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe' }}>
+                        {at('companies.exporter.badge')}
                       </span>
                     )}
                     {isInBoth && (
@@ -1037,7 +1305,7 @@ export default function CompaniesClient({ companies: initial, roles = [], person
                     <span className="text-xs" style={{ color: C.faint }}>
                       {activeModule === 'BOOKING'
                         ? `${company.prices.length} ${company.prices.length !== 1 ? at('companies.individuals.tier.plural') : at('companies.individuals.tier.singular')} · `
-                        : ''}{company.orderCount} {company.orderCount !== 1 ? at('packing.order.plural') : at('packing.order.singular')}
+                        : ''}{(() => { const n = activeModule === 'BOOKING' ? company.orderCount : company.wineOrderCount; return `${n} ${n !== 1 ? at('packing.order.plural') : at('packing.order.singular')}` })()}
                     </span>
                   </div>
 

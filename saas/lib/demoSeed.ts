@@ -78,6 +78,13 @@ export type BookingCompanySpec = {
    * any company that has one, and a prospect on the demo has nowhere to obtain
    * a code — the booking form is step one of the guided tour, so gating it
    * would dead-end the sales story.
+   *
+   * ⚠️ Since 2026-10-14 (Max: no code = unknown company, plan Chunk 15) a company
+   * without a code is never listed on a public form and gets nothing filled in, so
+   * on the demo these companies are reachable only through the admin screens. The
+   * demo tenant also has `hide_company_dropdown` on, so its public forms show a
+   * code box and "New company?" — which is what a prospect uses. If the demo ever
+   * needs a pickable company again, seed codes and show one on the tour.
    */
   accessCode: string
   /**
@@ -220,6 +227,8 @@ const INDIVIDUALS_TIERS: TierSpec[] = [
 type WineCompanySpec = {
   name: string; contactName: string; contactPhone: string; contactEmail: string
   identificationCode: string; address: string; discount: number; share: number
+  /** Several delivery addresses (T-13). Absent = one, `address`. */
+  branches?: { label: string; address: string; workingHours?: string }[]
   /**
    * Same non-demo-only rule as the booking companies' `accessCode`, and for the
    * same reason (see BookingCompanySpec).
@@ -234,7 +243,11 @@ type WineCompanySpec = {
 
 export const WINE_COMPANIES: WineCompanySpec[] = [
   { name: 'Sighnaghi Wine Bar', contactName: 'Tamar Gogoladze', contactPhone: '+995 599 20 71 44', contactEmail: 'orders@sighnaghiwinebar.example', identificationCode: '412008551', address: 'Sighnaghi, Kakheti', discount: 10, share: 8, accessCode: 'SIGHNAGHI44' },
-  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7, accessCode: 'KAKHURI90' },
+  { name: 'Restaurant Kakhuri', contactName: 'Zurab Maisuradze', contactPhone: '+995 577 45 19 03', contactEmail: 'zurab@kakhuri.example', identificationCode: '405771290', address: 'Chavchavadze Ave 37, Tbilisi', discount: 15, share: 7, accessCode: 'KAKHURI90',
+    branches: [
+      { label: 'Vake', address: 'Chavchavadze Ave 37, Tbilisi', workingHours: '12:00–00:00' },
+      { label: 'Old Tbilisi', address: 'Erekle II St 8, Tbilisi', workingHours: '13:00–01:00' },
+    ] },
   { name: 'Vinoteka Batumi', contactName: 'Salome Jgerenaia', contactPhone: '+995 593 66 82 17', contactEmail: 'buy@vinotekabatumi.example', identificationCode: '445002318', address: 'Parnavaz Mepe St 22, Batumi', discount: 5, share: 5, accessCode: 'VINOTEKA17' },
   { name: 'Marani Import GmbH', contactName: 'Katrin Vogel', contactPhone: '+49 30 5544 8820', contactEmail: 'purchasing@maraniimport.example', identificationCode: 'DE331904772', address: 'Prenzlauer Allee 8, Berlin', discount: 20, share: 4, accessCode: 'MARANIIMP82' },
 ]
@@ -602,7 +615,9 @@ export async function seedDemoTenant(
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        address: c.address, isBookingCompany: true, isWineOrderCompany: false,
+        // CompanyAddress, not Company.address — the column is being retired (T-13).
+        addresses: { create: [{ address: c.address }] },
+        isBookingCompany: true, isWineOrderCompany: false,
         accessCode: seedAccessCodes ? c.accessCode : null,
         prices: { create: c.tiers.map(t => tierToTetri(t)) },
       },
@@ -642,7 +657,13 @@ export async function seedDemoTenant(
     const row = await db.company.create({
       data: {
         name: c.name, tenantId: tid, identificationCode: c.identificationCode,
-        address: c.address, isBookingCompany: false, isWineOrderCompany: true,
+        // CompanyAddress, not Company.address — the column is being retired (T-13). A company
+        // with branches gets one row per branch, which is what makes the demo's wine form show
+        // its address picker.
+        addresses: {
+          create: (c.branches ?? [{ address: c.address }]).map((b, i) => ({ ...b, sortOrder: i })),
+        },
+        isBookingCompany: false, isWineOrderCompany: true,
         accessCode: seedAccessCodes ? c.accessCode : null,
         wineDiscountPercent: c.discount,
       },

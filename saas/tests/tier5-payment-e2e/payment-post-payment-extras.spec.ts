@@ -116,7 +116,7 @@ test.describe('Post-payment extras end-to-end (KnownBugs #64, Plan-PostPaymentEx
       tomorrow.setDate(tomorrow.getDate() + 1)
       await formPage.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow))
       await formPage.getByRole('combobox').selectOption({ index: 1 })
-      await formPage.getByRole('spinbutton', { name: 'Number of Guests (minimum 4)' }).fill(String(guestCount))
+      await formPage.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */).fill(String(guestCount))
       // Contact Person merged First/Last Name into one Name field 2026-09-30
       // (MaintenanceNotes.md §1).
       await formPage.getByRole('textbox', { name: 'Name', exact: true }).fill(`ZZPaymentE2E ${marker}`)

@@ -92,6 +92,34 @@ export default function BugReportWidget({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
+  // Hide the floating button while a popup/drawer/slide-over is open — on phones it sat on top
+  // of their buttons (booking review "Confirm", wine checkout, Edit Company "Cancel"). Max,
+  // 2026-10-16 (QA F2). Detected generically: any fixed element (other than this widget, which
+  // lives at z-index ≥ 8900) covering ~the whole screen means an overlay is up. Rechecked on DOM
+  // changes, once per frame at most.
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  useEffect(() => {
+    let frame = 0
+    const check = () => {
+      frame = 0
+      const vw = window.innerWidth, vh = window.innerHeight
+      const covering = [...document.querySelectorAll<HTMLElement>('.fixed, [style*="position: fixed"]')].some(el => {
+        const cs = getComputedStyle(el)
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') return false
+        if ((parseInt(cs.zIndex) || 0) >= 8900) return false
+        const r = el.getBoundingClientRect()
+        return r.width >= vw * 0.9 && r.height >= vh * 0.9
+      })
+      setOverlayOpen(covering)
+    }
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(check) }
+    const observer = new MutationObserver(schedule)
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
+    window.addEventListener('resize', schedule)
+    schedule()
+    return () => { observer.disconnect(); window.removeEventListener('resize', schedule); if (frame) cancelAnimationFrame(frame) }
+  }, [])
+
   function reset() {
     setType('FEATURE')
     setComment('')
@@ -119,8 +147,10 @@ export default function BugReportWidget({
   }
 
   function acceptImage(file: File) {
-    if (!file.type.startsWith('image/')) {
-      setImageError('Please attach an image file.')
+    // Same list the server accepts (it checks the file's real bytes): a HEIC/AVIF/SVG here would
+    // otherwise be refused only after the whole report was sent.
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      setImageError('Please attach a PNG, JPEG, WebP or GIF image.')
       return
     }
     if (file.size > MAX_SCREENSHOT_BYTES) {
@@ -244,7 +274,9 @@ export default function BugReportWidget({
       {/* Floating trigger button — bottom-right, fixed. Kept clear of the
           public-site mobile hamburger (top header, not fixed-bottom) and the
           admin panel's top nav / OrdersTable slide-over (which itself lives
-          at z-40/z-50) by sitting at a higher z-index.
+          at z-40/z-50) by sitting at a higher z-index. It hides while any of
+          those overlays is open (see `overlayOpen` above) so it never covers
+          their buttons.
 
           `--cart-bar-offset` is a CSS var published by pages that show their
           own fixed-bottom bar (currently just the wine catalogue's sticky
@@ -253,7 +285,7 @@ export default function BugReportWidget({
           prop/context wired down from every page. It defaults to 0px and is
           reset by the page itself when its bar isn't showing, so this has no
           effect anywhere else. */}
-      {!open && (
+      {!open && !overlayOpen && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Report a bug or feature request"
@@ -402,7 +434,7 @@ export default function BugReportWidget({
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
                         onChange={handleFileInputChange}
                         className="hidden"
                       />

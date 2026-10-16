@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
-import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent } from '@/lib/money'
+import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri, applyPercent, parseMajor, toMajor } from '@/lib/money'
 import { createPortal } from 'react-dom'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import { changeWineOrderStatus } from '@/app/actions/wineOrders'
+import { changeWineOrderStatus, setWineOrderDeliveryFee, recordWineOrderFeePayment, startWineOrderFeeCheckout, setWineOrderPreferredDate } from '@/app/actions/wineOrders'
+import { formatPreferredDate, formatIsoDay } from '@/lib/wineOrderDate'
+import { tbilisiDateIso } from '@/lib/tbilisiTime'
+import dynamic from 'next/dynamic'
 import {
   wineOrderStagePatch,
   paidPatch,
@@ -22,6 +25,10 @@ import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
+import MonthCalendar from '@/components/MonthCalendar'
+
+// Client-only, like OrderDetail.tsx: the QR is drawn in the browser (the link carries a payment token).
+const QrCodeDialog = dynamic(() => import('@/components/QrCodeDialog'), { ssr: false })
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -55,6 +62,11 @@ const STATUS_COLOR: Record<string, StatusStyle> = {
   PAID:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   paid:      { border: '#16a34a', pill: '#dcfce7', pillText: '#14532d', labelKey: 'orders.status.paid' },
   unpaid:    { border: '#78716c', pill: '#f5f5f4', pillText: '#44403c', labelKey: 'wineOrders.status.unpaid' },
+  // Fulfilment filter words (T-8).
+  delivery:  { border: '#0f766e', pill: '#ccfbf1', pillText: '#134e4a', labelKey: 'wineOrders.delivery.delivery' },
+  pickup:    { border: '#4338ca', pill: '#e0e7ff', pillText: '#3730a3', labelKey: 'wineOrders.delivery.pickup' },
+  // T-12 — exporter companies.
+  exporter:  { border: '#6d28d9', pill: '#f5f3ff', pillText: '#5b21b6', labelKey: 'companies.exporter.badge' },
 }
 
 const UNKNOWN_STATUS_STYLE: StatusStyle = { border: '#9ca3af', pill: '#f3f4f6', pillText: '#374151', labelKey: '' }
@@ -73,6 +85,9 @@ function labelFor(locale: string, code: string | null): string {
 /** The payment pills. Derived from `paidAt`, not stored as a status. */
 const PAYMENT_FILTER_CODES = ['paid', 'unpaid'] as const
 
+/** The fulfilment pills (T-8) — a third axis, AND'd with the other two like payment is. */
+const FULFILMENT_FILTER_CODES = ['delivery', 'pickup'] as const
+
 type WineOrder = {
   id: string
   businessName: string
@@ -80,6 +95,26 @@ type WineOrder = {
   llcId: string | null
   address: string
   workingHours: string | null
+  /** The saved address's name at order time ("Vake branch"), T-13. Null for a typed address. */
+  addressLabel: string | null
+  // ── Delivery (T-8) ──
+  fulfilment: 'DELIVERY' | 'PICKUP'
+  deliveryZoneName: string | null
+  /** Tetri. Null = none recorded. */
+  deliveryFee: number | null
+  /** "Other" area — the winery still has to set the fee. */
+  deliveryFeePending: boolean
+  /** On a paid order: what is still owed (tetri) — a fee set after payment. Computed on the page. */
+  /** Paid orders: due − paid. > 0 owed, < 0 overpaid (a credit). */
+  feeOwed: number
+  /** The newest unpaid delivery-fee card link, if any. */
+  pendingLink: { amount: number; createdAt: string } | null
+  /** T-14 — the customer's preferred delivery / pickup day (date only). */
+  preferredDate: Date | string | null
+  /** T-12 — the ordering company is marked as an exporter. */
+  isExporter: boolean
+  /** T-9 — ordered by a private person (no company) or a business. */
+  customerType: 'INDIVIDUAL' | 'COMPANY'
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -127,7 +162,7 @@ function itemLabel(i: WineOrderItem) {
   return `${i.wineNameSnapshot} · ${i.vintageYearSnapshot} × ${i.quantity} bottle${i.quantity !== 1 ? 's' : ''}`
 }
 
-type Mode = 'cards' | 'table' | 'pack' | 'board'
+type Mode = 'cards' | 'table' | 'pack' | 'board' | 'calendar'
 type PendingChange = { orderId: string; change: WineOrderStatusChange; label: string }
 
 /**
@@ -214,6 +249,283 @@ function PaymentMark({ order, locale }: { order: WineOrder; locale: string }) {
   return null
 }
 
+/** Delivery or pickup at a glance (T-8) — one badge for every view, like PaymentMark. */
+function DeliveryBadge({ order, locale }: { order: WineOrder; locale: string }) {
+  const at = (key: string) => adminT(locale, key)
+  const base = 'inline-flex items-center rounded-full font-semibold flex-shrink-0 whitespace-nowrap'
+  const size = { fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5 }
+  if (order.fulfilment === 'PICKUP') {
+    return <span className={base} style={{ ...size, backgroundColor: '#e0e7ff', color: '#3730a3' }}>{at('wineOrders.delivery.pickup')}</span>
+  }
+  if (order.deliveryFeePending) {
+    return <span className={base} style={{ ...size, backgroundColor: '#fef3c7', color: '#92400e' }}>{at('wineOrders.delivery.feeToSet')}</span>
+  }
+  if (order.deliveryZoneName || order.deliveryFee != null) {
+    return (
+      <span className={base} style={{ ...size, backgroundColor: 'var(--site-bg)', color: C.muted, border: `1px solid ${C.border}` }}>
+        {order.deliveryZoneName ?? at('wineOrders.delivery.delivery')}
+        {order.deliveryFee != null && ` · ${formatTetri(asTetri(order.deliveryFee))}`}
+      </span>
+    )
+  }
+  return null
+}
+
+/**
+ * A paid order whose payments do not match what is due (T-8): it still owes (a delivery fee set
+ * after payment), or it was paid too much — e.g. two card links both paid, or the fee lowered
+ * after it was collected. Shown as a credit, the same way bookings show it (`orders.credit`).
+ */
+function FeeOwedMark({ order, locale }: { order: WineOrder; locale: string }) {
+  if (!isPaid(order) || order.feeOwed === 0) return null
+  const credit = order.feeOwed < 0
+  return (
+    <span className="inline-flex items-center rounded-full font-bold flex-shrink-0 whitespace-nowrap"
+      style={{ backgroundColor: credit ? '#dbeafe' : '#fef3c7', color: credit ? '#1e40af' : '#92400e', fontSize: '0.65rem', padding: '0.05rem 0.4rem', lineHeight: 1.5 }}>
+      {credit
+        ? `${adminT(locale, 'orders.credit')} ${formatTetri(asTetri(-order.feeOwed))}`
+        : adminT(locale, 'wineOrders.delivery.owes').replace('{amount}', formatTetri(asTetri(order.feeOwed)))}
+    </span>
+  )
+}
+
+/**
+ * The full card's delivery block (T-8, Plan-WineOrderFeatures Chunk 6): where it goes (or that it
+ * is a pickup), the fee with "Set / Change fee", and — on a paid order that still owes — "Record
+ * payment" (cash / bank transfer) or "Card payment link" (Chunk 6b): a real Flitt checkout for
+ * the balance, handed over as a link or QR code — never emailed from here.
+ */
+function DeliverySection({ order, locale, onPatch }: {
+  order: WineOrder
+  locale: string
+  onPatch: (patch: Partial<WineOrder>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [editing, setEditing] = useState<'fee' | 'payment' | null>(null)
+  const [value, setValue] = useState('')
+  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [link, setLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  if (order.fulfilment === 'PICKUP') {
+    return <p className="text-sm" style={{ color: C.muted }}>&#127991; {at('wineOrders.delivery.pickupLine')}</p>
+  }
+
+  async function saveFee() {
+    const fee = parseMajor(value)
+    if (fee === null || fee < 0) { setError(at('wineOrders.delivery.invalid')); return }
+    setBusy(true); setError('')
+    const r = await setWineOrderDeliveryFee(order.id, fee)
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    const old = order.deliveryFee ?? 0
+    onPatch({
+      deliveryFee: fee,
+      deliveryFeePending: false,
+      displayTotal: order.totalAmount != null ? order.totalAmount + fee : order.displayTotal,
+      feeOwed: isPaid(order) ? order.feeOwed + fee - old : 0,
+    })
+    setEditing(null)
+  }
+
+  async function savePayment() {
+    const amount = parseMajor(value)
+    if (amount === null || amount <= 0) { setError(at('wineOrders.delivery.invalid')); return }
+    setBusy(true); setError('')
+    const r = await recordWineOrderFeePayment(order.id, { amount, method })
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    onPatch({ feeOwed: order.feeOwed - amount })
+    setEditing(null)
+  }
+
+  async function makeLink() {
+    setBusy(true); setError(''); setLink(null)
+    const r = await startWineOrderFeeCheckout(order.id, { amount: asTetri(order.feeOwed) })
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    setLink(r.checkoutUrl)
+  }
+
+  const small = { borderColor: C.border, color: C.muted }
+  return (
+    <div className="flex flex-col gap-1.5 text-sm" style={{ color: C.muted }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span>&#128666; {order.deliveryZoneName ?? at('wineOrders.delivery.delivery')}</span>
+        {order.deliveryFeePending
+          ? <DeliveryBadge order={order} locale={locale} />
+          : order.deliveryFee != null && <span className="font-medium" style={{ color: C.text }}>{formatTetri(asTetri(order.deliveryFee))}</span>}
+        {editing !== 'fee' && (
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { setEditing('fee'); setError(''); setValue(order.deliveryFee != null ? String(toMajor(asTetri(order.deliveryFee))) : '') }}>
+            {order.deliveryFee != null ? at('wineOrders.delivery.changeFee') : at('wineOrders.delivery.setFee')}
+          </button>
+        )}
+        <FeeOwedMark order={order} locale={locale} />
+        {isPaid(order) && order.feeOwed > 0 && editing !== 'payment' && (
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { setEditing('payment'); setError(''); setValue(String(toMajor(asTetri(order.feeOwed)))) }}>
+            {at('wineOrders.delivery.recordPayment')}
+          </button>
+        )}
+        {isPaid(order) && order.feeOwed > 0 && !editing && !link && (
+          <button type="button" disabled={busy} className="text-xs px-2 py-0.5 rounded border disabled:opacity-60" style={small} onClick={makeLink}>
+            {at('wineOrders.delivery.cardLink')}
+          </button>
+        )}
+      </div>
+      {order.pendingLink && !link && (
+        <p className="text-xs" style={{ color: '#92400e' }}>
+          {at('wineOrders.delivery.pendingLink')
+            .replace('{amount}', formatTetri(asTetri(order.pendingLink.amount)))
+            .replace('{date}', formatIsoDay(tbilisiDateIso(new Date(order.pendingLink.createdAt)), locale, { withYear: false }))}
+        </p>
+      )}
+      {link && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.topUpCheckout.linkLabel')}</span>
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
+            onClick={() => { void navigator.clipboard.writeText(link); setCopied(true) }}>
+            {copied ? at('orderDetail.topUpCheckout.copied') : at('orderDetail.topUpCheckout.copy')}
+          </button>
+          <QrCodeDialog
+            url={link}
+            triggerLabel={at('orderDetail.topUpCheckout.showQr')}
+            title={at('orderDetail.topUpCheckout.qrTitle')}
+            hint={at('wineOrders.delivery.qrHint')}
+            qrAriaLabel={at('orderDetail.topUpCheckout.qrAria')}
+            openLabel={at('orderDetail.topUpCheckout.openLink')}
+            closeLabel={at('orderDetail.topUpCheckout.closeQr')}
+            triggerClassName="text-xs px-2 py-0.5 rounded border"
+            triggerStyle={small}
+          />
+          <button type="button" className="text-xs px-2 py-0.5 rounded" style={{ color: C.faint }} onClick={() => { setLink(null); setCopied(false) }}>
+            {at('orderDetail.topUpCheckout.done')}
+          </button>
+        </div>
+      )}
+      {editing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="number" min={0} step="0.01" inputMode="decimal" value={value} onChange={e => setValue(e.target.value)}
+            aria-label={editing === 'fee' ? at('wineOrders.delivery.feeLabel') : at('wineOrders.delivery.amountLabel')}
+            className="rounded-lg border px-2 py-1 text-sm" style={{ borderColor: C.border, width: 90, textAlign: 'right' }} />
+          <span>₾</span>
+          {editing === 'payment' && (
+            <select value={method} onChange={e => setMethod(e.target.value as 'CASH' | 'BANK_TRANSFER')}
+              aria-label={at('wineOrders.delivery.method')} className="rounded-lg border px-2 py-1 text-sm" style={{ borderColor: C.border }}>
+              <option value="BANK_TRANSFER">{at('wineOrders.delivery.bank')}</option>
+              <option value="CASH">{at('wineOrders.delivery.cash')}</option>
+            </select>
+          )}
+          <button type="button" disabled={busy} onClick={editing === 'fee' ? saveFee : savePayment}
+            className="text-xs px-3 py-1 rounded-lg font-medium text-white disabled:opacity-60" style={{ backgroundColor: C.wine }}>
+            {at('settings.common.save')}
+          </button>
+          <button type="button" onClick={() => { setEditing(null); setError('') }} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+            {at('settings.common.cancel')}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+    </div>
+  )
+}
+
+/** T-9 — "Individual" next to the name of an order placed by a private person. */
+function IndividualMark({ locale }: { locale: string }) {
+  return (
+    <span className="ml-2 align-middle inline-flex items-center rounded-full font-semibold whitespace-nowrap"
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#f0f9ff', color: '#075985', border: '1px solid #bae6fd' }}>
+      {adminT(locale, 'wineOrders.individual')}
+    </span>
+  )
+}
+
+/** T-12 — "Exporter" next to a company name. */
+function ExporterMark({ locale }: { locale: string }) {
+  return (
+    <span className="ml-2 align-middle inline-flex items-center rounded-full font-semibold whitespace-nowrap"
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe' }}>
+      {adminT(locale, 'companies.exporter.badge')}
+    </span>
+  )
+}
+
+/** The preferred day as a small chip, for the compact views (T-14). Nothing when there is none. */
+function DateChip({ order, locale }: { order: WineOrder; locale: string }) {
+  if (!order.preferredDate) return null
+  return (
+    <span className="inline-flex items-center rounded-full font-semibold flex-shrink-0 whitespace-nowrap"
+      title={adminT(locale, 'wineOrders.date.label')}
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>
+      &#128197; {formatPreferredDate(order.preferredDate, locale)}
+    </span>
+  )
+}
+
+/** Full card: the preferred day, and "Change" / "Clear" for the winery (T-14, Chunk 7). */
+function PreferredDateRow({ order, locale, onPatch }: {
+  order: WineOrder
+  locale: string
+  onPatch: (patch: Partial<WineOrder>) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const current = order.preferredDate ? new Date(order.preferredDate).toISOString().slice(0, 10) : ''
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(current)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save(next: string | null) {
+    setBusy(true); setError('')
+    const r = await setWineOrderPreferredDate(order.id, next)
+    setBusy(false)
+    if ('error' in r) { setError(r.error); return }
+    onPatch({ preferredDate: next })
+    setEditing(false)
+  }
+
+  const small = { borderColor: C.border, color: C.muted }
+  return (
+    <div className="flex flex-col gap-1 text-sm" style={{ color: C.muted }}>
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The input must fill its box: left at its default width it spilled past 160px and
+              covered the Save button (caught by wine-order-delivery-fee.spec.ts). */}
+          <div style={{ width: 170 }}>
+            <DateInput value={value} onChange={setValue}
+              style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 8px', fontSize: '0.8125rem', backgroundColor: '#fff' }} />
+          </div>
+          <button type="button" disabled={busy || !value} onClick={() => save(value)}
+            className="text-xs px-3 py-1 rounded-lg font-medium text-white disabled:opacity-60" style={{ backgroundColor: C.wine }}>
+            {at('settings.common.save')}
+          </button>
+          {current && (
+            <button type="button" disabled={busy} onClick={() => save(null)} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+              {at('wineOrders.date.clear')}
+            </button>
+          )}
+          <button type="button" onClick={() => { setEditing(false); setValue(current); setError('') }} className="text-xs px-3 py-1 rounded-lg border" style={small}>
+            {at('settings.common.cancel')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span>&#128197; {current
+            ? <>{at('wineOrders.date.label')}: <span className="font-medium" style={{ color: C.text }}>{formatPreferredDate(order.preferredDate, locale)}</span></>
+            : at('wineOrders.date.none')}</span>
+          <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small} onClick={() => { setValue(current); setEditing(true) }}>
+            {current ? at('wineOrders.date.change') : at('wineOrders.date.set')}
+          </button>
+        </div>
+      )}
+      {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
+    </div>
+  )
+}
+
 /**
  * True on a phone-width screen. Used where the phone gets a different
  * component rather than a restyled one, so only one of the two is in the DOM
@@ -246,6 +558,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
   const paid = isPaid(order)
   return (
     <div
+      id={`wine-order-${order.id}`}
       onClick={onOpen}
       role="button"
       className="rounded-xl border p-4 cursor-pointer active:bg-amber-50"
@@ -256,7 +569,13 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{order.businessName}</p>
+          {/* Only the name truncates — the Exporter / Individual marks sit outside it, so a long
+              name can't push them into the "…" and hide them. (QA 2026-10-15 F10) */}
+          <p className="font-semibold flex items-center min-w-0" style={{ color: C.text, fontSize: '1rem' }}>
+            <span className="truncate">{order.businessName}</span>
+            {order.isExporter && <span className="flex-shrink-0"><ExporterMark locale={locale} /></span>}
+            {order.customerType === 'INDIVIDUAL' && <span className="flex-shrink-0"><IndividualMark locale={locale} /></span>}
+          </p>
           <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
@@ -271,6 +590,9 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
         {paid
           ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: '#dcfce7', color: '#166534' }}>₾✓ {at('orders.status.paid')}</span>
           : isOwed(order) && <OwedMark locale={locale} />}
+        <FeeOwedMark order={order} locale={locale} />
+        <DeliveryBadge order={order} locale={locale} />
+        <DateChip order={order} locale={locale} />
         {order.discountPercent != null && order.discountPercent > 0 && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>−{order.discountPercent}%</span>
         )}
@@ -558,6 +880,14 @@ function FilterBar({ filters, onToggleFilter, onClearFilters, search, onSearch, 
         <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
         {PAYMENT_FILTER_CODES.map(code => pill(code))}
 
+        {/* Fulfilment axis (T-8). */}
+        <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
+        {FULFILMENT_FILTER_CODES.map(code => pill(code))}
+
+        {/* Exporters (T-12) — narrows to orders from companies marked as exporters. */}
+        <span className="w-px self-stretch mx-1 flex-shrink-0" style={{ backgroundColor: C.border }} />
+        {pill('exporter')}
+
       </div>
       <div className={`${extraOpen ? 'flex' : 'hidden'} md:flex gap-2 flex-wrap items-end`}>
         <div className="relative w-full md:w-auto">
@@ -704,6 +1034,9 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         {labelFor(locale, order.stage)} ▾
                       </button>
                       <PaymentMark order={order} locale={locale} />
+                      <FeeOwedMark order={order} locale={locale} />
+                      <DeliveryBadge order={order} locale={locale} />
+                      <DateChip order={order} locale={locale} />
                     </div>
                     {statusMenuId === order.id && (
                       <div
@@ -877,6 +1210,9 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                           {order.businessName}
                         </div>
                         <PaymentMark order={order} locale={locale} />
+                        <FeeOwedMark order={order} locale={locale} />
+                        <DeliveryBadge order={order} locale={locale} />
+                        <DateChip order={order} locale={locale} />
                       </div>
                       <div className="truncate" style={{ color: C.faint, fontSize: '0.7rem' }}>
                         {order.wineItems.length} {order.wineItems.length === 1 ? at('wineOrders.board.wine') : at('wineOrders.board.wines')} · {bottles} {at('wineOrders.board.bottles')}
@@ -1046,6 +1382,9 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                   {labelFor(locale, order.stage)}
                 </span>
                 <PaymentMark order={order} locale={locale} />
+                <FeeOwedMark order={order} locale={locale} />
+                <DeliveryBadge order={order} locale={locale} />
+                <DateChip order={order} locale={locale} />
               </div>
             </div>
           </div>
@@ -1112,6 +1451,9 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                       {labelFor(locale, order.stage)}
                     </span>
                     <PaymentMark order={order} locale={locale} />
+                    <FeeOwedMark order={order} locale={locale} />
+                    <DeliveryBadge order={order} locale={locale} />
+                    <DateChip order={order} locale={locale} />
                   </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap" style={{ color: C.muted, fontSize: '0.8rem' }}>
@@ -1165,6 +1507,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     return {
       stage: new Set(picked.filter(f => (WINE_ORDER_STAGES as readonly string[]).includes(f))),
       payment: new Set(picked.filter(f => (PAYMENT_FILTER_CODES as readonly string[]).includes(f))),
+      fulfilment: new Set(picked.filter(f => (FULFILMENT_FILTER_CODES as readonly string[]).includes(f))),
     }
   }, [filters])
 
@@ -1185,6 +1528,8 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const filteredOrders = useMemo(() => orders.filter(o => {
     if (!matchesSearchAndDates(o)) return false
     if (activeFilters.stage.size > 0 && !activeFilters.stage.has(o.stage)) return false
+    if (activeFilters.fulfilment.size > 0 && !activeFilters.fulfilment.has(o.fulfilment === 'PICKUP' ? 'pickup' : 'delivery')) return false
+    if (filters.has('exporter') && !o.isExporter) return false
     return matchesPayment(o)
   }), [orders, activeFilters, matchesPayment, matchesSearchAndDates])
 
@@ -1282,14 +1627,14 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
     return <div className="text-center py-20 text-sm" style={{ color: 'var(--site-secondary)' }}>{at('wineOrders.noOrdersYet')}</div>
   }
 
-  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : at('wineOrders.mode.pack')
+  const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : m === 'calendar' ? at('orders.view.calendar') : at('wineOrders.mode.pack')
 
   const modeToggle = (
     <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start max-w-full">
       {/* min-w-0 + overflow-x-auto: Georgian labels are long, and at 320px the four tabs
           plus the "?" are wider than the screen - scroll the tabs rather than the page. */}
       <div className="flex gap-0.5 rounded-lg p-0.5 min-w-0 overflow-x-auto" style={{ backgroundColor: '#f0e8dc', scrollbarWidth: 'none' }}>
-        {(['cards', 'table', 'board', 'pack'] as const).map(m => (
+        {(['cards', 'table', 'board', 'calendar', 'pack'] as const).map(m => (
           <button
             key={m}
             onClick={() => switchMode(m)}
@@ -1349,6 +1694,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
             return (
               <div
                 key={order.id}
+                id={`wine-order-${order.id}`}
                 className="rounded-xl border overflow-hidden flex flex-col md:flex-row"
                 style={{
                   backgroundColor: C.bg, borderColor: C.border,
@@ -1368,7 +1714,11 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                         {at('packing.details')} ▾
                       </button>
                     )}
-                    <p className="font-bold mb-1" style={{ color: C.text }}>{order.businessName}</p>
+                    <p className="font-bold mb-1" style={{ color: C.text }}>
+                      {order.businessName}
+                      {order.isExporter && <ExporterMark locale={locale} />}
+                      {order.customerType === 'INDIVIDUAL' && <IndividualMark locale={locale} />}
+                    </p>
                     <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
                     </p>
@@ -1382,8 +1732,16 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1 text-sm mt-3" style={{ color: C.muted }}>
-                    <p>&#128205; {order.address}</p>
-                    {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+                    {order.fulfilment !== 'PICKUP' && (
+                      <>
+                        <p>&#128205; {order.addressLabel && <span className="font-medium">{order.addressLabel} — </span>}{order.address}</p>
+                        {order.workingHours && <p>&#128336; {order.workingHours}</p>}
+                      </>
+                    )}
+                    <DeliverySection order={order} locale={locale}
+                      onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />
+                    <PreferredDateRow order={order} locale={locale}
+                      onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />
                   </div>
                 </div>
 
@@ -1401,6 +1759,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     </span>
                   )}
                   {isOwed(order) && <OwedMark locale={locale} />}
+                  <FeeOwedMark order={order} locale={locale} />
                   <p>&#128100; {order.contactName}</p>
                   <p>&#128222; {order.contactPhone}</p>
                   <button
@@ -1459,6 +1818,83 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   }
 
   // ── Board ───────────────────────────────────────────────────
+
+  // ── Calendar (T-14, Plan-WineOrderFeatures Chunk 8) ─────────
+  // By preferred delivery / pickup date, on the same month grid as the Orders calendar. OPEN orders
+  // with no date (admin entries left blank, anything from before T-14 still in progress) are listed
+  // underneath. Delivered and cancelled ones are not — on a winery with history every past order
+  // has no date, and the list would be all of them (QA 2026-10-14 F2). Same rule as the Pack view.
+
+  if (mode === 'calendar') {
+    const byDate: Record<string, WineOrder[]> = {}
+    const undated: WineOrder[] = []
+    for (const o of filteredOrders) {
+      if (!o.preferredDate) { if (o.stage !== CANCELLED && o.stage !== 'DELIVERED') undated.push(o); continue }
+      const d = new Date(o.preferredDate).toISOString().slice(0, 10)
+      ;(byDate[d] ??= []).push(o)
+    }
+    const now = new Date()
+    // Opening an order from the calendar goes to its card — wine orders have no detail page.
+    const openOrder = (o: WineOrder) => {
+      switchMode('cards')
+      setOpenCardId(o.id)
+      setTimeout(() => document.getElementById(`wine-order-${o.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+    }
+    const row = (o: WineOrder) => {
+      const bottles = o.wineItems.reduce((n, i) => n + i.quantity, 0)
+      return (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium truncate" style={{ color: C.text }}>{o.businessName}</p>
+            <span className="text-xs font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: styleFor(o.stage).border }}>
+              {labelFor(locale, o.stage)}
+              <PaymentMark order={o} locale={locale} />
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span className="text-xs" style={{ color: C.faint }}>{bottles} {at('wineOrders.board.bottles')}</span>
+            <DeliveryBadge order={o} locale={locale} />
+            {o.displayTotal != null && (
+              <span className="text-xs font-semibold ml-auto" style={{ color: C.wine }}>{formatTetri(asTetri(o.displayTotal))}</span>
+            )}
+          </div>
+        </>
+      )
+    }
+    return (
+      <div className="flex flex-col">
+        {modeToggle}
+        {filterBar}
+        <MonthCalendar
+          itemsByDate={byDate}
+          itemKey={o => o.id}
+          renderItem={row}
+          countLabel={n => at(n === 1 ? 'wineOrders.calendar.one' : 'wineOrders.calendar.many').replace('{n}', String(n))}
+          initialYear={now.getFullYear()}
+          initialMonth={now.getMonth()}
+          locale={locale}
+          onItemOpen={openOrder}
+          emptyHint={at('wineOrders.calendar.hint')}
+        />
+        <div className="rounded-xl border mt-4" style={{ borderColor: C.border, backgroundColor: C.bg }}>
+          <p className="px-4 py-3 border-b text-sm font-semibold" style={{ borderColor: C.border, color: C.text }}>
+            {at('wineOrders.calendar.noDate')} ({undated.length})
+          </p>
+          {undated.length === 0
+            ? <p className="px-4 py-3 text-xs" style={{ color: C.faint }}>{at('wineOrders.calendar.noDateNone')}</p>
+            : (
+              <div className="divide-y" style={{ borderColor: C.border }}>
+                {undated.map(o => (
+                  <button key={o.id} onClick={() => openOrder(o)} className="w-full text-left px-4 py-2.5 active:bg-amber-50">
+                    {row(o)}
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
+      </div>
+    )
+  }
 
   if (mode === 'board') {
     return (

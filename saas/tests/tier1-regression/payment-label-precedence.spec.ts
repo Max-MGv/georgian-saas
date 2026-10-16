@@ -55,7 +55,10 @@ test.describe('Payment button-label precedence (#148)', () => {
   });
 
   test('company booking label follows the section default, and a per-company override always wins', async ({ page }) => {
-    test.setTimeout(180_000);
+    // ~13 admin page loads (Settings and Companies, 5-10 s each on a dev machine, which pays
+    // ~360 ms per database round trip) plus 4 public-form checks. Measured 2026-10-13: just over
+    // 180 s, so the old budget cut off the restore in `finally` and left the override changed.
+    test.setTimeout(300_000);
     await loginAsTenantAdmin(page);
 
     const originalSection = await readPaymentSectionToggle(page, 'Company bookings');

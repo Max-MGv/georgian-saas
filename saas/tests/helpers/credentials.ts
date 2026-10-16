@@ -61,3 +61,14 @@ export function getResendApiKey(): string {
   }
   return match[1];
 }
+
+/**
+ * Bearer token for /api/tickets on the DEV database (localhost and staging share it). Read from
+ * credentials.txt at run time like everything else here; never persisted. See Plan-Tickets.md.
+ */
+export function getTicketsDevToken(): string {
+  const text = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
+  const match = text.match(/^TICKETS_TOKEN_DEV=(\S+)/m);
+  if (!match) throw new Error('credentials.txt: TICKETS_TOKEN_DEV not found');
+  return match[1];
+}

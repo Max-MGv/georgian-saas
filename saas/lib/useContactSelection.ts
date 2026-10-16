@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { resolveCompanyContacts, resolveCompanyContactsAsAdmin } from '@/app/actions/companies'
-import type { ContactChoice, OrderRole, RoleChoices } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, RoleChoices, ResolvedCompany } from '@/lib/contactResolution'
 
 /**
  * The shared client state machine for picking one person per contact role.
@@ -53,7 +53,7 @@ type ResolveOutcome =
   | { error: string }
   | {
       success: true
-      company: { id: string; name: string; identificationCode: string | null; address: string | null; wineDiscountPercent: number | null }
+      company: ResolvedCompany
       matchType: 'person' | 'company'
       /** A person's own code matched — they are already selected, nothing to ask. */
       matchedPerson: ContactChoice | null

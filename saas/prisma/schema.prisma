@@ -65,6 +65,10 @@ model Company {
   id                  String          @id @default(cuid())
   name                String
   identificationCode  String?
+  // ⚠️ BEING REPLACED by CompanyAddress (T-13, vault/Plan-WineOrderFeatures.md Chunk 1). The
+  // migration copied every non-empty value into a CompanyAddress row; once plan Chunk 3 lands
+  // nothing reads this, and it is dropped after production has run the backfill. Do not add
+  // new readers.
   address             String?
   // The company-level gate, distinct from a person's own code (CompanyPerson.code).
   // NOT governed by `person_codes_enabled` — it works in both modes, because it is the only
@@ -99,8 +103,93 @@ model Company {
   wineOrders          WineOrder[]
   prices              Price[]
   people              CompanyPerson[]
+  addresses           CompanyAddress[]
+  /// T-12 — a label (and an admin filter) for companies that export. Nothing else depends on it.
+  isExporter          Boolean         @default(false)
+  winePrices          CompanyWinePrice[]
 
   @@index([tenantId])
+}
+
+/// A price this company negotiated for one vintage (T-12, vault/Plan-WineOrderFeatures.md
+/// Chunk 9). **Exceptions only** (Max, 2026-10-12): a row exists only where a price was agreed;
+/// every other vintage is the standard price less the company's % discount. A negotiated price
+/// replaces the standard one outright — the % is never applied on top of it.
+///
+/// No own tenantId — RLS JOIN-to-Company, like CompanyPerson / CompanyAddress / Price. Orders are
+/// unaffected by edits here: WineOrderItem.priceSnapshot records the price actually charged.
+model CompanyWinePrice {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  wineVintageId String
+  wineVintage   WineVintage @relation(fields: [wineVintageId], references: [id], onDelete: Cascade)
+  /// TETRI per bottle.
+  price         Int
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @default(now()) @updatedAt
+
+  @@unique([companyId, wineVintageId])
+  @@index([wineVintageId])
+}
+
+/// One delivery address of a company — "Vake branch, 12 Chavchavadze Ave" (T-13,
+/// vault/Plan-WineOrderFeatures.md). A company with several branches picks which one a wine
+/// order goes to, the same way it picks a Contact Person.
+///
+/// Replaces `Company.address` as the thing the wine forms autofill from. The migration copied
+/// every non-empty `Company.address` in as that company's first row; the column itself is kept
+/// until production has run that backfill, then dropped (plan Chunk 1).
+///
+/// No own tenantId — RLS is JOIN-to-Company, the same shape as CompanyPerson and Price.
+model CompanyAddress {
+  id           String      @id @default(cuid())
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Optional display name ("Vake branch"). A company with one address rarely needs one.
+  label        String?
+  address      String
+  workingHours String?
+  sortOrder    Int         @default(0)
+  isActive     Boolean     @default(true)
+  /// The delivery zone this address is in (T-8), so its fee fills in by itself on the wine
+  /// form. SetNull: deleting a zone leaves the address, just without a zone.
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  wineOrders   WineOrder[]
+
+  @@index([companyId])
+}
+
+/// An area a winery delivers wine to, with one fee per order — "Tbilisi — 0₾" (T-8,
+/// vault/Plan-WineOrderFeatures.md Chunk 4). Customers outside every zone pick "Other" and the
+/// winery agrees delivery with them; see WineOrder.deliveryFeePending.
+///
+/// Own tenantId (a zone belongs to the winery, not to a company) → direct RLS policy.
+model DeliveryZone {
+  id         String           @id @default(cuid())
+  tenantId   String
+  nameEn     String
+  nameKa     String?
+  /// TETRI, like every money column. Whole, non-negative (CHECK in the migration).
+  fee        Int
+  sortOrder  Int              @default(0)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @default(now()) @updatedAt
+  addresses  CompanyAddress[]
+  wineOrders WineOrder[]
+
+  @@index([tenantId])
+}
+
+/// How a wine order reaches the customer (T-8). DELIVERY is the default because every order
+/// before T-8 was a delivery.
+enum WineFulfilment {
+  DELIVERY
+  PICKUP
 }
 
 /// A kind of contact a company can have — "Guide", "Contact Person", later "CEO".
@@ -424,6 +513,12 @@ enum OrderEventType {
   // balance due (Plan-PostPaymentExtras Chunk 3, KnownBugs #64). Distinct from
   // PAID, which marks the order's own paidAt milestone the first time.
   ADDITIONAL_PAYMENT_RECORDED
+  // An admin set or changed a wine order's delivery fee after the order was placed (T-8,
+  // vault/Plan-WineOrderFeatures.md Chunk 6) — e.g. a customer outside every delivery zone.
+  // Payload carries the old and new fee in tetri.
+  DELIVERY_FEE_SET
+  // An admin changed a wine order's preferred delivery/pickup date (T-14). Payload: from / to.
+  PREFERRED_DATE_CHANGED
 }
 
 enum ActorType {
@@ -537,6 +632,39 @@ model WineOrder {
   tenantId        String?
   companyId       String?
   company         Company?        @relation(fields: [companyId], references: [id])
+  // Which of the company's saved addresses this order went to (T-13). Only the link —
+  // `address`, `workingHours` and `addressLabel` are the snapshot of what it said at the time,
+  // the same rule as OrderContact: deleting or editing a CompanyAddress must not move a past
+  // order, so this may go null and nothing is lost. Null also when the customer typed an
+  // "Other address" or ordered without a company.
+  companyAddressId String?
+  companyAddress   CompanyAddress? @relation(fields: [companyAddressId], references: [id], onDelete: SetNull)
+  addressLabel     String?
+  // ── Delivery (T-8, vault/Plan-WineOrderFeatures.md) ──
+  // Money rule (Max, 2026-10-12): `totalAmount` above stays WINES ONLY — statistics and packing
+  // read it as wine revenue. The fee lives here; what the customer owes is the two together,
+  // computed in one place (lib/wineOrderMoney.ts), never re-added by hand.
+  fulfilment         WineFulfilment @default(DELIVERY)
+  /// Link only; `deliveryZoneName` + `deliveryFee` are the snapshot (a zone can be renamed,
+  /// repriced or deleted without moving a past order).
+  deliveryZoneId     String?
+  deliveryZone       DeliveryZone?  @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+  deliveryZoneName   String?
+  /// TETRI. Null = no fee recorded (pickup, no zones configured, every pre-T-8 order, or a fee
+  /// still to be agreed — see the next column).
+  deliveryFee        Int?
+  /// True when the customer chose "Other – we'll contact you": the winery owes them a fee
+  /// decision. Cleared when the admin sets the fee. Separate from `deliveryFee IS NULL` so that
+  /// pre-T-8 orders are not all flagged as waiting for one.
+  deliveryFeePending Boolean        @default(false)
+  /// The customer's PREFERRED delivery / pickup day (T-14) — a wish, not a promise; the form says
+  /// so. Date only. Null on every order placed before T-14, and optional on admin-entered ones.
+  preferredDate      DateTime?      @db.Date
+  /// T-9 — ordered as a private person or as a business, the same split bookings make
+  /// (BookingType is reused: one vocabulary). COMPANY by default: every wine order before T-9 was
+  /// taken on the business-shaped form. An INDIVIDUAL order has no company, and its
+  /// `businessName` holds the person's name so every list keeps something to show.
+  customerType       BookingType    @default(COMPANY)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
@@ -552,6 +680,8 @@ model WineOrder {
   @@index([tenantId, stage])
   @@index([tenantId, createdAt])
   @@index([tenantId, abandonedAt])
+  // The Wine Orders calendar groups by this (T-14, Plan-WineOrderFeatures Chunk 8).
+  @@index([tenantId, preferredDate])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -721,6 +851,7 @@ model WineVintage {
   alcoholLevel Float?
   wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
   orderItems   WineOrderItem[]
+  companyPrices CompanyWinePrice[]
 
   @@index([tenantId])
   @@index([wineId])
@@ -768,9 +899,15 @@ model BugReport {
   submitterUserId String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  /// The work item this report belongs to (Plan-Tickets.md). Many reports can point at
+  /// one ticket (duplicates). `status` above stays what the *tenant* sees on /admin/my-reports
+  /// and is kept in sync from the ticket's status by a fixed mapping.
+  ticketId        String?
+  ticket          Ticket?          @relation(fields: [ticketId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([status])
+  @@index([ticketId])
 }
 
 /// Where a booking is in its life, and nothing at all about money (Feature 191).
@@ -897,10 +1034,238 @@ enum BugReportStatus {
   IN_PROGRESS
   RESOLVED
   WONT_FIX
+  /// Closed as obsolete / not reproducible (Plan-TicketsV2 3.3) - not "won't fix", which says we refused.
+  CLOSED
 }
 
 enum BugReportSurface {
   PUBLIC_SITE
   ADMIN
   SUPER_ADMIN
+}
+
+// ── Internal tickets (Plan-Tickets.md) ──────────────────────────────────────
+// Super-admin only. Like BugReport these have NO tenant RLS policy by design (the
+// super-admin reads across tenants) — but they are NOT left open: the migration enables RLS
+// with no policy and revokes anon/authenticated, so Supabase's REST API cannot reach them
+// (BugReport was open to it until 2026-10-07, KnownBugs #73). Only the app server (table
+// owner) touches them. `tenantId` is a plain column, no relation, as on BugReport.
+
+/// A unit of work: a bug report from the widget, a feature idea, a task Max or Claude added.
+model Ticket {
+  id          String             @id @default(cuid())
+  /// Human-friendly sequence, shown as T-42 and used in commit messages.
+  number      Int                @unique @default(autoincrement())
+  title       String
+  description String             @default("")
+  type        TicketType         @default(BUG)
+  status      TicketStatus       @default(INBOX)
+  priority    TicketPriority     @default(NORMAL)
+  /// One of a fixed list in code (lib/tickets.ts AREAS); text so adding one needs no migration.
+  area        String?
+  labels      String[]           @default([])
+  tenantId    String?
+  source      TicketSource
+  /// Makes imports re-runnable, e.g. "vault:KnownBugs#41".
+  externalRef String?            @unique
+  closeReason TicketCloseReason?
+  closedAt    DateTime?
+  /// Who created it: "max", "claude", "reporter", "system".
+  createdBy   String?
+  /// Plan-TicketsV2 2.1: what is really going on (root cause, options) and what we agreed to do. Markdown.
+  analysis    String             @default("")
+  solution    String             @default("")
+  /// Plan-TicketsV2 2.3: [{ kind: "plan"|"commit"|"bug"|"ticket"|"url", ref: string, label?: string }] (lib/tickets.ts TicketLink).
+  links       Json               @default("[]")
+  /// Plan-TicketsV2 2.5: where the work is live. Set by Claude (tix live) or Max; production = merged to master.
+  liveOnStagingAt    DateTime?
+  liveOnProductionAt DateTime?
+  /// Plan-TicketsV2 3.1: our message to the reporter, shown on their My Reports page. Emailed only when Max presses the button.
+  clientReply        String    @default("")
+  clientReplyAt      DateTime?
+  clientNotifiedAt   DateTime?
+  /// Plan-TicketsV2 3.5 (production only): when this client report was copied to the staging board, or why it was not.
+  forwardedAt        DateTime?
+  forwardError       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  events      TicketEvent[]
+  attachments TicketAttachment[]
+  reports     BugReport[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([type])
+}
+
+/// Append-only timeline of a ticket: comments, status changes, review cards.
+model TicketEvent {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  /// CREATED | COMMENT | STATUS | FIELD | REVIEW | VERIFIED | SENT_BACK | REPORT_LINKED | QUESTION | ANSWER | DECISION (lib/tickets.ts)
+  kind      String
+  body      String   @default("")
+  fromValue String?
+  toValue   String?
+  /// "max" | "claude" | "system" | "reporter" | an API token's name.
+  actor     String
+  /// REVIEW: { changed, howToTest, steps?, url?, leftOver, commit }. QUESTION: { options? }. ANSWER: { questionId, choice? }.
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  /// Path inside the private `ticket-attachments` bucket (or `bug-report-screenshots` for a
+  /// screenshot that came in with a widget report). Never a public URL.
+  storagePath String
+  bucket      String   @default("ticket-attachments")
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+/// Bearer tokens for the /api/tickets API (Claude's access). Only the SHA-256 hash is stored.
+model TicketApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  /// "full" = Claude's token (lib/ticketApiAuth.ts). "forward" = production's token on the STAGING board: it can only
+  /// create P-tickets through POST /api/tickets/forward (Plan-TicketsV2 3.5), nothing else.
+  scope      String    @default("full")
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+}
+
+/// Release notes (vault/Plan-ReleaseNotes.md): one production update. The real ones live on the PRODUCTION database
+/// (they describe what clients have); clients see a release only when it is PUBLISHED and clientVisible.
+model Release {
+  id            String         @id @default(cuid())
+  /// The day the update went to production.
+  releasedOn    DateTime       @db.Date
+  summary       String         @default("")
+  summaryKa     String         @default("")
+  status        ReleaseStatus  @default(DRAFT)
+  /// Max's switch: off by default, flipped on the production Super Admin.
+  clientVisible Boolean        @default(false)
+  publishedAt   DateTime?
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  entries       ReleaseEntry[]
+
+  @@index([status, releasedOn])
+}
+
+/// One change in a release, in plain client language (EN + KA).
+model ReleaseEntry {
+  id            String         @id @default(cuid())
+  releaseId     String
+  release       Release        @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  position      Int            @default(0)
+  title         String
+  titleKa       String         @default("")
+  body          String         @default("")
+  bodyKa        String         @default("")
+  /// "How to use it" - one step per line.
+  howTo         String         @default("")
+  howToKa       String         @default("")
+  /// "Take me there": an admin path such as /admin/settings (never an outside address).
+  linkPath      String?
+  /// Off = internal (e.g. the ticket tool): shown in Super Admin only.
+  clientVisible Boolean        @default(true)
+  /// Ticket refs this entry came from, e.g. ["T-12", "P-4"] (staging board numbers).
+  ticketRefs    String[]       @default([])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  images        ReleaseImage[]
+
+  @@index([releaseId, position])
+}
+
+/// A screenshot on an entry. BEFORE/AFTER with the same `pair` are shown side by side (slider); IMAGE stands alone.
+model ReleaseImage {
+  id          String           @id @default(cuid())
+  entryId     String
+  entry       ReleaseEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  kind        ReleaseImageKind @default(IMAGE)
+  /// Groups a BEFORE and an AFTER of the same screen.
+  pair        Int              @default(0)
+  /// "desktop" | "phone" - how wide to show it.
+  viewport    String           @default("desktop")
+  caption     String           @default("")
+  /// Path inside the private `release-images` bucket.
+  storagePath String
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime         @default(now())
+
+  @@index([entryId])
+}
+
+/// When an admin user last opened What's new (drives the "new" dot). Keyed by the Supabase auth user id.
+model ReleaseView {
+  userId     String   @id
+  lastSeenAt DateTime @default(now())
+}
+
+enum ReleaseStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ReleaseImageKind {
+  BEFORE
+  AFTER
+  IMAGE
+}
+
+enum TicketType {
+  BUG
+  FEATURE
+  TASK
+  IDEA
+}
+
+enum TicketStatus {
+  INBOX
+  BACKLOG
+  IN_PROGRESS
+  /// Shown as "Ready to test" — work finished, waiting for Max to verify.
+  REVIEW
+  DONE
+  CLOSED
+}
+
+enum TicketPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum TicketSource {
+  WIDGET
+  MANUAL
+  ASSISTANT
+  IMPORT
+  /// A client report copied from the production board (shown as P-<production number>, externalRef "prod:<n>").
+  PRODUCTION
+}
+
+enum TicketCloseReason {
+  WONT_FIX
+  DUPLICATE
+  NOT_REPRODUCIBLE
+  OBSOLETE
 }

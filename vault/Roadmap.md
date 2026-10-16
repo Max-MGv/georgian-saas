@@ -472,6 +472,56 @@ dependency map was confidently wrong in four places, each caught only by opening
 
 ---
 
+## v1.14 — Internal ticket tool (Super Admin → Tickets) 🚧 BUILT + VERIFIED ON STAGING, NOT ON PRODUCTION
+
+Full tracking: [[Plan-Tickets]] (design, reviewed by three blind sub-agents) · [[Feature 222 - Internal ticket tool]] · verification and the production runbook: [[Plan-VerifyBeforeProduction]].
+Max's mission (2026-10-07): an internal tool to manage bugs/features/tasks/ideas — widget reports are one source; Max and Claude use it regularly instead of ad-hoc notes.
+
+- [x] Schema + additive migration (RLS locked, anon revoked) — dev DB + staging
+- [x] `lib/ticketService.ts` (single writer), hardened widget submit that creates a ticket (KnownBugs #74), proxy header fix (#75)
+- [x] Board / List / ticket page, review flow (Ready to test → Verified / Send back), quick + bulk add, attachments, filters + group-by
+- [x] Token API + `tix` CLI + `tix export` → `vault/Tickets.md`
+- [x] Playwright spec (4 tests), full regression tiers 1–4, production-build check, independent reviews, live staging check
+- [ ] **Production** — needs Max's explicit go; order matters: storage bucket + migration **before** the code merge (runbook in [[Plan-VerifyBeforeProduction]])
+- [ ] Backfill + title existing production reports; create the production API token
+- [ ] Known gap: re-link a duplicate ticket's reports to the canonical ticket (a closed duplicate currently shows the reporter "Won't fix")
+
+**Also shipped 2026-10-07 (already on `master`, Max's explicit go):** the seven phone fixes from his annotated screenshots ([[Feature 221 - Mobile bug reports 2026-10-05]]), the 1 MB upload-limit fix (KnownBugs #72), production storage buckets (#71), the `BugReport` REST-API lock (#73).
+
+---
+
+## v1.15 — Wine order features + access-code rule 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+
+Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production runbook at the end) ·
+[[Feature 225 - Wine order delivery features]] · MaintenanceNotes §35. Tickets T-13, T-8, T-14, T-12, T-9, T-79 in Ready to test.
+
+- [x] T-13 several delivery addresses per company · T-8 minimum order, pickup, delivery zones + fees, fee set later
+- [x] T-14 preferred date + Wine Orders calendar · T-12 negotiated prices + exporter flag · T-9 individual wine orders
+- [x] KnownBugs #78 (both halves): server re-checks the company code on wine orders and bookings
+- [x] Blind review fixes (receipt paid amount, company checks, quantities, minimum/discount display)
+- [x] Overpayment shown as a credit · saved address's delivery area enforced · Georgian time for date checks (#79)
+- [x] **No code = unknown company** on both public forms (Max, 2026-10-14) — lists, resolver, write paths
+- [x] T-79 Settings in one read (no speed gain measured; fewer DB connections)
+- [x] **QA + stress test 2026-10-14** ([[QA-WineOrderFeatures-2026-10-14]]): migration rehearsal on a production-shaped copy, ~90 crafted requests, load vs pre-feature build, full suite — 14 findings, all fixed on staging (KnownBugs #80, #82–#86; #81 left open)
+- [ ] **Max tests on staging** (MyToDo 2026-10-14 + 2026-10-12)
+- [ ] **Production** — needs Max's go per step: 7 migrations, ticket-tool bucket, merge `staging → master`, address catch-up copy, live check
+- [ ] Later: cleanup migration dropping `Company.address`
+
+---
+
+## v1.16 — Tickets v2 + Release notes 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+
+[[Plan-TicketsV2]] (T-84) · [[Plan-ReleaseNotes]] (T-115) · FeatureLog #229–#232 · MaintenanceNotes §34, §36.
+
+- [x] Tickets Tier 1: side panel, image viewer, icons, URL filters, show everything once
+- [x] Tickets Tier 2: Request/Analysis/Solution, questions + one-tap answers, decisions, links, test checklist, where-is-it-live, Next release
+- [x] Tickets Tier 3: client replies on My Reports (+ email button), Resolved only when live on production, duplicates, production → staging P-tickets
+- [x] Release notes: Super Admin → Releases (Draft/Publish, Show to clients), before/after screenshots, clients' What's new page
+- [ ] **Max tests on staging** (T-84, T-115 checklists)
+- [ ] **Production** — Max's go per step: ticket migrations ×3 + release-notes migration, buckets `ticket-attachments` + `release-images`, report import, tokens, forward config, merge, history release notes
+
+---
+
 ## Draft Ideas / Backlog (not planned yet — notes only)
 
 These are rough ideas, not committed features. Scope and approach TBD.

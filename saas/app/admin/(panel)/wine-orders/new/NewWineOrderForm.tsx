@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation'
 import { createWineOrderAdmin } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
 import { useContactSelection } from '@/lib/useContactSelection'
-import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import type { ContactChoice, OrderRole, ResolvedAddress } from '@/lib/contactResolution'
+import { formatAddressOption } from '@/lib/orderAddress'
+import { zoneDisplayName } from '@/lib/wineOrderRules'
+import DateInput from '@/components/DateInput'
+import { priceWineOrder } from '@/lib/winePricing'
+import type { DeliveryZoneOption } from '@/lib/wineOrderDelivery'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -34,7 +39,7 @@ type CompanyOption = {
   // (Plan-ContactRoles Chunk 1). This form's old autofill from those columns, under a comment
   // reading "Mirrors WineCatalogueClient.tsx's applyProfile()", is what produced decision 10 -
   // the same job implemented twice and drifting. Both now call one resolver and one hook.
-  address: string | null
+  // Saved addresses arrive through that same resolver too (T-13).
   identificationCode: string | null
 }
 type VintageOption = { id: string; year: number; price: number }
@@ -60,9 +65,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 function Field({ label, children, half, required }: { label: string; children: React.ReactNode; half?: boolean; required?: boolean }) {
   return (
-    <div className={half ? '' : 'mb-3'}>
+    // Half fields sit two to a row: when one label wraps to two lines on a phone, mt-auto
+    // keeps both boxes on the same line instead of pushing one down. (QA 2026-10-15 F3)
+    <div className={half ? 'flex flex-col min-w-0' : 'mb-3'}>
       <label className="text-xs block mb-1" style={{ color: C.faint }}>{label}{required ? ' *' : ''}</label>
-      {children}
+      {half ? <div className="mt-auto">{children}</div> : children}
     </div>
   )
 }
@@ -74,7 +81,10 @@ export default function NewWineOrderForm({
   contactRoles = [],
   wines,
   locale = 'en',
+  zones = [],
 }: {
+  /** The winery's active delivery zones (T-8). Empty → no zone question, as before T-8. */
+  zones?: DeliveryZoneOption[]
   companies: CompanyOption[]
   wines: WineOption[]
   locale?: string
@@ -98,6 +108,29 @@ export default function NewWineOrderForm({
   const [llcId, setLlcId] = useState('')
   const [address, setAddress] = useState('')
   const [workingHours, setWorkingHours] = useState('')
+  // The company's saved delivery addresses (T-13) and which one: an id, 'other' (typed), or
+  // '' (not chosen yet). Same three states as the public form.
+  const [savedAddresses, setSavedAddresses] = useState<ResolvedAddress[]>([])
+  const [addressChoice, setAddressChoice] = useState('other')
+  const chosenSavedAddress = savedAddresses.find(a => a.id === addressChoice) ?? null
+  // T-8 — an admin can record a pickup even when the public form does not offer one, and may
+  // choose "Other" to set the fee later on the order. No minimum here (admin tool, like bookings).
+  // T-9 — a business (as before) or a private person.
+  const [customerType, setCustomerType] = useState<'COMPANY' | 'INDIVIDUAL'>('COMPANY')
+  const isIndividual = customerType === 'INDIVIDUAL'
+  const [fulfilment, setFulfilment] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY')
+  const [zoneChoice, setZoneChoice] = useState('')
+  // T-14 — optional here, and not held to lead time / Closed Days (what was agreed on the phone).
+  const [preferredDate, setPreferredDate] = useState('')
+  // T-12 — the chosen company's negotiated prices, per vintage (tetri).
+  const [negotiatedPrices, setNegotiatedPrices] = useState<Record<string, number>>({})
+  const isPickup = fulfilment === 'PICKUP'
+  const chosenZone = !isPickup ? zones.find(z => z.id === zoneChoice) ?? null : null
+  function chooseAddress(choice: string) {
+    setAddressChoice(choice)
+    const zoneId = savedAddresses.find(a => a.id === choice)?.deliveryZoneId
+    if (zoneId && zones.some(z => z.id === zoneId)) setZoneChoice(zoneId)
+  }
   const [contactName, setContactName] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -146,10 +179,17 @@ export default function NewWineOrderForm({
     ? Math.min(selectedCompany.wineDiscountPercent, 100)
     : null
 
-  const subtotal = lines.reduce((s, l) => s + l.quantity * l.price, 0)
-  const computedTotal = discountPercent
-    ? Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100
-    : subtotal
+  // T-12 — the same pricing the server charges with: negotiated prices where the company has
+  // them (admin resolution is trusted, so they are always visible here), the % on the rest.
+  // Replaces a lari-era Math.round(*100)/100 that no longer matched the server's tetri rounding.
+  const unitOf = (vintageId: string, standard: number) => negotiatedPrices[vintageId] ?? standard
+  const pricing = priceWineOrder(
+    lines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity, standardPrice: l.price })),
+    negotiatedPrices,
+    selectedCompany?.wineDiscountPercent ?? null,
+  )
+  const subtotal = pricing.negotiatedTotal + pricing.standardSubtotal
+  const computedTotal = pricing.total
 
   // ── Company autofill ──────────────────────────────────────────────────────
   // businessName/llcName take the company name unconditionally; everything else only
@@ -164,15 +204,26 @@ export default function NewWineOrderForm({
   function handleCompanyChange(id: string) {
     setCompanyId(id)
     resetContacts()
+    // Never carry one company's saved address over to another; typed text stays (see above).
+    setSavedAddresses([])
+    setAddressChoice('other')
+    setNegotiatedPrices({})
     if (!id) return
     const company = companies.find(c => c.id === id)
     if (!company) return
     setBusinessName(company.name)
     setLlcName(company.name)
     if (company.identificationCode) setLlcId(company.identificationCode)
-    if (company.address) setAddress(company.address)
     void resolveContacts({ companyId: id }).then(result => {
       if ('error' in result) return
+      // One saved address is used straight away; several must be chosen; none → typed.
+      setNegotiatedPrices(result.company.winePrices ?? {})
+      const list = result.company.addresses
+      setSavedAddresses(list)
+      setAddressChoice(list.length === 1 ? list[0]!.id : list.length === 0 ? 'other' : '')
+      if (list.length === 1 && list[0]!.deliveryZoneId && zones.some(z => z.id === list[0]!.deliveryZoneId)) {
+        setZoneChoice(list[0]!.deliveryZoneId)
+      }
       for (const choices of result.roleChoices) {
         if (choices.people.length === 1) pickFor(choices.people[0]!, choices)
       }
@@ -202,7 +253,7 @@ export default function NewWineOrderForm({
   // ── Wine line helpers ─────────────────────────────────────────────────────
   const selectedWine = wines.find(w => w.id === newLineWineId)
   const selectedVintage = selectedWine?.vintages.find(v => v.id === newLineVintageId)
-  const lineTotal = selectedVintage ? (parseInt(newLineQty) || 1) * selectedVintage.price : 0
+  const lineTotal = selectedVintage ? (parseInt(newLineQty) || 1) * unitOf(selectedVintage.id, selectedVintage.price) : 0
 
   function handleNewLineWineChange(wineId: string) {
     setNewLineWineId(wineId)
@@ -234,10 +285,15 @@ export default function NewWineOrderForm({
     setError('')
 
     const result = await createWineOrderAdmin({
-      companyId: companyId || null,
+      customerType,
+      companyId: isIndividual ? null : companyId || null,
       businessName,
       llcName: llcName || null,
       llcId: llcId || null,
+      companyAddressId: isPickup ? null : chosenSavedAddress?.id ?? null,
+      fulfilment,
+      zoneChoice: isPickup ? null : zoneChoice || null,
+      preferredDate: preferredDate || null,
       address,
       workingHours: workingHours || null,
       contactName,
@@ -261,7 +317,21 @@ export default function NewWineOrderForm({
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
+      {/* ── Ordering as (T-9) ── */}
+      <Card title={at('newWineOrder.type.title')}>
+        <select aria-label={at('newWineOrder.type.title')} value={customerType} style={inputStyle}
+          onChange={e => {
+            const next = e.target.value as 'COMPANY' | 'INDIVIDUAL'
+            setCustomerType(next)
+            if (next === 'INDIVIDUAL') handleCompanyChange('')
+          }}>
+          <option value="COMPANY">{at('newWineOrder.type.company')}</option>
+          <option value="INDIVIDUAL">{at('newWineOrder.type.individual')}</option>
+        </select>
+      </Card>
+
       {/* ── Company ── */}
+      {!isIndividual && (
       <Card title={at('newWineOrder.company.title')}>
         <Field label={at('newWineOrder.company.label')}>
           <select value={companyId} onChange={e => handleCompanyChange(e.target.value)} style={inputStyle}>
@@ -277,9 +347,11 @@ export default function NewWineOrderForm({
           </p>
         )}
       </Card>
+      )}
 
       {/* ── Business / Contact ── */}
-      <Card title={at('newWineOrder.contact.title')}>
+      <Card title={at(isIndividual ? 'newWineOrder.contact.titleIndividual' : 'newWineOrder.contact.title')}>
+        {!isIndividual && (<>
         <Field label={at('newWineOrder.contact.businessName')} required>
           <input value={businessName} onChange={e => setBusinessName(e.target.value)} style={inputStyle} />
         </Field>
@@ -291,11 +363,50 @@ export default function NewWineOrderForm({
             <input value={llcId} onChange={e => setLlcId(e.target.value)} style={inputStyle} />
           </Field>
         </div>
-        <Field label={at('newWineOrder.contact.address')} required>
-          <input value={address} onChange={e => setAddress(e.target.value)} style={inputStyle} />
+        </>)}
+        {/* Saved delivery addresses (T-13). A saved one sends only its id; the server re-reads
+            the text, so the typed boxes only appear for "Other address". */}
+        <Field label={at('newWineOrder.delivery.method')}>
+          <select value={fulfilment} onChange={e => setFulfilment(e.target.value as 'DELIVERY' | 'PICKUP')} style={inputStyle}>
+            <option value="DELIVERY">{at('newWineOrder.delivery.delivery')}</option>
+            <option value="PICKUP">{at('newWineOrder.delivery.pickup')}</option>
+          </select>
         </Field>
-        <Field label={at('newWineOrder.contact.workingHours')}>
-          <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
+        {!isPickup && savedAddresses.length > 0 && (
+          <Field label={at('newWineOrder.contact.savedAddress')} required>
+            <select value={addressChoice} onChange={e => chooseAddress(e.target.value)} style={inputStyle}>
+              {addressChoice === '' && <option value="" disabled>{at('newWineOrder.contact.savedAddressChoose')}</option>}
+              {savedAddresses.map(a => <option key={a.id} value={a.id}>{formatAddressOption(a)}</option>)}
+              <option value="other">{at('newWineOrder.contact.savedAddressOther')}</option>
+            </select>
+            {chosenSavedAddress?.workingHours && (
+              <p className="text-xs mt-1" style={{ color: C.faint }}>{chosenSavedAddress.workingHours}</p>
+            )}
+          </Field>
+        )}
+        {!isPickup && addressChoice === 'other' && (
+          <>
+            <Field label={at('newWineOrder.contact.address')} required>
+              <input value={address} onChange={e => setAddress(e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label={at('newWineOrder.contact.workingHours')}>
+              <input value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={inputStyle} />
+            </Field>
+          </>
+        )}
+        {!isPickup && zones.length > 0 && (
+          <Field label={at('newWineOrder.delivery.zone')} required>
+            <select value={zoneChoice} onChange={e => setZoneChoice(e.target.value)} style={inputStyle}>
+              <option value="" disabled>{at('newWineOrder.delivery.zoneChoose')}</option>
+              {zones.map(z => (
+                <option key={z.id} value={z.id}>{zoneDisplayName(z, locale)} — {formatTetri(asTetri(z.fee), { decimals: true })}</option>
+              ))}
+              <option value="other">{at('newWineOrder.delivery.zoneOther')}</option>
+            </select>
+          </Field>
+        )}
+        <Field label={at(isPickup ? 'newWineOrder.delivery.datePickup' : 'newWineOrder.delivery.dateDelivery')}>
+          <DateInput value={preferredDate} onChange={setPreferredDate} style={inputStyle} />
         </Field>
         {/* Choose one of the company's people, inline. The public forms reach the same
             choices through a code popup; an admin has no code step, so the list is simply a
@@ -381,8 +492,10 @@ export default function NewWineOrderForm({
       {/* ── Wines ── */}
       <Card title={at('newWineOrder.wines.title')}>
         {lines.length > 0 && (
-          <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
-            <table className="w-full text-sm">
+          // overflow-x-auto, not hidden: six columns don't fit a phone, and hidden cut off the
+          // Total column. The table now scrolls sideways inside its box. (QA 2026-10-15 F11)
+          <div className="rounded-lg border overflow-x-auto mb-3" style={{ borderColor: C.border }}>
+            <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
                   {[at('newWineOrder.wines.colWine'), at('newWineOrder.wines.colYear'), at('newWineOrder.wines.colQty'), at('newWineOrder.wines.colPrice'), at('newWineOrder.wines.colTotal'), ''].map(h => (
@@ -396,9 +509,9 @@ export default function NewWineOrderForm({
                     <td className="px-3 py-2 text-sm" style={{ color: C.text }}>{l.wineName}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.year}</td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(l.price))}</td>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.muted, fontWeight: l.vintageId in negotiatedPrices ? 700 : 400 }}>{formatTetri(asTetri(unitOf(l.vintageId, l.price)))}</td>
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}
+                      {formatTetri(multiplyTetri(asTetri(unitOf(l.vintageId, l.price)), l.quantity), { decimals: true })}
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -432,11 +545,11 @@ export default function NewWineOrderForm({
               </select>
             </div>
             {selectedWine && (
-              <div style={{ flex: '1 1 100px' }}>
+              <div style={{ flex: '1 1 130px' }}>
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('newWineOrder.wines.colYear')}</label>
                 <select value={newLineVintageId} onChange={e => setNewLineVintageId(e.target.value)} style={inputStyle}>
                   {selectedWine.vintages.map(v => (
-                    <option key={v.id} value={v.id}>{v.year} — {formatTetri(asTetri(v.price))}</option>
+                    <option key={v.id} value={v.id}>{v.year} — {formatTetri(asTetri(unitOf(v.id, v.price)))}</option>
                   ))}
                 </select>
               </div>
@@ -482,21 +595,31 @@ export default function NewWineOrderForm({
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{l.wineName} {l.year} × {l.quantity}</span>
-              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.price), l.quantity), { decimals: true })}</span>
+              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(unitOf(l.vintageId, l.price)), l.quantity), { decimals: true })}</span>
             </div>
           ))}
-          {discountPercent != null && lines.length > 0 && (
+          {pricing.discountPercent != null && lines.length > 0 && (
             <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>{at('newWineOrder.total.discount', { percent: discountPercent })}</span>
+              <span style={{ color: C.muted }}>{at('newWineOrder.total.discount', { percent: pricing.discountPercent })}</span>
               <span style={{ color: C.text }}>−{formatTetri(asTetri(subtotal - computedTotal), { decimals: true })}</span>
             </div>
           )}
         </div>
 
+        {chosenZone && (
+          <div className="flex justify-between text-sm mb-3">
+            <span style={{ color: C.muted }}>{at('newWineOrder.delivery.feeLine', { zone: zoneDisplayName(chosenZone, locale) })}</span>
+            <span style={{ color: C.text }}>{formatTetri(asTetri(chosenZone.fee), { decimals: true })}</span>
+          </div>
+        )}
+        {!isPickup && zoneChoice === 'other' && (
+          <p className="text-xs mb-3" style={{ color: C.faint }}>{at('newWineOrder.delivery.feeLater')}</p>
+        )}
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
-            {formatTetri(asTetri(computedTotal), { decimals: true })}
+            {/* Wines + delivery fee — display only; the server recomputes both. */}
+            {formatTetri(asTetri(computedTotal + (chosenZone?.fee ?? 0)), { decimals: true })}
           </span>
         </div>
 
