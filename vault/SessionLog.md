@@ -8,6 +8,27 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-15/16 — Manual QA of every "Ready to test" ticket + fixes (staging only)
+
+Max: "test the tickets as the user instead of me … make a list and tick off one by one", then "fix any visual bugs you
+see, anything else ask me first", then answered 8 questions. Full record: [[QA-Manual-ReadyToTest-2026-10-15]].
+- **Tested by clicking through staging (phone 390px + desktop) with screenshots:** T-5, T-23, T-6, T-11 (phone), T-21,
+  T-79, T-13, T-8, T-14, T-12, T-9, T-83 — all pass; T-84 + T-115 tested in the app's browser pane on the local dev
+  server (same code + dev DB) after Brave disconnected — pass. Left for Max: T-10 (production report), T-84 screenshot
+  paste + Tier 3 client report (file upload / email), T-11 on a wide desktop.
+- **Regression found in production:** T-5 made one-line add rows overflow on phones → KnownBugs #88, fixed on staging.
+- **Visual fixes** `3bc08a5` (F1, F3, F6, F10, F11, F13, F14) and **Max-approved fixes** `1132b2e` (F2 bug button hides
+  under popups, F5 "guests", F7 review sheet lists masterclass + guide, F8 Enter saves Settings fields, F9 "Contact &
+  Delivery", F12 wine order counts). Verified: public ones on staging (headless 390px), admin ones on the local dev
+  server (`saas/tests/_qa/qa-fixes-verify*.spec.ts`, untracked). tsc clean; lint errors unchanged from before.
+  **Nothing on production** — needs Max's go (F6 is the urgent one).
+- Open for Max: F15 / KnownBugs #91 (closed-day date hydration error). T-9 default stays Company; Georgian date
+  placeholder left as is.
+- Staging test data restored (settings, Sighnaghi, closed day, admin language); "ZZ QA" orders/bookings + closed
+  ticket T-133 left on the dev DB.
+- Slip: deleted `saas/.next` after a check showed a symlink inside it (MEMORY rule). Verified afterwards: node_modules
+  identical to a fresh install, nothing lost (Git Bash `rm` removes the link, it doesn't follow it).
+
 ## 2026-10-15 — Easy-wins release to production (T-5, T-6, T-11, T-21, T-23)
 
 Max: push the easy wins to production after testing them like a user. **Shipped:** six commits cherry-picked alone onto
