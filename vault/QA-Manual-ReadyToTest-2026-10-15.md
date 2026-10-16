@@ -128,8 +128,11 @@ Brave had disconnected. Pane width 629px.)
   why?" → Obsolete → "Closed · Obsolete". T-133 left closed.
 - [x] Tier 2: T-84 shows Analysis, Solution, Decisions (3 + the answered question), Links: plan chip (button) + commit
   chips linking to github.com/Max-MGv/georgian-saas/commit/…
-- [-] Tier 3: bug report with a screenshot from the red button → needs a file upload (not possible in the pane) and sends
-  Max a notification email. For Max.
+- [x] Tier 3 (2026-10-16, Brave reconnected, staging, 427px): staging admin → red button → Bug + text + screenshot (file
+  upload) → Send → arrives as **T-134** (Bug · widget · Admin), reporter's words with "T-84" auto-linked, screenshot under
+  Images, Client box "sees on My Reports: Received". Wrote a message to the client (no email button pressed) → My Reports
+  shows the report + screenshot + "Reply from VineWorks". Closed T-134 as Obsolete → client sees "Closed". (Report
+  notification email to Max was sent by the app as normal.)
 
 ### T-115 — Release notes (same setup)
 - [x] Releases overview: counts (2 releases · 0 published · 2 drafts, 9 changes for clients +1 internal, 12 screenshots),
@@ -154,6 +157,11 @@ Commit `3bc08a5` on **staging** only — NOT production. tsc clean; lint errors 
   `tests/_qa/qa-fixes-verify*.spec.ts`, untracked): F6 Companies/Menu Items/Masterclass rows fit (no page overflow,
   "Cancel" whole); F1 times on one line; F3 boxes aligned; F11 table scrolls in its box, Total visible; F10 badge visible on
   collapsed + open card; F13 error on screen; F14 on staging (compact pill).
+
+- [x] Re-checked again **on staging itself** (Brave, real 427px window, 2026-10-16): Companies add row fits (Cancel at
+  396/427px), Menu Items add dish fits, working hours on one line, Enter in "Wine Tasting minimum" → "Saved", New wine
+  order Individual → "CONTACT & DELIVERY" + aligned boxes + vintage "2026 — 40₾" + table scrolls in its box, Individual
+  badge visible on the collapsed card.
 
 ## Max's decisions 2026-10-16 → done, commit `1132b2e` on **staging** only (NOT production)
 1. F2 → **hide the bug button while a popup is open**: `BugReportWidget.tsx` hides its trigger whenever any fixed element
