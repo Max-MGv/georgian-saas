@@ -46,7 +46,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
       where: { tenantId },
       orderBy: { name: 'asc' },
       include: {
-        _count: { select: { orders: true } },
+        _count: { select: { orders: true, wineOrders: true } },
         prices: { orderBy: { minGuests: 'asc' } },
         // Only the columns the client actually renders. `code` is included solely so the
         // per-row code control can show it, and only when the tenant has person codes on —
@@ -108,6 +108,8 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           addresses: c.addresses,
           accessCode: c.accessCode,
           orderCount: c._count.orders,
+          // The Wine Orders tab counts wine orders, not bookings (QA 2026-10-16 F12).
+          wineOrderCount: c._count.wineOrders,
           // Prisma hands these back as plain numbers; re-brand at the boundary
           // so the client's Price type keeps its Tetri guarantee (chunk 3).
           prices: c.prices.map(pr => ({

@@ -794,7 +794,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       placeholder={placeholder}
                       autoFocus
                       onChange={e => setPaymentFields(prev => ({ ...prev, [key]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Escape') setPaymentEditing(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handlePaymentSave(key) } if (e.key === 'Escape') setPaymentEditing(null) }}
                     />
                   ) : (
                     <div style={{ ...inputStyle, flex: 1, minWidth: 0, cursor: 'default', overflowWrap: 'anywhere' }}>
@@ -1032,7 +1032,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         value={row.value}
                         autoFocus
                         onChange={e => { row.set(e.target.value); if (bookingRulesError) setBookingRulesError(null) }}
-                        onKeyDown={e => { if (e.key === 'Escape') { setBookingRulesEditing(null); setBookingRulesError(null) } }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleBookingRuleSave(row.key) } if (e.key === 'Escape') { setBookingRulesEditing(null); setBookingRulesError(null) } }}
                       />
                     ) : (
                       <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
@@ -1391,7 +1391,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       placeholder={at('settings.branding.altTextPh')}
                       autoFocus
                       onChange={e => setLogoAlt(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Escape') setAltEditing(false) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAltTextSave() } if (e.key === 'Escape') setAltEditing(false) }}
                     />
                   ) : (
                     <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>
@@ -1489,7 +1489,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                         value={value}
                         autoFocus
                         onChange={e => set(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Escape') setContactEditing(null) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleContactSave(key, value) } if (e.key === 'Escape') setContactEditing(null) }}
                       />
                     ) : (
                       <div style={{ ...inputStyle, flex: 1, cursor: 'default' }}>

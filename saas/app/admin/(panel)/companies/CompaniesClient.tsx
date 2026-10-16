@@ -70,6 +70,7 @@ type Company = {
   addresses: CompanyAddressRow[]
   accessCode: string | null
   orderCount: number
+  wineOrderCount: number
   prices: Price[]
   people: Person[]
 }
@@ -1304,7 +1305,7 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
                     <span className="text-xs" style={{ color: C.faint }}>
                       {activeModule === 'BOOKING'
                         ? `${company.prices.length} ${company.prices.length !== 1 ? at('companies.individuals.tier.plural') : at('companies.individuals.tier.singular')} · `
-                        : ''}{company.orderCount} {company.orderCount !== 1 ? at('packing.order.plural') : at('packing.order.singular')}
+                        : ''}{(() => { const n = activeModule === 'BOOKING' ? company.orderCount : company.wineOrderCount; return `${n} ${n !== 1 ? at('packing.order.plural') : at('packing.order.singular')}` })()}
                     </span>
                   </div>
 

@@ -28,6 +28,8 @@ const LABELS: Record<InvoiceLocale, {
   paidSoFar: string; balanceDue: string; credit: string
   paymentDetails: string; recipientName: string; personalNumber: string; bank: string; bankCode: string; account: string
   person: string
+  /** Plural form after a number; Georgian keeps the singular after numerals. */
+  persons: string
 }> = {
   ka: {
     invoice: 'ინვოისი', company: 'კომპანია', name: 'დასახელება', idCode: 'საიდენტიფიკაციო კოდი',
@@ -36,6 +38,7 @@ const LABELS: Record<InvoiceLocale, {
     paidSoFar: 'უკვე გადახდილი', balanceDue: 'გადასახდელი ნაშთი', credit: 'ზედმეტად გადახდილი',
     paymentDetails: 'გადახდის რეკვიზიტები', recipientName: 'მიმღების სახელი', personalNumber: 'პირადი ნომერი', bank: 'მიმღები ბანკი', bankCode: 'ბანკის კოდი', account: 'მიმღების ანგარიში',
     person: 'კაცი',
+    persons: 'კაცი',
   },
   en: {
     invoice: 'Invoice', company: 'Company', name: 'Name', idCode: 'ID code',
@@ -44,6 +47,7 @@ const LABELS: Record<InvoiceLocale, {
     paidSoFar: 'Paid so far', balanceDue: 'Balance due', credit: 'Credit (overpaid)',
     paymentDetails: 'Payment Details', recipientName: 'Recipient name', personalNumber: 'Personal number', bank: 'Bank', bankCode: 'Bank code', account: 'Account (IBAN)',
     person: 'guest',
+    persons: 'guests',
   },
 }
 
@@ -139,12 +143,12 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   // Guest rows
   let guestContent = ''
   if (hasSplit) {
-    if (data.tastingGuestCount > 0) guestContent += tableRow(th, L.tasting, `${data.tastingGuestCount} ${L.person}`)
-    if (data.lunchGuestCount > 0) guestContent += tableRow(th, L.lunch, `${data.lunchGuestCount} ${L.person}`)
-    if (data.freeGuestCount > 0) guestContent += tableRow(th, L.free, `${data.freeGuestCount} ${L.person}`)
-    guestContent += tableRow(th, L.total, `${data.guestCount} ${L.person}`)
+    if (data.tastingGuestCount > 0) guestContent += tableRow(th, L.tasting, `${data.tastingGuestCount} ${data.tastingGuestCount === 1 ? L.person : L.persons}`)
+    if (data.lunchGuestCount > 0) guestContent += tableRow(th, L.lunch, `${data.lunchGuestCount} ${data.lunchGuestCount === 1 ? L.person : L.persons}`)
+    if (data.freeGuestCount > 0) guestContent += tableRow(th, L.free, `${data.freeGuestCount} ${data.freeGuestCount === 1 ? L.person : L.persons}`)
+    guestContent += tableRow(th, L.total, `${data.guestCount} ${data.guestCount === 1 ? L.person : L.persons}`)
   } else {
-    guestContent += tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${data.guestCount} ${L.person}`)
+    guestContent += tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${data.guestCount} ${data.guestCount === 1 ? L.person : L.persons}`)
   }
 
   // Amount rows

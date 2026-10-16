@@ -634,11 +634,34 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [dateY, dateM, dateD] = selectedDate ? selectedDate.split('-') : ['', '', '']
   const confirmDateLabel = selectedDate ? `${dateD}/${dateM}/${dateY}` : ''
 
+  // Masterclass add-ons are part of the total, so the guest sees them listed — one row each,
+  // "name × qty" and its price. (Max, QA 2026-10-16 F7)
+  const masterclassReviewRows: ReviewRow[] = isEnhanced
+    ? activeMcLines.map(l => {
+        const item = masterclassItems.find(m => m.id === l.masterclassItemId)
+        return {
+          label: `${item?.name ?? fc('form_masterclass_header', 'form.masterclass')}${l.quantity > 1 ? ` × ${l.quantity}` : ''}`,
+          value: formatTetri(asTetri(l.quantity * l.pricePerUnit)),
+        }
+      })
+    : []
+
   const confirmVisitRows: ReviewRow[] = [
     { label: fc('form_visit_type', 'form.visit_type'), value: fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
     { label: fc('form_date', 'form.date'), value: confirmDateLabel },
     { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
+    ...masterclassReviewRows,
   ]
+
+  // The other contact roles (Guide, …) the guest filled in — shown like Contact Person. (F7)
+  const extraRoleReviewRows: ReviewRow[] = isEnhanced
+    ? extraRoles.flatMap(role => {
+        const chosen = selectedContacts[role.roleId]
+        const name = chosen?.name?.trim()
+        if (!name) return []
+        return [{ label: roleLabel(role), value: chosen?.phone ? `${name} · ${chosen.phone}` : name }]
+      })
+    : []
 
   // Shown on the review sheet for either branch below — nationality tagging is independent
   // of isEnhanced, so it isn't specific to one guest-count layout or the other.
@@ -655,6 +678,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         { label: contactPersonTitle, value: fullName.trim() },
         ...(phone ? [{ label: fc('form_phone', 'form.phone'), value: phone }] : []),
         ...(email ? [{ label: fc('form_email', 'form.email'), value: email }] : []),
+        ...extraRoleReviewRows,
         ...nationalityReviewRows,
       ]
     : [

@@ -350,7 +350,7 @@ export default function NewWineOrderForm({
       )}
 
       {/* ── Business / Contact ── */}
-      <Card title={at('newWineOrder.contact.title')}>
+      <Card title={at(isIndividual ? 'newWineOrder.contact.titleIndividual' : 'newWineOrder.contact.title')}>
         {!isIndividual && (<>
         <Field label={at('newWineOrder.contact.businessName')} required>
           <input value={businessName} onChange={e => setBusinessName(e.target.value)} style={inputStyle} />
