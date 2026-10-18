@@ -8,6 +8,17 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-18 — T-136: "Finish setting up your account" stuck on Nikalas Marani — ON PRODUCTION (`8a54f88`)
+
+- **Cause (read-only prod check):** NM has payment (IBAN + Flitt), 4 individual price tiers, 7 wines, 2 companies, launched 2026-10-07 — but no `onboarding_works_with_companies` Setting row. `companiesStepDone` needed an explicit "yes", so the wizard banner never cleared. The wizard question was skipped and companies were added from the Companies page; `launchTenant` is a record, not a gate.
+- **Fix `356ee8c` (pushed to `staging`):** `getOnboardingStatus` treats any non-individual company as "yes"; `createCompany` upserts the setting to "yes" in the same tx; CompaniesStep hides "change answer → no" while companies exist. No production data write needed — the derived rule clears NM once released.
+- Verified locally on dev DB (`scripts/_qa/onboarding-banner-check.ts`: removes the staging tenant's setting, checks banner + wizard, restores it). Prod read-only helper: `scripts/_qa/onboarding-status-check.ts`. The supabase MCP has no access to the prod project — use `.env.prod.backup` + a read-only tx instead.
+- Staging tested in Brave (dev-DB setting removed to copy NM state → no banner, wizard shows list, adding a company saved "yes"; test company deleted, setting restored — `scripts/_qa/wwc-toggle.ts`).
+- **On production** — merged staging → master `8a54f88` on Max's go, Vercel deploy green. NM `/admin/orders` checked in Brave: setup banner gone. It now shows the post-setup "A few records could use more detail — 7 wines still need full details" nudge, which by design only appears once `readyToLaunch` is true (onboarding.ts:224). T-136 marked live on production.
+- Gotcha: the auto-mode classifier blocked the master merge even after Max's chat go; Max granted permission and the rerun went through.
+
+---
+
 ## 2026-10-16 (later) — Post-release safety check + finishing up
 
 Max: "nikalas marani now contains live data, was our push to prod safe? and what's left? finish that up too".
