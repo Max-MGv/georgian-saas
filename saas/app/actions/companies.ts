@@ -72,7 +72,7 @@ export async function createCompany(name: string, modules: { isBookingCompany?: 
   const tenantId = await getTenantId()
   const company = await withTenantDb(tenantId, async tx => {
     const accessCode = await generateUniqueTenantCode(tx, tenantId)
-    return tx.company.create({
+    const created = await tx.company.create({
       data: {
         name: name.trim(),
         accessCode,
@@ -81,6 +81,15 @@ export async function createCompany(name: string, modules: { isBookingCompany?: 
         tenantId,
       },
     })
+    // Adding a company answers the onboarding wizard's "do you work with
+    // companies?" question, wherever it's added from — keeps the stored answer
+    // from contradicting the rows (getOnboardingStatus also derives it).
+    await tx.setting.upsert({
+      where: { key_tenantId: { key: 'onboarding_works_with_companies', tenantId } },
+      update: { value: 'yes' },
+      create: { key: 'onboarding_works_with_companies', value: 'yes', tenantId },
+    })
+    return created
   })
   revalidatePath('/admin/companies')
   return { success: true, company: { id: company.id, name: company.name, accessCode: company.accessCode } }
