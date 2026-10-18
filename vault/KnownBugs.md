@@ -98,6 +98,7 @@ tags: [bugs]
 | 89 | **English invoice email said "2 guest" / "4 guest"** (QA F5). Fixed: singular/plural (`invoiceEmailTemplate.ts`), commit `1132b2e`. Georgian unchanged; printed invoice is Georgian-only. | Emails | ✅ Resolved — on production since 2026-10-16 (`e317fe1`) |
 | 90 | **Companies → Wine Orders tab showed "0 orders" for every wine company** — counted bookings, not wine orders (QA F12). Fixed `1132b2e`. | Admin / Companies | ✅ Resolved — on production since 2026-10-16 (`e317fe1`) |
 | 91 | **Settings → Closed days: hydration error** — date formatted with the browser locale; server "Wed 25 November 2026" vs browser "Wed, 25 November 2026" (QA F15). Only when a closed day exists; React re-renders, nothing visibly wrong; dev overlay shows "1 Issue". Same family as #81. | Admin / Settings | ✅ Resolved — formatted from the 'YYYY-MM-DD' string (`deba5a6`), on production since 2026-10-16 (`60f0929`); verified on staging: closed day shows "Wed, 25 November 2026", clean console after reload |
+| 92 | **"Finish setting up your account" stuck on Nikalas Marani (production) while fully set up** — 2 companies existed but the wizard's "do you work with companies?" answer was never stored (question skipped, companies added from the Companies page), so `companiesStepDone` stayed false. T-136. | Admin / Onboarding | ✅ Resolved — any real company now counts as "yes" and `createCompany` stores the answer (`356ee8c`); on production 2026-10-18 (`8a54f88`), verified in Brave on staging (state reproduced) and on NM production |
 
 ---
 
