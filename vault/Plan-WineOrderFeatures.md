@@ -613,7 +613,9 @@ schema: `Company.address` still exists, every new column is nullable or has a de
    Settings shows the new panel (nothing configured → form as before).
 6. Later, separately: a cleanup migration dropping `Company.address` (no code reads it).
 
-**Not on production until then. Nothing in this list has been run.**
+**✅ DONE 2026-10-16** — steps 1–5 run on Max's go (step 4b catch-up: 0 rows; step 5 live checks passed; the real test
+reservation was skipped on purpose — live winery). Step 6 (drop `Company.address`) still open, needs Max's OK.
+Log: [[QA-Manual-ReadyToTest-2026-10-15]] → "Production release".
 
 ---
 

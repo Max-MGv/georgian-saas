@@ -43,7 +43,7 @@ tags: [plan, verification, tickets]
 1. Line-ending rewrite of 2 files — **fixed**. 2. ESLint errors in new code — **fixed**. 3. Widget file picker vs server allow-list — **fixed**. 4. Racy/ambiguous test selectors in my new spec (twice) — **fixed**. 5. React hydration mismatch (#418) in ticket pages, visible only in a production build — **fixed and re-verified live on staging**. 6. Stray dev process locking the Prisma engine blocks `next build` (Windows, known Rule-10 pattern) — procedure note. 7. Dev-data: the `Rkatsiteli` fixture wine is inactive → `wine-catalogue-order` fails until it is re-activated (**Max's staging data — left as found**; re-activate it on the Wines admin page before relying on that test).
 **Nothing found that requires a change to production beyond the runbook.**
 
-## Production runbook — DRAFT, DO NOT RUN until Max says go (reviewer finding #1: order matters)
+## Production runbook — ✅ DONE 2026-10-16 (Max's go; see SessionLog + QA-Manual-ReadyToTest-2026-10-15 → "Production release"). Forwarding (P-tickets) switched on the same day.
 
 `package.json` builds with `prisma generate && next build` — **Vercel does not run migrations**, so the new code will query tables that don't exist until you migrate. Wrong order = every bug report fails with "Failed to save your report" on every tenant. Correct order (the reverse is safe for old code, because it ignores the new nullable column and tables):
 

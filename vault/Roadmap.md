@@ -472,7 +472,7 @@ dependency map was confidently wrong in four places, each caught only by opening
 
 ---
 
-## v1.14 — Internal ticket tool (Super Admin → Tickets) 🚧 BUILT + VERIFIED ON STAGING, NOT ON PRODUCTION
+## v1.14 — Internal ticket tool (Super Admin → Tickets) ✅ ON PRODUCTION since 2026-10-16 (`e317fe1`)
 
 Full tracking: [[Plan-Tickets]] (design, reviewed by three blind sub-agents) · [[Feature 222 - Internal ticket tool]] · verification and the production runbook: [[Plan-VerifyBeforeProduction]].
 Max's mission (2026-10-07): an internal tool to manage bugs/features/tasks/ideas — widget reports are one source; Max and Claude use it regularly instead of ad-hoc notes.
@@ -490,7 +490,7 @@ Max's mission (2026-10-07): an internal tool to manage bugs/features/tasks/ideas
 
 ---
 
-## v1.15 — Wine order features + access-code rule 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+## v1.15 — Wine order features + access-code rule ✅ ON PRODUCTION since 2026-10-16 (`e317fe1`)
 
 Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production runbook at the end) ·
 [[Feature 225 - Wine order delivery features]] · MaintenanceNotes §35. Tickets T-13, T-8, T-14, T-12, T-9, T-79 in Ready to test.
@@ -509,7 +509,7 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 
 ---
 
-## v1.16 — Tickets v2 + Release notes 🚧 BUILT + TESTED ON STAGING, NOT ON PRODUCTION
+## v1.16 — Tickets v2 + Release notes ✅ ON PRODUCTION since 2026-10-16 (`e317fe1`; P-ticket copy production → staging switched on the same day)
 
 [[Plan-TicketsV2]] (T-84) · [[Plan-ReleaseNotes]] (T-115) · FeatureLog #229–#232 · MaintenanceNotes §34, §36.
 
@@ -517,6 +517,14 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [x] Tickets Tier 2: Request/Analysis/Solution, questions + one-tap answers, decisions, links, test checklist, where-is-it-live, Next release
 - [x] Tickets Tier 3: client replies on My Reports (+ email button), Resolved only when live on production, duplicates, production → staging P-tickets
 - [x] Release notes: Super Admin → Releases (Draft/Publish, Show to clients), before/after screenshots, clients' What's new page
+- [ ] First client-facing release published on the production board (Max: write/approve, Publish, Show to clients)
+
+## v1.17 — Manual QA of every ticket + fixes ✅ ON PRODUCTION since 2026-10-16 (`e317fe1`, `60f0929`)
+[[QA-Manual-ReadyToTest-2026-10-15]] · FeatureLog #236 · KnownBugs #88–#91.
+- [x] All 15 Ready-to-test tickets tested by clicking through staging (phone + desktop, screenshots)
+- [x] Visual fixes F1/F3/F6/F10/F11/F13/F14; approved fixes F2/F5/F7/F8/F9/F12; #91 closed-day date hydration
+- [x] Full production release by runbook (10 migrations, 2 buckets, report import, token, merge, catch-up, live checks)
+- [ ] Optional: cleanup migration dropping `Company.address` (no code reads it; destructive — Max's explicit OK)
 - [ ] **Max tests on staging** (T-84, T-115 checklists)
 - [ ] **Production** — Max's go per step: ticket migrations ×3 + release-notes migration, buckets `ticket-attachments` + `release-images`, report import, tokens, forward config, merge, history release notes
 

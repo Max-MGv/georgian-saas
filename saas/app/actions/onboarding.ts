@@ -85,7 +85,12 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
     isPaymentConfigured(tenantId),
   ])
 
-  const worksWithCompanies = raw === 'yes' ? 'yes' : raw === 'no' ? 'no' : null
+  // A real company row is the answer — it outranks the stored setting. Without
+  // this, a tenant who skipped the wizard question and added companies from the
+  // Companies page (Nikalas Marani, 2026-10-18) was stuck on "finish setting up"
+  // with the question unanswered while 2 companies existed. createCompany now
+  // also records 'yes', but older rows and an explicit 'no' still need this.
+  const worksWithCompanies = companyCount > 0 ? 'yes' : raw === 'yes' ? 'yes' : raw === 'no' ? 'no' : null
   const companiesStepDone = worksWithCompanies === 'no' || (worksWithCompanies === 'yes' && companyCount > 0)
   const individualsPricingSet = individualsPriceCount > 0
   const wineStepDone = !wineOrdersModuleOn || wineCount > 0

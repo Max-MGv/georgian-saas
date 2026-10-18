@@ -202,9 +202,13 @@ export default function CompaniesStep({
         <div>
           <div className="flex items-center justify-between mb-1">
             <p className="font-medium" style={{ color: C.text }}>{at('onboarding.companies.addTitle')}</p>
-            <button onClick={() => answer('no')} className="text-xs underline" style={{ color: C.muted }}>
-              {at('onboarding.companies.changeAnswer')}
-            </button>
+            {/* Existing companies are the answer (getOnboardingStatus derives
+                'yes' from them), so "no" is only offered while there are none. */}
+            {companies.length === 0 && (
+              <button onClick={() => answer('no')} className="text-xs underline" style={{ color: C.muted }}>
+                {at('onboarding.companies.changeAnswer')}
+              </button>
+            )}
           </div>
           <p className="text-sm mb-3" style={{ color: C.muted }}>{at('onboarding.companies.addHint')}</p>
 
