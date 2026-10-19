@@ -32,7 +32,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 |---|---|---|
 | 0 | Baseline: counts, edge rows, ticket links | ✅ 2026-10-20 |
 | 1 | Pricing rules as pure code + test script (no DB) | ✅ 2026-10-20 |
-| 2 | Migration A (expand): new columns + backfill, old columns kept | ⬜ |
+| 2 | Migration A (expand): new columns + backfill, old columns kept | ✅ 2026-10-20 (dev DB) |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ⬜ |
 | 4 | Migration B (contract): drop old columns, retire old scripts | ⬜ |
 | 5 | Company price setup: three prices per tier, company registration fee | ⬜ |
@@ -125,7 +125,7 @@ compile error**.
 | `Order` | `lunchOnlyRate Int?` | null | — |
 | `Order` | `tastingLunchRate Int?` | `lunchRateSnapshot` (already all-in) | `lunchRateSnapshot` |
 | `InvoiceSent` | `tastingOnlyGuests`, `lunchOnlyGuests`, `tastingLunchGuests` | same mapping (facts unchanged, clearer names — §31's append-only rule holds: no billed fact changes) | `tastingGuestCount`, `lunchGuestCount` |
-| `VisitType` enum | add `LUNCH` | — | — |
+| `VisitType` enum | add `LUNCH` — **in Chunk 6's own migration**, not Chunk 2 (the enum value changes Prisma's types, so it lands with the code that handles it) | — | — |
 | Settings (no table change) | `min_guests_company_tasting_only`, `min_guests_company_lunch_only`, `min_guests_company_tasting_lunch` — blank default | — | — |
 
 - Expand columns are **nullable** and the backfill is **idempotent** (`… WHERE new IS NULL`), so it can be
@@ -271,15 +271,30 @@ both caught; tsc 0; eslint clean.
 **Resume point:** done.
 
 ### Chunk 2 — Migration A (expand)
-**Status:** ⬜
+**Status:** ✅ 2026-10-20 — `20261019210217_pricing_model_expand` applied to the **dev DB** (`prisma migrate deploy`
++ `generate`; no dev server running). Check: 30 price rows, 24 companies, 428 orders (all re-price from the new
+columns to their stored totals), 3 invoices — **0 problems**. tsc 0. Baseline shots `chunk2` captured.
 **Goal:** new columns exist and are filled; nothing reads them yet; the app behaves exactly as before.
-- [ ] `prisma migrate dev --create-only --name pricing_model_expand`; hand-write the backfill SQL (§4.1),
-      idempotent (`WHERE … IS NULL`); add `LUNCH` to `VisitType` (enum add is safe).
-- [ ] Apply on dev (Rule 10). Read-only checks: every row's new columns = §4.1 mapping; Chunk 1's
-      equivalence re-run against the DB.
-- [ ] Smoke: open home page, booking form, an order, Companies → screenshots (unchanged).
-**Verify:** 0 mismatched rows; screenshots identical to before.
-**Resume point:** —
+- [x] Schema: `Price.tastingOnlyPrice/lunchOnlyPrice/tastingLunchPrice` (nullable), `Company.registrationFee`
+      (default 0), `Order.tastingOnlyGuests/lunchOnlyGuests/tastingLunchGuests` + `tastingOnlyRate/lunchOnlyRate/
+      tastingLunchRate` (nullable), `InvoiceSent.tastingOnlyGuests/lunchOnlyGuests/tastingLunchGuests` (nullable).
+      Old required columns got `DEFAULT 0` (`Price.pricePerPerson`, `InvoiceSent.tastingGuestCount/lunchGuestCount`)
+      so Chunk 3's code need not keep writing them. Old columns otherwise untouched → old code (staging deploy)
+      keeps working.
+- [x] Backfill hand-written at the end of the migration, mirroring `countsFromLegacy`; idempotent markers:
+      Price = all three new prices NULL; Order/InvoiceSent = `tastingOnlyGuests IS NULL`. The company-fee
+      backfill (A-3) runs **only here** (a re-run must not overwrite a fee an admin later sets).
+      `LUNCH` enum value moved to Chunk 6.
+- [x] Read-only row check: `saas/scripts/_qa/pricing-expand-check.ts [--prod]` (untracked) — counts vs
+      `countsFromLegacy`, prices, fees, invoices, and re-pricing every order from the new columns.
+- [x] Smoke + baseline: `saas/tests/_qa/pricing-shots.spec.ts` (untracked; `SHOT_LABEL=chunkN npx playwright test
+      tests/_qa/pricing-shots.spec.ts --workers=1`) captures 7 pages × desktop/phone (home individual quote,
+      detailed company form 4/6/2, Companies tiers, admin New Order 4/6/2, order detail, Orders list, booking
+      sheet) as PNG + visible text; `node tests/_qa/pricing-shots-diff.mjs chunk2 chunk3` diffs the text.
+      Baseline numbers: detailed company 4/6/2 on a 1–10 ₾60/₾100, 11–30 ₾48/₾88 ladder = **₾720** (old rule:
+      party of 12 → 11–30 row). Chunk 3 must still show ₾720.
+**Verify:** 0 mismatched rows ✔; screenshots normal ✔.
+**Resume point:** done.
 
 ### Chunk 3 — Switch every reader and writer to the new columns (behaviour identical)
 **Status:** ⬜

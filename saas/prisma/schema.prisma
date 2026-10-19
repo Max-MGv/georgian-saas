@@ -88,6 +88,9 @@ model Company {
   isIndividual        Boolean         @default(false)
   isBookingCompany    Boolean         @default(true)
   isWineOrderCompany  Boolean         @default(false)
+  // Flat fee, tetri, charged once per booking (Plan-PricingModel D-6, T-152). Replaces
+  // Price.registrationPrice, which sat on each tier row. Never charged to individuals.
+  registrationFee     Int             @default(0)
   wineDiscountPercent Float?
   // Per-company override of the tenant's Companies section toggle (#148).
   // null = follow paymentEnabledCompanies; true = always skip (trusted,
@@ -332,9 +335,13 @@ model InvoiceSent {
   companyName       String?
   totalPrice        Int
   guestCount        Int
-  tastingGuestCount Int
-  lunchGuestCount   Int
+  tastingGuestCount Int  @default(0) // OLD — dropped in T-152 Chunk 4
+  lunchGuestCount   Int  @default(0) // OLD (tasting AND lunch) — dropped in T-152 Chunk 4
   freeGuestCount    Int
+  // Product model (T-152) — same facts under clear names; nullable until Chunk 4.
+  tastingOnlyGuests  Int?
+  lunchOnlyGuests    Int?
+  tastingLunchGuests Int?
   visitType         String
   masterclassLines  Json
   extras            Json
@@ -380,9 +387,16 @@ model Order {
   timeSlot                String
   guestCount              Int
   // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
+  // OLD model — dropped by Plan-PricingModel Chunk 4 (T-152): lunchGuestCount = guests who did
+  // tasting AND lunch, tastingGuestCount = tasting only. Do not add readers.
   lunchGuestCount         Int                @default(0)
   tastingGuestCount       Int                @default(0)
   freeGuestCount          Int                @default(0)
+  // Product model (T-152): every guest is in exactly one box (or free). guestCount = all four.
+  // Nullable until Chunk 4; the backfill fills them from the old columns.
+  tastingOnlyGuests       Int?
+  lunchOnlyGuests         Int?
+  tastingLunchGuests      Int?
   // Hot dish selections (v1.2)
   hotDishVegetable        String?
   hotDishMeat             String?
@@ -432,9 +446,13 @@ model Order {
   // registrationFeeSnapshot is 0 for individuals: that path never applied the
   // tier's registration fee, and the snapshot records what was *used*, not what
   // the tier happened to hold.
-  tastingRateSnapshot     Int?
-  lunchRateSnapshot       Int?
+  tastingRateSnapshot     Int? // OLD — dropped in T-152 Chunk 4
+  lunchRateSnapshot       Int? // OLD (all-in tasting+lunch) — dropped in T-152 Chunk 4
   registrationFeeSnapshot Int?
+  // Product model (T-152): the per-person rate each product was sold at (null = product unused / not frozen).
+  tastingOnlyRate         Int?
+  lunchOnlyRate           Int?
+  tastingLunchRate        Int?
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @default(now()) @updatedAt
   masterclassLines        OrderMasterclass[]
@@ -534,9 +552,18 @@ model Price {
   company                    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   minGuests                  Int
   maxGuests                  Int
-  pricePerPerson             Int
+  // ── OLD model — dropped by Plan-PricingModel Chunk 4 (T-152). Do not add readers. ──
+  // pricePerPerson = tasting; tastingLunchPricePerPerson = the lunch ADD-ON (since 2026-09-13);
+  // registrationPrice = a flat fee per row (moves to Company.registrationFee).
+  pricePerPerson             Int      @default(0)
   tastingLunchPricePerPerson Int      @default(0)
   registrationPrice          Int      @default(0)
+  // ── Product model (T-152). Tetri per person; null = not offered on this row (D-7). ──
+  // tastingLunchPrice is the ALL-IN price for tasting and lunch, not an add-on.
+  // Nullable while the old columns exist (Chunk 2 backfill); never all three null on a real row.
+  tastingOnlyPrice           Int?
+  lunchOnlyPrice             Int?
+  tastingLunchPrice          Int?
   isDisplayPrice             Boolean  @default(false)
   // Pricing is edited in place, so without these there is no record of when a
   // company's rates changed — and every booking is priced from them. Chunk 4
