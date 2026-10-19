@@ -1,0 +1,162 @@
+/**
+ * What a booking request may contain — guest counts and masterclass lines — checked
+ * the same way by every write path (Plan-PricingModel §4.3, KnownBugs #93).
+ *
+ * Pure: settings and catalogue rows are passed in, so the public action, the admin
+ * actions and the forms' own warnings all run this one function. The forms only
+ * mirror it; the server decides (MaintenanceNotes §35).
+ *
+ * Why it exists: before T-152 the public action took counts and masterclass
+ * quantities as sent — a negative tasting count or a −20 masterclass line lowered
+ * the total that online payment then charged (#93, reproduced 2026-10-19).
+ */
+import { countsFromVisit, payingGuests, PRODUCTS, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
+
+/** Upper bound for any single count or quantity. Generous — the forms cap guests at 200. */
+export const MAX_COUNT = 999
+
+/** A whole number from 0 to MAX_COUNT, sent as a number (a string is refused, not coerced). */
+export function isCount(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_COUNT
+}
+
+export type CountRules = {
+  /** Today's group minimum for this visit type (all paying guests together). Null = none. */
+  groupMin: number | null
+  /** Company per-product minimums (D-11) — each applies only when that product has guests. Null = none. */
+  productMins: Record<Product, number | null>
+}
+
+export type CountsInput = {
+  bookingType: 'INDIVIDUAL' | 'COMPANY'
+  /** 'single' = one guest count (individuals, company simple form); 'boxes' = the three boxes + Free. */
+  layout: 'single' | 'boxes'
+  /** Public bookings get the minimums; admin screens are exempt (A-8). */
+  form: 'public' | 'admin'
+  visitType: unknown
+  guestCount?: unknown
+  tastingOnly?: unknown
+  lunchOnly?: unknown
+  tastingLunch?: unknown
+  free?: unknown
+}
+
+export type CountsError =
+  | { code: 'bad_visit_type' }
+  | { code: 'not_whole_number'; field: string }
+  | { code: 'no_paying_guests' }
+  | { code: 'visit_mismatch' }
+  | { code: 'below_group_min'; min: number }
+  | { code: 'below_product_min'; product: Product; min: number }
+
+export type CountsResult =
+  | { ok: true; counts: Counts; visitType: BookingVisitType; warnings: CountsError[] }
+  | { ok: false; error: CountsError }
+
+const VISIT_TYPES: readonly BookingVisitType[] = ['TASTING', 'TASTING_LUNCH', 'LUNCH']
+
+/**
+ * Normalised counts for a booking, or the first reason to refuse it.
+ *
+ * - 'single' layout: one guest count; the server builds the boxes from the visit
+ *   type (A-4) and ignores any boxes sent — an individual booking can no longer
+ *   be priced off a forged split (#93).
+ * - 'boxes' layout: every box is a whole number 0…999 (missing = 0).
+ * - Visit type and boxes must agree (A-6): Tasting → no lunch guests; Lunch only →
+ *   only Lunch only guests; Tasting + Lunch → at least one lunch guest. Refused on
+ *   the public form; on admin screens it is only a warning (Q-3 default).
+ * - Individuals never book Lunch only (D-5).
+ * - Public only: the group minimum (as today) and any per-product company minimum.
+ */
+export function checkBookingCounts(input: CountsInput, rules: CountRules): CountsResult {
+  const visitType = input.visitType as BookingVisitType
+  if (!VISIT_TYPES.includes(visitType)) return { ok: false, error: { code: 'bad_visit_type' } }
+  if (input.bookingType === 'INDIVIDUAL' && visitType === 'LUNCH') return { ok: false, error: { code: 'bad_visit_type' } }
+
+  let counts: Counts
+  if (input.layout === 'single') {
+    if (!isCount(input.guestCount)) return { ok: false, error: { code: 'not_whole_number', field: 'guestCount' } }
+    counts = countsFromVisit(visitType, input.guestCount)
+  } else {
+    const read = (field: 'tastingOnly' | 'lunchOnly' | 'tastingLunch' | 'free') => {
+      const v = input[field]
+      return v === undefined || v === null ? 0 : v
+    }
+    const raw = { tastingOnly: read('tastingOnly'), lunchOnly: read('lunchOnly'), tastingLunch: read('tastingLunch'), free: read('free') }
+    for (const [field, v] of Object.entries(raw)) {
+      if (!isCount(v)) return { ok: false, error: { code: 'not_whole_number', field } }
+    }
+    counts = raw as Counts
+  }
+
+  if (payingGuests(counts) < 1) return { ok: false, error: { code: 'no_paying_guests' } }
+
+  const lunchGuests = counts.lunchOnly + counts.tastingLunch
+  const mismatch =
+    (visitType === 'TASTING' && lunchGuests > 0) ||
+    (visitType === 'LUNCH' && (counts.tastingOnly > 0 || counts.tastingLunch > 0)) ||
+    (visitType === 'TASTING_LUNCH' && lunchGuests === 0)
+  const warnings: CountsError[] = []
+  if (mismatch) {
+    if (input.form === 'public') return { ok: false, error: { code: 'visit_mismatch' } }
+    warnings.push({ code: 'visit_mismatch' })
+  }
+
+  if (input.form === 'public') {
+    if (rules.groupMin != null && payingGuests(counts) < rules.groupMin) {
+      return { ok: false, error: { code: 'below_group_min', min: rules.groupMin } }
+    }
+    if (input.bookingType === 'COMPANY') {
+      for (const p of PRODUCTS) {
+        const min = rules.productMins[p]
+        if (min != null && counts[p] > 0 && counts[p] < min) {
+          return { ok: false, error: { code: 'below_product_min', product: p, min } }
+        }
+      }
+    }
+  }
+
+  return { ok: true, counts, visitType, warnings }
+}
+
+// ─── Masterclass lines ───────────────────────────────────────────────────────
+
+export type MasterclassCatalogueRow = { id: string; unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'; active: boolean; pricePerUnit: number }
+export type MasterclassLineIn = { masterclassItemId?: unknown; quantity?: unknown }
+export type MasterclassLineOut = { masterclassItemId: string; quantity: number; pricePerUnit: number }
+
+export type MasterclassError =
+  | { code: 'not_a_list' }
+  | { code: 'unknown_item' }
+  | { code: 'inactive_item' }
+  | { code: 'duplicate_item' }
+  | { code: 'bad_quantity' }
+
+/**
+ * Masterclass lines as they will be stored: every item must be this tenant's
+ * (the caller passes only its own catalogue rows) and active; quantities whole
+ * 1…999; FLAT items are always quantity 1; the price always comes from the
+ * catalogue, never from the request. Any bad line refuses the whole booking —
+ * silently dropping a line the guest saw priced would be its own surprise.
+ */
+export function checkMasterclassLines(
+  lines: unknown,
+  catalogue: MasterclassCatalogueRow[],
+): { ok: true; lines: MasterclassLineOut[] } | { ok: false; error: MasterclassError } {
+  if (lines === undefined || lines === null) return { ok: true, lines: [] }
+  if (!Array.isArray(lines)) return { ok: false, error: { code: 'not_a_list' } }
+  const byId = new Map(catalogue.map(r => [r.id, r]))
+  const seen = new Set<string>()
+  const out: MasterclassLineOut[] = []
+  for (const raw of lines as MasterclassLineIn[]) {
+    const id = typeof raw?.masterclassItemId === 'string' ? raw.masterclassItemId : ''
+    const item = byId.get(id)
+    if (!item) return { ok: false, error: { code: 'unknown_item' } }
+    if (!item.active) return { ok: false, error: { code: 'inactive_item' } }
+    if (seen.has(id)) return { ok: false, error: { code: 'duplicate_item' } }
+    seen.add(id)
+    if (!isCount(raw.quantity) || raw.quantity < 1) return { ok: false, error: { code: 'bad_quantity' } }
+    out.push({ masterclassItemId: id, quantity: item.unitType === 'FLAT' ? 1 : raw.quantity, pricePerUnit: item.pricePerUnit })
+  }
+  return { ok: true, lines: out }
+}

@@ -31,7 +31,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | Chunk | What | Status |
 |---|---|---|
 | 0 | Baseline: counts, edge rows, ticket links | ✅ 2026-10-20 |
-| 1 | Pricing rules as pure code + test script (no DB) | ⬜ |
+| 1 | Pricing rules as pure code + test script (no DB) | ✅ 2026-10-20 |
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ⬜ |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ⬜ |
 | 4 | Migration B (contract): drop old columns, retire old scripts | ⬜ |
@@ -155,7 +155,7 @@ priceBooking(rates, counts, lines) = Σ count × rate  + registration + mastercl
 
 ### 4.3 Validation (one helper, server-side; forms only mirror it — §35)
 
-`checkBookingCounts(input, { visitType, bookingType, form: 'public'|'admin', rules })` → error or normalised counts:
+`checkBookingCounts(input, rules)` + `checkMasterclassLines(lines, catalogue)` in `saas/lib/bookingInput.ts` → error or normalised counts/lines:
 - every count is a whole number 0…999; at least one paying guest;
 - individuals and the company simple form send **one** guest count; the server builds the boxes from the
   visit type (A-4) — a split sent on those paths is ignored;
@@ -250,18 +250,25 @@ stop the dev server (Rule 10), confirm "✔ Generated Prisma Client", restart.
 **Resume point:** done.
 
 ### Chunk 1 — Pricing rules as pure code (no DB, no UI)
-**Status:** ⬜
+**Status:** ✅ 2026-10-20 — `scripts/test-pricing-model.ts` **54/54**; equivalence dev 428/428, prod 2/2 (393 demo
+orders have no frozen rates — F-1); two deliberate mutations (lunch→lunch-only mapping, lunch-only priced at 0)
+both caught; tsc 0; eslint clean.
 **Goal:** the new rules exist and are proven by worked examples before anything depends on them.
-- [ ] Add §4.2's types and functions to `lib/pricingUtils.ts` **alongside** the old ones (old callers untouched).
-- [ ] Add `lib/bookingCounts.ts` with §4.3's `checkBookingCounts` (pure; settings passed in).
-- [ ] Rewrite `scripts/test-pricing-agreement.ts` → `scripts/test-pricing-model.ts` with worked cases:
-      Max's examples; Georgica's real ladder (24 Tasting & Lunch + 1 Tasting only = 24×₾95 + 1×₾100 =
-      **₾2,380**; today ₾1,710 — R-1); not offered; fallback (A-7); individuals = today's numbers for every
-      tier; registration once; masterclass/extras added; every #93 crafted input refused.
-- [ ] **Equivalence check:** for every order in Chunk 0's baseline, converted counts (A-2/A-4) priced with
-      the *frozen* rates through the new `priceBooking` = today's `totalPrice`. 0 differences required.
-**Verify:** script all green; equivalence 0 differences; tsc 0.
-**Resume point:** —
+- [x] §4.2's types and functions added to `lib/pricingUtils.ts` **alongside** the old ones (old callers untouched):
+      `Product`, `PRODUCTS`, `BookingVisitType`, `ProductTier`, `Counts`, `ProductRates`, `productPrice`,
+      `payingGuests`, `totalGuests`, `findProductTier`, `ratesForCounts`, `ratesFromProductSnapshot`,
+      `ratesFromManualProducts`, `notOffered`, `priceCounts` (throws on a product with guests and no rate),
+      `countsFromVisit` (A-4), `countsFromLegacy` (A-2/E-1/E-2 — **the Chunk 2 backfill SQL must mirror it**).
+- [x] `lib/bookingInput.ts`: `checkBookingCounts` (layouts 'single'/'boxes', public/admin, A-6 refuse public /
+      warn admin, D-11 minimums) and `checkMasterclassLines` (#93: tenant + active items, whole 1…999, FLAT = 1,
+      no duplicates, catalogue price). Pure; callers pass settings and catalogue rows.
+- [x] `scripts/test-pricing-model.ts` (the old `test-pricing-agreement.ts` stays until Chunk 3 removes the old
+      functions): P-11 → ₾550 / kitchen 11; Nikalas's two orders ₾2,800 / ₾250; R-1 ₾2,380 vs old ₾1,710;
+      mixed three-row booking; not offered; fallback; registration once; Individuals ladder 240 cases identical
+      to the old model; every #93 input refused.
+- [x] **Equivalence:** every baseline order with frozen rates re-prices to its stored total. 0 differences.
+**Verify:** script green; equivalence 0 differences; tsc 0. ✔
+**Resume point:** done.
 
 ### Chunk 2 — Migration A (expand)
 **Status:** ⬜
