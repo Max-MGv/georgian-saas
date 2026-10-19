@@ -34,7 +34,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 1 | Pricing rules as pure code + test script (no DB) | ✅ 2026-10-20 |
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ✅ 2026-10-20 (dev DB) |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ✅ 2026-10-20 |
-| 4 | Migration B (contract): drop old columns, retire old scripts | ⬜ |
+| 4 | Migration B (contract): drop old columns, retire old scripts | 🚧 |
 | 5 | Company price setup: three prices per tier, company registration fee | ⬜ |
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ⬜ |
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ⬜ |
@@ -338,16 +338,25 @@ the Tasting / Lunch columns of the Orders list and booking sheet (A-4); registra
 **Resume point:** done.
 
 ### Chunk 4 — Migration B (contract)
-**Status:** ⬜
+**Status:** 🚧 2026-10-20
 **Goal:** the old columns are gone, so nothing can read them by mistake.
-- [ ] Migration `pricing_model_contract`: re-run backfill for NULLs; NOT NULL (+ `DEFAULT 0` for counts);
-      drop `Price.pricePerPerson`, `Price.tastingLunchPricePerPerson`, `Price.registrationPrice`,
-      `Order.tastingGuestCount`, `Order.lunchGuestCount`, `Order.tastingRateSnapshot`,
-      `Order.lunchRateSnapshot`, `InvoiceSent.tastingGuestCount`, `InvoiceSent.lunchGuestCount`.
-- [ ] Delete `scripts/migrate-lunch-price-to-addon.ts`, `scripts/restore-dev-lunch-addon.ts`.
-- [ ] tsc 0 = proof no reader is left. Smoke screenshots again.
-**Verify:** tsc 0; app smoke unchanged.
-**Resume point:** —
+**Order matters (learned while doing it):** Prisma selects every column it knows on every query, so a running
+app whose client still knows a dropped column fails. Therefore: **(a)** remove the fields from the schema and
+deploy that code (works fine against a DB that still has the columns), **(b)** only then apply the migration.
+Same order in the production runbook (merge = step 3, contract = step 6).
+- [x] `scripts/_qa/pricing-expand-check.ts` rewritten in raw SQL (works before AND after the drop; recognises rows
+      the new code wrote). Dev: 0 problems.
+- [x] **4a** `ecbc415`: old fields removed from `schema.prisma`; product counts required (`@default(0)`) on Order and
+      InvoiceSent; tsc 0 (proof nothing reads them); `test-pricing-model` 54/54, `test-order-repricing` 6/6.
+      Contract migration `20261020120000_pricing_model_contract` **written, not applied** — hand-assembled because
+      `prisma migrate dev` refuses non-interactive shells: `prisma migrate diff --from-url <dev> --to-schema-datamodel`
+      output, preceded by the idempotent backfill re-run (minus the once-only company fee).
+- [ ] **4b** wait for the staging deploy of `ecbc415` to be READY (Vercel project `prj_6r0Ge02yFdu3y6XfPPTB42LIOg8I`,
+      team `team_YoGrXMcjXga0y919jXsSV82z`), then `prisma migrate deploy` on dev; `prisma generate`.
+- [ ] Verify: expand-check (old columns absent) 0 problems; tsc 0; model + repricing + RLS scripts; shots `chunk4`
+      vs `chunk3` identical; staging site loads an order and the booking form.
+- [x] Old scripts already deleted in Chunk 3.
+**Resume point:** 4b — check the deploy state, then apply the migration on dev.
 
 ### Chunk 5 — Company price setup
 **Status:** ⬜
