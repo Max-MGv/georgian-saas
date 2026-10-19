@@ -30,7 +30,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 
 | Chunk | What | Status |
 |---|---|---|
-| 0 | Baseline: counts, edge rows, ticket links | ⬜ |
+| 0 | Baseline: counts, edge rows, ticket links | ✅ 2026-10-20 |
 | 1 | Pricing rules as pure code + test script (no DB) | ⬜ |
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ⬜ |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ⬜ |
@@ -83,6 +83,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 
 - **Q-1 (#93 part B):** should the admin New Order path stop trusting the browser's masterclass price and read it from the database? Default if no answer by Chunk 8: **yes** — Chunk 8 rewrites that action anyway.
 - **Q-2:** the 2026-10-15 Georgica production order (40 lunch guests, ₾2,800 at ₾70 = tasting ₾30 + lunch ₾40). Right, or should it have been lunch-only? It converts unchanged (A-2); if it is wrong, an admin edits it after release.
+- **Q-3:** Nikalas's 2026-10-07 order (§10 F-2) — visit *Tasting + Lunch* but everyone in *Tasting only*. Did they have lunch (then ₾250 undercharged it), and should A-6 refuse that combination in future? Default if no answer by Chunk 6: **refuse on the public form, warn (not block) on admin screens.**
 
 ---
 
@@ -235,18 +236,18 @@ commit; screenshots go to `saas/tests/_qa/shots/pricing/` (untracked). Before an
 stop the dev server (Rule 10), confirm "✔ Generated Prisma Client", restart.
 
 ### Chunk 0 — Baseline
-**Status:** ⬜
+**Status:** ✅ 2026-10-20 — numbers + findings F-1/F-2 in §10; no E-1/E-2 rows on either database.
 **Goal:** know exactly what data the migration will meet, before writing it.
-- [ ] Dev DB, read-only script `saas/scripts/_qa/pricing-baseline.ts`: count `Price` rows (per tenant;
+- [x] Dev DB, read-only script `saas/scripts/_qa/pricing-baseline.ts`: count `Price` rows (per tenant;
       add-on > 0 / = 0; registration > 0), orders by shape (split / unsplit / unsplit-with-free (E-1) /
       split with leftover guests), `InvoiceSent` rows, orders per visit type. Save output in this plan (§10).
-- [ ] Same counts on **production, read-only** (Max approved read-only checks 2026-10-19; the script uses a
+- [x] Same counts on **production, read-only** (Max approved read-only checks 2026-10-19; the script uses a
       `SET TRANSACTION READ ONLY` transaction like `scripts/_qa/prod-lunch-price-check.ts`).
-- [ ] Note every total on dev + prod in a JSON file (`saas/scripts/_qa/pricing-baseline-totals.json`,
-      untracked) — Chunk 3 compares against it.
-- [ ] Link T-152 ↔ P-11 (staging #147), T-151, #93 on the board.
-**Verify:** numbers recorded in §10; E-1 count known.
-**Resume point:** —
+- [x] Every order's inputs + total saved in `saas/scripts/_qa/pricing-baseline-{dev,prod}.json`
+      (untracked) — Chunks 1 and 3 compare against them.
+- [x] Link T-152 ↔ P-11 (staging #147), T-151, #93 on the board.
+**Verify:** numbers recorded in §10; E-1 count known (0). ✔
+**Resume point:** done.
 
 ### Chunk 1 — Pricing rules as pure code (no DB, no UI)
 **Status:** ⬜
@@ -440,7 +441,37 @@ three minimums are tenant settings) · lunch-only for individuals (D-5).
 
 ## 10. Baseline numbers (filled in Chunk 0)
 
-_—_
+Taken 2026-10-19 ~20:52 UTC, read-only (`saas/scripts/_qa/pricing-baseline.ts [--prod]`, untracked). Every
+order's pricing inputs + stored total saved in `saas/scripts/_qa/pricing-baseline-{dev,prod}.json`
+(untracked) for Chunk 1/3's equivalence check.
+
+| | Dev | Production |
+|---|---|---|
+| `Price` rows | 30 (Staging Winery 14, Test Onboarding Wizard 2, Vineworks Demo 14) | 23 (Nikalas Marani 9, Vineworks Demo 14) |
+| rows with lunch add-on > 0 / = 0 | 28 / 2 (the two wizard rows) | 23 / 0 |
+| rows with a registration fee > 0 | 0 | 0 |
+| companies whose tiers have different fees (A-3) | 0 | 0 |
+| orders | 428 | 395 (Nikalas 2, demo 393) |
+| — split (company) | 149 | 126 (Nikalas 2 + demo 124) |
+| — unsplit (individual + 3 company on dev) | 279 | 269 |
+| — **E-1** unsplit with free guests | **0** | **0** |
+| — **E-2** split with leftover guests | **0** | **0** |
+| — split with guestCount < boxes / negative counts | 0 / 0 | 0 / 0 |
+| — orders with no rate snapshot | 0 | **393 — every production demo order** (see finding F-1) |
+| — individual orders carrying a split | 0 | 0 |
+| — Tasting visit with lunch guests | 0 | 0 |
+| — **Tasting + Lunch visit, split, but 0 lunch guests** | 0 | **1 — Nikalas's 2026-10-07 order** (finding F-2) |
+| `InvoiceSent` rows | 3 (1 split, 2 unsplit) | 1 (split) |
+
+**Findings**
+- **F-1:** all 393 demo orders on **production** have no rate snapshot (dev's demo has them — KnownBugs #49's
+  fix). The production demo data predates that fix or the nightly reseed is not running there (cf. KnownBugs
+  #30). Harmless for this plan — the converted rows simply keep null rates and runbook step 7 reseeds the demo —
+  but worth a separate look.
+- **F-2:** Nikalas's 2026-10-07 Georgica order is visit type *Tasting + Lunch* with 5 guests in *Tasting only*,
+  0 in the lunch box, 2 free, charged ₾250 (5 × ₾50). Either those guests really only tasted (visit type set
+  loosely), or they had lunch and were undercharged. It converts unchanged (A-2). Under A-6 a **new** booking
+  like it would be refused (a Tasting + Lunch visit needs a lunch guest) — **question for Max (Q-3).**
 
 ## 11. History
 
