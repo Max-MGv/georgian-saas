@@ -34,7 +34,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 1 | Pricing rules as pure code + test script (no DB) | ✅ 2026-10-20 |
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ✅ 2026-10-20 (dev DB) |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ✅ 2026-10-20 |
-| 4 | Migration B (contract): drop old columns, retire old scripts | 🚧 |
+| 4 | Migration B (contract): drop old columns, retire old scripts | ✅ 2026-10-20 (dev DB) |
 | 5 | Company price setup: three prices per tier, company registration fee | ⬜ |
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ⬜ |
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ⬜ |
@@ -338,7 +338,7 @@ the Tasting / Lunch columns of the Orders list and booking sheet (A-4); registra
 **Resume point:** done.
 
 ### Chunk 4 — Migration B (contract)
-**Status:** 🚧 2026-10-20
+**Status:** ✅ 2026-10-20 (dev DB)
 **Goal:** the old columns are gone, so nothing can read them by mistake.
 **Order matters (learned while doing it):** Prisma selects every column it knows on every query, so a running
 app whose client still knows a dropped column fails. Therefore: **(a)** remove the fields from the schema and
@@ -351,12 +351,16 @@ Same order in the production runbook (merge = step 3, contract = step 6).
       Contract migration `20261020120000_pricing_model_contract` **written, not applied** — hand-assembled because
       `prisma migrate dev` refuses non-interactive shells: `prisma migrate diff --from-url <dev> --to-schema-datamodel`
       output, preceded by the idempotent backfill re-run (minus the once-only company fee).
-- [ ] **4b** wait for the staging deploy of `ecbc415` to be READY (Vercel project `prj_6r0Ge02yFdu3y6XfPPTB42LIOg8I`,
-      team `team_YoGrXMcjXga0y919jXsSV82z`), then `prisma migrate deploy` on dev; `prisma generate`.
-- [ ] Verify: expand-check (old columns absent) 0 problems; tsc 0; model + repricing + RLS scripts; shots `chunk4`
-      vs `chunk3` identical; staging site loads an order and the booking form.
+- [x] **4b** staging deploy READY (first build of `ecbc415` failed downloading the Google font for `app/welcome` —
+      unrelated, transient; `4b33ef7` rebuilt it READY). Then `prisma migrate deploy` on dev → applied.
+      (Vercel project `prj_6r0Ge02yFdu3y6XfPPTB42LIOg8I`, team `team_YoGrXMcjXga0y919jXsSV82z`.)
+- [x] Verify: expand-check — old columns absent, 428 orders re-priced to their stored totals, **0 problems**;
+      `migrate status` up to date; `test-pricing-model` 54/54; repricing 6/6; price RLS 10/10; money audit clean;
+      staging home 200 before and after; shots `chunk4` vs `chunk3` identical (only the test order id); two real
+      localhost bookings stored as before; no server errors.
 - [x] Old scripts already deleted in Chunk 3.
-**Resume point:** 4b — check the deploy state, then apply the migration on dev.
+**Status line:** ✅ 2026-10-20 on the dev DB. Production still has neither migration (runbook).
+**Resume point:** done.
 
 ### Chunk 5 — Company price setup
 **Status:** ⬜
