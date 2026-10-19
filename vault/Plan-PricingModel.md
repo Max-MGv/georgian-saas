@@ -35,7 +35,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ✅ 2026-10-20 (dev DB) |
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ✅ 2026-10-20 |
 | 4 | Migration B (contract): drop old columns, retire old scripts | ✅ 2026-10-20 (dev DB) |
-| 5 | Company price setup: three prices per tier, company registration fee | ⬜ |
+| 5 | Company price setup: three prices per tier, company registration fee | ✅ 2026-10-20 |
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ⬜ |
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ⬜ |
 | 8 | Admin New Order + Order Detail (fixes P-11) | ⬜ |
@@ -363,16 +363,36 @@ Same order in the production runbook (merge = step 3, contract = step 6).
 **Resume point:** done.
 
 ### Chunk 5 — Company price setup
-**Status:** ⬜
-- [ ] Companies → tier form/list: Tasting only · Lunch only (blank = not offered) · Tasting & Lunch;
-      company card gets "Registration fee ₾ per booking"; Individuals hide Lunch only (A-10).
-- [ ] `app/actions/prices.ts` + company update action validate (whole tetri ≥ 0; lunch-only nullable).
-- [ ] Onboarding wizard companies step: same three prices (first tier) + fee.
-- [ ] `PaymentSetupBanner` "has prices" = any of the three > 0.
-- [ ] EN + KA labels (`adminT`).
-**Verify:** screenshots (desktop + 390px) of the table, edit form, Individuals, onboarding step; edit a
-tier on dev and read the row back.
-**Resume point:** —
+**Status:** ✅ 2026-10-20 — tsc 0 · price RLS 10/10 · eslint: only a pre-existing issue · UI checked on localhost
+through the real screens with `saas/tests/_qa/pricing-companies.spec.ts` (untracked): three prices + "not offered"
+shown, Lunch only saved (₾45 → 4500 in the DB), an empty Tasting & Lunch refused by the form, company fee saved
+(₾25 → 2500), Individuals show no Lunch only and no fee line; screenshots desktop + 390px in
+`saas/tests/_qa/shots/pricing/chunk5/`.
+- [x] Companies → tier form: Tasting only · Lunch only (hint: empty = not offered) · Tasting & Lunch, all-in GEL
+      inputs (`parseMajor`); Individuals: no Lunch only box. Tier list shows the three prices, *not offered* in
+      italics. Individuals' "shown on site" line reads the two all-in prices.
+- [x] Company registration fee: `RegistrationFeeRow` under each company's tiers (not Individuals) → new action
+      `setRegistrationFee(companyId, tetri)` in `app/actions/prices.ts` (whole tetri 0…₾1,000,000, not the
+      Individuals row). `Company` type + page mapping carry `registrationFee`.
+- [x] `tierPricesProblem` (server): whole tetri 0…₾1,000,000; **Tasting only and Tasting & Lunch required for now**
+      (decision C5-1: until Chunk 7 the party-size pricing would read an empty one as ₾0 — revisit in Chunk 7 when
+      `notOffered` guards every path); Individuals may not have a Lunch only price.
+- [x] Onboarding wizard: both boxes are all-in ("Tasting only", "Tasting & Lunch"); **an empty Tasting & Lunch box
+      in the wizard = same as tasting** (decision C5-2: the wizard's first-run shortcut; the Companies page asks
+      explicitly). **F-3 fixed:** the tier summary now shows GEL (was raw tetri as ₾), and the "add tier" path passes
+      tetri like the others. Visual check of the wizard step is left to the onboarding E2E in Chunk 11 (its step
+      labels are not clickable, so the quick screenshot script could not reach it).
+- [x] Labels EN + KA (`lib/adminT.ts`: `companies.priceForm.tastingOnlyPP/lunchOnlyPP/tastingLunchAllInPP/
+      lunchOnlyHint/required`, `companies.priceTiers.tastingOnly/lunchOnly/tastingLunch/notOffered`,
+      `companies.registrationFee.label/hint/none`). Old keys left unused (harmless).
+- [x] `PaymentSetupBanner` "has prices" = any of the three > 0 (done in Chunk 3).
+**For Chunk 10 (specs):** `tests/tier3-admin-smoke/companies-crud.spec.ts:302` finds tier inputs by POSITION
+(0 min, 1 max, 2 tasting, 3 "+Lunch add-on", 4 flat fee) — now 0 min, 1 max, 2 Tasting only, 3 Lunch only,
+4 Tasting & Lunch (companies) and no fee box; it must be updated.
+**Finding F-4 (pre-existing, small, not in scope):** the Individuals hint says "Falls back to 50₾ / 100₾ if none
+selected" (`companies.priceTiers.showOnSiteHint` / `noCustomTiersIndividual`) — the site has not invented default
+prices since the money work; the copy is stale.
+**Resume point:** done.
 
 ### Chunk 6 — Rules: minimums, `LUNCH` visit type
 **Status:** ⬜

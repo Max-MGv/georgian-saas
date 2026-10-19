@@ -112,6 +112,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           wineOrderCount: c._count.wineOrders,
           // Prisma hands these back as plain numbers; re-brand at the boundary
           // so the client's Price type keeps its Tetri guarantee (chunk 3).
+          registrationFee: asTetri(c.registrationFee),
           prices: c.prices.map(pr => ({
             id: pr.id, minGuests: pr.minGuests, maxGuests: pr.maxGuests, isDisplayPrice: pr.isDisplayPrice,
             tastingOnlyPrice: pr.tastingOnlyPrice == null ? null : asTetri(pr.tastingOnlyPrice),

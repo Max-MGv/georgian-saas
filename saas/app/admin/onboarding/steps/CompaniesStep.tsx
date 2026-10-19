@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { asTetri, fromMajor, formatTetri } from '@/lib/money'
+import { asTetri, fromMajor, formatTetri, toMajor } from '@/lib/money'
 import { createOnboardingCompany, addIndividualsPriceTier, setWorksWithCompanies, type OnboardingStatus, type OnboardingTier } from '@/app/actions/onboarding'
 import { createPrice } from '@/app/actions/prices'
 import { adminT } from '@/lib/adminT'
@@ -37,10 +37,11 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   return {
     minGuests: min,
     maxGuests: max,
-    // Until Plan-PricingModel Chunk 5 rebuilds this step: today's "+Lunch add-on" box, stored all-in.
+    // Both boxes are ALL-IN per-person prices (T-152). An empty Tasting & Lunch box means "same as tasting" —
+    // the wizard's first-run shortcut; the Companies page asks for it explicitly. Lunch only is set there too.
     tastingOnlyPrice: fromMajor(tasting),
     lunchOnlyPrice: null,
-    tastingLunchPrice: fromMajor(tasting + (fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP))),
+    tastingLunchPrice: fromMajor(fields.tastingLunchPP.trim() === '' ? tasting : Number(fields.tastingLunchPP)),
   }
 }
 
@@ -51,8 +52,9 @@ function tierSummary(at: (key: string, vars?: Record<string, string | number>) =
   if (prices.length === 0) return null
   const lowest = Math.min(...prices.map(p => p.tastingOnlyPrice))
   return prices.length === 1
-    ? at('onboarding.companies.tierSummaryOne', { amount: lowest })
-    : at('onboarding.companies.tierSummaryMany', { n: prices.length, amount: lowest })
+    // Prices are tetri; the copy reads "{amount}₾", so it needs GEL (Plan-PricingModel F-3 — it printed 5000₾ for ₾50).
+    ? at('onboarding.companies.tierSummaryOne', { amount: toMajor(asTetri(lowest)) })
+    : at('onboarding.companies.tierSummaryMany', { n: prices.length, amount: toMajor(asTetri(lowest)) })
 }
 
 function statusHint(at: (key: string) => string, company: Company): string {
@@ -279,8 +281,8 @@ export default function CompaniesStep({
               <div className="flex flex-wrap items-end gap-3">
                 <SmallField label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} width={72} />
                 <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
-                <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
-                <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
+                <SmallField label={at('companies.priceForm.tastingOnlyPP')} value={tastingPP} onChange={setTastingPP} width={110} />
+                <SmallField label={at('companies.priceForm.tastingLunchAllInPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
                 <button
                   onClick={handleAdd}
                   disabled={loading}
@@ -463,8 +465,8 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
             <div className="flex flex-wrap items-end gap-3">
               <SmallField label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} width={72} />
               <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
-              <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
-              <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
+              <SmallField label={at('companies.priceForm.tastingOnlyPP')} value={tastingPP} onChange={setTastingPP} width={110} />
+              <SmallField label={at('companies.priceForm.tastingLunchAllInPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
               <button
                 onClick={handleSave}
                 disabled={loading}
@@ -510,15 +512,15 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
       companyId,
       minGuests: min,
       maxGuests: max,
-      // The wizard's inputs hold GEL; the action takes tetri (chunk 3).
+      // The wizard's inputs hold GEL; the action takes tetri (chunk 3). All-in prices, empty = same as tasting.
       tastingOnlyPrice: fromMajor(tasting),
       lunchOnlyPrice: null,
-      tastingLunchPrice: fromMajor(tasting + (tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP))),
+      tastingLunchPrice: fromMajor(tastingLunchPP.trim() === '' ? tasting : Number(tastingLunchPP)),
     })
     if ('error' in result) {
       setError(result.error ?? '')
     } else {
-      onAdded({ tastingOnlyPrice: tasting })
+      onAdded({ tastingOnlyPrice: fromMajor(tasting) })
     }
     setLoading(false)
   }
@@ -527,8 +529,8 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
     <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
       <SmallField label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} width={72} />
       <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
-      <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
-      <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
+      <SmallField label={at('companies.priceForm.tastingOnlyPP')} value={tastingPP} onChange={setTastingPP} width={110} />
+      <SmallField label={at('companies.priceForm.tastingLunchAllInPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
       <div className="flex gap-2 pb-0.5">
         <button
           onClick={handleSave}

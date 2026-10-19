@@ -29,13 +29,22 @@ async function validateTier(
   return null
 }
 
-/** Whole tetri ≥ 0 or null, and at least one product offered (a row with no price at all prices nothing). */
-function tierPricesProblem(p: TierPrices): string | null {
+/** ₾1,000,000 — far above any real per-person or per-booking price; stops a typo becoming a 32-bit overflow. */
+const MAX_TETRI = 100_000_000
+
+/**
+ * Whole tetri ≥ 0 or null. Tasting only and Tasting & Lunch are REQUIRED for now: until the booking rules move
+ * to the product model (Plan-PricingModel Chunk 7) the party-size pricing reads an empty price as ₾0. Lunch only
+ * may be empty — that is "not offered" (D-7) — and is never offered to individuals (D-5).
+ */
+function tierPricesProblem(p: TierPrices, isIndividual: boolean): string | null {
   const all = [p.tastingOnlyPrice, p.lunchOnlyPrice, p.tastingLunchPrice]
-  if (all.some(v => v != null && (!Number.isInteger(v) || v < 0))) return 'Prices must be whole amounts of 0 or more.'
-  if (all.every(v => v == null)) return 'Enter at least one price.'
+  if (all.some(v => v != null && (!Number.isInteger(v) || v < 0 || v > MAX_TETRI))) return 'Prices must be whole amounts of 0 or more.'
+  if (p.tastingOnlyPrice == null || p.tastingLunchPrice == null) return 'Tasting only and Tasting & Lunch prices are required.'
+  if (isIndividual && p.lunchOnlyPrice != null) return 'Individuals have no Lunch only price.'
   return null
 }
+
 
 export async function createPrice(data: {
   companyId: string
@@ -52,7 +61,7 @@ export async function createPrice(data: {
     // Postgres error, not this file's `{ error }` convention — so check first.
     const company = await tx.company.findFirst({ where: { id: data.companyId, tenantId } })
     if (!company) return { error: 'Not found.' }
-    const err = tierPricesProblem(data) ?? await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
+    const err = tierPricesProblem(data, company.isIndividual) ?? await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
     if (err) return { error: err }
     await tx.price.create({ data })
     return { success: true as const }
@@ -70,10 +79,10 @@ export async function updatePrice(id: string, data: {
   const result = await withTenantDb(tenantId, async (tx) => {
     const price = await tx.price.findFirst({
       where: { id, companyId },
-      select: { id: true, company: { select: { tenantId: true } } },
+      select: { id: true, company: { select: { tenantId: true, isIndividual: true } } },
     })
     if (!price || price.company.tenantId !== tenantId) return { error: 'Not found.' }
-    const err = tierPricesProblem(data) ?? await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
+    const err = tierPricesProblem(data, price.company.isIndividual) ?? await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
     if (err) return { error: err }
     await tx.price.update({ where: { id }, data })
     return { success: true as const }
@@ -115,4 +124,20 @@ export async function setDisplayPrice(priceId: string) {
   revalidatePath('/')
   revalidatePath('/admin/companies')
   return { success: true }
+}
+
+/**
+ * A company's flat registration fee, TETRI, charged once per booking (Plan-PricingModel D-6, T-152). Replaces
+ * the per-tier fee. Individuals are never charged one, so the Individuals company cannot have it.
+ */
+export async function setRegistrationFee(companyId: string, fee: Tetri) {
+  await requireAdmin()
+  if (!Number.isInteger(fee) || fee < 0 || fee > MAX_TETRI) return { error: 'The fee must be a whole amount of 0 or more.' }
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const updated = await tx.company.updateMany({ where: { id: companyId, tenantId, isIndividual: false }, data: { registrationFee: fee } })
+    return updated.count === 0 ? { error: 'Not found.' } : { success: true as const }
+  })
+  if (!('error' in result)) revalidatePath('/admin/companies')
+  return result
 }
