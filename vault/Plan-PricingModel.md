@@ -33,7 +33,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 0 | Baseline: counts, edge rows, ticket links | ✅ 2026-10-20 |
 | 1 | Pricing rules as pure code + test script (no DB) | ✅ 2026-10-20 |
 | 2 | Migration A (expand): new columns + backfill, old columns kept | ✅ 2026-10-20 (dev DB) |
-| 3 | Switch every reader/writer to the new columns — **behaviour identical** | ⬜ |
+| 3 | Switch every reader/writer to the new columns — **behaviour identical** | ✅ 2026-10-20 |
 | 4 | Migration B (contract): drop old columns, retire old scripts | ⬜ |
 | 5 | Company price setup: three prices per tier, company registration fee | ⬜ |
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ⬜ |
@@ -297,20 +297,45 @@ columns to their stored totals), 3 invoices — **0 problems**. tsc 0. Baseline 
 **Resume point:** done.
 
 ### Chunk 3 — Switch every reader and writer to the new columns (behaviour identical)
-**Status:** ⬜
-**Goal:** the whole app runs on the new columns and the new pricing functions, **with today's UI and
-today's results**. No new feature visible yet. This is the riskiest chunk — go file by file down §5.
-- [ ] Pricing core: `recalcOrderTotal`, all write paths call `ratesForCounts`/`priceBooking` (new).
-      Writers fill the new columns (old columns no longer written).
-- [ ] Every reader in §5's rows marked "3": switch to the new columns, keeping today's labels/layout.
-- [ ] Re-run the backfill (idempotent) to catch rows staging wrote between Chunks 2 and 3.
-- [ ] `test-pricing-model.ts` + equivalence green; the scripts listed in §5 run green.
-- [ ] Screenshots (phone + desktop): public individual + detailed company form with a quote; admin New
-      Order quote; an order detail; Orders list (desktop + phone card); invoice print; booking sheet.
-      Create two bookings on localhost (individual, detailed company with masterclass) → totals equal
-      what the old code produced for the same input (recorded before the switch).
-**Verify:** identical totals; no visual change; tsc 0.
-**Resume point:** —
+**Status:** ✅ 2026-10-20 — tsc 0 · `test-pricing-model` 54/54 · `test-order-repricing` 6/6 · `test-price-rls` 10/10 ·
+`audit-money` clean · `_qa/pricing-expand-check` 0 problems (re-run backfill: 0 rows) · shots `chunk3` vs `chunk2`:
+**every price identical**, only the allowed differences · two real bookings on localhost stored as before
+(individual 10 × ₾60 = ₾600, boxes 10/0/0; company 4/6/2 + masterclass = ₾720 + ₾35) · no server errors · the
+10 eslint errors in touched files are all pre-existing (checked line by line against HEAD).
+**Goal:** the whole app runs on the new columns, **with today's rules, today's UI and today's numbers**
+(the tier is still picked by party size here — the per-product rule arrives with the forms in Chunks 7–8).
+**Method used:** the old Prisma fields were renamed `legacy…` with `@map` (no DB change), so `tsc` listed every
+reader. ⚠️ **Lesson:** the compiler does NOT catch an object built first and passed to Prisma later (TypeScript's
+excess-property check only applies to fresh literals) — `lib/demoSeed.ts` wrote `tastingGuestCount` that way and
+tsc stayed silent. So every write was also found by **text search**, and the seed's order literal is now typed at
+its declaration (`Prisma.OrderUncheckedCreateInput`). Chunk 4's final grep must repeat this.
+**What changed:**
+- `lib/pricingUtils.ts`: the party-size functions read the product columns (`PriceTier` = `ProductTier`,
+  `comboRatePerPerson` = `tastingLunchPrice`, new `tastingRatePerPerson`, `headcountOf(order)`); registration is
+  passed in (`ratesForParty(prices, n, registration)`, `ratesFromTier(tier, registration)`); `ratesFromSnapshot`
+  reads `tastingOnlyRate`/`tastingLunchRate`; new `boxColumns(counts)`; `TierPrices` type (kept out of the
+  `'use server'` file — MaintenanceNotes §24).
+- Writers (`createBooking`, `createOrderAdmin`, `updateOrderEnhanced`, `assignOrderCompany`, `recalcOrderTotal`,
+  `demoSeed`): boxes via `boxColumns(countsFromLegacy(…))` (A-4 — the same rule as the migration), rates in the new
+  columns, registration = `company.registrationFee` (0 for individuals). `InvoiceSent` writes the new columns.
+- Price setup: `createPrice`/`updatePrice`/`OnboardingTier` take `TierPrices` (validated: whole tetri ≥ 0, at least
+  one offered). The Companies tier form and the onboarding wizard keep today's "Tasting" + "+Lunch add-on" boxes and
+  save Tasting & Lunch = tasting + add-on (all-in). **The per-tier registration-fee input is removed**; the company-
+  level fee input arrives in Chunk 5 (all fees are ₾0 on both databases, so nothing is lost in between).
+- Readers: resolver (`bookingPrices` new shape + `bookingRegistrationFee`), home page, payment banner, Orders list,
+  order detail, New Order, booking form preview, invoice email + `InvoiceSent`. The list/sheet/invoice/detail
+  components keep their own local names (`tastingGuestCount` = Tasting only, `lunchGuestCount` = Tasting & Lunch) fed
+  from the new columns, with a comment — Chunks 8/9 rename them.
+- Scripts/tests: `test-order-repricing`, `test-price-rls`, `audit-money`, `booking-company-code-check.spec.ts` (its
+  page-source check now looks for `tastingOnlyPrice` instead of `pricePerPerson`) updated; **deleted**
+  `migrate-lunch-price-to-addon.ts`, `restore-dev-lunch-addon.ts` (would corrupt the new meaning) and
+  `test-pricing-agreement.ts` (replaced by `test-pricing-model.ts`).
+- New untracked QA helpers: `scripts/_qa/pricing-rerun-backfill.ts [--prod]`, `tests/_qa/pricing-bookings.spec.ts`.
+**Allowed differences (seen in the shots diff, as expected):** individual/simple bookings now show their count in
+the Tasting / Lunch columns of the Orders list and booking sheet (A-4); registration fee no longer editable per tier.
+**Finding F-3 (pre-existing, fix in Chunk 5):** the onboarding wizard's tier summary prints the stored tetri as ₾
+("1 tier — 5000₾/person" for ₾50), and its "add tier" path passes GEL instead — inconsistent units.
+**Resume point:** done.
 
 ### Chunk 4 — Migration B (contract)
 **Status:** ⬜

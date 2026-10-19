@@ -33,12 +33,12 @@ async function main() {
       name: `ZZ-repricing-probe-${Date.now()}`,
       tenantId: TENANT,
       isBookingCompany: true,
+      registrationFee: 2500,               // ₾25 — per company since T-152
       prices: {
         create: [{
           minGuests: 1, maxGuests: 100,
-          pricePerPerson: 7000,             // ₾70
-          tastingLunchPricePerPerson: 3000, // +₾30 → combo ₾100
-          registrationPrice: 2500,          // ₾25
+          tastingOnlyPrice: 7000,          // ₾70
+          tastingLunchPrice: 10000,        // ₾100 all-in
         }],
       },
     },
@@ -53,12 +53,12 @@ async function main() {
       tenantId: TENANT, companyId: company.id,
       bookingType: 'COMPANY', visitType: 'TASTING',
       date: new Date('2030-01-01'), timeSlot: '12:00',
-      guestCount: 4, tastingGuestCount: 4, lunchGuestCount: 0,
+      guestCount: 4, tastingOnlyGuests: 4, lunchOnlyGuests: 0, tastingLunchGuests: 0,
       name: 'ZZ', surname: 'Repricing',
       totalPrice: 30500,
-      tastingRateSnapshot: tier.pricePerPerson,
-      lunchRateSnapshot: tier.pricePerPerson + tier.tastingLunchPricePerPerson,
-      registrationFeeSnapshot: tier.registrationPrice,
+      tastingOnlyRate: tier.tastingOnlyPrice,
+      tastingLunchRate: tier.tastingLunchPrice,
+      registrationFeeSnapshot: company.registrationFee,
     },
   })
 
@@ -67,10 +67,8 @@ async function main() {
     (await db.order.findUnique({ where: { id: order.id } }))!.totalPrice, 30500)
 
   // ── 2. The winery raises its prices ───────────────────────────────────────
-  await db.price.update({
-    where: { id: tier.id },
-    data: { pricePerPerson: 9000, registrationPrice: 5000 }, // ₾70 → ₾90, ₾25 → ₾50
-  })
+  await db.price.update({ where: { id: tier.id }, data: { tastingOnlyPrice: 9000 } }) // ₾70 → ₾90
+  await db.company.update({ where: { id: company.id }, data: { registrationFee: 5000 } }) // ₾25 → ₾50
 
   // ── 3. An admin adds a ₾20 extra to the OLD booking ───────────────────────
   await db.orderExtra.create({ data: { orderId: order.id, label: 'ZZ probe extra', amount: 2000 } })
@@ -89,7 +87,7 @@ async function main() {
       tenantId: TENANT, companyId: company.id,
       bookingType: 'COMPANY', visitType: 'TASTING',
       date: new Date('2030-01-02'), timeSlot: '12:00',
-      guestCount: 4, tastingGuestCount: 4, lunchGuestCount: 0,
+      guestCount: 4, tastingOnlyGuests: 4, lunchOnlyGuests: 0, tastingLunchGuests: 0,
       name: 'ZZ', surname: 'Legacy',
       totalPrice: 0,
       // no snapshot — the pre-chunk-4 shape
@@ -107,10 +105,10 @@ async function main() {
       tenantId: TENANT, companyId: company.id,
       bookingType: 'COMPANY', visitType: 'TASTING_LUNCH',
       date: new Date('2030-01-03'), timeSlot: '12:00',
-      guestCount: 3, tastingGuestCount: 1, lunchGuestCount: 2,
+      guestCount: 3, tastingOnlyGuests: 1, lunchOnlyGuests: 0, tastingLunchGuests: 2,
       name: 'ZZ', surname: 'Combo',
       totalPrice: 0,
-      tastingRateSnapshot: 7000, lunchRateSnapshot: 10000, registrationFeeSnapshot: 2500,
+      tastingOnlyRate: 7000, tastingLunchRate: 10000, registrationFeeSnapshot: 2500,
     },
   })
   await recalcOrderTotal(combo.id, TENANT)

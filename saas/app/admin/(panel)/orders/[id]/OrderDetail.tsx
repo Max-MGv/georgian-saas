@@ -5,7 +5,7 @@ import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } f
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot, tastingRatePerPerson } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -180,9 +180,10 @@ type Price = {
   id: string
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  // Product model (T-152): tetri per person, null = not offered; tastingLunchPrice is all-in.
+  tastingOnlyPrice: number | null
+  lunchOnlyPrice: number | null
+  tastingLunchPrice: number | null
 }
 
 type MasterclassItemRow = {
@@ -241,8 +242,8 @@ type OrderProp = {
   // never passed these three down — so this screen had no way to know what the
   // order cost, and invented ₾50 instead (#50) while double-counting its lines
   // against the stored total (#52). Both fixes need these here.
-  tastingRateSnapshot: number | null
-  lunchRateSnapshot: number | null
+  tastingOnlyRate: number | null
+  tastingLunchRate: number | null
   registrationFeeSnapshot: number | null
   requestedCompanyName: string | null
   company: {
@@ -250,6 +251,8 @@ type OrderProp = {
     name: string
     identificationCode: string | null
     prices: Price[]
+    /** Flat fee per booking (T-152 D-6) — replaces each tier's own registration fee. */
+    registrationFee: number
   } | null
   masterclassLines: MasterclassLine[]
   extras: ExtraRow[]
@@ -374,8 +377,8 @@ export default function OrderDetail({
   // had no company prices, a Save after editing guest counts re-priced a ₾70/pp
   // booking at ₾50 and overwrote its real snapshot. Empty when there is no
   // snapshot to show: inventing a number here is the bug.
-  const snapshotTastingMajor = order.tastingRateSnapshot != null ? String(toMajor(asTetri(order.tastingRateSnapshot))) : ''
-  const snapshotLunchMajor = order.lunchRateSnapshot != null ? String(toMajor(asTetri(order.lunchRateSnapshot))) : ''
+  const snapshotTastingMajor = order.tastingOnlyRate != null ? String(toMajor(asTetri(order.tastingOnlyRate))) : ''
+  const snapshotLunchMajor = order.tastingLunchRate != null ? String(toMajor(asTetri(order.tastingLunchRate))) : ''
   const [manualTastingRateStr, setManualTastingRateStr] = useState(snapshotTastingMajor)
   const [manualLunchRateStr, setManualLunchRateStr] = useState(snapshotLunchMajor)
   const [customRates, setCustomRates] = useState(false)
@@ -558,6 +561,7 @@ export default function OrderDetail({
 
   // ── Pricing calculations ───────────────────────────────────────────────────
   const prices = order.company?.prices ?? []
+  const companyRegistrationFee = order.company?.registrationFee ?? 0
   const payingGuests = tastingGuests + lunchGuests
 
   // Party size drives the tier (2026-09-19). If no exact range match, falls back
@@ -585,11 +589,11 @@ export default function OrderDetail({
   // there is no snapshot there is nothing to rebuild from, so legacyBase is
   // null and the total falls back to the stored figure untouched.
   const snapshotBase =
-    order.tastingRateSnapshot != null || order.lunchRateSnapshot != null
+    order.tastingOnlyRate != null || order.tastingLunchRate != null
       ? partyGuestCount *
           (order.visitType === 'TASTING_LUNCH'
-            ? (order.lunchRateSnapshot ?? 0)
-            : (order.tastingRateSnapshot ?? 0)) +
+            ? (order.tastingLunchRate ?? 0)
+            : (order.tastingOnlyRate ?? 0)) +
         (order.registrationFeeSnapshot ?? 0)
       : null
 
@@ -597,11 +601,11 @@ export default function OrderDetail({
     ? order.guestCount *
         (order.visitType === 'TASTING_LUNCH'
           ? comboRatePerPerson(legacyTier)
-          : legacyTier.pricePerPerson) +
-      legacyTier.registrationPrice
+          : tastingRatePerPerson(legacyTier)) +
+      companyRegistrationFee
     : snapshotBase
 
-  const tastingAmt = tier ? tastingGuests * tier.pricePerPerson : null
+  const tastingAmt = tier ? tastingGuests * tastingRatePerPerson(tier) : null
   const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : null
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
@@ -617,8 +621,8 @@ export default function OrderDetail({
   // server uses, so this screen cannot disagree with what a Save will store.
   const previewRates =
     tier != null
-      ? ratesForParty(prices, partyGuestCount)
-      : (order.tastingRateSnapshot != null || customRates)
+      ? ratesForParty(prices, partyGuestCount, companyRegistrationFee)
+      : (order.tastingOnlyRate != null || customRates)
         ? (customRates
             ? ratesFromManual(manualTastingRate, manualLunchRate)
             : ratesFromSnapshot(order))
@@ -676,7 +680,7 @@ export default function OrderDetail({
       // neither holds, updateOrderEnhanced's manual branch does not fire and
       // the stored total and snapshot are left alone — the same stance
       // recalcOrderTotal's legacy branch takes: say nothing rather than guess.
-      ...(prices.length === 0 && payingGuests > 0 && (order.tastingRateSnapshot != null || customRates)
+      ...(prices.length === 0 && payingGuests > 0 && (order.tastingOnlyRate != null || customRates)
         ? { manualTastingRate, manualLunchRate }
         : {}),
     })
@@ -1218,7 +1222,7 @@ export default function OrderDetail({
                   {/* An em dash when the order carries no rate and nobody has
                       set one. Showing "50 / 50" there was the display half of
                       #50 — a made-up figure presented as the agreed rate. */}
-                  {order.tastingRateSnapshot == null && !customRates
+                  {order.tastingOnlyRate == null && !customRates
                     ? '—'
                     : at('orderDetail.guestBreakdown.rateBadge', { t: formatTetri(manualTastingRate, { symbol: false }), l: formatTetri(manualLunchRate, { symbol: false }) })}
                 </span>
@@ -1624,15 +1628,15 @@ export default function OrderDetail({
           >
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tier.pricePerPerson))}/pp</strong>
+            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tastingRatePerPerson(tier)))}/pp</strong>
             {' · '}
             {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
             {' · '}
-            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(tier.registrationPrice))}</strong>
+            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(companyRegistrationFee))}</strong>
           </div>
         )}
         {/* Lunch rate = 0 warning */}
-        {tier && lunchGuests > 0 && tier.tastingLunchPricePerPerson === 0 && (
+        {tier && lunchGuests > 0 && comboRatePerPerson(tier) === tastingRatePerPerson(tier) && (
           <div
             className="text-xs rounded-lg px-3 py-2 mb-3"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}
@@ -1649,7 +1653,7 @@ export default function OrderDetail({
           {tier && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(asTetri(tier.pricePerPerson))})
+                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(asTetri(tastingRatePerPerson(tier)))})
               </span>
               <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt!), { decimals: true })}</span>
             </div>
@@ -1662,10 +1666,10 @@ export default function OrderDetail({
               <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt!), { decimals: true })}</span>
             </div>
           )}
-          {tier && tier.registrationPrice > 0 && (
+          {tier && companyRegistrationFee > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(tier.registrationPrice), { decimals: true })}</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(companyRegistrationFee), { decimals: true })}</span>
             </div>
           )}
           {/* Manual rate lines for individual / no-tier orders */}

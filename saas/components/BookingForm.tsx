@@ -10,7 +10,7 @@ import { createBooking, type BookingFormData } from '@/app/actions/createBooking
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, tastingRatePerPerson } from '@/lib/pricingUtils'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
 import NationalityPicker from '@/components/NationalityPicker'
@@ -25,9 +25,10 @@ import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingCon
 import { dispatchDemoBooked } from '@/lib/demoEvents'
 import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime, getVisitDurationMinutes, addMinutesToSlot } from '@/lib/bookingHours'
 
+/** A tier row, tetri per person; null = not offered; tastingLunchPrice is all-in (T-152). */
 type Price = {
   id: string; minGuests: number; maxGuests: number
-  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
+  tastingOnlyPrice: number | null; lunchOnlyPrice: number | null; tastingLunchPrice: number | null
 }
 /**
  * A company in the public list: its name, nothing else (Max, 2026-10-14: no code = unknown
@@ -39,6 +40,8 @@ type Company = { id: string; name: string }
 /** What the resolver tells the form about a company proven by its code. */
 type ProvenCompany = {
   prices: ResolvedPriceTier[]
+  /** The company's flat registration fee per booking, tetri (T-152 D-6). */
+  registrationFee: number
   // Per-company payment override (#148). null = follow the Companies section default; true =
   // always skip; false = always require. Label-only — the real gate is shouldTakePayment().
   skipPayment: boolean | null
@@ -391,7 +394,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
-    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
     if (typeof window !== 'undefined' && 'PasswordCredential' in window) {
       try {
@@ -430,7 +433,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
   }
 
   function clearDirectCode() {
@@ -585,7 +588,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Party size picks the tier (2026-09-19), and priceBooking is the same
   // function the server prices with — this preview cannot drift from it.
   const enhancedRates = isEnhanced && selectedCompany
-    ? ratesForParty(selectedCompany.prices, totalGuests)
+    ? ratesForParty(selectedCompany.prices, totalGuests, selectedCompany.registrationFee)
     : null
   const enhancedTier = isEnhanced && selectedCompany
     ? findTier(selectedCompany.prices, totalGuests)
@@ -610,7 +613,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // the estimate is unknown and the form says "price confirmed after submission"
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
   const matchedTierRate = matchedTier
-    ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : comboRatePerPerson(matchedTier))
+    ? (visitType === 'TASTING' ? tastingRatePerPerson(matchedTier) : comboRatePerPerson(matchedTier))
     : null
   // Both branches price off matchedTierRate, which already picks
   // comboRatePerPerson for TASTING_LUNCH. The COMPANY branch used
@@ -618,7 +621,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // TASTING_LUNCH quote dropped the lunch add-on and under-stated the total
   // the server then stored (bug #48). createBooking.ts is the authority here.
   const estimatedTotal = matchedTier
-    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTierRate! * guestCount + matchedTier.registrationPrice)
+    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTierRate! * guestCount + (selectedCompany?.registrationFee ?? 0))
     : basePrice != null ? basePrice * guestCount : null
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
@@ -1356,13 +1359,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               </div>
               <div className="space-y-0.5">
                 {tastingGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {formatTetri(asTetri(enhancedTier.pricePerPerson))}</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {formatTetri(asTetri(tastingRatePerPerson(enhancedTier)))}</p>
                 )}
                 {lunchGuests > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {formatTetri(asTetri(comboRatePerPerson(enhancedTier)))}</p>
                 )}
-                {enhancedTier.registrationPrice > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(enhancedTier.registrationPrice))}</p>
+                {(selectedCompany?.registrationFee ?? 0) > 0 && (
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(selectedCompany!.registrationFee))}</p>
                 )}
                 {masterclassAmt > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {formatTetri(asTetri(masterclassAmt))}</p>

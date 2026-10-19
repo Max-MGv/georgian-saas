@@ -52,10 +52,11 @@ export default async function NewOrderPage() {
             id: p.id,
             minGuests: p.minGuests,
             maxGuests: p.maxGuests,
-            pricePerPerson: p.pricePerPerson,
-            tastingLunchPricePerPerson: p.tastingLunchPricePerPerson,
-            registrationPrice: p.registrationPrice,
+            tastingOnlyPrice: p.tastingOnlyPrice,
+            lunchOnlyPrice: p.lunchOnlyPrice,
+            tastingLunchPrice: p.tastingLunchPrice,
           })),
+          registrationFee: c.registrationFee,
         }))}
         menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
         masterclassItems={masterclassItems.map(i => ({

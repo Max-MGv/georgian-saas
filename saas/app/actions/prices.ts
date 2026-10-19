@@ -1,6 +1,7 @@
 'use server'
 
 import { db, withTenantDb, type TxClient } from '@/lib/db'
+import type { TierPrices } from '@/lib/pricingUtils'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
@@ -28,15 +29,19 @@ async function validateTier(
   return null
 }
 
+/** Whole tetri ≥ 0 or null, and at least one product offered (a row with no price at all prices nothing). */
+function tierPricesProblem(p: TierPrices): string | null {
+  const all = [p.tastingOnlyPrice, p.lunchOnlyPrice, p.tastingLunchPrice]
+  if (all.some(v => v != null && (!Number.isInteger(v) || v < 0))) return 'Prices must be whole amounts of 0 or more.'
+  if (all.every(v => v == null)) return 'Enter at least one price.'
+  return null
+}
+
 export async function createPrice(data: {
   companyId: string
   minGuests: number
   maxGuests: number
-  /** TETRI, all three. The form converts what the admin typed (chunk 3). */
-  pricePerPerson: Tetri
-  tastingLunchPricePerPerson: Tetri
-  registrationPrice: Tetri
-}) {
+} & TierPrices) {
   await requireAdmin()
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async (tx) => {
@@ -47,7 +52,7 @@ export async function createPrice(data: {
     // Postgres error, not this file's `{ error }` convention — so check first.
     const company = await tx.company.findFirst({ where: { id: data.companyId, tenantId } })
     if (!company) return { error: 'Not found.' }
-    const err = await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
+    const err = tierPricesProblem(data) ?? await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
     if (err) return { error: err }
     await tx.price.create({ data })
     return { success: true as const }
@@ -59,11 +64,7 @@ export async function createPrice(data: {
 export async function updatePrice(id: string, data: {
   minGuests: number
   maxGuests: number
-  /** TETRI, all three. The form converts what the admin typed (chunk 3). */
-  pricePerPerson: Tetri
-  tastingLunchPricePerPerson: Tetri
-  registrationPrice: Tetri
-}, companyId: string) {
+} & TierPrices, companyId: string) {
   await requireAdmin()
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async (tx) => {
@@ -72,7 +73,7 @@ export async function updatePrice(id: string, data: {
       select: { id: true, company: { select: { tenantId: true } } },
     })
     if (!price || price.company.tenantId !== tenantId) return { error: 'Not found.' }
-    const err = await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
+    const err = tierPricesProblem(data) ?? await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
     if (err) return { error: err }
     await tx.price.update({ where: { id }, data })
     return { success: true as const }

@@ -11,7 +11,7 @@ import { createAddress, updateAddress, deleteAddress } from '@/app/actions/compa
 import { setCompanyWinePrice } from '@/app/actions/companyWinePrices'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
-import { comboRatePerPerson } from '@/lib/pricingUtils'
+import { comboRatePerPerson, tastingRatePerPerson } from '@/lib/pricingUtils'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -23,10 +23,11 @@ type Price = {
   minGuests: number
   maxGuests: number
   // TETRI. These come straight off the DB row; the tier form converts to and
-  // from GEL at its inputs (chunk 3).
-  pricePerPerson: Tetri
-  tastingLunchPricePerPerson: Tetri
-  registrationPrice: Tetri
+  // from GEL at its inputs (chunk 3). Product model (T-152): null = not offered;
+  // tastingLunchPrice is the ALL-IN price for tasting and lunch.
+  tastingOnlyPrice: Tetri | null
+  lunchOnlyPrice: Tetri | null
+  tastingLunchPrice: Tetri | null
   isDisplayPrice: boolean
 }
 /** One person at this company, in one role. Replaces the separate Guide/Representative types. */
@@ -125,9 +126,13 @@ function PriceForm({
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
   // The inputs hold GEL, because that is what an admin types. Everything
   // below this component is tetri; fromMajor/toMajor are the boundary.
-  const [pricePerPerson, setPricePerPerson] = useState(initial ? String(toMajor(asTetri(initial.pricePerPerson))) : '')
-  const [tastingLunchPrice, setTastingLunchPrice] = useState(initial ? String(toMajor(asTetri(initial.tastingLunchPricePerPerson))) : '')
-  const [registrationPrice, setRegistrationPrice] = useState(initial ? String(toMajor(asTetri(initial.registrationPrice))) : '0')
+  // Until Plan-PricingModel Chunk 5 rebuilds this form, it keeps today's two boxes — Tasting and the
+  // "+Lunch" add-on — and stores them as the product prices: Tasting & Lunch = tasting + add-on (all-in).
+  // The registration fee is no longer per tier (it moves to the company, Chunk 5).
+  const initialTasting = initial ? (initial.tastingOnlyPrice ?? 0) : null
+  const [pricePerPerson, setPricePerPerson] = useState(initialTasting != null ? String(toMajor(asTetri(initialTasting))) : '')
+  const [tastingLunchPrice, setTastingLunchPrice] = useState(
+    initial && initialTasting != null ? String(toMajor(asTetri(Math.max(0, (initial.tastingLunchPrice ?? initialTasting) - initialTasting)))) : '')
 
   return (
     <div className="flex flex-wrap items-end gap-3 mt-3">
@@ -135,14 +140,13 @@ function PriceForm({
       <SmallInput label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
       <SmallInput label={at('companies.priceForm.tastingPP')} value={pricePerPerson} onChange={setPricePerPerson} type="number" width={110} />
       <SmallInput label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPrice} onChange={setTastingLunchPrice} type="number" width={140} />
-      <SmallInput label={at('companies.priceForm.flatFee')} value={registrationPrice} onChange={setRegistrationPrice} type="number" width={120} />
       <div className="flex gap-2 pb-0.5">
         <button
           onClick={() => onSave({
             minGuests: Number(minGuests), maxGuests: Number(maxGuests),
-            pricePerPerson: fromMajor(Number(pricePerPerson)),
-            tastingLunchPricePerPerson: fromMajor(tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice)),
-            registrationPrice: fromMajor(registrationPrice === '' ? 0 : Number(registrationPrice)),
+            tastingOnlyPrice: fromMajor(Number(pricePerPerson)),
+            tastingLunchPrice: fromMajor(Number(pricePerPerson) + (tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice))),
+            lunchOnlyPrice: initial?.lunchOnlyPrice ?? null,
           })}
           disabled={loading}
           className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
@@ -928,9 +932,8 @@ function PriceTiersSection({
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(price.pricePerPerson))}/pp</span></span>
+              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(tastingRatePerPerson(price)))}/pp</span></span>
               <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(comboRatePerPerson(price)))}/pp</span></span>
-              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{formatTetri(asTetri(price.registrationPrice))} {at('companies.priceTiers.flatFeeSuffix')}</span>}
 
               {isIndividual && (
                 <button
@@ -1191,7 +1194,7 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {formatTetri(asTetri(displayTier.pricePerPerson))} / {formatTetri(asTetri(comboRatePerPerson(displayTier)))} {at('companies.individuals.shownOnSite')}
+                    {formatTetri(asTetri(tastingRatePerPerson(displayTier)))} / {formatTetri(asTetri(comboRatePerPerson(displayTier)))} {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>

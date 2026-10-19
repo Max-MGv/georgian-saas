@@ -1,5 +1,5 @@
 import { withTenantDb } from '@/lib/db'
-import { priceBooking, ratesForParty, ratesFromSnapshot } from '@/lib/pricingUtils'
+import { headcountOf, priceBooking, ratesForParty, ratesFromSnapshot } from '@/lib/pricingUtils'
 
 /**
  * Recompute an order's total after its lines change.
@@ -31,11 +31,7 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
     )
     const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
 
-    const guests = {
-      guestCount: order.guestCount,
-      tastingGuests: order.tastingGuestCount,
-      lunchGuests: order.lunchGuestCount,
-    }
+    const guests = headcountOf(order)
     const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
     // ── The normal path: price from what this order was actually sold at ──────
@@ -66,7 +62,7 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
 
     // The tier comes from the party size, so this is one lookup rather than the
     // two branches it used to be (2026-09-19 — see pricingUtils.ratesForParty).
-    const liveRates = ratesForParty(prices, order.guestCount)
+    const liveRates = ratesForParty(prices, order.guestCount, order.company?.isIndividual ? 0 : order.company?.registrationFee ?? 0)
     if (!liveRates) {
       // Previously a bare `return` — a silent no-op that left the total
       // untouched and gave the caller no reason to think anything had gone

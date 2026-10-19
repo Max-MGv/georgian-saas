@@ -79,19 +79,22 @@ export type ResolvedCompany = {
    * shipped for every company in the public homepage's source; now only to someone with the code.
    */
   bookingPrices: ResolvedPriceTier[]
+  /** The company's flat registration fee per booking, tetri (T-152 D-6) — BOOKING lookups only, 0 otherwise. */
+  bookingRegistrationFee: number
   /** Per-company payment override (#148) — label only on the form; shouldTakePayment() decides. */
   skipPayment: boolean | null
 }
 
+/** One booking tier, tetri per person; null = product not offered on the row (T-152 — see ProductTier). */
 export type ResolvedPriceTier = {
   id: string; minGuests: number; maxGuests: number
-  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
+  tastingOnlyPrice: number | null; lunchOnlyPrice: number | null; tastingLunchPrice: number | null
 }
 
 /** A company's booking tiers, as the resolver selects them. */
 const TIER_SELECT = {
   orderBy: { minGuests: 'asc' as const },
-  select: { id: true, minGuests: true, maxGuests: true, pricePerPerson: true, tastingLunchPricePerPerson: true, registrationPrice: true },
+  select: { id: true, minGuests: true, maxGuests: true, tastingOnlyPrice: true, lunchOnlyPrice: true, tastingLunchPrice: true },
 }
 
 /** Negotiated prices, as the resolver selects them (T-12). */
@@ -294,6 +297,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
               winePrices: PRICE_SELECT,
               wineDiscountPercent: true,
               skipPayment: true,
+              registrationFee: true,
               prices: TIER_SELECT,
             },
           },
@@ -303,8 +307,9 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         return {
           success: true as const,
           // A person's own code proves the company, so its prices may be shown.
-          company: (({ winePrices, prices, ...c }) => ({
+          company: (({ winePrices, prices, registrationFee, ...c }) => ({
             ...c, winePrices: priceMap(winePrices), bookingPrices: input.module === 'BOOKING' ? prices : [],
+            bookingRegistrationFee: input.module === 'BOOKING' ? registrationFee : 0,
           }))(person.company),
           matchType: 'person' as const,
           matchedPerson: {
@@ -334,6 +339,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         winePrices: PRICE_SELECT,
         wineDiscountPercent: true,
         skipPayment: true,
+        registrationFee: true,
         prices: TIER_SELECT,
       },
     })
@@ -393,6 +399,7 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
         // Reached only by an admin (trusted) or with the company's code checked above.
         winePrices: priceMap(company.winePrices),
         bookingPrices: input.module === 'BOOKING' ? company.prices : [],
+        bookingRegistrationFee: input.module === 'BOOKING' ? company.registrationFee : 0,
         skipPayment: company.skipPayment,
       },
       matchType: 'company' as const,

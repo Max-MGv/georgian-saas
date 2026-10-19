@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, tastingRatePerPerson } from '@/lib/pricingUtils'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
@@ -38,12 +38,14 @@ type Price = {
   id: string
   minGuests: number
   maxGuests: number
-  pricePerPerson: number
-  tastingLunchPricePerPerson: number
-  registrationPrice: number
+  // Product model (T-152): tetri per person, null = not offered; tastingLunchPrice is all-in.
+  tastingOnlyPrice: number | null
+  lunchOnlyPrice: number | null
+  tastingLunchPrice: number | null
 }
 
-type CompanyOption = { id: string; name: string; prices: Price[] }
+/** registrationFee: the company's flat fee per booking (T-152 D-6). */
+type CompanyOption = { id: string; name: string; prices: Price[]; registrationFee: number }
 type MenuItemRow = { id: string; name: string; type: string }
 type MasterclassItemRow = { id: string; name: string; unitType: string; pricePerUnit: number }
 type LineItem = { tempId: number; itemId: string; quantity: number; pricePerUnit: number; name: string; unitType: string }
@@ -178,6 +180,7 @@ export default function NewOrderForm({
   const showNationalityPicker = nationalityEnabled && isCompany
   const selectedCompany = companies.find(c => c.id === companyId) ?? null
   const prices = selectedCompany?.prices ?? []
+  const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
   const guestCount = Math.max(1, parseInt(guestCountStr) || 1)
   const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
@@ -211,7 +214,7 @@ export default function NewOrderForm({
   // the amount used tastingGuests (always 0 for an individual), and the total
   // was computed somewhere else entirely.
   const tastingAmt = tier
-    ? tastingGuests * tier.pricePerPerson
+    ? tastingGuests * tastingRatePerPerson(tier)
     : isCompany
       ? tastingGuests * manualTastingRate
       : visitType === 'TASTING' ? guestCount * manualTastingRate : 0
@@ -226,7 +229,7 @@ export default function NewOrderForm({
   // The same function the server prices with, so this preview cannot drift from
   // what createOrderAdmin will store — which it did until 2026-09-19 (#51).
   const previewRates = tier
-    ? ratesForParty(prices, totalGuestCount)
+    ? ratesForParty(prices, totalGuestCount, companyRegistrationFee)
     : ratesFromManual(manualTastingRate, manualLunchRate)
   const splitExceedsParty = splitTotal > totalGuestCount
 
@@ -763,11 +766,11 @@ export default function NewOrderForm({
           <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
             <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
             {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tier.pricePerPerson))}/pp</strong>
+            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tastingRatePerPerson(tier)))}/pp</strong>
             {' · '}
             {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
             {' · '}
-            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(tier.registrationPrice))}</strong>
+            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(companyRegistrationFee))}</strong>
           </div>
         )}
         {/* Manual rate inputs */}
@@ -806,7 +809,7 @@ export default function NewOrderForm({
           {tastingAmt > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {formatTetri(tier ? asTetri(tier.pricePerPerson) : manualTastingRate)})
+                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {formatTetri(tier ? asTetri(tastingRatePerPerson(tier)) : manualTastingRate)})
               </span>
               <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt), { decimals: true })}</span>
             </div>
@@ -819,10 +822,10 @@ export default function NewOrderForm({
               <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt), { decimals: true })}</span>
             </div>
           )}
-          {tier && tier.registrationPrice > 0 && (
+          {tier && companyRegistrationFee > 0 && (
             <div className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(tier.registrationPrice), { decimals: true })}</span>
+              <span style={{ color: C.text }}>{formatTetri(asTetri(companyRegistrationFee), { decimals: true })}</span>
             </div>
           )}
           {lines.map(l => (

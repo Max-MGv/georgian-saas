@@ -18,8 +18,8 @@
  * Deterministic: a fixed-seed PRNG, so every run produces identical data.
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
-import type { PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
-import { priceBooking } from '@/lib/pricingUtils'
+import type { Prisma, PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
+import { boxColumns, countsFromLegacy, priceBooking } from '@/lib/pricingUtils'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -41,9 +41,15 @@ function makeRng(seed: number) {
 // ---------------------------------------------------------------------------
 // The cast
 // ---------------------------------------------------------------------------
+/**
+ * A seeded tier, written in GEL for readability: the tasting price and the lunch ADD-ON on top of it.
+ * Stored as the product model's columns (T-152): Tasting only = pricePerPerson, Tasting & Lunch =
+ * pricePerPerson + tastingLunchPricePerPerson (all-in), Lunch only not offered. Seeded companies have
+ * no registration fee. (Plan-PricingModel Chunk 10 gives some companies a Lunch only price.)
+ */
 type TierSpec = {
   minGuests: number; maxGuests: number
-  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice?: number
+  pricePerPerson: number; tastingLunchPricePerPerson: number
 }
 
 /**
@@ -344,7 +350,7 @@ function computeTotal(opts: {
   const rates = {
     tasting: fromMajor(tier.pricePerPerson),
     lunch: fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson),
-    registration: fromMajor(tier.registrationPrice ?? 0),
+    registration: 0, // no seeded company has a registration fee
   }
   const total = priceBooking(
     rates,
@@ -401,16 +407,13 @@ export type SeedReport = {
  * reading this file expects to see. Money is stored in tetri, so the conversion
  * happens once, here, at the write (chunk 3, 2026-09-18).
  */
-function tierToTetri(t: {
-  minGuests: number; maxGuests: number
-  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice?: number
-}) {
+function tierToTetri(t: TierSpec) {
   return {
     minGuests: t.minGuests,
     maxGuests: t.maxGuests,
-    pricePerPerson: fromMajor(t.pricePerPerson),
-    tastingLunchPricePerPerson: fromMajor(t.tastingLunchPricePerPerson),
-    registrationPrice: fromMajor(t.registrationPrice ?? 0),
+    tastingOnlyPrice: fromMajor(t.pricePerPerson),
+    lunchOnlyPrice: null,
+    tastingLunchPrice: fromMajor(t.pricePerPerson + t.tastingLunchPricePerPerson),
   }
 }
 
@@ -795,10 +798,13 @@ export async function seedDemoTenant(
         }
       }
 
-      const orderData = {
+      // Typed at the declaration so the compiler checks every field name (an object built first and passed
+      // later escapes TypeScript's excess-property check — a renamed column would only fail at runtime).
+      const orderData: Prisma.OrderUncheckedCreateInput = {
           tenantId: tid, stage, bookingType, visitType, date,
           timeSlot: pick(TIME_SLOTS), guestCount,
-          tastingGuestCount: tastingGuests, lunchGuestCount: lunchGuests, freeGuestCount: freeGuests,
+          // Stored by the same rule as every order (Plan-PricingModel A-4).
+          ...boxColumns(countsFromLegacy({ visitType, guestCount, tastingGuestCount: tastingGuests, lunchGuestCount: lunchGuests, freeGuestCount: freeGuests })),
           hotDishVegetable: visitType === 'TASTING_LUNCH' ? pick(vegItems) : null,
           hotDishMeat: visitType === 'TASTING_LUNCH' ? pick(meatItems) : null,
           name: company ? company.contactName.split(' ')[0] : first,
@@ -809,8 +815,8 @@ export async function seedDemoTenant(
           totalPrice, createdAt,
           // Carry the rates this order was sold at, so recalc uses its snapshot
           // branch rather than repricing off live tiers (#49).
-          tastingRateSnapshot: priced?.tastingRate ?? null,
-          lunchRateSnapshot: priced?.lunchRate ?? null,
+          tastingOnlyRate: priced?.tastingRate ?? null,
+          tastingLunchRate: priced?.lunchRate ?? null,
           registrationFeeSnapshot: priced?.registrationFee ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,

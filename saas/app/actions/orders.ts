@@ -11,7 +11,7 @@ import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
+import { boxColumns, countsFromLegacy, headcountOf, priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -179,7 +179,7 @@ export async function updateOrderEnhanced(
     const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
     const rates = order.company?.prices?.length
-      ? ratesForParty(order.company.prices, data.guestCount)
+      ? ratesForParty(order.company.prices, data.guestCount, order.company.registrationFee)
       : (data.manualTastingRate != null || data.manualLunchRate != null)
         ? ratesFromManual(data.manualTastingRate ?? 0, data.manualLunchRate ?? 0)
         : null
@@ -195,9 +195,11 @@ export async function updateOrderEnhanced(
       where: { id },
       data: {
         guestCount: data.guestCount,
-        tastingGuestCount: data.tastingGuestCount,
-        lunchGuestCount: data.lunchGuestCount,
-        freeGuestCount: data.freeGuestCount,
+        // Stored by the same rule as every order (Plan-PricingModel A-4, countsFromLegacy).
+        ...boxColumns(countsFromLegacy({
+          visitType: order.visitType, guestCount: data.guestCount,
+          tastingGuestCount: data.tastingGuestCount, lunchGuestCount: data.lunchGuestCount, freeGuestCount: data.freeGuestCount,
+        })),
         hotDishVegetable: data.hotDishVegetable || null,
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
@@ -205,7 +207,7 @@ export async function updateOrderEnhanced(
         // Only when this edit actually re-priced the order; a null here would
         // erase a snapshot the order still needs.
         ...(tastingRateSnapshot != null
-          ? { tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot }
+          ? { tastingOnlyRate: tastingRateSnapshot, tastingLunchRate: lunchRateSnapshot, registrationFeeSnapshot }
           : {}),
       },
     })
@@ -291,7 +293,7 @@ export async function createOrderAdmin(data: {
       : null
 
     const rates = company?.prices?.length
-      ? ratesForParty(company.prices, data.guestCount)
+      ? ratesForParty(company.prices, data.guestCount, company.isIndividual ? 0 : company.registrationFee)
       : (data.manualTastingRate > 0 || data.manualLunchRate > 0)
         ? ratesFromManual(data.manualTastingRate, data.manualLunchRate)
         : null
@@ -313,9 +315,11 @@ export async function createOrderAdmin(data: {
         date: new Date(data.date),
         timeSlot: data.timeSlot,
         guestCount: data.guestCount,
-        tastingGuestCount: data.tastingGuestCount,
-        lunchGuestCount: data.lunchGuestCount,
-        freeGuestCount: data.freeGuestCount,
+        // Stored by the same rule as every order (Plan-PricingModel A-4, countsFromLegacy).
+        ...boxColumns(countsFromLegacy({
+          visitType: data.visitType, guestCount: data.guestCount,
+          tastingGuestCount: data.tastingGuestCount, lunchGuestCount: data.lunchGuestCount, freeGuestCount: data.freeGuestCount,
+        })),
         hotDishVegetable: data.hotDishVegetable || null,
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
@@ -329,8 +333,8 @@ export async function createOrderAdmin(data: {
           ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
           : [],
         totalPrice,
-        tastingRateSnapshot,
-        lunchRateSnapshot,
+        tastingOnlyRate: tastingRateSnapshot,
+        tastingLunchRate: lunchRateSnapshot,
         registrationFeeSnapshot,
         tenantId,
         ...NEW_ORDER_COLUMNS,
@@ -447,8 +451,10 @@ export async function sendOrderInvoice(
       timeSlot: order.timeSlot,
       visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',
       guestCount: order.guestCount,
-      tastingGuestCount: order.tastingGuestCount,
-      lunchGuestCount: order.lunchGuestCount,
+      // The template's own names until Plan-PricingModel Chunk 9 redoes the invoice: "tasting" = Tasting only,
+      // "lunch" = Tasting & Lunch.
+      tastingGuestCount: order.tastingOnlyGuests ?? 0,
+      lunchGuestCount: order.tastingLunchGuests ?? 0,
       freeGuestCount: order.freeGuestCount,
       totalPrice: order.totalPrice ?? 0,
       // Only meaningful once something has actually settled — see this
@@ -485,8 +491,9 @@ export async function sendOrderInvoice(
           companyName: order.company?.name ?? null,
           totalPrice: order.totalPrice ?? 0,
           guestCount: order.guestCount,
-          tastingGuestCount: order.tastingGuestCount,
-          lunchGuestCount: order.lunchGuestCount,
+          tastingOnlyGuests: order.tastingOnlyGuests ?? 0,
+          lunchOnlyGuests: order.lunchOnlyGuests ?? 0,
+          tastingLunchGuests: order.tastingLunchGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           visitType: order.visitType,
           masterclassLines: order.masterclassLines.map(l => ({
@@ -705,12 +712,12 @@ export async function assignOrderCompany(
 
     // The two branches this used to have differed only in which head count fed
     // findTier. Now the party size always does, so there is one path.
-    const rates = ratesForParty(company.prices, order.guestCount)
+    const rates = ratesForParty(company.prices, order.guestCount, company.isIndividual ? 0 : company.registrationFee)
     let totalPrice = 0
     if (rates) {
       totalPrice = priceBooking(
         rates,
-        { guestCount: order.guestCount, tastingGuests: order.tastingGuestCount, lunchGuests: order.lunchGuestCount },
+        headcountOf(order),
         order.visitType,
         { masterclass: masterclassAmt, extras: extrasAmt },
       )
@@ -724,7 +731,7 @@ export async function assignOrderCompany(
       where: { id: orderId },
       data: {
         companyId, bookingType: 'COMPANY', totalPrice,
-        tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot,
+        tastingOnlyRate: tastingRateSnapshot, tastingLunchRate: lunchRateSnapshot, registrationFeeSnapshot,
       },
     })
     return { success: true as const, totalPrice }

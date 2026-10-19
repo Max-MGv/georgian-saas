@@ -335,8 +335,8 @@ model InvoiceSent {
   companyName       String?
   totalPrice        Int
   guestCount        Int
-  tastingGuestCount Int  @default(0) // OLD — dropped in T-152 Chunk 4
-  lunchGuestCount   Int  @default(0) // OLD (tasting AND lunch) — dropped in T-152 Chunk 4
+  legacyTastingGuestCount Int @default(0) @map("tastingGuestCount") // OLD — dropped in T-152 Chunk 4
+  legacyLunchGuestCount   Int @default(0) @map("lunchGuestCount") // OLD (tasting AND lunch) — dropped in T-152 Chunk 4
   freeGuestCount    Int
   // Product model (T-152) — same facts under clear names; nullable until Chunk 4.
   tastingOnlyGuests  Int?
@@ -389,8 +389,8 @@ model Order {
   // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
   // OLD model — dropped by Plan-PricingModel Chunk 4 (T-152): lunchGuestCount = guests who did
   // tasting AND lunch, tastingGuestCount = tasting only. Do not add readers.
-  lunchGuestCount         Int                @default(0)
-  tastingGuestCount       Int                @default(0)
+  legacyLunchGuestCount   Int                @default(0) @map("lunchGuestCount")
+  legacyTastingGuestCount Int                @default(0) @map("tastingGuestCount")
   freeGuestCount          Int                @default(0)
   // Product model (T-152): every guest is in exactly one box (or free). guestCount = all four.
   // Nullable until Chunk 4; the backfill fills them from the old columns.
@@ -446,8 +446,8 @@ model Order {
   // registrationFeeSnapshot is 0 for individuals: that path never applied the
   // tier's registration fee, and the snapshot records what was *used*, not what
   // the tier happened to hold.
-  tastingRateSnapshot     Int? // OLD — dropped in T-152 Chunk 4
-  lunchRateSnapshot       Int? // OLD (all-in tasting+lunch) — dropped in T-152 Chunk 4
+  legacyTastingRateSnapshot Int? @map("tastingRateSnapshot") // OLD — dropped in T-152 Chunk 4
+  legacyLunchRateSnapshot   Int? @map("lunchRateSnapshot") // OLD (all-in tasting+lunch) — dropped in T-152 Chunk 4
   registrationFeeSnapshot Int?
   // Product model (T-152): the per-person rate each product was sold at (null = product unused / not frozen).
   tastingOnlyRate         Int?
@@ -555,9 +555,9 @@ model Price {
   // ── OLD model — dropped by Plan-PricingModel Chunk 4 (T-152). Do not add readers. ──
   // pricePerPerson = tasting; tastingLunchPricePerPerson = the lunch ADD-ON (since 2026-09-13);
   // registrationPrice = a flat fee per row (moves to Company.registrationFee).
-  pricePerPerson             Int      @default(0)
-  tastingLunchPricePerPerson Int      @default(0)
-  registrationPrice          Int      @default(0)
+  legacyPricePerPerson       Int      @default(0) @map("pricePerPerson")
+  legacyLunchAddOn           Int      @default(0) @map("tastingLunchPricePerPerson")
+  legacyRegistrationPrice    Int      @default(0) @map("registrationPrice")
   // ── Product model (T-152). Tetri per person; null = not offered on this row (D-7). ──
   // tastingLunchPrice is the ALL-IN price for tasting and lunch, not an add-on.
   // Nullable while the old columns exist (Chunk 2 backfill); never all three null on a real row.

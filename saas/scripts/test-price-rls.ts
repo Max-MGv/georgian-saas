@@ -77,10 +77,10 @@ async function main() {
   check('Company.create works under withTenantDb for both tenants', true)
 
   const priceA = await withTenantDb(A, tx =>
-    tx.price.create({ data: { companyId: companyAId, minGuests: 1, maxGuests: 10, pricePerPerson: 50, tastingLunchPricePerPerson: 60, registrationPrice: 0 } })
+    tx.price.create({ data: { companyId: companyAId, minGuests: 1, maxGuests: 10, tastingOnlyPrice: 50, tastingLunchPrice: 110 } })
   )
   const priceB = await withTenantDb(B, tx =>
-    tx.price.create({ data: { companyId: companyBId, minGuests: 1, maxGuests: 10, pricePerPerson: 70, tastingLunchPricePerPerson: 80, registrationPrice: 0 } })
+    tx.price.create({ data: { companyId: companyBId, minGuests: 1, maxGuests: 10, tastingOnlyPrice: 70, tastingLunchPrice: 150 } })
   )
   check('Price.create works under withTenantDb for both tenants (JOIN-to-Company policy allows same-tenant writes)', true)
 
@@ -92,11 +92,11 @@ async function main() {
 
   // A write attempt against the other tenant's row must not take effect.
   const wrote = await withTenantDb(A, tx =>
-    tx.price.updateMany({ where: { id: priceB.id }, data: { pricePerPerson: 999 } })
+    tx.price.updateMany({ where: { id: priceB.id }, data: { tastingOnlyPrice: 999 } })
   )
   check("Tenant A cannot update tenant B's price via updateMany (RLS)", wrote.count === 0, `updated ${wrote.count}`)
   const bStill = await db.price.findUnique({ where: { id: priceB.id } })
-  check("Tenant B's price is untouched", bStill?.pricePerPerson === 70, `pricePerPerson=${bStill?.pricePerPerson}`)
+  check("Tenant B's price is untouched", bStill?.tastingOnlyPrice === 70, `tastingOnlyPrice=${bStill?.tastingOnlyPrice}`)
 
   // An insert against tenant B's companyId, run under tenant A's role, must be
   // rejected by the WITH CHECK clause (JOIN-to-Company fails since Company B's
@@ -104,7 +104,7 @@ async function main() {
   let crossTenantInsertRejected = false
   try {
     await withTenantDb(A, tx =>
-      tx.price.create({ data: { companyId: companyBId, minGuests: 1, maxGuests: 5, pricePerPerson: 1, tastingLunchPricePerPerson: 1, registrationPrice: 0 } })
+      tx.price.create({ data: { companyId: companyBId, minGuests: 1, maxGuests: 5, tastingOnlyPrice: 1, tastingLunchPrice: 2 } })
     )
   } catch {
     crossTenantInsertRejected = true
@@ -117,7 +117,7 @@ async function main() {
   // ownership-check body createPrice/updatePrice/deletePrice now run, inline,
   // to confirm they return a friendly `{ error }` instead of throwing.
 
-  async function createPriceAs(tenantId: string, data: { companyId: string; minGuests: number; maxGuests: number; pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number }) {
+  async function createPriceAs(tenantId: string, data: { companyId: string; minGuests: number; maxGuests: number; tastingOnlyPrice: number; tastingLunchPrice: number }) {
     return withTenantDb(tenantId, async (tx) => {
       const company = await tx.company.findFirst({ where: { id: data.companyId, tenantId } })
       if (!company) return { error: 'Not found.' }
@@ -138,7 +138,7 @@ async function main() {
     })
   }
 
-  const crossCreate = await createPriceAs(A, { companyId: companyBId, minGuests: 1, maxGuests: 5, pricePerPerson: 1, tastingLunchPricePerPerson: 1, registrationPrice: 0 })
+  const crossCreate = await createPriceAs(A, { companyId: companyBId, minGuests: 1, maxGuests: 5, tastingOnlyPrice: 1, tastingLunchPrice: 2 })
   check("createPrice's body rejects tenant A creating a price under tenant B's companyId with a friendly error", 'error' in crossCreate, JSON.stringify(crossCreate))
 
   const crossDelete = await deletePriceAs(A, priceB.id)

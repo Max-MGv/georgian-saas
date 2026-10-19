@@ -12,7 +12,7 @@ export type Company = {
   id: string
   name: string
   accessCode: string | null
-  prices: { pricePerPerson: number }[]
+  prices: { tastingOnlyPrice: number }[]
   contactInfoSet: boolean
 }
 
@@ -22,12 +22,12 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   maxGuests: string
   tastingPP: string
   tastingLunchPP: string
-  flatFee: string
 }): OnboardingTier | null {
   if (mode === 'simple') {
     const priceNum = Number(fields.price)
     if (fields.price.trim() === '' || !Number.isFinite(priceNum) || priceNum <= 0) return null
-    return { minGuests: 1, maxGuests: 999, pricePerPerson: fromMajor(priceNum), tastingLunchPricePerPerson: fromMajor(0), registrationPrice: fromMajor(0) }
+    // One flat rate: Tasting and Tasting & Lunch at the same price (today's "add-on 0"), Lunch only not offered.
+    return { minGuests: 1, maxGuests: 999, tastingOnlyPrice: fromMajor(priceNum), lunchOnlyPrice: null, tastingLunchPrice: fromMajor(priceNum) }
   }
   const min = Number(fields.minGuests)
   const max = Number(fields.maxGuests)
@@ -37,18 +37,19 @@ function buildTierFromFields(mode: 'simple' | 'detailed', fields: {
   return {
     minGuests: min,
     maxGuests: max,
-    pricePerPerson: fromMajor(tasting),
-    tastingLunchPricePerPerson: fromMajor(fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP)),
-    registrationPrice: fromMajor(fields.flatFee.trim() === '' ? 0 : Number(fields.flatFee)),
+    // Until Plan-PricingModel Chunk 5 rebuilds this step: today's "+Lunch add-on" box, stored all-in.
+    tastingOnlyPrice: fromMajor(tasting),
+    lunchOnlyPrice: null,
+    tastingLunchPrice: fromMajor(tasting + (fields.tastingLunchPP.trim() === '' ? 0 : Number(fields.tastingLunchPP))),
   }
 }
 
 // Shows the actual rate, not just how many tiers exist — "2 tiers" confirms
 // pricing was set but not whether it's sane; the lowest tier's amount lets an
 // admin sanity-check at a glance, same data already loaded client-side.
-function tierSummary(at: (key: string, vars?: Record<string, string | number>) => string, prices: { pricePerPerson: number }[]): string | null {
+function tierSummary(at: (key: string, vars?: Record<string, string | number>) => string, prices: { tastingOnlyPrice: number }[]): string | null {
   if (prices.length === 0) return null
-  const lowest = Math.min(...prices.map(p => p.pricePerPerson))
+  const lowest = Math.min(...prices.map(p => p.tastingOnlyPrice))
   return prices.length === 1
     ? at('onboarding.companies.tierSummaryOne', { amount: lowest })
     : at('onboarding.companies.tierSummaryMany', { n: prices.length, amount: lowest })
@@ -74,14 +75,14 @@ export default function CompaniesStep({
   initialStatus: OnboardingStatus
   initialCompanies: Company[]
   individualsCompanyId: string
-  initialIndividualsPrices: { pricePerPerson: number }[]
+  initialIndividualsPrices: { tastingOnlyPrice: number }[]
   bookingModuleOn: boolean
   wineOrdersModuleOn: boolean
   onDoneChange?: (done: boolean) => void
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
 
-  function priceSummary(prices: { pricePerPerson: number }[]): string | null {
+  function priceSummary(prices: { tastingOnlyPrice: number }[]): string | null {
     return tierSummary(at, prices)
   }
 
@@ -109,7 +110,6 @@ export default function CompaniesStep({
   const [maxGuests, setMaxGuests] = useState('10')
   const [tastingPP, setTastingPP] = useState('')
   const [tastingLunchPP, setTastingLunchPP] = useState('')
-  const [flatFee, setFlatFee] = useState('0')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [savingAnswer, setSavingAnswer] = useState(false)
@@ -125,7 +125,7 @@ export default function CompaniesStep({
   async function handleAdd() {
     if (!name.trim()) { setError(at('onboarding.companies.nameRequired')); return }
     if (askModules && !addAsBooking && !addAsWineOrder) { setError(at('onboarding.companies.moduleRequired')); return }
-    const tier = buildTierFromFields(mode, { price, minGuests, maxGuests, tastingPP, tastingLunchPP, flatFee })
+    const tier = buildTierFromFields(mode, { price, minGuests, maxGuests, tastingPP, tastingLunchPP })
     if (!tier) { setError(at('onboarding.companies.priceRequired')); return }
 
     setLoading(true)
@@ -139,12 +139,12 @@ export default function CompaniesStep({
     } else {
       setCompanies(prev => [...prev, {
         ...result.company,
-        prices: [{ pricePerPerson: tier.pricePerPerson }],
+        prices: [{ tastingOnlyPrice: tier.tastingOnlyPrice ?? 0 }],
         contactInfoSet: false,
       }])
       setName('')
       setPrice('')
-      setMinGuests('1'); setMaxGuests('10'); setTastingPP(''); setTastingLunchPP(''); setFlatFee('0')
+      setMinGuests('1'); setMaxGuests('10'); setTastingPP(''); setTastingLunchPP('')
     }
     setLoading(false)
   }
@@ -281,7 +281,6 @@ export default function CompaniesStep({
                 <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
                 <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
                 <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
-                <SmallField label={at('companies.priceForm.flatFee')} value={flatFee} onChange={setFlatFee} width={120} />
                 <button
                   onClick={handleAdd}
                   disabled={loading}
@@ -339,7 +338,7 @@ export default function CompaniesStep({
                         locale={locale}
                         onAdded={newTier => {
                           setCompanies(prev => prev.map(co =>
-                            co.id === c.id ? { ...co, prices: [...co.prices, { pricePerPerson: newTier.pricePerPerson }] } : co
+                            co.id === c.id ? { ...co, prices: [...co.prices, { tastingOnlyPrice: newTier.tastingOnlyPrice }] } : co
                           ))
                           setAddingTierFor(null)
                         }}
@@ -365,8 +364,8 @@ export default function CompaniesStep({
 function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }: {
   locale: string
   companyId: string
-  prices: { pricePerPerson: number }[]
-  onPricesChange: (prices: { pricePerPerson: number }[]) => void
+  prices: { tastingOnlyPrice: number }[]
+  onPricesChange: (prices: { tastingOnlyPrice: number }[]) => void
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const [mode, setMode] = useState<'simple' | 'detailed'>('simple')
@@ -375,7 +374,6 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
   const [maxGuests, setMaxGuests] = useState('10')
   const [tastingPP, setTastingPP] = useState('')
   const [tastingLunchPP, setTastingLunchPP] = useState('')
-  const [flatFee, setFlatFee] = useState('0')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [addingTier, setAddingTier] = useState(false)
@@ -384,7 +382,7 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
   const summary = tierSummary(at, prices)
 
   async function handleSave() {
-    const tier = buildTierFromFields(mode, { price, minGuests, maxGuests, tastingPP, tastingLunchPP, flatFee })
+    const tier = buildTierFromFields(mode, { price, minGuests, maxGuests, tastingPP, tastingLunchPP })
     if (!tier) { setError(at('onboarding.companies.priceRequired')); return }
     setLoading(true)
     setError('')
@@ -392,9 +390,9 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
     if ('error' in result) {
       setError(result.error ?? '')
     } else {
-      onPricesChange([...prices, { pricePerPerson: tier.pricePerPerson }])
+      onPricesChange([...prices, { tastingOnlyPrice: tier.tastingOnlyPrice ?? 0 }])
       setPrice('')
-      setMinGuests('1'); setMaxGuests('10'); setTastingPP(''); setTastingLunchPP(''); setFlatFee('0')
+      setMinGuests('1'); setMaxGuests('10'); setTastingPP(''); setTastingLunchPP('')
     }
     setLoading(false)
   }
@@ -425,7 +423,7 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
               companyId={companyId}
               locale={locale}
               onAdded={newTier => {
-                onPricesChange([...prices, { pricePerPerson: newTier.pricePerPerson }])
+                onPricesChange([...prices, { tastingOnlyPrice: newTier.tastingOnlyPrice }])
                 setAddingTier(false)
               }}
               onCancel={() => setAddingTier(false)}
@@ -467,7 +465,6 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
               <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
               <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
               <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
-              <SmallField label={at('companies.priceForm.flatFee')} value={flatFee} onChange={setFlatFee} width={120} />
               <button
                 onClick={handleSave}
                 disabled={loading}
@@ -488,7 +485,7 @@ function IndividualsPricingSection({ locale, companyId, prices, onPricesChange }
 function AddTierInline({ companyId, locale, onAdded, onCancel }: {
   companyId: string
   locale: string
-  onAdded: (tier: { pricePerPerson: number }) => void
+  onAdded: (tier: { tastingOnlyPrice: number }) => void
   onCancel: () => void
 }) {
   const at = (key: string) => adminT(locale, key)
@@ -496,7 +493,6 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
   const [maxGuests, setMaxGuests] = useState('20')
   const [tastingPP, setTastingPP] = useState('')
   const [tastingLunchPP, setTastingLunchPP] = useState('')
-  const [flatFee, setFlatFee] = useState('0')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -515,14 +511,14 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
       minGuests: min,
       maxGuests: max,
       // The wizard's inputs hold GEL; the action takes tetri (chunk 3).
-      pricePerPerson: fromMajor(tasting),
-      tastingLunchPricePerPerson: fromMajor(tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP)),
-      registrationPrice: fromMajor(flatFee.trim() === '' ? 0 : Number(flatFee)),
+      tastingOnlyPrice: fromMajor(tasting),
+      lunchOnlyPrice: null,
+      tastingLunchPrice: fromMajor(tasting + (tastingLunchPP.trim() === '' ? 0 : Number(tastingLunchPP))),
     })
     if ('error' in result) {
       setError(result.error ?? '')
     } else {
-      onAdded({ pricePerPerson: tasting })
+      onAdded({ tastingOnlyPrice: tasting })
     }
     setLoading(false)
   }
@@ -533,7 +529,6 @@ function AddTierInline({ companyId, locale, onAdded, onCancel }: {
       <SmallField label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} width={72} />
       <SmallField label={at('companies.priceForm.tastingPP')} value={tastingPP} onChange={setTastingPP} width={110} />
       <SmallField label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPP} onChange={setTastingLunchPP} width={140} />
-      <SmallField label={at('companies.priceForm.flatFee')} value={flatFee} onChange={setFlatFee} width={120} />
       <div className="flex gap-2 pb-0.5">
         <button
           onClick={handleSave}

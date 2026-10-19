@@ -119,7 +119,7 @@ export default async function Home({ searchParams }: PageProps) {
 
   // No invented default prices — the price line is hidden until the tenant sets a display tier
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
-  const displayPriceTasting = displayTier?.pricePerPerson ?? null
+  const displayPriceTasting = displayTier?.tastingOnlyPrice ?? null
   const displayPriceTastingLunch = displayTier ? comboRatePerPerson(displayTier) : null
 
   const logoUrl = h.get('x-tenant-logo') ?? null

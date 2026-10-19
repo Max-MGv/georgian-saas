@@ -298,8 +298,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             bookingType: o.bookingType,
             visitType: o.visitType,
             guestCount: o.guestCount,
-            tastingGuestCount: o.tastingGuestCount,
-            lunchGuestCount: o.lunchGuestCount,
+            // The list's own names until Plan-PricingModel Chunk 9 redoes these screens:
+            // "tasting" = Tasting only, "lunch" = Tasting & Lunch.
+            tastingGuestCount: o.tastingOnlyGuests ?? 0,
+            lunchGuestCount: o.tastingLunchGuests ?? 0,
             freeGuestCount: o.freeGuestCount,
             name: o.name,
             surname: o.surname,

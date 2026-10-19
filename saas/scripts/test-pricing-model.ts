@@ -18,7 +18,7 @@ import path from 'path'
 import {
   countsFromLegacy, countsFromVisit, findProductTier, notOffered, priceBooking, priceCounts, ratesForCounts,
   ratesForParty, ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
-  type Counts, type PriceTier, type ProductTier,
+  type Counts, type ProductTier,
 } from '../lib/pricingUtils'
 import { checkBookingCounts, checkMasterclassLines, type CountRules } from '../lib/bookingInput'
 
@@ -65,9 +65,8 @@ console.log('Pricing — worked examples')
   // R-1 (accepted by Max): each product on its own row. 24 T&L on row 4–24 (₾95), 1 tasting on row 1 (₾100).
   const r1 = c(1, 0, 24)
   check('R-1: 24 Tasting & Lunch + 1 Tasting only', priceCounts(ratesForCounts(GEORGICA, r1, 0), r1, NO_LINES), 238000)
-  // The old model priced the same party on the 25–48 row: 24 × ₾70 + 1 × ₾30 = ₾1,710.
-  const OLD_GEORGICA: PriceTier[] = GEORGICA.map(t => ({ minGuests: t.minGuests, maxGuests: t.maxGuests, pricePerPerson: t.tastingOnlyPrice!, tastingLunchPricePerPerson: t.tastingLunchPrice! - t.tastingOnlyPrice!, registrationPrice: 0 }))
-  check('R-1: old model for the same party', priceBooking(ratesForParty(OLD_GEORGICA, 25)!, { guestCount: 25, tastingGuests: 1, lunchGuests: 24 }, 'TASTING_LUNCH', NO_LINES), 171000)
+  // The old (party-size) model priced the same party on the 25–48 row: 24 × ₾70 + 1 × ₾30 = ₾1,710.
+  check('R-1: old model for the same party', priceBooking(ratesForParty(GEORGICA, 25, 0)!, { guestCount: 25, tastingGuests: 1, lunchGuests: 24 }, 'TASTING_LUNCH', NO_LINES), 171000)
 
   // All three products, three different rows: 4 tasting (4–24 ₾50), 2 lunch only (row "2" ₾50), 30 T&L (25–48 ₾70).
   const mixed = c(4, 2, 30, 1)
@@ -105,18 +104,17 @@ console.log('Pricing — worked examples')
 
 console.log('Pricing — individuals and the company simple form are unchanged (one product, one count)')
 {
-  // Nikalas's real Individuals ladder (production): old tasting / old add-on → new tasting / all-in.
-  const OLD_IND: PriceTier[] = [
-    { minGuests: 1, maxGuests: 1, pricePerPerson: 15000, tastingLunchPricePerPerson: 15000, registrationPrice: 0 },
-    { minGuests: 2, maxGuests: 2, pricePerPerson: 12000, tastingLunchPricePerPerson: 8000, registrationPrice: 0 },
-    { minGuests: 3, maxGuests: 3, pricePerPerson: 7000, tastingLunchPricePerPerson: 7000, registrationPrice: 0 },
-    { minGuests: 4, maxGuests: 100, pricePerPerson: 5000, tastingLunchPricePerPerson: 6000, registrationPrice: 0 },
+  // Nikalas's real Individuals ladder (production), converted: tasting / tasting + old add-on.
+  const NEW_IND: ProductTier[] = [
+    { minGuests: 1, maxGuests: 1, tastingOnlyPrice: 15000, lunchOnlyPrice: null, tastingLunchPrice: 30000 },
+    { minGuests: 2, maxGuests: 2, tastingOnlyPrice: 12000, lunchOnlyPrice: null, tastingLunchPrice: 20000 },
+    { minGuests: 3, maxGuests: 3, tastingOnlyPrice: 7000, lunchOnlyPrice: null, tastingLunchPrice: 14000 },
+    { minGuests: 4, maxGuests: 100, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 11000 },
   ]
-  const NEW_IND: ProductTier[] = OLD_IND.map(t => ({ minGuests: t.minGuests, maxGuests: t.maxGuests, tastingOnlyPrice: t.pricePerPerson, lunchOnlyPrice: null, tastingLunchPrice: t.pricePerPerson + t.tastingLunchPricePerPerson }))
   let diffs = 0
   for (const visit of ['TASTING', 'TASTING_LUNCH'] as const) {
     for (let n = 1; n <= 120; n++) {
-      const oldTotal = priceBooking(ratesForParty(OLD_IND, n, { chargeRegistration: false })!, { guestCount: n, tastingGuests: 0, lunchGuests: 0 }, visit, NO_LINES)
+      const oldTotal = priceBooking(ratesForParty(NEW_IND, n, 0)!, { guestCount: n, tastingGuests: 0, lunchGuests: 0 }, visit, NO_LINES)
       const counts = countsFromVisit(visit, n)
       const newTotal = priceCounts(ratesForCounts(NEW_IND, counts, 0), counts, NO_LINES)
       if (oldTotal !== newTotal) { diffs++; if (diffs < 4) console.error(`  ${visit} × ${n}: old ${oldTotal} new ${newTotal}`) }

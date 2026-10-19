@@ -9,7 +9,7 @@ import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { priceBooking, ratesForParty } from '@/lib/pricingUtils'
+import { boxColumns, countsFromLegacy, priceBooking, ratesForParty } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -278,7 +278,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     // on the individual path, which is why the resolver is told so here rather
     // than the fee being zeroed afterwards.
     const individualRates = individualsCompany?.prices.length
-      ? ratesForParty(individualsCompany.prices, guestCount, { chargeRegistration: false })
+      ? ratesForParty(individualsCompany.prices, guestCount, 0)
       : null
     const pricePerPersonTasting: number | null = individualRates?.tasting ?? null
     const pricePerPersonLunch: number | null = individualRates?.lunch ?? null
@@ -339,7 +339,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         // One lookup on the party size, and one call: priceBooking already
         // branches on whether the buckets are set, which is what the enhanced
         // and simple cases used to hand-code separately.
-        const companyRates = ratesForParty(company.prices, guestCount)
+        const companyRates = ratesForParty(company.prices, guestCount, company.registrationFee)
         if (companyRates) {
           tastingRateSnapshot = companyRates.tasting
           lunchRateSnapshot = companyRates.lunch
@@ -353,6 +353,16 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       totalPrice = masterclassAmt
     }
 
+    // Every order stores its boxes (Plan-PricingModel A-4), by the same rule the migration used:
+    // a detailed company booking as split, anything else with the whole party on its visit type's product.
+    const boxes = countsFromLegacy({
+      visitType: data.visitType,
+      guestCount,
+      tastingGuestCount: isEnhanced ? (data.tastingGuestCount ?? 0) : 0,
+      lunchGuestCount: isEnhanced ? (data.lunchGuestCount ?? 0) : 0,
+      freeGuestCount: isEnhanced ? (data.freeGuestCount ?? 0) : 0,
+    })
+
     const createdOrder = await withTenantDb(tenantId, async tx => {
       const created = await tx.order.create({
       data: {
@@ -361,9 +371,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         date: new Date(data.date),
         timeSlot: data.timeSlot,
         guestCount,
-        tastingGuestCount: isEnhanced ? (data.tastingGuestCount ?? 0) : 0,
-        lunchGuestCount: isEnhanced ? (data.lunchGuestCount ?? 0) : 0,
-        freeGuestCount: isEnhanced ? (data.freeGuestCount ?? 0) : 0,
+        ...boxColumns(boxes),
         hotDishVegetable: data.hotDishVegetable || null,
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
@@ -373,8 +381,8 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         phone: data.phone || null,
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
-        tastingRateSnapshot,
-        lunchRateSnapshot,
+        tastingOnlyRate: tastingRateSnapshot,
+        tastingLunchRate: lunchRateSnapshot,
         registrationFeeSnapshot,
         tenantId,
         ...NEW_ORDER_COLUMNS,
