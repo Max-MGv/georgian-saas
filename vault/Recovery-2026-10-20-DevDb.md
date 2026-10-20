@@ -256,3 +256,33 @@ today's dev backup, one transaction), `role-check.ts`, `priv-check.ts` (read-onl
   production); app_user unchanged. localhost and staging.vineworks.ge home → HTTP 200.
 - Note: R1's line "anon/authenticated missing — stricter, keep" is superseded: dev now reproduces production's grants
   **and** production's automatic grant on new tables, so a migration that forgets its REVOKE behaves the same on dev.
+
+## 7. Second blind review (2026-10-20) — verified findings
+
+A fresh context-free reviewer checked the safeguards and the situation. Verified by me (read-only):
+- **Backups:** both verify; a test backup of dev matched live counts exactly; one REPEATABLE READ + READ ONLY
+  snapshot; types faithful. Gaps: **never restore-tested** (no restore script); storage FILES and auth users not
+  included; JSON `null` vs SQL NULL indistinguishable; the in-repo path guard (`backup-db.ts:120`) accepts a sibling
+  folder named `..something`; single unencrypted copy on this PC.
+- **Hook: NOT protecting sessions started outside the project folder** — verified: a harmless `echo` containing
+  "TRUNCATE" ran unblocked in this session (started from the user's home folder, so the project
+  `.claude/settings.json` never loaded). Claude Code CLI is **2.1.251**; reviewer reports (from the docs, not verified
+  by me) that `onFailure` needs 2.1.295 or later. Bypasses it found (payloads only, nothing executed):
+  `prisma@<version> …`, `node node_modules/prisma/build/index.js …`, `--from-migrations` / `--to-migrations` without
+  the shadow flag (a `shadowDatabaseUrl` added to `prisma.config.ts` by an Edit/Write would repeat the incident),
+  `DROP TABLE`, `DELETE FROM`, `supabase db reset`, a fake `# --create-only`, PowerShell string-building, and **MCP
+  database tools are not covered at all**. False positives: `truncate` is a Tailwind class used in 10 files.
+- **Dev vs production:** identical except the 3 `supabase_admin` default-privilege rows (only Supabase can create
+  them), the harmless extra `app_user` grant on `Ticket_number_seq`, and realtime-schema platform drift. Pre-existing:
+  production's `Setting_key_tenantId_key` UNIQUE constraint comes from `scripts/migrate-setting-pk.ts:51`, not a
+  migration; 15 checksum differences are CRLF vs LF only.
+- **Claim checked and NOT confirmed:** "live payment credentials on staging" — staging uses Flitt's public test
+  merchant (`1549901`, secret `test`). Real NM banking/ID **settings** are on dev, as they were before the wipe (the
+  original clone copied them too).
+- **Real gap:** `test-onboarding-wizard` has 0 settings / 0 companies; `playwright/notes/10-onboarding-wizard.md`
+  needs `enable_enhanced_company_booking=true` (+ the Individuals company, which the page creates) → the onboarding
+  spec would fail.
+- **The reviewer's own slip (it disclosed it):** it ran one disallowed read-type command (`migrate diff --from-url
+  <prod> --to-migrations …`, no shadow URL) and re-snapshotted both databases: byte-identical before and after. The
+  hook did not stop it (same reason as above). Its scratch dev backup (in the temp folder `blind-review-2/backup-test`)
+  contains staging settings incl. the copied banking fields — to delete.
