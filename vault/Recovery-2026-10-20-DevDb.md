@@ -64,7 +64,7 @@ production's current content); staging bug-report rows (their screenshots surviv
 | R4 | Data: demo seed on staging + demo tenants, test fixtures | ✅ 2026-10-20 |
 | R5 | Ticket tool: new staging token (credentials.txt) + production's copy token re-registered | ✅ 2026-10-20 |
 | R6 | Tickets (Max's source, else transcripts), THEN P-tickets re-copied, + release drafts | ⬜ (waits for Max) |
-| R7 | Verification: logins, staging site, admin screens, RLS/money/pricing scripts, screenshots | ⬜ |
+| R7 | Verification: logins, staging site, admin screens, RLS/money/pricing scripts, screenshots | ✅ 2026-10-20 |
 | R8 | ~~Production forward token → Vercel env~~ — **not needed**, solved on dev in R5 | ✅ 2026-10-20 |
 
 ### R0 — Tracker + snapshot ✅
@@ -136,8 +136,33 @@ Wrapper `saas/scripts/_qa/seed-dev.ts` (untracked) — refuses anything but dev 
 ### R6 — Tickets + releases (waits for Max's source)
 **Resume point:** —
 
-### R7 — Verification
-**Resume point:** —
+### R7 — Verification ✅ 2026-10-20
+- [x] DB: `check-rls` 36/36 tables green · `test-rls` **21/21** · `test-price-rls` **10/10** · `test-order-repricing`
+      **6/6** · `test-pricing-model` **54/54** · `audit-money` clean (776 orders, 0 without frozen rates).
+- [x] Routing: localhost → Staging Winery; `Host: test-onboarding-wizard.invalid` → `test-onboarding-wizard`;
+      `Host: demo.placeholder.local` → `vineworks-demo`; **staging.vineworks.ge** live → "Nikalas Marani (Staging) — Book
+      a Visit".
+- [x] Logins: staging admin (screenshot run) and super-admin (`/super-admin/tenants`, `/tickets`, `/releases` all load —
+      `saas/tests/_qa/recovery-superadmin.spec.ts`).
+- [x] Prices: screenshot text vs the pre-wipe `chunk4` run — **every price line identical** (home ₾280, detailed
+      company 4/6/2 ₾720, New Order ₾720 on the same 11–30 tier, order detail). Other text differs as expected (content
+      is today's production NM copy; orders freshly seeded). Two real localhost bookings: individual 10 → ₾600, company
+      4/6/2 + masterclass → ₾755 — same as before the wipe.
+- [x] **One staging deviation restored:** production NM hides the company dropdown (`hide_company_dropdown=true`);
+      staging had it visible (`false` — playwright/notes/05) → set on dev (`scripts/_qa/staging-dropdown.ts`). The
+      other documented staging resting values already matched after the copy: online payment on, Individuals ✓,
+      **Companies ✗ (deliberate)**, Wine orders ✓ (KNOWN-ISSUES), `show_company_price_after_booking=false`,
+      enhanced booking on.
+- Note: my QA screenshot script opened the booking sheet before the Orders page finished hydrating (388 orders now)
+  → it now retries; a QA-script timing issue, not the app. Server log: only the pre-existing dev-mode hydration
+  warnings about the date input's inline style.
+- Dev now: 3 tenants, 20 companies, 776 orders, 90 wine orders, 13 wines, 75 settings, 143 site-content rows.
+  Tickets / releases / bug reports: 0 (R6).
+**Resume point:** done.
+
+**Note for every later Playwright run:** the staging tenant now holds 388 seeded orders (as before the wipe) and NM's
+*current* production content/settings. If a spec fails on wording, compare with production NM's texts before
+suspecting code.
 
 ### R8 — Production forward token (Max's go)
 **Resume point:** —
