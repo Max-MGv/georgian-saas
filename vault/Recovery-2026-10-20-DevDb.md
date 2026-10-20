@@ -286,3 +286,21 @@ A fresh context-free reviewer checked the safeguards and the situation. Verified
   <prod> --to-migrations …`, no shadow URL) and re-snapshotted both databases: byte-identical before and after. The
   hook did not stop it (same reason as above). Its scratch dev backup (in the temp folder `blind-review-2/backup-test`)
   contains staging settings incl. the copied banking fields — to delete.
+
+## 8. Blind review 3 (outside-auditor style) — PAUSED 2026-10-20 ~19:05 at Max's request (PC off)
+
+Three independent auditors, fenced off from this file / memory / recovery scripts. **A (data) and C (processes) finished; B (behaviour / Playwright) was stopped mid-way** and its local processes killed (dev server :3000, Playwright). Nothing was fixed yet — every fix below needs Max's go.
+
+**Verified by me (read-only):**
+- A: staging lost its staging-only settings `booking_lead_split=true` and `person_codes_enabled=true` (copy came from production, which has neither) · Rkatsiteli lost `nameKa` (რქაწითელი) and is active again (was inactive since 10-07) · Khikhvi new on staging · wizard tenant bare (no theme `cream`, wine orders + online payment modules off, 0 settings, no Individuals company) · 1 masterclass item gone (9→8) · release drafts rebuildable via `saas/scripts/_qa/_seed_oct_releases.ts` + `saas/release-shots/oct7/`.
+- C: dev lacks 3 `supabase_admin` default-ACL entries prod has (my "matches production" was too strong) · `Plan-DevProdEnvironments.md` daily workflow (`migrate dev`) is now blocked by the hook · prod's one forwarded ticket points at a staging copy that no longer exists · LUNCH migration recorded on dev but uncommitted · hook gaps (may not load from `C:\Users\Max`, ~9 bypasses, no MCP coverage) · staging holds NM's real contact/IBAN/personal-number (pre-existing since ≤ 2026-09-10, not a regression).
+
+**B partial results (raw, not yet triaged):** tier 1: 6 passed / 5 failed (payment-amount-integrity, 2× popover-clipping, theme-colors) · tier 2: 19 / 5 failed (booking-enhanced, booking-simple, company-nationality-tagging, contact-role-picker, wine-catalogue-order) · tier 3: 13 / 5 failed / 3 not run (admin-orders, companies-crud, tickets:44, wine-order-delivery-fee:144, onboarding-wizard). Tier 4 + page walk not done. Logs: `C:\Users\Max\AppData\Local\Temp\claude\audit-B\` (t1/t2/t3.log, out-* traces).
+
+**Side effects of B's run (state now, read-only check 19:05):**
+- `tickets.spec.ts` created **T-1..T-8** (closed "ZZ Tickets E2E" debris) — `Ticket_number_seq` = 8. Must `setval` past 152 before anything else files a ticket (Max's go).
+- Staging Winery `paymentEnabledIndividuals = false` — documented resting value is **true** (KNOWN-ISSUES: interrupted payment spec). Restore on Max's go.
+- `person_codes_enabled` now exists on staging as `'false'` (written by contact-role-picker spec).
+- Wizard tenant: onboarding-wizard spec was killed mid-run — tenant state undefined (only that spec uses it).
+
+**Resume:** (1) Max's go on: setval ticket seq · restore Individuals payment toggle · decide on T-1..T-8 debris. (2) Resume B (tier 3 reruns minus tickets.spec, tier 4, page walk) — restart dev server + `rm -rf saas/.next` first; never run ticket-creating specs until the seq is moved. (3) Merge A+B+C into one prioritised fix list for Max.
