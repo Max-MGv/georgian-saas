@@ -58,7 +58,7 @@ production's current content); staging bug-report rows (their screenshots surviv
 | # | What | Status |
 |---|---|---|
 | R0 | Tracker + incident record + read-only snapshot of dev | ✅ 2026-10-20 |
-| R1 | Plumbing: migration history (mark applied), RLS + grants (`setup-rls.ts`), verify vs production | ⬜ |
+| R1 | Plumbing: migration history (mark applied), RLS + grants (`setup-rls.ts`), verify vs production | ✅ 2026-10-20 |
 | R2 | Tenant rows: Staging Winery, dev demo, Test Onboarding Wizard — original ids/slugs/domains | ⬜ |
 | R3 | Staging Winery content from production (read-only) + Flitt test merchant | ⬜ |
 | R4 | Data: demo seed on staging + demo tenants, test fixtures | ⬜ |
@@ -73,13 +73,21 @@ production's current content); staging bug-report rows (their screenshots surviv
       (auth → tenant mapping, storage prefixes), `dev-counts.ts`.
 **Resume point:** done.
 
-### R1 — Plumbing
-- [ ] Read `scripts/setup-rls.ts` fully; confirm it only creates/replaces (no DROP of data).
-- [ ] Mark every migration folder as applied (`prisma migrate resolve --applied <name>`, one by one — this only
-      writes `_prisma_migrations`). `prisma migrate status` must say up to date and `migrate diff --from-url` must be
-      empty (read-only comparison — never a shadow).
-- [ ] Run `setup-rls.ts` on dev; compare RLS / policy / grant counts with production (forensics script).
-**Resume point:** —
+### R1 — Plumbing ✅ 2026-10-20
+- [x] `setup-rls.ts` read in full: grants, `ENABLE ROW LEVEL SECURITY`, `DROP POLICY IF EXISTS` + `CREATE POLICY` —
+      policies only, never data.
+- [x] Read-only check first: `prisma migrate diff --from-url <dev> --to-schema-datamodel` → **empty** (schema = code,
+      incl. the Chunk 6 `LUNCH` value). `prisma migrate resolve --help` read (Rule 0b): `--applied` only records.
+- [x] `prisma migrate resolve --applied` × **39/39** → `prisma migrate status`: "Database schema is up to date!"
+- [x] `setup-rls.ts` via `scripts/_qa/run-setup-rls-dev.ts` (refuses anything but dev): 24 policies.
+- [x] Production's `lock_platform_tables_rls` (read from production's `supabase_migrations`, read-only) re-applied on
+      dev via `scripts/_qa/platform-lock-dev.ts`: RLS on `Tenant`, `PlatformConfig`, `_prisma_migrations`; REST roles
+      revoked. (Dev's own July `rls_setup_and_platform_lock` entry is the early version of `setup-rls.ts`.)
+- [x] Per-table comparison (`scripts/_qa/db-forensics3.ts`): every table now has the same RLS state and policy as
+      production. **Only difference, kept on purpose:** production also grants `anon`/`authenticated` (Supabase's
+      default REST roles) on tenant tables; dev's replay created them without — stricter, and the app never uses
+      those roles for tables (it connects as `postgres` → `app_user`).
+**Resume point:** done.
 
 ### R2 — Tenant rows
 - [ ] `staging-winery` `cmrxb85wo0000vlc0d964nzf8`, domain `staging.vineworks.ge`, name "Staging Winery",
