@@ -194,3 +194,65 @@ that data/RLS/migrations are consistent, and found what R1 missed:
 `prisma/schema.prisma` (enum `LUNCH`) and `prisma/migrations/20261020150000_visit_type_lunch/` — **already applied to
 dev by the reset's replay**, so R1 marks it applied with the others. `prisma generate` and the `LUNCH` type fallout
 are still to do when Chunk 6 resumes.
+
+## 6. Safeguards (implemented 2026-10-20)
+
+Max approved exactly four steps. Production was only read (every query inside `SET TRANSACTION READ ONLY`); the only
+dev writes were the GRANT / ALTER statements of step 4, after the dev backup and a printed before-diff.
+
+### Step 1 — Production backup ✅
+- `saas/scripts/backup-db.ts --env=prod|dev [--out=<dir>]` (committed): one `REPEATABLE READ, READ ONLY` snapshot;
+  asserts the project ref in both URLs (and refuses the other ref); refuses an output folder inside the repo or a
+  non-empty one. Writes `tables/<T>.jsonl` (row_to_json, UTC, bigint/numeric as strings, PK order), `schema.json`
+  (owner/ACL, columns, constraints, indexes, enums, sequences + state, RLS, policies, grants, default privileges,
+  functions, triggers, buckets), `storage-objects.jsonl` (metadata only), `auth-summary.json` (count only),
+  `README.txt` (customer-data warning), `MANIFEST.json` (counts, sizes, sha256). Default folder
+  `C:\Users\Max\Backups\georgian-saas\<YYYY-MM-DD_HHmm>\<env>\`. Header documents how to schedule it (Task Scheduler
+  or CI) — **nothing scheduled**; Max decides between that and Supabase Pro.
+- `saas/scripts/backup-verify.ts <folder> | --latest --env=…` (committed): offline sha256 + size + row-count check.
+- **Production backup `2026-10-20_1256\prod`: verifier OK** — 36 tables, 1,297 rows, 40 files (1.1 MB), 9 storage
+  objects, 3 auth users. Order 395, WineOrder 50, WineOrderItem 114, Company 13, Ticket 14, Setting 77, SiteContent 143,
+  _prisma_migrations 36.
+
+### Step 2 — Safety lock (Claude Code hook) ✅ (active from the next session)
+- `.claude/settings.json` → PreToolUse, matcher `Bash|PowerShell`, `node "$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive-db.cjs"`,
+  `onFailure: block` (a broken hook blocks shell calls rather than letting them through). `settings.local.json` untouched.
+- Blocks (exit 2, stderr names Rule 0b): `--shadow-database-url`, `shadowDatabaseUrl`, `prisma migrate reset`,
+  `prisma db push`, `--force-reset`, `--accept-data-loss`, `prisma migrate dev` without `--create-only` (per command
+  segment), `DROP SCHEMA`, `TRUNCATE`, `DROP DATABASE` — case-insensitive, also across line continuations / quoting.
+- Test: `node .claude/hooks/test-block-destructive-db.cjs` → **35/35 pass** (23 blocked incl. the incident command,
+  3 PowerShell-tool payloads and unparseable stdin; 12 allowed incl. migrate deploy/status/resolve, `migrate diff
+  --from-url … --to-schema-datamodel`, `migrate dev --create-only`, generate, git, tix, a non-shell payload). The
+  configured command was also run through bash from another cwd: allow → 0, block → 2.
+- **Not live in the session that created it** (a harmless `echo` with a blocked word ran through) — project
+  settings load at session start. Limits: a script file that runs these statements internally, an npm alias, or an MCP
+  database tool (e.g. Supabase `execute_sql`) is not inspected; the word "truncate" in a commit message or grep is a
+  false positive (use `git commit -F <file>`).
+
+### Step 3 — Dev backup ✅
+`2026-10-20_1258\dev`: verifier OK — 36 tables, 2,314 rows, 49 storage objects, 3 auth users.
+
+### Step 4 — Dev `public` schema defaults restored to match production ✅ (except what Postgres refuses)
+Tools (untracked, `saas/scripts/_qa/`): `schema-defaults-diff.ts` (read-only diff; `--plan=` writes SQL, simulating the
+owner-change ACL rewrite), `apply-schema-defaults-dev.ts` (dev ref only, whitelisted statement shapes only, requires
+today's dev backup, one transaction), `role-check.ts`, `priv-check.ts` (read-only).
+- **Before:** owner `postgres` vs `pg_database_owner`; schema ACL 3 vs 8 entries (missing PUBLIC/anon/authenticated/
+  service_role/postgres USAGE); default privileges 0 vs 6 rows (24 role/objtype/grantee groups); relation grants 390 vs
+  1,037 entries — 88 table/sequence grants missing (service_role on all 36 tables, anon+authenticated on the 26 tables
+  plus `_prisma_migrations` and `Ticket_number_seq` where production has them). 115 differing items.
+- Role facts (read-only, both DBs identical): `postgres` is not superuser, owns the database, is a member of
+  `pg_database_owner`, is **not** a member of `supabase_admin`.
+- **Applied on dev, one transaction: 101 of 113 statements** (1 `ALTER SCHEMA public OWNER TO pg_database_owner`,
+  5 schema USAGE grants, 12 `ALTER DEFAULT PRIVILEGES FOR ROLE postgres …`, 83 table/sequence grants).
+  **12 refused by Postgres** — `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin …` ("permission denied to change
+  default privileges"); run behind a savepoint, not worked around.
+- **After:** owner, schema ACL, the 3 `postgres` default-privilege rows and every per-table/per-sequence grant match.
+  **Remaining (13):** the 3 `supabase_admin` default-privilege rows (12 groups) — only affect objects created by
+  `supabase_admin` (not our migrations, which run as `postgres`); fixing them needs Supabase support/superuser.
+  And `app_user` SELECT/USAGE on `Ticket_number_seq` exists on dev only — left alone (instruction: do not revoke app_user).
+- Checks after: `db-forensics3.ts` — all 36 tables identical to production (RLS, policy, anon/app_user/authenticated
+  grants). `verify-review.ts` — owner `pg_database_owner` both, same ACL set, default-privs 3 vs 6 (the supabase_admin
+  rows), tables granted to service_role 36 = 36. `postgres` still has CREATE on `public` (via pg_database_owner, as on
+  production); app_user unchanged. localhost and staging.vineworks.ge home → HTTP 200.
+- Note: R1's line "anon/authenticated missing — stricter, keep" is superseded: dev now reproduces production's grants
+  **and** production's automatic grant on new tables, so a migration that forgets its REVOKE behaves the same on dev.
