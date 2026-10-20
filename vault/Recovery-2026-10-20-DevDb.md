@@ -304,3 +304,5 @@ Three independent auditors, fenced off from this file / memory / recovery script
 - Wizard tenant: onboarding-wizard spec was killed mid-run — tenant state undefined (only that spec uses it).
 
 **Resume:** (1) Max's go on: setval ticket seq · restore Individuals payment toggle · decide on T-1..T-8 debris. (2) Resume B (tier 3 reruns minus tickets.spec, tier 4, page walk) — restart dev server + `rm -rf saas/.next` first; never run ticket-creating specs until the seq is moved. (3) Merge A+B+C into one prioritised fix list for Max.
+
+**Resumed (Max: "whatever you recommend"):** dev-only writes done in one transaction by `saas/scripts/_qa/post-audit-fixes.ts` — deleted the 8 closed "ZZ Tickets E2E" debris tickets T-1..T-8 (36 events cascaded, 0 attachments; 2 test bug reports unlinked; JSON safety copy in the session scratchpad `deleted-zz-tickets-2026-10-20.json`) · `Ticket_number_seq` → 200 (next ticket T-201; T-1..T-152 numbers free for a restore) · Staging Winery `paymentEnabledIndividuals` → true. Verified after: 0 tickets, seq 200, toggle true. Audit B resumed (no ticket-creating specs).
