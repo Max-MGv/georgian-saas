@@ -61,11 +61,11 @@ production's current content); staging bug-report rows (their screenshots surviv
 | R1 | Plumbing: migration history (mark applied), RLS + grants (`setup-rls.ts`), verify vs production | ✅ 2026-10-20 |
 | R2 | Tenant rows: Staging Winery, dev demo, Test Onboarding Wizard — original ids/slugs/domains | ✅ 2026-10-20 |
 | R3 | Staging Winery content from production (read-only) + Flitt test merchant | ✅ 2026-10-20 |
-| R4 | Data: demo seed on staging + demo tenants, test fixtures | ⬜ |
-| R5 | Ticket tool: new staging token (credentials.txt); P-tickets re-copied from production | ⬜ |
-| R6 | Tickets (Max's source, else transcripts) + release drafts | ⬜ (waits for Max) |
+| R4 | Data: demo seed on staging + demo tenants, test fixtures | ✅ 2026-10-20 |
+| R5 | Ticket tool: new staging token (credentials.txt) + production's copy token re-registered | ✅ 2026-10-20 |
+| R6 | Tickets (Max's source, else transcripts), THEN P-tickets re-copied, + release drafts | ⬜ (waits for Max) |
 | R7 | Verification: logins, staging site, admin screens, RLS/money/pricing scripts, screenshots | ⬜ |
-| R8 | Production forward token → Vercel production env (**Max's go**) | ⬜ |
+| R8 | ~~Production forward token → Vercel env~~ — **not needed**, solved on dev in R5 | ✅ 2026-10-20 |
 
 ### R0 — Tracker + snapshot ✅
 - [x] This file; Rule 0b in ClaudeInstructions (`94a3f45`); memory pointer.
@@ -112,14 +112,26 @@ column type; nothing had been written.
 Menu / masterclass items not copied — the demo seed replaces them. Re-run check: all "0 new".
 **Resume point:** done.
 
-### R4 — Data
-- [ ] `seed-demo-data.ts` for the dev demo tenant and `--tenant=staging-winery`; `backfill-test-fixtures.ts`.
-**Resume point:** —
+### R4 — Data ✅ 2026-10-20
+Wrapper `saas/scripts/_qa/seed-dev.ts` (untracked) — refuses anything but dev and refuses `--prod`; dry run first.
+- [x] Dev demo (`vineworks-demo`): 10 companies, 388 bookings, 45 wine orders, 6 menu items, 4 masterclass items.
+- [x] Staging Winery (`--tenant=staging-winery`): same shape, plus access codes / guides / representatives (the seed
+      adds them for non-demo tenants). `backfill-test-fixtures.ts --dry-run`: **0** codes / guides / reps to add.
+- Note (cosmetic, pre-existing): the seed CLI's summary prints tetri labelled "GEL" ("lifetime revenue 24,198,900
+  GEL" = ₾241,989 ≈ ₾624/booking — realistic). Data is right; only the printout's unit label is wrong.
+**Resume point:** done.
 
-### R5 — Ticket tool
-- [ ] `ticket-token.ts create` on dev → `TICKETS_TOKEN_DEV` in credentials.txt; re-copy P-1…P-14 from production
-      (`scripts/_qa/copy-prod-tickets-to-staging.ts`, reads production only).
-**Resume point:** —
+### R5 — Ticket tool ✅ 2026-10-20
+- [x] New staging token `claude-dev` (scope full) created on dev and written straight into `credentials.txt`
+      (`TICKETS_TOKEN_DEV`, never printed; the file was backed up to the scratchpad first). A first attempt's
+      plaintext was lost between bash and Python temp paths → that token (`claude-dev-2026-10-20`) was **revoked**.
+      `tix list` against staging works (0 tickets).
+- [x] **Production's copy-to-staging token re-registered on dev** from its plaintext in `credentials.txt`
+      (`scripts/_qa/restore-forward-token.ts`, scope forward) → production's Vercel setting works again **unchanged**.
+      Auth-only probe (empty body → 400 "prodNumber must be a ticket number", creates nothing) confirms it is accepted.
+- [ ] P-tickets are NOT re-copied yet: ticket numbers are unique, and a copy now would take numbers 1–14 and collide
+      with restored T-1…T-14 — they go after R6's restore.
+**Resume point:** done.
 
 ### R6 — Tickets + releases (waits for Max's source)
 **Resume point:** —
