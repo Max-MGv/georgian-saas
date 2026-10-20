@@ -134,6 +134,9 @@ If you add a new auth-related page (e.g. forgot-password, magic-link callback) t
 
 ## 3. `prisma db push` on Windows — stop dev server first
 
+> **2026-10-20:** `prisma db push` and `prisma migrate dev` are now **blocked** (ClaudeInstructions Rule 0b, safety hook). The
+> EPERM advice below still applies to `npx prisma generate`. Schema-change workflow: `Plan-DevProdEnvironments.md` → Daily workflow.
+
 **What the dependency is:**
 On Windows, Node locks `.dll.node` binary files while they are in use. `prisma generate` (which runs automatically at the end of `prisma db push`) writes a temp file then renames it over the existing Prisma client binary. That rename fails with `EPERM` if the dev server is running, because the server has the binary loaded and locked.
 
@@ -1285,3 +1288,25 @@ full-screen fixed element (e.g. a page background layer) would hide the button e
 Related, same day: Settings → Closed days formats dates from the `YYYY-MM-DD` string (`formatClosedDay`), not with
 `toLocaleDateString` — server and browser ICU differ (KnownBugs #91). Use the same approach for any date rendered in a
 client component that is also server-rendered.
+
+## 38. Database backups: script, verifier and hook share one folder layout (2026-10-20)
+
+**Coupled:** `saas/scripts/backup-db.ts` (writes), `saas/scripts/backup-verify.ts` (`--latest`), and
+`.claude/hooks/require-db-backup.cjs` (decides whether a fresh backup exists) all assume the same root and naming:
+`%USERPROFILE%\Downloads\DB_Backups\<YYYY-MM-DD_HHmmss>_<env>[_<reason>]\`, finished = has `MANIFEST.json`
+(overridable with env `DB_BACKUP_ROOT`). Change the root or the folder pattern in **all three** and re-run
+`node .claude/hooks/test-require-db-backup.cjs`.
+
+**Coupled:** the hook's read-only script list (`READ_ONLY_SCRIPT`) — a new script that only reads should be named
+`*-check` / `*-verify` / `*-facts` / `*-report` (or be added to the list), otherwise every run triggers a backup.
+A new script that writes should take `--write` and dry-run by default.
+
+**Coupled:** both hooks are registered in the **user** settings (`C:\Users\Max\.claude\settings.json`, absolute
+paths). Moving the repo folder breaks them silently (node cannot find the file → the hook errors, the command runs) —
+update the two paths there if the repo moves.
+
+**Related:** `scripts/clone-nm-to-staging.ts` copies Nikalas Marani's settings to Staging Winery **including the real
+contact, bank and personal-number values**. After any re-clone, scrub them (2026-10-20 scrub: test phone
+`+995 555 00 00 00`, IBAN `GE00XX…`, personal number `00000000000`, Max's own contact email), or staging emails and
+invoices expose the real client. `scripts/rebrand-demo-tenant.ts` does the same for the demo tenant (since `6425b24`
+also the recipient name and personal number).

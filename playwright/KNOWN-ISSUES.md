@@ -534,3 +534,13 @@ Because of standing bug #3 above, every run of `06-wine-catalogue-order.spec.ts`
 ## The one process lesson worth calling out explicitly
 
 Most of the real findings above were caught by **independently re-verifying every "done" claim** — re-running the full suite from a clean shell and spot-checking real data via direct SQL, rather than trusting a summary (including this suite's own earlier self-reports, which overclaimed completion twice before a background run had actually finished). If you're extending this suite or reviewing someone else's addition to it: don't skip this step. It found a premature "14/14 passing" claim that was actually 5 failures, an accidental edit to live production-adjacent data, and 14 rows of accumulated test debris — none of which would have surfaced from reading a summary alone.
+
+### `playwright test` first takes a database backup (~30 s) (2026-10-20)
+
+**Symptom:** a test command pauses ~30 s before Playwright starts, with the status "Backing up the database before a write".
+**Cause:** by design — the suite writes to the dev DB, so the hook `.claude/hooks/require-db-backup.cjs` saves dev to
+`C:\Users\Max\Downloads\DB_Backups\` first (ClaudeInstructions Rule 0b). A backup younger than 10 minutes is reused.
+If the backup fails the run is **blocked** — fix the backup (`cd saas && npx tsx scripts/backup-db.ts --env=dev`), don't bypass it.
+Also from the 2026-10-20 audit: run long suites on AC power with sleep blocked (Modern Standby killed a run with
+`ERR_NETWORK_IO_SUSPENDED`), and on a dev server you started yourself after `rm -rf saas/.next` — `.next` contains
+junctions into `node_modules` (`sharp`, `@prisma/client`): remove those links first, never recurse through them.

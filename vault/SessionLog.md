@@ -8,6 +8,17 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-20 — Dev DB wiped by a shadow-database command → recovery, 3 blind reviews, backup-before-write process
+
+- **Incident:** during T-152 Chunk 6 a `prisma migrate diff … --shadow-database-url <dev URL>` reset the dev DB (every `public` row; auth + storage survived; production untouched). Full record + chunks R0–R8 + reviews: `vault/Recovery-2026-10-20-DevDb.md`. New rule: ClaudeInstructions **Rule 0b** (no shadow/reset on real DBs; a hook blocks them).
+- **Recovered:** schema/migrations/RLS/grants, 3 tenants with old ids, content copied from production, demo data reseeded, tokens, staging settings; after blind review 3 also staging-only settings, Rkatsiteli `nameKa`, display price, wizard tenant baseline, production's 14 client reports as P-1..P-14, release drafts 7 + 9 Oct. **Lost for good:** staging T-tickets (Max may have another source — R6), bug reports, staging's real test orders/payments/history, 13 SiteContent + 7 Setting rows, edits 10-16..10-20.
+- **Production (Max's explicit go):** demo tenant held NM's real personal number + recipient name (visible to demo visitors) → placeholders; root cause fixed in `rebrand-demo-tenant.ts` (`6425b24`).
+- **Staging:** Max replaced the contact email; Claude scrubbed the rest of NM's real identity (phone, address, socials, map, IBAN, bank, personal number, recipient name) → test values.
+- **Process (Max):** automatic full backup before every DB-writing command → `C:\Users\Max\Downloads\DB_Backups\`, one folder per backup (`<stamp>_<env>_<reason>`); hook `require-db-backup.cjs`; both safety hooks now in the **user** settings so every session gets them. Rule 0b.6, MaintenanceNotes §38, Plan-DevProdEnvironments (no more `migrate dev`).
+- **Next:** R6 tickets (Max) → resume T-152 pricing Chunk 6 (commit the LUNCH migration unchanged), then 7–12; open items at the end of the recovery tracker §9.
+
+---
+
 ## 2026-10-18 — T-136: "Finish setting up your account" stuck on Nikalas Marani — ON PRODUCTION (`8a54f88`)
 
 - **Cause (read-only prod check):** NM has payment (IBAN + Flitt), 4 individual price tiers, 7 wines, 2 companies, launched 2026-10-07 — but no `onboarding_works_with_companies` Setting row. `companiesStepDone` needed an explicit "yes", so the wizard banner never cleared. The wizard question was skipped and companies were added from the Companies page; `launchTenant` is a record, not a gate.

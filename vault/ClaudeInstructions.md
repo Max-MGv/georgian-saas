@@ -60,6 +60,26 @@ touched (different database). Logins (`auth`) and Storage files survived. Nothin
 5. **If something destructive happens anyway: stop immediately, check with read-only queries what is left, and tell
    Max plainly** — what was lost, what survived, and the recovery options (Supabase → Database → Backups first) —
    before running anything else against that database.
+6. **A full local backup runs before every database write** (Max, 2026-10-20: "if we lose something, its saved
+   locally on this laptop"). Backups live in **`C:\Users\Max\Downloads\DB_Backups\`**, **one folder per backup**,
+   named `<YYYY-MM-DD_HHmmss>_<env>[_<reason>]` (env = `prod` or `dev`), so old ones can be deleted one at a time.
+   Each holds every `public` table, the schema metadata, storage file list and logins (no passwords) — see
+   `saas/scripts/backup-db.ts`; check one with `npx tsx scripts/backup-verify.ts "<folder>"`.
+   - **Automatic:** the hook `.claude/hooks/require-db-backup.cjs` runs before every Bash/PowerShell command that can
+     write to a database: any `--write`/`--apply`, `prisma migrate deploy|resolve`, `prisma db execute|seed`,
+     `playwright test`, inline SQL writes, and any `scripts/…` file not on its read-only list (checks, verify,
+     audits, `tix`). It backs up **dev**, plus **prod** when the command mentions production; a backup younger than
+     10 minutes is reused. **A failed backup blocks the command** — fix the backup, never work around it.
+   - **Manual (the hook cannot see these):** writes through the Supabase MCP tools, the app's own pages, HTTP APIs,
+     or Max's own terminal → run `cd saas && npx tsx scripts/backup-db.ts --env=dev|prod --reason=<what>` first.
+   - Writing a file whose text contains `--write` or `.env.prod` via a Bash heredoc also triggers a (harmless)
+     backup — use the Write tool for script files.
+   - **Both hooks** (this one and `block-destructive-db.cjs`) are registered in the **user** settings
+     `C:\Users\Max\.claude\settings.json` with absolute paths, so they run in every session wherever it was started
+     (a session started from `C:\Users\Max` did not load project settings). `georgian-saas/.claude/settings.json` is
+     deliberately empty — do not re-add them there (they would run twice). Tests:
+     `node .claude/hooks/test-block-destructive-db.cjs`, `node .claude/hooks/test-require-db-backup.cjs`.
+   - Use `--write` (and a dry run by default) for every new script that changes data, so the hook recognises it.
 
 ---
 

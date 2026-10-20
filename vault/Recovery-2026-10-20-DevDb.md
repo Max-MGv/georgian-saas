@@ -328,3 +328,16 @@ Three independent auditors, fenced off from this file / memory / recovery script
 - **Release drafts:** 7 Oct (9 changes) + 9 Oct (1 change) recreated on staging via `_seed_oct_releases_staging.ts` (the original seed, BASE → staging). Any hand edits made to the old drafts after 10-15 are not recoverable.
 
 **Still open:** R6 T-tickets from Max's other source · 49 orphaned storage objects (old ticket attachments / release images / bug screenshots — keep until R6 done) · hook global + widen + MCP · `Plan-DevProdEnvironments.md` workflow (`migrate dev` blocked) · backups schedule + restore drill · staging holds NM's real contact/IBAN (pre-existing; decision) · test budgets + `allowedDevOrigins` · `companies-crud.spec` for three prices (pricing chunks) · commit LUNCH migration unchanged (Chunk 6) · unidentified: 13 SiteContent + 7 Setting rows, 1 masterclass item, staging edits 10-16..10-20.
+
+## 9. Process change: automatic backup before every database write (2026-10-20 evening, Max)
+
+Max: "update the process so that export of whole db runs before commands like this … keep it in downloads/DB_Backups … in a way where we can incrementally delete them". Done:
+- `saas/scripts/backup-db.ts`: default root `C:\Users\Max\Downloads\DB_Backups\`, **one folder per backup** `<YYYY-MM-DD_HHmmss>_<env>[_<reason>]`, root `README.txt`; now also `auth-users.jsonl` (logins + tenant links, no passwords). `backup-verify.ts --latest` follows the new layout and refuses an unfinished newest folder.
+- New hook `.claude/hooks/require-db-backup.cjs` (+ `test-require-db-backup.cjs`, 30/30): before any database-writing Bash/PowerShell command, backs up dev (+ prod when production is mentioned), reuses a backup < 10 min old, **blocks** if the backup fails.
+- Both hooks moved to the **user** settings (`C:\Users\Max\.claude\settings.json`, absolute paths) → they run in every session, wherever started (closes audit C's R1). Verified live in this session: it backed up prod on its own at 21:02 and blocked a doc edit that merely mentioned `migrate dev`.
+- The two earlier backups moved in: `2026-10-20_125600_prod_first-backup-after-wipe`, `2026-10-20_125800_dev_first-backup-after-wipe` (verified OK).
+- Docs: ClaudeInstructions Rule 0b.6, `Plan-DevProdEnvironments.md` Daily workflow (no more `migrate dev`), MaintenanceNotes §3 note + §38, playwright/KNOWN-ISSUES.
+
+**Staging identity scrub (Max replaced the contact email himself, asked for the rest):** `saas/scripts/_qa/staging-identity-scrub.ts` — 10 Settings + 5 SiteContent rows that held NM's real phone/address/socials/map/IBAN/bank/personal number/recipient name/email → test values. Check afterwards: no staging value matches or contains NM's real values.
+
+**Still open after this:** R6 T-tickets from Max's other source (re-attach the 15 orphaned ticket images, then clean the 49 orphaned storage objects) · remaining hook gaps (≈9 command variants, MCP DB tools — Rule 0b.6 says back up manually) · scheduled backups / Supabase Pro + one restore drill · test budgets (`/admin/orders` specs ≥ 60 s), `allowedDevOrigins` for the demo host · `companies-crud.spec` for three prices + commit the LUNCH migration unchanged (pricing Chunk 6) · unrecoverable: 13 SiteContent + 7 Setting rows, 1 masterclass item, staging edits 10-16..10-20.

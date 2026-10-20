@@ -2,8 +2,8 @@
  * backup-verify.ts — offline integrity check of a folder written by scripts/backup-db.ts. Never connects to a database.
  *
  *   cd saas
- *   npx tsx scripts/backup-verify.ts "C:\Users\Max\Backups\georgian-saas\2026-10-20_1830\prod"
- *   npx tsx scripts/backup-verify.ts --latest --env=prod      # newest folder under the default backup root
+ *   npx tsx scripts/backup-verify.ts "C:\Users\Max\Downloads\DB_Backups\2026-10-20_221530_prod_daily"
+ *   npx tsx scripts/backup-verify.ts --latest --env=prod      # newest <stamp>_prod… folder under the backup root
  *
  * Checks: MANIFEST.json present; every listed file exists with the listed size and sha256; no unlisted files;
  * every table in rowCounts has tables/<Table>.jsonl whose line count equals the count and whose every line parses
@@ -23,10 +23,14 @@ function pickFolder(): string {
   if (flag('latest') !== undefined) {
     const env = flag('env')
     if (env !== 'prod' && env !== 'dev') { console.error('with --latest pass --env=prod or --env=dev'); process.exit(1) }
-    const root = path.join(os.homedir(), 'Backups', 'georgian-saas')
-    const stamps = fs.existsSync(root) ? fs.readdirSync(root).filter(d => /^\d{4}-\d{2}-\d{2}_\d{4}$/.test(d) && fs.existsSync(path.join(root, d, env, 'MANIFEST.json'))).sort() : []
-    if (!stamps.length) { console.error(`no ${env} backup found under ${root}`); process.exit(1) }
-    return path.join(root, stamps[stamps.length - 1], env)
+    // Same root + naming as backup-db.ts: one folder per backup, <YYYY-MM-DD_HHmmss>_<env>[_<reason>].
+    const root = process.env.DB_BACKUP_ROOT || path.join(os.homedir(), 'Downloads', 'DB_Backups')
+    const all = fs.existsSync(root) ? fs.readdirSync(root).filter(d => new RegExp(`^\\d{4}-\\d{2}-\\d{2}_\\d{4,6}_${env}(_|$)`).test(d)).sort() : []
+    if (!all.length) { console.error(`no ${env} backup found under ${root}`); process.exit(1) }
+    const newest = all[all.length - 1]
+    // Say so when the newest folder is incomplete instead of silently verifying an older one.
+    if (!fs.existsSync(path.join(root, newest, 'MANIFEST.json'))) { console.error(`newest ${env} backup ${newest} has no MANIFEST.json — it did not finish`); process.exit(1) }
+    return path.join(root, newest)
   }
   const dir = args.find(a => !a.startsWith('--'))
   if (!dir) { console.error('usage: backup-verify.ts <folder> | --latest --env=prod|dev'); process.exit(1) }
@@ -96,6 +100,13 @@ async function main() {
     const a = JSON.parse(fs.readFileSync(path.join(dir, 'auth-summary.json'), 'utf8'))
     if (a.authUsersCount !== m.authUsersCount) problems.push('auth-summary.json ≠ manifest')
   } catch { problems.push('auth-summary.json unreadable') }
+  if ((m.formatVersion ?? 1) >= 2) {
+    if (fs.existsSync(path.join(dir, 'auth-users.jsonl'))) {
+      const u = await jsonlLines(path.join(dir, 'auth-users.jsonl'))
+      if (u.lines !== m.authUsersCount) problems.push(`auth-users: ${u.lines} ≠ manifest ${m.authUsersCount}`)
+      if (u.bad) problems.push(`auth-users: ${u.bad} bad lines`)
+    } else problems.push('missing auth-users.jsonl')
+  }
   try { JSON.parse(fs.readFileSync(path.join(dir, 'schema.json'), 'utf8')) } catch { problems.push('schema.json unreadable') }
 
   console.log(`Backup: ${dir}`)

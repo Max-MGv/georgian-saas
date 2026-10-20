@@ -5,13 +5,17 @@
  * Free plan, which has NO backups — this script is the stop-gap.
  *
  *   cd saas
- *   npx tsx scripts/backup-db.ts --env=prod            # production (ref dshsfkffcsgerdqinqst, from .env.prod.backup)
- *   npx tsx scripts/backup-db.ts --env=dev             # dev/staging (ref jpbkkngpgtvqmsocitjx, from .env)
+ *   npx tsx scripts/backup-db.ts --env=prod --reason=before-demo-fix   # production (ref dshsfkffcsgerdqinqst, .env.prod.backup)
+ *   npx tsx scripts/backup-db.ts --env=dev                             # dev/staging (ref jpbkkngpgtvqmsocitjx, .env)
  *   npx tsx scripts/backup-db.ts --env=prod --out=D:\somewhere\folder
  *   npx tsx scripts/backup-verify.ts <folder>          # or: --latest --env=prod
  *
- * Default output: C:\Users\<you>\Backups\georgian-saas\<YYYY-MM-DD_HHmm>\<env>\   (OUTSIDE the repo — the script
- * refuses any --out inside the repo, and refuses a non-empty target folder).
+ * Default output: one folder PER BACKUP under C:\Users\<you>\Downloads\DB_Backups\ (Max's choice, 2026-10-20), named
+ *   <YYYY-MM-DD_HHmmss>_<env>[_<reason>]      e.g. 2026-10-20_221530_dev_staging-identity-scrub
+ * so backups sort by time and can be deleted one at a time. Override the root with env DB_BACKUP_ROOT. The script
+ * refuses any --out inside the repo, and refuses a non-empty target folder.
+ * The PreToolUse hook .claude/hooks/require-db-backup.cjs runs this script automatically before commands that write
+ * to a database (vault/ClaudeInstructions.md Rule 0b) — keep the folder naming in sync with that hook.
  *
  * SAFETY
  * - The connection URL must belong to the expected Supabase project ref (and must not contain the other one) —
@@ -34,16 +38,18 @@
  *                          policies, exploded table/sequence grants, column grants, default privileges, views,
  *                          functions, triggers, extensions, storage buckets.
  * - storage-objects.jsonl  storage.objects metadata only (bucket, name, size, created_at) — not the files.
- * - auth-summary.json      auth.users COUNT only (no user data).
+ * - auth-users.jsonl       auth.users identity columns only (id, email, phone, app_metadata incl. tenant links,
+ *                          user_metadata, timestamps) — NO password hashes or tokens. Enough to re-link admins.
+ * - auth-summary.json      auth.users count.
  * - README.txt, MANIFEST.json (env, timestamps, row counts, file sizes, sha256 per file).
  *
- * NOT covered: the Storage files themselves, auth.* contents, Supabase project settings, Vercel env. A restore is a
+ * NOT covered: the Storage files themselves, passwords/sessions in auth.*, Supabase project settings, Vercel env. A restore is a
  * manual, reviewed process (rebuild schema from migrations, compare against schema.json, load the jsonl files).
  *
  * SCHEDULING (not set up — Max decides between Supabase Pro backups and a scheduled job). Two options:
  *  a) Windows Task Scheduler on this PC (runs only while the PC is on), e.g. daily 03:00, in cmd.exe:
  *       schtasks /Create /SC DAILY /ST 03:00 /TN "georgian-saas prod backup" /TR ^
- *         "cmd /c cd /d C:\Users\Max\Desktop\claude-projects\georgian-saas\saas && npx tsx scripts/backup-db.ts --env=prod >> C:\Users\Max\Backups\georgian-saas\backup.log 2>&1 && npx tsx scripts/backup-verify.ts --latest --env=prod >> C:\Users\Max\Backups\georgian-saas\backup.log 2>&1"
+ *         "cmd /c cd /d C:\Users\Max\Desktop\claude-projects\georgian-saas\saas && npx tsx scripts/backup-db.ts --env=prod --reason=daily >> C:\Users\Max\Downloads\DB_Backups\backup.log 2>&1 && npx tsx scripts/backup-verify.ts --latest --env=prod >> C:\Users\Max\Downloads\DB_Backups\backup.log 2>&1"
  *     Remove with: schtasks /Delete /TN "georgian-saas prod backup"
  *     Add retention (e.g. keep 30 folders) and an off-machine copy (encrypted cloud folder) — not done here.
  *  b) A scheduled CI job (e.g. GitHub Actions cron) with the production URL as a repository secret, uploading the
@@ -63,6 +69,7 @@ const ENVS: Record<EnvName, { file: string; ref: string }> = {
   dev: { file: '.env', ref: 'jpbkkngpgtvqmsocitjx' },
 }
 const SAAS_DIR = path.resolve(__dirname, '..')
+export const BACKUP_ROOT = process.env.DB_BACKUP_ROOT || path.join(os.homedir(), 'Downloads', 'DB_Backups')
 const REPO_DIR = path.resolve(SAAS_DIR, '..')
 
 function arg(name: string): string | undefined {
@@ -76,7 +83,7 @@ function fail(msg: string): never {
 }
 const pad = (n: number) => String(n).padStart(2, '0')
 function stamp(d = new Date()) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
 }
 const qi = (s: string) => `"${s.replace(/"/g, '""')}"`
 
@@ -101,6 +108,24 @@ export function resolveUrl(env: EnvName): string {
   return url
 }
 
+/** One README at the root explaining the layout (written once, never overwritten). */
+function writeRootReadme() {
+  fs.mkdirSync(BACKUP_ROOT, { recursive: true })
+  const f = path.join(BACKUP_ROOT, 'README.txt')
+  if (fs.existsSync(f)) return
+  fs.writeFileSync(f, [
+    'georgian-saas database backups (saas/scripts/backup-db.ts). The _prod_ folders hold REAL CUSTOMER DATA - never share or upload them.',
+    '',
+    'One folder = one complete, independent backup:  <YYYY-MM-DD_HHmmss>_<env>[_<reason>]',
+    '  env    = prod (production, Supabase dshsfkffcsgerdqinqst) or dev (localhost + staging, Supabase jpbkkngpgtvqmsocitjx)',
+    '  reason = what was about to run (the automatic backup names the command that triggered it).',
+    'Delete old folders one at a time (oldest first) whenever you like; keep at least the newest one of each env.',
+    'Check a folder:  cd saas && npx tsx scripts/backup-verify.ts "<folder>"',
+    'Made automatically before database-writing commands by .claude/hooks/require-db-backup.cjs (vault/ClaudeInstructions.md Rule 0b).',
+    '',
+  ].join('\r\n'))
+}
+
 async function sha256(file: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const h = crypto.createHash('sha256')
@@ -115,7 +140,9 @@ async function main() {
   const url = resolveUrl(env)
 
   const startedAt = new Date()
-  const outDir = path.resolve(arg('out') || path.join(os.homedir(), 'Backups', 'georgian-saas', stamp(startedAt), env))
+  const reason = (arg('reason') || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+  const outDir = path.resolve(arg('out') || path.join(BACKUP_ROOT, `${stamp(startedAt)}_${env}${reason ? `_${reason}` : ''}`))
+  if (!arg('out')) writeRootReadme()
   const rel = path.relative(REPO_DIR, outDir)
   if (!rel.startsWith('..') && !path.isAbsolute(rel)) fail(`output folder ${outDir} is inside the repo — customer data must not land in git`)
   if (fs.existsSync(outDir) && fs.readdirSync(outDir).length) fail(`output folder ${outDir} already exists and is not empty`)
@@ -128,9 +155,10 @@ async function main() {
     '',
     `Environment: ${env} (Supabase project ${ENVS[env].ref})`,
     `Created: ${startedAt.toISOString()} by saas/scripts/backup-db.ts (read-only, one REPEATABLE READ snapshot)`,
+    `Reason: ${arg('reason') || '(none given)'}`,
     'Check integrity: cd saas && npx tsx scripts/backup-verify.ts "<this folder>"',
     'Contents: tables/*.jsonl (one JSON row per line; bigint/numeric as strings), schema.json (rebuild metadata),',
-    'storage-objects.jsonl (file metadata only), auth-summary.json (user COUNT only), MANIFEST.json (counts + sha256).',
+    'storage-objects.jsonl (file metadata only), auth-users.jsonl (logins, no passwords), MANIFEST.json (counts + sha256).',
     '',
   ].join('\r\n'))
 
@@ -243,7 +271,13 @@ async function main() {
         SELECT bucket_id, name, (metadata->>'size')::bigint AS size, created_at FROM storage.objects ORDER BY bucket_id, name) x`)
       fs.writeFileSync(path.join(outDir, 'storage-objects.jsonl'), objs.map(o => o.j).join('\n') + (objs.length ? '\n' : ''))
       storageObjectsCount = objs.length
+      const users = await tx.$queryRawUnsafe<{ j: string }[]>(`SELECT row_to_json(x)::text j FROM (
+        SELECT id, email, phone, role, raw_app_meta_data AS app_metadata, raw_user_meta_data AS user_metadata,
+               email_confirmed_at, last_sign_in_at, created_at, updated_at, banned_until, deleted_at, is_sso_user
+        FROM auth.users ORDER BY created_at, id) x`)
+      fs.writeFileSync(path.join(outDir, 'auth-users.jsonl'), users.map(u => u.j).join('\n') + (users.length ? '\n' : ''))
       authUsersCount = Number((await jq<{ n: number }>(`SELECT count(*)::int n FROM auth.users`))[0].n)
+      if (authUsersCount !== users.length) throw new Error(`auth.users: wrote ${users.length} rows but count(*) says ${authUsersCount}`)
       fs.writeFileSync(path.join(outDir, 'auth-summary.json'), JSON.stringify({ authUsersCount }, null, 2))
     }, { timeout: 60 * 60_000, maxWait: 60_000 })
   } finally {
@@ -262,7 +296,7 @@ async function main() {
   walk(outDir)
   for (const f of files) f.sha256 = await sha256(path.join(outDir, f.path))
   const manifest = {
-    env, projectRef: ENVS[env].ref, tool: 'saas/scripts/backup-db.ts', formatVersion: 1,
+    env, projectRef: ENVS[env].ref, reason: arg('reason') || null, tool: 'saas/scripts/backup-db.ts', formatVersion: 2,
     createdAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
     snapshot: snapshotInfo,
     encoding: 'tables/*.jsonl: one row_to_json object per line, TimeZone=UTC, bigint/numeric as strings, ordered by primary key',
