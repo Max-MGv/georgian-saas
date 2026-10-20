@@ -167,6 +167,26 @@ suspecting code.
 ### R8 — Production forward token (Max's go)
 **Resume point:** —
 
+## 4b. Blind review (2026-10-20) — findings, each verified read-only by `saas/scripts/_qa/verify-review.ts`
+
+A context-free reviewer (no vault, no git history, no transcripts, strictly read-only) confirmed the mechanism and
+that data/RLS/migrations are consistent, and found what R1 missed:
+- **The reset was `DROP SCHEMA public CASCADE` + re-create.** Besides rows it lost the schema's Supabase defaults:
+  owner is now `postgres` (production `pg_database_owner`), the schema ACL lacks `PUBLIC`/`anon`/`authenticated`/
+  `service_role`, **0 default-privilege entries** (production 6), **0 tables granted to `service_role`** (production
+  36). R1 called the missing anon/authenticated grants "stricter, keep" — **that was wrong in one important way**:
+  dev no longer reproduces production's automatic grant on new tables, so a migration that forgets its `REVOKE`
+  would look safe on dev and be exposed on production. → restore to match production (needs Max's go).
+- `Ticket_number_seq` never called → if tickets are restored with their numbers, move the sequence past the max.
+- The uncommitted migration `20261020150000_visit_type_lunch` is recorded as applied with its current checksum →
+  never edit/rename it; changes go in a new migration (else Prisma reports drift and offers a reset).
+- Production has a UNIQUE **constraint** `Setting_key_tenantId_key` that no migration creates (dev: unique index
+  only) — pre-existing drift.
+- `onboarding_launched_at` / `onboarding_works_with_companies` absent on staging — the demo seed deletes them by design
+  (`lib/demoSeed.ts:917`); decide whether staging should carry them.
+- Biggest risk overall: **production has no backups**. Prevention idea: a Claude Code PreToolUse hook that blocks
+  `--shadow-database-url`, `migrate dev/reset`, `db push`, `--force-reset` against any `supabase.co` URL.
+
 ## 5. Paused work
 
 `vault/Plan-PricingModel.md` **Chunk 6 is paused mid-way** (uncommitted on `staging`): `lib/settings.ts`,
