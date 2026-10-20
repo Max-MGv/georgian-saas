@@ -59,8 +59,8 @@ production's current content); staging bug-report rows (their screenshots surviv
 |---|---|---|
 | R0 | Tracker + incident record + read-only snapshot of dev | ✅ 2026-10-20 |
 | R1 | Plumbing: migration history (mark applied), RLS + grants (`setup-rls.ts`), verify vs production | ✅ 2026-10-20 |
-| R2 | Tenant rows: Staging Winery, dev demo, Test Onboarding Wizard — original ids/slugs/domains | ⬜ |
-| R3 | Staging Winery content from production (read-only) + Flitt test merchant | ⬜ |
+| R2 | Tenant rows: Staging Winery, dev demo, Test Onboarding Wizard — original ids/slugs/domains | ✅ 2026-10-20 |
+| R3 | Staging Winery content from production (read-only) + Flitt test merchant | ✅ 2026-10-20 |
 | R4 | Data: demo seed on staging + demo tenants, test fixtures | ⬜ |
 | R5 | Ticket tool: new staging token (credentials.txt); P-tickets re-copied from production | ⬜ |
 | R6 | Tickets (Max's source, else transcripts) + release drafts | ⬜ (waits for Max) |
@@ -89,20 +89,28 @@ production's current content); staging bug-report rows (their screenshots surviv
       those roles for tables (it connects as `postgres` → `app_user`).
 **Resume point:** done.
 
-### R2 — Tenant rows
-- [ ] `staging-winery` `cmrxb85wo0000vlc0d964nzf8`, domain `staging.vineworks.ge`, name "Staging Winery",
-      displayName "Nikalas Marani (Staging)", branding/theme/modules from production NM.
-- [ ] `vineworks-demo` `cmtvgl6e60000vl6w9se65t86`, domain `demo.placeholder.local`, displayName "Vineworks Estate"
-      (branding per `scripts/rebrand-demo-tenant.ts`).
-- [ ] `test-onboarding-wizard` `cmsioproi000avl9czd60ua5h`, domain `test-onboarding-wizard.invalid`, blank (the
-      onboarding spec starts from an empty tenant).
-**Resume point:** —
+### R2 — Tenant rows ✅ 2026-10-20
+Script: `saas/scripts/_qa/recover-dev.ts --phase=tenants [--write]` (untracked) — dry run by default, asserts dev as
+target and production as read-only source, compares column lists first, skips anything that exists (re-run = no-op,
+verified). First write attempt failed atomically (a JSON value bound as text) → inserts now cast each value to its
+column type; nothing had been written.
+- [x] `staging-winery` `cmrxb85wo0000vlc0d964nzf8`, `staging.vineworks.ge`, "Nikalas Marani (Staging)" — branding,
+      theme, modules copied from production NM; Flitt **test merchant** `1549901`/`test`, online payment on.
+- [x] `vineworks-demo` `cmtvgl6e60000vl6w9se65t86`, `demo.placeholder.local` — copied from **production's demo tenant**
+      (`cmtvi582n…`, already scrubbed of NM's identity — better than re-cloning NM + `rebrand-demo-tenant.ts`).
+- [x] `test-onboarding-wizard` `cmsioproi000avl9czd60ua5h`, `test-onboarding-wizard.invalid` — blank, as the onboarding
+      spec expects.
+**Resume point:** done.
 
-### R3 — Staging Winery content
-- [ ] Copy from production NM (read-only): Settings, SiteContent, Wines + vintages, MenuItems, MasterclassItems,
-      BlockedDates, ContactRoles. Not copied: orders, wine orders, people, addresses, customers (real data).
-- [ ] Flitt: `flittMerchantId=1549901`, `flittSecretKey=test`, `modulesOnlinePayment` as before.
-**Resume point:** —
+### R3 — Content ✅ 2026-10-20
+`recover-dev.ts --phase=content --write` (new ids; wines re-linked to their vintages):
+| Tenant | ContactRole | Setting | SiteContent | Wines (+vintages) | BlockedDate |
+|---|---|---|---|---|---|
+| staging-winery (from production NM) | 2 | 41 | 71 | 7 (+9) | 0 |
+| vineworks-demo (from production demo) | 2 | 36 | 72 | 6 (+8) | 0 |
+| test-onboarding-wizard | 2 (from NM) | — | — | — | — |
+Menu / masterclass items not copied — the demo seed replaces them. Re-run check: all "0 new".
+**Resume point:** done.
 
 ### R4 — Data
 - [ ] `seed-demo-data.ts` for the dev demo tenant and `--tenant=staging-winery`; `backfill-test-fixtures.ts`.
