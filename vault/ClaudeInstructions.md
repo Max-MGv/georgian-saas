@@ -32,6 +32,37 @@ Full reference, environment map, and the exact commands: `vault/Plan-DevProdEnvi
 
 ---
 
+## 0b. DATABASE SAFETY — never run anything that can reset, drop or wipe a real database (since 2026-10-20)
+
+**What happened (2026-10-20, T-152 Chunk 6):** to check a new migration, Claude ran
+`prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <DEV DATABASE URL> --script`.
+A **shadow database is treated by Prisma as disposable: it is reset (every table dropped) and all migrations are
+replayed into it.** Pointing it at the real dev database **wiped every row in the dev `public` schema** — all
+tenants, companies, orders, wines, settings, site content, **the whole staging ticket board** (T-tickets, comments,
+history, P-ticket copies) and the staging release-note drafts — and its migration history. Production was not
+touched (different database). Logins (`auth`) and Storage files survived. Nothing in the command's output warned.
+
+**The rules:**
+1. **Never pass a real database URL (dev, staging, production) to `--shadow-database-url`, `shadowDatabaseUrl`, or
+   anything called "shadow".** A shadow database must be a throwaway database created for that purpose — or skip
+   the shadow altogether: `prisma migrate diff --from-url <db> --to-schema-datamodel …` compares against a live
+   database **read-only** and needs no shadow.
+2. **Never run on a real database:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`,
+   `prisma migrate dev` when it offers a reset, `DROP`/`TRUNCATE` of a table or schema, or any script whose job is
+   to wipe or reseed — unless Max has said yes **to that exact command on that exact database**.
+3. **Before running any Prisma/database command you have not used in this session, read what it does to its
+   inputs** (`npx prisma <cmd> --help` + the docs) — especially any flag that takes a database URL. If a flag can
+   write to, reset or drop a database, treat it as destructive until proven otherwise.
+4. **The dev database is not a scratch database.** It holds the staging ticket board, release-note drafts and
+   Max's test setup, not only fake orders. Treat it with the same care as production for anything destructive;
+   the only difference is that routine *additive* migrations (`prisma migrate deploy` of a reviewed migration) are
+   allowed there without asking.
+5. **If something destructive happens anyway: stop immediately, check with read-only queries what is left, and tell
+   Max plainly** — what was lost, what survived, and the recovery options (Supabase → Database → Backups first) —
+   before running anything else against that database.
+
+---
+
 ## 1. Always update the vault
 
 After any meaningful work (feature built, decision made, architecture changed), update the relevant vault file:
