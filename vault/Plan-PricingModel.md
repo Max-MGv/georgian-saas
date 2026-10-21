@@ -504,7 +504,12 @@ back to Wine Tasting → dish selects off, saved: dish cleared, ₾468. Individu
 ₾70 → ₾280 stored. `test-pricing-model.ts` 96/96 (21 new). Bug found and fixed in QA: a stale dish in memory blocked
 Save after the lunch guests went → the inline check no longer looks at dishes (forms drop them; server still refuses).
 **Not done here:** Playwright specs that type "Total guests in the party" (e.g. `payment-admin-order.spec.ts`) → Chunk 10.
-**Resume point:** staging QA → Chunk 9.
+- Public form (localhost): dish picked on Tasting + Lunch, then switched to Wine Tasting and booked → stored with no dish,
+  4 × ₾52 = ₾208 (A-11 client half).
+- Staging `539483c` (Brave, read-only): mixed order ₾135 + ₾460 = ₾595; an ordinary individual order (2 × ₾150 = ₾300) and
+  an older company order with a free guest ("Total: 8 guests (7 paying)", 7 × ₾58 = ₾406) render as sold, no "Live
+  preview", console clean.
+**Resume point:** done → Chunk 9.
 
 ### Chunk 9 — Everything that shows a booking
 **Status:** ⬜

@@ -19,7 +19,11 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   page crashed and Save would have moved Lunch only guests into Free — now read-only priced, re-price refused (Chunk 8
   replaces it). Only staging/dev ever held such orders.
 - Dev tidy-up later: "ZZ QA" bookings, Silk Road's Lunch only ₾45 test price. `seed-ka.ts` not run (would overwrite KA edits).
-- **Next:** Brave QA of `05df9d9` on staging → Chunk 8 (admin New Order + Order Detail on three products, fixes P-11).
+- 2026-10-22: Chunk 7 staging QA passed. Max: Lunch only *is* a visit type (D-10, simple company form); new rule **A-11 "no hot
+  dish without a lunch guest"**. **Chunk 8 `539483c`**: admin New Order + order page on the four boxes (P-11 fixed — no typed
+  party size), visit type editable, re-price only on a real change, A-11 on every path, quick-edit panel no longer writes
+  guestCount, addMasterclassLine validates quantity. Localhost + staging QA in the plan. 96/96 pricing tests.
+- **Next:** Chunk 9 (every screen/document that shows a booking: lists, calendar, sheet, invoices, emails, statistics).
 
 ---
 
