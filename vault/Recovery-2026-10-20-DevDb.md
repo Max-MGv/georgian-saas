@@ -387,3 +387,13 @@ payments, events, invoices, demo analytics (counts only survive). No other schem
   should visit type + price become editable).
 - `vault/Tickets.md` re-exported (39 tickets). **R6 = done** for everything recoverable; still lost: Max's own board edits
   after each snapshot, ~110 test tickets (not worth it), 13 orphaned storage files that belong to test tickets.
+
+## 11. Backup protocol completed (2026-10-21, Max: "keep local backups on my device, before the commands for changing stuff execute")
+- Automatic backup now also before: `git push` to master / `gh pr merge` (prod + dev), any other push (dev), ticket-tool
+  writes, Supabase MCP `execute_sql` (non-read-only) / `apply_migration`. The safety lock inspects MCP SQL too. Tests
+  49/49 + 38/38. User-settings matcher widened.
+- Every backup includes the Storage files (unchanged ones hard-linked → disk stays small).
+- Restore drill passed: `saas/scripts/restore-db.ts` + `vault/Restore-Guide.md`. Prod backup → throwaway local
+  PostgreSQL 17.6 (`C:\Users\Max\Tools\postgresql-17.6`) → 36 tables byte-identical, schema identical, tenant isolation
+  OK; drill data deleted.
+- **Accepted risks (Max):** no scheduled backups (Pro / nightly job declined), one copy on this laptop only.

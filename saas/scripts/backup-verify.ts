@@ -60,7 +60,7 @@ async function main() {
   if (!fs.existsSync(mPath)) { console.error(`FAIL: no MANIFEST.json in ${dir}`); process.exit(1) }
   const m = JSON.parse(fs.readFileSync(mPath, 'utf8')) as {
     env: string; projectRef: string; createdAt: string; rowCounts: Record<string, number>; totalRows: number
-    storageObjectsCount: number; authUsersCount: number; files: { path: string; bytes: number; sha256: string }[]
+    storageObjectsCount: number; storageFilesCount?: number; formatVersion?: number; authUsersCount: number; files: { path: string; bytes: number; sha256: string }[]
   }
 
   // 1. files: presence, size, hash
@@ -107,11 +107,23 @@ async function main() {
       if (u.bad) problems.push(`auth-users: ${u.bad} bad lines`)
     } else problems.push('missing auth-users.jsonl')
   }
+  // 4. Storage files (format 3+): one file per storage-objects line, same size as its metadata
+  if ((m.formatVersion ?? 1) >= 3 && fs.existsSync(path.join(dir, 'storage-objects.jsonl'))) {
+    const objs = fs.readFileSync(path.join(dir, 'storage-objects.jsonl'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l) as { bucket_id: string; name: string; size: number | null })
+    let found = 0
+    for (const o of objs) {
+      const f = path.join(dir, 'storage', o.bucket_id, ...o.name.split('/'))
+      if (!fs.existsSync(f)) { problems.push(`missing storage file ${o.bucket_id}/${o.name}`); continue }
+      if (o.size != null && fs.statSync(f).size !== Number(o.size)) problems.push(`storage file ${o.bucket_id}/${o.name}: size ≠ metadata`)
+      found++
+    }
+    if (m.storageFilesCount != null && found !== m.storageFilesCount) problems.push(`storage files: ${found} ≠ manifest ${m.storageFilesCount}`)
+  }
   try { JSON.parse(fs.readFileSync(path.join(dir, 'schema.json'), 'utf8')) } catch { problems.push('schema.json unreadable') }
 
   console.log(`Backup: ${dir}`)
   console.log(`env=${m.env} ref=${m.projectRef} created=${m.createdAt}`)
-  console.log(`files=${m.files.length} tables=${Object.keys(m.rowCounts).length} rows=${total} storageObjects=${m.storageObjectsCount} authUsers=${m.authUsersCount}`)
+  console.log(`files=${m.files.length} tables=${Object.keys(m.rowCounts).length} rows=${total} storageObjects=${m.storageObjectsCount}${m.storageFilesCount != null ? ` storageFiles=${m.storageFilesCount}` : ''} authUsers=${m.authUsersCount}`)
   if (problems.length) {
     console.log(`FAIL — ${problems.length} problem(s):`)
     for (const p of problems) console.log(`  - ${p}`)

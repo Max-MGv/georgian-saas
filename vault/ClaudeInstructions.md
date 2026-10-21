@@ -68,10 +68,19 @@ touched (different database). Logins (`auth`) and Storage files survived. Nothin
    - **Automatic:** the hook `.claude/hooks/require-db-backup.cjs` runs before every Bash/PowerShell command that can
      write to a database: any `--write`/`--apply`, `prisma migrate deploy|resolve`, `prisma db execute|seed`,
      `playwright test`, inline SQL writes, and any `scripts/…` file not on its read-only list (checks, verify,
-     audits, `tix`). It backs up **dev**, plus **prod** when the command mentions production; a backup younger than
+     audits). It backs up **dev**, plus **prod** when the command mentions production; a backup younger than
      10 minutes is reused. **A failed backup blocks the command** — fix the backup, never work around it.
-   - **Manual (the hook cannot see these):** writes through the Supabase MCP tools, the app's own pages, HTTP APIs,
-     or Max's own terminal → run `cd saas && npx tsx scripts/backup-db.ts --env=dev|prod --reason=<what>` first.
+   - **Since 2026-10-21 also** (Max: "keep local backups on my device, before the commands for changing stuff
+     execute"): **`git push` to `master`** (or `gh pr merge`) → **production + dev** backup, because it deploys the
+     live site; `git push` to any other branch → dev; **ticket-tool writes** (`tix add|comment|move|review|…`) → dev
+     (prod with `--prod`); **Supabase MCP** `execute_sql` (unless read-only) / `apply_migration` → the env of its
+     `project_id`. The safety lock also inspects MCP SQL. Matcher in user settings: `Bash|PowerShell|mcp__.*__execute_sql|mcp__.*__apply_migration`.
+   - **Every backup now includes the uploaded Storage files** (`storage/<bucket>/…`). Unchanged files are hard-linked
+     to the previous backup (stored once on disk; every folder still complete and deletable on its own).
+   - **Manual (the hook cannot see these):** writes through the app's own pages, other HTTP APIs, or Max's own
+     terminal → run `cd saas && npx tsx scripts/backup-db.ts --env=dev|prod --reason=<what>` first.
+   - **Restoring:** `vault/Restore-Guide.md` (drill on a throwaway local PostgreSQL + emergency steps). First drill
+     2026-10-21 passed. Accepted risks (Max, 2026-10-21): no scheduled backups, one copy on this laptop only.
    - Writing a file whose text contains `--write` or `.env.prod` via a Bash heredoc also triggers a (harmless)
      backup — use the Write tool for script files.
    - **Both hooks** (this one and `block-destructive-db.cjs`) are registered in the **user** settings
@@ -226,4 +235,5 @@ Max and Claude manage small features, bugs and ideas in **Super Admin → Ticket
 - **Test steps live on the ticket, not in `MyToDo.md`** (Max, 2026-10-15). After handing over work, point Max to "Waiting for me";
   `MyToDo.md` is only for manual chores that aren't tickets.
 - `vault/Tickets.md` is an **auto-generated read-only snapshot** — never edit it; change tickets in the tool.
+- **Multi-line text (analysis/solution/comment): don't use `npx tsx`** — on Windows `npx` goes through cmd.exe, which silently cuts the argument at the first newline (only paragraph 1 is saved). Use `node node_modules/tsx/dist/cli.mjs scripts/tix.ts …` from `saas/` instead (found 2026-10-18 on T-114).
 

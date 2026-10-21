@@ -1303,7 +1303,15 @@ A new script that writes should take `--write` and dry-run by default.
 
 **Coupled:** both hooks are registered in the **user** settings (`C:\Users\Max\.claude\settings.json`, absolute
 paths). Moving the repo folder breaks them silently (node cannot find the file → the hook errors, the command runs) —
-update the two paths there if the repo moves.
+update the two paths there if the repo moves. The matcher there (`Bash|PowerShell|mcp__.*__execute_sql|mcp__.*__apply_migration`,
+2026-10-21) must keep the MCP part, or Supabase-connection SQL runs with no backup and no safety lock.
+
+**Coupled (2026-10-21):** `restore-db.ts` reads exactly what `backup-db.ts` writes (`tables/*.jsonl` encoding,
+`schema.json` keys, `_prisma_migrations`) and proves the restore by re-exporting with **the same query** as
+`backup-db.ts` (row_to_json, UTC, bigint/numeric as text, PK order) and comparing sha256. Change the export format in
+`backup-db.ts` → change the proof in `restore-db.ts` (and bump `formatVersion`) → re-run the drill in
+`vault/Restore-Guide.md`. Storage files: `backup-db.ts` hard-links unchanged files to the previous backup and
+`backup-verify.ts` (format 3+) checks one file per `storage-objects.jsonl` line.
 
 **Related:** `scripts/clone-nm-to-staging.ts` copies Nikalas Marani's settings to Staging Winery **including the real
 contact, bank and personal-number values**. After any re-clone, scrub them (2026-10-20 scrub: test phone

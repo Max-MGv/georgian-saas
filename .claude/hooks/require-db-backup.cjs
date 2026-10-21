@@ -15,8 +15,15 @@
  * {systemMessage} is shown to the user), exit 2 → block (stderr shown to Claude). Configured in the USER settings
  * (~/.claude/settings.json, absolute path) so it runs in every session, wherever it was started.
  * Tests: node .claude/hooks/test-require-db-backup.cjs   (uses DB_BACKUP_HOOK_DRY=1 — never runs a real backup)
- * Known limits: it only sees the command line. A write made through an MCP database tool, an HTTP API (tix,
- * staging pages) or the app itself is not covered — Rule 0b still asks for a manual backup before those.
+ * Since 2026-10-21 (Max: "keep local backups on my device, before the commands for changing stuff execute") it also
+ * backs up before:
+ *   - `git push` — to master/main (or `gh pr merge`): PRODUCTION + dev, because that deploys to the live site;
+ *     to any other branch (staging): dev;
+ *   - ticket-tool writes (`tix add|comment|move|review|…|release new|add|edit|…`): dev, or prod with --prod;
+ *   - Supabase MCP database tools (`mcp__*__execute_sql` unless the SQL is read-only, `mcp__*__apply_migration`):
+ *     the env of the tool's project_id (dev ref / prod ref; other projects are ignored).
+ * Known limits: writes made through the app's own pages, other HTTP calls, or Max's own terminal are not seen —
+ * Rule 0b asks for a manual backup before those.
  */
 'use strict'
 const fs = require('fs')
@@ -48,6 +55,60 @@ function isWrite(cmd) {
   const m = c.match(SCRIPT)
   if (m && !READ_ONLY_SCRIPT.test(m[0]) && !/--dry\b/i.test(c)) return `script ${m[0].split(/[\\/]/).pop()}`
   return null
+}
+
+const TIX_WRITE = /\btix(?:\.ts)?\s+(?:(add|comment|move|review|analysis|solution|ask|answer|decide|link|unlink|live|reply|ship)\b|release\s+(new|add|edit|image|draft-from-next|publish|delete)\b)/i
+const REFS = { jpbkkngpgtvqmsocitjx: 'dev', dshsfkffcsgerdqinqst: 'prod' }
+
+/** Branch a `git push` sends to: 'master' (deploys production), 'other', or null when the command has no push. */
+function pushTarget(c, cwd) {
+  if (/\bgh\s+pr\s+merge\b/i.test(c)) return 'master'
+  let dir = cwd
+  for (const seg of c.split(/&&|\|\||[;|\n]/)) {
+    const cd = seg.match(/^\s*cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/)
+    if (cd) { dir = cd[1] || cd[2] || cd[3]; continue }
+    const m = seg.match(/\bgit\b((?:\s+-C\s+(?:"[^"]+"|\S+))?)\s+push\b(.*)$/i)
+    if (!m) continue
+    const refs = m[2].trim().split(/\s+/).filter(a => a && !a.startsWith('-')).slice(1) // drop the remote name
+    if (refs.some(r => /(^|:)(refs\/heads\/)?(master|main)$/i.test(r.replace(/^\+/, '')))) return 'master'
+    if (refs.length) return 'other'
+    let branch = process.env.DB_BACKUP_GIT_BRANCH // tests only
+    if (branch === undefined) {
+      const at = (m[1].match(/-C\s+"?([^"]+?)"?\s*$/) || [])[1] || dir || REPO
+      branch = (spawnSync('git', ['branch', '--show-current'], { cwd: at, encoding: 'utf8', windowsHide: true }).stdout || '').trim()
+    }
+    return /^(master|main)$/.test(branch) ? 'master' : 'other'
+  }
+  return null
+}
+
+/** Read-only SQL = every statement starts with SELECT / WITH / SHOW / EXPLAIN / VALUES and nothing writes. */
+function readOnlySql(sql) {
+  const s = String(sql || '').replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const stmts = s.split(';').map(x => x.trim()).filter(Boolean)
+  return stmts.length > 0 && stmts.every(x => /^(select|with|show|explain|values)\b/i.test(x)) && !SQL_WRITE.test(s) && !/\bset\s+(?!local\s+timezone)\w|nextval\s*\(|\bdo\s+\$/i.test(s)
+}
+
+/** What a tool call needs backed up: { why, envs } or null. */
+function plan(input) {
+  const tool = input.tool_name || ''
+  const ti = input.tool_input || {}
+  const mcp = tool.match(/^mcp__.+__(execute_sql|apply_migration)$/)
+  if (mcp) {
+    const env = REFS[ti.project_id]
+    if (!env) return null // not one of this project's databases
+    if (mcp[1] === 'execute_sql' && readOnlySql(ti.query)) return null
+    return { why: `Supabase MCP ${mcp[1]}`, envs: [env] }
+  }
+  const cmd = typeof ti.command === 'string' ? ti.command : null
+  if (!cmd || !inProject(cmd, input.cwd || '')) return null
+  const c = cmd.replace(/\\\r?\n|`\r?\n|\^\r?\n/g, ' ')
+  const push = pushTarget(c, input.cwd || '')
+  if (push === 'master') return { why: 'git push to master (deploys production)', envs: ['dev', 'prod'] }
+  if (push === 'other') return { why: 'git push', envs: ['dev'] }
+  if (TIX_WRITE.test(c)) return { why: 'ticket write (tix)', envs: PROD.test(c) ? ['prod'] : ['dev'] }
+  const why = isWrite(cmd)
+  return why ? { why, envs: PROD.test(cmd) ? ['dev', 'prod'] : ['dev'] } : null
 }
 
 function inProject(cmd, cwd) {
@@ -96,16 +157,10 @@ function backup(env, reason) {
 }
 
 function main(raw) {
-  let cmd = null, cwd = ''
-  try {
-    const input = JSON.parse(raw)
-    cmd = input.tool_input && typeof input.tool_input.command === 'string' ? input.tool_input.command : null
-    cwd = input.cwd || ''
-  } catch { return 0 }
-  if (!cmd || !inProject(cmd, cwd)) return 0
-  const why = isWrite(cmd)
-  if (!why) return 0
-  const envs = PROD.test(cmd) ? ['dev', 'prod'] : ['dev']
+  let p = null
+  try { p = plan(JSON.parse(raw)) } catch { return 0 }
+  if (!p) return 0
+  const { why, envs } = p
   const reason = 'auto-' + why.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
   const done = []
   try {
@@ -138,4 +193,4 @@ if (require.main === module) {
   process.stdin.on('data', d => { raw += d })
   process.stdin.on('end', () => process.exit(main(raw)))
 }
-module.exports = { isWrite, inProject }
+module.exports = { isWrite, inProject, plan, pushTarget, readOnlySql }

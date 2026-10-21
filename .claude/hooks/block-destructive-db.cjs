@@ -13,7 +13,7 @@
  * DROP SCHEMA; TRUNCATE; DROP DATABASE. Everything else is allowed (migrate deploy/status/resolve, migrate diff
  * --from-url ... --to-schema-datamodel, ...).
  * Known limits: it only sees the command line — a script file that runs these statements internally, an npm script
- * alias, or an MCP database tool is not inspected. False positives (e.g. the word "truncate" in a grep or commit
+ * alias is not inspected. Supabase MCP execute_sql / apply_migration SQL IS inspected (since 2026-10-21). False positives (e.g. the word "truncate" in a grep or commit
  * message) are accepted on purpose: write such text with the Write tool / `git commit -F <file>` instead.
  */
 'use strict'
@@ -63,7 +63,8 @@ function main(raw) {
     const input = JSON.parse(raw)
     tool = input.tool_name || '?'
     const ti = input.tool_input || {}
-    command = typeof ti.command === 'string' ? ti.command : null
+    // Shell commands, and (since 2026-10-21) the SQL of Supabase MCP database tools (execute_sql / apply_migration).
+    command = typeof ti.command === 'string' ? ti.command : /^mcp__.+__(execute_sql|apply_migration)$/.test(tool) && typeof ti.query === 'string' ? ti.query : null
   } catch {
     command = raw // unparseable input: fail safe by scanning the raw text
   }

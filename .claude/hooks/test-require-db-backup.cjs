@@ -34,7 +34,21 @@ const cases = [
   [A, 'npx tsx scripts/_qa/verify-audit-b.ts', null, 'QA verify script'],
   [A, 'npx tsx scripts/_qa/debris-facts.ts', null, 'QA facts script'],
   [W, 'npx tsx scripts/_qa/restore-dev-gaps.ts', 'dev', 'QA script without flags counts as a write (safe default)'],
-  [A, 'npx tsx scripts/tix.ts comment T-201 "note" --prod --yes-prod', null, 'tix (ticket API, not a DB command)'],
+  // ---- 2026-10-21: ticket writes, pushes, Supabase MCP ----
+  [W, 'npx tsx scripts/tix.ts comment T-201 "note" --prod --yes-prod', 'prod', 'tix write on production → prod backup'],
+  [W, 'npx tsx scripts/tix.ts comment T-21 "QA passes"', 'dev', 'tix comment → dev backup'],
+  [W, 'node node_modules/tsx/dist/cli.mjs scripts/tix.ts add "New thing" --type TASK', 'dev', 'tix add (direct tsx cli)'],
+  [W, 'npx tsx scripts/tix.ts move T-5 CLOSED --reason OBSOLETE', 'dev', 'tix move'],
+  [W, 'npx tsx scripts/tix.ts release add cmabc "Title"', 'dev', 'tix release add'],
+  [A, 'npx tsx scripts/tix.ts show T-21', null, 'tix show (read)'],
+  [A, 'npx tsx scripts/tix.ts release list', null, 'tix release list (read)'],
+  [W, 'git push origin master', 'dev+prod', 'push to master → production backup'],
+  [W, 'git checkout master && git merge staging && git push origin master && git checkout staging', 'dev+prod', 'merge + push to master'],
+  [W, 'git push origin staging:master', 'dev+prod', 'refspec onto master'],
+  [W, 'gh pr merge 12 --merge', 'dev+prod', 'gh pr merge'],
+  [W, 'git push -q origin staging', 'dev', 'push to staging → dev backup'],
+  [W, 'git push', 'dev', 'bare push on a non-master branch (DB_BACKUP_GIT_BRANCH=staging)'],
+  [A, 'git commit -q -m "x" && git log --oneline -1', null, 'commit without push'],
   [A, 'npx tsx scripts/_qa/post-audit-fixes.ts --dry', null, '--dry'],
   [A, 'npx prisma migrate status', null, 'migrate status'],
   [A, 'npx playwright test --list', null, 'playwright --list'],
@@ -42,9 +56,9 @@ const cases = [
   [A, `psql "$URL" -c "SELECT count(*) FROM \\"Order\\""`, null, 'read-only SQL'],
 ]
 
-function run(cmd, env, cwd = PROJ) {
-  const input = JSON.stringify({ session_id: 't', hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd, tool_input: { command: cmd } })
-  return spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8', env: { ...process.env, ...env } })
+function run(cmd, env, cwd = PROJ, tool = 'Bash', toolInput = { command: cmd }) {
+  const input = JSON.stringify({ session_id: 't', hook_event_name: 'PreToolUse', tool_name: tool, cwd, tool_input: toolInput })
+  return spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8', env: { DB_BACKUP_GIT_BRANCH: 'staging', ...process.env, ...env } })
 }
 let failed = 0
 const rows = []
@@ -54,8 +68,32 @@ for (const [want, cmd, envs, note] of cases) {
   const r = run(cmd, { DB_BACKUP_HOOK_DRY: '1', DB_BACKUP_ROOT: root })
   const msg = r.stdout || ''
   const got = r.status === 0 && /DB backup before write/.test(msg) ? W : r.status === 0 && !msg ? A : `exit ${r.status} ${msg}${r.stderr}`
-  const envOk = want !== W || (envs === 'dev+prod' ? /back up dev.*back up prod/.test(msg) : /back up dev/.test(msg) && !/prod/.test(msg.replace(/before write \([^)]*\)/, '')))
+  const backedUp = msg.replace(/^.*?\) — /, '') // what follows "DB backup before write (<why>) — "
+  const envOk = want !== W || (envs === 'dev+prod' ? /back up dev.*back up prod/.test(backedUp)
+    : envs === 'prod' ? /back up prod/.test(backedUp) && !/back up dev/.test(backedUp)
+    : /back up dev/.test(backedUp) && !/prod/.test(backedUp))
   check(got === want && envOk, `${want.padEnd(6)} ${note}${got !== want ? `  → got ${got}` : envOk ? '' : `  → envs wrong: ${msg}`}`)
+  fs.rmSync(root, { recursive: true, force: true })
+}
+// bare `git push` while on master → production backup
+{ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dbbk-'))
+  const r = run('git push', { DB_BACKUP_HOOK_DRY: '1', DB_BACKUP_ROOT: root, DB_BACKUP_GIT_BRANCH: 'master' })
+  check(r.status === 0 && /back up dev.*back up prod/.test(r.stdout), 'BACKUP bare git push while on master → dev + prod')
+  fs.rmSync(root, { recursive: true, force: true }) }
+// Supabase MCP database tools
+for (const [want, tool, ti, envs, note] of [
+  [W, 'mcp__supabase__execute_sql', { project_id: 'jpbkkngpgtvqmsocitjx', query: 'UPDATE "Setting" SET value = \'x\' WHERE key = \'y\'' }, 'dev', 'MCP UPDATE on dev'],
+  [W, 'mcp__a9e48394-127d-401e-9bf9-f3890b566cb5__apply_migration', { project_id: 'dshsfkffcsgerdqinqst', name: 'x', query: 'ALTER TABLE "Order" ADD COLUMN x int' }, 'prod', 'MCP apply_migration on prod'],
+  [W, 'mcp__supabase__execute_sql', { project_id: 'jpbkkngpgtvqmsocitjx', query: "select setval('\"Ticket_number_seq\"', 200)" }, 'dev', 'MCP setval inside a SELECT'],
+  [A, 'mcp__supabase__execute_sql', { project_id: 'jpbkkngpgtvqmsocitjx', query: 'select count(*) from "Order"; -- read' }, null, 'MCP read-only SELECT'],
+  [A, 'mcp__supabase__execute_sql', { project_id: 'otherprojectref00000', query: 'delete from x' }, null, 'MCP write on another project is not ours'],
+]) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dbbk-'))
+  const r = run('', { DB_BACKUP_HOOK_DRY: '1', DB_BACKUP_ROOT: root }, PROJ, tool, ti)
+  const msg = r.stdout || ''
+  const ok = want === A ? r.status === 0 && !msg
+    : r.status === 0 && (envs === 'prod' ? /back up prod/.test(msg) && !/back up dev/.test(msg) : /back up dev/.test(msg) && !/back up prod/.test(msg))
+  check(ok, `${want.padEnd(6)} ${note}${ok ? '' : `  → ${r.status} ${msg}${r.stderr}`}`)
   fs.rmSync(root, { recursive: true, force: true })
 }
 // outside the project → nothing

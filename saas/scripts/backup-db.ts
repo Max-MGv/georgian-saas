@@ -37,16 +37,21 @@
  *                          identity), constraints, indexes, enums, sequences (+ last_value/is_called, owned-by),
  *                          policies, exploded table/sequence grants, column grants, default privileges, views,
  *                          functions, triggers, extensions, storage buckets.
- * - storage-objects.jsonl  storage.objects metadata only (bucket, name, size, created_at) — not the files.
+ * - storage-objects.jsonl  storage.objects metadata (bucket, name, size, created_at).
+ * - storage/<bucket>/<name> every Storage FILE itself (screenshots, logos, ticket attachments, release images), fetched
+ *                          after the database snapshot with the project's service key (plain GET, read-only). Since
+ *                          2026-10-21 (Max: "uploaded files included in every backup"). Each file's size must equal
+ *                          its metadata size; a missing or short file fails the backup.
  * - auth-users.jsonl       auth.users identity columns only (id, email, phone, app_metadata incl. tenant links,
  *                          user_metadata, timestamps) — NO password hashes or tokens. Enough to re-link admins.
  * - auth-summary.json      auth.users count.
  * - README.txt, MANIFEST.json (env, timestamps, row counts, file sizes, sha256 per file).
  *
- * NOT covered: the Storage files themselves, passwords/sessions in auth.*, Supabase project settings, Vercel env. A restore is a
+ * NOT covered: passwords/sessions in auth.*, Supabase project settings, Vercel env. A restore is a
  * manual, reviewed process (rebuild schema from migrations, compare against schema.json, load the jsonl files).
  *
- * SCHEDULING (not set up — Max decides between Supabase Pro backups and a scheduled job). Two options:
+ * SCHEDULING — decided 2026-10-21 (Max): NO schedule and no Supabase Pro; backups run only before commands that change
+ * something (hook), kept locally only. Accepted risks in vault/Restore-Guide.md §C. If that changes, two options:
  *  a) Windows Task Scheduler on this PC (runs only while the PC is on), e.g. daily 03:00, in cmd.exe:
  *       schtasks /Create /SC DAILY /ST 03:00 /TN "georgian-saas prod backup" /TR ^
  *         "cmd /c cd /d C:\Users\Max\Desktop\claude-projects\georgian-saas\saas && npx tsx scripts/backup-db.ts --env=prod --reason=daily >> C:\Users\Max\Downloads\DB_Backups\backup.log 2>&1 && npx tsx scripts/backup-verify.ts --latest --env=prod >> C:\Users\Max\Downloads\DB_Backups\backup.log 2>&1"
@@ -108,6 +113,17 @@ export function resolveUrl(env: EnvName): string {
   return url
 }
 
+/** Storage API base + service key for env, asserting the URL belongs to that project. */
+function storageCreds(env: EnvName): { base: string; key: string } {
+  const cfg = ENVS[env]
+  const vars = dotenv.parse(fs.readFileSync(path.join(SAAS_DIR, cfg.file)))
+  const base = (vars.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '')
+  const key = vars.SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!base || !key) fail(`${cfg.file} has no NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (needed to back up Storage files)`)
+  if (!new URL(base).hostname.startsWith(`${cfg.ref}.`)) fail(`NEXT_PUBLIC_SUPABASE_URL in ${cfg.file} does not belong to project ${cfg.ref}`)
+  return { base, key }
+}
+
 /** One README at the root explaining the layout (written once, never overwritten). */
 function writeRootReadme() {
   fs.mkdirSync(BACKUP_ROOT, { recursive: true })
@@ -158,7 +174,7 @@ async function main() {
     `Reason: ${arg('reason') || '(none given)'}`,
     'Check integrity: cd saas && npx tsx scripts/backup-verify.ts "<this folder>"',
     'Contents: tables/*.jsonl (one JSON row per line; bigint/numeric as strings), schema.json (rebuild metadata),',
-    'storage-objects.jsonl (file metadata only), auth-users.jsonl (logins, no passwords), MANIFEST.json (counts + sha256).',
+    'storage-objects.jsonl (file metadata), storage/ (the files), auth-users.jsonl (logins, no passwords), MANIFEST.json (counts + sha256).',
     '',
   ].join('\r\n'))
 
@@ -284,6 +300,38 @@ async function main() {
     await db.$disconnect()
   }
 
+  // ---------- storage files (after the snapshot; plain authenticated GETs, nothing is changed) ----------
+  const { base, key } = storageCreds(env)
+  type Obj = { bucket_id: string; name: string; size: number | null; created_at: string }
+  const readObjs = (dir: string): Obj[] => fs.readFileSync(path.join(dir, 'storage-objects.jsonl'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  const objects = readObjs(outDir)
+  // Storage files almost never change, and a backup runs before every write — so a file identical to the previous
+  // finished backup of this env (same bucket/name/size/created_at) is HARD-LINKED to that copy instead of downloaded
+  // again: every folder still holds the complete file (deleting any one folder never affects another), but the disk
+  // stores it once. Falls back to a download if linking fails (e.g. a different drive).
+  const prevDir = arg('out') ? null : fs.readdirSync(BACKUP_ROOT).filter(d => new RegExp(`^\\d{4}-\\d{2}-\\d{2}_\\d{6}_${env}(_|$)`).test(d))
+    .map(d => path.join(BACKUP_ROOT, d)).filter(d => d !== outDir && fs.existsSync(path.join(d, 'MANIFEST.json')) && fs.existsSync(path.join(d, 'storage')))
+    .sort().at(-1) ?? null
+  const prev = new Map(prevDir ? readObjs(prevDir).map(o => [`${o.bucket_id}/${o.name}`, o]) : [])
+  let storageFilesBytes = 0, storageFilesLinked = 0
+  for (const o of objects) {
+    const rel = path.join('storage', o.bucket_id, ...o.name.split('/'))
+    if (path.relative(path.join(outDir, 'storage'), path.join(outDir, rel)).startsWith('..')) throw new Error(`unsafe storage path ${o.bucket_id}/${o.name}`)
+    fs.mkdirSync(path.dirname(path.join(outDir, rel)), { recursive: true })
+    const p = prev.get(`${o.bucket_id}/${o.name}`)
+    const prevFile = prevDir ? path.join(prevDir, rel) : ''
+    if (p && p.size === o.size && p.created_at === o.created_at && fs.existsSync(prevFile) && (o.size == null || fs.statSync(prevFile).size === Number(o.size))) {
+      try { fs.linkSync(prevFile, path.join(outDir, rel)); storageFilesBytes += fs.statSync(prevFile).size; storageFilesLinked++; continue } catch { /* download instead */ }
+    }
+    const res = await fetch(`${base}/storage/v1/object/${o.bucket_id}/${o.name.split('/').map(encodeURIComponent).join('/')}`,
+      { headers: { Authorization: `Bearer ${key}`, apikey: key } })
+    if (!res.ok) throw new Error(`storage ${o.bucket_id}/${o.name}: HTTP ${res.status}`)
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (o.size != null && buf.length !== Number(o.size)) throw new Error(`storage ${o.bucket_id}/${o.name}: got ${buf.length} bytes, metadata says ${o.size}`)
+    fs.writeFileSync(path.join(outDir, rel), buf)
+    storageFilesBytes += buf.length
+  }
+
   // ---------- manifest ----------
   const files: { path: string; bytes: number; sha256: string }[] = []
   const walk = (dir: string) => {
@@ -296,17 +344,17 @@ async function main() {
   walk(outDir)
   for (const f of files) f.sha256 = await sha256(path.join(outDir, f.path))
   const manifest = {
-    env, projectRef: ENVS[env].ref, reason: arg('reason') || null, tool: 'saas/scripts/backup-db.ts', formatVersion: 2,
+    env, projectRef: ENVS[env].ref, reason: arg('reason') || null, tool: 'saas/scripts/backup-db.ts', formatVersion: 3,
     createdAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
     snapshot: snapshotInfo,
     encoding: 'tables/*.jsonl: one row_to_json object per line, TimeZone=UTC, bigint/numeric as strings, ordered by primary key',
     rowCounts, totalRows: Object.values(rowCounts).reduce((a, b) => a + b, 0),
-    storageObjectsCount, authUsersCount, files,
+    storageObjectsCount, storageFilesCount: objects.length, storageFilesBytes, storageFilesLinked, storageFilesLinkedFrom: prevDir ? path.basename(prevDir) : null, authUsersCount, files,
   }
   fs.writeFileSync(path.join(outDir, 'MANIFEST.json'), JSON.stringify(manifest, null, 2))
 
   console.log(`Backup of ${env} written to: ${outDir}`)
-  console.log(`Tables: ${Object.keys(rowCounts).length}, rows: ${manifest.totalRows}, storage objects: ${storageObjectsCount}, auth users: ${authUsersCount}`)
+  console.log(`Tables: ${Object.keys(rowCounts).length}, rows: ${manifest.totalRows}, storage files: ${objects.length} (${storageFilesBytes} bytes, ${storageFilesLinked} unchanged - hard-linked to the previous backup), auth users: ${authUsersCount}`)
   for (const [t, n] of Object.entries(rowCounts)) console.log(`  ${t.padEnd(28)} ${n}`)
   console.log(`Files: ${files.length}, ${files.reduce((a, f) => a + f.bytes, 0)} bytes. Next: npx tsx scripts/backup-verify.ts "${outDir}"`)
 }

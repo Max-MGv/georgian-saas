@@ -34,6 +34,8 @@ const cases = [
   [B, 'PowerShell', 'cd saas; npx prisma migrate reset --force; Write-Host done', 'PowerShell tool: migrate reset'],
   [B, 'PowerShell', 'npx prisma db `\n  push', 'PowerShell tool: backtick continuation'],
   [B, 'PowerShell', '$env:X = "1"; npx prisma migrate dev --name x', 'PowerShell tool: migrate dev'],
+  [B, 'mcp__supabase__execute_sql', 'DROP SCHEMA public CASCADE', 'Supabase MCP SQL: drop schema'],
+  [B, 'mcp__a9e48394-127d-401e-9bf9-f3890b566cb5__apply_migration', 'truncate "Order"', 'Supabase MCP migration: truncate'],
   [B, 'RAW', 'not json at all … npx prisma migrate reset', 'unparseable stdin → raw text scanned'],
   // ---- must be allowed ----
   [A, 'Bash', 'npx prisma migrate deploy', 'migrate deploy'],
@@ -47,6 +49,7 @@ const cases = [
   [A, 'Bash', 'npx tsx scripts/tix.ts list', 'tix'],
   [A, 'PowerShell', 'Get-ChildItem saas/scripts | Select-Object -First 5 Name', 'PowerShell tool: normal command'],
   [A, 'PowerShell', 'cd saas; npx prisma migrate status', 'PowerShell tool: migrate status'],
+  [A, 'mcp__supabase__execute_sql', 'select count(*) from "Order"', 'Supabase MCP SQL: read-only select'],
   [A, 'Read', null, 'non-shell payload without a command'],
 ]
 
@@ -55,7 +58,7 @@ const rows = []
 for (const [want, tool, cmd, note] of cases) {
   const input = tool === 'RAW' ? cmd
     : JSON.stringify({ session_id: 'test', hook_event_name: 'PreToolUse', tool_name: tool,
-        tool_input: cmd === null ? { file_path: 'README.md' } : { command: cmd, description: 'test' } })
+        tool_input: cmd === null ? { file_path: 'README.md' } : tool.startsWith('mcp__') ? { project_id: 'jpbkkngpgtvqmsocitjx', query: cmd } : { command: cmd, description: 'test' } })
   const r = spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8' })
   const got = r.status === 2 ? B : r.status === 0 ? A : `exit ${r.status}`
   const ok = got === want && (got !== B || /Rule 0b/.test(r.stderr))

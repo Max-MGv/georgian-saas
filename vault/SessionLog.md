@@ -28,7 +28,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   everything editable from the order page). Dev backup `2026-10-21_113133_dev` taken by the hook first; re-run = no-op.
 - Finding: T-137…T-150 were the P-ticket copies, not lost tickets; T-151/T-152 had full text. ~110 numbers = test debris.
 - Tools (untracked): `saas/scripts/_qa/recovery-tickets/`. `vault/Tickets.md` re-exported (39 tickets).
-- **Next:** Max's decision on the backup protocol (see the chat report 2026-10-21: what exists vs. gaps).
+- **Backup protocol (Max: local only, before commands that change something):** backups now also before pushes (prod
+  before master), ticket-tool writes and Supabase MCP SQL; Storage files included (hard-linked when unchanged); restore
+  drill passed (`restore-db.ts`, `vault/Restore-Guide.md`). Accepted risks: no schedule, one copy on the laptop.
 
 ---
 
