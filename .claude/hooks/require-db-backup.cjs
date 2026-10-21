@@ -61,13 +61,19 @@ const TIX_WRITE = /\btix(?:\.ts)?\s+(?:(add|comment|move|review|analysis|solutio
 const REFS = { jpbkkngpgtvqmsocitjx: 'dev', dshsfkffcsgerdqinqst: 'prod' }
 
 /** Branch a `git push` sends to: 'master' (deploys production), 'other', or null when the command has no push. */
+/** The command without heredoc bodies (commit messages, file contents) — their text is data, not commands. */
+function withoutHeredocs(c) {
+  return c.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, '<<heredoc')
+}
+
 function pushTarget(c, cwd) {
-  if (/\bgh\s+pr\s+merge\b/i.test(c)) return 'master'
   let dir = cwd
-  for (const seg of c.split(/&&|\|\||[;|\n]/)) {
+  // Only a segment that STARTS with the command counts — not the words inside a message or an echo.
+  for (const seg of withoutHeredocs(c).split(/&&|\|\||[;|\n]/)) {
     const cd = seg.match(/^\s*cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/)
     if (cd) { dir = cd[1] || cd[2] || cd[3]; continue }
-    const m = seg.match(/\bgit\b((?:\s+-C\s+(?:"[^"]+"|\S+))?)\s+push\b(.*)$/i)
+    if (/^\s*(?:\w+=\S*\s+)*gh\s+pr\s+merge\b/i.test(seg)) return 'master'
+    const m = seg.match(/^\s*(?:\w+=\S*\s+)*git\b((?:\s+-C\s+(?:"[^"]+"|\S+))?)\s+push\b(.*)$/i)
     if (!m) continue
     const refs = m[2].trim().split(/\s+/).filter(a => a && !a.startsWith('-')).slice(1) // drop the remote name
     if (refs.some(r => /(^|:)(refs\/heads\/)?(master|main)$/i.test(r.replace(/^\+/, '')))) return 'master'
@@ -106,7 +112,7 @@ function plan(input) {
   const push = pushTarget(c, input.cwd || '')
   if (push === 'master') return { why: 'git push to master (deploys production)', envs: ['dev', 'prod'] }
   if (push === 'other') return { why: 'git push', envs: ['dev'] }
-  if (TIX_WRITE.test(c)) return { why: 'ticket write (tix)', envs: PROD.test(c) ? ['prod'] : ['dev'] }
+  if (TIX_WRITE.test(withoutHeredocs(c))) return { why: 'ticket write (tix)', envs: PROD.test(c) ? ['prod'] : ['dev'] }
   const why = isWrite(cmd)
   return why ? { why, envs: PROD.test(cmd) ? ['dev', 'prod'] : ['dev'] } : null
 }
