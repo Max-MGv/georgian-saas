@@ -10,7 +10,7 @@ import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type BookingVisitType, type Product, type ProductRates } from '@/lib/pricingUtils'
-import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, type CountRuleKey } from '@/lib/bookingInput'
+import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, type CountRuleKey } from '@/lib/bookingInput'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -258,6 +258,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     }
     const guestCount = totalGuests(counts)
     const effectiveGuestCount = payingGuests(counts)
+
+    // A hot dish needs a lunch guest (A-11). Only the detailed company form asks for one; anything sent from
+    // another layout is ignored below, as before.
+    if (layout === 'boxes' && hotDishWithoutLunch(counts, data.hotDishVegetable, data.hotDishMeat)) {
+      return { success: false, error: await mc('onsite_err_hot_dish', 'form.err_hot_dish') }
+    }
 
     // ── Masterclass lines (#93): this tenant's items, active, whole quantities, FLAT = 1, price from the DB ──
     // Offered on the detailed company form only, as before; anything sent from another layout is ignored.

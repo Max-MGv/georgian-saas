@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, tastingRatePerPerson } from '@/lib/pricingUtils'
+import type { BookingVisitType, Product } from '@/lib/pricingUtils'
+import { adminOrderView, manualFromStrings, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
+import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
@@ -105,7 +107,7 @@ export default function NewOrderForm({
 
   // Booking details
   const [companyId, setCompanyId] = useState('')
-  const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
+  const [visitType, setVisitType] = useState<BookingVisitType>('TASTING')
   const [date, setDate] = useState('')
   const [timeSlot, setTimeSlot] = useState('11:00')
 
@@ -142,20 +144,18 @@ export default function NewOrderForm({
     reset: resetContacts,
   } = useContactSelection({ module: 'BOOKING', onApply: applyPickedPerson, asAdmin: true })
 
-  // Guest counts
-  const [guestCountStr, setGuestCountStr] = useState('4')       // individual total
-  const [tastingGuestsStr, setTastingGuestsStr] = useState('0')
-  const [lunchGuestsStr, setLunchGuestsStr] = useState('0')
-  const [freeGuestsStr, setFreeGuestsStr] = useState('0')
+  // Guests: individuals type one count (D-5); companies fill the four boxes and the total is their sum (D-3).
+  const [guestCountStr, setGuestCountStr] = useState('4')
+  const [boxes, setBoxes] = useState<BoxStrings>({ tastingOnly: '0', lunchOnly: '0', tastingLunch: '0', free: '0' })
+  const setBox = (f: BoxField, v: string) => setBoxes(prev => ({ ...prev, [f]: v }))
 
   // Dishes
   const [hotDishVeg, setHotDishVeg] = useState('')
   const [hotDishMeat, setHotDishMeat] = useState('')
   const [foodNotes, setFoodNotes] = useState('')
 
-  // Manual rates (for individual or company with no tiers)
-  const [manualTastingRateStr, setManualTastingRateStr] = useState('0')
-  const [manualLunchRateStr, setManualLunchRateStr] = useState('0')
+  // Typed per-person rates (GEL) — for products the company's table does not price, or when there is no table.
+  const [manualRates, setManualRates] = useState<Record<Product, string>>({ tastingOnly: '', lunchOnly: '', tastingLunch: '' })
 
   // Masterclass lines (client-side only until submit)
   const [lines, setLines] = useState<LineItem[]>([])
@@ -182,65 +182,18 @@ export default function NewOrderForm({
   const prices = selectedCompany?.prices ?? []
   const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
-  const guestCount = Math.max(1, parseInt(guestCountStr) || 1)
-  const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
-  const lunchGuests = Math.max(0, parseInt(lunchGuestsStr) || 0)
-  const freeGuests = Math.max(0, parseInt(freeGuestsStr) || 0)
-  const payingGuests = tastingGuests + lunchGuests
-
-  // The rate inputs hold GEL; everything they feed is tetri (chunk 3).
-  const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
-  const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
-
-  // The party size is entered, not derived, because it picks the price tier
-  // (2026-09-19). Deriving it meant a company's total was whatever the split
-  // happened to add up to, and on edit the two drifted apart entirely (#54).
-  const totalGuestCount = guestCount
-  const splitTotal = tastingGuests + lunchGuests + freeGuests
-
-  // Party size picks the tier (2026-09-19), not the paying head count.
-  const tier = useMemo(
-    () => (prices.length > 0 ? findTier(prices, totalGuestCount) : null),
-    [prices, totalGuestCount]
-  )
-
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
 
-  // An individual books ONE visit type for the whole party, so its charge lands
-  // entirely on whichever of the two rows matches `visitType`. A company splits
-  // its party across both. Getting this wrong is what made the breakdown read
-  // "Tasting (4 × 50₾) — 0.00₾" under a ₾320 total: the label used guestCount,
-  // the amount used tastingGuests (always 0 for an individual), and the total
-  // was computed somewhere else entirely.
-  const tastingAmt = tier
-    ? tastingGuests * tastingRatePerPerson(tier)
-    : isCompany
-      ? tastingGuests * manualTastingRate
-      : visitType === 'TASTING' ? guestCount * manualTastingRate : 0
-  const lunchAmt = tier
-    ? lunchGuests * comboRatePerPerson(tier)
-    : isCompany
-      ? lunchGuests * manualLunchRate
-      : visitType === 'TASTING_LUNCH' ? guestCount * manualLunchRate : 0
-
-  const showManualRates = !tier && (isCompany ? payingGuests > 0 : true)
-
-  // The same function the server prices with, so this preview cannot drift from
-  // what createOrderAdmin will store — which it did until 2026-09-19 (#51).
-  const previewRates = tier
-    ? ratesForParty(prices, totalGuestCount, companyRegistrationFee)
-    : ratesFromManual(manualTastingRate, manualLunchRate)
-  const splitExceedsParty = splitTotal > totalGuestCount
-
-  const computedTotal = previewRates
-    ? priceBooking(
-        previewRates,
-        { guestCount: totalGuestCount, tastingGuests, lunchGuests },
-        visitType,
-        { masterclass: masterclassAmt, extras: extrasAmt },
-      )
-    : masterclassAmt + extrasAmt
+  // Everything the preview shows comes from the same check and pricing createOrderAdmin runs (Chunk 8), so the
+  // total here is the total that will be stored — it drifted from the server until 2026-09-19 (#51).
+  const view = adminOrderView({
+    bookingType: isCompany ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
+    prices, registration: companyRegistrationFee, manual: manualRates,
+    masterclassAmt, extrasAmt,
+  })
+  const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
+  const problem = problemText(at, view)
 
   // ── Masterclass helpers ───────────────────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -253,7 +206,8 @@ export default function NewOrderForm({
     setNewLineItemId(itemId)
     const item = masterclassItems.find(i => i.id === itemId)
     if (!item) return
-    if (item.unitType === 'PER_PERSON') setNewLineQty(String(payingGuests || guestCount || 1))
+    // Per person = the paying guests, the three boxes together (Free guests are never charged).
+    if (item.unitType === 'PER_PERSON') setNewLineQty(String(payingGuests || 1))
     else setNewLineQty('1')
   }
 
@@ -294,6 +248,8 @@ export default function NewOrderForm({
   function handleCompanyChange(id: string) {
     setCompanyId(id)
     resetContacts()
+    // Individuals book Tasting or Tasting + Lunch only (D-5).
+    if (!id && visitType === 'LUNCH') setVisitType('TASTING')
     if (!id) { setNationalities([]); return }
     void resolveContacts({ companyId: id }).then(result => {
       if ('error' in result) return
@@ -338,20 +294,14 @@ export default function NewOrderForm({
       phone: phone || null,
       email: email || null,
       notes: notes || null,
-      guestCount: totalGuestCount || 1,
-      tastingGuestCount: isCompany ? tastingGuests : 0,
-      lunchGuestCount: isCompany ? lunchGuests : 0,
-      freeGuestCount: isCompany ? freeGuests : 0,
-      hotDishVegetable: hotDishVeg || null,
-      hotDishMeat: hotDishMeat || null,
+      ...(isCompany ? { boxes: view.counts ?? undefined } : { guestCount: parseInt(guestCountStr) || 0 }),
+      // No lunch guest, no dish (A-11): a dish picked earlier is not sent.
+      hotDishVegetable: view.lunchGuests > 0 ? hotDishVeg || null : null,
+      hotDishMeat: view.lunchGuests > 0 ? hotDishMeat || null : null,
       foodNotes: foodNotes || null,
-      manualTastingRate,
-      manualLunchRate,
-      masterclassLines: lines.map(l => ({
-        masterclassItemId: l.itemId,
-        quantity: l.quantity,
-        pricePerUnit: l.pricePerUnit,
-      })),
+      manualRates: manualFromStrings(manualRates),
+      // The server takes each line's price from the catalogue (Q-1); only the item and quantity go up.
+      masterclassLines: lines.map(l => ({ masterclassItemId: l.itemId, quantity: l.quantity })),
       extras: extras.map(e => ({ label: e.label, amount: e.amount })),
       contacts: buildContacts(),
       nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
@@ -421,13 +371,6 @@ export default function NewOrderForm({
           </Field>
         </div>
 
-        <Field label={at('orderDetail.bookingInfo.visitType')}>
-          <select value={visitType} onChange={e => setVisitType(e.target.value as 'TASTING' | 'TASTING_LUNCH')} style={inputStyle}>
-            <option value="TASTING">{at('orders.visit.tasting')}</option>
-            <option value="TASTING_LUNCH">{at('orders.visit.tastingLunch')}</option>
-          </select>
-        </Field>
-
         <Field label={at('newOrder.bookingDetails.company')}>
           <select value={companyId} onChange={e => handleCompanyChange(e.target.value)} style={inputStyle}>
             <option value="">{at('newOrder.bookingDetails.individual')}</option>
@@ -448,19 +391,19 @@ export default function NewOrderForm({
           </Field>
         )}
 
-        {(
-          <Field label={at('orderDetail.guestBreakdown.partySize')}>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={guestCountStr}
-              onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
-              style={inputStyle}
-            />
-          </Field>
+        {isCompany && prices.length === 0 && (
+          <div className="text-xs rounded-lg p-3 mb-3" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
+            <strong>{at('newOrder.guestBreakdown.noTiers', { name: selectedCompany?.name ?? '' })}</strong>{' '}
+            {at('newOrder.guestBreakdown.wontCalc')}{' '}
+            <a href="/admin/companies" style={{ textDecoration: 'underline' }}>{at('newOrder.guestBreakdown.addTiersLink')}</a>.
+          </div>
         )}
+
+        <GuestFields
+          at={at} isCompany={isCompany} visitType={visitType} onVisitType={setVisitType}
+          guests={guestCountStr} onGuests={setGuestCountStr} boxes={boxes} onBox={setBox}
+          view={view} inputStyle={inputStyle}
+        />
       </Card>
 
       {/* ── Contact ── */}
@@ -523,53 +466,16 @@ export default function NewOrderForm({
         </div>
       </Card>
 
-      {/* ── Guest Breakdown & Dishes (company only) ── */}
+      {/* ── Dishes (company only) — the guest boxes moved up to Booking Details ── */}
       {isCompany && (
         <Card title={at('orderDetail.guestBreakdown.title')}>
-          {prices.length === 0 && (
-            <div className="text-xs rounded-lg p-3 mb-4" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>
-              <strong>{at('newOrder.guestBreakdown.noTiers', { name: selectedCompany?.name ?? '' })}</strong>{' '}
-              {at('newOrder.guestBreakdown.wontCalc')}{' '}
-              <a href="/admin/companies" style={{ textDecoration: 'underline' }}>{at('newOrder.guestBreakdown.addTiersLink')}</a>.
-            </div>
+          {/* A hot dish needs a lunch guest (A-11): the selects are off until there is one. */}
+          {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
+            <p className="text-xs mb-3" style={{ color: C.faint }}>{at('orderForm.hotDishNeedsLunch')}</p>
           )}
-
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <Field label={at('orderDetail.guestBreakdown.tastingGuests')} half>
-              <input
-                type="text" inputMode="numeric" pattern="[0-9]*"
-                value={tastingGuestsStr}
-                onChange={e => setTastingGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={e => setTastingGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-                style={inputStyle}
-              />
-            </Field>
-            <Field label={at('orderDetail.guestBreakdown.lunchGuests')} half>
-              <input
-                type="text" inputMode="numeric" pattern="[0-9]*"
-                value={lunchGuestsStr}
-                onChange={e => setLunchGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={e => setLunchGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-                style={inputStyle}
-              />
-            </Field>
-            <div>
-              <Field label={at('orderDetail.guestBreakdown.freeGuests')} half>
-                <input
-                  type="text" inputMode="numeric" pattern="[0-9]*"
-                  value={freeGuestsStr}
-                  onChange={e => setFreeGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-                  onBlur={e => setFreeGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-                  style={inputStyle}
-                />
-              </Field>
-              <p className="text-xs mt-0.5" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.freeGuestsHint')}</p>
-            </div>
-          </div>
-
           {vegItems.length > 0 && (
             <Field label={at('orderDetail.guestBreakdown.hotDishVeg')}>
-              <select value={hotDishVeg} onChange={e => setHotDishVeg(e.target.value)} style={inputStyle}>
+              <select value={view.lunchGuests > 0 ? hotDishVeg : ''} onChange={e => setHotDishVeg(e.target.value)} disabled={view.lunchGuests === 0} style={view.lunchGuests === 0 ? { ...inputStyle, opacity: 0.6 } : inputStyle}>
                 <option value="">{at('orderDetail.guestBreakdown.none')}</option>
                 {vegItems.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
               </select>
@@ -577,7 +483,7 @@ export default function NewOrderForm({
           )}
           {meatItems.length > 0 && (
             <Field label={at('orderDetail.guestBreakdown.hotDishMeat')}>
-              <select value={hotDishMeat} onChange={e => setHotDishMeat(e.target.value)} style={inputStyle}>
+              <select value={view.lunchGuests > 0 ? hotDishMeat : ''} onChange={e => setHotDishMeat(e.target.value)} disabled={view.lunchGuests === 0} style={view.lunchGuests === 0 ? { ...inputStyle, opacity: 0.6 } : inputStyle}>
                 <option value="">{at('orderDetail.guestBreakdown.none')}</option>
                 {meatItems.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
               </select>
@@ -761,73 +667,15 @@ export default function NewOrderForm({
 
       {/* ── Order Total ── */}
       <Card title={at('orderDetail.total.title')}>
-        {/* Tier banner */}
-        {tier && (
-          <div className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}>
-            <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
-            {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tastingRatePerPerson(tier)))}/pp</strong>
-            {' · '}
-            {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
-            {' · '}
-            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(companyRegistrationFee))}</strong>
-          </div>
-        )}
-        {/* Manual rate inputs */}
-        {showManualRates && (
-          <div className="mb-3">
-            <p className="text-xs mb-2" style={{ color: C.muted }}>
-              {isCompany ? at('newOrder.total.manualRatesCompany') : at('newOrder.total.manualRatesIndividual')}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.tastingRatePP')}</label>
-                <input
-                  type="text" inputMode="decimal"
-                  value={manualTastingRateStr}
-                  onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                  onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchRatePP')}</label>
-                <input
-                  type="text" inputMode="decimal"
-                  value={manualLunchRateStr}
-                  onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                  onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Typed rates for what the table does not price (or no table at all) */}
+        <RateFields
+          at={at} view={view} hasTable={prices.length > 0} companyName={selectedCompany?.name ?? ''}
+          manual={manualRates} onManual={(p, v) => setManualRates(prev => ({ ...prev, [p]: v }))} inputStyle={inputStyle}
+        />
 
-        {/* Breakdown lines */}
+        {/* Breakdown lines: one per product, each with the price-table row it used (finding 7) */}
         <div className="space-y-1.5 mb-3">
-          {tastingAmt > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({isCompany ? tastingGuests : guestCount} × {formatTetri(tier ? asTetri(tastingRatePerPerson(tier)) : manualTastingRate)})
-              </span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt), { decimals: true })}</span>
-            </div>
-          )}
-          {lunchAmt > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({isCompany ? lunchGuests : guestCount} × {formatTetri(tier ? asTetri(comboRatePerPerson(tier)) : manualLunchRate)})
-              </span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt), { decimals: true })}</span>
-            </div>
-          )}
-          {tier && companyRegistrationFee > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(companyRegistrationFee), { decimals: true })}</span>
-            </div>
-          )}
+          <PriceLines at={at} view={view} />
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{l.name} × {l.quantity}</span>
@@ -845,7 +693,7 @@ export default function NewOrderForm({
         <div className="pt-3 flex justify-between items-center border-t" style={{ borderColor: C.border }}>
           <span className="text-sm font-semibold" style={{ color: C.muted }}>{at('orderDetail.total.totalLabel')}</span>
           <span className="text-2xl font-bold" style={{ color: C.wine }}>
-            {formatTetri(asTetri(computedTotal), { decimals: true })}
+            {view.total != null ? formatTetri(asTetri(view.total), { decimals: true }) : '—'}
           </span>
         </div>
 
@@ -853,19 +701,16 @@ export default function NewOrderForm({
           <p className="text-sm mt-3" style={{ color: '#b91c1c' }}>{error}</p>
         )}
 
-        {/* The buckets are subsets of the party. Caught here as well as on the
-            server, so the admin sees it before losing the form (#54). */}
-        {splitExceedsParty && (
-          <p className="text-sm mt-3" style={{ color: '#b91c1c' }}>
-            {at('orderDetail.guestBreakdown.splitExceeds', { split: splitTotal, party: totalGuestCount })}
-          </p>
+        {/* Why it cannot be created yet — the same check the server runs, shown before the admin loses the form. */}
+        {problem && (
+          <p className="text-sm mt-3" style={{ color: '#b91c1c' }}>{problem}</p>
         )}
 
         <button
           onClick={handleSubmit}
-          disabled={submitting || splitExceedsParty}
+          disabled={submitting || !!problem}
           className="mt-4 w-full py-3 rounded-lg text-sm font-semibold text-white"
-          style={{ backgroundColor: C.wine, opacity: submitting || splitExceedsParty ? 0.7 : 1 }}
+          style={{ backgroundColor: C.wine, opacity: submitting || problem ? 0.7 : 1 }}
         >
           {submitting ? at('newOrder.total.creating') : at('newOrder.total.create')}
         </button>

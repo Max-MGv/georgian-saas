@@ -37,8 +37,8 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 4 | Migration B (contract): drop old columns, retire old scripts | ✅ 2026-10-20 (dev DB) |
 | 5 | Company price setup: three prices per tier, company registration fee | ✅ 2026-10-20 |
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ✅ 2026-10-21 |
-| 7 | Public booking form + `createBooking` (incl. #93 checks) | ⬜ |
-| 8 | Admin New Order + Order Detail (fixes P-11) | ⬜ |
+| 7 | Public booking form + `createBooking` (incl. #93 checks) | ✅ 2026-10-21 |
+| 8 | Admin New Order + Order Detail (fixes P-11) | ✅ 2026-10-22 |
 | 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ⬜ |
 | 10 | Demo seed, test fixtures, scripts, docs | ⬜ |
 | 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ⬜ |
@@ -78,6 +78,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | A-8 | Admin screens are **exempt from minimums** (as today); they still get every integer / not-offered check. | Admins book odd cases by phone. |
 | A-9 | A company with no price table: the admin's typed-in rates become **three** (Tasting only / Lunch only / Tasting & Lunch), all-in per person. | Same as today, one more box. |
 | A-10 | Individuals' **Lunch only** input is hidden on the Individuals price table. | D-5. |
+| A-11 | **A hot dish needs a lunch guest** (Max, 2026-10-21: "refuse to have food selected without lunch guests"). A vegetable or meat dish with 0 Lunch only + 0 Tasting & Lunch guests is refused on every write path (public form, admin New Order, order page) by one helper, `hotDishWithoutLunch()` in `lib/bookingInput.ts`; forms only send a dish while there is a lunch guest. Food notes (allergies) stay allowed. | Kitchen gets no orphan dish orders. |
 
 ### Answered by Max (2026-10-21) — was "still open"
 
@@ -421,19 +422,20 @@ but no one is booked for lunch. Enter the lunch guests, or switch to Tasting onl
 admin screens.
 
 ### Chunk 7 — Public booking form + `createBooking` (#93)
-**Status:** 🚧 2026-10-21 — section 1 (re-pricing + assign-company, `7c18dcb`) and section 2 (form + action) built;
-section 3 (content-editor mirror, labels in FIELDS.form / seed-ka, MessagesPanel keys) next. Max asked for a Brave QA
-pass after each section (see §"QA log" below).
-- [ ] **First (from Chunk 6):** move every `priceBooking` caller to `priceCounts` (it throws for `LUNCH`), wire
-      `countRulesFromSettings` into `createBooking`, add the Q-3 mismatch message (EN + KA) — see Chunk 6's "Carried" note.
-- [ ] `BookingForm.tsx`: detailed company form per D-9 (+ Free, total line, per-product preview, "not
+**Status:** ✅ 2026-10-21 on localhost — section 1 `7c18dcb`, section 2 `a4cb3bc`, section 3 `05df9d9` (all pushed to
+staging); staging QA of section 3 in the log below. Max asked for a Brave QA pass after each section.
+- [x] **First (from Chunk 6):** `createBooking` + `recalcOrderTotal` + assign-company on `priceCounts`; rules via
+      `countRulesFromSettings`; Q-3 message EN + KA. **Still on `priceBooking` (old two-box model, never sees LUNCH):**
+      `updateOrderEnhanced` + `OrderDetail` (both guarded for Lunch only orders — see the stopgap below),
+      `createOrderAdmin` + `NewOrderForm` (TASTING / TASTING_LUNCH only) → Chunk 8; `demoSeed` → Chunk 10.
+- [x] `BookingForm.tsx`: detailed company form per D-9 (+ Free, total line, per-product preview, "not
       offered" products hidden); simple company form gets **Lunch only** (D-10); individuals unchanged.
       Review sheet lines per product.
-- [ ] `BookingFormVisualPanel.tsx` mirrors both variants; `FIELDS.form` + `seed-ka.ts` for any new
+- [x] `BookingFormVisualPanel.tsx` mirrors both variants; `FIELDS.form` + `seed-ka.ts` for any new
       tenant-editable label (§1's test: fixed label vs other admin data).
-- [ ] `createBooking.ts`: `checkBookingCounts` + masterclass checks (§4.3); counts/rates written; `orderDesc`
+- [x] `createBooking.ts`: `checkBookingCounts` + masterclass checks (§4.3); counts/rates written; `orderDesc`
       label for `LUNCH`.
-- [ ] Turn the #93 repro into a committed spec `tests/tier2-core-flows/booking-tampered-quantities.spec.ts`
+- [x] Turn the #93 repro into a committed spec `tests/tier2-core-flows/booking-tampered-quantities.spec.ts`
       (written now, **run in Chunk 11**); meanwhile prove refusal with the `_qa` repro on localhost.
 **Verify:** screenshots (phone + desktop) of each variant with a quote; three real bookings on localhost
 (individual; detailed company mixing all three products with masterclass; simple company Lunch only) →
@@ -451,18 +453,58 @@ stored counts/rates/total checked in the DB against `test-pricing-model.ts`'s nu
 - Incident (mine): `rm -rf saas/.next` run although my own check had just found 2 links into node_modules inside it —
   no damage (`npm ls` clean). New `saas/scripts/clear-next-cache.cjs` (unlink first, verify, then delete); KNOWN-ISSUES
   and memory point at it.
-**Resume point:** section 3 + run `booking-tampered-quantities.spec.ts` result in the log.
+- Tamper spec on localhost: 9/9 (6 refusals, honest company ₾320, individual forged boxes ignored, individual LUNCH
+  refused). First run failed only on its own ambiguous `/masterclass/i` matcher → `/no longer available/i`.
+- Section 2, assign-company on localhost (simple company form, enhanced setting OFF temporarily, back ON after): new-company
+  request as Lunch only × 6 → linking Kakheti refused (no Lunch only price; **finding 5** message wording → reworded);
+  linking Silk Road → ₾270 stored, lunchOnlyRate 4500. **Finding 4:** order page said "Tasting + Lunch" → fixed.
+  **Finding 3:** visit grid counted the hidden Lunch only option → fixed by filtering `visitOptions` itself (a hidden
+  Lunch only choice now falls back to Tasting).
+- **Finding 6 (serious, staging only):** once linked, the Lunch only order's page crashed (`priceBooking` throws on
+  LUNCH), and Save on any order with Lunch only guests would have pushed them into Free (`countsFromLegacy`). Stopgap
+  in `05df9d9`: the page shows stored boxes × sold rates read-only ("Lunch only (6 × 45₾) 270.00₾"); the server refuses
+  a guest/rate change on such orders (verified: party 6→8 refused with the message, food note saved, counts/total
+  unchanged). Chunk 8 replaces the stopgap.
+- Section 3 on localhost: content editor Simple shows the Lunch only tile, Detailed shows 4 boxes; Messages tab lists
+  the 5 new errors prefilled; public detailed form unchanged, console clean. `seed-ka.ts` gained the
+  `form_lunch_only` row but was **not run** — it upserts every KA label and would overwrite wineries' edits; the live
+  form falls back to the same KA string from `lib/t.ts`.
+- Staging `05df9d9` (Brave): Lunch only order page "Lunch only (6 × 45₾) 270.00₾"; mixed order 3 LO + 5 T&L →
+  ₾135 + ₾460 = ₾595, console clean; content editor shows the editable Lunch only tile. **Finding 7 (Chunk 8):** the
+  order page's "Tier in use: … Tasting 52₾/pp · Lunch 92₾/pp" banner still describes the old two-rate tier and says
+  nothing about Lunch only.
+**Resume point:** done → Chunk 8 (include findings 2 and 7).
 
 ### Chunk 8 — Admin New Order + Order Detail (fixes P-11)
-**Status:** ⬜
-- [ ] `NewOrderForm.tsx` + `createOrderAdmin`: three boxes + Free, derived total (no typed total →
-      P-11 cannot happen), per-product tier box, three manual rates (A-9), masterclass price from the DB
-      (Q-1 default), per-person prefill = paying guests.
-- [ ] `OrderDetail.tsx` + `updateOrderEnhanced`: same; re-pricing on edit as today (today's tiers, new rule).
-- [ ] `assignOrderCompany`: new rates.
-**Verify:** reproduce P-11's exact input (9 tasting + 2 free + wine extra ₾100) → saves, total ₾550,
-kitchen total 11; screenshots phone + desktop; edit an order's counts and check the re-snapshot.
-**Resume point:** —
+**Status:** ✅ 2026-10-22 on localhost (commit below); staging QA after the push.
+- [x] `NewOrderForm.tsx` + `createOrderAdmin`: companies get the four boxes, the total is their sum (no typed party
+      size → **P-11 cannot happen**); individuals keep visit type + one guest count (D-5). Companies may book Lunch only.
+      Typed rates per product (A-9 / E-3), masterclass price from the catalogue (Q-1, `checkMasterclassLines`),
+      per-person prefill = paying guests, extras must be > 0.
+- [x] `OrderDetail.tsx` + `updateOrderEnhanced`: same fields **plus the visit type is editable** (D-9, T-215 direction);
+      re-prices at today's table **only when the visit type, a box or a typed rate changed** — saving a food note no longer
+      re-prices (it used to on every Save). An order that has a price cannot drop back to "price later".
+- [x] `assignOrderCompany` — done in Chunk 7 section 1.
+- [x] A-11 everywhere: `hotDishWithoutLunch` in `createBooking`, `createOrderAdmin`, `updateOrderEnhanced`; all three
+      forms switch the dish off / do not send it while there is no lunch guest.
+- [x] Chunk 7's Lunch only stopgap removed; finding 7 (per-product lines with "row 1–20 guests"); finding 2 ("Live
+      preview" only while something is edited).
+- [x] Extra (found while building): the orders-table quick-edit panel wrote `guestCount` alone (total ≠ boxes, price
+      unchanged) → guest count is read-only there with a link to the order page; `updateOrder` no longer takes it.
+- [x] Extra: `addMasterclassLine` (order page) accepted negative / fractional quantities → `checkMasterclassLines`.
+- One shared rule set for the two admin screens and their actions: `adminQuote()` (pricingUtils), `checkAdminOrder()`
+  (bookingInput), `adminOrderView()` (lib/adminOrderView.ts) + `OrderGuestFields.tsx` (UI). `priceBooking` now has no
+  app caller left except `demoSeed` (Chunk 10).
+**Verify (localhost, Brave, 2026-10-22):** dev data shape first (no individual free guests, no visit/box contradiction,
+no orphan dish, guestCount = Σ boxes on every order). P-11 shape on Silk Road (₾52 tasting row): 9 Tasting only + 2 free
++ ₾100 extra → "Total: 11 guests (9 paying)", ₾568 stored, kitchen 11 (with P-11's ₾50 rate that is the plan's ₾550 —
+unit test). Order page: Tasting + Lunch with no lunch guest → Q-3 message, Save off; + 3 Lunch only + 4 Tasting & Lunch
+→ preview ₾1,071 with rows, saved with three frozen rates; dish saved; extra removed → ₾971, no "Live preview";
+back to Wine Tasting → dish selects off, saved: dish cleared, ₾468. Individual New Order Tasting + Lunch × 4 at typed
+₾70 → ₾280 stored. `test-pricing-model.ts` 96/96 (21 new). Bug found and fixed in QA: a stale dish in memory blocked
+Save after the lunch guests went → the inline check no longer looks at dishes (forms drop them; server still refuses).
+**Not done here:** Playwright specs that type "Total guests in the party" (e.g. `payment-admin-order.spec.ts`) → Chunk 10.
+**Resume point:** staging QA → Chunk 9.
 
 ### Chunk 9 — Everything that shows a booking
 **Status:** ⬜

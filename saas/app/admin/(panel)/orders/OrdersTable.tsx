@@ -745,7 +745,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // Edit form state
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
-  const [editGuests, setEditGuests] = useState('')
   const [editName, setEditName] = useState('')
   const [editSurname, setEditSurname] = useState('')
   const [editPhone, setEditPhone] = useState('')
@@ -935,7 +934,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setEditingOrder(order)
     setEditDate(toInputDate(order.date))
     setEditTime(order.timeSlot)
-    setEditGuests(String(order.guestCount))
     setEditName(order.name)
     setEditSurname(order.surname)
     setEditPhone(order.phone ?? '')
@@ -964,7 +962,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     const result = await updateOrder(editingOrder.id, {
       date: editDate,
       timeSlot: editTime,
-      guestCount: Number(editGuests),
       name: editName,
       surname: editSurname,
       phone: editPhone,
@@ -980,7 +977,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       ...o,
       date: new Date(editDate),
       timeSlot: editTime,
-      guestCount: Number(editGuests),
       name: editName,
       surname: editSurname,
       phone: editPhone || null,
@@ -1572,8 +1568,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 </Field>
               </div>
 
+              {/* Read-only (T-152): the total is the sum of the guest boxes and picks the price, so it is changed on
+                  the order page, where the boxes and the price move together — never typed on its own here. */}
               <Field label={at('orders.editPanel.guests')}>
-                <input type="number" min={1} value={editGuests} onChange={e => setEditGuests(e.target.value)} style={inputStyle} />
+                <div className="text-sm py-1.5" style={{ color: C.text }}>
+                  {editingOrder.guestCount}{' '}
+                  <a href={`/admin/orders/${editingOrder.id}`} className="text-xs underline" style={{ color: C.muted }}>{at('orders.editPanel.guestsOnOrderPage')}</a>
+                </div>
               </Field>
 
               <div className="grid grid-cols-2 gap-3">

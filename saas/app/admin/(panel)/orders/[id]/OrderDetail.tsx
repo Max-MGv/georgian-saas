@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier, notOffered, priceBooking, priceCounts, PRODUCTS, ratesForParty, ratesFromManual, ratesFromProductSnapshot, ratesFromSnapshot, tastingRatePerPerson, type Counts, type Product } from '@/lib/pricingUtils'
+import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
+import { adminOrderView, manualFromStrings, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
+import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -367,30 +369,23 @@ export default function OrderDetail({
   // change what's owed on a paid order.
   const isPaid = order.paidAt != null
   const lockedInputStyle = { ...inputStyle, opacity: 0.6, cursor: 'not-allowed' } as const
+  // Plan-PricingModel Chunk 8: the visit type, and the guests as the order stores them — four boxes for a
+  // company (the total is their sum, D-3), one count for an individual (D-5).
+  const [visitType, setVisitType] = useState<BookingVisitType>(order.visitType as BookingVisitType)
   const [guestCountStr, setGuestCountStr] = useState(String(order.guestCount))
-  const [tastingGuestsStr, setTastingGuestsStr] = useState(String(order.tastingGuestCount))
-  const [lunchGuestsStr, setLunchGuestsStr] = useState(String(order.lunchGuestCount))
-  const [freeGuestsStr, setFreeGuestsStr] = useState(String(order.freeGuestCount))
-  // Manual per-person rates for individual / no-tier orders.
-  //
-  // Seeded from the order's own rate snapshot, NOT from a constant. Both boxes
-  // were `useState('50')` until 2026-09-19 (#50), which meant the screen showed
-  // "Rate: 50/50" for every individual order as though that were what it had
-  // been sold at — and, because handleSave sent the boxes whenever the order
-  // had no company prices, a Save after editing guest counts re-priced a ₾70/pp
-  // booking at ₾50 and overwrote its real snapshot. Empty when there is no
-  // snapshot to show: inventing a number here is the bug.
-  const snapshotTastingMajor = order.tastingOnlyRate != null ? String(toMajor(asTetri(order.tastingOnlyRate))) : ''
-  const snapshotLunchMajor = order.tastingLunchRate != null ? String(toMajor(asTetri(order.tastingLunchRate))) : ''
-  const [manualTastingRateStr, setManualTastingRateStr] = useState(snapshotTastingMajor)
-  const [manualLunchRateStr, setManualLunchRateStr] = useState(snapshotLunchMajor)
-  const [customRates, setCustomRates] = useState(false)
-  // Parsed numbers for calculations
-  const partyGuestCount = Math.max(1, parseInt(guestCountStr) || 1)
-  const tastingGuests = Math.max(0, parseInt(tastingGuestsStr) || 0)
-  const lunchGuests = Math.max(0, parseInt(lunchGuestsStr) || 0)
-  const freeGuests = Math.max(0, parseInt(freeGuestsStr) || 0)
-  const splitTotal = tastingGuests + lunchGuests + freeGuests
+  const storedBoxes: BoxStrings = {
+    tastingOnly: String(order.tastingGuestCount), lunchOnly: String(order.lunchOnlyGuestCount),
+    tastingLunch: String(order.lunchGuestCount), free: String(order.freeGuestCount),
+  }
+  const [boxes, setBoxes] = useState<BoxStrings>(storedBoxes)
+  const setBox = (f: BoxField, v: string) => setBoxes(prev => ({ ...prev, [f]: v }))
+  // Typed per-person rates, seeded from what the order was sold at — never from a constant: a hardcoded
+  // ₾50 here once re-priced a ₾70/pp booking on Save (#50). Empty when the order carries no rate.
+  const major = (t: number | null) => (t != null ? String(toMajor(asTetri(t))) : '')
+  const storedManual: Record<Product, string> = {
+    tastingOnly: major(order.tastingOnlyRate), lunchOnly: major(order.lunchOnlyRate), tastingLunch: major(order.tastingLunchRate),
+  }
+  const [manualRates, setManualRates] = useState<Record<Product, string>>(storedManual)
   const [hotDishVeg, setHotDishVeg] = useState(order.hotDishVegetable ?? '')
   const [hotDishMeat, setHotDishMeat] = useState(order.hotDishMeat ?? '')
   const [foodNotes, setFoodNotes] = useState(order.foodNotes ?? '')
@@ -565,93 +560,43 @@ export default function OrderDetail({
   // ── Pricing calculations ───────────────────────────────────────────────────
   const prices = order.company?.prices ?? []
   const companyRegistrationFee = order.company?.registrationFee ?? 0
-  const payingGuests = tastingGuests + lunchGuests
-
-  // Party size drives the tier (2026-09-19). If no exact range match, falls back
-  // to the highest-priced tier so small groups are never under-charged.
-  const tier = useMemo(
-    () => findTier(prices, partyGuestCount),
-    [prices, partyGuestCount]
-  )
-
-  // Same lookup as `tier` now that both key off the party size; kept as its own
-  // name because the breakdown row below reads differently when it is the only
-  // basis for the total.
-  const legacyTier = tier
-  // Base price derived from the original booking (guestCount × rate + reg fee).
-  //
-  // MUST exclude line items, because the caller adds masterclassAmt + extrasAmt
-  // to it. The fallback was `order.totalPrice ?? 0` until 2026-09-19 (#52) —
-  // a figure that already contains those lines, so they were counted twice on
-  // every individual order (`prices` comes from order.company?.prices, and an
-  // individual has no company). The database, the orders table and the invoice
-  // said ₾240; this screen said ₾280.
-  //
-  // The snapshot is the honest source for a line-free base, and reconstructing
-  // it here is exactly what recalcOrderTotal does (pricing.ts:47-54). When
-  // there is no snapshot there is nothing to rebuild from, so legacyBase is
-  // null and the total falls back to the stored figure untouched.
-  const snapshotBase =
-    order.tastingOnlyRate != null || order.tastingLunchRate != null
-      ? partyGuestCount *
-          (order.visitType === 'TASTING_LUNCH'
-            ? (order.tastingLunchRate ?? 0)
-            : (order.tastingOnlyRate ?? 0)) +
-        (order.registrationFeeSnapshot ?? 0)
-      : null
-
-  const legacyBase: number | null = legacyTier
-    ? order.guestCount *
-        (order.visitType === 'TASTING_LUNCH'
-          ? comboRatePerPerson(legacyTier)
-          : tastingRatePerPerson(legacyTier)) +
-      companyRegistrationFee
-    : snapshotBase
-
-  const tastingAmt = tier ? tastingGuests * tastingRatePerPerson(tier) : null
-  const lunchAmt = tier ? lunchGuests * comboRatePerPerson(tier) : null
+  const isCompanyOrder = order.bookingType === 'COMPANY'
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
-  // The inputs hold GEL; everything they feed into is tetri (chunk 3).
-  const manualTastingRate = fromMajor(Math.max(0, parseFloat(manualTastingRateStr) || 0))
-  const manualLunchRate = fromMajor(Math.max(0, parseFloat(manualLunchRateStr) || 0))
 
-  // null means "this screen cannot derive a total" — the display then shows the
-  // stored order.totalPrice rather than a computed one. Every branch used to
-  // return a number, which made that fallback unreachable and meant the screen
-  // never displayed the stored total at all (#52).
-  // Whichever rates apply, the sum is priceBooking's — the same function the
-  // server uses, so this screen cannot disagree with what a Save will store.
-  const previewRates =
-    tier != null
-      ? ratesForParty(prices, partyGuestCount, companyRegistrationFee)
-      : (order.tastingOnlyRate != null || customRates)
-        ? (customRates
-            ? ratesFromManual(manualTastingRate, manualLunchRate)
-            : ratesFromSnapshot(order))
-        : null
+  // The same check and pricing updateOrderEnhanced runs, so a Save stores exactly what is previewed.
+  const view = adminOrderView({
+    bookingType: isCompanyOrder ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
+    prices, registration: companyRegistrationFee, manual: manualRates,
+    masterclassAmt, extrasAmt,
+  })
+  const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
+  const problem = problemText(at, view)
 
-  // Stopgap until Plan-PricingModel Chunk 8 rebuilds this screen on the three products: an order with Lunch only
-  // guests does not fit the two boxes above, so it shows its stored boxes × the rates it was sold at, read-only
-  // (updateOrderEnhanced refuses to re-price it). Lines added or removed below still move the total.
-  const lunchModel = order.visitType === 'LUNCH' || order.lunchOnlyGuestCount > 0
+  // Nothing about what is sold has been edited → show the order as it was sold (its own rates), not a quote at
+  // today's price table. This is also why "Live preview" no longer appears with nothing unsaved (finding 2).
+  const sameBoxes = isCompanyOrder
+    ? (Object.keys(storedBoxes) as BoxField[]).every(f => (parseInt(boxes[f]) || 0) === (parseInt(storedBoxes[f]) || 0))
+    : (parseInt(guestCountStr) || 0) === order.guestCount
+  const snapshot = ratesFromProductSnapshot(order)
+  // updateOrderEnhanced's own rule: a rate counts as changed only when one is typed for a product with guests
+  // and differs from what the order was sold at.
+  const rateEdited = PRODUCTS.some(p => {
+    const typed = typedTetri(manualRates[p])
+    return (view.counts?.[p] ?? 0) > 0 && typed != null && typed !== (snapshot?.[p] ?? null)
+  })
+  const edited = visitType !== order.visitType || !sameBoxes || rateEdited
   const storedCounts: Counts = { tastingOnly: order.tastingGuestCount, lunchOnly: order.lunchOnlyGuestCount, tastingLunch: order.lunchGuestCount, free: order.freeGuestCount }
-  const storedRates = lunchModel ? ratesFromProductSnapshot(order) : null
-  const productLines = storedRates ? PRODUCTS.filter(p => storedCounts[p] > 0 && storedRates[p] != null) : []
-  const PRODUCT_AT: Record<Product, string> = { tastingOnly: 'orderDetail.product.tastingOnly', lunchOnly: 'orders.visit.lunch', tastingLunch: 'orderDetail.product.tastingLunch' }
-
-  const computedTotal: number | null = lunchModel
-    ? (storedRates && notOffered(storedRates, storedCounts).length === 0
-        ? priceCounts(storedRates, storedCounts, { masterclass: masterclassAmt, extras: extrasAmt })
-        : null)
-    : previewRates
-    ? priceBooking(
-        previewRates,
-        { guestCount: partyGuestCount, tastingGuests, lunchGuests },
-        order.visitType as 'TASTING' | 'TASTING_LUNCH',
-        { masterclass: masterclassAmt, extras: extrasAmt },
-      )
+  const soldLines: PriceLine[] = snapshot
+    ? PRODUCTS.filter(p => storedCounts[p] > 0 && snapshot[p] != null)
+        .map(p => ({ product: p, count: storedCounts[p], rate: snapshot[p]!, amount: snapshot[p]! * storedCounts[p], row: null }))
+    : []
+  const soldTotal = snapshot && notOffered(snapshot, storedCounts).length === 0
+    ? priceCounts(snapshot, storedCounts, { masterclass: masterclassAmt, extras: extrasAmt })
     : null
+  const shown: AdminOrderView = edited ? view : { ...view, lines: soldLines, registration: snapshot?.registration ?? 0, total: soldTotal }
+  // null means "this screen cannot derive a total" — the display then shows the stored order.totalPrice (#52).
+  const computedTotal: number | null = shown.total
 
   // What's still owed, once this order has ever been paid — the balance-due
   // figure from Plan-PostPaymentExtras Chunk 2 (KnownBugs #64). Uses
@@ -683,29 +628,21 @@ export default function OrderDetail({
     setSaving(true)
     setSaveMsg('')
     const result = await updateOrderEnhanced(order.id, {
-      guestCount: partyGuestCount,
-      tastingGuestCount: tastingGuests,
-      lunchGuestCount: lunchGuests,
-      freeGuestCount: freeGuests,
-      hotDishVegetable: hotDishVeg || null,
-      hotDishMeat: hotDishMeat || null,
+      visitType,
+      ...(isCompanyOrder ? { boxes: view.counts ?? undefined } : { guestCount: parseInt(guestCountStr) || 0 }),
+      // No lunch guest, no dish (A-11).
+      hotDishVegetable: view.lunchGuests > 0 ? hotDishVeg || null : null,
+      hotDishMeat: view.lunchGuests > 0 ? hotDishMeat || null : null,
       foodNotes: foodNotes || null,
-      // Only send rates there is a reason to believe: one the order already
-      // carries, or one the admin deliberately typed. Sending unconditionally
-      // is what let a hardcoded ₾50 overwrite a real snapshot (#50). When
-      // neither holds, updateOrderEnhanced's manual branch does not fire and
-      // the stored total and snapshot are left alone — the same stance
-      // recalcOrderTotal's legacy branch takes: say nothing rather than guess.
-      ...(prices.length === 0 && payingGuests > 0 && (order.tastingOnlyRate != null || customRates)
-        ? { manualTastingRate, manualLunchRate }
-        : {}),
+      // Seeded from the order's own rates (#50); the server re-prices only when something here was changed.
+      manualRates: manualFromStrings(manualRates),
     })
     setSaving(false)
     if ('error' in result) {
       setSaveMsg(result.error)
     } else {
       setSaveMsg(at('orderDetail.guestBreakdown.savedOk'))
-      setCustomRates(false)
+      router.refresh()
       setTimeout(() => setSaveMsg(''), 3000)
     }
   }
@@ -1147,159 +1084,24 @@ export default function OrderDetail({
           </div>
         )}
 
-        {/* Party size — what the price tier is chosen by. */}
-        <div className="mb-3" style={{ maxWidth: 200 }}>
-          <label className="text-xs block mb-1" style={{ color: C.faint }}>
-            {at('orderDetail.guestBreakdown.partySize')}
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={guestCountStr}
-            onChange={e => setGuestCountStr(e.target.value.replace(/[^0-9]/g, ''))}
-            onBlur={e => setGuestCountStr(String(Math.max(1, parseInt(e.target.value) || 1)))}
-            disabled={isPaid}
-            style={isPaid ? lockedInputStyle : inputStyle}
-          />
-          <p className="text-xs mt-1" style={{ color: C.faint }}>
-            {at('orderDetail.guestBreakdown.partySizeHint')}
-          </p>
-        </div>
+        {/* Visit type and guests (Plan-PricingModel Chunk 8): a company's four boxes add up to the total — there
+            is no typed party size any more (P-11) — and an individual keeps one guest count (D-5). */}
+        <GuestFields
+          at={at} isCompany={isCompanyOrder} visitType={visitType} onVisitType={setVisitType}
+          guests={guestCountStr} onGuests={setGuestCountStr} boxes={boxes} onBox={setBox}
+          view={view} disabled={isPaid} inputStyle={inputStyle}
+        />
 
-        {splitTotal > partyGuestCount && (
-          <p className="text-xs mb-3" style={{ color: '#b91c1c' }}>
-            {at('orderDetail.guestBreakdown.splitExceeds', { split: splitTotal, party: partyGuestCount })}
-          </p>
-        )}
+        {/* Typed rates for what the price table does not cover, or for an order with no table (A-9, E-3). */}
+        <RateFields
+          at={at} view={view} hasTable={prices.length > 0} companyName={order.company?.name ?? ''}
+          manual={manualRates} onManual={(p, v) => setManualRates(prev => ({ ...prev, [p]: v }))}
+          disabled={isPaid} inputStyle={inputStyle}
+        />
 
-        {/* Guest count inputs */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div>
-            <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.tastingGuests')}
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={tastingGuestsStr}
-              onChange={e => setTastingGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={e => setTastingGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              disabled={isPaid}
-              style={isPaid ? lockedInputStyle : inputStyle}
-            />
-          </div>
-          <div>
-            <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.lunchGuests')}
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={lunchGuestsStr}
-              onChange={e => setLunchGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={e => setLunchGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              disabled={isPaid}
-              style={isPaid ? lockedInputStyle : inputStyle}
-            />
-          </div>
-          <div>
-            <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.freeGuests')}
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={freeGuestsStr}
-              onChange={e => setFreeGuestsStr(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={e => setFreeGuestsStr(String(Math.max(0, parseInt(e.target.value) || 0)))}
-              disabled={isPaid}
-              style={isPaid ? lockedInputStyle : inputStyle}
-            />
-            <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.freeGuestsHint')}
-            </p>
-          </div>
-        </div>
-
-        {/* Per-person rate — only for individual / no-tier orders */}
-        {!order.company && (
-          <div className="mb-4 pt-1">
-            {!customRates ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.rate')}</span>
-                <span
-                  className="text-xs px-2.5 py-1 rounded-full font-medium"
-                  style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
-                >
-                  {/* An em dash when the order carries no rate and nobody has
-                      set one. Showing "50 / 50" there was the display half of
-                      #50 — a made-up figure presented as the agreed rate. */}
-                  {order.tastingOnlyRate == null && !customRates
-                    ? '—'
-                    : at('orderDetail.guestBreakdown.rateBadge', { t: formatTetri(manualTastingRate, { symbol: false }), l: formatTetri(manualLunchRate, { symbol: false }) })}
-                </span>
-                <button
-                  onClick={() => setCustomRates(true)}
-                  disabled={isPaid}
-                  className="text-xs px-3 py-1 rounded-lg font-medium text-white"
-                  style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
-                >
-                  {at('orderDetail.guestBreakdown.editRates')}
-                </button>
-              </div>
-            ) : (
-              <div
-                className="rounded-lg border p-3"
-                style={{ borderColor: C.border, backgroundColor: 'var(--site-surface)' }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium" style={{ color: C.muted }}>{at('orderDetail.guestBreakdown.customRates')}</span>
-                  <button
-                    onClick={() => {
-                      // Back to what the order was sold at, not to a constant (#50).
-                      setManualTastingRateStr(snapshotTastingMajor)
-                      setManualLunchRateStr(snapshotLunchMajor)
-                      setCustomRates(false)
-                    }}
-                    className="text-xs"
-                    style={{ color: C.faint }}
-                  >
-                    {at('orderDetail.guestBreakdown.standardRate')}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.tastingRatePP')}</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={manualTastingRateStr}
-                      onChange={e => setManualTastingRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                      onBlur={e => setManualTastingRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                      disabled={isPaid}
-                      style={isPaid ? lockedInputStyle : inputStyle}
-                    />
-                  </div>
-                  <div>
-                      <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchRatePP')}</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={manualLunchRateStr}
-                        onChange={e => setManualLunchRateStr(e.target.value.replace(/[^0-9.]/g, ''))}
-                        onBlur={e => setManualLunchRateStr(String(Math.max(0, parseFloat(e.target.value) || 0)))}
-                        disabled={isPaid}
-                        style={isPaid ? lockedInputStyle : inputStyle}
-                      />
-                    </div>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* A hot dish needs a lunch guest (A-11). */}
+        {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
+          <p className="text-xs mb-3" style={{ color: C.faint }}>{at('orderForm.hotDishNeedsLunch')}</p>
         )}
 
         {/* Hot dishes */}
@@ -1309,10 +1111,10 @@ export default function OrderDetail({
               {at('orderDetail.guestBreakdown.hotDishVeg')}
             </label>
             <select
-              value={hotDishVeg}
+              value={view.lunchGuests > 0 ? hotDishVeg : ''}
               onChange={e => setHotDishVeg(e.target.value)}
-              disabled={isPaid}
-              style={isPaid ? lockedInputStyle : inputStyle}
+              disabled={isPaid || view.lunchGuests === 0}
+              style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {vegItems.map(i => (
@@ -1328,10 +1130,10 @@ export default function OrderDetail({
               {at('orderDetail.guestBreakdown.hotDishMeat')}
             </label>
             <select
-              value={hotDishMeat}
+              value={view.lunchGuests > 0 ? hotDishMeat : ''}
               onChange={e => setHotDishMeat(e.target.value)}
-              disabled={isPaid}
-              style={isPaid ? lockedInputStyle : inputStyle}
+              disabled={isPaid || view.lunchGuests === 0}
+              style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
             >
               <option value="">{at('orderDetail.guestBreakdown.none')}</option>
               {meatItems.map(i => (
@@ -1369,7 +1171,7 @@ export default function OrderDetail({
         <div className="flex items-center gap-3">
           <button
             onClick={handleSave}
-            disabled={saving || isPaid}
+            disabled={saving || isPaid || !!problem}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
             style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
           >
@@ -1384,8 +1186,8 @@ export default function OrderDetail({
             </span>
           )}
         </div>
-        {lunchModel && !isPaid && (
-          <p className="text-xs mt-2" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchOnlyLocked')}</p>
+        {problem && !isPaid && (
+          <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>{problem}</p>
         )}
       </Card>
 
@@ -1639,115 +1441,9 @@ export default function OrderDetail({
 
       {/* ── Order Total ── */}
       <Card title={at('orderDetail.total.title')}>
-        {/* Active tier info */}
-        {tier && payingGuests > 0 && (
-          <div
-            className="text-xs rounded-lg px-3 py-2 mb-3"
-            style={{ backgroundColor: 'var(--site-bg)', color: 'var(--site-secondary)' }}
-          >
-            <span className="font-semibold">{at('orderDetail.total.tierInUse')}</span>{' '}
-            {tier.minGuests}–{tier.maxGuests} {at('orderDetail.total.guests')} ·{' '}
-            {at('orders.col.tasting')} <strong>{formatTetri(asTetri(tastingRatePerPerson(tier)))}/pp</strong>
-            {' · '}
-            {at('orders.col.lunch')} <strong>{formatTetri(asTetri(comboRatePerPerson(tier)))}/pp</strong>
-            {' · '}
-            {at('orderDetail.total.regFee')} <strong>{formatTetri(asTetri(companyRegistrationFee))}</strong>
-          </div>
-        )}
-        {/* Lunch rate = 0 warning */}
-        {!lunchModel && tier && lunchGuests > 0 && comboRatePerPerson(tier) === tastingRatePerPerson(tier) && (
-          <div
-            className="text-xs rounded-lg px-3 py-2 mb-3"
-            style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}
-          >
-            <strong>{at('orderDetail.total.lunchRateZero')}</strong> — {lunchGuests} {at(lunchGuests !== 1 ? 'orders.guest.plural' : 'orders.guest.singular')} {at('orderDetail.total.lunchGuestWontAdd')}{' '}
-            <a href="/admin/companies" style={{ textDecoration: 'underline' }}>
-              {at('orderDetail.total.setLunchRateLink')}
-            </a>{' '}
-            {at('orderDetail.total.andReload')}
-          </div>
-        )}
         <div className="space-y-1.5">
-          {lunchModel ? (
-            <>
-              {/* Stopgap (see lunchModel): one line per product the order was booked with, at its sold rate. */}
-              {productLines.map(p => (
-                <div key={p} className="flex justify-between text-sm">
-                  <span style={{ color: C.muted }}>
-                    {at(PRODUCT_AT[p])} ({storedCounts[p]} × {formatTetri(asTetri(storedRates![p]!))})
-                  </span>
-                  <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(storedRates![p]!), storedCounts[p]), { decimals: true })}</span>
-                </div>
-              ))}
-              {storedRates && storedRates.registration > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-                  <span style={{ color: C.text }}>{formatTetri(asTetri(storedRates.registration), { decimals: true })}</span>
-                </div>
-              )}
-            </>
-          ) : (
-          <>
-          {/* Company tier lines */}
-          {tier && tastingGuests > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(asTetri(tastingRatePerPerson(tier)))})
-              </span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(tastingAmt!), { decimals: true })}</span>
-            </div>
-          )}
-          {tier && lunchGuests > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(asTetri(comboRatePerPerson(tier)))})
-              </span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(lunchAmt!), { decimals: true })}</span>
-            </div>
-          )}
-          {tier && companyRegistrationFee > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(companyRegistrationFee), { decimals: true })}</span>
-            </div>
-          )}
-          {/* Manual rate lines for individual / no-tier orders */}
-          {!tier && payingGuests > 0 && tastingGuests > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orders.col.tasting')} ({tastingGuests} × {formatTetri(manualTastingRate)})
-              </span>
-              <span style={{ color: C.text }}>
-                {formatTetri(multiplyTetri(manualTastingRate, tastingGuests), { decimals: true })}
-              </span>
-            </div>
-          )}
-          {!tier && payingGuests > 0 && lunchGuests > 0 && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {at('orderDetail.total.tastingLunch')} ({lunchGuests} × {formatTetri(manualLunchRate)})
-              </span>
-              <span style={{ color: C.text }}>
-                {formatTetri(multiplyTetri(manualLunchRate, lunchGuests), { decimals: true })}
-              </span>
-            </div>
-          )}
-          {/* Pre-enhancement fallback: split counts not set yet. Hidden when
-              legacyBase is null — no tier and no snapshot means there is no
-              line-free base to show, and printing the stored total here would
-              list it beside the very lines it already contains (#52). */}
-          {payingGuests === 0 && order.guestCount > 0 && legacyBase != null && (
-            <div className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>
-                {legacyTier
-                  ? `${order.visitType === 'TASTING_LUNCH' ? at('orderDetail.total.tastingLunch') : at('orders.col.tasting')} (${order.guestCount} ${at('orderDetail.total.guests')})`
-                  : at('orderDetail.total.basePriceOriginal')}
-              </span>
-              <span style={{ color: C.text }}>{formatTetri(asTetri(legacyBase), { decimals: true })}</span>
-            </div>
-          )}
-          </>
-          )}
+          {/* One line per product with the price-table row it used (finding 7); unedited, the rates it was sold at. */}
+          <PriceLines at={at} view={shown} />
           {lines.map(l => (
             <div key={l.id} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>
@@ -1786,7 +1482,7 @@ export default function OrderDetail({
             a guess about which path produced it. The old `payingGuests > 0`
             gate hid it on exactly the path where the number was wrong (#52),
             so a live preview read as the settled total. */}
-        {computedTotal != null && computedTotal !== order.totalPrice && (
+        {edited && computedTotal != null && computedTotal !== order.totalPrice && (
           <p className="text-xs mt-1 text-right" style={{ color: C.faint }}>
             {at('orderDetail.total.livePreview')}
           </p>

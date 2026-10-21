@@ -580,8 +580,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       email,
       phone,
       ...(isEnhanced ? {
-        hotDishVegetable: hotDishVeg || null,
-        hotDishMeat: hotDishMeat || null,
+        // A dish picked before switching to a Tasting visit stays in state but is not sent — no lunch guest, no dish (A-11).
+        hotDishVegetable: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishVeg || null : null,
+        hotDishMeat: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishMeat || null : null,
         foodNotes: foodNotes || null,
         masterclassLines: activeMcLines,
       } : {}),

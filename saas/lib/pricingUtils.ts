@@ -264,6 +264,38 @@ export function ratesFromManualProducts(tastingOnly: number | null, lunchOnly: n
   return { tastingOnly, lunchOnly, tastingLunch, registration: 0 }
 }
 
+/** Admin-typed per-person rates, tetri, per product. null (or ≤ 0) = nothing typed for that product. */
+export type ManualRates = Record<Product, number | null>
+
+/**
+ * The admin screens' pricing (New Order, the order page, and their two server actions — Plan-PricingModel
+ * Chunk 8). One rule so the preview and the stored total cannot disagree:
+ * - The company's price table first: each product by its own count (D-2), its flat fee (D-6).
+ * - A product with guests the table does not offer — or every product when there is no table (individuals
+ *   on these screens, A-9) — takes the admin's typed rate (E-3). Typed rates carry no registration fee.
+ * - No table and nothing typed for any product with guests → 'unpriced': the price is set later, as today.
+ * - Otherwise a product with guests and no rate from either source → 'missing' (never priced at ₾0, D-7).
+ */
+export type AdminQuote =
+  | { kind: 'priced'; rates: ProductRates; typed: Product[] }
+  | { kind: 'unpriced' }
+  | { kind: 'missing'; products: Product[] }
+
+export function adminQuote<T extends ProductTier>(prices: T[], registration: number, counts: Counts, manual: ManualRates): AdminQuote {
+  const hasTable = prices.length > 0
+  const base: ProductRates = hasTable
+    ? ratesForCounts(prices, counts, registration)
+    : { tastingOnly: null, lunchOnly: null, tastingLunch: null, registration: 0 }
+  const typedRate = (p: Product) => { const v = manual[p]; return v != null && v > 0 ? v : null }
+  const needed = PRODUCTS.filter(p => counts[p] > 0 && base[p] == null)
+  if (!hasTable && needed.every(p => typedRate(p) == null)) return { kind: 'unpriced' }
+  const missing = needed.filter(p => typedRate(p) == null)
+  if (missing.length > 0) return { kind: 'missing', products: missing }
+  const rates = { ...base }
+  for (const p of needed) rates[p] = typedRate(p)
+  return { kind: 'priced', rates, typed: needed }
+}
+
 /** Products that have guests but no rate. Must be empty before {@link priceCounts} is called. */
 export function notOffered(rates: ProductRates, counts: Counts): Product[] {
   return PRODUCTS.filter(p => counts[p] > 0 && rates[p] == null)

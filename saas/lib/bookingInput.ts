@@ -164,6 +164,59 @@ export function countRulesFromSettings(
   }
 }
 
+// ─── Hot dish ────────────────────────────────────────────────────────────────
+
+/**
+ * A hot dish is lunch food: one may be chosen only when at least one guest has lunch (Lunch only or Tasting &
+ * Lunch) — Max, 2026-10-21 (A-11). Every write path refuses a dish on a booking with no lunch guest rather than
+ * silently dropping it; the forms only send a dish while there is a lunch guest, so a guest never meets this.
+ * Food notes (allergies) are not food choices and stay allowed on any booking.
+ */
+export function hotDishWithoutLunch(counts: Counts, vegetable: unknown, meat: unknown): boolean {
+  const chosen = (v: unknown) => typeof v === 'string' && v.trim() !== ''
+  return (chosen(vegetable) || chosen(meat)) && counts.lunchOnly + counts.tastingLunch === 0
+}
+
+// ─── Admin screens (New Order, the order page) ──────────────────────────────
+
+/** A reason an admin screen cannot save, as an adminT key (+ vars) — the forms show it, the server returns it. */
+export type AdminOrderProblem = { key: string; vars?: Record<string, string | number> }
+
+/**
+ * Plan-PricingModel Chunk 8: what admin New Order and the order page may save, checked by the forms (inline)
+ * and by `createOrderAdmin` / `updateOrderEnhanced` (authoritative) with this one function.
+ * - Individuals: visit type Tasting / Tasting + Lunch and ONE guest count (D-5, A-4).
+ * - Companies: the four boxes; the total is their sum, never typed (D-3 — what made P-11 possible).
+ * - Visit type and boxes agree (A-6), a hot dish needs a lunch guest (A-11). No minimums (A-8).
+ */
+export function checkAdminOrder(input: {
+  bookingType: 'INDIVIDUAL' | 'COMPANY'
+  visitType: unknown
+  guestCount?: unknown
+  boxes?: { tastingOnly?: unknown; lunchOnly?: unknown; tastingLunch?: unknown; free?: unknown } | null
+  hotDishVegetable?: unknown
+  hotDishMeat?: unknown
+}): { ok: true; counts: Counts; visitType: BookingVisitType } | { ok: false; problem: AdminOrderProblem } {
+  const company = input.bookingType === 'COMPANY'
+  const r = checkBookingCounts({
+    bookingType: input.bookingType, layout: company ? 'boxes' : 'single', form: 'admin', visitType: input.visitType,
+    guestCount: input.guestCount,
+    ...(company ? { tastingOnly: input.boxes?.tastingOnly, lunchOnly: input.boxes?.lunchOnly, tastingLunch: input.boxes?.tastingLunch, free: input.boxes?.free } : {}),
+  }, { groupMin: null, productMins: { tastingOnly: null, lunchOnly: null, tastingLunch: null } })
+  if (!r.ok) {
+    const e = r.error
+    if (e.code === 'not_whole_number') return { ok: false, problem: { key: 'orderForm.err.wholeNumbers' } }
+    if (e.code === 'no_paying_guests') return { ok: false, problem: { key: 'orderForm.err.noPaying' } }
+    if (e.code === 'visit_mismatch') {
+      const v = input.visitType
+      return { ok: false, problem: { key: v === 'TASTING' ? 'orderForm.err.mismatchTasting' : v === 'LUNCH' ? 'orderForm.err.mismatchLunch' : 'orderForm.err.mismatchTastingLunch' } }
+    }
+    return { ok: false, problem: { key: 'orderForm.err.visitType' } }
+  }
+  if (hotDishWithoutLunch(r.counts, input.hotDishVegetable, input.hotDishMeat)) return { ok: false, problem: { key: 'orderForm.err.hotDish' } }
+  return { ok: true, counts: r.counts, visitType: r.visitType }
+}
+
 // ─── Masterclass lines ───────────────────────────────────────────────────────
 
 export type MasterclassCatalogueRow = { id: string; unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'; active: boolean; pricePerUnit: number }

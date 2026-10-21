@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
+import { checkMasterclassLines } from '@/lib/bookingInput'
 
 export async function addMasterclassLine(
   orderId: string,
@@ -20,12 +21,19 @@ export async function addMasterclassLine(
     ])
     if (!order) return { error: 'Order not found.' } as const
     if (!item) return { error: 'Masterclass item not found' } as const
+    // The public form's rule (#93): active item, whole quantity 1…999, FLAT = 1, price from the catalogue.
+    // Without it a negative or fractional quantity here lowered the order's total.
+    const checked = checkMasterclassLines([{ masterclassItemId: item.id, quantity: data.quantity }], [item])
+    if (!checked.ok) {
+      return { error: checked.error.code === 'inactive_item' ? 'This masterclass item is switched off.' : 'Quantity must be a whole number from 1 to 999.' } as const
+    }
+    const line = checked.lines[0]!
     const created = await tx.orderMasterclass.create({
       data: {
         orderId,
-        masterclassItemId: data.masterclassItemId,
-        quantity: data.quantity,
-        pricePerUnit: item.pricePerUnit,
+        masterclassItemId: line.masterclassItemId,
+        quantity: line.quantity,
+        pricePerUnit: line.pricePerUnit,
       },
     })
     return { success: true as const, lineId: created.id }

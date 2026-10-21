@@ -16,11 +16,11 @@
 import fs from 'fs'
 import path from 'path'
 import {
-  countsFromLegacy, countsFromVisit, findProductTier, notOffered, priceBooking, priceCounts, ratesForCounts,
+  adminQuote, countsFromLegacy, countsFromVisit, findProductTier, notOffered, priceBooking, priceCounts, ratesForCounts,
   ratesForParty, ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
-import { checkBookingCounts, checkMasterclassLines, countRulesFromSettings, type CountRules, type CountRuleKey } from '../lib/bookingInput'
+import { checkAdminOrder, checkBookingCounts, checkMasterclassLines, countRulesFromSettings, hotDishWithoutLunch, type CountRules, type CountRuleKey } from '../lib/bookingInput'
 import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
 
 let passed = 0, failed = 0
@@ -241,7 +241,56 @@ console.log('Rules from settings (Chunk 6)')
   check('settings-wired: 5 Lunch only < company minimum 8 → refused', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'public', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'below_product_min')
   check('settings-wired: same booking on an admin screen → ok (A-8)', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'admin', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'ok')
   // The old two-bucket formula must never price a Lunch only party (it has no Lunch only rate).
+  // A-11 (Max, 2026-10-21): a hot dish needs a lunch guest; food notes are not checked here.
+  const c = (to: number, lo: number, tl: number) => ({ tastingOnly: to, lunchOnly: lo, tastingLunch: tl, free: 0 })
+  check('hot dish, no lunch guest → refused', hotDishWithoutLunch(c(4, 0, 0), 'Pkhali', null), true)
+  check('meat dish only, no lunch guest → refused', hotDishWithoutLunch(c(4, 0, 0), null, 'Mtsvadi'), true)
+  check('hot dish with a Lunch only guest → ok', hotDishWithoutLunch(c(0, 1, 0), 'Pkhali', 'Mtsvadi'), false)
+  check('hot dish with a Tasting & Lunch guest → ok', hotDishWithoutLunch(c(4, 0, 2), 'Pkhali', null), false)
+  check('no dish chosen (blank / spaces / null) → ok', hotDishWithoutLunch(c(4, 0, 0), '  ', null), false)
   throws('priceBooking() refuses a Lunch only visit', () => priceBooking({ tasting: 5000, lunch: 9500, registration: 0 }, { guestCount: 8, tastingGuests: 0, lunchGuests: 0 }, 'LUNCH', NO_LINES))
+}
+
+// ── Chunk 8: admin New Order / order page — adminQuote + checkAdminOrder ──
+{
+  console.log('\nChunk 8 — admin screens')
+  const tbl: ProductTier[] = [
+    { minGuests: 1, maxGuests: 20, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 9200 },
+    { minGuests: 21, maxGuests: 100, tastingOnlyPrice: 4500, lunchOnlyPrice: null, tastingLunchPrice: 7800 },
+  ]
+  const none = { tastingOnly: null, lunchOnly: null, tastingLunch: null }
+  const c = (to: number, lo: number, tl: number, free = 0): Counts => ({ tastingOnly: to, lunchOnly: lo, tastingLunch: tl, free })
+
+  // P-11 (production T-11): 9 Tasting only + 2 free + a ₾100 wine extra on a company table → ₾550, kitchen 11.
+  const p11 = checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 9, lunchOnly: 0, tastingLunch: 0, free: 2 } })
+  check('P-11: 9 Tasting only + 2 free is accepted (no typed party size to contradict it)', p11.ok, true)
+  const q11 = adminQuote(tbl, 0, c(9, 0, 0, 2), none)
+  check('P-11: priced from the table', q11.kind, 'priced')
+  if (q11.kind === 'priced') check('P-11: total ₾550 with the ₾100 extra', priceCounts(q11.rates, c(9, 0, 0, 2), { masterclass: 0, extras: 10000 }), 55000)
+  check('P-11: kitchen count 11', totalGuests(c(9, 0, 0, 2)), 11)
+
+  const lo = adminQuote(tbl, 0, c(0, 3, 5), none)
+  check('table has no Lunch only price, nothing typed → missing', lo.kind === 'missing' ? lo.products : lo.kind, ['lunchOnly'])
+  const loTyped = adminQuote(tbl, 0, c(0, 3, 5), { ...none, lunchOnly: 4000 })
+  check('typed Lunch only fills the gap; T&L still from the table (E-3)', loTyped.kind === 'priced' ? [loTyped.rates.lunchOnly, loTyped.rates.tastingLunch, loTyped.typed] : loTyped.kind, [4000, 9200, ['lunchOnly']])
+  check('a typed rate never overrides a table price', adminQuote(tbl, 0, c(4, 0, 0), { ...none, tastingOnly: 1 }).kind === 'priced' && (adminQuote(tbl, 0, c(4, 0, 0), { ...none, tastingOnly: 1 }) as { rates: { tastingOnly: number } }).rates.tastingOnly, 5000)
+  check('no table, nothing typed → priced later', adminQuote([], 0, c(4, 0, 0), none).kind, 'unpriced')
+  const ind = adminQuote([], 0, c(0, 0, 4), { ...none, tastingLunch: 7000 })
+  check('no table, typed rate → priced, no registration fee (A-9)', ind.kind === 'priced' ? [ind.rates.tastingLunch, ind.rates.registration] : ind.kind, [7000, 0])
+  check('no table, one product typed but another not → missing', (() => { const q = adminQuote([], 0, c(2, 0, 3), { ...none, tastingOnly: 5000 }); return q.kind === 'missing' ? q.products : q.kind })(), ['tastingLunch'])
+  check('company fee charged with the table', (() => { const q = adminQuote(tbl, 3000, c(4, 0, 0), none); return q.kind === 'priced' ? q.rates.registration : q.kind })(), 3000)
+
+  const e = (x: ReturnType<typeof checkAdminOrder>) => (x.ok ? 'ok' : x.problem.key)
+  check('individual: one guest count, Tasting + Lunch', e(checkAdminOrder({ bookingType: 'INDIVIDUAL', visitType: 'TASTING_LUNCH', guestCount: 4 })), 'ok')
+  check('individual: Lunch only refused (D-5)', e(checkAdminOrder({ bookingType: 'INDIVIDUAL', visitType: 'LUNCH', guestCount: 4 })), 'orderForm.err.visitType')
+  check('individual: boxes sent are ignored (A-4)', (() => { const r = checkAdminOrder({ bookingType: 'INDIVIDUAL', visitType: 'TASTING', guestCount: 3, boxes: { tastingOnly: 99, free: 9 } }); return r.ok ? r.counts : r.problem.key })(), c(3, 0, 0, 0))
+  check('company Tasting + Lunch with no lunch guest → Q-3 message', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING_LUNCH', boxes: { tastingOnly: 4 } })), 'orderForm.err.mismatchTastingLunch')
+  check('company Lunch only with a Tasting only guest → refused', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'LUNCH', boxes: { tastingOnly: 1, lunchOnly: 4 } })), 'orderForm.err.mismatchLunch')
+  check('company: only free guests → refused', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { free: 3 } })), 'orderForm.err.noPaying')
+  check('company: negative box → refused', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: -2 } })), 'orderForm.err.wholeNumbers')
+  check('admin screens skip the minimums (A-8): 1 guest ok', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 1 } })), 'ok')
+  check('hot dish with no lunch guest → refused (A-11)', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 4 }, hotDishVegetable: 'Pkhali' })), 'orderForm.err.hotDish')
+  check('hot dish with a lunch guest → ok', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'LUNCH', boxes: { lunchOnly: 4 }, hotDishMeat: 'Mtsvadi' })), 'ok')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

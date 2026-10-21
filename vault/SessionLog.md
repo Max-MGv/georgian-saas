@@ -8,6 +8,21 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-21 (eve) — T-152 pricing: Chunk 6 done, Chunk 7 built in 3 sections (all on staging, not production)
+
+- Max: Q-1 yes, Q-2 correct, Q-3 "0 lunch guests on Tasting + Lunch must be refused"; "start step 6"; "after each section
+  use Brave to do easy-win QA checks". Plan: `vault/Plan-PricingModel.md` (Chunk 7 QA log has every check + finding).
+- Chunk 6 `4bd077a`: company per-product minimums, `LUNCH` visit type (migration committed unchanged), one rules helper.
+- Chunk 7: `7c18dcb` re-pricing + assign-company on `priceCounts`; `a4cb3bc` public form + `createBooking` (four boxes,
+  Lunch only on the simple company form, Q-3 refusal, #93 tamper refusals — spec 9/9 on localhost); `05df9d9` content
+  editor mirror, 5 new editable error messages, findings 3–5, and a **stopgap for finding 6**: a linked Lunch only order's
+  page crashed and Save would have moved Lunch only guests into Free — now read-only priced, re-price refused (Chunk 8
+  replaces it). Only staging/dev ever held such orders.
+- Dev tidy-up later: "ZZ QA" bookings, Silk Road's Lunch only ₾45 test price. `seed-ka.ts` not run (would overwrite KA edits).
+- **Next:** Brave QA of `05df9d9` on staging → Chunk 8 (admin New Order + Order Detail on three products, fixes P-11).
+
+---
+
 ## 2026-10-20 — Dev DB wiped by a shadow-database command → recovery, 3 blind reviews, backup-before-write process
 
 - **Incident:** during T-152 Chunk 6 a `prisma migrate diff … --shadow-database-url <dev URL>` reset the dev DB (every `public` row; auth + storage survived; production untouched). Full record + chunks R0–R8 + reviews: `vault/Recovery-2026-10-20-DevDb.md`. New rule: ClaudeInstructions **Rule 0b** (no shadow/reset on real DBs; a hook blocks them).
