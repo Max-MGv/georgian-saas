@@ -321,6 +321,14 @@ export function countsFromLegacy(o: {
   return countsFromVisit(o.visitType === 'TASTING_LUNCH' ? 'TASTING_LUNCH' : 'TASTING', o.guestCount)
 }
 
+/** An order's boxes, read back off its columns (the inverse of {@link boxColumns}). */
+export function countsOf(o: { tastingOnlyGuests: number; lunchOnlyGuests: number; tastingLunchGuests: number; freeGuestCount: number }): Counts {
+  return { tastingOnly: o.tastingOnlyGuests, lunchOnly: o.lunchOnlyGuests, tastingLunch: o.tastingLunchGuests, free: o.freeGuestCount }
+}
+
+/** Product names as admins and guests read them (English; the forms translate their own copy). */
+export const PRODUCT_LABEL: Record<Product, string> = { tastingOnly: 'Tasting only', lunchOnly: 'Lunch only', tastingLunch: 'Tasting & Lunch' }
+
 /** The Order / InvoiceSent columns that hold the boxes. guestCount stays as the caller sets it. */
 export function boxColumns(c: Counts) {
   return { tastingOnlyGuests: c.tastingOnly, lunchOnlyGuests: c.lunchOnly, tastingLunchGuests: c.tastingLunch, freeGuestCount: c.free }

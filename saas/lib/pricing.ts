@@ -1,5 +1,5 @@
 import { withTenantDb } from '@/lib/db'
-import { headcountOf, priceBooking, ratesForParty, ratesFromSnapshot } from '@/lib/pricingUtils'
+import { countsOf, notOffered, priceCounts, ratesForCounts, ratesFromProductSnapshot } from '@/lib/pricingUtils'
 
 /**
  * Recompute an order's total after its lines change.
@@ -10,6 +10,11 @@ import { headcountOf, priceBooking, ratesForParty, ratesFromSnapshot } from '@/l
  * March and then adding a ₾20 extra to their February booking silently
  * re-priced the entire booking at March rates. Nobody would have seen it
  * happen — the total simply became a different number.
+ *
+ * Since Plan-PricingModel Chunk 7 (2026-10-21) this is the product model: the order's
+ * four boxes × its three frozen product rates (`priceCounts`), so a Lunch only order
+ * prices correctly. Every existing order re-prices to its stored total this way
+ * (scripts/test-pricing-model.ts equivalence: dev 428/428, prod 2/2).
  *
  * All amounts are tetri, and integer arithmetic keeps them there.
  */
@@ -31,15 +36,21 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
     )
     const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
 
-    const guests = headcountOf(order)
+    const counts = countsOf(order)
     const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
     // ── The normal path: price from what this order was actually sold at ──────
-    const snapshotRates = ratesFromSnapshot(order)
+    const snapshotRates = ratesFromProductSnapshot(order)
     if (snapshotRates) {
+      const missing = notOffered(snapshotRates, counts)
+      if (missing.length) {
+        // A box with guests but no frozen rate cannot be priced; never invent ₾0 for it.
+        console.warn(`[pricing] order ${orderId}: no frozen rate for ${missing.join(', ')}; total left unchanged`)
+        return
+      }
       await tx.order.update({
         where: { id: orderId },
-        data: { totalPrice: priceBooking(snapshotRates, guests, order.visitType, lines) },
+        data: { totalPrice: priceCounts(snapshotRates, counts, lines) },
       })
       return
     }
@@ -60,22 +71,20 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
       return
     }
 
-    // The tier comes from the party size, so this is one lookup rather than the
-    // two branches it used to be (2026-09-19 — see pricingUtils.ratesForParty).
-    const liveRates = ratesForParty(prices, order.guestCount, order.company?.isIndividual ? 0 : order.company?.registrationFee ?? 0)
-    if (!liveRates) {
+    // Each product looks up its own row by its own count (Plan-PricingModel D-2).
+    const liveRates = ratesForCounts(prices, counts, order.company?.isIndividual ? 0 : order.company?.registrationFee ?? 0)
+    const missing = notOffered(liveRates, counts)
+    if (missing.length) {
       // Previously a bare `return` — a silent no-op that left the total
       // untouched and gave the caller no reason to think anything had gone
       // wrong. It still cannot invent a price, but it no longer hides.
-      console.warn(
-        `[pricing] order ${orderId}: no price tier matches a party of ${order.guestCount}; total left unchanged`
-      )
+      console.warn(`[pricing] order ${orderId}: the company's tiers do not price ${missing.join(', ')}; total left unchanged`)
       return
     }
 
     await tx.order.update({
       where: { id: orderId },
-      data: { totalPrice: priceBooking(liveRates, guests, order.visitType, lines) },
+      data: { totalPrice: priceCounts(liveRates, counts, lines) },
     })
   })
 }

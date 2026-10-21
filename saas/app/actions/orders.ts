@@ -11,7 +11,7 @@ import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { boxColumns, countsFromLegacy, headcountOf, priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
+import { boxColumns, countsFromLegacy, countsOf, notOffered, priceBooking, priceCounts, PRODUCT_LABEL, ratesForCounts, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -706,33 +706,27 @@ export async function assignOrderCompany(
     // the columns existed". recalcOrderTotal then fell into its legacy branch
     // and re-priced the whole booking off whatever the company's tiers said
     // that day — the precise repricing bug chunk 4 was written to close.
-    let tastingRateSnapshot: number | null = null
-    let lunchRateSnapshot: number | null = null
-    let registrationFeeSnapshot: number | null = null
-
-    // The two branches this used to have differed only in which head count fed
-    // findTier. Now the party size always does, so there is one path.
-    const rates = ratesForParty(company.prices, order.guestCount, company.isIndividual ? 0 : company.registrationFee)
-    let totalPrice = 0
-    if (rates) {
-      totalPrice = priceBooking(
-        rates,
-        headcountOf(order),
-        order.visitType,
-        { masterclass: masterclassAmt, extras: extrasAmt },
-      )
-      tastingRateSnapshot = rates.tasting
-      lunchRateSnapshot = rates.lunch
-      registrationFeeSnapshot = rates.registration
+    // Product model (Plan-PricingModel Chunk 7): each of the order's boxes looks up its own row of
+    // the company's ladder (D-2). A company with no ladder leaves the order unpriced (0 + its lines),
+    // as before; a ladder that does not price a box the order has is refused, never priced at ₾0.
+    const counts = countsOf(order)
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
+    let totalPrice = masterclassAmt + extrasAmt
+    let snapshot: { tastingOnlyRate: number | null; lunchOnlyRate: number | null; tastingLunchRate: number | null; registrationFeeSnapshot: number | null } =
+      { tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
+    if (company.prices.length) {
+      const rates = ratesForCounts(company.prices, counts, company.isIndividual ? 0 : company.registrationFee)
+      const missing = notOffered(rates, counts)
+      if (missing.length) {
+        return { error: `${company.name}'s price table has no price for ${missing.map(p => PRODUCT_LABEL[p]).join(' / ')} — add one on its price table first, then link the company.` } as const
+      }
+      totalPrice = priceCounts(rates, counts, lines)
+      snapshot = { tastingOnlyRate: rates.tastingOnly, lunchOnlyRate: rates.lunchOnly, tastingLunchRate: rates.tastingLunch, registrationFeeSnapshot: rates.registration }
     }
-    if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
 
     await tx.order.update({
       where: { id: orderId },
-      data: {
-        companyId, bookingType: 'COMPANY', totalPrice,
-        tastingOnlyRate: tastingRateSnapshot, tastingLunchRate: lunchRateSnapshot, registrationFeeSnapshot,
-      },
+      data: { companyId, bookingType: 'COMPANY', totalPrice, ...snapshot },
     })
     return { success: true as const, totalPrice }
   })
