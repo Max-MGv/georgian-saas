@@ -29,6 +29,7 @@ const cases = [
   // ---- not writes → no backup ----
   [A, 'npx tsx scripts/backup-db.ts --env=dev', null, 'the backup itself'],
   [A, 'npx tsx scripts/backup-verify.ts --latest --env=prod', null, 'verify'],
+  [A, 'cd saas && node scripts/clear-next-cache.cjs', null, 'clearing the Next cache is not a database write'],
   [A, 'npx tsx scripts/tix.ts list', null, 'tix'],
   [A, 'npx tsx scripts/audit-money.ts', null, 'read-only audit'],
   [A, 'npx tsx scripts/_qa/verify-audit-b.ts', null, 'QA verify script'],

@@ -47,6 +47,7 @@ const SQL_RUNNER = /\bpsql\b|executeRaw|\$queryRaw|db\s+execute|\b(tsx|node)\s+-
 function isWrite(cmd) {
   const c = cmd.replace(/\\\r?\n|`\r?\n|\^\r?\n/g, ' ')
   if (/scripts[\\/]backup-(db|verify)\.ts/i.test(c) && !/--write\b/i.test(c)) return null // the backup itself
+  if (/scripts[\\/]clear-next-cache\.cjs/i.test(c)) return null // deletes Next's local cache only, never a database
   if (/--(write|apply)\b/i.test(c)) return '--write/--apply flag'
   if (/prisma(\.cmd|\.exe)?\s+migrate\s+(deploy|resolve)\b/i.test(c)) return 'prisma migrate deploy/resolve'
   if (/prisma(\.cmd|\.exe)?\s+db\s+(execute|seed)\b/i.test(c) || /\bnpm\s+run\s+seed\b/i.test(c)) return 'prisma db execute/seed'

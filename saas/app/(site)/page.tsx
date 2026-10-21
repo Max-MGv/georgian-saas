@@ -3,6 +3,7 @@ import { asTetri, formatTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
 import { getAllSettings } from '@/app/actions/settings'
 import { settingValue } from '@/lib/settings'
+import { COUNT_RULE_KEYS } from '@/lib/bookingInput'
 import { getSiteContext } from '@/lib/siteContext'
 import { getBlockedDates } from '@/app/actions/blockedDates'
 import { getAllContent } from '@/app/actions/siteContent'
@@ -434,6 +435,7 @@ export default async function Home({ searchParams }: PageProps) {
             displayPriceTasting={displayPriceTasting}
             displayPriceLunch={displayPriceTastingLunch}
             individualPrices={individualsRow?.prices ?? []}
+            countRuleSettings={Object.fromEntries(COUNT_RULE_KEYS.map(k => [k, settingValue(settings, k)]))}
             onlinePaymentEnabled={{
               configured: paymentConfigured,
               individual: individualsPaymentReady,

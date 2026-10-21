@@ -140,7 +140,7 @@ These come from running this suite (or the app in general) hard, not from any si
 **Symptom:** a route that exists and worked before (`/api/releases`, `/api/tickets`, `/super-admin/releases/[id]`) returns Next's
 HTML **404 "This page could not be found"** — the log shows `proxy.ts` and application time, then 404. It does not go away with
 retries or warm-up. Seen after adding new route folders, after creating git worktrees elsewhere, and once on a plain restart.
-**Fix:** stop the dev server, `rm -rf saas/.next`, start again; check `curl localhost:3000/api/releases` answers **401** (needs
+**Fix:** stop the dev server, `cd saas && node scripts/clear-next-cache.cjs` (never a plain `rm -rf .next` — see below), start again; check `curl localhost:3000/api/releases` answers **401** (needs
 a token), not 404, before running specs. Not an app bug — nothing changes on staging/production builds.
 
 ### First run after a dev-server start times out on cold-compiled routes (2026-10-07)
@@ -168,7 +168,7 @@ a token), not 404, before running specs. Not an app bug — nothing changes on s
 
 **Cause:** after many hours and dozens of test runs in one session, the `next dev` process itself can grow very large (observed once at ~1.8GB resident) and degrade.
 
-**Fix:** `Stop-Process` the dev server, `rm -rf .next` (Turbopack's dev cache — a forceful `-Force` kill has corrupted this once, manifesting as `/admin/login` returning a stale 404), then `npm run dev` fresh. Cheap and reliably fixes this specific pattern — distinguish it from the DB pool issue above (that one a restart does *not* fix).
+**Fix:** `Stop-Process` the dev server, `node scripts/clear-next-cache.cjs` (link-safe; it replaces `rm -rf .next`) (Turbopack's dev cache — a forceful `-Force` kill has corrupted this once, manifesting as `/admin/login` returning a stale 404), then `npm run dev` fresh. Cheap and reliably fixes this specific pattern — distinguish it from the DB pool issue above (that one a restart does *not* fix).
 
 **Reconfirmed 2026-09-30, a second real instance, different route:** after a ~90-minute session
 running the full suite plus several isolated reruns, `/admin/orders/new` started returning a
@@ -544,3 +544,6 @@ If the backup fails the run is **blocked** — fix the backup (`cd saas && npx t
 Also from the 2026-10-20 audit: run long suites on AC power with sleep blocked (Modern Standby killed a run with
 `ERR_NETWORK_IO_SUSPENDED`), and on a dev server you started yourself after `rm -rf saas/.next` — `.next` contains
 junctions into `node_modules` (`sharp`, `@prisma/client`): remove those links first, never recurse through them.
+**Use `cd saas && node scripts/clear-next-cache.cjs`** (2026-10-21): it unlinks every link, checks they are gone, then deletes `.next`.
+Every `rm -rf .next` mentioned in this file means that script. (2026-10-21 a plain `rm -rf .next` was run by mistake; the links
+were removed without touching node_modules — `npm ls` clean — but that was luck.)

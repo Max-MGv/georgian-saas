@@ -490,7 +490,10 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     // Company per-product minimums (T-152): optional — blank is "no minimum" — and not paired with any max.
     if (key in companyMinState) {
       const [raw, set] = companyMinState[key as CompanyMinKey]
-      const val = raw.trim() === '' ? '' : String(Math.max(parseInt(raw) || 1, 1))
+      // 0, a negative number or garbage means "no minimum" (blank) — the same reading as countRulesFromSettings.
+      // It used to become 1, which looked like a minimum but restricted nothing (QA 2026-10-21).
+      const n = parseInt(raw, 10)
+      const val = Number.isFinite(n) && n > 0 ? String(n) : ''
       setBookingRulesEditing(null)
       setBookingRulesError(null)
       set(val)

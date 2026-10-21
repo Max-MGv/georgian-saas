@@ -9,7 +9,8 @@ import { cookies } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
-import { boxColumns, countsFromLegacy, priceBooking, ratesForParty } from '@/lib/pricingUtils'
+import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type BookingVisitType, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, type CountRuleKey } from '@/lib/bookingInput'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -29,6 +30,8 @@ import { companyCodeProof } from '@/lib/contactResolution'
 import { tbilisiDateIso } from '@/lib/tbilisiTime'
 
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
+/** Public-site translation key for each product's name (lib/t.ts). */
+const PRODUCT_T: Record<Product, string> = { tastingOnly: 'form.product_tasting_only', lunchOnly: 'form.product_lunch_only', tastingLunch: 'form.product_tasting_lunch' }
 
 export type BookingFormData = {
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -61,7 +64,8 @@ export type BookingFormData = {
     phone: string | null
     email: string | null
   }[]
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  /** 'LUNCH' only on the company simple form (Plan-PricingModel D-10). */
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   date: string
   timeSlot: string
   guestCount: number
@@ -69,13 +73,16 @@ export type BookingFormData = {
   surname: string
   email?: string
   phone?: string
-  tastingGuestCount?: number
-  lunchGuestCount?: number
-  freeGuestCount?: number
+  /**
+   * The detailed company form's four boxes (T-152 D-3). Read only when the tenant has the detailed form on;
+   * otherwise `guestCount` is the one count and the server builds the boxes from the visit type (A-4).
+   */
+  boxes?: { tastingOnly: number; lunchOnly: number; tastingLunch: number; free: number }
   hotDishVegetable?: string | null
   hotDishMeat?: string | null
   foodNotes?: string | null
-  masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
+  /** pricePerUnit is ignored — the server reads every price from its own catalogue (#93). */
+  masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit?: number }[]
   /**
    * ISO 3166-1 alpha-2 codes for the nationalities present on a COMPANY booking
    * (Plan-CompanyNationality) — a small tag set, no per-country headcount.
@@ -206,119 +213,90 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return { success: false, error: await mc('onsite_err_lead_time', 'form.err_lead_time', { hours: leadHours }) }
     }
 
-    // Guard: min guests from settings (tenant-scoped via getSetting)
-    const [minTastingStr, minLunchStr] = await Promise.all([
-      getSetting('min_guests_tasting'),
-      getSetting('min_guests_tasting_lunch'),
-    ])
-    const minGuests = data.visitType === 'TASTING'
-      ? (parseInt(minTastingStr) || 4)
-      : (parseInt(minLunchStr) || 4)
-
-    let guestCount = Number(data.guestCount)
-    const isEnhanced = data.bookingType === 'COMPANY' &&
-      (data.tastingGuestCount != null || data.lunchGuestCount != null)
-
-    let effectiveGuestCount = isEnhanced
-      ? (data.tastingGuestCount ?? 0) + (data.lunchGuestCount ?? 0)
-      : guestCount
-    if (effectiveGuestCount < minGuests) {
-      return { success: false, error: await mc('onsite_err_min_guests', 'form.err_min_guests', { min: minGuests }) }
+    // ── Who is coming (Plan-PricingModel §4.3, KnownBugs #93) ──────────────────
+    // The server decides the layout from the tenant's setting — never from what the request happens to
+    // contain — and runs the one shared check: whole numbers 0…999, at least one paying guest, visit type
+    // and boxes agreeing (Q-3), the group minimum and any company per-product minimum. Forms only mirror it.
+    const enhancedOn = (await getSetting('enable_enhanced_company_booking')) === 'true'
+    const layout = data.bookingType === 'COMPANY' && enhancedOn ? 'boxes' : 'single'
+    const ruleValues = await Promise.all(COUNT_RULE_KEYS.map(k => getSetting(k)))
+    const ruleMap = new Map<CountRuleKey, string>(COUNT_RULE_KEYS.map((k, i) => [k, ruleValues[i]]))
+    const visitForRules: BookingVisitType = (['TASTING', 'TASTING_LUNCH', 'LUNCH'] as const).includes(data.visitType as BookingVisitType)
+      ? data.visitType as BookingVisitType : 'TASTING'
+    const rules = countRulesFromSettings(k => ruleMap.get(k), visitForRules, data.bookingType)
+    const checkedCounts = checkBookingCounts({
+      bookingType: data.bookingType, layout, form: 'public', visitType: data.visitType,
+      guestCount: data.guestCount,
+      ...(layout === 'boxes' ? {
+        tastingOnly: data.boxes?.tastingOnly, lunchOnly: data.boxes?.lunchOnly,
+        tastingLunch: data.boxes?.tastingLunch, free: data.boxes?.free,
+      } : {}),
+    }, rules)
+    if (!checkedCounts.ok) {
+      const e = checkedCounts.error
+      if (e.code === 'below_group_min') return { success: false, error: await mc('onsite_err_min_guests', 'form.err_min_guests', { min: e.min }) }
+      if (e.code === 'below_product_min') return { success: false, error: await mc('onsite_err_product_min', 'form.err_product_min', { min: e.min, product: t(guestLocale, PRODUCT_T[e.product]) }) }
+      if (e.code === 'visit_mismatch' && data.visitType === 'TASTING_LUNCH') return { success: false, error: await mc('onsite_err_visit_mismatch', 'form.err_visit_mismatch') }
+      return { success: false, error: await mc('onsite_err_guest_counts', 'form.err_guest_counts') }
     }
+    const visitType = checkedCounts.visitType
+    let counts = checkedCounts.counts
 
-    // Guard: max guests from settings (optional — blank/unset means no cap).
+    // Guard: max guests from settings (optional — blank/unset means no cap), on the PAYING guests as before.
     // INDIVIDUAL bookings over the cap are clamped down, never rejected.
     // COMPANY bookings are never altered — only flagged for a heads-up.
-    const [maxTastingStr, maxLunchStr] = await Promise.all([
-      getSetting('max_guests_tasting'),
-      getSetting('max_guests_tasting_lunch'),
-    ])
-    const maxGuestsStr = data.visitType === 'TASTING' ? maxTastingStr : maxLunchStr
-    const maxGuests = maxGuestsStr.trim() !== '' && !Number.isNaN(parseInt(maxGuestsStr))
-      ? parseInt(maxGuestsStr)
-      : null
-
+    const maxGuests = rules.groupMax
     let guestCountAdjustedTo: number | null = null
     let guestCountOverMax = false
-
-    if (maxGuests != null && effectiveGuestCount > maxGuests) {
+    if (maxGuests != null && payingGuests(counts) > maxGuests) {
       if (data.bookingType === 'INDIVIDUAL') {
-        guestCount = maxGuests
-        effectiveGuestCount = maxGuests
+        counts = countsFromVisit(visitType, maxGuests)
         guestCountAdjustedTo = maxGuests
       } else {
         guestCountOverMax = true
       }
     }
+    const guestCount = totalGuests(counts)
+    const effectiveGuestCount = payingGuests(counts)
 
-    // Fetch real masterclass prices from DB (scoped to this tenant)
-    const masterclassIds = (data.masterclassLines ?? []).map(l => l.masterclassItemId)
-    const masterclassItemsFromDb = masterclassIds.length > 0
-      ? await withTenantDb(tenantId, tx =>
-          tx.masterclassItem.findMany({
-            where: { id: { in: masterclassIds }, tenantId },
-            select: { id: true, pricePerUnit: true },
-          })
-        )
+    // ── Masterclass lines (#93): this tenant's items, active, whole quantities, FLAT = 1, price from the DB ──
+    // Offered on the detailed company form only, as before; anything sent from another layout is ignored.
+    const catalogue = layout === 'boxes' && (data.masterclassLines ?? []).length > 0
+      ? await withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
+          where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true },
+        }))
       : []
-    const masterclassPriceMap = Object.fromEntries(masterclassItemsFromDb.map(i => [i.id, i.pricePerUnit]))
-    const masterclassAmt = (data.masterclassLines ?? []).reduce(
-      (s, l) => s + l.quantity * (masterclassPriceMap[l.masterclassItemId] ?? 0), 0
-    )
-
-    // Fetch individual pricing tiers. No invented 50/100 defaults: a tenant
-    // with no pricing configured stores 0 and confirms the price manually.
-    const individualsCompany = await withTenantDb(tenantId, tx =>
-      tx.company.findFirst({
-        where: { tenantId, isIndividual: true },
-        include: { prices: { orderBy: { minGuests: 'asc' } } },
-      })
-    )
-    // The party size picks the tier (2026-09-19). Registration is never charged
-    // on the individual path, which is why the resolver is told so here rather
-    // than the fee being zeroed afterwards.
-    const individualRates = individualsCompany?.prices.length
-      ? ratesForParty(individualsCompany.prices, guestCount, 0)
-      : null
-    const pricePerPersonTasting: number | null = individualRates?.tasting ?? null
-    const pricePerPersonLunch: number | null = individualRates?.lunch ?? null
-
-    // The party and its line totals, shared by both branches below.
-    const guests = {
-      guestCount,
-      tastingGuests: data.tastingGuestCount ?? 0,
-      lunchGuests: data.lunchGuestCount ?? 0,
-    }
+    const checkedLines = checkMasterclassLines(layout === 'boxes' ? data.masterclassLines : undefined, catalogue)
+    if (!checkedLines.ok) return { success: false, error: await mc('onsite_err_masterclass', 'form.err_masterclass') }
+    const masterclassLines = checkedLines.lines
+    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
     const lines = { masterclass: masterclassAmt, extras: 0 }
 
-    // What this order is actually sold at, frozen onto the row (chunk 4).
-    //
-    // Seeded from the individuals tier ONLY for an individual booking. A company
-    // booking that no tier prices keeps a null snapshot deliberately: its total
-    // stays 0 ("confirmed after submission"), and seeding it with the
-    // individuals rate would let a later recalc invent a price the winery never
-    // quoted.
-    //
-    // Registration is 0 rather than the tier's fee because the individual path
-    // never applies that fee — the snapshot records what was *used*, not what
-    // the tier happened to hold.
-    const isIndividual = data.bookingType === 'INDIVIDUAL'
-    let tastingRateSnapshot: number | null = isIndividual ? pricePerPersonTasting : null
-    let lunchRateSnapshot: number | null = isIndividual ? pricePerPersonLunch : null
-    let registrationFeeSnapshot: number | null =
-      isIndividual && pricePerPersonTasting != null ? 0 : null
-    // A COMPANY booking with no companyId is a new-company request (Feature 180) —
-    // there's no company row to price against yet, so it must not fall through to
-    // the individuals table below. It stays 0 ("confirmed after submission") until
-    // the winery creates the company and prices it manually.
+    // ── Price (Plan-PricingModel §4.2): each product looks up its own row by its own count (D-2) ──
+    // A product with guests that the ladder does not offer is refused — never priced at ₾0 (D-7).
+    // No ladder at all = no price yet ("confirmed after submission"): total = the add-ons, nothing frozen.
+    const notOfferedError = async (missing: Product[]) => ({
+      success: false as const,
+      error: await mc('onsite_err_not_offered', 'form.err_not_offered', { product: missing.map(m => t(guestLocale, PRODUCT_T[m])).join(', ') }),
+    })
+    let rates: ProductRates | null = null
+    let totalPrice = masterclassAmt
     const isNewCompanyRequest = data.bookingType === 'COMPANY' && !data.companyId
-    let totalPrice = isEnhanced
-      ? masterclassAmt
-      : data.bookingType === 'INDIVIDUAL'
-        ? (individualRates ? priceBooking(individualRates, guests, data.visitType, lines) : 0)
-        : 0
 
-    if (data.bookingType === 'COMPANY' && data.companyId) {
+    if (data.bookingType === 'INDIVIDUAL') {
+      // Registration is never charged on the individual path.
+      const individualsCompany = await withTenantDb(tenantId, tx =>
+        tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: { orderBy: { minGuests: 'asc' } } } })
+      )
+      if (individualsCompany?.prices.length) {
+        rates = ratesForCounts(individualsCompany.prices, counts, 0)
+        const missing = notOffered(rates, counts)
+        if (missing.length) return await notOfferedError(missing)
+        totalPrice = priceCounts(rates, counts, lines)
+      } else {
+        totalPrice = 0 // no pricing configured: the winery confirms the price by hand, as before
+      }
+    } else if (data.companyId) {
       // The browser names the company; the server decides whether this guest may book as it.
       // Without the code check a crafted request got a coded company's price tiers (KnownBugs #78).
       const checked = await withTenantDb(tenantId, async tx => {
@@ -334,56 +312,38 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         return { success: false, error: await mc('onsite_access_code_error', 'form.access_code_error') }
       }
       const company = checked.company
-
-      if (company?.prices.length) {
-        // One lookup on the party size, and one call: priceBooking already
-        // branches on whether the buckets are set, which is what the enhanced
-        // and simple cases used to hand-code separately.
-        const companyRates = ratesForParty(company.prices, guestCount, company.registrationFee)
-        if (companyRates) {
-          tastingRateSnapshot = companyRates.tasting
-          lunchRateSnapshot = companyRates.lunch
-          registrationFeeSnapshot = companyRates.registration
-          totalPrice = priceBooking(companyRates, guests, data.visitType, lines)
-        } else if (!isEnhanced) {
-          return { success: false, error: await mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount }) }
-        }
+      if (company.prices.length) {
+        rates = ratesForCounts(company.prices, counts, company.registrationFee)
+        const missing = notOffered(rates, counts)
+        if (missing.length) return await notOfferedError(missing)
+        totalPrice = priceCounts(rates, counts, lines)
       }
-    } else if (isEnhanced) {
-      totalPrice = masterclassAmt
     }
-
-    // Every order stores its boxes (Plan-PricingModel A-4), by the same rule the migration used:
-    // a detailed company booking as split, anything else with the whole party on its visit type's product.
-    const boxes = countsFromLegacy({
-      visitType: data.visitType,
-      guestCount,
-      tastingGuestCount: isEnhanced ? (data.tastingGuestCount ?? 0) : 0,
-      lunchGuestCount: isEnhanced ? (data.lunchGuestCount ?? 0) : 0,
-      freeGuestCount: isEnhanced ? (data.freeGuestCount ?? 0) : 0,
-    })
 
     const createdOrder = await withTenantDb(tenantId, async tx => {
       const created = await tx.order.create({
       data: {
         bookingType: data.bookingType as BookingType,
-        visitType: data.visitType as VisitType,
+        visitType: visitType as VisitType,
         date: new Date(data.date),
         timeSlot: data.timeSlot,
         guestCount,
-        ...boxColumns(boxes),
-        hotDishVegetable: data.hotDishVegetable || null,
-        hotDishMeat: data.hotDishMeat || null,
-        foodNotes: data.foodNotes || null,
+        ...boxColumns(counts),
+        // Hot dishes are asked on the detailed company form for a lunch visit only.
+        hotDishVegetable: layout === 'boxes' && visitType !== 'TASTING' ? data.hotDishVegetable || null : null,
+        hotDishMeat: layout === 'boxes' && visitType !== 'TASTING' ? data.hotDishMeat || null : null,
+        foodNotes: layout === 'boxes' ? data.foodNotes || null : null,
         name: data.name,
         surname: data.surname,
         email: data.email || null,
         phone: data.phone || null,
         requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,
         totalPrice,
-        tastingOnlyRate: tastingRateSnapshot,
-        tastingLunchRate: lunchRateSnapshot,
-        registrationFeeSnapshot,
+        // What this order is sold at, frozen per product (chunk 4 / T-152). Null when nothing priced it.
+        tastingOnlyRate: rates?.tastingOnly ?? null,
+        lunchOnlyRate: rates?.lunchOnly ?? null,
+        tastingLunchRate: rates?.tastingLunch ?? null,
+        registrationFeeSnapshot: rates ? rates.registration : null,
         tenantId,
         ...NEW_ORDER_COLUMNS,
         companyId: data.bookingType === 'COMPANY' ? data.companyId || null : null,
@@ -393,13 +353,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         nationalities: data.bookingType === 'COMPANY'
           ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
           : [],
-        masterclassLines: (data.masterclassLines ?? []).length > 0 ? {
-          create: (data.masterclassLines ?? []).map(l => ({
-            masterclassItemId: l.masterclassItemId,
-            quantity: l.quantity,
-            pricePerUnit: masterclassPriceMap[l.masterclassItemId] ?? 0,
-          })),
-        } : undefined,
+        masterclassLines: masterclassLines.length > 0 ? { create: masterclassLines } : undefined,
       },
     })
       /**
@@ -466,7 +420,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     if (gate.takePayment) {
       const locale = (await cookies()).get('site_locale')?.value
       // order_desc from the actual order, not a hardcoded site name.
-      const typeLabel = data.visitType === 'TASTING' ? 'Tasting' : 'Tasting + Lunch'
+      const typeLabel = visitType === 'TASTING' ? 'Tasting' : visitType === 'LUNCH' ? 'Lunch only' : 'Tasting + Lunch'
       const checkoutUrl = await startCheckout({
         tenantId,
         merchantId: gate.merchantId,
@@ -530,7 +484,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         date: formattedDate,
         timeSlot: data.timeSlot,
         guestCount,
-        visitType: data.visitType,
+        visitType,
         totalPrice,
         wineryName,
         wineryAddress,
@@ -554,7 +508,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       date: formattedDate,
       timeSlot: data.timeSlot,
       guestCount,
-      visitType: data.visitType,
+      visitType,
       totalPrice,
       bookingType: data.bookingType,
       requestedCompanyName: isNewCompanyRequest ? (data.requestedCompanyName || null) : null,

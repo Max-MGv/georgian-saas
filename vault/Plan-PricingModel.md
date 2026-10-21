@@ -421,7 +421,9 @@ but no one is booked for lunch. Enter the lunch guests, or switch to Tasting onl
 admin screens.
 
 ### Chunk 7 — Public booking form + `createBooking` (#93)
-**Status:** ⬜
+**Status:** 🚧 2026-10-21 — section 1 (re-pricing + assign-company, `7c18dcb`) and section 2 (form + action) built;
+section 3 (content-editor mirror, labels in FIELDS.form / seed-ka, MessagesPanel keys) next. Max asked for a Brave QA
+pass after each section (see §"QA log" below).
 - [ ] **First (from Chunk 6):** move every `priceBooking` caller to `priceCounts` (it throws for `LUNCH`), wire
       `countRulesFromSettings` into `createBooking`, add the Q-3 mismatch message (EN + KA) — see Chunk 6's "Carried" note.
 - [ ] `BookingForm.tsx`: detailed company form per D-9 (+ Free, total line, per-product preview, "not
@@ -436,7 +438,20 @@ admin screens.
 **Verify:** screenshots (phone + desktop) of each variant with a quote; three real bookings on localhost
 (individual; detailed company mixing all three products with masterclass; simple company Lunch only) →
 stored counts/rates/total checked in the DB against `test-pricing-model.ts`'s numbers; crafted requests refused.
-**Resume point:** —
+**QA log (Brave, Max's request 2026-10-21):**
+- Chunk 6 on staging: company minimum rows show "—"; **finding 1: typing 0 saved as 1** → fixed (0/negative/garbage =
+  blank, same as `countRulesFromSettings`). Console clean.
+- Section 1 on localhost: ₾10 extra on a Silk Road booking → server total ₾1,364 → ₾1,374 → ₾1,364 after removal
+  (re-pricing via `priceCounts`). Finding 2 (for Chunk 8): Order Detail shows "Live preview — click Save changes" after
+  an extra was removed although nothing is unsaved. Assign-company not testable (no unlinked booking) → after section 2.
+- Section 2 on localhost: individual preview ₾70 × 4; detailed company Tasting → only Tasting only + Free; Tasting + Lunch
+  with only Tasting only guests → Q-3 message, blocked; 2 TO + 5 T&L + 1 free → ₾564 stored with frozen rates; Silk Road
+  given Lunch only ₾45 (1–20) → Lunch only box appears; 25 LO + 25 T&L → ₾3,075 (LO falls back to the ₾45 row — A-7;
+  T&L on 21–100 ₾78 — D-2); 3 LO + 5 T&L booked → stored lunchOnlyRate 4500, total ₾595.
+- Incident (mine): `rm -rf saas/.next` run although my own check had just found 2 links into node_modules inside it —
+  no damage (`npm ls` clean). New `saas/scripts/clear-next-cache.cjs` (unlink first, verify, then delete); KNOWN-ISSUES
+  and memory point at it.
+**Resume point:** section 3 + run `booking-tampered-quantities.spec.ts` result in the log.
 
 ### Chunk 8 — Admin New Order + Order Detail (fixes P-11)
 **Status:** ⬜
