@@ -19,6 +19,37 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-21 — Dev-DB recovery: staging tickets restored from transcripts (R6 done)
+
+- Max: "recover what that process could not". Read-only inventory first (Recovery-2026-10-20-DevDb.md §10), then on
+  "recover what you can" the restore (§10b): **24 real tickets back with original numbers** (merged `tix show` snapshots +
+  Claude's own `tix` commands from 258 transcripts, pre-wipe evidence only, wipe pinned to 10-19 ~22:07Z), 9 screenshots
+  re-attached, P-2…P-5/P-13/P-14 re-closed, P-7→T-151 and P-11→T-152 linked, **T-215** filed (Max's unsent 10-19 report:
+  everything editable from the order page). Dev backup `2026-10-21_113133_dev` taken by the hook first; re-run = no-op.
+- Finding: T-137…T-150 were the P-ticket copies, not lost tickets; T-151/T-152 had full text. ~110 numbers = test debris.
+- Tools (untracked): `saas/scripts/_qa/recovery-tickets/`. `vault/Tickets.md` re-exported (39 tickets).
+- **Next:** Max's decision on the backup protocol (see the chat report 2026-10-21: what exists vs. gaps).
+
+---
+
+## 2026-10-18/19 — T-7 + T-22 planning: booking add-ons + wine for the table (PLAN ONLY, nothing built)
+
+- Max: "explore T-22", then "work on T-7 together with this", then "spend a lot of time on planning".
+- **Plan:** `vault/Plan-AddOnsAndWine.md` — decisions log D-1..D-16, design, dependencies, edge cases E1–E20, chunks 0–12.
+  Key design: masterclass → add-on groups (`@@map`, no table renames); table wine stored in `WineOrderItem` with a
+  booking OR wine-order parent (one table of wine sold, per-line `lineTotal`); guest purchases = pickup wine orders
+  with `sourceOrderId`; one line-sum helper (`lib/orderLines.ts`) and one wine-sold reader (`lib/wineSales.ts`).
+- **Blind review** (fenced from vault/git): agreed on almost everything, preferred a separate booking-wine table (kept
+  one table — Max wants wine sold in one place); found **KnownBugs #93** (public booking accepts negative quantities —
+  live money bug), #94, #95 and R2–R8, all verified in code.
+- **Mockups:** `vault/addons-layout-options.html` → https://claude.ai/artifact/N5JNWe76EUyqEY9ghbkbbf — Max picked A/A/A/A.
+- **Summary for Max's review:** `vault/addons-summary.html` → https://claude.ai/artifact/9m5Foocbhy4Q9UwYtrSs7r
+  (5 items to confirm, C-1..C-5).
+- #93 fix runs in its own session (reproduced on dev; waiting for Max's OK on the fix).
+- **Next:** Max reviews the summary + answers C-1..C-5 → approve chunk 0.
+
+---
+
 ## 2026-10-18 — T-136: "Finish setting up your account" stuck on Nikalas Marani — ON PRODUCTION (`8a54f88`)
 
 - **Cause (read-only prod check):** NM has payment (IBAN + Flitt), 4 individual price tiers, 7 wines, 2 companies, launched 2026-10-07 — but no `onboarding_works_with_companies` Setting row. `companiesStepDone` needed an explicit "yes", so the wizard banner never cleared. The wizard question was skipped and companies were added from the Companies page; `launchTenant` is a record, not a gate.

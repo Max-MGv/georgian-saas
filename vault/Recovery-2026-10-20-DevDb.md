@@ -63,7 +63,7 @@ production's current content); staging bug-report rows (their screenshots surviv
 | R3 | Staging Winery content from production (read-only) + Flitt test merchant | ✅ 2026-10-20 |
 | R4 | Data: demo seed on staging + demo tenants, test fixtures | ✅ 2026-10-20 |
 | R5 | Ticket tool: new staging token (credentials.txt) + production's copy token re-registered | ✅ 2026-10-20 |
-| R6 | Tickets (Max's source, else transcripts), THEN P-tickets re-copied, + release drafts | ⬜ (waits for Max) |
+| R6 | Tickets (from transcripts, §10b), P-tickets re-copied, release drafts | ✅ 2026-10-21 |
 | R7 | Verification: logins, staging site, admin screens, RLS/money/pricing scripts, screenshots | ✅ 2026-10-20 |
 | R8 | ~~Production forward token → Vercel env~~ — **not needed**, solved on dev in R5 | ✅ 2026-10-20 |
 
@@ -341,3 +341,49 @@ Max: "update the process so that export of whole db runs before commands like th
 **Staging identity scrub (Max replaced the contact email himself, asked for the rest):** `saas/scripts/_qa/staging-identity-scrub.ts` — 10 Settings + 5 SiteContent rows that held NM's real phone/address/socials/map/IBAN/bank/personal number/recipient name/email → test values. Check afterwards: no staging value matches or contains NM's real values.
 
 **Still open after this:** R6 T-tickets from Max's other source (re-attach the 15 orphaned ticket images, then clean the 49 orphaned storage objects) · remaining hook gaps (≈9 command variants, MCP DB tools — Rule 0b.6 says back up manually) · scheduled backups / Supabase Pro + one restore drill · test budgets (`/admin/orders` specs ≥ 60 s), `allowedDevOrigins` for the demo host · `companies-crud.spec` for three prices + commit the LUNCH migration unchanged (pricing Chunk 6) · unrecoverable: 13 SiteContent + 7 Setting rows, 1 masterclass item, staging edits 10-16..10-20.
+
+## 10. What is still recoverable — inventory 2026-10-21 (identification only, nothing written)
+
+Max: "try and recover what that process could not — step one is identifying what we can recover; I'll say what's worth it."
+Read-only throughout (transcripts, git, local files, `SELECT`s on dev inside `SET TRANSACTION READ ONLY`). Wipe time pinned to
+**2026-10-19 ~22:07Z** (pricing session `536b969b`); only evidence from before that counts — later transcripts (recovery
+sessions, this one) re-print old data with new timestamps. Evidence + scripts: `saas/scripts/_qa/recovery-tickets/`
+(untracked: `evidence/T-n.json` per ticket, `scan-tickets.cjs`, `map-orphans.cjs`, `storage-inventory.txt`).
+
+**T-tickets (R6) — 24 real tickets, nothing restored yet:**
+- Full `tix show` text (description + timeline as of the date): T-1 (10-08), T-4 (10-08), T-5 (10-15), T-6 (10-08), T-7 (10-18),
+  T-8 (10-12), T-9 (10-12), T-10 (10-08), T-11 (10-08), T-12 (10-14), T-13 (10-12), T-14 (10-12), T-21 (10-18), T-22 (10-18),
+  T-23 (10-08, short), T-84 (10-14), T-114 (10-19, description only).
+- Original `tix add` text (+ the review cards / comments Claude posted): T-72, T-79, T-83, T-115, T-136, **T-151, T-152**.
+- Gaps: anything after each snapshot that wasn't a Claude `tix` command (Max's UI edits/moves/comments, QA comments posted
+  by scripts). Status per ticket is known from the 10-18 export + a 10-19 14:02Z list. Board screenshot 10-14
+  (`3fdce105…/scratchpad/shots/desk-board.png`) gives comment counts / labels.
+- **Correction to §3/audit A:** T-137…T-150 were NOT lost tickets — they were the staging copies of production reports
+  P-1…P-14 (catch-up 10-19 13:40Z), already re-copied. T-151 (print-sheet columns) and T-152 (pricing model) have full text.
+- Untraced numbers (53, 56, 59, 65, 68, 74–78, 80–82, 85, 87, 88, 93, 99, 101, 103, 105, 106, 112, 116, 122, 124, 125, 131,
+  133, 135): no trace in any transcript, the vault, tests or git → automated test tickets. ~80 more are "ZZ…" test debris.
+**P-tickets — staging-side state lost on the re-copy:** P-2…P-5, P-13, P-14 had been closed (Claude's own test reports,
+closed on Max's say-so 10-19); links P-7↔T-151 and P-11↔T-152.
+**Storage orphans (49):** 22 bug-report screenshots (9 belong to real tickets T-1/4/5/6/7/8/10/11/114; the rest test
+reports; one = an unsent report 10-19 18:47Z — Max's browser on staging Admin → Orders, Edit Order panel, no ticket was ever
+created); 15 ticket attachments = ZZ test tickets or duplicates of the re-copied P-ticket images; 12 release images = the
+old copies of the drafts recreated from the seed (no Claude edits to drafts after 10-15 → recreated = last Claude state).
+**Not recoverable / not worth it:** 7 Setting + 13 SiteContent rows (no full key dump exists anywhere pre-wipe); the
+"missing masterclass item" was the wizard tenant's (staging showed the same 4 items on 10-15 as now); staging QA orders,
+payments, events, invoices, demo analytics (counts only survive). No other schema/copy exists in the dev DB.
+
+### 10b. Restored 2026-10-21 (Max: "recover what you can") — dev only, backup `2026-10-21_113133_dev` taken first
+`saas/scripts/_qa/recovery-tickets/` (untracked): `scan-tickets.cjs` → `evidence/` → `build-manifest.cjs` → `manifest.json`
+→ `restore-tickets.ts` (dry run by default, `--write`, dev only, one transaction, re-run = no-op — verified 33/33 skipped).
+- **24 tickets back with their original numbers** (T-1, 4–14, 21–23, 72, 79, 83, 84, 114, 115, 136, 151, 152): title,
+  description, type/priority/area, status, live markers + dates, analysis/solution, links, and the timeline merged from every
+  pre-wipe snapshot plus Claude's own `tix` commands (only ones whose output confirmed success). Each ends with a
+  "Restored 2026-10-21…" comment saying the history is complete only as far as Claude saw it. `externalRef = recovery:T-n`.
+- **9 screenshots re-attached** (T-1, 4, 5, 6, 7, 8, 10, 11, 114) from the surviving `bug-report-screenshots` files.
+- **P-tickets:** P-2…P-5, P-13, P-14 closed again (obsolete, note on each); links P-7 → T-151, P-11 → T-152. Old refs
+  T-143/T-147 in T-151/T-152 remapped to P-7/P-11's new numbers (T-207/T-211).
+- **T-215 (new):** Max's unsent 2026-10-19 report, filed from his 2026-10-21 explanation — "everything editable from the order
+  page; whatever the edit icon can edit must be editable there too" (screenshot attached, linked to T-152; open question:
+  should visit type + price become editable).
+- `vault/Tickets.md` re-exported (39 tickets). **R6 = done** for everything recoverable; still lost: Max's own board edits
+  after each snapshot, ~110 test tickets (not worth it), 13 orphaned storage files that belong to test tickets.

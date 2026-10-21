@@ -1,0 +1,421 @@
+<title>Add-ons Layout Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a review sheet — each decision is a band with option frames side by side (stacking on phones).
+   Outer page = neutral review paper. Inside the frames = the tenant's real theme (Cream & wine; Midnight cellar in dark). */
+:root {
+  --paper: #EEF0EF; --ink: #1D2321; --ink-soft: #5A6560; --rule: #CDD3D0; --card: #FFFFFF;
+  --pick: #1F6F5C; --pick-soft: #DCEDE7;
+  /* tenant theme: Cream & wine (themePresets.ts) */
+  --m-bg: #F5EFE6; --m-surface: #FFF9F3; --m-text: #1C1008; --m-muted: #6B5A47;
+  --m-border: #E0D4C0; --m-faint: #A89070; --m-brand: #7C1D23; --m-on-brand: #FFF9F3;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32;
+  /* tenant theme: Midnight cellar */
+  --m-bg: #1E1B18; --m-surface: #262220; --m-text: #F1E9DD; --m-muted: #A99A87;
+  --m-border: #3A332C; --m-faint: #A88B5C; --m-brand: #C9A227; --m-on-brand: #1E1B18;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32;
+  --m-bg: #1E1B18; --m-surface: #262220; --m-text: #F1E9DD; --m-muted: #A99A87;
+  --m-border: #3A332C; --m-faint: #A88B5C; --m-brand: #C9A227; --m-on-brand: #1E1B18;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 12px; max-width: 70ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+h1 { font-family: var(--display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-size: clamp(22px, 3vw, 28px); line-height: 1.15; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--ink-soft); font-size: 17px; }
+section.decision { display: grid; gap: 20px; border-top: 2px solid var(--ink); padding-top: 20px; }
+.dhead { display: grid; gap: 8px; max-width: 75ch; }
+.dhead .q { color: var(--ink-soft); }
+.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; align-items: start; }
+.options.wide { grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+.opt { display: grid; gap: 12px; min-width: 0; }
+.opt-label { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.opt-label b { font-family: var(--display); font-size: 20px; }
+.tag { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--pick-soft); color: var(--pick); }
+.opt-note { color: var(--ink-soft); font-size: 15px; }
+.opt-note ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.rec { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--pick); padding: 14px 16px; max-width: 75ch; font-size: 15px; }
+.rec strong { color: var(--pick); }
+
+/* ── Mockup frames: the tenant's real theme ── */
+.phone { width: 100%; max-width: 360px; background: var(--m-bg); color: var(--m-text); border: 8px solid var(--ink); border-radius: 30px; padding: 18px 14px 16px; position: relative; overflow: hidden; display: grid; gap: 14px; font-size: 14px; }
+.screen { width: 100%; background: var(--m-bg); color: var(--m-text); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 16px; font-size: 14px; min-width: 0; }
+.ctx { font-size: 12px; color: var(--m-muted); display: flex; gap: 6px; flex-wrap: wrap; }
+.ctx span { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 999px; padding: 2px 9px; }
+.flabel { font-size: 13px; font-weight: 600; color: var(--m-text); margin-bottom: 6px; display: block; }
+.box { border: 1px solid var(--m-border); border-radius: 8px; overflow: hidden; background: var(--m-surface); }
+.rowbtn { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; background: var(--m-surface); color: var(--m-muted); border: 0; font: inherit; text-align: left; cursor: pointer; }
+.rowbtn.has { color: var(--m-text); }
+.rowbtn svg { width: 14px; height: 14px; flex: none; color: var(--m-faint); transition: transform .15s; }
+.rowbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.list { border-top: 1px solid var(--m-border); }
+.item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--m-border); }
+.item:first-child { border-top: 0; }
+.item .nm { flex: 1; min-width: 0; }
+.item .nm small { display: block; color: var(--m-faint); font-size: 12px; }
+.sub { font-size: 11px; font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--m-faint); padding: 10px 14px 4px; border-top: 1px solid var(--m-border); }
+.sub:first-child { border-top: 0; }
+.dot { width: 10px; height: 26px; border-radius: 3px; flex: none; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--m-border); border-radius: 6px; overflow: hidden; flex: none; }
+.stepper button { width: 28px; height: 28px; border: 0; background: var(--m-bg); color: var(--m-text); font: inherit; font-size: 16px; cursor: pointer; }
+.stepper output { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+.calc { font-size: 12px; color: var(--m-muted); font-variant-numeric: tabular-nums; }
+.chk { width: 16px; height: 16px; accent-color: var(--m-brand); flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 999px; padding: 4px 6px 4px 10px; font-size: 13px; }
+.chip button { border: 0; background: none; color: var(--m-faint); cursor: pointer; font: inherit; padding: 0 4px; }
+.addbtn { border: 1px dashed var(--m-faint); color: var(--m-brand); background: transparent; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; width: 100%; }
+.total { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--m-border); padding-top: 10px; font-variant-numeric: tabular-nums; }
+.total b { font-size: 18px; }
+.sheet { position: absolute; inset: auto 0 0 0; background: var(--m-surface); border-top: 1px solid var(--m-border); border-radius: 16px 16px 0 0; padding: 14px; display: grid; gap: 10px; box-shadow: 0 -12px 30px rgb(0 0 0 / .18); }
+.sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--m-border); margin: 0 auto 2px; }
+.sheet h4 { margin: 0; font-size: 15px; }
+.wcards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wcard { border: 1px solid var(--m-border); border-radius: 8px; padding: 8px; display: grid; gap: 6px; background: var(--m-bg); }
+.wcard .bottle { height: 54px; border-radius: 6px; display: grid; place-items: center; }
+.wcard .bottle svg { height: 46px; }
+.wcard .t { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.wcard .p { font-size: 12px; color: var(--m-muted); }
+.primary { background: var(--m-brand); color: var(--m-on-brand); border: 0; border-radius: 8px; padding: 10px; font: inherit; font-weight: 700; cursor: pointer; }
+.dim { position: absolute; inset: 0; background: rgb(0 0 0 / .35); }
+
+/* admin */
+.card { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 10px; overflow: hidden; }
+.card > h5 { margin: 0; padding: 10px 14px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--m-border); flex-wrap: wrap; }
+.card > h5 small { font-weight: 400; color: var(--m-muted); }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 14px; border-top: 1px solid var(--m-border); white-space: nowrap; }
+th { font-weight: 600; color: var(--m-muted); font-size: 12px; border-top: 0; }
+td.n, th.n { text-align: right; }
+tr.grp td { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--m-faint); padding-top: 10px; }
+tr.sum td { font-weight: 700; }
+.x { color: var(--m-faint); }
+.mini { font-size: 12px; color: var(--m-muted); }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--m-border); }
+.sbtn { border: 1px solid var(--m-border); background: var(--m-bg); color: var(--m-text); border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.sbtn.brand { background: var(--m-brand); color: var(--m-on-brand); border-color: var(--m-brand); }
+.offbill { border-style: dashed; }
+.badge { font-size: 11px; border: 1px solid var(--m-border); border-radius: 999px; padding: 1px 8px; color: var(--m-muted); }
+.menu { position: relative; display: inline-block; }
+.menu ul { position: absolute; left: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 8px; box-shadow: 0 8px 20px rgb(0 0 0 / .15); min-width: 170px; z-index: 2; }
+.menu li { padding: 6px 10px; border-radius: 5px; font-size: 13px; }
+.menu li:hover { background: var(--m-bg); }
+
+/* invoice */
+.paper { background: var(--m-surface); color: var(--m-text); border: 1px solid var(--rule); padding: 18px; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 0; }
+.paper .tbl-wrap td, .paper .tbl-wrap th { padding: 5px 8px; }
+.paper h6 { margin: 0 0 8px; font-size: 13px; }
+.disc td { color: var(--m-muted); font-style: italic; }
+
+.skip { display: grid; gap: 10px; max-width: 75ch; }
+.skip ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink-soft); }
+button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">T-7 + T-22 · Plan-AddOnsAndWine · mockups, not built</div>
+  <h1>Add-ons and table wine: four layout choices</h1>
+  <p class="lede">Each band below is one decision. Pick A or B (or mix). The frames use Nikalas Marani's real theme and work: rows open, +/− change quantities. Example booking: <b>Caucasus Travel</b>, 12 guests, tasting + lunch. Caucasus Travel has an agreed price on Saperavi and 10% off other wines.</p>
+</header>
+
+<!-- ───────────── Decision 1 ───────────── -->
+<section class="decision">
+  <div class="dhead">
+    <div class="eyebrow">Decision 1 · public booking form</div>
+    <h2>How guests add wine for the table</h2>
+    <p class="q">You said "just a small button, add wine or something". Two ways to do that.</p>
+  </div>
+  <div class="options">
+    <div class="opt">
+      <div class="opt-label"><b>A · A row like masterclass</b></div>
+      <div class="phone" data-frame>
+        <div class="ctx"><span>Sat 24 Oct</span><span>12 guests</span><span>Tasting + lunch</span></div>
+        <div>
+          <span class="flabel">Wine for the table</span>
+          <div class="box">
+            <button class="rowbtn has" type="button" aria-expanded="true" data-toggle>
+              <span data-summary data-empty="Add wine for the table (5 wines)">3 bottles · 114.20 ₾</span>
+              <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <div class="list" data-list>
+              <div class="item"><span class="dot" style="background:#5B0F1A"></span><span class="nm">Saperavi 2021<small>Red · dry · 40 ₾ agreed</small></span><span class="stepper" data-price="40"><button type="button" data-step="-1">−</button><output>2</output><button type="button" data-step="1">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#D9A441"></span><span class="nm">Rkatsiteli 2022<small>Amber · dry · 38 ₾ −10%</small></span><span class="stepper" data-price="34.2"><button type="button" data-step="-1">−</button><output>1</output><button type="button" data-step="1">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#E9DFA0"></span><span class="nm">Mtsvane 2022<small>White · dry · 42 ₾ −10%</small></span><span class="stepper" data-price="37.8"><button type="button" data-step="-1">−</button><output>0</output><button type="button" data-step="1">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#C98A55"></span><span class="nm">Kisi 2021<small>Amber · dry · 55 ₾ −10%</small></span><span class="stepper" data-price="49.5"><button type="button" data-step="-1">−</button><output>0</output><button type="button" data-step="1">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#E7A3A6"></span><span class="nm">Tavkveri rosé 2023<small>Rosé · dry · 35 ₾ −10%</small></span><span class="stepper" data-price="31.5"><button type="button" data-step="-1">−</button><output>0</output><button type="button" data-step="1">+</button></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="total"><span>Wine</span><b data-total>114.20 ₾</b></div>
+      </div>
+      <div class="opt-note">Same look as the masterclass row today.
+        <ul><li>One tap opens the list, a second tap closes it</li><li>Plain list, no pictures</li><li>Takes the least room on the form</li></ul></div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-label"><b>B · "+ Add wine" button and a picker</b></div>
+      <div class="phone" data-frame>
+        <div class="ctx"><span>Sat 24 Oct</span><span>12 guests</span><span>Tasting + lunch</span></div>
+        <div>
+          <span class="flabel">Wine for the table</span>
+          <div class="chips">
+            <span class="chip">Saperavi 2021 × 2 · 80 ₾<button type="button" aria-label="Remove Saperavi">✕</button></span>
+            <span class="chip">Rkatsiteli 2022 × 1 · 34.20 ₾<button type="button" aria-label="Remove Rkatsiteli">✕</button></span>
+          </div>
+          <button class="addbtn" type="button">+ Add wine</button>
+        </div>
+        <div class="total"><span>Wine</span><b>114.20 ₾</b></div>
+      </div>
+      <div class="opt-note">Chosen bottles show as small tags. The button opens the picker (right).</div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-label"><b>B · …picker open</b></div>
+      <div class="phone" style="min-height:430px">
+        <div class="ctx"><span>Sat 24 Oct</span><span>12 guests</span></div>
+        <span class="flabel">Wine for the table</span>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h4>Add wine for the table</h4>
+          <div class="wcards">
+            <div class="wcard"><div class="bottle" style="background:#5B0F1A22"><svg viewBox="0 0 20 60"><path d="M8 0h4v14c0 3 5 6 5 12v32H3V26c0-6 5-9 5-12z" fill="#5B0F1A"/></svg></div><div class="t">Saperavi 2021</div><div class="p">40 ₾ · agreed</div><span class="stepper"><button type="button">−</button><output>2</output><button type="button">+</button></span></div>
+            <div class="wcard"><div class="bottle" style="background:#D9A44122"><svg viewBox="0 0 20 60"><path d="M8 0h4v14c0 3 5 6 5 12v32H3V26c0-6 5-9 5-12z" fill="#D9A441"/></svg></div><div class="t">Rkatsiteli 2022</div><div class="p">38 ₾ · −10%</div><span class="stepper"><button type="button">−</button><output>1</output><button type="button">+</button></span></div>
+            <div class="wcard"><div class="bottle" style="background:#E9DFA022"><svg viewBox="0 0 20 60"><path d="M8 0h4v14c0 3 5 6 5 12v32H3V26c0-6 5-9 5-12z" fill="#CFC27A"/></svg></div><div class="t">Mtsvane 2022</div><div class="p">42 ₾ · −10%</div><span class="stepper"><button type="button">−</button><output>0</output><button type="button">+</button></span></div>
+            <div class="wcard"><div class="bottle" style="background:#C98A5522"><svg viewBox="0 0 20 60"><path d="M8 0h4v14c0 3 5 6 5 12v32H3V26c0-6 5-9 5-12z" fill="#C98A55"/></svg></div><div class="t">Kisi 2021</div><div class="p">55 ₾ · −10%</div><span class="stepper"><button type="button">−</button><output>0</output><button type="button">+</button></span></div>
+          </div>
+          <button class="primary" type="button">Done · 3 bottles · 114.20 ₾</button>
+        </div>
+      </div>
+      <div class="opt-note">Uses the wine photos you already have in the catalogue. Looks nicer but is a popup inside a form: one more thing to open and close on a phone.</div>
+    </div>
+  </div>
+  <p class="rec"><strong>My recommendation: A.</strong> It matches the masterclass row guests already see, and it's half the work. B is worth it if you want the bottles to <em>sell</em> (photos make people order more). Either way the admin can add wine later from the booking page.</p>
+</section>
+
+<!-- ───────────── Decision 2 ───────────── -->
+<section class="decision">
+  <div class="dhead">
+    <div class="eyebrow">Decision 2 · public booking form</div>
+    <h2>Several add-on groups on one form</h2>
+    <p class="q">With Masterclass, Food and Wine as separate groups, do they each get a row, or share one? Both show the unit fix: per-person items multiply by guests on their own, flat fees have no quantity box.</p>
+  </div>
+  <div class="options">
+    <div class="opt">
+      <div class="opt-label"><b>A · One row per group</b></div>
+      <div class="phone" data-frame>
+        <div class="ctx"><span>12 guests</span><span>Tasting + lunch</span></div>
+        <div>
+          <span class="flabel">Masterclass</span>
+          <div class="box">
+            <button class="rowbtn has" type="button" aria-expanded="true" data-toggle><span>1 selected · 420 ₾</span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <div class="list" data-list>
+              <div class="item"><input class="chk" type="checkbox" id="m1" checked><label class="nm" for="m1">Khinkali folding class<small class="calc">35 ₾ per person × 12 guests = 420 ₾</small></label></div>
+              <div class="item"><input class="chk" type="checkbox" id="m2"><label class="nm" for="m2">Churchkhela making<small>25 ₾ per person</small></label></div>
+              <div class="item"><input class="chk" type="checkbox" id="m3"><label class="nm" for="m3">Private cellar tour<small>150 ₾ flat, once per booking</small></label></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="flabel">Food</span>
+          <div class="box"><button class="rowbtn" type="button" aria-expanded="false" data-toggle><span>Add food (2 available)</span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <div class="list" data-list hidden>
+              <div class="item"><span class="nm">Extra khachapuri<small>18 ₾ per piece</small></span><span class="stepper" data-price="18"><button type="button" data-step="-1">−</button><output>0</output><button type="button" data-step="1">+</button></span></div>
+              <div class="item"><span class="nm">Cheese platter<small>40 ₾ per piece</small></span><span class="stepper" data-price="40"><button type="button" data-step="-1">−</button><output>0</output><button type="button" data-step="1">+</button></span></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="flabel">Wine for the table</span>
+          <div class="box"><button class="rowbtn has" type="button" aria-expanded="false"><span>3 bottles · 114.20 ₾</span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
+        </div>
+      </div>
+      <div class="opt-note">Each group has its own heading in English and Georgian, set by the admin. The admin also decides who sees each group (companies, individuals) and the order of the rows.</div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-label"><b>B · One shared row</b></div>
+      <div class="phone">
+        <div class="ctx"><span>12 guests</span><span>Tasting + lunch</span></div>
+        <div>
+          <span class="flabel">Extras for your visit</span>
+          <div class="box">
+            <button class="rowbtn has" type="button" aria-expanded="true" data-toggle><span>3 selected · 534.20 ₾</span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <div class="list" data-list>
+              <div class="sub">Masterclass</div>
+              <div class="item"><input class="chk" type="checkbox" id="b1" checked><label class="nm" for="b1">Khinkali folding class<small class="calc">35 ₾ × 12 guests = 420 ₾</small></label></div>
+              <div class="item"><input class="chk" type="checkbox" id="b2"><label class="nm" for="b2">Churchkhela making<small>25 ₾ per person</small></label></div>
+              <div class="sub">Food</div>
+              <div class="item"><span class="nm">Extra khachapuri<small>18 ₾ per piece</small></span><span class="stepper"><button type="button">−</button><output>0</output><button type="button">+</button></span></div>
+              <div class="sub">Wine for the table</div>
+              <div class="item"><span class="dot" style="background:#5B0F1A"></span><span class="nm">Saperavi 2021<small>40 ₾ agreed</small></span><span class="stepper"><button type="button">−</button><output>2</output><button type="button">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#D9A441"></span><span class="nm">Rkatsiteli 2022<small>38 ₾ −10%</small></span><span class="stepper"><button type="button">−</button><output>1</output><button type="button">+</button></span></div>
+              <div class="item"><span class="dot" style="background:#E9DFA0"></span><span class="nm">Mtsvane 2022<small>42 ₾ −10%</small></span><span class="stepper"><button type="button">−</button><output>0</output><button type="button">+</button></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="opt-note">Only one row on the form, but it becomes a long list once it's open. With 3 or more groups it gets hard to scan on a phone.</div>
+    </div>
+  </div>
+  <p class="rec"><strong>My recommendation: A.</strong> It keeps the compact form from T-21, and each group can be shown or hidden for companies and individuals separately.</p>
+</section>
+
+<!-- ───────────── Decision 3 ───────────── -->
+<section class="decision">
+  <div class="dhead">
+    <div class="eyebrow">Decision 3 · admin booking page</div>
+    <h2>What's on the bill, and what the visit sold separately</h2>
+    <p class="q">This is where staff add wine during the dinner, and where guests' own purchases show up (linked to the visit, never on the invoice).</p>
+  </div>
+  <div class="options wide">
+    <div class="opt">
+      <div class="opt-label"><b>A · One card per kind</b></div>
+      <div class="screen">
+        <div class="card"><h5>Add-ons <button class="sbtn" type="button">+ Add</button></h5>
+          <div class="tbl-wrap"><table><tr><th>Item</th><th>Unit</th><th class="n">Qty</th><th class="n">Total</th></tr>
+          <tr><td>Khinkali folding class</td><td>per person</td><td class="n">12</td><td class="n">420.00</td></tr></table></div></div>
+        <div class="card"><h5>Wine for the table <button class="sbtn" type="button">+ Add wine</button></h5>
+          <div class="tbl-wrap"><table><tr><th>Wine</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Total</th></tr>
+          <tr><td>Saperavi 2021</td><td class="n">2</td><td class="n">40.00 <span class="x">agreed</span></td><td class="n">80.00</td></tr>
+          <tr><td>Rkatsiteli 2022</td><td class="n">1</td><td class="n">38.00 <span class="x">−10%</span></td><td class="n">34.20</td></tr></table></div></div>
+        <div class="card"><h5>Extras <button class="sbtn" type="button">+ Add</button></h5>
+          <div class="tbl-wrap"><table><tr><td>Transport from Tbilisi</td><td class="n">200.00</td></tr></table></div></div>
+        <div class="card offbill"><h5>Sales from this visit <small>not on the invoice</small></h5>
+          <div class="tbl-wrap"><table><tr><td>Nino K. · 3 bottles</td><td class="n">126.00</td><td><span class="badge">Paid</span></td></tr>
+          <tr><td>David M. · 6 bottles</td><td class="n">234.00</td><td><span class="badge">Paid</span></td></tr></table></div>
+          <div class="btnrow"><button class="sbtn" type="button">Record guest purchase</button></div></div>
+      </div>
+      <div class="opt-note">Closest to today's page: the Masterclass card stays, and Wine and Extras sit beside it. Four cards to scroll past.</div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-label"><b>B · One "On the invoice" card</b></div>
+      <div class="screen">
+        <div class="card"><h5>On the invoice
+            <span class="menu"><button class="sbtn brand" type="button" data-menu aria-expanded="false">+ Add ▾</button>
+              <ul hidden><li>Add-on (masterclass, food…)</li><li>Wine for the table</li><li>Extra charge</li></ul></span></h5>
+          <div class="tbl-wrap"><table>
+            <tr><th>Line</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Total</th></tr>
+            <tr class="grp"><td colspan="4">Masterclass</td></tr>
+            <tr><td>Khinkali folding class</td><td class="n">12</td><td class="n">35.00 <span class="x">/person</span></td><td class="n">420.00</td></tr>
+            <tr class="grp"><td colspan="4">Wine for the table</td></tr>
+            <tr><td>Saperavi 2021</td><td class="n">2</td><td class="n">40.00 <span class="x">agreed</span></td><td class="n">80.00</td></tr>
+            <tr><td>Rkatsiteli 2022</td><td class="n">1</td><td class="n">38.00 <span class="x">−10%</span></td><td class="n">34.20</td></tr>
+            <tr class="grp"><td colspan="4">Extras</td></tr>
+            <tr><td>Transport from Tbilisi</td><td class="n"></td><td class="n"></td><td class="n">200.00</td></tr>
+            <tr class="sum"><td colspan="3">Added to the visit price</td><td class="n">734.20</td></tr>
+          </table></div></div>
+        <div class="card offbill"><h5>Sales from this visit <small>guests' own purchases · not on the invoice</small></h5>
+          <div class="tbl-wrap"><table><tr><td>Nino K. · 3 bottles</td><td class="n">126.00</td><td><span class="badge">Paid</span></td></tr>
+          <tr><td>David M. · 6 bottles</td><td class="n">234.00</td><td><span class="badge">Paid</span></td></tr>
+          <tr class="sum"><td>Total from this visit</td><td class="n">360.00</td><td></td></tr></table></div>
+          <div class="btnrow"><button class="sbtn" type="button">Record guest purchase</button></div></div>
+      </div>
+      <div class="opt-note">One card reads like the invoice will, with one Add button. The dashed card underneath makes it obvious what is <em>not</em> billed to the company.</div>
+    </div>
+  </div>
+  <p class="rec"><strong>My recommendation: B.</strong> Staff see what the company will be billed in one place, laid out like the invoice, with what guests bought for themselves clearly set apart.</p>
+</section>
+
+<!-- ───────────── Decision 4 ───────────── -->
+<section class="decision">
+  <div class="dhead">
+    <div class="eyebrow">Decision 4 · invoice (print + email)</div>
+    <h2>How company wine discounts show on the invoice</h2>
+    <p class="q">Same money either way: 114.20 ₾. Shown in English here. The printed invoice is in Georgian.</p>
+  </div>
+  <div class="options">
+    <div class="opt">
+      <div class="opt-label"><b>A · Discount inside each line</b></div>
+      <div class="paper"><h6>Wine for the table</h6><div class="tbl-wrap"><table>
+        <tr><td>Saperavi 2021 (agreed price)</td><td class="n">2 × 40.00</td><td class="n">80.00</td></tr>
+        <tr><td>Rkatsiteli 2022 (38.00 −10%)</td><td class="n">1 × 34.20</td><td class="n">34.20</td></tr>
+        <tr class="sum"><td>Wine</td><td></td><td class="n">114.20</td></tr></table></div></div>
+      <div class="opt-note">Each line shows what it cost. But rounding per line can come out 1 tetri different from how wine orders calculate today.</div>
+    </div>
+    <div class="opt">
+      <div class="opt-label"><b>B · A separate discount line</b></div>
+      <div class="paper"><h6>Wine for the table</h6><div class="tbl-wrap"><table>
+        <tr><td>Saperavi 2021 (agreed price)</td><td class="n">2 × 40.00</td><td class="n">80.00</td></tr>
+        <tr><td>Rkatsiteli 2022</td><td class="n">1 × 38.00</td><td class="n">38.00</td></tr>
+        <tr class="disc"><td>Company discount 10% (not on agreed prices)</td><td></td><td class="n">−3.80</td></tr>
+        <tr class="sum"><td>Wine</td><td></td><td class="n">114.20</td></tr></table></div></div>
+      <div class="opt-note">Calculated exactly like wine orders today: % taken once from the non-agreed bottles. The company sees its discount spelled out.</div>
+    </div>
+  </div>
+  <p class="rec"><strong>My recommendation: B.</strong> It uses the same calculation as wine orders, so the two can never disagree, and the discount shows as a line of its own.</p>
+</section>
+
+<section class="decision">
+  <div class="dhead">
+    <div class="eyebrow">No mockup needed</div>
+    <h2>Only one sensible way to do these</h2>
+  </div>
+  <div class="skip"><ul>
+    <li><b>Wines admin:</b> an "Offer on bookings" switch on each wine (on each vintage if the tenant shows vintages).</li>
+    <li><b>Companies tab:</b> a switch "Use this company's wine prices for table wine". The existing % and agreed-price section also appears for booking companies when it's on.</li>
+    <li><b>Admin → Add-ons</b> (renamed from Masterclass): groups listed in order, each with its English/Georgian name and who sees it, and its items underneath. Masterclass becomes the first group automatically. "Wine for the table" appears as one group you can rename, move or switch off.</li>
+  </ul></div>
+</section>
+</div>
+
+<script>
+(function () {
+  const fmt = n => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '') + ' ₾';
+  document.querySelectorAll('[data-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const list = btn.parentElement.querySelector('[data-list]');
+      if (!list) return;
+      const open = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!open));
+      list.hidden = open;
+    });
+  });
+  document.querySelectorAll('[data-frame]').forEach(frame => {
+    const recalc = () => {
+      let bottles = 0, sum = 0;
+      frame.querySelectorAll('.stepper[data-price]').forEach(s => {
+        const q = +s.querySelector('output').textContent;
+        bottles += q; sum += q * +s.dataset.price;
+      });
+      const summary = frame.querySelector('[data-summary]');
+      if (summary) {
+        summary.textContent = bottles ? `${bottles} bottle${bottles > 1 ? 's' : ''} · ${fmt(sum)}` : summary.dataset.empty;
+        summary.parentElement.classList.toggle('has', bottles > 0);
+      }
+      const total = frame.querySelector('[data-total]');
+      if (total) total.textContent = fmt(sum);
+    };
+    frame.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
+      const out = b.parentElement.querySelector('output');
+      out.textContent = Math.max(0, Math.min(99, +out.textContent + +b.dataset.step));
+      recalc();
+    }));
+  });
+  document.querySelectorAll('[data-menu]').forEach(b => {
+    const ul = b.nextElementSibling;
+    b.addEventListener('click', () => { ul.hidden = !ul.hidden; b.setAttribute('aria-expanded', String(!ul.hidden)); });
+  });
+})();
+</script>
