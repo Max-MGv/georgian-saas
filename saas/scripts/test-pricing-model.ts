@@ -20,7 +20,8 @@ import {
   ratesForParty, ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
-import { checkBookingCounts, checkMasterclassLines, type CountRules } from '../lib/bookingInput'
+import { checkBookingCounts, checkMasterclassLines, countRulesFromSettings, type CountRules, type CountRuleKey } from '../lib/bookingInput'
+import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
 
 let passed = 0, failed = 0
 function check(label: string, actual: unknown, expected: unknown) {
@@ -148,11 +149,13 @@ console.log('Input checks (#93)')
   const simpleLunch = checkBookingCounts({ bookingType: 'COMPANY', layout: 'single', form: 'public', visitType: 'LUNCH', guestCount: 8 }, none)
   check('company simple form: Lunch only (D-10)', simpleLunch.ok && simpleLunch.counts, c(0, 8, 0))
 
-  // Visit type vs boxes (A-6; Q-3 default: refuse public, warn admin).
+  // Visit type vs boxes (A-6; Q-3 answered by Max 2026-10-21: refused everywhere, public and admin).
   check('Tasting visit with lunch guests → refused', err(pub({ visitType: 'TASTING', tastingOnly: 4, tastingLunch: 2 })), 'visit_mismatch')
   check('Tasting + Lunch visit with no lunch guest → refused (F-2 shape)', err(pub({ tastingOnly: 5, free: 2 })), 'visit_mismatch')
   const adm = checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'admin', visitType: 'TASTING_LUNCH', tastingOnly: 5, free: 2 }, none)
-  check('…on an admin screen it is a warning, not a refusal', adm.ok && adm.warnings.map(w => w.code), ['visit_mismatch'])
+  check('…on an admin screen it is refused too (Q-3)', adm.ok ? 'ok' : adm.error.code, 'visit_mismatch')
+  check('Lunch only visit with tasting guests → refused', err(pub({ visitType: 'LUNCH', lunchOnly: 4, tastingLunch: 2 })), 'visit_mismatch')
+  check('Lunch only visit, only Lunch only guests → ok', err(pub({ visitType: 'LUNCH', lunchOnly: 6, free: 1 })), 'ok')
 
   // Minimums, option C (D-11).
   const withGroup: CountRules = { ...none, groupMin: 4 }
@@ -212,6 +215,33 @@ for (const which of ['dev', 'prod']) {
   console.log(`  ${which}: ${same} identical, ${diffs.length} different, ${skipped} skipped (no frozen rates)`)
   for (const d of diffs.slice(0, 10)) console.error(`    ${d}`)
   check(`${which}: every order with frozen rates re-prices to its stored total`, diffs.length, 0)
+}
+
+console.log('Rules from settings (Chunk 6)')
+{
+  const settings = (m: Partial<Record<CountRuleKey, string>>) => (k: CountRuleKey) => m[k] ?? ''
+  const base = { min_guests_tasting: '4', min_guests_tasting_lunch: '6', max_guests_tasting: '', max_guests_tasting_lunch: '40' }
+  check('Lunch only follows Tasting + Lunch rules (A-5)', rulesVisitType('LUNCH'), 'TASTING_LUNCH')
+  check('Tasting follows Tasting rules', rulesVisitType('TASTING'), 'TASTING')
+  check('lead time: Lunch only = Tasting + Lunch hours', getLeadHours('LUNCH', true, 3, 2, 6), 6)
+  check('lead time: no split = single value for every type', getLeadHours('LUNCH', false, 3, 2, 6), 3)
+  check('visit length: Lunch only = Tasting + Lunch minutes', getVisitDurationMinutes('LUNCH', 90, 180), 180)
+  const t = countRulesFromSettings(settings(base), 'TASTING', 'COMPANY')
+  check('Tasting: group min/max from the Tasting keys; company minimums blank = none (day one unchanged)', t, { groupMin: 4, groupMax: null, productMins: { tastingOnly: null, lunchOnly: null, tastingLunch: null } })
+  const l = countRulesFromSettings(settings(base), 'LUNCH', 'COMPANY')
+  check('Lunch only: group min/max from the Tasting + Lunch keys', [l.groupMin, l.groupMax], [6, 40])
+  check('blank group minimum falls back to 4, as createBooking always has', countRulesFromSettings(settings({}), 'TASTING_LUNCH', 'COMPANY').groupMin, 4)
+  const mins = settings({ ...base, min_guests_company_tasting_only: '3', min_guests_company_lunch_only: ' 8 ', min_guests_company_tasting_lunch: 'abc' })
+  check('company minimums: set / spaces trimmed / garbage = none', countRulesFromSettings(mins, 'TASTING_LUNCH', 'COMPANY').productMins, { tastingOnly: 3, lunchOnly: 8, tastingLunch: null })
+  check('company minimum "0" means none', countRulesFromSettings(settings({ min_guests_company_lunch_only: '0' }), 'TASTING_LUNCH', 'COMPANY').productMins.lunchOnly, null)
+  check('individuals never get company minimums', countRulesFromSettings(mins, 'TASTING_LUNCH', 'INDIVIDUAL').productMins, { tastingOnly: null, lunchOnly: null, tastingLunch: null })
+  // Wired end to end: settings → rules → check.
+  const r = countRulesFromSettings(mins, 'TASTING_LUNCH', 'COMPANY')
+  const e = (x: ReturnType<typeof checkBookingCounts>) => (x.ok ? 'ok' : x.error.code)
+  check('settings-wired: 5 Lunch only < company minimum 8 → refused', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'public', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'below_product_min')
+  check('settings-wired: same booking on an admin screen → ok (A-8)', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'admin', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'ok')
+  // The old two-bucket formula must never price a Lunch only party (it has no Lunch only rate).
+  throws('priceBooking() refuses a Lunch only visit', () => priceBooking({ tasting: 5000, lunch: 9500, registration: 0 }, { guestCount: 8, tastingGuests: 0, lunchGuests: 0 }, 'LUNCH', NO_LINES))
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

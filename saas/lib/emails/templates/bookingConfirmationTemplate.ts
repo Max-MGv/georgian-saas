@@ -38,19 +38,19 @@ type BookingEmailLocale = 'en' | 'ka'
 const LABELS: Record<BookingEmailLocale, {
   summary: string; visitType: string; date: string; time: string; guests: string
   paid: string; estimatedTotal: string; cancellationPolicy: string
-  tasting: string; tastingLunch: string
+  tasting: string; tastingLunch: string; lunch: string
 }> = {
   en: {
     summary: 'Booking Summary', visitType: 'Visit type', date: 'Date', time: 'Time', guests: 'Guests',
     paid: 'Paid', estimatedTotal: 'Estimated total',
     cancellationPolicy: '48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.',
-    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch',
+    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch', lunch: 'Lunch',
   },
   ka: {
     summary: 'ჯავშნის დეტალები', visitType: 'ვიზიტის ტიპი', date: 'თარიღი', time: 'დრო', guests: 'სტუმრები',
     paid: 'გადახდილია', estimatedTotal: 'სავარაუდო ჯამი',
     cancellationPolicy: 'მოქმედებს გაუქმების 48-საათიანი პოლიტიკა. გთხოვთ, გვაცნობოთ სტუმრობამდე მინიმუმ 48 საათით ადრე, თუ გჭირდებათ გაუქმება ან გადატანა.',
-    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი',
+    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი', lunch: 'სადილი',
   },
 }
 
@@ -60,7 +60,7 @@ export type BookingEmailData = {
   date: string        // e.g. "Saturday, 24 May 2026" — pre-formatted by the caller, see lib/emails/templates/dateFormat.ts
   timeSlot: string    // e.g. "14:00"
   guestCount: number
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   totalPrice: number
   /** Which language to render this send in. Defaults to 'en'. */
   locale?: BookingEmailLocale
@@ -102,7 +102,7 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
   const th = data.theme ?? resolveTenantTheme(null)
   const locale = data.locale ?? 'en'
   const L = LABELS[locale]
-  const visitLabel = data.visitType === 'TASTING' ? L.tasting : L.tastingLunch
+  const visitLabel = data.visitType === 'TASTING' ? L.tasting : data.visitType === 'LUNCH' ? L.lunch : L.tastingLunch
   const winery = data.wineryName || ''
   const address = data.wineryAddress || ''
   const phone = data.wineryPhone || ''

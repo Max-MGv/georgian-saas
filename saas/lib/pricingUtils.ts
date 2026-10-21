@@ -71,7 +71,8 @@ export type Headcount = {
 
 export type LineTotals = { masterclass: number; extras: number }
 
-export type VisitType = 'TASTING' | 'TASTING_LUNCH'
+/** Same as {@link BookingVisitType} since Chunk 6 (the database's VisitType gained 'LUNCH'). */
+export type VisitType = BookingVisitType
 
 /**
  * The rates for a party, from its company's price ladder.
@@ -147,6 +148,10 @@ export function priceBooking(
   visitType: VisitType,
   lines: LineTotals,
 ): number {
+  // This old two-bucket formula has no Lunch-only rate: an unsplit Lunch-only party would be priced at the
+  // TASTING rate. Nothing creates such an order before Plan-PricingModel Chunk 7, and Chunks 7–8 move every
+  // caller to priceCounts() first — until then, refuse loudly rather than misprice (Chunk 6, 2026-10-21).
+  if (visitType === 'LUNCH') throw new Error('priceBooking() cannot price a Lunch only booking — use priceCounts() (Plan-PricingModel Chunk 7)')
   const paying = guests.tastingGuests + guests.lunchGuests
   const base = paying > 0
     ? guests.tastingGuests * rates.tasting + guests.lunchGuests * rates.lunch

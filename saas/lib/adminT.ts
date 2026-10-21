@@ -234,6 +234,10 @@ const en: Translations = {
   'settings.bookingRules.maxBelowMin': "Maximum can't be less than the minimum.",
   'settings.bookingRules.minAboveMax': "Minimum can't be more than the maximum.",
   'settings.bookingRules.guests': 'guests',
+  'settings.bookingRules.companyTastingOnlyMin': 'Company minimum — Tasting only',
+  'settings.bookingRules.companyLunchOnlyMin': 'Company minimum — Lunch only',
+  'settings.bookingRules.companyTastingLunchMin': 'Company minimum — Tasting & Lunch',
+  'settings.bookingRules.companyMinHint': 'Company bookings only, and only when that box has guests. Leave blank for none.',
 
   'settings.leadTime.sectionTitle': 'Booking Lead Time',
   'settings.leadTime.sectionHint': 'How far in advance a guest must book. Applies to the public booking form.',
@@ -380,6 +384,7 @@ const en: Translations = {
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
   'orders.visit.tastingLunch': 'Tasting + Lunch',
+  'orders.visit.lunch': 'Lunch only',
   'orders.guest.singular': 'guest',
   'orders.guest.plural': 'guests',
   'orders.type.company': 'Company',
@@ -1630,6 +1635,10 @@ const ka: Translations = {
   'settings.bookingRules.maxBelowMin': 'მაქსიმუმი ვერ იქნება მინიმუმზე ნაკლები.',
   'settings.bookingRules.minAboveMax': 'მინიმუმი ვერ იქნება მაქსიმუმზე მეტი.',
   'settings.bookingRules.guests': 'სტუმარი',
+  'settings.bookingRules.companyTastingOnlyMin': 'კომპანიის მინიმუმი — მხოლოდ დეგუსტაცია',
+  'settings.bookingRules.companyLunchOnlyMin': 'კომპანიის მინიმუმი — მხოლოდ სადილი',
+  'settings.bookingRules.companyTastingLunchMin': 'კომპანიის მინიმუმი — დეგუსტაცია და სადილი',
+  'settings.bookingRules.companyMinHint': 'მხოლოდ კომპანიის ჯავშნებზე და მხოლოდ მაშინ, როცა ამ ველში სტუმრები არიან. ცარიელი = მინიმუმი არ არის.',
 
   'settings.leadTime.sectionTitle': 'ჯავშნის მინიმალური ვადა',
   'settings.leadTime.sectionHint': 'რამდენი საათით ადრე უნდა გააკეთოს სტუმარმა ჯავშანი. მოქმედებს საჯარო ჯავშნის ფორმაზე.',
@@ -1773,6 +1782,7 @@ const ka: Translations = {
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',
   'orders.visit.tastingLunch': 'დეგუსტაცია + სადილი',
+  'orders.visit.lunch': 'მხოლოდ სადილი',
   'orders.guest.singular': 'სტუმარი',
   'orders.guest.plural': 'სტუმარი',
   'orders.type.company': 'კომპანია',

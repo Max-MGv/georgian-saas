@@ -38,6 +38,9 @@ export default async function SettingsPage() {
   const minGuestsTastingLunch = get('min_guests_tasting_lunch')
   const maxGuestsTasting = get('max_guests_tasting')
   const maxGuestsTastingLunch = get('max_guests_tasting_lunch')
+  const companyMinTastingOnly = get('min_guests_company_tasting_only')
+  const companyMinLunchOnly = get('min_guests_company_lunch_only')
+  const companyMinTastingLunch = get('min_guests_company_tasting_lunch')
   const bookingLeadSplit = get('booking_lead_split')
   const bookingLeadHours = get('booking_lead_hours')
   const bookingLeadHoursTasting = get('booking_lead_hours_tasting')
@@ -112,6 +115,9 @@ export default async function SettingsPage() {
         minGuestsTastingLunch={minGuestsTastingLunch}
         maxGuestsTasting={maxGuestsTasting}
         maxGuestsTastingLunch={maxGuestsTastingLunch}
+        companyMinTastingOnly={companyMinTastingOnly}
+        companyMinLunchOnly={companyMinLunchOnly}
+        companyMinTastingLunch={companyMinTastingLunch}
         bookingLeadSplit={bookingLeadSplit}
         bookingLeadHours={bookingLeadHours}
         bookingLeadHoursTasting={bookingLeadHoursTasting}

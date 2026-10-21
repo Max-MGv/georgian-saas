@@ -11,6 +11,7 @@
  * the total that online payment then charged (#93, reproduced 2026-10-19).
  */
 import { countsFromVisit, payingGuests, PRODUCTS, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
+import { rulesVisitType } from '@/lib/bookingHours'
 
 /** Upper bound for any single count or quantity. Generous — the forms cap guests at 200. */
 export const MAX_COUNT = 999
@@ -63,8 +64,9 @@ const VISIT_TYPES: readonly BookingVisitType[] = ['TASTING', 'TASTING_LUNCH', 'L
  *   be priced off a forged split (#93).
  * - 'boxes' layout: every box is a whole number 0…999 (missing = 0).
  * - Visit type and boxes must agree (A-6): Tasting → no lunch guests; Lunch only →
- *   only Lunch only guests; Tasting + Lunch → at least one lunch guest. Refused on
- *   the public form; on admin screens it is only a warning (Q-3 default).
+ *   only Lunch only guests; Tasting + Lunch → at least one lunch guest. Refused on the
+ *   public form AND on admin screens (Max, 2026-10-21, Q-3: "it should prevent a booking —
+ *   enter lunch guests or switch to Tasting only"; the 2026-10-07 production order was this mistake).
  * - Individuals never book Lunch only (D-5).
  * - Public only: the group minimum (as today) and any per-product company minimum.
  */
@@ -96,11 +98,9 @@ export function checkBookingCounts(input: CountsInput, rules: CountRules): Count
     (visitType === 'TASTING' && lunchGuests > 0) ||
     (visitType === 'LUNCH' && (counts.tastingOnly > 0 || counts.tastingLunch > 0)) ||
     (visitType === 'TASTING_LUNCH' && lunchGuests === 0)
+  // `warnings` stays in the result shape for checks that only advise (none today).
   const warnings: CountsError[] = []
-  if (mismatch) {
-    if (input.form === 'public') return { ok: false, error: { code: 'visit_mismatch' } }
-    warnings.push({ code: 'visit_mismatch' })
-  }
+  if (mismatch) return { ok: false, error: { code: 'visit_mismatch' } }
 
   if (input.form === 'public') {
     if (rules.groupMin != null && payingGuests(counts) < rules.groupMin) {
@@ -117,6 +117,51 @@ export function checkBookingCounts(input: CountsInput, rules: CountRules): Count
   }
 
   return { ok: true, counts, visitType, warnings }
+}
+
+// ─── Count rules from the winery's settings ─────────────────────────────────
+
+/** Every setting a booking's guest-count rules read (Settings → Booking rules). */
+export const COUNT_RULE_KEYS = [
+  'min_guests_tasting', 'min_guests_tasting_lunch', 'max_guests_tasting', 'max_guests_tasting_lunch',
+  'min_guests_company_tasting_only', 'min_guests_company_lunch_only', 'min_guests_company_tasting_lunch',
+] as const
+export type CountRuleKey = (typeof COUNT_RULE_KEYS)[number]
+
+/** A positive whole number from a setting, or null for blank / 0 / garbage ("no limit"). */
+function limit(raw: string | null | undefined): number | null {
+  const s = (raw ?? '').trim()
+  if (!/^\d+$/.test(s)) return null
+  const n = parseInt(s, 10)
+  return n > 0 ? n : null
+}
+
+/**
+ * The one reader of the count-rule settings (Plan-PricingModel Chunk 6) — pure: the caller passes a getter
+ * (`settingValue(settings, key)` or a map), so the public action, the admin actions and the form's own
+ * warnings all get identical rules.
+ *
+ * - Group minimum: the visit type's `min_guests_*` (Lunch only uses Tasting + Lunch's, A-5). A blank or
+ *   unreadable value falls back to **4**, exactly as createBooking always has.
+ * - Group maximum: the visit type's `max_guests_*`; blank = no cap (as today).
+ * - Company per-product minimums (D-11): blank = none; **never** for individuals.
+ */
+export function countRulesFromSettings(
+  get: (key: CountRuleKey) => string | null | undefined,
+  visitType: BookingVisitType,
+  bookingType: 'INDIVIDUAL' | 'COMPANY',
+): CountRules & { groupMax: number | null } {
+  const lunchRules = rulesVisitType(visitType) === 'TASTING_LUNCH'
+  const company = bookingType === 'COMPANY'
+  return {
+    groupMin: limit(get(lunchRules ? 'min_guests_tasting_lunch' : 'min_guests_tasting')) ?? 4,
+    groupMax: limit(get(lunchRules ? 'max_guests_tasting_lunch' : 'max_guests_tasting')),
+    productMins: {
+      tastingOnly: company ? limit(get('min_guests_company_tasting_only')) : null,
+      lunchOnly: company ? limit(get('min_guests_company_lunch_only')) : null,
+      tastingLunch: company ? limit(get('min_guests_company_tasting_lunch')) : null,
+    },
+  }
 }
 
 // ─── Masterclass lines ───────────────────────────────────────────────────────

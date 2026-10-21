@@ -36,7 +36,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 3 | Switch every reader/writer to the new columns — **behaviour identical** | ✅ 2026-10-20 |
 | 4 | Migration B (contract): drop old columns, retire old scripts | ✅ 2026-10-20 (dev DB) |
 | 5 | Company price setup: three prices per tier, company registration fee | ✅ 2026-10-20 |
-| 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ⬜ |
+| 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ✅ 2026-10-21 |
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ⬜ |
 | 8 | Admin New Order + Order Detail (fixes P-11) | ⬜ |
 | 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ⬜ |
@@ -73,17 +73,17 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | A-3 | Company registration fee = the **highest** fee on its tiers today (Nikalas: all ₾0). | Never lowers what a winery charged. |
 | A-4 | **Every order stores the three counts**, including individual and simple-form bookings (individual 4 × Tasting → Tasting only = 4). One pricing branch instead of two ("split" vs "unsplit"). | Removes the unsplit/split fork that caused #93's individual-booking hole. |
 | A-5 | A **Lunch only** visit (company simple form) follows the **Tasting + Lunch** rules for lead time, visit length, max guests, group minimum, and shows the hot-dish question. | The kitchen rules are about lunch. |
-| A-6 | Detailed form, visit type *Tasting + Lunch*: at least one guest must be in Lunch only or Tasting & Lunch (otherwise it is a tasting visit). Visit type *Tasting*: the two lunch boxes must be 0. Server refuses a contradiction. | D-9 without contradictions. |
+| A-6 | Detailed form, visit type *Tasting + Lunch*: at least one guest must be in Lunch only or Tasting & Lunch (otherwise it is a tasting visit) — **confirmed by Max 2026-10-21 (Q-3): refused with a message, public form + server + admin**. Visit type *Tasting*: the two lunch boxes must be 0. Server refuses a contradiction. | D-9 without contradictions. |
 | A-7 | No exact tier for a product's count → today's fallback per product (the highest-priced row **that offers that product**). No row offers it → "not offered" (D-7). | Keeps today's protection against an unpriced gap. |
 | A-8 | Admin screens are **exempt from minimums** (as today); they still get every integer / not-offered check. | Admins book odd cases by phone. |
 | A-9 | A company with no price table: the admin's typed-in rates become **three** (Tasting only / Lunch only / Tasting & Lunch), all-in per person. | Same as today, one more box. |
 | A-10 | Individuals' **Lunch only** input is hidden on the Individuals price table. | D-5. |
 
-### Still open — needs Max (does not block Chunks 0–4)
+### Answered by Max (2026-10-21) — was "still open"
 
-- **Q-1 (#93 part B):** should the admin New Order path stop trusting the browser's masterclass price and read it from the database? Default if no answer by Chunk 8: **yes** — Chunk 8 rewrites that action anyway.
-- **Q-2:** the 2026-10-15 Georgica production order (40 lunch guests, ₾2,800 at ₾70 = tasting ₾30 + lunch ₾40). Right, or should it have been lunch-only? It converts unchanged (A-2); if it is wrong, an admin edits it after release.
-- **Q-3:** Nikalas's 2026-10-07 order (§10 F-2) — visit *Tasting + Lunch* but everyone in *Tasting only*. Did they have lunch (then ₾250 undercharged it), and should A-6 refuse that combination in future? Default if no answer by Chunk 6: **refuse on the public form, warn (not block) on admin screens.**
+- **Q-1 (#93 part B) — ANSWERED: yes.** The admin New Order path reads the masterclass price from the database, never from the browser (Chunk 8).
+- **Q-2 — ANSWERED: correct as it is.** The 2026-10-15 Georgica production order (40 guests, Tasting + Lunch, ₾2,800 at ₾70) was a tasting + lunch visit. Converts unchanged to Tasting & Lunch (A-2).
+- **Q-3 — ANSWERED: it was a mistake the site should have stopped.** Nikalas's 2026-10-07 order: visit *Tasting + Lunch* with 0 lunch guests. From Chunk 6 on, that combination is **refused**: the booking is not accepted and the guest sees a clear message, e.g. EN "This is a Tasting + Lunch visit but no one is booked for lunch. Enter the lunch guests, or switch to Tasting only." (+ KA). The server refuses it too (A-6). Admin screens: refused with the same message (Claude's reading of "prevent a booking" — the combination has no legitimate use; an admin simply picks Tasting). The existing 2026-10-07 order is left as it is (converts unchanged; an admin can correct it).
 
 ---
 
@@ -395,18 +395,35 @@ prices since the money work; the copy is stale.
 **Resume point:** done.
 
 ### Chunk 6 — Rules: minimums, `LUNCH` visit type
-**Status:** ⬜
-- [ ] Settings: three company per-product minimums, blank default (D-11), EN + KA, with a one-line
-      explanation ("applies only to a product with guests; blank = no minimum").
-- [ ] `lib/bookingHours.ts` + settings readers: `LUNCH` uses the Tasting + Lunch lead time / visit length /
-      max / group minimum (A-5).
-- [ ] `checkBookingCounts` wired to read these settings (still pure; callers pass them).
-**Verify:** `test-pricing-model.ts` minimum cases (group check unchanged on day one; per-product only when
-set and count > 0); Settings screenshot.
-**Resume point:** —
+**Status:** ✅ 2026-10-21 — tsc 0 · `test-pricing-model` **70/70** (was 54) · `test-order-repricing` 6/6 · Settings
+checked on localhost (text-verified — the browser pane was hidden): the three rows show "—" when blank, the hint line
+appears while editing, a value saves and survives a reload, and is read back by `countRulesFromSettings` (5 → a public
+booking with 3 Lunch only refused `below_product_min`); then cleared again. Dev backup taken before the UI test.
+- [x] Settings: three company per-product minimums, blank default (D-11), EN + KA, one-line hint.
+- [x] `lib/bookingHours.ts`: `VisitType` gains `LUNCH`; **`rulesVisitType()`** — the one mapping "which visit type's
+      rules apply" (LUNCH → TASTING_LUNCH, A-5); `getLeadHours` / `getVisitDurationMinutes` use it.
+- [x] `lib/bookingInput.ts`: **`countRulesFromSettings(get, visitType, bookingType)`** — the one reader of
+      `min/max_guests_*` + the three company minimums (blank/0/garbage = none; blank group minimum → 4 as before;
+      never company minimums for individuals); `COUNT_RULE_KEYS`. `checkBookingCounts` now **refuses** a visit-type
+      mismatch on admin screens too (Q-3, Max 2026-10-21).
+- [x] Migration `20261020150000_visit_type_lunch` committed **unchanged** (recorded as applied on dev by the 10-20
+      replay — never edit it). `prisma generate` done.
+- [x] `LUNCH` type fallout: the old `priceBooking()` **throws** for `LUNCH` (it has no Lunch-only rate — never
+      misprice); `pricingUtils.VisitType` = `BookingVisitType`. Labels "Lunch only" (EN + KA) where the widened type
+      forced it: Orders table/cards, super-admin activity, booking-confirmation + new-booking emails. The rest of the
+      display work stays in Chunk 9.
+**Resume point:** done.
+**Carried into Chunk 7 (must happen before anything writes `LUNCH`):** move `createBooking`, `recalcOrderTotal`
+(`lib/pricing.ts`), `orders.ts` (`updateOrderEnhanced` ~l.191, invoice path ~l.721) and `lib/demoSeed.ts` from
+`priceBooking` to `priceCounts`/`ratesFromProductSnapshot`; wire `countRulesFromSettings` into `createBooking` (replaces
+its inline `min_guests_*`/`max_guests_*` reads); the visit-mismatch message (Q-3): EN "This is a Tasting + Lunch visit
+but no one is booked for lunch. Enter the lunch guests, or switch to Tasting only." + KA, on the public form and the
+admin screens.
 
 ### Chunk 7 — Public booking form + `createBooking` (#93)
 **Status:** ⬜
+- [ ] **First (from Chunk 6):** move every `priceBooking` caller to `priceCounts` (it throws for `LUNCH`), wire
+      `countRulesFromSettings` into `createBooking`, add the Q-3 mismatch message (EN + KA) — see Chunk 6's "Carried" note.
 - [ ] `BookingForm.tsx`: detailed company form per D-9 (+ Free, total line, per-product preview, "not
       offered" products hidden); simple company form gets **Lunch only** (D-10); individuals unchanged.
       Review sheet lines per product.

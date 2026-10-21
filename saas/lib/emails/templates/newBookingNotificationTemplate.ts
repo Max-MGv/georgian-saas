@@ -14,7 +14,7 @@ export type NewBookingNotificationData = {
   date: string
   timeSlot: string
   guestCount: number
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   totalPrice: number
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   /** True once payment actually settled (sent from settle.ts, not createBooking.ts). */
@@ -28,7 +28,7 @@ export type NewBookingNotificationData = {
 }
 
 export function renderNewBookingNotificationEmail(data: NewBookingNotificationData): { subject: string; html: string } {
-  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : 'Wine Tasting + Lunch'
+  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : data.visitType === 'LUNCH' ? 'Lunch only' : 'Wine Tasting + Lunch'
 
   const html = `
       <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; color: #1c1008; padding: 32px;">

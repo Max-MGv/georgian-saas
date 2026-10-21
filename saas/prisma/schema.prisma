@@ -957,6 +957,9 @@ enum BookingType {
 enum VisitType {
   TASTING
   TASTING_LUNCH
+  // Company simple form only (Plan-PricingModel D-10, T-152): the whole group has lunch, no tasting.
+  // Follows the Tasting + Lunch rules for lead time, visit length, max/min guests and the hot-dish question (A-5).
+  LUNCH
 }
 
 enum WineType {

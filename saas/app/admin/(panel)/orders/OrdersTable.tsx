@@ -81,7 +81,7 @@ type Order = {
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   guestCount: number
   tastingGuestCount: number
   lunchGuestCount: number
@@ -272,7 +272,7 @@ function OneLine({ title, children }: { title: string; children: React.ReactNode
 }
 
 function visitLabel(locale: string, v: string) {
-  return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : adminT(locale, 'orders.visit.tastingLunch')
+  return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : v === 'LUNCH' ? adminT(locale, 'orders.visit.lunch') : adminT(locale, 'orders.visit.tastingLunch')
 }
 
 // ── Phone order card ───────────────────────────────────────────────────
@@ -1699,7 +1699,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Amounts */}
               <div>
                 <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>{at('orders.preview.amount')}</div>
-                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={formatTetri(asTetri(bookingAmt))} />
+                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : o.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.col.tasting')} value={formatTetri(asTetri(bookingAmt))} />
                 {o.masterclassLines.map((l, i) => (
                   <PRow key={i} label={`${l.name} ×${l.quantity}`} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity))} />
                 ))}

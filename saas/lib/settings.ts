@@ -23,6 +23,11 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   payment_iban: '',
   min_guests_tasting: '4',
   min_guests_tasting_lunch: '4',
+  // Company per-product minimums (Plan-PricingModel D-11, T-152). Blank = no minimum. Each applies only to a
+  // product that has guests on a COMPANY booking, on top of the group minimum above; never to individuals.
+  min_guests_company_tasting_only: '',
+  min_guests_company_lunch_only: '',
+  min_guests_company_tasting_lunch: '',
   // Booking lead time (#178) — minimum hours-ahead a booking must be made.
   // `booking_lead_split` off: `booking_lead_hours` applies to every visit type.
   // On: the two per-visit-type values apply instead.

@@ -50,6 +50,13 @@ type Props = {
    */
   maxGuestsTasting: string
   maxGuestsTastingLunch: string
+  /**
+   * Company per-product minimums (Plan-PricingModel D-11, T-152) — `min_guests_company_*`. Blank = no minimum.
+   * Each applies only when that product has guests on a company booking, on top of the group minimum.
+   */
+  companyMinTastingOnly: string
+  companyMinLunchOnly: string
+  companyMinTastingLunch: string
   blockedDates?: { id: string; date: string; reason: string | null }[]
   /** Booking lead time + working hours/days (#178) — Setting values, all strings. */
   bookingLeadSplit: string
@@ -118,7 +125,7 @@ function formatClosedDay(iso: string): string {
   return `${weekday}, ${d} ${CLOSED_DAY_MONTHS[m - 1]} ${y}`
 }
 
-export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, visitDurationTasting: initialDurationTasting, visitDurationTastingLunch: initialDurationLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
+export default function SettingsClient({ settings, defaultLocale: initialDefaultLocale, payment, onlinePayment, minGuestsTasting, minGuestsTastingLunch, maxGuestsTasting, maxGuestsTastingLunch, companyMinTastingOnly, companyMinLunchOnly, companyMinTastingLunch, blockedDates: initialBlockedDates = [], bookingLeadSplit: initialLeadSplit, bookingLeadHours: initialLeadHours, bookingLeadHoursTasting: initialLeadHoursTasting, bookingLeadHoursTastingLunch: initialLeadHoursLunch, visitDurationTasting: initialDurationTasting, visitDurationTastingLunch: initialDurationLunch, workingHoursCustom: initialHoursCustom, workingHoursOpen: initialHoursOpen, workingHoursClose: initialHoursClose, workingHoursDaysJson: initialHoursDaysJson, mapsEmbedUrl: initialMapsEmbedUrl, logoUrl: initialLogoUrl = null, logoAlt: initialLogoAlt = '', faviconUrl: initialFaviconUrl = null, contactEmail: initialContactEmail = '', contactPhone: initialContactPhone = '', contactAddress: initialContactAddress = '', contactFacebook: initialContactFacebook = '', contactInstagram: initialContactInstagram = '', adminLanguage: initialAdminLanguage = 'en' }: Props) {
   const [defaultLocale, setDefaultLocale] = useState(initialDefaultLocale ?? 'en')
   const [adminLanguage, setAdminLanguage] = useState(initialAdminLanguage)
   const at = (key: string) => adminT(adminLanguage, key)
@@ -145,6 +152,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
   const [minTastingLunch, setMinTastingLunch] = useState(minGuestsTastingLunch)
   const [maxTasting, setMaxTasting] = useState(maxGuestsTasting)
   const [maxTastingLunch, setMaxTastingLunch] = useState(maxGuestsTastingLunch)
+  const [coMinTastingOnly, setCoMinTastingOnly] = useState(companyMinTastingOnly)
+  const [coMinLunchOnly, setCoMinLunchOnly] = useState(companyMinLunchOnly)
+  const [coMinTastingLunch, setCoMinTastingLunch] = useState(companyMinTastingLunch)
   const [blockedDates, setBlockedDates] = useState(initialBlockedDates)
   const [leadSplit, setLeadSplit] = useState(initialLeadSplit === 'true')
   const [leadHours, setLeadHours] = useState(initialLeadHours)
@@ -467,9 +477,30 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
     })
   }
 
-  type BookingRuleKey = 'min_guests_tasting' | 'min_guests_tasting_lunch' | 'max_guests_tasting' | 'max_guests_tasting_lunch'
+  type CompanyMinKey = 'min_guests_company_tasting_only' | 'min_guests_company_lunch_only' | 'min_guests_company_tasting_lunch'
+  type BookingRuleKey = 'min_guests_tasting' | 'min_guests_tasting_lunch' | 'max_guests_tasting' | 'max_guests_tasting_lunch' | CompanyMinKey
+
+  const companyMinState: Record<CompanyMinKey, [string, (v: string) => void]> = {
+    min_guests_company_tasting_only: [coMinTastingOnly, setCoMinTastingOnly],
+    min_guests_company_lunch_only: [coMinLunchOnly, setCoMinLunchOnly],
+    min_guests_company_tasting_lunch: [coMinTastingLunch, setCoMinTastingLunch],
+  }
 
   function handleBookingRuleSave(key: BookingRuleKey) {
+    // Company per-product minimums (T-152): optional — blank is "no minimum" — and not paired with any max.
+    if (key in companyMinState) {
+      const [raw, set] = companyMinState[key as CompanyMinKey]
+      const val = raw.trim() === '' ? '' : String(Math.max(parseInt(raw) || 1, 1))
+      setBookingRulesEditing(null)
+      setBookingRulesError(null)
+      set(val)
+      startTransition(async () => {
+        await updateSetting(key, val)
+        setSavedKey(key)
+        setTimeout(() => setSavedKey(null), 2000)
+      })
+      return
+    }
     // Min-guest keys always clamp to >= 1 (they have a hardcoded default of 4
     // and can never be "off"). Max-guest keys are optional — a blank value is
     // a real, intentional "no limit" state, not something to coerce to 1.
@@ -1026,7 +1057,11 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
             { key: 'min_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMin'), value: minTastingLunch, set: setMinTastingLunch, isMax: false },
             { key: 'max_guests_tasting' as const,       label: at('settings.bookingRules.tastingMax'),      value: maxTasting,      set: setMaxTasting,      isMax: true },
             { key: 'max_guests_tasting_lunch' as const, label: at('settings.bookingRules.tastingLunchMax'), value: maxTastingLunch, set: setMaxTastingLunch, isMax: true },
-          ]).map(row => {
+            // Company per-product minimums (T-152 D-11): optional, blank = none — shown as "—", not "∞".
+            { key: 'min_guests_company_tasting_only' as const,  label: at('settings.bookingRules.companyTastingOnlyMin'),  value: coMinTastingOnly,  set: setCoMinTastingOnly,  isMax: false, optional: true },
+            { key: 'min_guests_company_lunch_only' as const,    label: at('settings.bookingRules.companyLunchOnlyMin'),    value: coMinLunchOnly,    set: setCoMinLunchOnly,    isMax: false, optional: true },
+            { key: 'min_guests_company_tasting_lunch' as const, label: at('settings.bookingRules.companyTastingLunchMin'), value: coMinTastingLunch, set: setCoMinTastingLunch, isMax: false, optional: true },
+          ] as { key: BookingRuleKey; label: string; value: string; set: (v: string) => void; isMax: boolean; optional?: boolean }[]).map(row => {
             const isEditing = bookingRulesEditing === row.key
             const rowError = isEditing ? bookingRulesError : null
             return (
@@ -1039,7 +1074,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     {isEditing ? (
                       <input
                         type="number" min={1} max={200}
-                        placeholder={row.isMax ? '∞' : undefined}
+                        placeholder={row.isMax ? '∞' : row.optional ? '—' : undefined}
                         style={{ ...inputStyle, width: 80, borderColor: rowError ? '#b91c1c' : C.border }}
                         value={row.value}
                         autoFocus
@@ -1048,7 +1083,7 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                       />
                     ) : (
                       <div style={{ ...inputStyle, width: 80, cursor: 'default', textAlign: 'center' }}>
-                        <span style={{ color: row.value ? C.text : C.faint }}>{row.value || '∞'}</span>
+                        <span style={{ color: row.value ? C.text : C.faint }}>{row.value || (row.optional ? '—' : '∞')}</span>
                       </div>
                     )}
                     <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.guests')}</span>
@@ -1070,6 +1105,9 @@ export default function SettingsClient({ settings, defaultLocale: initialDefault
                     )}
                     {row.isMax && isEditing && !rowError && (
                       <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.maxHint')}</span>
+                    )}
+                    {row.optional && isEditing && !rowError && (
+                      <span className="text-xs" style={{ color: C.faint }}>{at('settings.bookingRules.companyMinHint')}</span>
                     )}
                     {savedKey === row.key && !isPending && (
                       <span className="text-xs" style={{ color: '#16a34a' }}>{at('settings.saved')}</span>
