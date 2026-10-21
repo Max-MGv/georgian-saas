@@ -121,6 +121,7 @@ export default async function OrderDetailPage({
           // "lunch" = Tasting & Lunch.
           tastingGuestCount: order.tastingOnlyGuests ?? 0,
           lunchGuestCount: order.tastingLunchGuests ?? 0,
+          lunchOnlyGuestCount: order.lunchOnlyGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           hotDishVegetable: order.hotDishVegetable,
           hotDishMeat: order.hotDishMeat,
@@ -136,6 +137,7 @@ export default async function OrderDetailPage({
           // `include`) but never passed down, which is why OrderDetail could not
           // tell what the order cost and invented ₾50 instead (#50/#52).
           tastingOnlyRate: order.tastingOnlyRate,
+          lunchOnlyRate: order.lunchOnlyRate,
           tastingLunchRate: order.tastingLunchRate,
           registrationFeeSnapshot: order.registrationFeeSnapshot,
           requestedCompanyName: order.requestedCompanyName,

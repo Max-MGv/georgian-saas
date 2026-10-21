@@ -5,7 +5,7 @@ import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } f
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty, ratesFromManual, ratesFromSnapshot, tastingRatePerPerson } from '@/lib/pricingUtils'
+import { comboRatePerPerson, findTier, notOffered, priceBooking, priceCounts, PRODUCTS, ratesForParty, ratesFromManual, ratesFromProductSnapshot, ratesFromSnapshot, tastingRatePerPerson, type Counts, type Product } from '@/lib/pricingUtils'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -224,6 +224,8 @@ type OrderProp = {
   guestCount: number
   tastingGuestCount: number
   lunchGuestCount: number
+  /** Lunch only guests (T-152) — shown read-only until Plan-PricingModel Chunk 8 gives this screen a box for them. */
+  lunchOnlyGuestCount: number
   freeGuestCount: number
   hotDishVegetable: string | null
   hotDishMeat: string | null
@@ -243,6 +245,7 @@ type OrderProp = {
   // order cost, and invented ₾50 instead (#50) while double-counting its lines
   // against the stored total (#52). Both fixes need these here.
   tastingOnlyRate: number | null
+  lunchOnlyRate: number | null
   tastingLunchRate: number | null
   registrationFeeSnapshot: number | null
   requestedCompanyName: string | null
@@ -628,7 +631,20 @@ export default function OrderDetail({
             : ratesFromSnapshot(order))
         : null
 
-  const computedTotal: number | null = previewRates
+  // Stopgap until Plan-PricingModel Chunk 8 rebuilds this screen on the three products: an order with Lunch only
+  // guests does not fit the two boxes above, so it shows its stored boxes × the rates it was sold at, read-only
+  // (updateOrderEnhanced refuses to re-price it). Lines added or removed below still move the total.
+  const lunchModel = order.visitType === 'LUNCH' || order.lunchOnlyGuestCount > 0
+  const storedCounts: Counts = { tastingOnly: order.tastingGuestCount, lunchOnly: order.lunchOnlyGuestCount, tastingLunch: order.lunchGuestCount, free: order.freeGuestCount }
+  const storedRates = lunchModel ? ratesFromProductSnapshot(order) : null
+  const productLines = storedRates ? PRODUCTS.filter(p => storedCounts[p] > 0 && storedRates[p] != null) : []
+  const PRODUCT_AT: Record<Product, string> = { tastingOnly: 'orderDetail.product.tastingOnly', lunchOnly: 'orders.visit.lunch', tastingLunch: 'orderDetail.product.tastingLunch' }
+
+  const computedTotal: number | null = lunchModel
+    ? (storedRates && notOffered(storedRates, storedCounts).length === 0
+        ? priceCounts(storedRates, storedCounts, { masterclass: masterclassAmt, extras: extrasAmt })
+        : null)
+    : previewRates
     ? priceBooking(
         previewRates,
         { guestCount: partyGuestCount, tastingGuests, lunchGuests },
@@ -1007,7 +1023,7 @@ export default function OrderDetail({
         <InfoRow label={at('orderDetail.bookingInfo.time')} value={order.timeSlot} />
         <InfoRow
           label={at('orderDetail.bookingInfo.visitType')}
-          value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : at('orders.visit.tastingLunch')}
+          value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : order.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.visit.tastingLunch')}
         />
         <InfoRow
           label={at('orderDetail.bookingInfo.bookingType')}
@@ -1368,6 +1384,9 @@ export default function OrderDetail({
             </span>
           )}
         </div>
+        {lunchModel && !isPaid && (
+          <p className="text-xs mt-2" style={{ color: C.faint }}>{at('orderDetail.guestBreakdown.lunchOnlyLocked')}</p>
+        )}
       </Card>
 
       {/* ── Masterclass Add-ons ── */}
@@ -1636,7 +1655,7 @@ export default function OrderDetail({
           </div>
         )}
         {/* Lunch rate = 0 warning */}
-        {tier && lunchGuests > 0 && comboRatePerPerson(tier) === tastingRatePerPerson(tier) && (
+        {!lunchModel && tier && lunchGuests > 0 && comboRatePerPerson(tier) === tastingRatePerPerson(tier) && (
           <div
             className="text-xs rounded-lg px-3 py-2 mb-3"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}
@@ -1649,6 +1668,26 @@ export default function OrderDetail({
           </div>
         )}
         <div className="space-y-1.5">
+          {lunchModel ? (
+            <>
+              {/* Stopgap (see lunchModel): one line per product the order was booked with, at its sold rate. */}
+              {productLines.map(p => (
+                <div key={p} className="flex justify-between text-sm">
+                  <span style={{ color: C.muted }}>
+                    {at(PRODUCT_AT[p])} ({storedCounts[p]} × {formatTetri(asTetri(storedRates![p]!))})
+                  </span>
+                  <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(storedRates![p]!), storedCounts[p]), { decimals: true })}</span>
+                </div>
+              ))}
+              {storedRates && storedRates.registration > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span style={{ color: C.muted }}>{at('orderDetail.total.registrationFee')}</span>
+                  <span style={{ color: C.text }}>{formatTetri(asTetri(storedRates.registration), { decimals: true })}</span>
+                </div>
+              )}
+            </>
+          ) : (
+          <>
           {/* Company tier lines */}
           {tier && tastingGuests > 0 && (
             <div className="flex justify-between text-sm">
@@ -1706,6 +1745,8 @@ export default function OrderDetail({
               </span>
               <span style={{ color: C.text }}>{formatTetri(asTetri(legacyBase), { decimals: true })}</span>
             </div>
+          )}
+          </>
           )}
           {lines.map(l => (
             <div key={l.id} className="flex justify-between text-sm">

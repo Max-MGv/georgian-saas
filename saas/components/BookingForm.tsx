@@ -293,8 +293,13 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [mcSelections, setMcSelections] = useState<Record<string, { checked: boolean; qtyStr: string }>>({})
 
   const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
-  // Individuals and the detailed company form: Tasting / Tasting + Lunch. The company simple form adds Lunch only (D-10).
-  const visitOptions: BookingVisitType[] = bookingType === 'COMPANY' && !isEnhanced ? ['TASTING', 'TASTING_LUNCH', 'LUNCH'] : ['TASTING', 'TASTING_LUNCH']
+  // Only a proven company counts for pricing and the payment label — never one merely picked.
+  const selectedCompany = bookingType === 'COMPANY' && companyId ? proven : null
+  // A box is shown only for a product the proven company's ladder offers (D-7); before the code, all of them.
+  const offers = (pr: Product) => !selectedCompany || selectedCompany.prices.length === 0 || selectedCompany.prices.some(row => productPrice(row, pr) != null)
+  // Individuals and the detailed company form: Tasting / Tasting + Lunch. The company simple form adds Lunch only (D-10),
+  // unless the proven company's ladder has no Lunch only price — then a Lunch only choice falls back to Tasting.
+  const visitOptions: BookingVisitType[] = bookingType === 'COMPANY' && !isEnhanced && offers('lunchOnly') ?['TASTING', 'TASTING_LUNCH', 'LUNCH'] : ['TASTING', 'TASTING_LUNCH']
   const visitType: BookingVisitType = visitOptions.includes(visitChoice) ? visitChoice : 'TASTING'
   function setVisitType(v: BookingVisitType) {
     setVisitChoice(v)
@@ -342,8 +347,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // Independent of isEnhanced by design (Plan-CompanyNationality Chunk 1) — shows for any
   // COMPANY booking once the tenant flag is on, enhanced mode or not.
   const showNationalityPicker = !!nationalityBreakdownEnabled && bookingType === 'COMPANY'
-  // Only a proven company counts for pricing and the payment label — never one merely picked.
-  const selectedCompany = bookingType === 'COMPANY' && companyId ? proven : null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (configured) first — nothing beats it — then, for COMPANY bookings, the
   // selected company's override, then the section default. INDIVIDUAL bookings
@@ -632,8 +635,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const previewTotal: number | null = previewRates && payingGuests > 0 && missingProducts.length === 0
     ? priceCounts(previewRates, counts, { masterclass: isEnhanced ? masterclassAmt : 0, extras: 0 })
     : null
-  // A box is shown only for a product the proven company's ladder offers (D-7); before the code, all of them.
-  const offers = (pr: Product) => !selectedCompany || selectedCompany.prices.length === 0 || selectedCompany.prices.some(row => productPrice(row, pr) != null)
   // Individuals with no ladder: the home page's display price, as before (an estimate, never stored).
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
   const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount : null)
@@ -1060,7 +1061,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: displayPriceTasting },
               { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: displayPriceLunch },
               { value: 'LUNCH',         contentKey: 'form_lunch_only',    labelKey: 'form.lunch_only',    price: null },
-            ] as const).filter(opt => visitOptions.includes(opt.value) && (opt.value !== 'LUNCH' || offers('lunchOnly'))).map(opt => (
+            ] as const).filter(opt => visitOptions.includes(opt.value)).map(opt => (
               <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
                 className="py-3 px-4 rounded-lg border text-left transition-colors"
                 style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>

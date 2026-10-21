@@ -71,6 +71,7 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     { key: 'form_visit_type',            label: 'Visit Type label',           fallback: 'Visit Type' },
     { key: 'form_tasting',               label: 'Wine Tasting option',        fallback: 'Wine Tasting' },
     { key: 'form_tasting_lunch',         label: 'Tasting + Lunch option',     fallback: 'Tasting + Lunch' },
+    { key: 'form_lunch_only',            label: 'Lunch only option (tour companies)', fallback: 'Lunch only' },
     { key: 'form_date',                  label: 'Date label',                 fallback: 'Date' },
     { key: 'form_time_slot',             label: 'Time Slot label',            fallback: 'Time Slot' },
     { key: 'form_num_guests',            label: 'Number of Guests label',     fallback: 'Number of Guests' },

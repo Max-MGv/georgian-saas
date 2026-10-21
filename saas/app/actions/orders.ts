@@ -146,6 +146,23 @@ export async function updateOrderEnhanced(
       } as const
     }
 
+    // Stopgap until Plan-PricingModel Chunk 8 moves this screen to the three products: its form has two boxes
+    // (Tasting only / Tasting & Lunch), so re-pricing an order that has Lunch only guests here would push them into
+    // Free (countsFromLegacy) or throw (priceBooking on LUNCH). Its guests and rates stay as booked; the food
+    // details still save.
+    if (order.visitType === 'LUNCH' || order.lunchOnlyGuests > 0) {
+      const countsUnchanged = data.guestCount === order.guestCount && data.tastingGuestCount === order.tastingOnlyGuests &&
+        data.lunchGuestCount === order.tastingLunchGuests && data.freeGuestCount === order.freeGuestCount
+      if (!countsUnchanged || data.manualTastingRate != null || data.manualLunchRate != null) {
+        return { error: 'Guest numbers and rates of a booking with Lunch only guests cannot be changed here yet. The hot dish and food notes can still be saved.' } as const
+      }
+      await tx.order.update({
+        where: { id },
+        data: { hotDishVegetable: data.hotDishVegetable || null, hotDishMeat: data.hotDishMeat || null, foodNotes: data.foodNotes || null },
+      })
+      return { success: true as const }
+    }
+
     // The three buckets are subsets of the party, never more than it. Nothing
     // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
     // guests while every document it produced still said 10.
@@ -718,7 +735,7 @@ export async function assignOrderCompany(
       const rates = ratesForCounts(company.prices, counts, company.isIndividual ? 0 : company.registrationFee)
       const missing = notOffered(rates, counts)
       if (missing.length) {
-        return { error: `${company.name}'s price table has no price for ${missing.map(p => PRODUCT_LABEL[p]).join(' / ')} — add one on its price table first, then link the company.` } as const
+        return { error: `The price table for ${company.name} has no price for ${missing.map(p => PRODUCT_LABEL[p]).join(' / ')}. Add one on that company's price table first, then link it.` } as const
       }
       totalPrice = priceCounts(rates, counts, lines)
       snapshot = { tastingOnlyRate: rates.tastingOnly, lunchOnlyRate: rates.lunchOnly, tastingLunchRate: rates.tastingLunch, registrationFeeSnapshot: rates.registration }

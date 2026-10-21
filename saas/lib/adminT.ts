@@ -97,6 +97,11 @@ const en: Translations = {
   'messages.onsiteErrors.workingHours': 'Time is outside working hours',
   'messages.onsiteErrors.leadTime': 'Not enough notice — {hours} is replaced with the required hours',
   'messages.onsiteErrors.minGuests': 'Below minimum guest count — {min} is replaced with the minimum',
+  'messages.onsiteErrors.productMin': 'Too few guests for one product (tour companies) — {min} is replaced with the minimum, {product} with the product name',
+  'messages.onsiteErrors.visitMismatch': 'Tasting + Lunch chosen but no lunch guests entered',
+  'messages.onsiteErrors.notOffered': 'Company has no price for a chosen product — {product} is replaced with the product name',
+  'messages.onsiteErrors.guestCounts': 'Guest numbers could not be read (shown for a damaged or tampered request)',
+  'messages.onsiteErrors.masterclass': 'A chosen masterclass is no longer offered',
   'messages.onsiteErrors.noRateDetail': 'No pricing tier for this guest count — {n} is replaced with the guest count',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
@@ -555,6 +560,9 @@ const en: Translations = {
   'orderDetail.guestBreakdown.foodNotesPlaceholder': 'Allergies, preferences, kitchen notes…',
   'orderDetail.guestBreakdown.saving': 'Saving…',
   'orderDetail.guestBreakdown.saveChanges': 'Save changes',
+  'orderDetail.guestBreakdown.lunchOnlyLocked': 'This booking has Lunch only guests — its guest numbers and rates stay as booked for now; the hot dish and food notes still save.',
+  'orderDetail.product.tastingOnly': 'Tasting only',
+  'orderDetail.product.tastingLunch': 'Tasting & Lunch',
   'orderDetail.guestBreakdown.savedOk': 'Saved ✓',
 
   'orderDetail.masterclass.title': 'Masterclass Add-ons',
@@ -1500,6 +1508,11 @@ const ka: Translations = {
   'messages.onsiteErrors.workingHours': 'დრო სამუშაო საათების მიღმაა',
   'messages.onsiteErrors.leadTime': 'არასაკმარისი დრო წინასწარ — {hours} ჩანაცვლდება საჭირო საათების რაოდენობით',
   'messages.onsiteErrors.minGuests': 'სტუმრების რაოდენობა მინიმუმზე ნაკლებია — {min} ჩანაცვლდება მინიმუმით',
+  'messages.onsiteErrors.productMin': 'ერთი პროდუქტისთვის სტუმრები ცოტაა (ტური კომპანიები) — {min} ჩანაცვლდება მინიმუმით, {product} პროდუქტის სახელით',
+  'messages.onsiteErrors.visitMismatch': 'არჩეულია „დეგუსტაცია + სადილი“, მაგრამ სადილის სტუმრები მითითებული არ არის',
+  'messages.onsiteErrors.notOffered': 'კომპანიას არჩეული პროდუქტის ფასი არ აქვს — {product} ჩანაცვლდება პროდუქტის სახელით',
+  'messages.onsiteErrors.guestCounts': 'სტუმრების რაოდენობა ვერ წაიკითხა (ჩნდება დაზიანებული ან შეცვლილი მოთხოვნისას)',
+  'messages.onsiteErrors.masterclass': 'არჩეული მასტერკლასი აღარ არის ხელმისაწვდომი',
   'messages.onsiteErrors.noRateDetail': 'ამ რაოდენობის სტუმრისთვის ფასების კატეგორია არ არსებობს — {n} ჩანაცვლდება სტუმრების რაოდენობით',
 
   // My Reports page
@@ -1958,6 +1971,9 @@ const ka: Translations = {
   'orderDetail.guestBreakdown.foodNotesPlaceholder': 'ალერგია, უპირატესობები, შენიშვნები სამზარეულოსთვის…',
   'orderDetail.guestBreakdown.saving': 'ინახება…',
   'orderDetail.guestBreakdown.saveChanges': 'ცვლილებების შენახვა',
+  'orderDetail.guestBreakdown.lunchOnlyLocked': 'ამ ჯავშანში არიან „მხოლოდ სადილის“ სტუმრები — სტუმრების რაოდენობა და ფასები ჯერჯერობით რჩება ისე, როგორც დაიჯავშნა; ცხელი კერძი და კვების შენიშვნები მაინც ინახება.',
+  'orderDetail.product.tastingOnly': 'მხოლოდ დეგუსტაცია',
+  'orderDetail.product.tastingLunch': 'დეგუსტაცია და სადილი',
   'orderDetail.guestBreakdown.savedOk': 'შენახულია ✓',
 
   'orderDetail.masterclass.title': 'მასტერკლასის დამატებები',
