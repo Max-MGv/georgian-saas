@@ -23,7 +23,8 @@ export async function loginAsTenantAdmin(page: Page) {
   // sustained-heavy-testing dev DB (confirmed live: a run that otherwise
   // passed cleanly failed here with the URL still reading plain "/admin",
   // i.e. mid-way through the two-hop redirect, not stuck on login itself).
-  await expect(page).toHaveURL(/\/admin\/orders/, { timeout: 25_000 });
+  // 25 → 60 s on 2026-10-22 (Max): dev DB ~0.3–0.5 s per round trip, GET /admin took 7–29 s (KNOWN-ISSUES.md).
+  await expect(page).toHaveURL(/\/admin\/orders/, { timeout: 60_000 });
 }
 
 // Cross-tenant super-admin login — only for tests that need it (theme preset
@@ -42,5 +43,6 @@ export async function loginAsSuperAdmin(page: Page) {
   // sustained-heavy-testing dev DB (confirmed live: a run that otherwise
   // passed cleanly failed here with the URL still reading plain "/admin",
   // i.e. mid-way through the two-hop redirect, not stuck on login itself).
-  await expect(page).toHaveURL(/\/admin\/orders/, { timeout: 25_000 });
+  // 25 → 60 s on 2026-10-22 (Max): dev DB ~0.3–0.5 s per round trip, GET /admin took 7–29 s (KNOWN-ISSUES.md).
+  await expect(page).toHaveURL(/\/admin\/orders/, { timeout: 60_000 });
 }

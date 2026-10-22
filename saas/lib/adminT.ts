@@ -103,6 +103,7 @@ const en: Translations = {
   'messages.onsiteErrors.guestCounts': 'Guest numbers could not be read (shown for a damaged or tampered request)',
   'messages.onsiteErrors.masterclass': 'A chosen masterclass is no longer offered',
   'messages.onsiteErrors.hotDish': 'Hot dish chosen but no guest is booked for lunch',
+  'messages.onsiteErrors.tooManyFree': 'More free guests than paying guests — {max} is replaced with the limit',
   'messages.onsiteErrors.noRateDetail': 'No pricing tier for this guest count — {n} is replaced with the guest count',
 
   // My Reports page (Phase 6 of Plan-BugReportWidget.md) — read-only status
@@ -1538,6 +1539,7 @@ const ka: Translations = {
   'messages.onsiteErrors.guestCounts': 'სტუმრების რაოდენობა ვერ წაიკითხა (ჩნდება დაზიანებული ან შეცვლილი მოთხოვნისას)',
   'messages.onsiteErrors.masterclass': 'არჩეული მასტერკლასი აღარ არის ხელმისაწვდომი',
   'messages.onsiteErrors.hotDish': 'არჩეულია ცხელი კერძი, მაგრამ სადილზე არავინ არის ჩაწერილი',
+  'messages.onsiteErrors.tooManyFree': 'უფასო სტუმრები მეტია გადამხდელებზე — {max} ჩანაცვლდება ზღვრით',
   'messages.onsiteErrors.noRateDetail': 'ამ რაოდენობის სტუმრისთვის ფასების კატეგორია არ არსებობს — {n} ჩანაცვლდება სტუმრების რაოდენობით',
 
   // My Reports page

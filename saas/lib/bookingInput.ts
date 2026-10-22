@@ -49,6 +49,7 @@ export type CountsError =
   | { code: 'visit_mismatch' }
   | { code: 'below_group_min'; min: number }
   | { code: 'below_product_min'; product: Product; min: number }
+  | { code: 'too_many_free'; max: number }
 
 export type CountsResult =
   | { ok: true; counts: Counts; visitType: BookingVisitType; warnings: CountsError[] }
@@ -69,6 +70,8 @@ const VISIT_TYPES: readonly BookingVisitType[] = ['TASTING', 'TASTING_LUNCH', 'L
  *   enter lunch guests or switch to Tasting only"; the 2026-10-07 production order was this mistake).
  * - Individuals never book Lunch only (D-5).
  * - Public only: the group minimum (as today) and any per-product company minimum.
+ * - Public only: no more Free guests than paying guests (Max, 2026-10-22 — the Free box had no limit, so a
+ *   company could book 1 paying + 200 free; the max-guest cap only counts paying guests). Admin screens are exempt.
  */
 export function checkBookingCounts(input: CountsInput, rules: CountRules): CountsResult {
   const visitType = input.visitType as BookingVisitType
@@ -113,6 +116,10 @@ export function checkBookingCounts(input: CountsInput, rules: CountRules): Count
           return { ok: false, error: { code: 'below_product_min', product: p, min } }
         }
       }
+    }
+    // Last, so a group that is simply too small hears about the minimum first.
+    if (counts.free > payingGuests(counts)) {
+      return { ok: false, error: { code: 'too_many_free', max: payingGuests(counts) } }
     }
   }
 

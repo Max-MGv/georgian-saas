@@ -617,6 +617,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   function countErrorText(e: CountsError): string {
     if (e.code === 'below_group_min') return mc('onsite_err_min_guests', 'form.err_min_guests', { min: e.min })
     if (e.code === 'below_product_min') return mc('onsite_err_product_min', 'form.err_product_min', { min: e.min, product: productName(e.product) })
+    if (e.code === 'too_many_free') return mc('onsite_err_too_many_free', 'form.err_too_many_free', { max: e.max })
     if (e.code === 'visit_mismatch' && visitType === 'TASTING_LUNCH') return mc('onsite_err_visit_mismatch', 'form.err_visit_mismatch')
     return mc('onsite_err_guest_counts', 'form.err_guest_counts')
   }

@@ -48,7 +48,7 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // Calendar round trip, and a Table-view re-render that alone measures
     // ~5s on a healthy server (see the real finding further down) — 60s left
     // no real margin even without any load.
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     await ensureAdminLoggedIn(page);
 

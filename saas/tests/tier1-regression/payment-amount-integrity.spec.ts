@@ -159,7 +159,7 @@ test.describe('Individual booking — payment on/off carries the correct amount 
     // (and any other spec that assumes it's on) until someone noticed and
     // fixed it by hand. Not a hang, not a stuck locator — every step
     // completes, there just wasn't enough budget.
-    test.setTimeout(180_000);
+    test.setTimeout(360_000); // was 180 s — slow dev DB, 2026-10-22 (KNOWN-ISSUES "/admin itself takes 7–29 s")
     await loginAsTenantAdmin(page);
     const original = await readPaymentSectionToggle(page, 'Individual bookings');
 

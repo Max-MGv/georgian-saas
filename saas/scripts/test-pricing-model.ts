@@ -326,5 +326,15 @@ console.log('Rules from settings (Chunk 6)')
   check('rates cleared on an order that had a price → refused like the server (8a)', [ind(true).problem?.key, ind(true).missing, ind(true).total], ['orderForm.err.missingRate', ['tastingOnly'], null])
 }
 
+// Max 2026-10-22: no more Free guests than paying guests on the public form (admin exempt).
+{
+  console.log('\nFree-guest cap')
+  const none = { groupMin: null, productMins: { tastingOnly: null, lunchOnly: null, tastingLunch: null } }
+  const r = (form: 'public' | 'admin', to: number, free: number) => { const x = checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form, visitType: 'TASTING', tastingOnly: to, free }, none); return x.ok ? 'ok' : x.error }
+  check('public: 1 paying + 200 free → refused, max 1', r('public', 1, 200), { code: 'too_many_free', max: 1 })
+  check('public: 4 paying + 4 free → ok', r('public', 4, 4), 'ok')
+  check('admin screens exempt (phone bookings)', r('admin', 1, 3), 'ok')
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed ? 1 : 0)

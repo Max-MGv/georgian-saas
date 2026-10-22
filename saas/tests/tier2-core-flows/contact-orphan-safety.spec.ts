@@ -154,7 +154,7 @@ test.describe('Deleting a person must not erase their name from a past order (F2
   });
 
   test('deleting the guide leaves the order showing their name from the snapshot', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     // 1. Add a throwaway guide to a real, already-populated test company.
     await ensureAdminLoggedIn(page);

@@ -73,7 +73,7 @@ test.use({
 // file for the exact reset query.
 test.describe('Onboarding wizard walkthrough', () => {
   test('7-step flow on a fresh tenant: gating, cross-page contact check, payment-gated Review, idempotent launch', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000); // was 180 s — slow dev DB, 2026-10-22
 
     const stamp = Date.now();
     const COMPANY_NAME = `PW Onboarding Co ${stamp}`;
