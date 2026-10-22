@@ -6,7 +6,7 @@
 // Individuals: one guest count (D-5).
 
 import { asTetri, formatTetri } from '@/lib/money'
-import { boxesFor, PRODUCT_AT, type AdminOrderView, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
+import { boxesFor, PRODUCT_AT, visibleBoxes, type AdminOrderView, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
 import type { BookingVisitType, Product } from '@/lib/pricingUtils'
 
 type At = (key: string, vars?: Record<string, string | number>) => string
@@ -37,7 +37,8 @@ export function GuestFields({
 }) {
   const options: BookingVisitType[] = isCompany ? ['TASTING', 'TASTING_LUNCH', 'LUNCH'] : ['TASTING', 'TASTING_LUNCH']
   const label = (v: BookingVisitType) => at(v === 'TASTING' ? 'orders.visit.tasting' : v === 'LUNCH' ? 'orders.visit.lunch' : 'orders.visit.tastingLunch')
-  const shown = boxesFor(visitType)
+  // The visit's boxes plus any box still holding guests, so a stored contradiction is shown, never zeroed unseen.
+  const shown = visibleBoxes(visitType, boxes)
   const style = disabled ? { ...inputStyle, opacity: 0.6, cursor: 'not-allowed' } : inputStyle
 
   function changeVisit(v: BookingVisitType) {

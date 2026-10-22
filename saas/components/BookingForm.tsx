@@ -591,9 +591,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   // Who is coming. Detailed company form: the four boxes. Everyone else: one count, all on the visit type's
   // product (A-4) — exactly the counts the server will build.
+  // Only a box on screen counts: a number typed before the code was proven stays in state but is neither priced
+  // nor sent once the proven company turns out not to sell that product — otherwise the guest is stuck behind a
+  // "not offered" error whose box they can no longer see (blind review, Chunk 11).
   const boxNum = (v: string) => Math.max(parseInt(v) || 0, 0)
+  const lunchVisit = visitType !== 'TASTING'
   const counts: Counts = isEnhanced
-    ? { tastingOnly: boxNum(tastingOnlyStr), lunchOnly: visitType === 'TASTING' ? 0 : boxNum(lunchOnlyStr), tastingLunch: visitType === 'TASTING' ? 0 : boxNum(tastingLunchStr), free: boxNum(freeGuestsStr) }
+    ? {
+        tastingOnly: offers('tastingOnly') ? boxNum(tastingOnlyStr) : 0,
+        lunchOnly: lunchVisit && offers('lunchOnly') ? boxNum(lunchOnlyStr) : 0,
+        tastingLunch: lunchVisit && offers('tastingLunch') ? boxNum(tastingLunchStr) : 0,
+        free: boxNum(freeGuestsStr),
+      }
     : countsFromVisit(visitType, guestCount)
   const totalGuests = totalOf(counts)
   const payingGuests = payingOf(counts)

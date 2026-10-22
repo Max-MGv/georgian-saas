@@ -2,6 +2,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
 import { openReviewSheet, confirmButton } from '../helpers/bookingForm';
+import { readPersonCodesToggle, setPersonCodesToggle } from '../helpers/payments';
 
 // Repointed (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): "Test
 // Company # 1" was deleted from Staging Winery weeks ago (KNOWN-ISSUES.md
@@ -55,6 +56,26 @@ async function deleteTestOrderOnAdminPage(page: Page) {
 }
 
 test.describe('Booking form — enhanced/company variant', () => {
+  // The company code / New Order picker only lists a company's people while "Personal access codes"
+  // (person_codes_enabled) is OFF — ON hides the list by design. Staging Winery's real resting value is ON
+  // (a staging-only setting restored after the 2026-10-20 dev-DB recovery), so this spec sets OFF for itself and
+  // puts back whatever it found, like contact-role-picker.spec.ts does. It used to assume OFF.
+  let personCodesWas = false;
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    personCodesWas = await readPersonCodesToggle(page);
+    if (personCodesWas) await setPersonCodesToggle(page, false);
+    await page.close();
+  });
+  test.afterAll(async ({ browser }) => {
+    if (!personCodesWas) return;
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    await setPersonCodesToggle(page, true);
+    await page.close();
+  });
+
   test.afterEach(async ({ context }, testInfo) => {
     // The test body's own step 9 already deletes the order it created — this
     // hook is a safety net for a body that failed before reaching that step.

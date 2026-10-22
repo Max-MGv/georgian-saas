@@ -99,6 +99,19 @@ export async function updateOrder(id: string, data: {
   return { success: true }
 }
 
+/**
+ * Typed per-person rates from an admin screen: each null, or whole tetri from 1 to ₾100,000. Anything else (a
+ * fraction, a negative, a huge number from a crafted call) is refused with a message instead of reaching
+ * Prisma's Int column as a 500 (blind review, Chunk 11). Not exported: a 'use server' file only exports actions.
+ */
+function badManualRates(m: unknown): boolean {
+  if (!m || typeof m !== 'object') return true
+  return PRODUCTS.some(p => {
+    const v = (m as Record<string, unknown>)[p]
+    return v != null && !(typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 10_000_000)
+  })
+}
+
 export async function updateOrderEnhanced(
   id: string,
   data: {
@@ -148,6 +161,17 @@ export async function updateOrderEnhanced(
           'that changed (e.g. extra guests joining after payment), add it as an extra on ' +
           'this order instead.',
       } as const
+    }
+
+    if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' } as const
+    // An individual order is edited as one guest count on one product (D-5). One that was stored any other way
+    // (free guests, two products — only possible for orders converted from the old model) is refused rather than
+    // silently rewritten into that shape (blind review, Chunk 11).
+    if (order.bookingType === 'INDIVIDUAL') {
+      const nonZero = PRODUCTS.filter(p => countsOf(order)[p] > 0).length
+      if (order.freeGuestCount > 0 || nonZero > 1) {
+        return { error: 'This individual booking has free guests or more than one product, which this page cannot show — its guests cannot be changed here.' } as const
+      }
     }
 
     // Who is coming — the check the order page shows inline (Plan-PricingModel Chunk 8, A-6, A-11).
@@ -259,6 +283,8 @@ export async function createOrderAdmin(data: {
   // splits it with splitFullName(), so a one-word name arrives with an empty surname.
   if (!data.name.trim()) return { error: 'Name is required.' }
   if (!data.date) return { error: 'Date is required.' }
+  if (!Array.isArray(data.masterclassLines) || !Array.isArray(data.extras)) return { error: 'The order could not be read — please reload and try again.' }
+  if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' }
   const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
 
   // Who is coming — the same check the form shows inline (Plan-PricingModel Chunk 8, A-6, A-11).
@@ -705,6 +731,15 @@ export async function assignOrderCompany(
     // Product model (Plan-PricingModel Chunk 7): each of the order's boxes looks up its own row of
     // the company's ladder (D-2). A company with no ladder leaves the order unpriced (0 + its lines),
     // as before; a ladder that does not price a box the order has is refused, never priced at ₾0.
+    // Linking never rewrites money that is already settled or deliberately set (blind review, Chunk 11):
+    // - a paid order is only linked — its total and rates are what the guest was charged;
+    // - a company with no price table yet leaves an order that already has a price (typed on the order page) alone.
+    // Only a priced table re-prices the order, which is the point of linking (E-7).
+    if (order.paidAt || (!company.prices.length && ratesFromProductSnapshot(order))) {
+      await tx.order.update({ where: { id: orderId }, data: { companyId, bookingType: 'COMPANY' } })
+      return { success: true as const, totalPrice: order.totalPrice ?? 0 }
+    }
+
     const counts = countsOf(order)
     const lines = { masterclass: masterclassAmt, extras: extrasAmt }
     let totalPrice = masterclassAmt + extrasAmt

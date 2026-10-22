@@ -15,6 +15,8 @@ import { fromMajor } from '@/lib/money'
 export type BoxField = 'tastingOnly' | 'lunchOnly' | 'tastingLunch' | 'free'
 export type BoxStrings = Record<BoxField, string>
 
+const num = (s: string) => (/^\d+$/.test(s.trim()) ? parseInt(s, 10) : 0)
+
 /** Which boxes a company visit type shows (D-9; Lunch only → only Lunch only, A-6). Free is always there. */
 export function boxesFor(visitType: BookingVisitType): BoxField[] {
   if (visitType === 'TASTING') return ['tastingOnly', 'free']
@@ -22,12 +24,22 @@ export function boxesFor(visitType: BookingVisitType): BoxField[] {
   return ['tastingOnly', 'lunchOnly', 'tastingLunch', 'free']
 }
 
+/**
+ * The boxes a screen shows: the visit type's boxes, plus any box that holds guests. A stored order whose boxes
+ * contradict its visit type (possible for orders converted from the old model) then shows the contradiction and
+ * gets the usual "move them or switch the visit type" message — instead of a hidden box being counted as 0 and a
+ * Save silently dropping those guests (blind review, Chunk 11).
+ */
+export function visibleBoxes(visitType: BookingVisitType, boxes: BoxStrings): BoxField[] {
+  const own = boxesFor(visitType)
+  return (['tastingOnly', 'lunchOnly', 'tastingLunch', 'free'] as BoxField[]).filter(f => own.includes(f) || num(boxes[f]) > 0)
+}
+
 /** adminT keys for the product names. */
 export const PRODUCT_AT: Record<Product, string> = {
   tastingOnly: 'orderDetail.product.tastingOnly', lunchOnly: 'orderDetail.product.lunchOnly', tastingLunch: 'orderDetail.product.tastingLunch',
 }
 
-const num = (s: string) => (/^\d+$/.test(s.trim()) ? parseInt(s, 10) : 0)
 /** GEL typed in a rate box → tetri, or null when empty / zero. */
 export const typedTetri = (s: string): number | null => { const v = parseFloat(s); return Number.isFinite(v) && v > 0 ? fromMajor(v) : null }
 export const manualFromStrings = (m: Record<Product, string>): ManualRates =>
@@ -64,9 +76,11 @@ export function adminOrderView(input: {
   manual: Record<Product, string>
   masterclassAmt: number
   extrasAmt: number
+  /** The order already carries frozen rates (order page) — clearing every typed rate is then refused, not "price later". */
+  hadRates?: boolean
 }): AdminOrderView {
   const company = input.bookingType === 'COMPANY'
-  const shown = company ? boxesFor(input.visitType) : []
+  const shown = company ? visibleBoxes(input.visitType, input.boxes) : []
   const box = (f: BoxField) => (shown.includes(f) ? num(input.boxes[f]) : 0)
   // Dishes are not part of this check: both screens switch the dish selects off and send no dish while there is
   // no lunch guest, so the admin never has a dish to fix. The server still refuses one (A-11) — a crafted request.
@@ -94,6 +108,12 @@ export function adminOrderView(input: {
   const total = quote.kind === 'priced' ? priceCounts(quote.rates, counts, lineTotals)
     : quote.kind === 'unpriced' ? input.masterclassAmt + input.extrasAmt
     : null
-  const problem: AdminOrderProblem | null = quote.kind === 'missing' ? { key: 'orderForm.err.missingRate' } : null
-  return { counts, problem, quote, rateInputs, lines, registration: quote.kind === 'priced' ? quote.rates.registration : 0, total, lunchGuests, missing: quote.kind === 'missing' ? quote.products : [] }
+  // updateOrderEnhanced's rule: an order that already has a price never drops back to "price later" (review 8a).
+  const unpricedButWasPriced = quote.kind === 'unpriced' && input.hadRates === true
+  const missing = quote.kind === 'missing' ? quote.products : unpricedButWasPriced ? PRODUCTS.filter(p => counts[p] > 0) : []
+  const problem: AdminOrderProblem | null = missing.length > 0 ? { key: 'orderForm.err.missingRate' } : null
+  return {
+    counts, problem, quote, rateInputs, lines, registration: quote.kind === 'priced' ? quote.rates.registration : 0,
+    total: unpricedButWasPriced ? null : total, lunchGuests, missing,
+  }
 }

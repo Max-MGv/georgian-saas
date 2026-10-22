@@ -17,8 +17,14 @@ import { countsOf, notOffered, priceCounts, ratesForCounts, ratesFromProductSnap
  * (scripts/test-pricing-model.ts equivalence: dev 428/428, prod 2/2).
  *
  * All amounts are tetri, and integer arithmetic keeps them there.
+ *
+ * `linesDelta` — how much the line that was just added (+) or removed (−) is worth. It is used only by an order
+ * with no frozen rates AND no price table (a "price later" order, or an old one): its total then moves by exactly
+ * that amount instead of staying put — before the blind review of Chunk 11 such an order kept its old total, so a
+ * ₾20 extra was never billed. Moving by the delta, not recomputing "total = lines", keeps any base price an old
+ * order carries.
  */
-export async function recalcOrderTotal(orderId: string, tenantId: string): Promise<void> {
+export async function recalcOrderTotal(orderId: string, tenantId: string, linesDelta?: number): Promise<void> {
   await withTenantDb(tenantId, async (tx) => {
     const order = await tx.order.findFirst({
       where: { id: orderId, tenantId },
@@ -65,6 +71,13 @@ export async function recalcOrderTotal(orderId: string, tenantId: string): Promi
 
     const prices = order.company?.prices ?? []
     if (prices.length === 0) {
+      if (linesDelta != null && linesDelta !== 0) {
+        await tx.order.update({
+          where: { id: orderId },
+          data: { totalPrice: Math.max(0, (order.totalPrice ?? 0) + linesDelta) },
+        })
+        return
+      }
       console.warn(
         `[pricing] order ${orderId}: no snapshot and no company tiers; total left unchanged`
       )

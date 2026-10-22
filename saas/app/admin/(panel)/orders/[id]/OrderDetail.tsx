@@ -569,6 +569,7 @@ export default function OrderDetail({
     bookingType: isCompanyOrder ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
     prices, registration: companyRegistrationFee, manual: manualRates,
     masterclassAmt, extrasAmt,
+    hadRates: ratesFromProductSnapshot(order) != null,
   })
   const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
   const problem = problemText(at, view)

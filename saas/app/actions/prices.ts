@@ -46,6 +46,14 @@ function tierPricesProblem(p: TierPrices, isIndividual: boolean): string | null 
 }
 
 
+/** The tier columns a price action may write — never companyId changes or isDisplayPrice from a browser object. */
+function tierFields(d: { minGuests: number; maxGuests: number } & TierPrices) {
+  return {
+    minGuests: d.minGuests, maxGuests: d.maxGuests,
+    tastingOnlyPrice: d.tastingOnlyPrice, lunchOnlyPrice: d.lunchOnlyPrice, tastingLunchPrice: d.tastingLunchPrice,
+  }
+}
+
 export async function createPrice(data: {
   companyId: string
   minGuests: number
@@ -63,7 +71,8 @@ export async function createPrice(data: {
     if (!company) return { error: 'Not found.' }
     const err = tierPricesProblem(data, company.isIndividual) ?? await validateTier(tx, data.companyId, data.minGuests, data.maxGuests)
     if (err) return { error: err }
-    await tx.price.create({ data })
+    // Only the known fields — the caller's object is passed in from the browser (blind review, Chunk 11).
+    await tx.price.create({ data: { companyId: data.companyId, ...tierFields(data) } })
     return { success: true as const }
   })
   if (!('error' in result)) revalidatePath('/admin/companies')
@@ -84,7 +93,7 @@ export async function updatePrice(id: string, data: {
     if (!price || price.company.tenantId !== tenantId) return { error: 'Not found.' }
     const err = tierPricesProblem(data, price.company.isIndividual) ?? await validateTier(tx, companyId, data.minGuests, data.maxGuests, id)
     if (err) return { error: err }
-    await tx.price.update({ where: { id }, data })
+    await tx.price.update({ where: { id }, data: tierFields(data) })
     return { success: true as const }
   })
   if (!('error' in result)) revalidatePath('/admin/companies')

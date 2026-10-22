@@ -36,11 +36,12 @@ export async function addMasterclassLine(
         pricePerUnit: line.pricePerUnit,
       },
     })
-    return { success: true as const, lineId: created.id }
+    return { success: true as const, lineId: created.id, amount: line.quantity * line.pricePerUnit }
   })
   if ('error' in result) return result
 
-  await recalcOrderTotal(orderId, tenantId)
+  // The delta matters only to an order with no frozen rates and no price table (lib/pricing.ts).
+  await recalcOrderTotal(orderId, tenantId, result.amount)
   revalidatePath(`/admin/orders/${orderId}`)
   revalidatePath('/admin/orders')
   return result
@@ -55,11 +56,15 @@ export async function removeMasterclassLine(
 
   const found = await withTenantDb(tenantId, async (tx) => {
     const order = await tx.order.findFirst({ where: { id: orderId, tenantId } })
-    if (!order) return false
+    if (!order) return null
+    // Scoped to this order: a line id from another order must not be deleted, nor this order re-priced for it
+    // (blind review, Chunk 11 — the delete used to go by id alone).
+    const line = await tx.orderMasterclass.findFirst({ where: { id: lineId, orderId } })
+    if (!line) return null
     await tx.orderMasterclass.delete({ where: { id: lineId } })
-    return true
+    return line.quantity * line.pricePerUnit
   })
-  if (found) await recalcOrderTotal(orderId, tenantId)
+  if (found != null) await recalcOrderTotal(orderId, tenantId, -found)
   revalidatePath(`/admin/orders/${orderId}`)
   revalidatePath('/admin/orders')
   return { success: true }

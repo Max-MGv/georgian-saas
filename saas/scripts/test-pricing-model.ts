@@ -21,6 +21,7 @@ import {
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
 import { guestSplitText, invoiceView } from '../lib/invoiceLines'
+import { adminOrderView, visibleBoxes } from '../lib/adminOrderView'
 import { checkAdminOrder, checkBookingCounts, checkMasterclassLines, countRulesFromSettings, hotDishWithoutLunch, type CountRules, type CountRuleKey } from '../lib/bookingInput'
 import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
 
@@ -307,6 +308,22 @@ console.log('Rules from settings (Chunk 6)')
   check('registration fee counted in', invoiceView({ ...base, registrationFeeSnapshot: 3000, totalPrice: 62500 }).registration, 3000)
   check('guest split: mixed booking', guestSplitText({ tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 }, 'en'), '1 Tasting only · 2 Tasting & Lunch · 1 free')
   check('guest split: one product, no free → nothing extra to say', guestSplitText({ tastingOnly: 0, lunchOnly: 0, tastingLunch: 4, free: 0 }, 'en'), null)
+}
+
+// ── Chunk 11 blind-review fixes: hidden boxes are never zeroed unseen; a priced order cannot go "unpriced" ──
+{
+  console.log('\nChunk 11 — review fixes')
+  const tbl: ProductTier[] = [{ minGuests: 1, maxGuests: 50, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 9200 }]
+  const stored = { tastingOnly: '6', lunchOnly: '0', tastingLunch: '4', free: '0' }
+  check('a Tasting order with stored Tasting & Lunch guests shows that box too', visibleBoxes('TASTING', stored), ['tastingOnly', 'tastingLunch', 'free'])
+  const v = adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING', guests: '0', boxes: stored, prices: tbl, registration: 0,
+    manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' }, masterclassAmt: 0, extrasAmt: 0 })
+  check('…and the contradiction is a problem to fix, not 4 guests dropped on Save', v.problem?.key, 'orderForm.err.mismatchTasting')
+  const manual = { tastingOnly: '', lunchOnly: '', tastingLunch: '' }
+  const ind = (hadRates: boolean) => adminOrderView({ bookingType: 'INDIVIDUAL', visitType: 'TASTING', guests: '4', boxes: { tastingOnly: '0', lunchOnly: '0', tastingLunch: '0', free: '0' },
+    prices: [], registration: 0, manual, masterclassAmt: 0, extrasAmt: 0, hadRates })
+  check('no rates typed on a new order → price later, no problem', [ind(false).quote?.kind, ind(false).problem], ['unpriced', null])
+  check('rates cleared on an order that had a price → refused like the server (8a)', [ind(true).problem?.key, ind(true).missing, ind(true).total], ['orderForm.err.missingRate', ['tastingOnly'], null])
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
