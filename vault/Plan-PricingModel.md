@@ -534,7 +534,8 @@ Save after the lunch guests went → the inline check no longer looks at dishes 
 16–22 Dec all with kitchen totals, simple invoice for the mixed order (₾460 + ₾135 = ₾595), Messages previews EN + KA
 (confirmation split line, invoice per-product lines, winery alert split), statistics (188 / 146 / 2 orders; guests
 1640 / 15 / 1074 / 62). `test-pricing-model.ts` 103/103.
-**Resume point:** staging check → Chunk 10.
+Staging `089a802` (Brave, read-only): orders table columns + statistics identical to localhost, console clean.
+**Resume point:** done → Chunk 10.
 
 ### Chunk 10 — Demo seed, fixtures, scripts, docs
 **Status:** ⬜
