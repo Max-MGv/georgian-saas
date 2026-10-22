@@ -77,7 +77,8 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // reset to land in between.
     await expect(dateInput).toBeVisible({ timeout: 15_000 });
     await dateInput.fill(TEST_DATE);
-    await page.getByRole('textbox').nth(1).fill('4'); // Guest count
+    // An individual order: one guest count (T-152 D-5), named since Chunk 8 — not found by position any more.
+    await page.getByRole('textbox', { name: 'Number of guests' }).fill('4');
     // One Name box now (like the public form) — split into first word / rest at submit,
     // so this still stores name "Playwright", surname "AdminOrdersTest".
     await page.getByPlaceholder('Name', { exact: true }).fill('Playwright AdminOrdersTest');
@@ -95,7 +96,8 @@ test.describe('Orders admin — filtering and view toggle', () => {
     await page.goto('/admin/orders');
     const table = page.locator('table');
     await expect(table).toBeVisible({ timeout: 15_000 });
-    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
+    // The three product columns since T-152 Chunk 9 (saved ids tasting/lunch kept, labels renamed, Lunch only added).
+    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting only', 'Lunch only', 'Tasting & Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
       await expect(page.getByRole('columnheader', { name: col, exact: true })).toBeVisible();
     }
 

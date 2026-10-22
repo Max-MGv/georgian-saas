@@ -185,14 +185,14 @@ test.describe.serial('Company booking nationality tagging', () => {
 
     // 4. Fill the rest of the required fields and reach the confirm-review sheet. Real finding:
     // Staging Winery has "enhanced company booking" permanently on (per booking-enhanced.spec.ts),
-    // so a Company booking here shows split Tasting/Free guest-count spinbuttons (defaulting to
-    // "0") instead of a single Guest Count field — must fill Tasting to at least minGuests (4) or
-    // the confirm sheet never opens.
+    // so a Company booking here shows one box per product (a Tasting visit: Tasting only + Free, T-152 D-9,
+    // defaulting to "0") instead of a single Guest Count field — must fill Tasting only to at least
+    // minGuests (4) or the confirm sheet never opens.
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
     await page.getByRole('combobox').last().selectOption({ index: 1 });
-    await page.getByText('Tasting', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
+    await page.getByText('Tasting only', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
     // Contact Person merged First/Last Name into one Name field 2026-09-30
     // (MaintenanceNotes.md §1); exact: true since Tbilisi Tour Collective has
     // a guide on file, which also renders "Guide — Name"/"Guide — Phone"/

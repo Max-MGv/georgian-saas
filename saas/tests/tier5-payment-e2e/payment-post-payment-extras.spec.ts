@@ -170,13 +170,12 @@ test.describe('Post-payment extras end-to-end (KnownBugs #64, Plan-PostPaymentEx
 
       // ── 4. Chunk 1 — attempt an edit, confirm it's rejected/disabled. ───────
       await expect(page.getByText('This order is already paid.', { exact: false })).toBeVisible()
-      const partySizeInput = page.locator('label', { hasText: 'Total guests in the party' }).locator('xpath=following-sibling::input[1]')
-      const tastingGuestsInput = page.locator('label', { hasText: 'Tasting-only guests' }).locator('xpath=following-sibling::input[1]')
-      const lunchGuestsInput = page.locator('label', { hasText: 'Tasting+Lunch guests' }).locator('xpath=following-sibling::input[1]')
+      // An individual order since T-152 Chunk 8: one guest count and the rate it was sold at — both locked.
+      const partySizeInput = page.getByRole('textbox', { name: 'Number of guests' })
+      const rateInput = page.getByRole('textbox', { name: /— ₾ per person$/ })
       const saveButton = page.getByRole('button', { name: 'Save changes', exact: true })
       await expect(partySizeInput).toBeDisabled()
-      await expect(tastingGuestsInput).toBeDisabled()
-      await expect(lunchGuestsInput).toBeDisabled()
+      await expect(rateInput).toBeDisabled()
       await expect(saveButton).toBeDisabled()
       // A genuine attempt, not just a state check: Playwright's own
       // actionability wait for `.fill()` blocks on the element becoming

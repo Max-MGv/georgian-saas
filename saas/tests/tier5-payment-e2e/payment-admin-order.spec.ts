@@ -127,20 +127,15 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
       // immediately before submit.
       await expect(dateInput).toBeVisible({ timeout: 15_000 })
       await dateInput.fill(dateIso)
-      await page.getByRole('textbox').nth(1).fill(String(guestCount)) // Party size / guest count
+      // An individual order: one guest count (T-152 D-5), found by its name since Chunk 8.
+      await page.getByRole('textbox', { name: 'Number of guests' }).fill(String(guestCount))
       // One Name box (split into first word / rest at submit): first name, then the unique marker.
       await page.getByPlaceholder('Name', { exact: true }).fill(`${firstName} ${marker}`)
       await page.locator('input[type="tel"]').fill(phone)
       await page.locator('input[type="email"]').fill(email)
-      // Manual tasting rate — an individual order always shows this (no
-      // company tier to fall back on). Located by its label rather than a
-      // positional textbox index, since several more text inputs sit between
-      // the contact fields and this one (notes textarea) that a plain nth()
-      // chain would have to account for.
-      await page
-        .locator('label', { hasText: 'Tasting only ₾/pp' })
-        .locator('xpath=following-sibling::input[1]')
-        .fill(tastingRate)
+      // Typed per-person rate — an individual order on this screen has no price table, so the visit's product
+      // asks for one (T-152 A-9; empty = price later). Named since Chunk 8.
+      await page.getByRole('textbox', { name: 'Tasting only — ₾ per person' }).fill(tastingRate)
       await dateInput.fill(dateIso)
       await expect(dateInput).toHaveValue(dateIso)
       await page.getByRole('button', { name: 'Create order', exact: true }).click()

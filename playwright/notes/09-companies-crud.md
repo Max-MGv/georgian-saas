@@ -4,6 +4,10 @@ tags: [playwright, test, tier3]
 
 # 09. Companies CRUD
 
+> **Update 2026-10-22 (T-152).** A company's "+ Add tier" form is now Min / Max / Tasting only / Lunch only /
+> Tasting & Lunch (all-in); the registration fee is one field on the company, not per tier. The spec fills
+> Tasting only and Tasting & Lunch and leaves Lunch only blank (= not offered).
+
 **Status:** ✅ Passing — 1/1, reconfirmed clean twice individually and in the full 16-test suite (see `Progress.md`)
 **Tier:** 3 — admin panel smoke
 **Regression guard for:** `KnownBugs.md` #11 (wizard-created companies ignored tenant's actual modules), #13 (Companies list had no visual indicator for missing details)

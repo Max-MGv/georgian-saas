@@ -4,6 +4,10 @@ tags: [playwright, test, tier5, payment, known-bug]
 
 # 18. Post-payment extras end-to-end (Plan-PostPaymentExtras Chunk 6)
 
+> **Update 2026-10-22 (T-152, Chunk 8).** The paid-order lock is now checked on "Number of guests" and the
+> rate box ("… — ₾ per person"), the individual order page's two editable money inputs; the old three guest
+> fields are gone.
+
 **Status:** ✅ Passing (6/6 consecutive runs after two real test fixes — see "Getting to a clean pass" below).
 **Tier:** 5 — real staging E2E (`playwright.staging.config.ts`, targets `https://staging.vineworks.ge`, dev DB).
 **File:** `tests/tier5-payment-e2e/payment-post-payment-extras.spec.ts`

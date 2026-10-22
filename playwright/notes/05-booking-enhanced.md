@@ -4,6 +4,14 @@ tags: [playwright, test, tier2]
 
 # 05. Booking form — enhanced/company variant
 
+> **Update 2026-10-22 (T-152, Plan-PricingModel Chunk 10).** The detailed company form now has one box per
+> product: Tasting only / Lunch only / Tasting & Lunch + Free / Guide (a Tasting visit shows only Tasting only +
+> Free). A product the company's price table does not price has no box (Tbilisi Tour Collective has no Lunch only
+> price, so the spec checks that box stays hidden). Each product finds its row by its own count; Tasting & Lunch
+> is an all-in price, not tasting + an add-on. Preview lines read "5 × Tasting only 60₾". The orders table gained
+> a Lunch only column, so every cell after Company moved one to the right. Text below about "Tasting/Lunch" fields,
+> `pricePerPerson` and the add-on is history.
+
 **Status:** ✅ Passing (1/1), fixed and reconfirmed 2026-08-12 — see finding below
 **Tier:** 2 — core customer flows
 **Regression guard for:** the `isEnhanced` branch logic in `BookingForm.tsx` (`MaintenanceNotes.md` §1) — split guest counts, hot dish, masterclass add-ons

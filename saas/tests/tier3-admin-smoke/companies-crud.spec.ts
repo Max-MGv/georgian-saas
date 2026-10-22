@@ -298,9 +298,10 @@ test.describe('Companies CRUD', () => {
     // Real finding: these spinbuttons have no accessible name (the "Min
     // guests"/"Tasting ₾/person" text is plain nearby text, not wired via
     // <label> or aria-label — confirmed live), so they can only be targeted
-    // positionally: 0=Min guests (prefilled "1"), 1=Max guests (prefilled
-    // "10"), 2=Tasting ₾/person, 3=+Lunch ₾/person (add-on), 4=Flat fee
-    // (prefilled "0").
+    // positionally. Since T-152 (product model) a company's tier form is:
+    // 0=Min guests (prefilled "1"), 1=Max guests (prefilled "10"), 2=Tasting only
+    // ₾/person, 3=Lunch only ₾/person (blank = not offered), 4=Tasting & Lunch
+    // ₾/person (ALL-IN, not an add-on). The registration fee moved to the company.
     // Real bug fixed here: clicking companyRow(page) (the row's outer <div>,
     // parent of the summary button) never toggled expansion — it silently
     // no-opped and "+ Add tier" (only rendered when expanded) timed out.
@@ -311,8 +312,8 @@ test.describe('Companies CRUD', () => {
     await clickUntil(companyNameButton(page), () => expect(addTierButton).toBeVisible({ timeout: 2_000 }));
     const tierInputs = page.getByRole('spinbutton');
     await clickUntil(addTierButton, () => expect(tierInputs.first()).toBeVisible({ timeout: 2_000 }));
-    await tierInputs.nth(2).fill('50');
-    await tierInputs.nth(3).fill('50');
+    await tierInputs.nth(2).fill('50');   // Tasting only
+    await tierInputs.nth(4).fill('100');  // Tasting & Lunch, all-in (Lunch only left blank = not offered)
     await clickUntil(
       page.getByRole('button', { name: 'Save', exact: true }),
       () => expect(companyRow(page)).toContainText('1 tier', { timeout: 8_000 }),
