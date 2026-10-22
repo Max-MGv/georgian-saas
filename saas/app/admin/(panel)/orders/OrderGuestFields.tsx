@@ -161,8 +161,8 @@ export function PriceLines({ at, view }: { at: At; view: AdminOrderView }) {
 /** The inline reason this booking cannot be saved yet, in the admin's language. */
 export function problemText(at: At, view: AdminOrderView): string | null {
   if (!view.problem) return null
-  if (view.problem.key === 'orderForm.err.missingRate') {
-    return at('orderForm.err.missingRate', { products: view.missing.map(p => at(PRODUCT_AT[p])).join(', ') })
+  if (view.problem.key === 'orderForm.err.missingRate' || view.problem.key === 'orderForm.err.individualsMissing') {
+    return at(view.problem.key, { products: view.missing.map(p => at(PRODUCT_AT[p])).join(', ') })
   }
   return at(view.problem.key, view.problem.vars)
 }

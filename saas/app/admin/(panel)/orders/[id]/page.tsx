@@ -18,7 +18,7 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage] = await Promise.all([
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -69,6 +69,8 @@ export default async function OrderDetailPage({
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
     getSetting('admin_language'),
+    // What an individual order is re-priced from when its guests or visit change (D-14).
+    withTenantDb(tenantId, tx => tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })),
   ])
 
   if (!order) notFound()
@@ -94,6 +96,14 @@ export default async function OrderDetailPage({
         displayName={displayName}
         locale={locale}
         companies={companies}
+        individualsPrices={(individuals?.prices ?? []).map(p => ({
+          id: p.id,
+          minGuests: p.minGuests,
+          maxGuests: p.maxGuests,
+          tastingOnlyPrice: p.tastingOnlyPrice,
+          lunchOnlyPrice: p.lunchOnlyPrice,
+          tastingLunchPrice: p.tastingLunchPrice,
+        }))}
         order={{
           id: order.id,
           stage: order.stage,

@@ -1167,6 +1167,15 @@ of **36 000 s (10 h)** — this app does not set one (`lib/payments/flitt.ts`).
 (total derived — P-11); individuals one guest count. The orders-table quick-edit panel no longer edits the guest
 count at all (it changed the total without the boxes or the price) — it links to the order page.
 
+**Since D-14 (2026-10-22): an individual order is priced from the Individuals table on both screens.** Individual
+orders carry `companyId: null`, so four places must each load the `isIndividual: true` company's prices and keep
+in step: `orders/new/page.tsx` + `orders/[id]/page.tsx` (pass `individualsPrices` down), and `createOrderAdmin` +
+`updateOrderEnhanced` (`individualsTable()` in `orders.ts`). `adminOrderView` ignores typed rates, the registration
+fee and `hadRates` for an individual and shows no rate boxes; no table → `orderForm.err.noIndividualsTable`
+(refused, never "price later"); a product the table lacks → `orderForm.err.individualsMissing`. Typed rates and
+"price later" remain for **companies** only (no table / product not on it). The public form reads the same row
+(`createBooking.ts`) but still prices an individual at ₾0 when the table is empty — that path was not changed.
+
 ---
 
 ## 33. Phone and desktop are different components in four places — change both halves

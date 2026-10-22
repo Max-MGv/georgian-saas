@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
-import { adminOrderView, manualFromStrings, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
+import { adminOrderView, manualFromStrings, NO_TYPED_RATES, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
@@ -317,6 +317,7 @@ export default function OrderDetail({
   menuItems,
   masterclassItems,
   companies = [],
+  individualsPrices = [],
   locale = 'en',
 }: {
   order: OrderProp
@@ -328,6 +329,8 @@ export default function OrderDetail({
   /** Real companies to link a no-company order to (Feature 180). Excludes
    * the isIndividual pricing-container row — see page.tsx's fetch. */
   companies?: { id: string; name: string }[]
+  /** The tenant's Individuals price table — what an individual order is re-priced from (D-14). */
+  individualsPrices?: Price[]
   locale?: string
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
@@ -558,9 +561,10 @@ export default function OrderDetail({
   const [emailSent, setEmailSent] = useState(false)
 
   // ── Pricing calculations ───────────────────────────────────────────────────
-  const prices = order.company?.prices ?? []
-  const companyRegistrationFee = order.company?.registrationFee ?? 0
   const isCompanyOrder = order.bookingType === 'COMPANY'
+  // An individual order is priced from the Individuals table, never typed rates (D-14).
+  const prices = isCompanyOrder ? order.company?.prices ?? [] : individualsPrices
+  const companyRegistrationFee = order.company?.registrationFee ?? 0
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
 
@@ -572,7 +576,6 @@ export default function OrderDetail({
     hadRates: ratesFromProductSnapshot(order) != null,
   })
   const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
-  const problem = problemText(at, view)
 
   // Nothing about what is sold has been edited → show the order as it was sold (its own rates), not a quote at
   // today's price table. This is also why "Live preview" no longer appears with nothing unsaved (finding 2).
@@ -582,11 +585,15 @@ export default function OrderDetail({
   const snapshot = ratesFromProductSnapshot(order)
   // updateOrderEnhanced's own rule: a rate counts as changed only when one is typed for a product with guests
   // and differs from what the order was sold at.
-  const rateEdited = PRODUCTS.some(p => {
+  const rateEdited = isCompanyOrder && PRODUCTS.some(p => {
     const typed = typedTetri(manualRates[p])
     return (view.counts?.[p] ?? 0) > 0 && typed != null && typed !== (snapshot?.[p] ?? null)
   })
   const edited = visitType !== order.visitType || !sameBoxes || rateEdited
+  // D-14: the server re-prices an individual order only when its visit or guests change, so a missing (or
+  // incomplete) Individuals table blocks Save only then — a food note or hot dish still saves without one.
+  const individualTableProblem = !isCompanyOrder && (view.problem?.key === 'orderForm.err.noIndividualsTable' || view.problem?.key === 'orderForm.err.individualsMissing')
+  const problem = individualTableProblem && !edited ? null : problemText(at, view)
   const storedCounts: Counts = { tastingOnly: order.tastingGuestCount, lunchOnly: order.lunchOnlyGuestCount, tastingLunch: order.lunchGuestCount, free: order.freeGuestCount }
   const soldLines: PriceLine[] = snapshot
     ? PRODUCTS.filter(p => storedCounts[p] > 0 && snapshot[p] != null)
@@ -636,7 +643,8 @@ export default function OrderDetail({
       hotDishMeat: view.lunchGuests > 0 ? hotDishMeat || null : null,
       foodNotes: foodNotes || null,
       // Seeded from the order's own rates (#50); the server re-prices only when something here was changed.
-      manualRates: manualFromStrings(manualRates),
+      // Companies only — an individual order has no typed rates (D-14).
+      manualRates: isCompanyOrder ? manualFromStrings(manualRates) : NO_TYPED_RATES,
     })
     setSaving(false)
     if ('error' in result) {

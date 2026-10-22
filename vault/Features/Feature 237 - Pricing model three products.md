@@ -5,7 +5,7 @@ tags: [feature, pricing, bookings, companies, admin]
 # Feature 237 — Pricing model: three products (T-152, fixes #93 + production P-11)
 
 Built 2026-10-19 → 2026-10-22 on `staging` + the dev database. **Not on production** — the production runbook is
-[[Plan-PricingModel]] Chunk 12 (each step on Max's explicit go). Plan, decisions (D-1…D-13, A-1…A-11, Q-1…Q-3) and
+[[Plan-PricingModel]] Chunk 12 (each step on Max's explicit go). Plan, decisions (D-1…D-14, A-1…A-11, Q-1…Q-3) and
 per-chunk QA logs: [[Plan-PricingModel]]. FeatureLog #237.
 
 ## What it does (for a winery)
@@ -22,8 +22,12 @@ per-chunk QA logs: [[Plan-PricingModel]]. FeatureLog #237.
   offer, per-product company minimums (Settings, blank by default), a hot dish with no lunch guest (A-11), and any
   altered request (negative or fractional counts, forged masterclass quantities — KnownBugs #93).
 - **Admin New Order + order page:** the four boxes, total derived (no typed party size → production report P-11
-  cannot happen), visit type editable on the order page, typed rates only where the table has no price, one price
-  line per product showing the table row used. Saving a food note no longer re-prices an order.
+  cannot happen), visit type editable on the order page, typed rates only where a company's table has no price, one
+  price line per product showing the table row used. Saving a food note no longer re-prices an order.
+- **Individual orders on the admin screens (D-14, 2026-10-22):** priced from the Individuals price table by the
+  guest count, like a company — no typed rates, no "price later" (refused with a message until the table exists).
+  To charge more, add an extra. Changing the guests or the visit re-prices at today's table; paid orders stay locked.
+- **Free guests capped** at the paying guests on the public form (Max, 2026-10-22); admin screens exempt.
 - **Everywhere a booking is shown:** orders table (Tasting only / Lunch only / Tasting & Lunch / Free columns),
   kitchen sheet with a kitchen total, invoices (print + email: a line per product), booking emails (Lunch only
   label, per-product guest line), statistics (three visit types, guests by product).
@@ -37,6 +41,7 @@ per-chunk QA logs: [[Plan-PricingModel]]. FeatureLog #237.
 | D-7 | Blank price = not offered | A ₾0 Lunch only by accident would give lunches away |
 | A-7 | No exact row → highest-priced row that offers it | Keeps today's "never under-quote a gap" protection, per product |
 | A-11 | No hot dish without a lunch guest | Max, 2026-10-21 — the kitchen gets no orphan dish orders |
+| D-14 | Individual admin orders priced from the Individuals table, no typed rates | Max, 2026-10-22 — same as companies; extras are the way to add money; removes a class of preview/server mismatches |
 | — | Order page re-prices only on a real change | A food-note save used to silently move a price to today's table |
 | — | Invoice prints per-product lines only when the frozen rates explain the total | Never print a split that does not add up to what is billed |
 

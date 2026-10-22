@@ -5,7 +5,7 @@ import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
 import type { BookingVisitType, Product } from '@/lib/pricingUtils'
-import { adminOrderView, manualFromStrings, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
+import { adminOrderView, manualFromStrings, NO_TYPED_RATES, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
@@ -83,6 +83,7 @@ function Field({ label, children, half }: { label: string; children: React.React
 
 export default function NewOrderForm({
   companies,
+  individualsPrices,
   menuItems,
   masterclassItems,
   contactRoles = [],
@@ -90,6 +91,8 @@ export default function NewOrderForm({
   locale = 'en',
 }: {
   companies: CompanyOption[]
+  /** The tenant's Individuals price table — what an individual order is priced from (D-14). Empty = none yet. */
+  individualsPrices: Price[]
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
   /** Tenant flag `enableCompanyNationalityBreakdown` — the same gate the public form uses. */
@@ -155,6 +158,7 @@ export default function NewOrderForm({
   const [foodNotes, setFoodNotes] = useState('')
 
   // Typed per-person rates (GEL) — for products the company's table does not price, or when there is no table.
+  // Companies only: an individual order is priced from the Individuals table (D-14).
   const [manualRates, setManualRates] = useState<Record<Product, string>>({ tastingOnly: '', lunchOnly: '', tastingLunch: '' })
 
   // Masterclass lines (client-side only until submit)
@@ -179,7 +183,7 @@ export default function NewOrderForm({
   // Same rule as the public form: a company booking, on a tenant with the flag on.
   const showNationalityPicker = nationalityEnabled && isCompany
   const selectedCompany = companies.find(c => c.id === companyId) ?? null
-  const prices = selectedCompany?.prices ?? []
+  const prices = isCompany ? selectedCompany?.prices ?? [] : individualsPrices
   const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
   const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
@@ -299,7 +303,7 @@ export default function NewOrderForm({
       hotDishVegetable: view.lunchGuests > 0 ? hotDishVeg || null : null,
       hotDishMeat: view.lunchGuests > 0 ? hotDishMeat || null : null,
       foodNotes: foodNotes || null,
-      manualRates: manualFromStrings(manualRates),
+      manualRates: isCompany ? manualFromStrings(manualRates) : NO_TYPED_RATES,
       // The server takes each line's price from the catalogue (Q-1); only the item and quantity go up.
       masterclassLines: lines.map(l => ({ masterclassItemId: l.itemId, quantity: l.quantity })),
       extras: extras.map(e => ({ label: e.label, amount: e.amount })),

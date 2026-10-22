@@ -45,6 +45,10 @@ export const typedTetri = (s: string): number | null => { const v = parseFloat(s
 export const manualFromStrings = (m: Record<Product, string>): ManualRates =>
   ({ tastingOnly: typedTetri(m.tastingOnly), lunchOnly: typedTetri(m.lunchOnly), tastingLunch: typedTetri(m.tastingLunch) })
 
+/** No typed rates — what an individual order is always priced with (D-14). */
+export const NO_TYPED_RATES: ManualRates = { tastingOnly: null, lunchOnly: null, tastingLunch: null }
+const NO_TYPED_STRINGS: Record<Product, string> = { tastingOnly: '', lunchOnly: '', tastingLunch: '' }
+
 export type PriceLine = { product: Product; count: number; rate: number; amount: number; row: { min: number; max: number } | null }
 
 export type AdminOrderView = {
@@ -71,8 +75,11 @@ export function adminOrderView(input: {
   /** Individuals' one guest count. */
   guests: string
   boxes: BoxStrings
+  /** The company's price table — for an individual order, the tenant's Individuals table (D-14). */
   prices: ProductTier[]
+  /** The company's registration fee; ignored for an individual order (never charged, as on the public form). */
   registration: number
+  /** Typed rates; ignored for an individual order (D-14). */
   manual: Record<Product, string>
   masterclassAmt: number
   extrasAmt: number
@@ -80,6 +87,9 @@ export function adminOrderView(input: {
   hadRates?: boolean
 }): AdminOrderView {
   const company = input.bookingType === 'COMPANY'
+  // D-14 (Max, 2026-10-22): an individual order is priced from the Individuals table by its guest count, like a
+  // company — no typed rates, no "price later". To charge more, the admin adds an extra.
+  if (!company) input = { ...input, registration: 0, manual: NO_TYPED_STRINGS, hadRates: false }
   const shown = company ? visibleBoxes(input.visitType, input.boxes) : []
   const box = (f: BoxField) => (shown.includes(f) ? num(input.boxes[f]) : 0)
   // Dishes are not part of this check: both screens switch the dish selects off and send no dish while there is
@@ -94,8 +104,11 @@ export function adminOrderView(input: {
   const counts: Counts = checked.counts
 
   const lunchGuests = counts.lunchOnly + counts.tastingLunch
+  if (!company && input.prices.length === 0) {
+    return { ...empty, counts, lunchGuests, problem: { key: 'orderForm.err.noIndividualsTable' } }
+  }
   const table = input.prices.length > 0 ? ratesForCounts(input.prices, counts, input.registration) : null
-  const rateInputs = PRODUCTS.filter(p => counts[p] > 0 && (table == null || table[p] == null))
+  const rateInputs = company ? PRODUCTS.filter(p => counts[p] > 0 && (table == null || table[p] == null)) : []
   const quote = adminQuote(input.prices, input.registration, counts, manualFromStrings(input.manual))
   const lines: PriceLine[] = quote.kind === 'priced'
     ? PRODUCTS.filter(p => counts[p] > 0).map(p => {
@@ -111,7 +124,8 @@ export function adminOrderView(input: {
   // updateOrderEnhanced's rule: an order that already has a price never drops back to "price later" (review 8a).
   const unpricedButWasPriced = quote.kind === 'unpriced' && input.hadRates === true
   const missing = quote.kind === 'missing' ? quote.products : unpricedButWasPriced ? PRODUCTS.filter(p => counts[p] > 0) : []
-  const problem: AdminOrderProblem | null = missing.length > 0 ? { key: 'orderForm.err.missingRate' } : null
+  const problem: AdminOrderProblem | null = missing.length === 0 ? null
+    : { key: company ? 'orderForm.err.missingRate' : 'orderForm.err.individualsMissing' }
   return {
     counts, problem, quote, rateInputs, lines, registration: quote.kind === 'priced' ? quote.rates.registration : 0,
     total: unpricedButWasPriced ? null : total, lunchGuests, missing,

@@ -320,10 +320,37 @@ console.log('Rules from settings (Chunk 6)')
     manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' }, masterclassAmt: 0, extrasAmt: 0 })
   check('…and the contradiction is a problem to fix, not 4 guests dropped on Save', v.problem?.key, 'orderForm.err.mismatchTasting')
   const manual = { tastingOnly: '', lunchOnly: '', tastingLunch: '' }
-  const ind = (hadRates: boolean) => adminOrderView({ bookingType: 'INDIVIDUAL', visitType: 'TASTING', guests: '4', boxes: { tastingOnly: '0', lunchOnly: '0', tastingLunch: '0', free: '0' },
+  // A company with no price table yet (since D-14 the only orders that can be priced later).
+  const co = (hadRates: boolean) => adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING', guests: '0', boxes: { tastingOnly: '4', lunchOnly: '0', tastingLunch: '0', free: '0' },
     prices: [], registration: 0, manual, masterclassAmt: 0, extrasAmt: 0, hadRates })
-  check('no rates typed on a new order → price later, no problem', [ind(false).quote?.kind, ind(false).problem], ['unpriced', null])
-  check('rates cleared on an order that had a price → refused like the server (8a)', [ind(true).problem?.key, ind(true).missing, ind(true).total], ['orderForm.err.missingRate', ['tastingOnly'], null])
+  check('no table, no rates typed on a new order → price later, no problem', [co(false).quote?.kind, co(false).problem], ['unpriced', null])
+  check('rates cleared on an order that had a price → refused like the server (8a)', [co(true).problem?.key, co(true).missing, co(true).total], ['orderForm.err.missingRate', ['tastingOnly'], null])
+}
+
+// D-14 (Max 2026-10-22): an individual order on the admin screens is priced from the Individuals table by its
+// guest count — no typed rates, no "price later", no registration fee.
+{
+  console.log('\nD-14 — individuals from the Individuals table')
+  const individuals: ProductTier[] = [
+    { minGuests: 1, maxGuests: 2, tastingOnlyPrice: 9000, lunchOnlyPrice: null, tastingLunchPrice: 15000 },
+    { minGuests: 3, maxGuests: 6, tastingOnlyPrice: 7000, lunchOnlyPrice: null, tastingLunchPrice: 12000 },
+    { minGuests: 7, maxGuests: 100, tastingOnlyPrice: 6000, lunchOnlyPrice: null, tastingLunchPrice: 10500 },
+  ]
+  const noBoxes = { tastingOnly: '0', lunchOnly: '0', tastingLunch: '0', free: '0' }
+  const ind = (o: { visitType?: 'TASTING' | 'TASTING_LUNCH'; guests: string; prices?: ProductTier[]; manual?: string; registration?: number; hadRates?: boolean }) =>
+    adminOrderView({ bookingType: 'INDIVIDUAL', visitType: o.visitType ?? 'TASTING', guests: o.guests, boxes: noBoxes, prices: o.prices ?? individuals,
+      registration: o.registration ?? 0, manual: { tastingOnly: o.manual ?? '', lunchOnly: '', tastingLunch: o.manual ?? '' }, masterclassAmt: 0, extrasAmt: 0, hadRates: o.hadRates })
+  const four = ind({ guests: '4' })
+  check('4 guests, Tasting → the 3–6 row, ₾70 × 4 = ₾280', [four.quote?.kind, four.total, four.lines.map(l => [l.rate, l.row])], ['priced', 28000, [[7000, { min: 3, max: 6 }]]])
+  check('8 guests, Tasting + Lunch → the 7–100 row, ₾105 × 8', ind({ visitType: 'TASTING_LUNCH', guests: '8' }).total, 84000)
+  const typed = ind({ guests: '4', manual: '50' })
+  check('a typed rate is ignored — the table price stands, no rate inputs', [typed.total, typed.rateInputs], [28000, []])
+  check('no registration fee for an individual, whatever is passed', ind({ guests: '4', registration: 3000 }).registration, 0)
+  const noTable = ind({ guests: '4', prices: [] })
+  check('no Individuals table → refused, not priced later', [noTable.problem?.key, noTable.quote, noTable.total, noTable.rateInputs], ['orderForm.err.noIndividualsTable', null, null, []])
+  const noTL = ind({ visitType: 'TASTING_LUNCH', guests: '4', prices: individuals.map(r => ({ ...r, tastingLunchPrice: null })) })
+  check('table lacks the product → refused with the Individuals message', [noTL.problem?.key, noTL.missing, noTL.rateInputs], ['orderForm.err.individualsMissing', ['tastingLunch'], []])
+  check('an order that had rates still prices from the table (hadRates is a company rule)', ind({ guests: '4', hadRates: true }).total, 28000)
 }
 
 // Max 2026-10-22: no more Free guests than paying guests on the public form (admin exempt).

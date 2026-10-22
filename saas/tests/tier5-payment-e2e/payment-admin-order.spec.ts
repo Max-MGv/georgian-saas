@@ -101,9 +101,11 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
     const email = `zz-payment-e2e-admin-order-${Date.now()}@example.invalid`
     const firstName = 'ZZPaymentE2E'
     const phone = '+995500000063'
-    const tastingRate = '50'
     const guestCount = 4
-    const expectedTotal = guestCount * parseInt(tastingRate, 10) // 200 — individual, TASTING visit, manual rate
+    // D-14 (2026-10-22): an individual admin order is priced from the Individuals table, no typed rate. Staging
+    // Winery's table: 3–6 guests, Tasting = ₾70 → 4 × 70. Change this if that table changes.
+    const individualsTastingRate = 70
+    const expectedTotal = guestCount * individualsTastingRate // 280
 
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -133,9 +135,8 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
       await page.getByPlaceholder('Name', { exact: true }).fill(`${firstName} ${marker}`)
       await page.locator('input[type="tel"]').fill(phone)
       await page.locator('input[type="email"]').fill(email)
-      // Typed per-person rate — an individual order on this screen has no price table, so the visit's product
-      // asks for one (T-152 A-9; empty = price later). Named since Chunk 8.
-      await page.getByRole('textbox', { name: 'Tasting only — ₾ per person' }).fill(tastingRate)
+      // No rate to type: the Individuals table prices it (D-14), and the box is gone.
+      await expect(page.getByRole('textbox', { name: 'Tasting only — ₾ per person' })).toHaveCount(0)
       await dateInput.fill(dateIso)
       await expect(dateInput).toHaveValue(dateIso)
       await page.getByRole('button', { name: 'Create order', exact: true }).click()

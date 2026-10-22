@@ -51,7 +51,7 @@ async function deleteTestOrderOnAdminPage(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
@@ -94,7 +94,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     // verify + cleanup, on top of the public form itself), each of which
     // can hit a slow first-visit dev-server compile (see booking-simple's
     // "Real finding" comment on the same root cause).
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     // 1. Confirm `enable_enhanced_company_booking` is on. Real finding: on
     // Staging Winery it's already permanently on (confirmed live via the

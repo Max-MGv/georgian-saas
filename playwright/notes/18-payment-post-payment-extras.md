@@ -7,6 +7,9 @@ tags: [playwright, test, tier5, payment, known-bug]
 > **Update 2026-10-22 (T-152, Chunk 8).** The paid-order lock is now checked on "Number of guests" and the
 > rate box ("… — ₾ per person"), the individual order page's two editable money inputs; the old three guest
 > fields are gone.
+>
+> **Update 2026-10-22 (T-152, D-14).** Individual orders have no rate box any more (priced from the Individuals
+> table), so the lock check is "Number of guests" disabled and the rate box absent.
 
 **Status:** ✅ Passing (6/6 consecutive runs after two real test fixes — see "Getting to a clean pass" below).
 **Tier:** 5 — real staging E2E (`playwright.staging.config.ts`, targets `https://staging.vineworks.ge`, dev DB).

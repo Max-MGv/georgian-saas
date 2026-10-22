@@ -1,6 +1,6 @@
 'use server'
 
-import { db, withTenantDb } from '@/lib/db'
+import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
@@ -13,6 +13,7 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkAdminOrder, checkMasterclassLines, type AdminOrderProblem } from '@/lib/bookingInput'
+import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
@@ -112,6 +113,15 @@ function badManualRates(m: unknown): boolean {
   })
 }
 
+/**
+ * The tenant's Individuals price table — what an individual order is priced from on the admin screens, by its
+ * guest count, like a company (D-14). The public form reads the same row (createBooking.ts). Empty = none yet.
+ */
+async function individualsTable(tx: TxClient, tenantId: string) {
+  const row = await tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })
+  return row?.prices ?? []
+}
+
 export async function updateOrderEnhanced(
   id: string,
   data: {
@@ -124,7 +134,7 @@ export async function updateOrderEnhanced(
     hotDishVegetable: string | null
     hotDishMeat: string | null
     foodNotes: string | null
-    /** TETRI per product; the order page prefills them from the order's own snapshot. See adminQuote. */
+    /** TETRI per product; the order page prefills them from the order's own snapshot. See adminQuote. Ignored for an individual order (D-14). */
     manualRates: ManualRates
   }
 ): Promise<{ success: true } | { error: string }> {
@@ -185,9 +195,13 @@ export async function updateOrderEnhanced(
 
     // Re-price only when what is sold changed: the visit type, a box, or a typed rate. Saving a food note no
     // longer re-prices an order at today's price table (it used to, on every Save).
+    // D-14: an individual order has no typed rates — only its visit type or guest count re-prices it, from the
+    // Individuals table.
+    const individual = order.bookingType === 'INDIVIDUAL'
+    const manual = individual ? NO_TYPED_RATES : data.manualRates
     const stored = countsOf(order)
     const snapshot = ratesFromProductSnapshot(order)
-    const typed = (p: Product) => { const v = data.manualRates[p]; return v != null && v > 0 ? v : null }
+    const typed = (p: Product) => { const v = manual[p]; return v != null && v > 0 ? v : null }
     const changed = visitType !== order.visitType
       || PRODUCTS.some(p => counts[p] !== stored[p]) || counts.free !== stored.free
       || PRODUCTS.some(p => counts[p] > 0 && typed(p) != null && typed(p) !== (snapshot?.[p] ?? null))
@@ -197,10 +211,14 @@ export async function updateOrderEnhanced(
       const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
       const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
       // The company's table at today's rows (each product by its own count), typed rates for the rest — the
-      // same adminQuote the page previews with, so the stored total is the one the admin saw.
-      const quote = adminQuote(order.company?.prices ?? [], order.company?.registrationFee ?? 0, counts, data.manualRates)
+      // same adminQuote the page previews with, so the stored total is the one the admin saw. An individual
+      // order: the Individuals table, no registration fee (D-14).
+      const prices = individual ? await individualsTable(tx, tenantId) : order.company?.prices ?? []
+      if (individual && prices.length === 0) return { error: en({ key: 'orderForm.err.noIndividualsTable' }) } as const
+      const quote = adminQuote(prices, individual ? 0 : order.company?.registrationFee ?? 0, counts, manual)
       if (quote.kind === 'missing') {
-        return { error: en({ key: 'orderForm.err.missingRate', vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+        const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
+        return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
       }
       if (quote.kind === 'unpriced') {
         // An order that already has a price never drops back to "price later" because its rates were cleared.
@@ -261,7 +279,7 @@ export async function createOrderAdmin(data: {
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  /** TETRI per product, null = nothing typed. Used only for products the company's table does not price (E-3, A-9). */
+  /** TETRI per product, null = nothing typed. Used only for products the company's table does not price (E-3, A-9); ignored for an individual (D-14). */
   manualRates: ManualRates
   /** The price always comes from the masterclass catalogue, never from the browser (Q-1, #93). */
   masterclassLines: { masterclassItemId: string; quantity: number }[]
@@ -318,10 +336,15 @@ export async function createOrderAdmin(data: {
     const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
 
     // The company's table by each product's own count, the admin's typed rate for anything it does not price;
-    // no table and nothing typed = priced later (total = the lines), as before.
-    const quote = adminQuote(company?.prices ?? [], company?.registrationFee ?? 0, counts, data.manualRates)
+    // no table and nothing typed = priced later (total = the lines), as before. An individual order: the
+    // Individuals table only — no typed rates, no "price later", refused while there is no table (D-14).
+    const individual = !company
+    const prices = individual ? await individualsTable(tx, tenantId) : company.prices
+    if (individual && prices.length === 0) return { error: en({ key: 'orderForm.err.noIndividualsTable' }) } as const
+    const quote = adminQuote(prices, company?.registrationFee ?? 0, counts, individual ? NO_TYPED_RATES : data.manualRates)
     if (quote.kind === 'missing') {
-      return { error: en({ key: 'orderForm.err.missingRate', vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+      const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
+      return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
     }
     const rates = quote.kind === 'priced' ? quote.rates : null
     const totalPrice = rates ? priceCounts(rates, counts, { masterclass: masterclassAmt, extras: extrasAmt }) : masterclassAmt + extrasAmt

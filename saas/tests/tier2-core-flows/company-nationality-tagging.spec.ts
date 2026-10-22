@@ -90,7 +90,7 @@ async function deleteTestOrderOnAdminPage(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
@@ -121,7 +121,7 @@ test.describe.serial('Company booking nationality tagging', () => {
     // companies-crud.spec.ts already use for their own multi-round-trip
     // flows, following this suite's established pattern of sizing the
     // budget to the step count rather than guessing.
-    test.setTimeout(150_000);
+    test.setTimeout(300_000); // was 150 s — slow dev DB, 2026-10-22
 
     const admin = await context.newPage();
     const superAdmin = await context.newPage();

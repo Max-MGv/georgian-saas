@@ -156,6 +156,11 @@ a token), not 404, before running specs. Not an app bug — nothing changes on s
 
 ### `/admin` itself takes 7–29 s — the login helper's 25 s wait runs out (2026-10-22)
 
+> Same root (2026-10-22, later): **deleting an order** re-renders `/admin/orders` before the row disappears —
+> 9–12 s on the dev DB although `deleteOrder` itself takes ~1–2 s. Every "row is gone" wait after Delete → Yes now
+> allows 30 s (tiers 1–4). Also warm `/admin/orders/[id]` by hand after a restart — the warmup spec can hit its own
+> 600 s limit before reaching it, and a cold compile there took 16.5 s.
+
 **Symptom:** `loginAsTenantAdmin` fails with the URL stuck at `http://localhost:3000/admin`; admin specs with 30 s budgets
 time out on ordinary clicks; the server log shows `GET /admin 200 in 7–29s` and P2028 "transaction already closed".
 **Cause:** `/admin` only redirects, but the admin layout's banners (`OnboardingBanner`, `FinishDetailsBanner`,
@@ -171,6 +176,13 @@ login helper wait 25 → 60 s, admin specs' 30 s budgets → 60–90 s.
 **Cause:** sustained heavy test-run volume against the shared dev Supabase project (`georgian-saas-dev`) exhausts its connection pool. This is `vault/KnownBugs.md` #4's exact failure shape, just triggered by test volume instead of hot-reload churn.
 
 **Fix:** there isn't a fast one. A restart of the local `next dev` process does **not** help — the pool exhaustion is on the database/pooler side, not the app process. Recovery requires the pool to actually drain, which means genuinely reducing load and waiting — confirmed via polling an ordinary page load (or `pg_stat_activity`'s idle-connection count) every 30–60s until it's clean, not just waiting an arbitrary amount of time or assuming a restart fixed it. `pg_terminate_backend` to force-close connections is correctly off-limits (a destructive action against shared infrastructure).
+
+**Seen 2026-10-22 — the other way round, worth knowing:** during runs 7–8 (same `next dev` process, > 1 h of
+runs) the server log was full of P2028 / P1017 and `/admin/orders` took up to 2.4 min, while a *separate* process
+measured the dev DB at a normal 0.33–0.75 s per round trip. A restart + cache clear then gave clean results again
+(run 6 before it: 78/78 on a fresh server; runs 9–11 after it: green once budgets matched). So on that day the
+bottleneck was the long-lived dev server's own pool, not the database — measure from a separate process
+(`scripts/_qa/db-latency.ts`) before deciding which of these two entries applies.
 
 ### Dev server process bloat over a long session
 

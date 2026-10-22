@@ -29,7 +29,7 @@ async function deleteTestOrderIfPresent(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
@@ -79,6 +79,9 @@ test.describe('Orders admin — filtering and view toggle', () => {
     await dateInput.fill(TEST_DATE);
     // An individual order: one guest count (T-152 D-5), named since Chunk 8 — not found by position any more.
     await page.getByRole('textbox', { name: 'Number of guests' }).fill('4');
+    // D-14 (2026-10-22): priced from Staging Winery's Individuals table (3–6 guests, Tasting ₾70), no rate box.
+    await expect(page.getByText('Tasting only (4 × 70₾)', { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('textbox', { name: /— ₾ per person$/ })).toHaveCount(0);
     // One Name box now (like the public form) — split into first word / rest at submit,
     // so this still stores name "Playwright", surname "AdminOrdersTest".
     await page.getByPlaceholder('Name', { exact: true }).fill('Playwright AdminOrdersTest');

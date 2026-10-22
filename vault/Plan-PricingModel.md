@@ -606,7 +606,15 @@ review card + release note wait for Max's call on the test budgets.
       admin layout banners / `getSetting` / the orders list query; nothing from T-152 code. DB measured normal again
       right after (335 ms round trip). Left behind by the failed tests: orders `Nationality TestGuest`,
       `ZZPaymentIntegrity On`, and ZZ / Playwright wine orders → the existing "ZZ test data on dev" cleanup.
-      Run 8 = the 10 failing files in isolation.
+      Run 8 = the 10 failing files in isolation → 13 pass / 6 fail / 9 not run, same server, same signature (P2028,
+      P1017, `/admin/orders` up to 84 s) while a separate process measured the DB at 365–745 ms.
+- [x] **D-14 + runs 9–11 (fresh server + cleared cache):** run 9 (5 order specs) — `admin-orders` with the new D-14
+      check ✅, `payment-amount-integrity` 4/4 ✅; 3 company specs failed on (a) `/admin/orders/[id]` cold-compiling
+      16.5 s (warmup hit its own limit before that route) and (b) **order-delete cleanup**: `deleteOrder` takes
+      0.8–1.9 s but the action re-renders `/admin/orders` (9–12 s) before the row goes, against a 5 s wait. Fixed
+      (test code): 30 s on that wait in booking-enhanced / booking-simple / company-nationality-tagging /
+      contact-orphan-safety / admin-orders; budgets booking-enhanced 90 → 180 s, nationality 150 → 300 s.
+      **Run 11: 3/3 ✅**, no retries. Server log: `createOrderAdmin` ok for an individual (3.2 s) and a company (2.8 s).
 - [ ] `tix review T-152` with test steps for Max (staging), commit list; draft the release note with before/after shots.
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
@@ -614,24 +622,34 @@ review card + release note wait for Max's call on the test budgets.
 rerun, or accept the environment failures; then the review card + release note.
 
 ### Chunk 11b — D-14: individuals priced from the Individuals table on admin screens (NOT STARTED — Max: "record, don't start")
-**Status:** ⬜ — go given 2026-10-22 ("agreed with all"); starts after Playwright run 7 finishes (no app-code edits
-during a run). Code read 2026-10-22: individual orders carry `companyId: null`, so both admin actions see no table
+**Status:** ✅ 2026-10-22 on localhost, committed + pushed to staging (see git log); tsc 0, `test-pricing-model` **115/115** (7 new D-14
+checks; two old individual "price later" checks moved to a no-table company), browser check below; Playwright pending.
+Go given 2026-10-22 ("agreed with all"). Code read 2026-10-22: individual orders carry `companyId: null`, so both admin actions see no table
 and fall back to typed rates / "price later"; only the public form loads the Individuals table
 (`createBooking.ts` ~l.295, `isIndividual: true`, registration 0).
-- [ ] `createOrderAdmin` / `updateOrderEnhanced`: for an INDIVIDUAL order load the tenant's Individuals company prices
+- [x] `createOrderAdmin` / `updateOrderEnhanced`: for an INDIVIDUAL order load the tenant's Individuals company prices
       (`isIndividual: true`), registration 0; `adminQuote(prices, 0, counts, no typed rates)` — typed rates ignored.
       Empty table → refused (Q2, new message); a product the table lacks → refused (new individual message — the
       company one says "company's price table"). updateOrderEnhanced re-prices an individual only when visit or
       guest count changed (Q3); paid stays locked; the "can't show this shape" guard stays.
-- [ ] `adminOrderView`: individual → no rate inputs ever, problems "no Individuals table" / "Individuals table lacks
+- [x] `adminOrderView`: individual → no rate inputs ever, problems "no Individuals table" / "Individuals table lacks
       X"; New Order + order page pages fetch the Individuals table and pass it for individuals; OrderDetail drops
       `storedManual` for individuals. Companies unchanged (Q1: typed rates only where the table is missing / lacks it).
-- [ ] adminT EN + KA for the two messages; remove the dead keys `orderDetail.guestBreakdown.partySizeHint` (wrong
+- [x] adminT EN + KA for the two messages; remove the dead keys `orderDetail.guestBreakdown.partySizeHint` (wrong
       under T-152), `lunchOnlyLocked`, `rateBadge`, `tastingRatePP` (unused since Chunk 8 — checked 2026-10-22).
-- [ ] Tests: `test-pricing-model` cases for the individual path; `tier5/payment-admin-order.spec.ts` stops typing a
+- [x] Tests: `test-pricing-model` cases for the individual path; `tier5/payment-admin-order.spec.ts` stops typing a
       rate — 4 guests Tasting on Staging Winery's Individuals table (3–6 row ₾70) → ₾280, not ₾200; check
-      `payment-post-payment-extras.spec.ts`; tiers 1–4 rerun of the admin-order specs.
-- [ ] Docs: MaintenanceNotes §22, Feature 237, FeatureLog #237.
+      `payment-post-payment-extras.spec.ts`; tiers 1–4 rerun of the admin-order specs — done (runs 9–11, see Chunk 11). Tier 5 (staging) not run yet.
+- [x] Docs: MaintenanceNotes §32 (D-14 paragraph), Feature 237, FeatureLog #237, Playwright notes 16 + 18.
+- Browser check (localhost, nothing saved): New Order individual 4 guests Tasting → "Tasting only (4 × 70₾) · row 3–6",
+  ₾280, no rate box; Tasting + Lunch 8 → 8 × ₾105 = ₾840; Kakheti Wine Routes (no Lunch only price) still asks for a
+  typed Lunch only rate (Q1); an individual order sold 2 × ₾150 changed to 5 guests → 5 × ₾120 = ₾600 live preview.
+- Self-review of the diff (2026-10-22): on a tenant with **no** Individuals table, the order page blocked Save on every
+  individual order (the view's problem disables it) although the server only needs the table when guests / visit
+  change — a food note could not be saved. Fixed in OrderDetail: the two Individuals-table problems block Save only
+  when what is sold was edited.
+- Specs: `admin-orders` now also checks the Individuals price line on New Order (tiers 1–4 coverage of D-14);
+  tier-5 `payment-admin-order` expects ₾280, `payment-post-payment-extras` expects no rate box (both staging-only).
 - Questions asked 2026-10-22 — **Max: "agreed with all"** (same day):
   1. **Companies keep typed rates** only where there is no table, or the table lacks the product (e.g. a new
      company's request) — otherwise such an order can't be priced at all.
