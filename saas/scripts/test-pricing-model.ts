@@ -16,8 +16,8 @@
 import fs from 'fs'
 import path from 'path'
 import {
-  adminQuote, countsFromLegacy, countsFromVisit, findProductTier, notOffered, priceBooking, priceCounts, ratesForCounts,
-  ratesForParty, ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
+  adminQuote, countsFromLegacy, countsFromVisit, findProductTier, findTier, notOffered, priceCounts, ratesForCounts,
+  ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
 import { guestSplitText, invoiceView } from '../lib/invoiceLines'
@@ -67,8 +67,8 @@ console.log('Pricing — worked examples')
   // R-1 (accepted by Max): each product on its own row. 24 T&L on row 4–24 (₾95), 1 tasting on row 1 (₾100).
   const r1 = c(1, 0, 24)
   check('R-1: 24 Tasting & Lunch + 1 Tasting only', priceCounts(ratesForCounts(GEORGICA, r1, 0), r1, NO_LINES), 238000)
-  // The old (party-size) model priced the same party on the 25–48 row: 24 × ₾70 + 1 × ₾30 = ₾1,710.
-  check('R-1: old model for the same party', priceBooking(ratesForParty(GEORGICA, 25, 0)!, { guestCount: 25, tastingGuests: 1, lunchGuests: 24 }, 'TASTING_LUNCH', NO_LINES), 171000)
+  // The old (party-size) model, retired in Chunk 10, priced the same party on the 25–48 row:
+  // 24 × ₾70 + 1 × ₾30 = ₾1,710 (checked against priceBooking while it existed).
 
   // All three products, three different rows: 4 tasting (4–24 ₾50), 2 lunch only (row "2" ₾50), 30 T&L (25–48 ₾70).
   const mixed = c(4, 2, 30, 1)
@@ -116,7 +116,9 @@ console.log('Pricing — individuals and the company simple form are unchanged (
   let diffs = 0
   for (const visit of ['TASTING', 'TASTING_LUNCH'] as const) {
     for (let n = 1; n <= 120; n++) {
-      const oldTotal = priceBooking(ratesForParty(NEW_IND, n, 0)!, { guestCount: n, tastingGuests: 0, lunchGuests: 0 }, visit, NO_LINES)
+      // The retired party-size rule for one visit type: the row for n guests, everyone on that visit's price.
+      const row = findTier(NEW_IND, n)!
+      const oldTotal = n * ((visit === 'TASTING_LUNCH' ? row.tastingLunchPrice : row.tastingOnlyPrice) ?? 0)
       const counts = countsFromVisit(visit, n)
       const newTotal = priceCounts(ratesForCounts(NEW_IND, counts, 0), counts, NO_LINES)
       if (oldTotal !== newTotal) { diffs++; if (diffs < 4) console.error(`  ${visit} × ${n}: old ${oldTotal} new ${newTotal}`) }
@@ -241,7 +243,6 @@ console.log('Rules from settings (Chunk 6)')
   const e = (x: ReturnType<typeof checkBookingCounts>) => (x.ok ? 'ok' : x.error.code)
   check('settings-wired: 5 Lunch only < company minimum 8 → refused', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'public', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'below_product_min')
   check('settings-wired: same booking on an admin screen → ok (A-8)', e(checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form: 'admin', visitType: 'TASTING_LUNCH', lunchOnly: 5, tastingLunch: 10 }, r)), 'ok')
-  // The old two-bucket formula must never price a Lunch only party (it has no Lunch only rate).
   // A-11 (Max, 2026-10-21): a hot dish needs a lunch guest; food notes are not checked here.
   const c = (to: number, lo: number, tl: number) => ({ tastingOnly: to, lunchOnly: lo, tastingLunch: tl, free: 0 })
   check('hot dish, no lunch guest → refused', hotDishWithoutLunch(c(4, 0, 0), 'Pkhali', null), true)
@@ -249,7 +250,6 @@ console.log('Rules from settings (Chunk 6)')
   check('hot dish with a Lunch only guest → ok', hotDishWithoutLunch(c(0, 1, 0), 'Pkhali', 'Mtsvadi'), false)
   check('hot dish with a Tasting & Lunch guest → ok', hotDishWithoutLunch(c(4, 0, 2), 'Pkhali', null), false)
   check('no dish chosen (blank / spaces / null) → ok', hotDishWithoutLunch(c(4, 0, 0), '  ', null), false)
-  throws('priceBooking() refuses a Lunch only visit', () => priceBooking({ tasting: 5000, lunch: 9500, registration: 0 }, { guestCount: 8, tastingGuests: 0, lunchGuests: 0 }, 'LUNCH', NO_LINES))
 }
 
 // ── Chunk 8: admin New Order / order page — adminQuote + checkAdminOrder ──

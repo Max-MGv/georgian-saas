@@ -19,7 +19,7 @@
  * Screenshots stay valid and a nightly reset restores the same demo.
  */
 import type { Prisma, PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
-import { boxColumns, countsFromLegacy, priceBooking } from '@/lib/pricingUtils'
+import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type Counts } from '@/lib/pricingUtils'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -44,12 +44,14 @@ function makeRng(seed: number) {
 /**
  * A seeded tier, written in GEL for readability: the tasting price and the lunch ADD-ON on top of it.
  * Stored as the product model's columns (T-152): Tasting only = pricePerPerson, Tasting & Lunch =
- * pricePerPerson + tastingLunchPricePerPerson (all-in), Lunch only not offered. Seeded companies have
- * no registration fee. (Plan-PricingModel Chunk 10 gives some companies a Lunch only price.)
+ * pricePerPerson + tastingLunchPricePerPerson (all-in), Lunch only = lunchOnlyPricePerPerson (all-in;
+ * absent = not offered, D-7). Seeded companies have no registration fee. Two companies offer Lunch only
+ * (Plan-PricingModel Chunk 10) so the demo and the tests have a company with it and ones without.
  */
 type TierSpec = {
   minGuests: number; maxGuests: number
   pricePerPerson: number; tastingLunchPricePerPerson: number
+  lunchOnlyPricePerPerson?: number
 }
 
 /**
@@ -170,8 +172,8 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Caucasus Vine Travel', contactName: 'Ana Tsereteli', contactPhone: '+995 595 88 60 31',
     contactEmail: 'ops@caucasusvinetravel.example', identificationCode: '406220145', address: 'Sighnaghi, Kakheti',
     tiers: [
-      { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 40 },
-      { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38 },
+      { minGuests: 1, maxGuests: 15, pricePerPerson: 50, tastingLunchPricePerPerson: 40, lunchOnlyPricePerPerson: 42 },
+      { minGuests: 16, maxGuests: 100, pricePerPerson: 42, tastingLunchPricePerPerson: 38, lunchOnlyPricePerPerson: 38 },
     ],
     accessCode: 'CAUCASUS31',
     guides: [
@@ -203,8 +205,8 @@ export const BOOKING_COMPANIES: BookingCompanySpec[] = [
     name: 'Silk Road Journeys', contactName: 'Mariam Dolidze', contactPhone: '+995 591 76 20 55',
     contactEmail: 'reservations@silkroadjourneys.example', identificationCode: '405633208', address: 'Batumi, Adjara',
     tiers: [
-      { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 40 },
-      { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 38 },
+      { minGuests: 1, maxGuests: 20, pricePerPerson: 52, tastingLunchPricePerPerson: 40, lunchOnlyPricePerPerson: 45 },
+      { minGuests: 21, maxGuests: 100, pricePerPerson: 40, tastingLunchPricePerPerson: 38, lunchOnlyPricePerPerson: 40 },
     ],
     accessCode: 'SILKROAD55',
     guides: [
@@ -301,67 +303,36 @@ const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00
 const WINE_ORDER_COUNT = 45
 
 // ---------------------------------------------------------------------------
-// Pricing — mirrors lib/pricing.ts recalcOrderTotal exactly, so a seeded total
-// reconciles against the company's tier ladder if anyone checks the numbers.
+// Pricing — the app's own rules (lib/pricingUtils, T-152): each product finds its tier by its own guest
+// count (D-2), so a seeded total reconciles against the company's price table exactly like a real booking.
 // ---------------------------------------------------------------------------
-function findTier(tiers: TierSpec[], guestCount: number): TierSpec | undefined {
-  if (tiers.length === 0 || guestCount === 0) return undefined
-  return tiers.find(t => guestCount >= t.minGuests && guestCount <= t.maxGuests)
-    ?? tiers.reduce((best, t) => (t.pricePerPerson > best.pricePerPerson ? t : best))
-}
 
 /**
- * The order total, in TETRI.
+ * The order total and the per-product rates it was sold at, in TETRI.
  *
- * The tier literals at the top of this file are written in GEL, because that is
- * what a human reading them expects. `masterclassAmt` arrives in tetri, read
- * back from the database. **Mixing the two is a bug that shipped once already**
- * (2026-09-18): tier rates went in as GEL while masterclass amounts were tetri,
- * so a seeded booking came out as roughly 1/100 of its intended total with a
- * masterclass line added on at full size. Every tier value is converted here,
- * at the one place they are read for arithmetic.
+ * The tier literals at the top of this file are written in GEL; `masterclassAmt` arrives in tetri, read
+ * back from the database. **Mixing the two is a bug that shipped once already** — a seeded booking came out
+ * as roughly 1/100 of its intended total. Tiers are converted once, by `tierToTetri`.
+ *
+ * The rates are returned because every seeded order carries its snapshot (`tastingOnlyRate` etc.): without
+ * them `recalcOrderTotal` re-priced a demo booking off live tiers the moment a visitor added an extra (#49).
+ * Null when the company has no tier for a product that has guests — the caller never builds such a booking.
  */
-/**
- * Returns the total AND the three tier rates it was derived from.
- *
- * The rates are returned, not discarded, because every seeded order has to
- * carry `tastingRateSnapshot`/`lunchRateSnapshot`/`registrationFeeSnapshot`.
- * Until 2026-09-19 the seed wrote none of them, so all 393 demo orders were
- * snapshot-less — and those columns are nullable only to mean "created before
- * the columns existed". `recalcOrderTotal` therefore took its legacy branch for
- * every demo order, re-pricing the whole booking off live tiers the moment a
- * visitor added an extra. Same shape as bug #47, at 100% of the demo data.
- *
- * The rates match what `recalcOrderTotal`'s snapshot branch expects:
- * tasting = the per-person TASTING rate, lunch = the per-person COMBO rate.
- * Both branches below then reproduce exactly what recalc would compute.
- */
-type SeedPrice = { total: number; tastingRate: number; lunchRate: number; registrationFee: number }
+type SeedPrice = { total: number; rates: { tastingOnly: number | null; lunchOnly: number | null; tastingLunch: number | null; registration: number } }
 
-function computeTotal(opts: {
-  tiers: TierSpec[]; visitType: VisitType; guestCount: number
-  tastingGuests: number; lunchGuests: number; masterclassAmt: number
-}): SeedPrice | null {
-  const { tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt } = opts
-  // The party size picks the tier, same rule as the app (2026-09-19).
-  const tier = findTier(tiers, guestCount)
-  if (!tier) return null
-
-  const rates = {
-    tasting: fromMajor(tier.pricePerPerson),
-    lunch: fromMajor(tier.pricePerPerson + tier.tastingLunchPricePerPerson),
-    registration: 0, // no seeded company has a registration fee
-  }
-  const total = priceBooking(
-    rates,
-    { guestCount, tastingGuests, lunchGuests },
-    visitType,
-    { masterclass: masterclassAmt, extras: 0 },
-  )
-  return { total, tastingRate: rates.tasting, lunchRate: rates.lunch, registrationFee: rates.registration }
+function computeTotal(tiers: TierSpec[], counts: Counts, masterclassAmt: number): SeedPrice | null {
+  const rates = ratesForCounts(tiers.map(tierToTetri), counts, 0) // no seeded company has a registration fee
+  if (payingGuests(counts) === 0 || notOffered(rates, counts).length > 0) return null
+  return { total: priceCounts(rates, counts, { masterclass: masterclassAmt, extras: 0 }), rates }
 }
 
+/** Does this company's table offer Lunch only at all (D-7)? */
+const offersLunchOnly = (tiers: TierSpec[]) => tiers.some(t => t.lunchOnlyPricePerPerson != null)
+
 // ---------------------------------------------------------------------------
+
+/**
+ * Runs `tasks` with bounded concurrency.// ---------------------------------------------------------------------------
 
 /**
  * Runs `tasks` with bounded concurrency.
@@ -412,7 +383,7 @@ function tierToTetri(t: TierSpec) {
     minGuests: t.minGuests,
     maxGuests: t.maxGuests,
     tastingOnlyPrice: fromMajor(t.pricePerPerson),
-    lunchOnlyPrice: null,
+    lunchOnlyPrice: t.lunchOnlyPricePerPerson != null ? fromMajor(t.lunchOnlyPricePerPerson) : null,
     tastingLunchPrice: fromMajor(t.pricePerPerson + t.tastingLunchPricePerPerson),
   }
 }
@@ -717,24 +688,32 @@ export async function seedDemoTenant(
       const inSeason = m >= 5 && m <= 8
       const isCompany = rng() < (inSeason ? 0.4 : 0.22)
       const bookingType: BookingType = isCompany ? 'COMPANY' : 'INDIVIDUAL'
-      const visitType: VisitType = rng() < 0.55 ? 'TASTING' : 'TASTING_LUNCH'
       const company = isCompany ? weighted(companyWeights) : null
       const tiers = company ? company.tiers : INDIVIDUALS_TIERS
+      const lunchOnlyOffered = company != null && offersLunchOnly(tiers)
+      // Companies that sell Lunch only book it now and then (D-10); individuals never do (D-5).
+      const visitType: VisitType = lunchOnlyOffered && rng() < 0.12 ? 'LUNCH' : rng() < 0.55 ? 'TASTING' : 'TASTING_LUNCH'
       const guestCount = isCompany ? rand(8, 25) : rand(2, 6)
 
-      // Company bookings use the enhanced per-guest split (the tenant has
-      // enable_enhanced_company_booking on); individuals use the simple path.
-      let tastingGuests = 0, lunchGuests = 0, freeGuests = 0
+      // Every guest is in exactly one box (D-3). Company bookings use the detailed form's boxes (the tenant has
+      // enable_enhanced_company_booking on); individuals book one product for the whole group (A-4).
+      let counts: Counts
       if (isCompany) {
-        freeGuests = rng() < 0.5 ? 1 : 0   // the guide eats free
-        const paying = guestCount - freeGuests
+        const free = rng() < 0.5 ? 1 : 0   // the guide eats free
+        const paying = guestCount - free
         if (visitType === 'TASTING_LUNCH') {
-          lunchGuests = paying - rand(0, Math.floor(paying / 3))
-          tastingGuests = paying - lunchGuests
+          const tastingLunch = paying - rand(0, Math.floor(paying / 3))
+          // The rest skip the lunch — or, at a company that sells it, a few come for lunch only.
+          const rest = paying - tastingLunch
+          const lunchOnly = lunchOnlyOffered && rng() < 0.4 ? rest : 0
+          counts = { tastingOnly: rest - lunchOnly, lunchOnly, tastingLunch, free }
         } else {
-          tastingGuests = paying
+          counts = { ...countsFromVisit(visitType, paying), free }
         }
+      } else {
+        counts = countsFromVisit(visitType, guestCount)
       }
+      const lunchGuests = counts.lunchOnly + counts.tastingLunch
 
       // ~1 in 5 bookings adds a masterclass, so the order-detail expansion
       // isn't empty either.
@@ -742,14 +721,15 @@ export async function seedDemoTenant(
       let masterclassAmt = 0
       if (rng() < 0.2 && mcItems.length) {
         const item = pick(mcItems)
+        // Per person = the paying guests (free guests are never charged).
         const qty = item.unitType === 'FLAT' ? 1
-          : item.unitType === 'PER_PERSON' ? guestCount
+          : item.unitType === 'PER_PERSON' ? payingGuests(counts)
           : rand(10, 40)
         mcLines.push({ masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit })
         masterclassAmt = qty * item.pricePerUnit
       }
 
-      const priced = computeTotal({ tiers, visitType, guestCount, tastingGuests, lunchGuests, masterclassAmt })
+      const priced = computeTotal(tiers, counts, masterclassAmt)
       const totalPrice = priced?.total ?? null
 
       // Rolled BEFORE the stage, because an abandoned checkout is a slice of
@@ -802,11 +782,11 @@ export async function seedDemoTenant(
       // later escapes TypeScript's excess-property check — a renamed column would only fail at runtime).
       const orderData: Prisma.OrderUncheckedCreateInput = {
           tenantId: tid, stage, bookingType, visitType, date,
-          timeSlot: pick(TIME_SLOTS), guestCount,
-          // Stored by the same rule as every order (Plan-PricingModel A-4).
-          ...boxColumns(countsFromLegacy({ visitType, guestCount, tastingGuestCount: tastingGuests, lunchGuestCount: lunchGuests, freeGuestCount: freeGuests })),
-          hotDishVegetable: visitType === 'TASTING_LUNCH' ? pick(vegItems) : null,
-          hotDishMeat: visitType === 'TASTING_LUNCH' ? pick(meatItems) : null,
+          timeSlot: pick(TIME_SLOTS), guestCount: totalGuests(counts),
+          ...boxColumns(counts),
+          // A hot dish only when someone is booked for lunch (A-11).
+          hotDishVegetable: lunchGuests > 0 ? pick(vegItems) : null,
+          hotDishMeat: lunchGuests > 0 ? pick(meatItems) : null,
           name: company ? company.contactName.split(' ')[0] : first,
           surname: company ? company.contactName.split(' ')[1] : last,
           email: company ? company.contactEmail : `${first.toLowerCase()}.${last.toLowerCase()}@example.com`,
@@ -815,9 +795,10 @@ export async function seedDemoTenant(
           totalPrice, createdAt,
           // Carry the rates this order was sold at, so recalc uses its snapshot
           // branch rather than repricing off live tiers (#49).
-          tastingOnlyRate: priced?.tastingRate ?? null,
-          tastingLunchRate: priced?.lunchRate ?? null,
-          registrationFeeSnapshot: priced?.registrationFee ?? null,
+          tastingOnlyRate: priced?.rates.tastingOnly ?? null,
+          lunchOnlyRate: priced?.rates.lunchOnly ?? null,
+          tastingLunchRate: priced?.rates.tastingLunch ?? null,
+          registrationFeeSnapshot: priced?.rates.registration ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
           contacts: contactRows.length ? { create: contactRows } : undefined,

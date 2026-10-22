@@ -1,163 +1,31 @@
-// ─── Party-size pricing (2026-09-19) — on the new columns since T-152 Chunk 3 ──
+// ─── Tier lookup by party size — the home page's display price only ──────────
 //
-// These keep TODAY's rules (the tier is picked by the party size; an order is
-// either split into tasting / tasting+lunch or priced on its visit type) but read
-// the product columns. They are replaced by the product model below when the
-// forms move to it (Plan-PricingModel Chunks 7–8) and then deleted.
+// The party-size pricing that used to live here (priceBooking, ratesForParty, …) was retired by the product
+// model below (Plan-PricingModel Chunk 10, 2026-10-22); every write path now prices per product. What is left
+// is the one lookup the home page and the payment-setup banner still make: "the Individuals row for N guests".
 //
 // See vault/MaintenanceNotes.md §22.
 
 /** A tier row. Same shape as {@link ProductTier} (declared below). */
 export type PriceTier = ProductTier
 
-/**
- * Per-person rate for a guest doing tasting + lunch: the row's all-in
- * Tasting & Lunch price (since T-152 it is stored all-in, not as an add-on).
- *
- * `?? 0` only because the column is nullable while the old model is phased out;
- * a row converted from the old model always has it (Chunk 2's backfill), and the
- * product model never reads this function.
- */
+/** A row's all-in Tasting & Lunch per-person price (the home page's "Tasting + Lunch from …"). */
 export function comboRatePerPerson<T extends PriceTier>(tier: T): number {
   return tier.tastingLunchPrice ?? 0
 }
 
-/** Per-person tasting rate of a row (same nullable caveat as {@link comboRatePerPerson}). */
-export function tastingRatePerPerson<T extends PriceTier>(tier: T): number {
-  return tier.tastingOnlyPrice ?? 0
-}
-
 /**
- * Find the price tier for a given party size.
- *
- * - Exact match: guest count falls within a tier's min/max range.
- * - No exact match: returns the highest-priced tier (protects against
- *   under-charging very small groups that fall below the lowest tier).
- * - Returns undefined only when prices is empty or guestCount is 0.
+ * The row for a party size: the exact range, else the highest-priced row (never under-quote a small group).
+ * Undefined only for an empty ladder or 0 guests. Booking prices use {@link findProductTier} instead.
  */
-export function findTier<T extends PriceTier>(
-  prices: T[],
-  guestCount: number
-): T | undefined {
+export function findTier<T extends PriceTier>(prices: T[], guestCount: number): T | undefined {
   if (prices.length === 0 || guestCount === 0) return undefined
-  const exact = prices.find(
-    p => guestCount >= p.minGuests && guestCount <= p.maxGuests
-  )
+  const exact = prices.find(p => guestCount >= p.minGuests && guestCount <= p.maxGuests)
   if (exact) return exact
-  // Fallback: highest tasting price tier
-  return prices.reduce((best, p) =>
-    tastingRatePerPerson(p) > tastingRatePerPerson(best) ? p : best
-  )
-}
-
-/** All tetri. Where these came from is the resolver's business, not priceBooking's. */
-export type RateSet = {
-  /** Per person having tasting only. */
-  tasting: number
-  /** Per person having tasting AND lunch — all-in, NOT the lunch add-on. */
-  lunch: number
-  /** Charged once for the booking, not per head. */
-  registration: number
-}
-
-export type Headcount = {
-  /** The party size. This alone decides the price tier. */
-  guestCount: number
-  /** Of that party, how many have tasting only. */
-  tastingGuests: number
-  /** Of that party, how many have tasting AND lunch. */
-  lunchGuests: number
+  return prices.reduce((best, p) => ((p.tastingOnlyPrice ?? 0) > (best.tastingOnlyPrice ?? 0) ? p : best))
 }
 
 export type LineTotals = { masterclass: number; extras: number }
-
-/** Same as {@link BookingVisitType} since Chunk 6 (the database's VisitType gained 'LUNCH'). */
-export type VisitType = BookingVisitType
-
-/**
- * The rates for a party, from its company's price ladder.
- *
- * **The tier is chosen by party size, not by how many of them are paying**
- * (Max, 2026-09-19 — retired by the product model, T-152). `registration` is the
- * company's flat fee (`Company.registrationFee`); individuals pass 0.
- */
-export function ratesForParty<T extends PriceTier>(
-  prices: T[],
-  guestCount: number,
-  registration: number,
-): RateSet | null {
-  const tier = findTier(prices, guestCount)
-  if (!tier) return null
-  return ratesFromTier(tier, registration)
-}
-
-/** Rates a tier already in hand. Prefer {@link ratesForParty}, which picks the tier too. */
-export function ratesFromTier<T extends PriceTier>(tier: T, registration: number): RateSet {
-  return {
-    tasting: tastingRatePerPerson(tier),
-    lunch: comboRatePerPerson(tier),
-    registration,
-  }
-}
-
-/**
- * The rates this order was sold at, read back off the row.
- *
- * Null when the order predates the snapshot columns — the caller must then
- * decide, loudly, what to do. It must never quietly substitute live rates.
- */
-export function ratesFromSnapshot(o: {
-  tastingOnlyRate: number | null
-  tastingLunchRate: number | null
-  registrationFeeSnapshot: number | null
-}): RateSet | null {
-  if (o.tastingOnlyRate == null && o.tastingLunchRate == null) return null
-  return {
-    tasting: o.tastingOnlyRate ?? 0,
-    lunch: o.tastingLunchRate ?? 0,
-    registration: o.registrationFeeSnapshot ?? 0,
-  }
-}
-
-/** Hand-typed rates, for a walk-in or a company with no ladder. No registration fee. */
-export function ratesFromManual(tasting: number, lunch: number): RateSet {
-  return { tasting, lunch, registration: 0 }
-}
-
-/** An order's boxes as the party-size functions read them (old "tasting" / "lunch" = Tasting only / Tasting & Lunch). */
-export function headcountOf(o: { guestCount: number; tastingOnlyGuests: number | null; tastingLunchGuests: number | null }): Headcount {
-  return { guestCount: o.guestCount, tastingGuests: o.tastingOnlyGuests ?? 0, lunchGuests: o.tastingLunchGuests ?? 0 }
-}
-
-/**
- * What a booking costs, in tetri.
- *
- * Two shapes, and which one applies is decided by the buckets, not by visitType:
- *
- *  - **Split party** (someone is in a bucket): each bucket pays its own rate.
- *    `visitType` is ignored — the buckets already say who is eating.
- *  - **Unsplit party** (both buckets empty): the whole party is on one visit
- *    type, so `visitType` picks the rate.
- *
- * `freeGuestCount` never appears here: free guests are not charged. They do
- * count toward the tier, which happens in {@link ratesForParty}, not here.
- */
-export function priceBooking(
-  rates: RateSet,
-  guests: Headcount,
-  visitType: VisitType,
-  lines: LineTotals,
-): number {
-  // This old two-bucket formula has no Lunch-only rate: an unsplit Lunch-only party would be priced at the
-  // TASTING rate. Nothing creates such an order before Plan-PricingModel Chunk 7, and Chunks 7–8 move every
-  // caller to priceCounts() first — until then, refuse loudly rather than misprice (Chunk 6, 2026-10-21).
-  if (visitType === 'LUNCH') throw new Error('priceBooking() cannot price a Lunch only booking — use priceCounts() (Plan-PricingModel Chunk 7)')
-  const paying = guests.tastingGuests + guests.lunchGuests
-  const base = paying > 0
-    ? guests.tastingGuests * rates.tasting + guests.lunchGuests * rates.lunch
-    : guests.guestCount * (visitType === 'TASTING_LUNCH' ? rates.lunch : rates.tasting)
-  return base + rates.registration + lines.masterclass + lines.extras
-}
 
 // ─── The product model (Plan-PricingModel, T-152, Max 2026-10-20) ────────────
 //
@@ -167,8 +35,6 @@ export function priceBooking(
 // ladder; the group total plays no part in the price. Individuals are the same
 // model with one product for the whole group.
 //
-// Everything above this line is the old model and is removed in the plan's
-// Chunk 3/4, once every caller has moved here.
 
 export type Product = 'tastingOnly' | 'lunchOnly' | 'tastingLunch'
 export const PRODUCTS: readonly Product[] = ['tastingOnly', 'lunchOnly', 'tastingLunch']
