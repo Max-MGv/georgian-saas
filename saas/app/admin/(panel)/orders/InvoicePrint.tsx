@@ -1,4 +1,8 @@
 import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView } from '@/lib/invoiceLines'
+import type { Product } from '@/lib/pricingUtils'
+
+const KA = INVOICE_PRODUCT_LABEL.ka
 
 type Order = {
   id: string
@@ -6,9 +10,16 @@ type Order = {
   timeSlot: string
   visitType: string
   guestCount: number
+  // The boxes (T-152), under the list's names: tasting = Tasting only, lunch = Tasting & Lunch.
   tastingGuestCount: number
+  lunchOnlyGuestCount: number
   lunchGuestCount: number
   freeGuestCount: number
+  /** Frozen per-person rates, tetri — each product gets its own line when they explain the total. */
+  tastingOnlyRate: number | null
+  lunchOnlyRate: number | null
+  tastingLunchRate: number | null
+  registrationFeeSnapshot: number | null
   name: string
   surname: string
   totalPrice: number | null
@@ -58,8 +69,6 @@ export default function InvoicePrint({ order, payment, detailed = false, display
   const dateStr = d.toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
   const nowStr = new Date().toLocaleString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  const isTasting = order.visitType === 'TASTING'
-  const isLunch = order.visitType === 'TASTING_LUNCH'
   const totalPrice = order.totalPrice ?? 0
   const companyName = order.company?.name ?? `${order.name} ${order.surname}`
   const idCode = order.company?.identificationCode ?? '—'
@@ -84,8 +93,24 @@ export default function InvoicePrint({ order, payment, detailed = false, display
     </div>
   ) : null
 
-  // Determine if this order has split guest counts
-  const hasSplitCounts = order.tastingGuestCount > 0 || order.lunchGuestCount > 0 || order.freeGuestCount > 0
+  // The booking itself, per product (Plan-PricingModel Chunk 9) — the same lines the invoice email prints.
+  const view = invoiceView({
+    visitType: order.visitType, guestCount: order.guestCount,
+    tastingOnlyGuests: order.tastingGuestCount, lunchOnlyGuests: order.lunchOnlyGuestCount, tastingLunchGuests: order.lunchGuestCount,
+    freeGuestCount: order.freeGuestCount,
+    tastingOnlyRate: order.tastingOnlyRate, lunchOnlyRate: order.lunchOnlyRate, tastingLunchRate: order.tastingLunchRate,
+    registrationFeeSnapshot: order.registrationFeeSnapshot,
+    totalPrice, masterclassAmt: mcAmt, extrasAmt,
+  })
+  const money = (t: number) => formatTetri(asTetri(t), { space: true, decimals: true })
+  const countOf = (p: Product) => view.guests.find(g => g.product === p)?.count ?? 0
+  /** One product's booking amount: its line when the rates explain the total, else the whole booking on the visit's product. */
+  const amountOf = (p: Product) => view.lines
+    ? (view.lines.find(l => l.product === p)?.amount ?? 0)
+    : (p === view.visitProduct ? bookingAmt : 0)
+  // Tasting + Lunch and Tasting always appear on the simple invoice (as before); Lunch only when it was booked.
+  const simpleProducts: Product[] = (['tastingLunch', 'lunchOnly', 'tastingOnly'] as Product[])
+    .filter(p => p !== 'lunchOnly' || countOf(p) > 0 || view.visitProduct === 'lunchOnly')
 
   const header = (
     <div style={{ fontFamily: 'Georgia, serif', maxWidth: 600, margin: '0 auto', padding: 40, color: '#1c1008', backgroundColor: '#fff' }}>
@@ -112,9 +137,6 @@ export default function InvoicePrint({ order, payment, detailed = false, display
 
   if (!detailed) {
     // ── SIMPLE layout (original) ──────────────────────────────────────
-    const tastingAmount = isTasting ? totalPrice : 0
-    const lunchAmount = isLunch ? totalPrice : 0
-
     return (
       <div className="invoice-print" style={{ fontFamily: 'Georgia, serif', maxWidth: 600, margin: '0 auto', padding: 40, color: '#1c1008', backgroundColor: '#fff' }}>
         {/* Header */}
@@ -138,18 +160,17 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           <Row label="საიდენტიფიკაციო კოდი" value={idCode} />
         </Section>
 
-        <Section title="სადილი">
-          <Row label="რაოდენობა" value={isLunch ? `${order.guestCount} კაცი` : '0 კაცი'} />
-        </Section>
-
-        <Section title="დეგუსტაცია">
-          <Row label="რაოდენობა" value={isTasting ? `${order.guestCount} კაცი` : '0 კაცი'} />
-        </Section>
+        {simpleProducts.map(p => (
+          <Section key={p} title={KA[p]}>
+            <Row label="რაოდენობა" value={`${countOf(p)} კაცი`} />
+          </Section>
+        ))}
 
         <Section title="თანხა">
-          <Row label="სადილი" value={formatTetri(asTetri(lunchAmount), { space: true, decimals: true })} />
-          <Row label="დეგუსტაცია" value={formatTetri(asTetri(tastingAmount), { space: true, decimals: true })} />
-          <Row label="დამ. სტუმრების კვება" value={formatTetri(asTetri(0), { space: true, decimals: true })} />
+          {simpleProducts.map(p => <Row key={p} label={KA[p]} value={money(amountOf(p))} />)}
+          {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
+          <Row label="დამ. სტუმრების კვება" value={money(0)} />
+          {mcAmt + extrasAmt > 0 && <Row label="მასტერკლასი და დამატებები" value={money(mcAmt + extrasAmt)} />}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
             <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
           </div>
@@ -197,24 +218,11 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         <Row label="საიდენტიფიკაციო კოდი" value={idCode} />
       </Section>
 
-      {/* Guests — split counts if available, else simple */}
+      {/* Guests — one row per product, the free guests, and the kitchen total */}
       <Section title="სტუმრები">
-        {hasSplitCounts ? (
-          <>
-            {order.tastingGuestCount > 0 && (
-              <Row label="დეგუსტაცია" value={`${order.tastingGuestCount} კაცი`} />
-            )}
-            {order.lunchGuestCount > 0 && (
-              <Row label="სადილი" value={`${order.lunchGuestCount} კაცი`} />
-            )}
-            {order.freeGuestCount > 0 && (
-              <Row label="თავისუფალი (გიდი/მძღოლი)" value={`${order.freeGuestCount} კაცი`} />
-            )}
-            <Row label="სულ" value={`${order.guestCount} კაცი`} />
-          </>
-        ) : (
-          <Row label={isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია'} value={`${order.guestCount} კაცი`} />
-        )}
+        {view.guests.map(g => <Row key={g.product} label={KA[g.product]} value={`${g.count} კაცი`} />)}
+        {view.free > 0 && <Row label="თავისუფალი (გიდი/მძღოლი)" value={`${view.free} კაცი`} />}
+        <Row label="სულ" value={`${view.totalGuests} კაცი`} />
       </Section>
 
       {/* Masterclass lines */}
@@ -241,10 +249,12 @@ export default function InvoicePrint({ order, payment, detailed = false, display
 
       {/* Amount breakdown */}
       <Section title="თანხა">
-        <Row
-          label={isLunch ? 'სადილი + დეგუსტაცია' : 'დეგუსტაცია'}
-          value={formatTetri(asTetri(bookingAmt), { space: true, decimals: true })}
-        />
+        {view.lines
+          ? view.lines.map(l => (
+              <Row key={l.product} label={`${KA[l.product]} (${l.count} × ${formatTetri(asTetri(l.rate))})`} value={money(l.amount)} />
+            ))
+          : <Row label={KA[view.visitProduct]} value={money(bookingAmt)} />}
+        {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
         {order.masterclassLines.map((l, i) => (
           <Row key={i} label={l.name} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
         ))}

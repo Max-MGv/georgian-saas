@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { Company } from '@prisma/client'
-import { COLUMN_DEFS, COLUMNS_STORAGE_KEY, defaultVisibleFor, type ColumnId } from './columnDefs'
+import { COLUMN_DEFS, defaultVisibleFor, readVisibleColumns, saveVisibleColumns, type ColumnId } from './columnDefs'
 import { exportOrdersCsv } from '@/app/actions/orders'
 import DateInput from '@/components/DateInput'
 import { adminT } from '@/lib/adminT'
@@ -86,11 +86,9 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
   const columnsPickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(COLUMNS_STORAGE_KEY)
-      if (saved) setVisibleCols(new Set(JSON.parse(saved) as ColumnId[]))
-    } catch {}
-  }, [])
+    const saved = readVisibleColumns(tenantId)
+    if (saved) setVisibleCols(saved)
+  }, [tenantId])
 
   useEffect(() => {
     if (!columnsOpen) return
@@ -106,7 +104,7 @@ export default function OrdersFilters({ companies, params, statusCounts, payment
   function toggleCol(id: ColumnId) {
     const next = new Set(visibleCols)
     next.has(id) ? next.delete(id) : next.add(id)
-    try { localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...next])) } catch {}
+    saveVisibleColumns(next)
     // Notify OrdersTable on the same page (fired here, not inside a setState
     // updater, so it doesn't run mid-render of this component)
     window.dispatchEvent(new CustomEvent('ordersColumnsChanged'))

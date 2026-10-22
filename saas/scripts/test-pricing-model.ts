@@ -20,6 +20,7 @@ import {
   ratesForParty, ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
+import { guestSplitText, invoiceView } from '../lib/invoiceLines'
 import { checkAdminOrder, checkBookingCounts, checkMasterclassLines, countRulesFromSettings, hotDishWithoutLunch, type CountRules, type CountRuleKey } from '../lib/bookingInput'
 import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
 
@@ -291,6 +292,21 @@ console.log('Rules from settings (Chunk 6)')
   check('admin screens skip the minimums (A-8): 1 guest ok', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 1 } })), 'ok')
   check('hot dish with no lunch guest → refused (A-11)', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 4 }, hotDishVegetable: 'Pkhali' })), 'orderForm.err.hotDish')
   check('hot dish with a lunch guest → ok', e(checkAdminOrder({ bookingType: 'COMPANY', visitType: 'LUNCH', boxes: { lunchOnly: 4 }, hotDishMeat: 'Mtsvadi' })), 'ok')
+}
+
+// ── Chunk 9: invoice lines + guest split (printed invoice, invoice email, booking emails) ──
+{
+  console.log('\nChunk 9 — invoice lines')
+  const base = { visitType: 'TASTING_LUNCH', guestCount: 8, tastingOnlyGuests: 0, lunchOnlyGuests: 3, tastingLunchGuests: 5, freeGuestCount: 0,
+    tastingOnlyRate: null, lunchOnlyRate: 4500, tastingLunchRate: 9200, registrationFeeSnapshot: 0, totalPrice: 59500, masterclassAmt: 0, extrasAmt: 0 }
+  const v = invoiceView(base)
+  check('rates explain the total → one line per product', v.lines?.map(l => [l.product, l.count, l.amount]), [['tastingLunch', 5, 46000], ['lunchOnly', 3, 13500]])
+  check('a hand-changed total → one booking line instead (never a split that does not add up)', invoiceView({ ...base, totalPrice: 60000 }).lines, null)
+  check("no rates → one booking line on the visit's product", [invoiceView({ ...base, lunchOnlyRate: null }).lines, invoiceView({ ...base, lunchOnlyRate: null }).visitProduct], [null, 'tastingLunch'])
+  check('masterclass and extras stay outside the booking amount', invoiceView({ ...base, totalPrice: 69500, masterclassAmt: 8000, extrasAmt: 2000 }).lines?.length, 2)
+  check('registration fee counted in', invoiceView({ ...base, registrationFeeSnapshot: 3000, totalPrice: 62500 }).registration, 3000)
+  check('guest split: mixed booking', guestSplitText({ tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 }, 'en'), '1 Tasting only · 2 Tasting & Lunch · 1 free')
+  check('guest split: one product, no free → nothing extra to say', guestSplitText({ tastingOnly: 0, lunchOnly: 0, tastingLunch: 4, free: 0 }, 'en'), null)
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

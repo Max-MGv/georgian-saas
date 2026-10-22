@@ -1,3 +1,4 @@
+import { guestSplitText } from '@/lib/invoiceLines'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { asTetri, formatTetri } from '@/lib/money'
 import { renderTokenizedText } from '@/lib/emails/templates/tokens'
@@ -44,13 +45,13 @@ const LABELS: Record<BookingEmailLocale, {
     summary: 'Booking Summary', visitType: 'Visit type', date: 'Date', time: 'Time', guests: 'Guests',
     paid: 'Paid', estimatedTotal: 'Estimated total',
     cancellationPolicy: '48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.',
-    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch', lunch: 'Lunch',
+    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch', lunch: 'Lunch only',
   },
   ka: {
     summary: 'ჯავშნის დეტალები', visitType: 'ვიზიტის ტიპი', date: 'თარიღი', time: 'დრო', guests: 'სტუმრები',
     paid: 'გადახდილია', estimatedTotal: 'სავარაუდო ჯამი',
     cancellationPolicy: 'მოქმედებს გაუქმების 48-საათიანი პოლიტიკა. გთხოვთ, გვაცნობოთ სტუმრობამდე მინიმუმ 48 საათით ადრე, თუ გჭირდებათ გაუქმება ან გადატანა.',
-    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი', lunch: 'სადილი',
+    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი', lunch: 'მხოლოდ სადილი',
   },
 }
 
@@ -61,6 +62,8 @@ export type BookingEmailData = {
   timeSlot: string    // e.g. "14:00"
   guestCount: number
   visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
+  /** The guest boxes (T-152) — listed under the guest count when the booking mixes products or has free guests. */
+  boxes?: { tastingOnly: number; lunchOnly: number; tastingLunch: number; free: number }
   totalPrice: number
   /** Which language to render this send in. Defaults to 'en'. */
   locale?: BookingEmailLocale
@@ -103,6 +106,7 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
   const locale = data.locale ?? 'en'
   const L = LABELS[locale]
   const visitLabel = data.visitType === 'TASTING' ? L.tasting : data.visitType === 'LUNCH' ? L.lunch : L.tastingLunch
+  const split = data.boxes ? guestSplitText(data.boxes, locale) : null
   const winery = data.wineryName || ''
   const address = data.wineryAddress || ''
   const phone = data.wineryPhone || ''
@@ -161,6 +165,7 @@ export function renderBookingConfirmationEmail(data: BookingEmailData): { subjec
               <td style="color: ${th.muted}; padding: 5px 0;">${L.guests}</td>
               <td style="color: ${th.text}; font-weight: bold; text-align: right;">${data.guestCount}</td>
             </tr>
+            ${split ? `<tr><td colspan="2" style="color: ${th.muted}; padding: 0 0 5px; font-size: 13px; text-align: right;">${split}</td></tr>` : ''}
             <tr style="border-top: 1px solid ${th.border};">
               <td style="color: ${th.muted}; padding: 10px 0 5px;">${data.paid ? L.paid : L.estimatedTotal}</td>
               <td style="color: ${th.brand}; font-weight: bold; font-size: 16px; text-align: right;">${formatTetri(asTetri(data.totalPrice), { decimals: true })}</td>

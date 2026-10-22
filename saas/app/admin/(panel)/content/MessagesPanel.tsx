@@ -356,6 +356,8 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
+    // A mixed company booking, so the per-product guest line shows in the preview (T-152).
+    boxes: { tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 },
     totalPrice: 32000, // tetri — the templates take tetri since the money refactor
     wineryName: winery.name,
     wineryAddress: winery.address,
@@ -391,11 +393,17 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     date: new Date(),
     timeSlot: SAMPLE_TIME,
     visitType: 'TASTING_LUNCH',
-    guestCount: 4,
+    // A company mixing all three products + a guide (T-152): 2 × ₾50 + 1 × ₾45 + 2 × ₾92 + ₾80 masterclass.
+    guestCount: 6,
     tastingGuestCount: 2,
+    lunchOnlyGuestCount: 1,
     lunchGuestCount: 2,
-    freeGuestCount: 0,
-    totalPrice: 32000, // tetri — the templates take tetri since the money refactor
+    freeGuestCount: 1,
+    tastingOnlyRate: 5000,
+    lunchOnlyRate: 4500,
+    tastingLunchRate: 9200,
+    registrationFeeSnapshot: 0,
+    totalPrice: 40900, // tetri — the templates take tetri since the money refactor
     companyName: SAMPLE_COMPANY,
     identificationCode: '123456789',
     masterclassLines: [{ name: 'Wine Blending Masterclass', quantity: 2, pricePerUnit: 4000 }],
@@ -423,6 +431,8 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     timeSlot: SAMPLE_TIME,
     guestCount: 4,
     visitType: 'TASTING_LUNCH',
+    // A mixed company booking, so the per-product guest line shows in the preview (T-152).
+    boxes: { tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 },
     totalPrice: 32000, // tetri — the templates take tetri since the money refactor
     bookingType: 'INDIVIDUAL',
     paid: false,

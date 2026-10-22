@@ -1,3 +1,4 @@
+import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceLocale } from '@/lib/invoiceLines'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { asTetri, balanceDue, formatTetri, multiplyTetri } from '@/lib/money'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
@@ -19,7 +20,7 @@ import { formatShortDate } from '@/lib/emails/templates/dateFormat'
  * than a persisted default rendered automatically.
  */
 
-export type InvoiceLocale = 'en' | 'ka'
+export type { InvoiceLocale }
 
 const LABELS: Record<InvoiceLocale, {
   invoice: string; company: string; name: string; idCode: string
@@ -59,11 +60,18 @@ export type InvoiceEmailData = {
   surname: string
   date: Date
   timeSlot: string
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   guestCount: number
+  // The boxes (T-152): tasting = Tasting only, lunch = Tasting & Lunch (names kept), lunchOnly = Lunch only.
   tastingGuestCount: number
+  lunchOnlyGuestCount?: number
   lunchGuestCount: number
   freeGuestCount: number
+  /** Frozen per-person rates, tetri — one line per product when they explain the total (lib/invoiceLines). */
+  tastingOnlyRate?: number | null
+  lunchOnlyRate?: number | null
+  tastingLunchRate?: number | null
+  registrationFeeSnapshot?: number | null
   totalPrice: number
   /**
    * Sum of this order's settled, non-reversed Payment.amount rows.
@@ -133,26 +141,32 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   const dateStr = formatShortDate(new Date(data.date), locale)
 
   const companyDisplay = data.companyName ?? `${data.name} ${data.surname}`
-  const hasSplit = data.tastingGuestCount > 0 || data.lunchGuestCount > 0 || data.freeGuestCount > 0
-  const isLunch = data.visitType === 'TASTING_LUNCH'
-
   const mcAmt = data.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
-  const bookingAmt = data.totalPrice - mcAmt - extrasAmt
+  // The booking per product — the same lines the printed invoice shows (Plan-PricingModel Chunk 9).
+  const view = invoiceView({
+    visitType: data.visitType, guestCount: data.guestCount,
+    tastingOnlyGuests: data.tastingGuestCount, lunchOnlyGuests: data.lunchOnlyGuestCount ?? 0, tastingLunchGuests: data.lunchGuestCount,
+    freeGuestCount: data.freeGuestCount,
+    tastingOnlyRate: data.tastingOnlyRate ?? null, lunchOnlyRate: data.lunchOnlyRate ?? null, tastingLunchRate: data.tastingLunchRate ?? null,
+    registrationFeeSnapshot: data.registrationFeeSnapshot ?? null,
+    totalPrice: data.totalPrice, masterclassAmt: mcAmt, extrasAmt,
+  })
+  const P = INVOICE_PRODUCT_LABEL[locale]
+  const people = (n: number) => `${n} ${n === 1 ? L.person : L.persons}`
+  const money = (t: number) => formatTetri(asTetri(t), { space: true, decimals: true })
 
-  // Guest rows
+  // Guest rows: one per product, the free guests, the total
   let guestContent = ''
-  if (hasSplit) {
-    if (data.tastingGuestCount > 0) guestContent += tableRow(th, L.tasting, `${data.tastingGuestCount} ${data.tastingGuestCount === 1 ? L.person : L.persons}`)
-    if (data.lunchGuestCount > 0) guestContent += tableRow(th, L.lunch, `${data.lunchGuestCount} ${data.lunchGuestCount === 1 ? L.person : L.persons}`)
-    if (data.freeGuestCount > 0) guestContent += tableRow(th, L.free, `${data.freeGuestCount} ${data.freeGuestCount === 1 ? L.person : L.persons}`)
-    guestContent += tableRow(th, L.total, `${data.guestCount} ${data.guestCount === 1 ? L.person : L.persons}`)
-  } else {
-    guestContent += tableRow(th, isLunch ? L.lunchTasting : L.tasting, `${data.guestCount} ${data.guestCount === 1 ? L.person : L.persons}`)
-  }
+  for (const g of view.guests) guestContent += tableRow(th, P[g.product], people(g.count))
+  if (view.free > 0) guestContent += tableRow(th, L.free, people(view.free))
+  guestContent += tableRow(th, L.total, people(view.totalGuests))
 
-  // Amount rows
-  let amountContent = tableRow(th, isLunch ? L.lunchTasting : L.tasting, formatTetri(asTetri(bookingAmt), { space: true, decimals: true }))
+  // Amount rows: per product when the order's rates explain the booking amount, else one booking line
+  let amountContent = view.lines
+    ? view.lines.map(l => tableRow(th, `${P[l.product]} (${l.count} × ${formatTetri(asTetri(l.rate))})`, money(l.amount))).join('')
+    : tableRow(th, P[view.visitProduct], money(view.bookingAmt))
+  if (view.registration > 0) amountContent += tableRow(th, INVOICE_REGISTRATION_LABEL[locale], money(view.registration))
   for (const l of data.masterclassLines) {
     amountContent += tableRow(th, l.name, formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
   }

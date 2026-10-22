@@ -39,7 +39,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 6 | Rules: company per-product minimums, `LUNCH` visit type, rule helper | ✅ 2026-10-21 |
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ✅ 2026-10-21 |
 | 8 | Admin New Order + Order Detail (fixes P-11) | ✅ 2026-10-22 |
-| 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ⬜ |
+| 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ✅ 2026-10-22 |
 | 10 | Demo seed, test fixtures, scripts, docs | ⬜ |
 | 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ⬜ |
 | 12 | Production runbook (DRAFT — Max's go per step) | ⬜ |
@@ -512,14 +512,29 @@ Save after the lunch guests went → the inline check no longer looks at dishes 
 **Resume point:** done → Chunk 9.
 
 ### Chunk 9 — Everything that shows a booking
-**Status:** ⬜
-- [ ] Orders table + phone card (§33), column defs (new id for Lunch only), calendar (both halves),
-      filters (`LUNCH`), booking sheet (three + Free + kitchen total), invoice print, invoice email +
-      `InvoiceSent`, confirmation + winery notification emails, `settle.ts` path, statistics (third bucket;
-      guests per product), super-admin activity, Messages preview samples.
-**Verify:** screenshots of each (EN + KA for emails/invoice via the Messages preview); send a test invoice
-on dev to a test address and read the `InvoiceSent` row.
-**Resume point:** —
+**Status:** ✅ 2026-10-22 on localhost; staging check after the push.
+- [x] Orders table: columns Tasting only / **Lunch only** (new id `lunchOnly`) / Tasting & Lunch / Free (new, off by
+      default); saved ids `tasting`/`lunch` kept (E-9). A browser that saved its choice before a column existed now
+      gets it once at its default (`readVisibleColumns` + `orders-columns-seen` in `columnDefs.ts`). Hover card per
+      product. Phone card already showed total + visit label — unchanged (§33 checked).
+- [x] Calendar: Lunch only label. Filters: there is no visit-type filter — nothing to change.
+- [x] Booking sheet: Tasting only / Lunch only / Tasting & Lunch / Free / **Kitchen total** (D-4).
+- [x] Invoice print (simple + detailed) and invoice email: one shared `lib/invoiceLines.ts` — a line per product
+      ("2 × 92₾") when the frozen rates explain the booking amount, else the old single booking line (never a split
+      that does not add up). `sendOrderInvoice` passes counts + rates.
+- [x] Booking confirmation (guest, EN/KA) and winery notification: "Lunch only" label fixed (was "Lunch"), and a
+      per-product guest line when a booking mixes products or has free guests (`guestSplitText`); `createBooking`
+      and `settle.ts` pass the boxes.
+- [x] Statistics: three visit types (orders, revenue), new "Guests by product"; also fixed the revenue-by-booking-type
+      legend that printed raw tetri ("85,475₾: 8547500").
+- [x] Super-admin activity: already had the label. Messages previews: samples mix all three products.
+- [ ] Not done: `InvoiceSent` keeps counts but not the per-product rates (would need a migration; nothing reads them
+      back today). Sending a real test invoice by email — not done without Max's OK (it sends mail).
+**Verify (localhost, Brave):** columns (fresh browser + an old saved choice → Lunch only added once), booking sheet rows
+16–22 Dec all with kitchen totals, simple invoice for the mixed order (₾460 + ₾135 = ₾595), Messages previews EN + KA
+(confirmation split line, invoice per-product lines, winery alert split), statistics (188 / 146 / 2 orders; guests
+1640 / 15 / 1074 / 62). `test-pricing-model.ts` 103/103.
+**Resume point:** staging check → Chunk 10.
 
 ### Chunk 10 — Demo seed, fixtures, scripts, docs
 **Status:** ⬜

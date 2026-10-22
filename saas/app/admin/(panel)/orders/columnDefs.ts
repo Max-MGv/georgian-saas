@@ -6,8 +6,12 @@ export const COLUMN_DEFS = [
   { id: 'type',        labelKey: 'orders.col.type',        defaultVisible: true  },
   { id: 'company',     labelKey: 'orders.col.company',     defaultVisible: true  },
   { id: 'nationality', labelKey: 'orders.col.nationality', defaultVisible: false },
+  // The three products (T-152). The ids 'tasting' / 'lunch' are kept — browsers have them saved — and now mean
+  // Tasting only / Tasting & Lunch; 'lunchOnly' was added in Plan-PricingModel Chunk 9.
   { id: 'tasting',     labelKey: 'orders.col.tasting',     defaultVisible: true  },
+  { id: 'lunchOnly',   labelKey: 'orders.col.lunchOnly',   defaultVisible: true  },
   { id: 'lunch',       labelKey: 'orders.col.lunch',       defaultVisible: true  },
+  { id: 'free',        labelKey: 'orders.col.free',        defaultVisible: false },
   { id: 'guests',      labelKey: 'orders.col.guests',      defaultVisible: false },
   { id: 'visit',       labelKey: 'orders.col.visit',       defaultVisible: true  },
   { id: 'masterclass', labelKey: 'orders.col.masterclass', defaultVisible: true  },
@@ -20,6 +24,10 @@ export const COLUMN_DEFS = [
 export type ColumnId = typeof COLUMN_DEFS[number]['id']
 
 export const COLUMNS_STORAGE_KEY = 'orders-columns'
+/** Every column id this browser has been offered — so a column added later still shows by default once. */
+export const COLUMNS_SEEN_KEY = 'orders-columns-seen'
+/** Columns added after browsers began saving their choices; a saved choice with no "seen" list predates them. */
+const ADDED_LATER: ColumnId[] = ['lunchOnly', 'free']
 
 export const DEFAULT_VISIBLE = new Set<ColumnId>(
   COLUMN_DEFS.filter(c => c.defaultVisible).map(c => c.id as ColumnId)
@@ -50,4 +58,32 @@ export function defaultVisibleFor(tenantId?: string | null): Set<ColumnId> {
   demo.delete('food')
   demo.delete('masterclass')
   return demo
+}
+
+/**
+ * The visible columns for this browser: its saved choice, plus any column it has never been offered at that
+ * column's default — without this a browser that saved its choice before a column existed would never see it.
+ * Null when nothing is saved (use defaultVisibleFor). Never throws (private windows, blocked storage).
+ */
+export function readVisibleColumns(tenantId?: string | null): Set<ColumnId> | null {
+  try {
+    const saved = localStorage.getItem(COLUMNS_STORAGE_KEY)
+    if (!saved) return null
+    const visible = new Set(JSON.parse(saved) as ColumnId[])
+    const seenRaw = localStorage.getItem(COLUMNS_SEEN_KEY)
+    const seen = new Set<ColumnId>(seenRaw ? JSON.parse(seenRaw) as ColumnId[] : COLUMN_DEFS.map(c => c.id).filter(id => !ADDED_LATER.includes(id)))
+    const defaults = defaultVisibleFor(tenantId)
+    for (const c of COLUMN_DEFS) if (!seen.has(c.id) && defaults.has(c.id)) visible.add(c.id)
+    return visible
+  } catch {
+    return null
+  }
+}
+
+/** Saves the admin's choice and marks every current column as seen. */
+export function saveVisibleColumns(visible: Set<ColumnId>) {
+  try {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify([...visible]))
+    localStorage.setItem(COLUMNS_SEEN_KEY, JSON.stringify(COLUMN_DEFS.map(c => c.id)))
+  } catch {}
 }

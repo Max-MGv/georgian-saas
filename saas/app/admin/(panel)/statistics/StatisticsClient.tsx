@@ -30,7 +30,10 @@ type Props = {
   byVisitType: {
     tastingOrders: number; tastingRevenue: number
     tastingLunchOrders: number; tastingLunchRevenue: number
+    lunchOnlyOrders: number; lunchOnlyRevenue: number
   }
+  /** Guests per product across the same orders (T-152). */
+  guestsByProduct: { tastingOnly: number; lunchOnly: number; tastingLunch: number; free: number }
   byBookingType: {
     individualOrders: number; individualRevenue: number
     companyOrders: number; companyRevenue: number
@@ -71,6 +74,28 @@ function SplitRow({ label, a, b, aLabel, bLabel }: {
   )
 }
 
+/** A bar split into any number of parts (visit types, products) — SplitRow's two-part case generalised (T-152). */
+const PART_COLORS = [C.wine, '#c2783f', '#9db07a', '#cbbfa8']
+function MultiSplitRow({ label, parts }: { label: string; parts: { label: string; value: number; display?: string }[] }) {
+  const total = parts.reduce((s, p) => s + p.value, 0) || 1
+  return (
+    <div className="mb-5">
+      <p className="text-xs font-medium mb-2" style={{ color: C.muted }}>{label}</p>
+      <div className="flex rounded-full overflow-hidden h-2 mb-2" style={{ backgroundColor: C.border }}>
+        {parts.map((p, i) => <div key={p.label} style={{ width: `${(p.value / total) * 100}%`, backgroundColor: PART_COLORS[i % PART_COLORS.length] }} />)}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: C.faint }}>
+        {parts.map((p, i) => (
+          <span key={p.label} className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: PART_COLORS[i % PART_COLORS.length] }} />
+            {p.label}: {p.display ?? p.value} ({Math.round((p.value / total) * 100)}%)
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const tooltipStyle = {
   contentStyle: { backgroundColor: 'var(--site-surface)', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 },
   labelStyle: { color: C.muted, fontWeight: 600 },
@@ -82,7 +107,7 @@ type Mode = 'bookings' | 'wine'
 export default function StatisticsClient({
   bookingOn, wineOrdersOn,
   totalOrders, totalRevenue, monthOrders, monthRevenue,
-  byMonth, byVisitType, byBookingType, topCompanies,
+  byMonth, byVisitType, guestsByProduct, byBookingType, topCompanies,
   orders, companies, wineOrders, locale = 'en',
 }: Props) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
@@ -201,19 +226,31 @@ export default function StatisticsClient({
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="rounded-xl border p-5" style={{ borderColor: C.border, backgroundColor: '#ffffff' }}>
               <p className="text-sm font-semibold mb-5" style={{ color: C.text }}>{at('statistics.breakdown.title')}</p>
-              <SplitRow
+              {/* Visit types — Lunch only shows once a winery has any (T-152) */}
+              <MultiSplitRow
                 label={at('statistics.breakdown.byVisitTypeOrders')}
-                a={byVisitType.tastingOrders}
-                b={byVisitType.tastingLunchOrders}
-                aLabel={at('statistics.tasting')}
-                bLabel={at('orders.visit.tastingLunch')}
+                parts={[
+                  { label: at('orders.visit.tasting'), value: byVisitType.tastingOrders },
+                  { label: at('orders.visit.tastingLunch'), value: byVisitType.tastingLunchOrders },
+                  ...(byVisitType.lunchOnlyOrders > 0 ? [{ label: at('orders.visit.lunch'), value: byVisitType.lunchOnlyOrders }] : []),
+                ]}
               />
-              <SplitRow
+              <MultiSplitRow
                 label={at('statistics.breakdown.byVisitTypeRevenue')}
-                a={byVisitType.tastingRevenue}
-                b={byVisitType.tastingLunchRevenue}
-                aLabel={`${at('statistics.tasting')} ${formatTetri(asTetri(byVisitType.tastingRevenue), { grouping: true })}`}
-                bLabel={`+${at('orders.col.lunch')} ${formatTetri(asTetri(byVisitType.tastingLunchRevenue), { grouping: true })}`}
+                parts={[
+                  { label: at('orders.visit.tasting'), value: byVisitType.tastingRevenue },
+                  { label: at('orders.visit.tastingLunch'), value: byVisitType.tastingLunchRevenue },
+                  ...(byVisitType.lunchOnlyOrders > 0 ? [{ label: at('orders.visit.lunch'), value: byVisitType.lunchOnlyRevenue }] : []),
+                ].map(p => ({ ...p, display: formatTetri(asTetri(p.value), { grouping: true }) }))}
+              />
+              <MultiSplitRow
+                label={at('statistics.breakdown.guestsByProduct')}
+                parts={[
+                  { label: at('orders.col.tasting'), value: guestsByProduct.tastingOnly },
+                  ...(guestsByProduct.lunchOnly > 0 ? [{ label: at('orders.col.lunchOnly'), value: guestsByProduct.lunchOnly }] : []),
+                  { label: at('orders.col.lunch'), value: guestsByProduct.tastingLunch },
+                  { label: at('orders.col.free'), value: guestsByProduct.free },
+                ]}
               />
               <SplitRow
                 label={at('statistics.breakdown.byBookingTypeOrders')}
@@ -222,12 +259,13 @@ export default function StatisticsClient({
                 aLabel={at('orders.type.individual')}
                 bLabel={at('orders.type.company')}
               />
-              <SplitRow
+              {/* Was a SplitRow whose legend printed the raw tetri number after the formatted amount */}
+              <MultiSplitRow
                 label={at('statistics.breakdown.byBookingTypeRevenue')}
-                a={byBookingType.individualRevenue}
-                b={byBookingType.companyRevenue}
-                aLabel={`${at('orders.type.individual')} ${formatTetri(asTetri(byBookingType.individualRevenue), { grouping: true })}`}
-                bLabel={`${at('orders.type.company')} ${formatTetri(asTetri(byBookingType.companyRevenue), { grouping: true })}`}
+                parts={[
+                  { label: at('orders.type.individual'), value: byBookingType.individualRevenue },
+                  { label: at('orders.type.company'), value: byBookingType.companyRevenue },
+                ].map(p => ({ ...p, display: formatTetri(asTetri(p.value), { grouping: true }) }))}
               />
             </div>
 

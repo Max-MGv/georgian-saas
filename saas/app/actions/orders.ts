@@ -440,13 +440,18 @@ export async function sendOrderInvoice(
       email: recipient,
       date: order.date,
       timeSlot: order.timeSlot,
-      visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',
+      visitType: order.visitType,
       guestCount: order.guestCount,
-      // The template's own names until Plan-PricingModel Chunk 9 redoes the invoice: "tasting" = Tasting only,
-      // "lunch" = Tasting & Lunch.
+      // The template keeps its prop names: "tasting" = Tasting only, "lunch" = Tasting & Lunch (T-152).
       tastingGuestCount: order.tastingOnlyGuests ?? 0,
+      lunchOnlyGuestCount: order.lunchOnlyGuests ?? 0,
       lunchGuestCount: order.tastingLunchGuests ?? 0,
       freeGuestCount: order.freeGuestCount,
+      // Per-product lines on the invoice come from what the order was sold at.
+      tastingOnlyRate: order.tastingOnlyRate,
+      lunchOnlyRate: order.lunchOnlyRate,
+      tastingLunchRate: order.tastingLunchRate,
+      registrationFeeSnapshot: order.registrationFeeSnapshot,
       totalPrice: order.totalPrice ?? 0,
       // Only meaningful once something has actually settled — see this
       // field's doc comment on InvoiceEmailData.

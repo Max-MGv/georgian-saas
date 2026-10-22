@@ -66,14 +66,22 @@ export default async function StatisticsPage() {
     return { month: label, orders: bucket.length, revenue: Math.round(bucket.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)) }
   })
 
-  const tasting = rawOrders.filter(o => o.visitType === 'TASTING')
-  const tastingLunch = rawOrders.filter(o => o.visitType === 'TASTING_LUNCH')
+  // Three visit types since T-152 (Lunch only is a company visit type, D-10).
+  const ofVisit = (v: string) => rawOrders.filter(o => o.visitType === v)
+  const revenueOf = (list: typeof rawOrders) => Math.round(list.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0))
+  const [tasting, tastingLunch, lunchOnly] = [ofVisit('TASTING'), ofVisit('TASTING_LUNCH'), ofVisit('LUNCH')]
   const byVisitType = {
-    tastingOrders: tasting.length,
-    tastingRevenue: Math.round(tasting.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
-    tastingLunchOrders: tastingLunch.length,
-    tastingLunchRevenue: Math.round(tastingLunch.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
+    tastingOrders: tasting.length, tastingRevenue: revenueOf(tasting),
+    tastingLunchOrders: tastingLunch.length, tastingLunchRevenue: revenueOf(tastingLunch),
+    lunchOnlyOrders: lunchOnly.length, lunchOnlyRevenue: revenueOf(lunchOnly),
   }
+  // Guests per product — every order stores its boxes (A-4), so this counts heads the kitchen actually served.
+  const guestsByProduct = rawOrders.reduce((acc, o) => ({
+    tastingOnly: acc.tastingOnly + (o.tastingOnlyGuests ?? 0),
+    lunchOnly: acc.lunchOnly + (o.lunchOnlyGuests ?? 0),
+    tastingLunch: acc.tastingLunch + (o.tastingLunchGuests ?? 0),
+    free: acc.free + o.freeGuestCount,
+  }), { tastingOnly: 0, lunchOnly: 0, tastingLunch: 0, free: 0 })
 
   const individual = rawOrders.filter(o => o.bookingType === 'INDIVIDUAL')
   const company = rawOrders.filter(o => o.bookingType === 'COMPANY')
@@ -139,6 +147,7 @@ export default async function StatisticsPage() {
         monthRevenue={Math.round(monthRevenue)}
         byMonth={byMonth}
         byVisitType={byVisitType}
+        guestsByProduct={guestsByProduct}
         byBookingType={byBookingType}
         topCompanies={topCompanies}
         orders={orders}
