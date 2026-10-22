@@ -561,16 +561,38 @@ re-pricing) rather than by eye; Chunk 11 covers the screens end to end.
 **Resume point:** done → Chunk 11.
 
 ### Chunk 11 — Full verification and hand-over
-**Status:** ⬜
-- [ ] Fresh dev server (`rm -rf saas/.next`), warm routes, then **Playwright tiers 1–4** (KNOWN-ISSUES first).
-      Two clean runs of anything that fails before fixing; reproduce every failure live.
-- [ ] Blind review of the whole diff by a context-free subagent (vault fenced off — memory
-      `feedback_blind_reviews`); verify every finding against the code; fix.
-- [ ] `tix review T-152` with test steps for Max (staging), commit list; draft the release note
-      (Releases, client view) with before/after shots.
-- [ ] Vault: KnownBugs #93 (fixed on staging), FeatureLog, Roadmap, SessionLog.
+**Status:** 🚧 2026-10-22 — blind review done + fixed (`acfa3f3`); Playwright not green yet (environment, see log);
+review card + release note wait for Max's call on the test budgets.
+- [~] Fresh dev server + warm routes + **Playwright tiers 1–4** (73 tests now — the suite doubled since the last
+      green 35/35 on 2026-10-02). Runs: (1) 66 pass / 9 fail / 3 not run; (2) the 9 failing files in isolation →
+      12 pass, 5 fail; (3) clean full rerun on a fresh server after the fixes → 66 / 9 / 3; (4) the 7 failing files in
+      isolation → 6 / 7 / 3. **What the failures are:**
+  - *Real, fixed:* `booking-enhanced` + `contact-orphan-safety` assumed "Personal access codes" OFF; staging's real
+    resting value is ON (restored after the 10-20 recovery, Recovery doc §9). Both specs now set OFF and restore.
+    `booking-enhanced` passed in run 3.
+  - *Environment:* the dev DB answers in 0.33–0.53 s per round trip (a tenant transaction ≈ 0.46 s, measured);
+    `GET /admin` (the login's landing redirect) took 7–29 s — the admin layout's banners fire many parallel
+    transactions; T-152 did not add any (only renamed the price columns PaymentSetupBanner reads). That breaks the
+    login helper's 25 s wait and several 30 s test budgets (popover-clipping, admin-orders, onboarding, tickets),
+    produced P1001 / P2028 in the server log, and makes `payment-amount-integrity` time out — which then leaves
+    Individual payments OFF and fails `booking-simple` (the known cascade). Matches the recovery's open item P4
+    ("budgets ≥ 60 s for /admin/orders specs").
+  - State restored after every run (Individual payments ON, wizard tenant reset, person codes left at ON).
+- [x] **Blind review** (context-free subagent, vault fenced off) — 9 findings + 4 unconfirmed, each checked against the
+      code. Fixed in `acfa3f3`: #1 hidden stored box zeroed on a food-note Save (now shown + flagged; individual
+      orders stored in an unshowable shape refused); #3 unpriced orders' totals did not follow line changes (now move by
+      the line's amount; old orders keep their base — verified 4/4 on dev); #4 linking a company wiped typed rates and
+      re-priced paid orders; #5 a hidden Lunch only value blocked the public form; #8a preview vs server on cleared
+      rates; #9 input validation on both admin actions; unconfirmed #2 line/extra deletes not scoped to the order;
+      unconfirmed #3 price actions passed the browser's object through. **Not changed (for Max):** #2 admin screens
+      price individuals from typed rates, not the Individuals table (same as before T-152); #6 Free box unbounded on
+      the public form; #7 single-layout extras ignored rather than refused (A-4, intended); #8b a frozen ₾0 rate
+      reads as "nothing typed"; registration fee per company (A-3, intended). `test-pricing-model.ts` 105/105.
+- [ ] `tix review T-152` with test steps for Max (staging), commit list; draft the release note with before/after shots.
+- [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
-**Resume point:** —
+**Resume point:** Max's call — raise the test budgets (login helper 25 → 60 s, the 30 s admin specs → 60–90 s) and
+rerun, or accept the environment failures; then the review card + release note.
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)
 **Status:** ⬜

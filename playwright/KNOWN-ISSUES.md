@@ -154,6 +154,16 @@ a token), not 404, before running specs. Not an app bug — nothing changes on s
 **Cause:** a stray `next dev` / node process still holds the engine file (ClaudeInstructions Rule 10).
 **Fix:** stop the project's node processes, then rebuild.
 
+### `/admin` itself takes 7–29 s — the login helper's 25 s wait runs out (2026-10-22)
+
+**Symptom:** `loginAsTenantAdmin` fails with the URL stuck at `http://localhost:3000/admin`; admin specs with 30 s budgets
+time out on ordinary clicks; the server log shows `GET /admin 200 in 7–29s` and P2028 "transaction already closed".
+**Cause:** `/admin` only redirects, but the admin layout's banners (`OnboardingBanner`, `FinishDetailsBanner`,
+`PaymentSetupBanner`) fire many parallel `withTenantDb` transactions, and the dev DB answers in ~0.33–0.53 s per round
+trip (measured 2026-10-22, `scripts/_qa/db-latency.ts`). With 73 tests now (35 on 2026-10-02) the suite hits it reliably.
+**Not a regression of the pricing work** (T-152 added no queries there). Proposed (needs Max's OK, recovery item P4):
+login helper wait 25 → 60 s, admin specs' 30 s budgets → 60–90 s.
+
 ### Dev database connection pool exhaustion
 
 **Symptom:** `PrismaClientKnownRequestError` with code `P1001` ("Can't reach database server") or `P2028` ("Transaction already closed" / "Unable to start a transaction in the given time"), appearing even on ordinary `/admin/*` page loads — including immediately on a *freshly restarted* dev server.
