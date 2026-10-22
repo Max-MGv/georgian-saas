@@ -40,7 +40,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 7 | Public booking form + `createBooking` (incl. #93 checks) | ✅ 2026-10-21 |
 | 8 | Admin New Order + Order Detail (fixes P-11) | ✅ 2026-10-22 |
 | 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ✅ 2026-10-22 |
-| 10 | Demo seed, test fixtures, scripts, docs | ⬜ |
+| 10 | Demo seed, test fixtures, scripts, docs | ✅ 2026-10-22 |
 | 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ⬜ |
 | 12 | Production runbook (DRAFT — Max's go per step) | ⬜ |
 
@@ -538,15 +538,27 @@ Staging `089a802` (Brave, read-only): orders table columns + statistics identica
 **Resume point:** done → Chunk 10.
 
 ### Chunk 10 — Demo seed, fixtures, scripts, docs
-**Status:** ⬜
-- [ ] `demoSeed.ts`: three prices per tier (lunch-only on some companies), orders using all three products;
-      reseed dev demo; `audit-money.ts` clean.
-- [ ] Scripts in §5 updated and green; `backfill-test-fixtures.ts` gives the test companies lunch-only prices.
-- [ ] Playwright specs + helpers + notes updated to the new labels/totals (**not run yet**).
-- [ ] Docs: MaintenanceNotes §22 rewritten (per-product tiers; the 2026-09-19 party-size rule is retired by
-      Max's 2026-10-20 decision), §1/§31/§32 touch-ups; `Database Schema.md`; `Dependencies.md`; Feature note.
-**Verify:** demo admin + public screenshots; scripts green; tsc 0.
-**Resume point:** —
+**Status:** ✅ 2026-10-22 — `5f18f21` (seed, fixtures, old functions removed), `2621a69` (specs + notes), docs commit.
+- [x] `demoSeed.ts`: Caucasus Vine Travel + Silk Road Journeys sell Lunch only; company bookings mix all three
+      products (Lunch only visits; Tasting + Lunch groups with Lunch only guests); priced with
+      `ratesForCounts`/`priceCounts`; per-person masterclass = paying guests; dish only with a lunch guest.
+      **Dev demo reseeded** (backup first): 388 bookings — 6 Lunch only visits, 3 mixed; every one of the 783 dev
+      orders re-prices to its stored total; `audit-money.ts` clean (incl. the new Lunch only prices).
+- [x] `backfill-test-fixtures.ts`: fills missing Lunch only prices from the specs (never overwrites); run on
+      staging-winery: 3 set, Silk Road's existing 1–20 ₾45 left alone. Kakheti Wine Routes stays the "not offered"
+      example. Scripts green: repricing 6, order-status, events 12, contacts 36, extra/masterclass RLS 8+8, payment
+      ledger 16, settle double-payment 11, top-up 3, payment flow 22, price RLS 10. `seed-demo-data` report now
+      prints lari (it printed tetri as GEL).
+- [x] Old party-size pricing removed from `pricingUtils.ts` (`priceBooking`, `ratesForParty`, `ratesFromTier`,
+      `ratesFromSnapshot`, `ratesFromManual`, `headcountOf`); `countsFromLegacy` kept (production equivalence).
+      `test-pricing-model.ts` 101/101.
+- [x] Playwright specs + notes updated (**not run** — Chunk 11): booking-enhanced, company-nationality-tagging,
+      admin-orders, companies-crud, tier5 payment-admin-order + payment-post-payment-extras; notes 05/09/16/17/18.
+- [x] Docs: MaintenanceNotes §22 rewritten (history kept below), §1/§31/§32 additions; `Database Schema.md`;
+      `DataModel/Dependencies.md`; [[Feature 237 - Pricing model three products]]; FeatureLog #237.
+**Not done:** demo/public screenshots for this chunk — the reseeded demo was checked by data (mix, invariants,
+re-pricing) rather than by eye; Chunk 11 covers the screens end to end.
+**Resume point:** done → Chunk 11.
 
 ### Chunk 11 — Full verification and hand-over
 **Status:** ⬜

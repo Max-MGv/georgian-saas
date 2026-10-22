@@ -114,6 +114,15 @@ so a booking submitted through the popup carries it too — a field added only t
 
 ---
 
+**Since T-152 (2026-10-21/22):** the detailed variant has **one box per product** — Tasting only / Lunch only /
+Tasting & Lunch + Free / Guide (a Tasting visit shows only Tasting only + Free; a product the proven company's
+price table does not price has no box). The simple company form has a third visit tile, **Lunch only**
+(`form_lunch_only` in `FIELDS.form` + `seed-ka.ts` — the seed row exists but `seed-ka.ts` was not re-run: it
+upserts every KA label and would overwrite wineries' edits). The box sub-labels are fixed `t()` labels, not
+SiteContent (same rule as before). Six new booking errors are on the Messages tab (`onsite_err_product_min`,
+`_visit_mismatch`, `_not_offered`, `_guest_counts`, `_masterclass`, `_hot_dish`). A hot dish is only sent while
+a guest has lunch (A-11). `BookingFormVisualPanel.tsx` mirrors all of this.
+
 ---
 
 ## 2. Admin route group structure — `(panel)` vs root
@@ -662,7 +671,44 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. ~~Nine places compute a booking price~~ — DONE 2026-09-19, there is now one
+## 22. Booking prices — one rule set, the product model (T-152, rewritten 2026-10-22)
+
+**The model (Max, 2026-10-20 — Plan-PricingModel).** Companies sell three products: **Tasting only, Lunch only,
+Tasting & Lunch** (all-in, not tasting + an add-on). Every guest is in exactly one box, or **Free**, and the
+order's `guestCount` is the sum of the four boxes — never typed (D-3). **Each product finds its price row by its
+own guest count** (D-2): one booking can use different rows. A product with no price on a row is "not offered"
+(null, never ₾0, D-7); no exact row → the highest-priced row that offers it (A-7). The registration fee is one
+flat fee per company (D-6). Individuals: same model, one product for the whole group (A-4). This **retires the
+2026-09-19 "party size picks the tier" rule** described in the history below.
+
+**Where the rules live — and only there:**
+- `lib/pricingUtils.ts`: `findProductTier`, `ratesForCounts` (table), `ratesFromProductSnapshot` (frozen on the
+  order), `adminQuote` (admin screens: table first, typed rate for what it does not price, "unpriced" when
+  nothing is set), `notOffered`, and the one arithmetic function `priceCounts(rates, counts, lines)`.
+- `lib/bookingInput.ts`: `checkBookingCounts` (public), `checkAdminOrder` (admin), `checkMasterclassLines`,
+  `hotDishWithoutLunch` (A-11), `countRulesFromSettings`.
+- `lib/adminOrderView.ts` + `orders/OrderGuestFields.tsx`: what New Order and the order page preview — the same
+  functions the server runs, so a preview cannot disagree with a Save.
+- `lib/invoiceLines.ts`: invoice print + email lines (per product when the frozen rates explain the total, else
+  one booking line) and the booking emails' guest split.
+
+**Callers:** `createBooking`, `createOrderAdmin`, `updateOrderEnhanced` (re-prices only when the visit type, a box
+or a typed rate changed), `assignOrderCompany`, `recalcOrderTotal` (frozen rates only — a line change never moves
+the agreed rates), `BookingForm`, `NewOrderForm`, `OrderDetail`, `demoSeed`.
+
+**Retired 2026-10-22 (Chunk 10):** `priceBooking`, `ratesForParty`, `ratesFromTier`, `ratesFromSnapshot`,
+`ratesFromManual`, `headcountOf`. `countsFromLegacy` stays as the migration's TypeScript twin (the production
+equivalence check uses it). `findTier`/`comboRatePerPerson` stay **only** for the home page's display price and
+the payment-setup banner.
+
+**Watch for:** a new path that prices by party size, reads `tastingLunchPrice` as an add-on, or computes its own
+total in a form instead of calling the shared functions; a write path that skips `checkBookingCounts` /
+`checkAdminOrder` (KnownBugs #93 was exactly that). **Tests:** `saas/scripts/test-pricing-model.ts` (worked
+examples, #93 refusals, every real order re-pricing to its stored total), `tests/tier2-core-flows/
+booking-tampered-quantities.spec.ts`.
+
+### History — 2026-09-19 "Nine places compute a booking price", then `priceBooking()` (superseded above)
+
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -1063,6 +1109,12 @@ reasoning and the field-by-field rationale: [[DataModel/Reference-SnapshotVsLive
 (`sendOrderInvoice`), `saas/app/admin/(panel)/orders/[id]/page.tsx` and `OrderDetail.tsx` (the
 Invoice History card), `saas/scripts/setup-rls.ts`.
 
+**Since T-152 (2026-10-22):** `InvoiceSent` stores the boxes as billed (`tastingOnlyGuests`, `lunchOnlyGuests`,
+`tastingLunchGuests`, `freeGuestCount`) but **not** the per-product rates the invoice now prints from
+`lib/invoiceLines.ts`. Nothing reads them back today; keeping them would need a migration (noted in
+Plan-PricingModel Chunk 9). The invoice print and the invoice email share `invoiceLines.ts`, so they cannot
+describe one order two ways.
+
 ---
 
 ## 32. Admin New Order mirrors the public form's contact blocks — what is shared, what is deliberately not
@@ -1108,6 +1160,12 @@ of **36 000 s (10 h)** — this app does not set one (`lib/payments/flitt.ts`).
 `saas/app/actions/orders.ts` (`createOrderAdmin`), `OrderDetail.tsx`, `QrCodeDialog.tsx`, `adminT.ts`.
 
 ---
+
+**Since T-152 Chunk 8 (2026-10-22):** New Order and the order page share their guest/price controls
+(`orders/OrderGuestFields.tsx`) and their preview logic (`lib/adminOrderView.ts`), which runs the same
+`checkAdminOrder` + `adminQuote` as `createOrderAdmin` / `updateOrderEnhanced`. Companies fill the four boxes
+(total derived — P-11); individuals one guest count. The orders-table quick-edit panel no longer edits the guest
+count at all (it changed the total without the boxes or the price) — it links to the order page.
 
 ---
 

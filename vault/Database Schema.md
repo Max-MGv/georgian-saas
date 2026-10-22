@@ -25,48 +25,42 @@ model Company {
 ```
 
 ### Order
-Every booking submitted (public form or admin).
+Every booking submitted (public form or admin). **Pricing fields as of 2026-10-22 (T-152 product model)** —
+`saas/prisma/schema.prisma` is the source of truth for everything else (stage/milestone dates, payments,
+contacts, nationalities). Money is **tetri** (Int, 100 = ₾1) since the 2026-09-18 money refactor.
 ```prisma
 model Order {
-  id                  String             @id @default(cuid())
-  date                DateTime
-  timeSlot            String
-  bookingType         String             // "INDIVIDUAL" | "COMPANY"
-  visitType           String             // "TASTING" | "TASTING_LUNCH"
-  guestCount          Int
-  lunchGuestCount     Int                @default(0)
-  tastingGuestCount   Int                @default(0)
-  freeGuestCount      Int                @default(0)   // guide, driver, under-12 — no charge
-  hotDishVegetable    String?            // snapshot of selected menu item name
-  hotDishMeat         String?            // snapshot of selected menu item name
-  foodNotes           String?            // free-text kitchen notes
-  name                String
-  surname             String
-  email               String?
-  phone               String?
-  notes               String?
-  totalPrice          Float?
-  companyId           String?
-  company             Company?           @relation(fields: [companyId], references: [id])
-  masterclassLines    OrderMasterclass[]
-  extras              OrderExtra[]
-  createdAt           DateTime           @default(now())
+  visitType           VisitType   // TASTING | TASTING_LUNCH | LUNCH (Lunch only: company simple form)
+  bookingType         BookingType // INDIVIDUAL | COMPANY
+  guestCount          Int         // = the four boxes below, summed — never typed (the kitchen count)
+  tastingOnlyGuests   Int         // the boxes: every guest is in exactly one
+  lunchOnlyGuests     Int
+  tastingLunchGuests  Int
+  freeGuestCount      Int         // guide, driver, under-12 — never charged
+  tastingOnlyRate     Int?        // per-person rates this order was SOLD at (frozen; null = no guests on it /
+  lunchOnlyRate       Int?        //   not priced yet). recalcOrderTotal re-prices from these, never live tiers.
+  tastingLunchRate    Int?
+  registrationFeeSnapshot Int?
+  totalPrice          Int?        // Σ box × rate + registration + masterclass lines + extras
+  hotDishVegetable    String?     // only when someone has lunch (A-11)
+  hotDishMeat         String?
+  foodNotes           String?
+  // … plus contact, stage/milestones, payments, masterclassLines, extras — see schema.prisma
 }
 ```
 
 ### Price
-Per-company pricing tiers by group size.
+Per-company price table. One row = a guest range with a price per product.
 ```prisma
 model Price {
-  id                       String  @id @default(cuid())
-  companyId                String
-  company                  Company @relation(fields: [companyId], references: [id])
-  minGuests                Int
-  maxGuests                Int
-  pricePerPerson           Float   // tasting rate
-  tastingLunchPricePerPerson Float @default(0)  // tasting+lunch rate
-  registrationPrice        Float
+  minGuests          Int
+  maxGuests          Int
+  tastingOnlyPrice   Int?   // tetri per person; null = not offered on this row (never ₾0)
+  lunchOnlyPrice     Int?   //   blank for most companies — Lunch only is opt-in per company
+  tastingLunchPrice  Int?   //   ALL-IN, not tasting + an add-on
+  isDisplayPrice     Boolean
 }
+// Company.registrationFee Int — one flat fee per booking (was per row, as registrationPrice)
 ```
 
 ### Wine
@@ -184,25 +178,13 @@ model OrderExtra {
 
 ## Pricing Logic
 
-### Current (simple)
+**The product model (T-152, 2026-10-22)** — full rules and where they live: [[MaintenanceNotes]] §22.
 ```
-totalPrice = guestCount × ratePerPerson + registrationPrice
-
-ratePerPerson = visitType === 'TASTING'
-  ? price.pricePerPerson
-  : price.tastingLunchPricePerPerson || price.pricePerPerson
+each product with guests finds its row by ITS OWN count (no exact row → highest-priced row offering it)
+totalPrice = Σ (box × that product's rate) + registration fee + Σ masterclass (qty × catalogue price) + Σ extras
 ```
-
-### Enhanced (Step 4 — order detail UI, in progress)
-```
-totalPrice =
-  (tastingGuestCount × price.pricePerPerson) +
-  (lunchGuestCount   × price.tastingLunchPricePerPerson) +
-  price.registrationPrice +
-  Σ(masterclassLines: quantity × pricePerUnit) +
-  Σ(extras: amount)
-```
-Falls back to current logic if split counts are all 0. DB schema is ready; recalculation UI comes in Step 4.
+A product with guests but no rate is refused on the public form ("not offered") and needs a typed rate on the
+admin screens. Free guests are never charged. The old "party size picks one tier" rule (2026-09-19) is retired.
 
 ---
 

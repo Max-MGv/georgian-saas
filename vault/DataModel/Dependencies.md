@@ -1,5 +1,12 @@
 ---
 tags: [schema, data-model, dependencies, risk]
+
+> **Update 2026-10-22 (T-152, Plan-PricingModel).** The order/price columns this note talks about were reshaped
+> by the product model: `Order.tastingGuestCount/lunchGuestCount` → `tastingOnlyGuests` / `lunchOnlyGuests` /
+> `tastingLunchGuests` (+ `freeGuestCount`), the rate snapshots → `tastingOnlyRate` / `lunchOnlyRate` /
+> `tastingLunchRate` / `registrationFeeSnapshot`, `Price.pricePerPerson`/`tastingLunchPricePerPerson` →
+> `tastingOnlyPrice` / `lunchOnlyPrice` / `tastingLunchPrice` (all-in), `registrationPrice` → `Company.registrationFee`.
+> Hazard 1 below still holds: wiping `Company` cascades to `Price` — now including every Lunch only price.
 ---
 
 # Dependencies and blast radius

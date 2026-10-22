@@ -23,7 +23,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   dish without a lunch guest"**. **Chunk 8 `539483c`**: admin New Order + order page on the four boxes (P-11 fixed — no typed
   party size), visit type editable, re-price only on a real change, A-11 on every path, quick-edit panel no longer writes
   guestCount, addMasterclassLine validates quantity. Localhost + staging QA in the plan. 96/96 pricing tests.
-- **Next:** Chunk 9 (every screen/document that shows a booking: lists, calendar, sheet, invoices, emails, statistics).
+- 2026-10-22: **Chunk 9 `089a802`** — orders table (Lunch only + Free columns, saved column choices get new columns
+  once), kitchen sheet with kitchen total, invoices print + email per product (`lib/invoiceLines.ts`), booking emails
+  ("Lunch only" label, guest split), statistics (three visit types, guests by product; raw-tetri legend fixed).
+  **Chunk 10** — demo seed on three products + dev demo reseeded, fixtures get Lunch only prices, old party-size pricing
+  removed, specs/notes updated (not run), docs (MaintenanceNotes §22 rewritten, Feature 237, FeatureLog #237).
+- **Next:** Chunk 11 — fresh dev server, Playwright tiers 1–4, blind review, fixes, hand-over (then Chunk 12 runbook).
 
 ---
 
