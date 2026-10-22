@@ -114,9 +114,9 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // suite (wait for the real state change, not a fixed sleep).
     async function setDateRange(from: string, fromIso: string, to: string, toIso: string) {
       await fromInput.fill(from);
-      await page.waitForURL(new RegExp(`dateFrom=${fromIso}`), { timeout: 10_000 });
+      await page.waitForURL(new RegExp(`dateFrom=${fromIso}`), { timeout: 30_000 });
       await toInput.fill(to);
-      await page.waitForURL(new RegExp(`dateTo=${toIso}`), { timeout: 10_000 });
+      await page.waitForURL(new RegExp(`dateTo=${toIso}`), { timeout: 30_000 });
     }
 
     // 3 & 4. Filter to a range containing zero known orders (a decade before

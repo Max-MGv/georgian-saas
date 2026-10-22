@@ -589,6 +589,24 @@ review card + release note wait for Max's call on the test budgets.
       price individuals from typed rates, not the Individuals table (same as before T-152); #6 Free box unbounded on
       the public form; #7 single-layout extras ignored rather than refused (A-4, intended); #8b a frozen ₾0 rate
       reads as "nothing typed"; registration fee per company (A-3, intended). `test-pricing-model.ts` 105/105.
+- [x] **Max's answers (2026-10-22)** to the "not changed" list: #6 → *cap it* — the public form refuses more Free guests
+      than paying guests (`too_many_free`, checked last in the public block; admin screens exempt; message on the
+      Messages tab EN/KA) in `70adfbf`, `test-pricing-model` 108/108. #2 → **D-14** (Chunk 11b, not started). Test
+      budgets → *raise and rerun*: default 30 → 90 s, login wait 25 → 60 s, payment-amount-integrity individual
+      180 → 360 s, admin-orders / contact-orphan-safety 90 → 180 s, onboarding 180 → 300 s (`70adfbf`).
+- [~] Run 5 (new budgets): 69 pass / 6 fail / 3 not run. Three were real spec gaps, fixed (test code only):
+      `contact-orphan-safety` never filled a guest box, so Create order stayed off since Chunk 8 (boxes start at 0) — now
+      fills Tasting only = 4 (Kakheti Wine Routes has a Tasting only rate); `payment-amount-integrity`'s deleted-row
+      check used the 5 s default → 30 s; `admin-orders`' filter URL waits 10 → 30 s. The other three were the server
+      stalling (ERR_ABORTED / ERR_CONNECTION_REFUSED) or a lost click (KNOWN-ISSUES #2) and passed in earlier runs.
+      Run 6 = full rerun on a fresh server + cleared cache.
+- [~] **Run 6: 78 / 78 passed, 0 retries (1.0 h)** — first fully green run since T-152 began.
+      **Run 7** (same server, straight after): 65 pass / 10 fail / 3 not run — every error in the server log is the
+      database link (P1001 "can't reach database server", transactions waiting 94–259 s to start, P2028) in the
+      admin layout banners / `getSetting` / the orders list query; nothing from T-152 code. DB measured normal again
+      right after (335 ms round trip). Left behind by the failed tests: orders `Nationality TestGuest`,
+      `ZZPaymentIntegrity On`, and ZZ / Playwright wine orders → the existing "ZZ test data on dev" cleanup.
+      Run 8 = the 10 failing files in isolation.
 - [ ] `tix review T-152` with test steps for Max (staging), commit list; draft the release note with before/after shots.
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
@@ -596,12 +614,31 @@ review card + release note wait for Max's call on the test budgets.
 rerun, or accept the environment failures; then the review card + release note.
 
 ### Chunk 11b — D-14: individuals priced from the Individuals table on admin screens (NOT STARTED — Max: "record, don't start")
-**Status:** ⬜ — waiting for Max's go and the open questions below.
-- [ ] `createOrderAdmin` / `updateOrderEnhanced` / `adminOrderView`: an individual order uses the tenant's Individuals
-      company table (`isIndividual: true`) by its guest count, same lookup as companies (`ratesForCounts`, A-7 fallback);
-      no typed-rate boxes for individuals; extras / masterclasses stay the way to add money.
-- [ ] Remove the individual-only typed-rate UI and code paths; update tests (`payment-admin-order.spec.ts` types a rate today).
-- Open questions for Max (asked 2026-10-22): see the session reply — companies' typed rates, "price later", existing orders.
+**Status:** ⬜ — go given 2026-10-22 ("agreed with all"); starts after Playwright run 7 finishes (no app-code edits
+during a run). Code read 2026-10-22: individual orders carry `companyId: null`, so both admin actions see no table
+and fall back to typed rates / "price later"; only the public form loads the Individuals table
+(`createBooking.ts` ~l.295, `isIndividual: true`, registration 0).
+- [ ] `createOrderAdmin` / `updateOrderEnhanced`: for an INDIVIDUAL order load the tenant's Individuals company prices
+      (`isIndividual: true`), registration 0; `adminQuote(prices, 0, counts, no typed rates)` — typed rates ignored.
+      Empty table → refused (Q2, new message); a product the table lacks → refused (new individual message — the
+      company one says "company's price table"). updateOrderEnhanced re-prices an individual only when visit or
+      guest count changed (Q3); paid stays locked; the "can't show this shape" guard stays.
+- [ ] `adminOrderView`: individual → no rate inputs ever, problems "no Individuals table" / "Individuals table lacks
+      X"; New Order + order page pages fetch the Individuals table and pass it for individuals; OrderDetail drops
+      `storedManual` for individuals. Companies unchanged (Q1: typed rates only where the table is missing / lacks it).
+- [ ] adminT EN + KA for the two messages; remove the dead keys `orderDetail.guestBreakdown.partySizeHint` (wrong
+      under T-152), `lunchOnlyLocked`, `rateBadge`, `tastingRatePP` (unused since Chunk 8 — checked 2026-10-22).
+- [ ] Tests: `test-pricing-model` cases for the individual path; `tier5/payment-admin-order.spec.ts` stops typing a
+      rate — 4 guests Tasting on Staging Winery's Individuals table (3–6 row ₾70) → ₾280, not ₾200; check
+      `payment-post-payment-extras.spec.ts`; tiers 1–4 rerun of the admin-order specs.
+- [ ] Docs: MaintenanceNotes §22, Feature 237, FeatureLog #237.
+- Questions asked 2026-10-22 — **Max: "agreed with all"** (same day):
+  1. **Companies keep typed rates** only where there is no table, or the table lacks the product (e.g. a new
+     company's request) — otherwise such an order can't be priced at all.
+  2. **Individual "price later" goes away** — an individual order is refused when the Individuals table is empty
+     ("set up the Individuals price table first").
+  3. **Existing individual orders re-price at today's Individuals table** when guests or visit change; paid orders
+     stay locked, as now (same as companies).
 **Resume point:** —
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)

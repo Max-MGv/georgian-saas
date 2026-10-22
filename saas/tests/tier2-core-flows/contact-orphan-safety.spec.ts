@@ -175,6 +175,9 @@ test.describe('Deleting a person must not erase their name from a past order (F2
 
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     await page.getByText('Date', { exact: true }).locator('xpath=following-sibling::*[1]').fill(tomorrow);
+    // A company order needs a paying guest (T-152 Chunk 8: the four boxes start at 0 and Create stays off until
+    // one is filled — there is no typed party size any more).
+    await page.getByRole('textbox', { name: 'Tasting only', exact: true }).fill('4');
 
     await page.getByRole('button', { name: 'Create order', exact: true }).click();
     // Not /[a-zA-Z0-9]+$/ alone — that also matches the literal ".../orders/new" this page

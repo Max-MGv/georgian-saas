@@ -100,7 +100,8 @@ async function deleteTestOrderOnAdminPage(page: Page, marker: string) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: marker })).toHaveCount(0);
+    // 30 s, not the 5 s default: the delete is a server round trip on a slow dev DB (2026-10-22, KNOWN-ISSUES).
+    await expect(page.locator('tr', { hasText: marker })).toHaveCount(0, { timeout: 30_000 });
   }
 }
 
