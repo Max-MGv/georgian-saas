@@ -63,6 +63,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | D-11 | **Minimums, option C — nothing changes on day one.** Individuals: as today (per visit type, whole group). Companies: today's group check stays (all paying guests together ≥ the visit-type minimum) **plus** three optional per-product minimums (Tasting only / Lunch only / Tasting & Lunch), starting **blank**; each applies only to a product that has guests. Free guests never count toward a minimum. |
 | D-12 | Add-ons plan (`Plan-AddOnsAndWine.md`) is **parked**; handled after this lands. |
 | D-13 | Full E2E tests **last**; screenshots along the way. Caution over speed. |
+| D-14 | **Individual bookings on admin screens are priced from the Individuals price table, like companies — no typed custom rates for individuals** (Max, 2026-10-22, after the review finding #2 example: *"scrap these custom rates, have it work like the company one does, look up the rate according to the number of guests; if they ever want to add money they have other ways such as add flat fee"*). Applies to New Order and the order page. **Recorded, not built yet** — see Chunk 11b. |
 
 ### Defaults I chose — Max may change any of these on review
 
@@ -593,6 +594,15 @@ review card + release note wait for Max's call on the test budgets.
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
 **Resume point:** Max's call — raise the test budgets (login helper 25 → 60 s, the 30 s admin specs → 60–90 s) and
 rerun, or accept the environment failures; then the review card + release note.
+
+### Chunk 11b — D-14: individuals priced from the Individuals table on admin screens (NOT STARTED — Max: "record, don't start")
+**Status:** ⬜ — waiting for Max's go and the open questions below.
+- [ ] `createOrderAdmin` / `updateOrderEnhanced` / `adminOrderView`: an individual order uses the tenant's Individuals
+      company table (`isIndividual: true`) by its guest count, same lookup as companies (`ratesForCounts`, A-7 fallback);
+      no typed-rate boxes for individuals; extras / masterclasses stay the way to add money.
+- [ ] Remove the individual-only typed-rate UI and code paths; update tests (`payment-admin-order.spec.ts` types a rate today).
+- Open questions for Max (asked 2026-10-22): see the session reply — companies' typed rates, "price later", existing orders.
+**Resume point:** —
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)
 **Status:** ⬜
