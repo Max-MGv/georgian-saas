@@ -562,8 +562,9 @@ re-pricing) rather than by eye; Chunk 11 covers the screens end to end.
 **Resume point:** done → Chunk 11.
 
 ### Chunk 11 — Full verification and hand-over
-**Status:** 🚧 2026-10-22 — blind review done + fixed (`acfa3f3`); Playwright not green yet (environment, see log);
-review card + release note wait for Max's call on the test budgets.
+**Status:** 🚧 2026-10-22 — blind review fixed (`acfa3f3`), Free cap (`70adfbf`), D-14 (`dcad3f4`, Chunk 11b), tiers 1–4
+green (run 6 78/78; runs 9–11 after budget fixes). **Review card posted — T-152 Ready to test.** Left: release note
+draft with before/after shots; tier 5 on staging.
 - [~] Fresh dev server + warm routes + **Playwright tiers 1–4** (73 tests now — the suite doubled since the last
       green 35/35 on 2026-10-02). Runs: (1) 66 pass / 9 fail / 3 not run; (2) the 9 failing files in isolation →
       12 pass, 5 fail; (3) clean full rerun on a fresh server after the fixes → 66 / 9 / 3; (4) the 7 failing files in
@@ -615,11 +616,13 @@ review card + release note wait for Max's call on the test budgets.
       (test code): 30 s on that wait in booking-enhanced / booking-simple / company-nationality-tagging /
       contact-orphan-safety / admin-orders; budgets booking-enhanced 90 → 180 s, nationality 150 → 300 s.
       **Run 11: 3/3 ✅**, no retries. Server log: `createOrderAdmin` ok for an individual (3.2 s) and a company (2.8 s).
-- [ ] `tix review T-152` with test steps for Max (staging), commit list; draft the release note with before/after shots.
+- [x] `tix review T-152` with test steps for Max (staging) — posted 2026-10-22, commit `dcad3f4`, D-14 checked on live
+      staging first (4 guests → "Tasting only (4 × 70₾) · row 3–6", ₾280, no rate box).
+- [ ] Draft the release note with before/after shots (`scripts/release-shots.ts`, Plan-ReleaseNotes).
+- [ ] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box).
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
-**Resume point:** Max's call — raise the test budgets (login helper 25 → 60 s, the 30 s admin specs → 60–90 s) and
-rerun, or accept the environment failures; then the review card + release note.
+**Resume point:** Max tests on staging (review card on T-152). Meanwhile: release note draft, tier 5 on staging.
 
 ### Chunk 11b — D-14: individuals priced from the Individuals table on admin screens (NOT STARTED — Max: "record, don't start")
 **Status:** ✅ 2026-10-22 on localhost, committed + pushed to staging (see git log); tsc 0, `test-pricing-model` **115/115** (7 new D-14

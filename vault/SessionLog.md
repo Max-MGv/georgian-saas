@@ -8,6 +8,23 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-22 — T-152 Chunk 11 hand-over: blind-review fixes, Free cap, D-14, review card (staging only)
+
+- Blind review fixes `acfa3f3`. Max: #6 → **cap Free guests at the paying guests** (public form) `70adfbf`; test budgets
+  raised for the slow dev DB; #2 → **D-14** "scrap custom rates for individuals" — three follow-up questions "agreed with all".
+- Playwright tiers 1–4: **run 6 78/78** on a fresh server. Runs 7–8 on the same long-lived server stalled (P2028/P1001/
+  P1017, `/admin/orders` up to 2.4 min) while a separate process measured the DB normal → KNOWN-ISSUES entry. Real spec
+  gaps fixed: contact-orphan never filled a guest box; order-delete waits 5 s vs a 9–12 s re-render → 30 s.
+- **D-14 `dcad3f4`**: individual admin orders priced from the Individuals table (no typed rates / price later; refused
+  without a table; food notes still save). 115/115 pricing tests; runs 9–11 green; checked on localhost + live staging
+  (4 guests → 4 × ₾70 = ₾280). MaintenanceNotes §32, Feature 237, FeatureLog #237, Plan Chunk 11/11b.
+- **T-152 → Ready to test** with Max's steps (`tix review`). Dev debris: ZZ/Playwright test orders + wine orders from
+  failed cleanups (2× "Nationality TestGuest", "ZZPaymentIntegrity On").
+- **Next:** Max tests on staging; release note draft with before/after shots; tier 5 (real Flitt) on staging;
+  then Chunk 12 production runbook — each step only on Max's explicit go.
+
+---
+
 ## 2026-10-21 (eve) — T-152 pricing: Chunk 6 done, Chunk 7 built in 3 sections (all on staging, not production)
 
 - Max: Q-1 yes, Q-2 correct, Q-3 "0 lunch guests on Tasting + Lunch must be refused"; "start step 6"; "after each section
@@ -32,14 +49,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-20 — Dev DB wiped by a shadow-database command → recovery, 3 blind reviews, backup-before-write process
-
-- **Incident:** during T-152 Chunk 6 a `prisma migrate diff … --shadow-database-url <dev URL>` reset the dev DB (every `public` row; auth + storage survived; production untouched). Full record + chunks R0–R8 + reviews: `vault/Recovery-2026-10-20-DevDb.md`. New rule: ClaudeInstructions **Rule 0b** (no shadow/reset on real DBs; a hook blocks them).
-- **Recovered:** schema/migrations/RLS/grants, 3 tenants with old ids, content copied from production, demo data reseeded, tokens, staging settings; after blind review 3 also staging-only settings, Rkatsiteli `nameKa`, display price, wizard tenant baseline, production's 14 client reports as P-1..P-14, release drafts 7 + 9 Oct. **Lost for good:** staging T-tickets (Max may have another source — R6), bug reports, staging's real test orders/payments/history, 13 SiteContent + 7 Setting rows, edits 10-16..10-20.
-- **Production (Max's explicit go):** demo tenant held NM's real personal number + recipient name (visible to demo visitors) → placeholders; root cause fixed in `rebrand-demo-tenant.ts` (`6425b24`).
-- **Staging:** Max replaced the contact email; Claude scrubbed the rest of NM's real identity (phone, address, socials, map, IBAN, bank, personal number, recipient name) → test values.
-- **Process (Max):** automatic full backup before every DB-writing command → `C:\Users\Max\Downloads\DB_Backups\`, one folder per backup (`<stamp>_<env>_<reason>`); hook `require-db-backup.cjs`; both safety hooks now in the **user** settings so every session gets them. Rule 0b.6, MaintenanceNotes §38, Plan-DevProdEnvironments (no more `migrate dev`).
-- **Next:** R6 tickets (Max) → resume T-152 pricing Chunk 6 (commit the LUNCH migration unchanged), then 7–12; open items at the end of the recovery tracker §9.
+## 2026-10-20 — Dev DB wiped by a shadow-database command → recovery (full record: `vault/Recovery-2026-10-20-DevDb.md`; Rule 0b, backup-before-write hooks)
 
 ---
 
