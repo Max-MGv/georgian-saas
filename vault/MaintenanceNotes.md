@@ -1388,3 +1388,9 @@ contact, bank and personal-number values**. After any re-clone, scrub them (2026
 `+995 555 00 00 00`, IBAN `GE00XX…`, personal number `00000000000`, Max's own contact email), or staging emails and
 invoices expose the real client. `scripts/rebrand-demo-tenant.ts` does the same for the demo tenant (since `6425b24`
 also the recipient name and personal number).
+
+## 37. Two screens edit an order's date, time, contact and notes — one action
+
+Since T-215 (2026-10-23) the Orders **side panel** (`OrdersTable.tsx`, Edit Order) and the **order page** (`orders/[id]/OrderDetail.tsx`, Booking Info → Edit) both save date, time slot, name, surname, phone, email and notes through **`updateOrder`** (`app/actions/orders.ts`), which validates and keeps the Contacts card's contact_person row in step (`syncOrderContactPerson`). Add a field to one → add it to the other, or move it to the order page only. Visit type, guest boxes and price are changed **only** on the order page (`updateOrderEnhanced`).
+
+Time slot lists come from `orders/timeSlots.ts` (`ADMIN_TIME_SLOTS`, `slotOptions(current)`): every admin `<select>` for an existing order must use `slotOptions(order.timeSlot)`, because public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list — a select without it shows 11:00 and Save moves the booking.

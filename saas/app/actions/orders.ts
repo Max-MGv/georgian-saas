@@ -60,6 +60,9 @@ export async function updateOrder(id: string, data: {
   await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
+  // Both the Orders side panel and the order page (T-215) call this; a cleared date input sends '' (Invalid Date).
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || isNaN(new Date(data.date).getTime())) return { error: 'Please choose a valid date.' }
+  if (!/^\d{1,2}:\d{2}$/.test(data.timeSlot)) return { error: 'Please choose a time.' }
 
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
@@ -97,6 +100,7 @@ export async function updateOrder(id: string, data: {
   })
   if (result.count === 0) return { error: 'Order not found.' }
   revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${id}`)
   return { success: true }
 }
 

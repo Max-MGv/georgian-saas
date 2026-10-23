@@ -15,13 +15,13 @@ import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { splitFullName } from '@/lib/splitFullName'
 import ContactRoleFields from '@/components/ContactRoleFields'
 import NationalityPicker from '@/components/NationalityPicker'
+import { ADMIN_TIME_SLOTS as TIME_SLOTS } from '../timeSlots'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
   border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
-const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
 const inputStyle: React.CSSProperties = {
   backgroundColor: 'var(--site-surface)',

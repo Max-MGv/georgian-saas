@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
+import { updateOrder, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
 import { adminOrderView, manualFromStrings, NO_TYPED_RATES, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
+import { slotOptions } from '../timeSlots'
 import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
 import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -267,11 +268,11 @@ type OrderProp = {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border mb-4" style={{ borderColor: C.border }}>
       <div
-        className="px-5 py-3 border-b"
+        className="px-5 py-3 border-b flex items-center justify-between gap-3"
         style={{ borderColor: C.border, backgroundColor: 'var(--site-bg)' }}
       >
         <h3
@@ -280,6 +281,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         >
           {title}
         </h3>
+        {action}
       </div>
       <div className="px-5 py-4" style={{ backgroundColor: C.bg }}>
         {children}
@@ -299,6 +301,11 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       </span>
     </div>
   )
+}
+
+/** yyyy-mm-dd for a date input — the same conversion the Orders side panel uses. */
+function toInputDate(d: Date | string) {
+  return new Date(d).toISOString().split('T')[0]
 }
 
 function formatDate(d: Date) {
@@ -335,6 +342,55 @@ export default function OrderDetail({
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const router = useRouter()
+
+  // ── Booking details: date, time, contact, notes (T-215) ────────────────────
+  // The same fields and the same action (updateOrder) as the Orders side panel, so the order page can change
+  // everything the panel can. For a company booking the name/phone/email are the Contact Person (updateOrder keeps
+  // the Contacts card's row in step).
+  const [editingInfo, setEditingInfo] = useState(false)
+  const [infoDate, setInfoDate] = useState('')
+  const [infoTime, setInfoTime] = useState('')
+  const [infoName, setInfoName] = useState('')
+  const [infoSurname, setInfoSurname] = useState('')
+  const [infoPhone, setInfoPhone] = useState('')
+  const [infoEmail, setInfoEmail] = useState('')
+  const [infoNotes, setInfoNotes] = useState('')
+  const [infoSaving, setInfoSaving] = useState(false)
+  const [infoMsg, setInfoMsg] = useState('')
+  const [infoError, setInfoError] = useState(false)
+
+  function startInfoEdit() {
+    setInfoDate(toInputDate(order.date))
+    setInfoTime(order.timeSlot)
+    setInfoName(order.name)
+    setInfoSurname(order.surname)
+    setInfoPhone(order.phone ?? '')
+    setInfoEmail(order.email ?? '')
+    setInfoNotes(order.notes ?? '')
+    setInfoMsg('')
+    setInfoError(false)
+    setEditingInfo(true)
+  }
+
+  async function handleInfoSave() {
+    setInfoSaving(true)
+    setInfoMsg('')
+    const result = await updateOrder(order.id, {
+      date: infoDate, timeSlot: infoTime, name: infoName, surname: infoSurname,
+      phone: infoPhone, email: infoEmail, notes: infoNotes,
+    })
+    setInfoSaving(false)
+    if ('error' in result) {
+      setInfoError(true)
+      setInfoMsg(result.error ?? '')
+      return
+    }
+    setInfoError(false)
+    setEditingInfo(false)
+    setInfoMsg(at('orderDetail.bookingInfo.savedOk'))
+    router.refresh()
+    setTimeout(() => setInfoMsg(''), 3000)
+  }
 
   // ── Link to a real company (Feature 180) ───────────────────────────────────
   // Only relevant for an order that came in with no companyId at all — see
@@ -968,10 +1024,86 @@ export default function OrderDetail({
         document.body
       )}
 
-      {/* ── Booking Info (read-only) ── */}
-      <Card title={at('orderDetail.bookingInfo.title')}>
-        <InfoRow label={at('orderDetail.bookingInfo.date')} value={formatDate(order.date)} />
-        <InfoRow label={at('orderDetail.bookingInfo.time')} value={order.timeSlot} />
+      {/* ── Booking Info — date, time, contact and notes editable here (T-215); visit type, guests and price in
+          the Guest Breakdown card below ── */}
+      <Card
+        title={at('orderDetail.bookingInfo.title')}
+        action={!editingInfo && (
+          <button
+            onClick={startInfoEdit}
+            className="text-xs font-medium px-2.5 py-1 rounded-lg border"
+            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+          >
+            {at('orderDetail.bookingInfo.edit')}
+          </button>
+        )}
+      >
+        {editingInfo ? (
+          // Any change clears a refused save's message (input events bubble from every field, the select too).
+          <div className="flex flex-col gap-3 mb-3" onInput={() => { if (infoError) { setInfoError(false); setInfoMsg('') } }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.date')}</span>
+                <input type="date" value={infoDate} onChange={e => setInfoDate(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.time')}</span>
+                <select value={infoTime} onChange={e => setInfoTime(e.target.value)} style={inputStyle}>
+                  {slotOptions(order.timeSlot).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.firstName')}</span>
+                <input value={infoName} onChange={e => setInfoName(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.lastName')}</span>
+                <input value={infoSurname} onChange={e => setInfoSurname(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.phone')}</span>
+                <input type="tel" value={infoPhone} onChange={e => setInfoPhone(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.email')}</span>
+                <input type="email" value={infoEmail} onChange={e => setInfoEmail(e.target.value)} style={inputStyle} />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.notes')}</span>
+              <textarea
+                value={infoNotes}
+                onChange={e => setInfoNotes(e.target.value)}
+                rows={3}
+                placeholder={at('orders.editPanel.notesPlaceholder')}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </label>
+            {infoMsg && infoError && <p className="text-sm" style={{ color: '#b91c1c' }}>{infoMsg}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleInfoSave}
+                disabled={infoSaving}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                style={{ backgroundColor: C.wine, opacity: infoSaving ? 0.6 : 1 }}
+              >
+                {infoSaving ? at('orders.editPanel.saving') : at('orders.editPanel.save')}
+              </button>
+              <button
+                onClick={() => { setEditingInfo(false); setInfoMsg('') }}
+                className="px-4 py-2 rounded-lg border text-sm"
+                style={{ borderColor: C.border, color: C.muted }}
+              >
+                {at('orders.editPanel.cancel')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <InfoRow label={at('orderDetail.bookingInfo.date')} value={formatDate(order.date)} />
+            <InfoRow label={at('orderDetail.bookingInfo.time')} value={order.timeSlot} />
+          </>
+        )}
         <InfoRow
           label={at('orderDetail.bookingInfo.visitType')}
           value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : order.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.visit.tastingLunch')}
@@ -1032,13 +1164,14 @@ export default function OrderDetail({
         {/* Plan-ContactRoles Chunk 11a: for company bookings these are a synced copy of the
             Contacts card's Contact Person row (decision 4) — showing both duplicated the same
             person. Individuals have no OrderContact row at all, so they still need these here. */}
-        {order.bookingType !== 'COMPANY' && (
+        {!editingInfo && order.bookingType !== 'COMPANY' && (
           <>
             <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
             <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
           </>
         )}
-        {order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
+        {!editingInfo && order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
+        {!editingInfo && infoMsg && !infoError && <p className="text-xs mt-2" style={{ color: '#166534' }}>{infoMsg}</p>}
       </Card>
 
       {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1) ── */}

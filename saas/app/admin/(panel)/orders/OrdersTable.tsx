@@ -55,8 +55,7 @@ function labelFor(locale: string, code: string | null): string {
 }
 
 import { COLUMN_DEFS, defaultVisibleFor, readVisibleColumns, type ColumnId } from './columnDefs'
-
-const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
+import { slotOptions } from './timeSlots'
 
 // Actions column (print/email/edit/delete) is pinned to the right edge. Status is
 // pinned right next to it, so both stay visible while scrolling a wide table —
@@ -1566,7 +1565,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 </Field>
                 <Field label={at('orders.editPanel.time')}>
                   <select value={editTime} onChange={e => setEditTime(e.target.value)} style={inputStyle}>
-                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                    {slotOptions(editingOrder.timeSlot).map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </Field>
               </div>
@@ -1608,7 +1607,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               </Field>
 
               <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: '#fdf6ee', color: C.muted }}>
-                <strong>{at('orders.editPanel.notEditable')}</strong> {at('orders.editPanel.notEditableDetail')}
+                <strong>{at('orders.editPanel.notEditable')}</strong>{' '}
+                <a href={`/admin/orders/${editingOrder.id}`} className="underline" style={{ color: C.muted }}>{at('orders.editPanel.notEditableDetail')}</a>
               </div>
 
               {error && <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>}
