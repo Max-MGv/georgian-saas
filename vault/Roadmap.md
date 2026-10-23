@@ -529,15 +529,15 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [ ] **Production** — Max's go per step: ticket migrations ×3 + release-notes migration, buckets `ticket-attachments` + `release-images`, report import, tokens, forward config, merge, history release notes
 
 
-## v1.18 — Pricing model: three products (T-152) 🚧 STAGING (Chunks 0–10 done 2026-10-22)
+## v1.18 — Pricing model: three products (T-152) ✅ PRODUCTION 2026-10-23 (master `497bdc7`)
 [[Plan-PricingModel]] · [[Feature 237 - Pricing model three products]] · FeatureLog #237 · fixes KnownBugs #93 and production P-11.
 - [x] Price tables: Tasting only / Lunch only / Tasting & Lunch per row (blank = not offered), flat company registration fee
 - [x] Each product priced on its own row by its own count; guests in exactly one box + Free; total derived
 - [x] Public form: per-product boxes + preview; Lunch only visit on the simple company form; per-product company minimums; Q-3 / A-11 / #93 refusals
 - [x] Admin New Order + order page on the boxes (P-11); visit type editable; re-price only on a real change
 - [x] Orders table, kitchen sheet, invoices, emails, statistics on the three products; demo seed + fixtures; docs
-- [ ] Chunk 11: Playwright tiers 1–4 on localhost, blind review + fixes, tix review card, release note draft
-- [ ] **Production** — Chunk 12 runbook, Max's go per step (migrations, data check against the production baseline, merge)
+- [x] Chunk 11: Playwright tiers 1–4 on localhost, blind review + fixes, tix review card, tier 5 7/7, release note draft (text; no screenshots)
+- [x] **Production** 2026-10-23 — Chunk 12 runbook (migrations, data check against the production baseline, merge) — demo reset left to the nightly reseed
 
 ---
 

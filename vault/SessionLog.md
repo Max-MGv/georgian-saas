@@ -8,7 +8,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-23 (eve) — T-152: tier-5 wine test solved (7/7), production step 1 done (read-only)
+## 2026-10-23 (eve) — T-152 + T-272 SHIPPED TO PRODUCTION (tier-5 wine test solved first, 7/7)
 
 - New session from the handoff (`vault/Handoff-T152-Production.md`). The wine-order tier-5 failure was a **stale test**:
   since T-13 a company with one saved address gets a "Delivering to" card, not the address box; the reported
@@ -16,7 +16,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   config only traces on retry). Spec fixed (keeps a saved address) → rerun passed → **tier 5 7/7**. Toggles at resting values.
 - **Production step 1 (Max's go, read-only):** backup `2026-10-23_200652_prod_t152-step1-preflight` verified (1,302 rows);
   baseline: 395 orders, Nikalas 2 orders ₾2,800 + ₾250, 9 price rows, 1 invoice — nothing new or changed since 10-19.
-- **Production otherwise untouched.** **Next:** step 2 (expand migration only, expand-only config) — on Max's explicit go.
+- **Then Max: "execute the push to production workflow per our process, stop asking me things"** → steps 2–6 + 8 the same
+  evening: expand (0 problems) → master `497bdc7` READY → backfill 0 rows → live checks (Nikalas's form quotes identical to
+  the old prices, orders ₾250 / ₾2,800, 0 runtime errors) → contract + LUNCH (backup verified, 0 problems) → `tix ship`
+  T-152 / T-272 / P-11 (Nikalas sees "Resolved"; fixed `tix ship`'s `--yes-prod` regex first) → draft release note on
+  production (EN + KA, no screenshots, hidden).
+- **ON PRODUCTION: T-152 + T-272.** **For Max:** check the production admin screens (New Order, an order, an invoice view —
+  Claude can't sign in there); demo.vineworks.ge after tonight's 03:00 reseed (or Reset Demo); review + publish the release
+  note; tell Nikalas (mixed groups can cost more, product names changed, Lunch prices optional).
 
 ---
 
