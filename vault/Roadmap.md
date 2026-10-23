@@ -536,7 +536,7 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [x] Public form: per-product boxes + preview; Lunch only visit on the simple company form; per-product company minimums; Q-3 / A-11 / #93 refusals
 - [x] Admin New Order + order page on the boxes (P-11); visit type editable; re-price only on a real change
 - [x] Orders table, kitchen sheet, invoices, emails, statistics on the three products; demo seed + fixtures; docs
-- [x] Chunk 11: Playwright tiers 1–4 on localhost, blind review + fixes, tix review card, tier 5 7/7, release note draft (text; no screenshots)
+- [x] Chunk 11: Playwright tiers 1–4 on localhost, blind review + fixes, tix review card, tier 5 7/7, release note draft with before/after screenshots
 - [x] **Production** 2026-10-23 — Chunk 12 runbook (migrations, data check against the production baseline, merge) — demo reset left to the nightly reseed
 
 ---

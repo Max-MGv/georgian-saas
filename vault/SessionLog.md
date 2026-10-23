@@ -20,7 +20,9 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   evening: expand (0 problems) → master `497bdc7` READY → backfill 0 rows → live checks (Nikalas's form quotes identical to
   the old prices, orders ₾250 / ₾2,800, 0 runtime errors) → contract + LUNCH (backup verified, 0 problems) → `tix ship`
   T-152 / T-272 / P-11 (Nikalas sees "Resolved"; fixed `tix ship`'s `--yes-prod` regex first) → draft release note on
-  production (EN + KA, no screenshots, hidden).
+  production (EN + KA, hidden); **screenshots added** after Max asked (11 images, before/after on every entry — see
+  Plan-ReleaseNotes "Before shots when the old code can't run"). P-11 checked → review card (Ready to test); T-215 analysed
+  (the order page still lacks date / time / contact / notes editing — written on the ticket).
 - **ON PRODUCTION: T-152 + T-272.** **For Max:** check the production admin screens (New Order, an order, an invoice view —
   Claude can't sign in there); demo.vineworks.ge after tonight's 03:00 reseed (or Reset Demo); review + publish the release
   note; tell Nikalas (mixed groups can cost more, product names changed, Lunch prices optional).

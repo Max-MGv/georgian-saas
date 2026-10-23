@@ -736,8 +736,8 @@ and fall back to typed rates / "price later"; only the public form loads the Ind
       demo.vineworks.ge tomorrow, or press Reset Demo.
 - [x] **8. Close-out:** `tix ship` T-152, T-272, T-211 (= P-11) `--yes-prod` → production report #11 live, Nikalas sees
       "Resolved" (no reply text attached). Fixed a `tix ship` bug first: `/^prod:(d+)$/` lacked the backslash, so `--yes-prod`
-      never reached production. Draft release `cmvl6hsjk0002jr08h8fbzp46` on production (4 entries, EN + KA, **no
-      screenshots**; Draft, hidden) — Max reviews/publishes in Super Admin → Releases. Tell Nikalas: mixed groups can cost
+      never reached production. Draft release `cmvl6hsjk0002jr08h8fbzp46` on production (4 entries, EN + KA, **11
+      screenshots** added later that evening, before/after on every entry; Draft, hidden) — Max reviews/publishes in Super Admin → Releases. Tell Nikalas: mixed groups can cost
       more (each product on its own row), product names changed, Lunch prices optional.
 **Resume point (2026-10-23 afternoon):** staging = `4e89018` (T-152 + D-15…D-17 + T-272), run 13 15/15. Acceptance
 round 2 hit a usage limit mid-cleanup; checked against its pre-test backup: prices, companies, settings, site content

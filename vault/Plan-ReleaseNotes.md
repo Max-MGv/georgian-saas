@@ -82,7 +82,19 @@ Max: *"the release section looks terrible and unreadable"* and *"without includi
    Cleanup: stop both servers, `find <wt> -type l` (Turbopack leaves a link inside `.next` pointing into the same checkout — remove
    it), then `git worktree remove --force` and check the main `saas/node_modules` is intact (lesson: [[feedback_windows_junction_delete]]).
 4. Max reads it in Super Admin → Releases (Preview as client, EN/KA), presses **Publish**, and flips **Show to clients** when he wants.
-5. Git Bash note: run tix/shots with `MSYS_NO_PATHCONV=1`, or `/admin/...` arguments are rewritten into Windows paths.
+5. Git Bash note: run tix/shots with `MSYS_NO_PATHCONV=1`, or `/admin/...` arguments are rewritten into Windows paths
+   (and then give file paths as `C:/…`, not `/c/…`).
+6. **Every entry gets screenshots** (Max, 2026-10-23: "make sure all patch notes have screenshots now and generally, unless
+   it's absolutely not necessary") — before/after where something visibly changed, one image otherwise. Draft them before
+   the production close-out, not after. The draft lives on the **production** board:
+   https://nikalasmarani.vineworks.ge/super-admin/releases (the staging board only has test drafts).
+
+**Before shots when the old code can't run (learned 2026-10-23, T-152):** after a schema change the old build can't run
+on the dev DB any more, and restoring a production backup locally for screenshots was refused (customer data). So:
+**take the "before" set during development, before the migration** — `tests/_qa/pricing-shots.spec.ts` style (same pages,
+own ZZ fixture company, desktop + phone, saved per label); re-run it with a new label after release for the "after" set,
+then crop each pair to the part that changed (sharp: extract + stack regions). Older acceptance-run screenshots of a bug
+also work as "before" pictures.
 
 ## Verification (2026-10-15)
 22 scripted UI checks (desktop + phone): Show-to-clients locked until published, preview = client page (internal entries hidden,
