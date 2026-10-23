@@ -1,6 +1,6 @@
 'use server'
 
-import { db, withTenantDb } from '@/lib/db'
+import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
@@ -11,7 +11,10 @@ import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { priceBooking, ratesForParty, ratesFromManual } from '@/lib/pricingUtils'
+import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { checkAdminOrder, checkMasterclassLines, type AdminOrderProblem } from '@/lib/bookingInput'
+import { NO_TYPED_RATES } from '@/lib/adminOrderView'
+import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
 import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
@@ -40,10 +43,14 @@ export async function deleteOrder(id: string) {
   return { success: true }
 }
 
+/**
+ * The orders table's quick-edit panel: date, time and contact details. Guest numbers are NOT edited here
+ * (T-152): the total is the sum of the guest boxes and picks the price, so it changes on the order page
+ * (`updateOrderEnhanced`), where boxes, total and price move together. This used to write `guestCount` alone.
+ */
 export async function updateOrder(id: string, data: {
   date: string
   timeSlot: string
-  guestCount: number
   name: string
   surname: string
   phone: string
@@ -53,7 +60,6 @@ export async function updateOrder(id: string, data: {
   await requireAdmin()
   if (!data.name.trim()) return { error: 'First name is required.' }
   if (!data.surname.trim()) return { error: 'Last name is required.' }
-  if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
 
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
@@ -62,7 +68,6 @@ export async function updateOrder(id: string, data: {
       data: {
         date: new Date(data.date),
         timeSlot: data.timeSlot,
-        guestCount: data.guestCount,
         name: data.name.trim(),
         surname: data.surname.trim(),
         phone: data.phone.trim() || null,
@@ -95,20 +100,42 @@ export async function updateOrder(id: string, data: {
   return { success: true }
 }
 
+/**
+ * Typed per-person rates from an admin screen: each null, or whole tetri from 1 to ₾100,000. Anything else (a
+ * fraction, a negative, a huge number from a crafted call) is refused with a message instead of reaching
+ * Prisma's Int column as a 500 (blind review, Chunk 11). Not exported: a 'use server' file only exports actions.
+ */
+function badManualRates(m: unknown): boolean {
+  if (!m || typeof m !== 'object') return true
+  return PRODUCTS.some(p => {
+    const v = (m as Record<string, unknown>)[p]
+    return v != null && !(typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 10_000_000)
+  })
+}
+
+/**
+ * The tenant's Individuals price table — what an individual order is priced from on the admin screens, by its
+ * guest count, like a company (D-14). The public form reads the same row (createBooking.ts). Empty = none yet.
+ */
+async function individualsTable(tx: TxClient, tenantId: string) {
+  const row = await tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })
+  return row?.prices ?? []
+}
+
 export async function updateOrderEnhanced(
   id: string,
   data: {
-    /** The party size. Drives the price tier, so it is editable (2026-09-19). */
-    guestCount: number
-    tastingGuestCount: number
-    lunchGuestCount: number
-    freeGuestCount: number
+    /** Admins may change the visit type before payment (D-9); it must agree with the boxes (A-6). */
+    visitType: BookingVisitType
+    /** Individual orders: the one guest count (D-5). Ignored for a company order. */
+    guestCount?: number
+    /** Company orders: the four boxes; the total is their sum (D-3). Ignored for an individual order. */
+    boxes?: Counts
     hotDishVegetable: string | null
     hotDishMeat: string | null
     foodNotes: string | null
-    /** TETRI — the detail screen converts what the admin typed (chunk 3). */
-    manualTastingRate?: Tetri
-    manualLunchRate?: Tetri
+    /** TETRI per product; the order page prefills them from the order's own snapshot. See adminQuote. Ignored for an individual order (D-14). */
+    manualRates: ManualRates
   }
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
@@ -146,67 +173,83 @@ export async function updateOrderEnhanced(
       } as const
     }
 
-    // The three buckets are subsets of the party, never more than it. Nothing
-    // enforced this until 2026-09-19 (#54), so an order could bill 14 paying
-    // guests while every document it produced still said 10.
-    if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' } as const
-    const split = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
-    if (split > data.guestCount) {
-      return {
-        error: `The split adds up to ${split} but the party is ${data.guestCount}. ` +
-          `Raise the guest count or lower the split.`,
-      } as const
+    if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' } as const
+    // An individual order is edited as one guest count on one product (D-5). One that was stored any other way
+    // (free guests, two products — only possible for orders converted from the old model) is refused rather than
+    // silently rewritten into that shape (blind review, Chunk 11).
+    if (order.bookingType === 'INDIVIDUAL') {
+      const nonZero = PRODUCTS.filter(p => countsOf(order)[p] > 0).length
+      if (order.freeGuestCount > 0 || nonZero > 1) {
+        return { error: 'This individual booking has free guests or more than one product, which this page cannot show — its guests cannot be changed here.' } as const
+      }
     }
 
-    const tastingGuests = data.tastingGuestCount
-    const lunchGuests = data.lunchGuestCount
-    const totalPayingGuests = tastingGuests + lunchGuests
+    // Who is coming — the check the order page shows inline (Plan-PricingModel Chunk 8, A-6, A-11).
+    const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
+    const checked = checkAdminOrder({
+      bookingType: order.bookingType, visitType: data.visitType, guestCount: data.guestCount, boxes: data.boxes,
+      hotDishVegetable: data.hotDishVegetable, hotDishMeat: data.hotDishMeat,
+    })
+    if (!checked.ok) return { error: en(checked.problem) } as const
+    const { counts, visitType } = checked
 
-    let totalPrice: number | null = order.totalPrice
-    const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
-    const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
+    // Re-price only when what is sold changed: the visit type, a box, or a typed rate. Saving a food note no
+    // longer re-prices an order at today's price table (it used to, on every Save).
+    // D-14: an individual order has no typed rates — only its visit type or guest count re-prices it, from the
+    // Individuals table.
+    const individual = order.bookingType === 'INDIVIDUAL'
+    const manual = individual ? NO_TYPED_RATES : data.manualRates
+    const stored = countsOf(order)
+    const snapshot = ratesFromProductSnapshot(order)
+    const typed = (p: Product) => { const v = manual[p]; return v != null && v > 0 ? v : null }
+    const changed = visitType !== order.visitType
+      || PRODUCTS.some(p => counts[p] !== stored[p]) || counts.free !== stored.free
+      || PRODUCTS.some(p => counts[p] > 0 && typed(p) != null && typed(p) !== (snapshot?.[p] ?? null))
 
-    // An admin editing guest counts or rates is deliberately re-pricing the
-    // order, so the snapshot moves with it and records what the order is sold
-    // at *now*. That is the opposite of `recalcOrderTotal`, where a line change
-    // must never disturb the agreed rates (chunk 4).
-    let tastingRateSnapshot: number | null = null
-    let lunchRateSnapshot: number | null = null
-    let registrationFeeSnapshot: number | null = null
-
-    // The party size, not the paying head count, picks the tier (2026-09-19).
-    const guests = { guestCount: data.guestCount, tastingGuests, lunchGuests }
-    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
-
-    const rates = order.company?.prices?.length
-      ? ratesForParty(order.company.prices, data.guestCount)
-      : (data.manualTastingRate != null || data.manualLunchRate != null)
-        ? ratesFromManual(data.manualTastingRate ?? 0, data.manualLunchRate ?? 0)
-        : null
-
-    if (totalPayingGuests > 0 && rates) {
-      tastingRateSnapshot = rates.tasting
-      lunchRateSnapshot = rates.lunch
-      registrationFeeSnapshot = rates.registration
-      totalPrice = priceBooking(rates, guests, order.visitType, lines)
+    let pricing: { totalPrice: number; rates: ProductRates | null } | null = null
+    if (changed) {
+      const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
+      const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
+      // The company's table at today's rows (each product by its own count), typed rates for the rest — the
+      // same adminQuote the page previews with, so the stored total is the one the admin saw. An individual
+      // order: the Individuals table, no registration fee (D-14).
+      const prices = individual ? await individualsTable(tx, tenantId) : order.company?.prices ?? []
+      if (individual && prices.length === 0) return { error: en({ key: 'orderForm.err.noIndividualsTable' }) } as const
+      const quote = adminQuote(prices, individual ? 0 : order.company?.registrationFee ?? 0, counts, manual)
+      if (quote.kind === 'missing') {
+        const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
+        return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+      }
+      if (quote.kind === 'unpriced') {
+        // An order that already has a price never drops back to "price later" because its rates were cleared.
+        if (snapshot) {
+          const needed = PRODUCTS.filter(p => counts[p] > 0)
+          return { error: en({ key: 'orderForm.err.rateRequired', vars: { products: needed.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+        }
+        pricing = { totalPrice: masterclassAmt + extrasAmt, rates: null }
+      } else {
+        pricing = { totalPrice: priceCounts(quote.rates, counts, { masterclass: masterclassAmt, extras: extrasAmt }), rates: quote.rates }
+      }
     }
 
     await tx.order.update({
       where: { id },
       data: {
-        guestCount: data.guestCount,
-        tastingGuestCount: data.tastingGuestCount,
-        lunchGuestCount: data.lunchGuestCount,
-        freeGuestCount: data.freeGuestCount,
+        visitType,
+        guestCount: totalGuests(counts),
+        ...boxColumns(counts),
         hotDishVegetable: data.hotDishVegetable || null,
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
-        totalPrice,
-        // Only when this edit actually re-priced the order; a null here would
-        // erase a snapshot the order still needs.
-        ...(tastingRateSnapshot != null
-          ? { tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot }
-          : {}),
+        // Re-priced: the snapshot moves with it and records what the order is sold at now — the opposite of
+        // recalcOrderTotal, where a line change never disturbs the agreed rates (chunk 4).
+        ...(pricing ? {
+          totalPrice: pricing.totalPrice,
+          ...(pricing.rates ? {
+            tastingOnlyRate: pricing.rates.tastingOnly, lunchOnlyRate: pricing.rates.lunchOnly,
+            tastingLunchRate: pricing.rates.tastingLunch, registrationFeeSnapshot: pricing.rates.registration,
+          } : {}),
+        } : {}),
       },
     })
     return { success: true as const }
@@ -220,7 +263,8 @@ export async function updateOrderEnhanced(
 
 export async function createOrderAdmin(data: {
   companyId: string | null
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  /** Individuals: Tasting / Tasting + Lunch. Companies may also book Lunch only (D-9, A-6). */
+  visitType: BookingVisitType
   date: string
   timeSlot: string
   name: string
@@ -228,17 +272,17 @@ export async function createOrderAdmin(data: {
   phone: string | null
   email: string | null
   notes: string | null
-  guestCount: number
-  tastingGuestCount: number
-  lunchGuestCount: number
-  freeGuestCount: number
+  /** Individuals only: the one guest count (D-5). Ignored for a company. */
+  guestCount?: number
+  /** Companies only: the four boxes; the total is their sum, never typed (D-3 — P-11). Ignored for an individual. */
+  boxes?: Counts
   hotDishVegetable: string | null
   hotDishMeat: string | null
   foodNotes: string | null
-  /** TETRI — the new-order form converts what the admin typed (chunk 3). */
-  manualTastingRate: Tetri
-  manualLunchRate: Tetri
-  masterclassLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[]
+  /** TETRI per product, null = nothing typed. Used only for products the company's table does not price (E-3, A-9); ignored for an individual (D-14). */
+  manualRates: ManualRates
+  /** The price always comes from the masterclass catalogue, never from the browser (Q-1, #93). */
+  masterclassLines: { masterclassItemId: string; quantity: number }[]
   extras: { label: string; amount: number }[]
   /**
    * One entry per contact role, from the admin's inline pickers (Plan-ContactRoles Chunk 10).
@@ -257,65 +301,62 @@ export async function createOrderAdmin(data: {
   // splits it with splitFullName(), so a one-word name arrives with an empty surname.
   if (!data.name.trim()) return { error: 'Name is required.' }
   if (!data.date) return { error: 'Date is required.' }
-  if (data.guestCount < 1) return { error: 'Guest count must be at least 1.' }
-  const splitTotal = data.tastingGuestCount + data.lunchGuestCount + data.freeGuestCount
-  if (splitTotal > data.guestCount) {
-    return { error: `The split adds up to ${splitTotal} but the party is ${data.guestCount}.` }
+  if (!Array.isArray(data.masterclassLines) || !Array.isArray(data.extras)) return { error: 'The order could not be read — please reload and try again.' }
+  if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' }
+  const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
+
+  // Who is coming — the same check the form shows inline (Plan-PricingModel Chunk 8, A-6, A-11).
+  const checked = checkAdminOrder({
+    bookingType: data.companyId ? 'COMPANY' : 'INDIVIDUAL', visitType: data.visitType,
+    guestCount: data.guestCount, boxes: data.boxes, hotDishVegetable: data.hotDishVegetable, hotDishMeat: data.hotDishMeat,
+  })
+  if (!checked.ok) return { error: en(checked.problem) }
+  const { counts, visitType } = checked
+  if (!data.extras.every(e => Number.isInteger(e.amount) && e.amount > 0 && e.label.trim())) {
+    return { error: 'Each extra charge needs a description and an amount above 0.' }
   }
 
   const tenantId = await getTenantId()
-
-  const masterclassAmt = data.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  // Rate snapshots — see schema.prisma on Order (chunk 4).
-  let tastingRateSnapshot: number | null = null
-  let lunchRateSnapshot: number | null = null
-  let registrationFeeSnapshot: number | null = null
   const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
 
-  let totalPrice: number | null = null
-
-  const orderId = await withTenantDb(tenantId, async (tx) => {
-    // One lookup, on the party size (2026-09-19). Manual rates are the fallback
-    // when there is no ladder, and are just as much "what this was sold at" as a
-    // tier is — until 2026-09-18 they were used once and thrown away, which is
-    // why an order priced that way could never be recalculated at all.
-    const guests = {
-      guestCount: data.guestCount,
-      tastingGuests: data.tastingGuestCount,
-      lunchGuests: data.lunchGuestCount,
-    }
-    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
-
+  const created = await withTenantDb(tenantId, async (tx) => {
     const company = data.companyId
       ? await tx.company.findFirst({ where: { id: data.companyId, tenantId }, include: { prices: true } })
       : null
+    if (data.companyId && !company) return { error: 'Company not found.' } as const
 
-    const rates = company?.prices?.length
-      ? ratesForParty(company.prices, data.guestCount)
-      : (data.manualTastingRate > 0 || data.manualLunchRate > 0)
-        ? ratesFromManual(data.manualTastingRate, data.manualLunchRate)
-        : null
-
-    if (rates) {
-      tastingRateSnapshot = rates.tasting
-      lunchRateSnapshot = rates.lunch
-      registrationFeeSnapshot = rates.registration
-      totalPrice = priceBooking(rates, guests, data.visitType, lines)
+    const catalogue = data.masterclassLines.length > 0
+      ? await tx.masterclassItem.findMany({ where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true } })
+      : []
+    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue)
+    if (!checkedLines.ok) {
+      return { error: 'A masterclass line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
     }
+    const masterclassLines = checkedLines.lines
+    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
 
-    if (totalPrice === null && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
-    if (totalPrice === null) totalPrice = 0
+    // The company's table by each product's own count, the admin's typed rate for anything it does not price;
+    // no table and nothing typed = priced later (total = the lines), as before. An individual order: the
+    // Individuals table only — no typed rates, no "price later", refused while there is no table (D-14).
+    const individual = !company
+    const prices = individual ? await individualsTable(tx, tenantId) : company.prices
+    if (individual && prices.length === 0) return { error: en({ key: 'orderForm.err.noIndividualsTable' }) } as const
+    const quote = adminQuote(prices, company?.registrationFee ?? 0, counts, individual ? NO_TYPED_RATES : data.manualRates)
+    if (quote.kind === 'missing') {
+      const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
+      return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+    }
+    const rates = quote.kind === 'priced' ? quote.rates : null
+    const totalPrice = rates ? priceCounts(rates, counts, { masterclass: masterclassAmt, extras: extrasAmt }) : masterclassAmt + extrasAmt
 
     const order = await tx.order.create({
       data: {
         bookingType: data.companyId ? 'COMPANY' : 'INDIVIDUAL',
-        visitType: data.visitType,
+        visitType,
         date: new Date(data.date),
         timeSlot: data.timeSlot,
-        guestCount: data.guestCount,
-        tastingGuestCount: data.tastingGuestCount,
-        lunchGuestCount: data.lunchGuestCount,
-        freeGuestCount: data.freeGuestCount,
+        guestCount: totalGuests(counts),
+        ...boxColumns(counts),
         hotDishVegetable: data.hotDishVegetable || null,
         hotDishMeat: data.hotDishMeat || null,
         foodNotes: data.foodNotes || null,
@@ -329,17 +370,19 @@ export async function createOrderAdmin(data: {
           ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
           : [],
         totalPrice,
-        tastingRateSnapshot,
-        lunchRateSnapshot,
-        registrationFeeSnapshot,
+        // What it was sold at, per product (null = no guests on it, or not priced yet).
+        tastingOnlyRate: rates?.tastingOnly ?? null,
+        lunchOnlyRate: rates?.lunchOnly ?? null,
+        tastingLunchRate: rates?.tastingLunch ?? null,
+        registrationFeeSnapshot: rates ? rates.registration : null,
         tenantId,
         ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
-        masterclassLines: data.masterclassLines.length
-          ? { create: data.masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
+        masterclassLines: masterclassLines.length
+          ? { create: masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
           : undefined,
         extras: data.extras.length
-          ? { create: data.extras.map(e => ({ label: e.label, amount: e.amount })) }
+          ? { create: data.extras.map(e => ({ label: e.label.trim(), amount: e.amount })) }
           : undefined,
       },
     })
@@ -376,14 +419,15 @@ export async function createOrderAdmin(data: {
       actorType: 'ADMIN',
       actorId: actor?.id ?? null,
       toStage: order.stage,
-      payload: { totalPrice: order.totalPrice, bookingType: order.bookingType, guestCount: data.guestCount },
+      payload: { totalPrice: order.totalPrice, bookingType: order.bookingType, guestCount: order.guestCount },
     })
-    return order.id
+    return { orderId: order.id }
   })
+  if (!created.orderId) return { error: created.error ?? 'The order could not be created.' }
 
   revalidatePath('/admin/orders')
   revalidatePath('/admin/statistics')
-  return { orderId }
+  return { orderId: created.orderId }
 }
 
 export async function sendOrderInvoice(
@@ -445,11 +489,18 @@ export async function sendOrderInvoice(
       email: recipient,
       date: order.date,
       timeSlot: order.timeSlot,
-      visitType: order.visitType as 'TASTING' | 'TASTING_LUNCH',
+      visitType: order.visitType,
       guestCount: order.guestCount,
-      tastingGuestCount: order.tastingGuestCount,
-      lunchGuestCount: order.lunchGuestCount,
+      // The template keeps its prop names: "tasting" = Tasting only, "lunch" = Tasting & Lunch (T-152).
+      tastingGuestCount: order.tastingOnlyGuests ?? 0,
+      lunchOnlyGuestCount: order.lunchOnlyGuests ?? 0,
+      lunchGuestCount: order.tastingLunchGuests ?? 0,
       freeGuestCount: order.freeGuestCount,
+      // Per-product lines on the invoice come from what the order was sold at.
+      tastingOnlyRate: order.tastingOnlyRate,
+      lunchOnlyRate: order.lunchOnlyRate,
+      tastingLunchRate: order.tastingLunchRate,
+      registrationFeeSnapshot: order.registrationFeeSnapshot,
       totalPrice: order.totalPrice ?? 0,
       // Only meaningful once something has actually settled — see this
       // field's doc comment on InvoiceEmailData.
@@ -485,8 +536,9 @@ export async function sendOrderInvoice(
           companyName: order.company?.name ?? null,
           totalPrice: order.totalPrice ?? 0,
           guestCount: order.guestCount,
-          tastingGuestCount: order.tastingGuestCount,
-          lunchGuestCount: order.lunchGuestCount,
+          tastingOnlyGuests: order.tastingOnlyGuests ?? 0,
+          lunchOnlyGuests: order.lunchOnlyGuests ?? 0,
+          tastingLunchGuests: order.tastingLunchGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           visitType: order.visitType,
           masterclassLines: order.masterclassLines.map(l => ({
@@ -699,33 +751,36 @@ export async function assignOrderCompany(
     // the columns existed". recalcOrderTotal then fell into its legacy branch
     // and re-priced the whole booking off whatever the company's tiers said
     // that day — the precise repricing bug chunk 4 was written to close.
-    let tastingRateSnapshot: number | null = null
-    let lunchRateSnapshot: number | null = null
-    let registrationFeeSnapshot: number | null = null
-
-    // The two branches this used to have differed only in which head count fed
-    // findTier. Now the party size always does, so there is one path.
-    const rates = ratesForParty(company.prices, order.guestCount)
-    let totalPrice = 0
-    if (rates) {
-      totalPrice = priceBooking(
-        rates,
-        { guestCount: order.guestCount, tastingGuests: order.tastingGuestCount, lunchGuests: order.lunchGuestCount },
-        order.visitType,
-        { masterclass: masterclassAmt, extras: extrasAmt },
-      )
-      tastingRateSnapshot = rates.tasting
-      lunchRateSnapshot = rates.lunch
-      registrationFeeSnapshot = rates.registration
+    // Product model (Plan-PricingModel Chunk 7): each of the order's boxes looks up its own row of
+    // the company's ladder (D-2). A company with no ladder leaves the order unpriced (0 + its lines),
+    // as before; a ladder that does not price a box the order has is refused, never priced at ₾0.
+    // Linking never rewrites money that is already settled or deliberately set (blind review, Chunk 11):
+    // - a paid order is only linked — its total and rates are what the guest was charged;
+    // - a company with no price table yet leaves an order that already has a price (typed on the order page) alone.
+    // Only a priced table re-prices the order, which is the point of linking (E-7).
+    if (order.paidAt || (!company.prices.length && ratesFromProductSnapshot(order))) {
+      await tx.order.update({ where: { id: orderId }, data: { companyId, bookingType: 'COMPANY' } })
+      return { success: true as const, totalPrice: order.totalPrice ?? 0 }
     }
-    if (totalPrice === 0 && masterclassAmt + extrasAmt > 0) totalPrice = masterclassAmt + extrasAmt
+
+    const counts = countsOf(order)
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
+    let totalPrice = masterclassAmt + extrasAmt
+    let snapshot: { tastingOnlyRate: number | null; lunchOnlyRate: number | null; tastingLunchRate: number | null; registrationFeeSnapshot: number | null } =
+      { tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
+    if (company.prices.length) {
+      const rates = ratesForCounts(company.prices, counts, company.isIndividual ? 0 : company.registrationFee)
+      const missing = notOffered(rates, counts)
+      if (missing.length) {
+        return { error: `The price table for ${company.name} has no price for ${missing.map(p => PRODUCT_LABEL[p]).join(' / ')}. Add one on that company's price table first, then link it.` } as const
+      }
+      totalPrice = priceCounts(rates, counts, lines)
+      snapshot = { tastingOnlyRate: rates.tastingOnly, lunchOnlyRate: rates.lunchOnly, tastingLunchRate: rates.tastingLunch, registrationFeeSnapshot: rates.registration }
+    }
 
     await tx.order.update({
       where: { id: orderId },
-      data: {
-        companyId, bookingType: 'COMPANY', totalPrice,
-        tastingRateSnapshot, lunchRateSnapshot, registrationFeeSnapshot,
-      },
+      data: { companyId, bookingType: 'COMPANY', totalPrice, ...snapshot },
     })
     return { success: true as const, totalPrice }
   })

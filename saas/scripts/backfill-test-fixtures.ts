@@ -34,6 +34,7 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { BOOKING_COMPANIES, WINE_COMPANIES, DEMO_SLUG } from '../lib/demoSeed'
+import { fromMajor } from '../lib/money'
 
 const db = new PrismaClient()
 
@@ -79,7 +80,7 @@ async function main() {
     throw new Error(`Tenant '${slug}' is missing its 'guide'/'contact_person' ContactRole rows.`)
   }
 
-  let codesSet = 0, guidesAdded = 0, guidesUpdated = 0, repsAdded = 0, skipped = 0
+  let codesSet = 0, guidesAdded = 0, guidesUpdated = 0, repsAdded = 0, skipped = 0, lunchOnlySet = 0
 
   for (const spec of BOOKING_COMPANIES) {
     const company = await db.company.findFirst({
@@ -102,6 +103,18 @@ async function main() {
         await db.company.update({ where: { id: company.id }, data: { accessCode: spec.accessCode } })
       }
       codesSet++
+    }
+
+    // Lunch only prices (Plan-PricingModel Chunk 10): the spec's companies that sell Lunch only get the price on
+    // the matching row (same guest range) — only where it is still empty, never overwriting one set by hand.
+    for (const t of spec.tiers) {
+      if (t.lunchOnlyPricePerPerson == null) continue
+      const row = await db.price.findFirst({ where: { companyId: company.id, minGuests: t.minGuests, maxGuests: t.maxGuests }, select: { id: true, lunchOnlyPrice: true } })
+      if (!row) { console.log(`      lunch only ${t.minGuests}–${t.maxGuests}: no such row — skipped`); continue }
+      if (row.lunchOnlyPrice != null) { console.log(`      lunch only ${t.minGuests}–${t.maxGuests}: already ${row.lunchOnlyPrice / 100}₾ — left alone`); continue }
+      console.log(`      lunch only ${t.minGuests}–${t.maxGuests}: ${t.lunchOnlyPricePerPerson}₾  ← setting`)
+      if (!dryRun) await db.price.update({ where: { id: row.id }, data: { lunchOnlyPrice: fromMajor(t.lunchOnlyPricePerPerson) } })
+      lunchOnlySet++
     }
 
     // The code pool is global across Company.accessCode and CompanyPerson.code
@@ -198,6 +211,7 @@ async function main() {
     `${dryRun ? 'add' : 'added'} ${guidesAdded} guide(s) and ${repsAdded} representative(s)` +
     (guidesUpdated ? `, ${dryRun ? 'would update' : 'updated'} ${guidesUpdated} guide(s)` : '') +
     (staleSeeded.length ? `, ${dryRun ? 'would remove' : 'removed'} ${staleSeeded.length} stale seeded guide(s)` : '') +
+    (lunchOnlySet ? `, ${dryRun ? 'would set' : 'set'} ${lunchOnlySet} Lunch only price(s)` : '') +
     (skipped ? `; ${skipped} company(ies) not present on this tenant.` : '.')
   )
 }

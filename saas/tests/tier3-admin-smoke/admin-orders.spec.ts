@@ -29,7 +29,7 @@ async function deleteTestOrderIfPresent(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
@@ -48,7 +48,7 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // Calendar round trip, and a Table-view re-render that alone measures
     // ~5s on a healthy server (see the real finding further down) — 60s left
     // no real margin even without any load.
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     await ensureAdminLoggedIn(page);
 
@@ -77,7 +77,11 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // reset to land in between.
     await expect(dateInput).toBeVisible({ timeout: 15_000 });
     await dateInput.fill(TEST_DATE);
-    await page.getByRole('textbox').nth(1).fill('4'); // Guest count
+    // An individual order: one guest count (T-152 D-5), named since Chunk 8 — not found by position any more.
+    await page.getByRole('textbox', { name: 'Number of guests' }).fill('4');
+    // D-14 (2026-10-22): priced from Staging Winery's Individuals table (3–6 guests, Tasting ₾70), no rate box.
+    await expect(page.getByText('Tasting (4 × 70₾)', { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('textbox', { name: /— ₾ per person$/ })).toHaveCount(0);
     // One Name box now (like the public form) — split into first word / rest at submit,
     // so this still stores name "Playwright", surname "AdminOrdersTest".
     await page.getByPlaceholder('Name', { exact: true }).fill('Playwright AdminOrdersTest');
@@ -95,7 +99,8 @@ test.describe('Orders admin — filtering and view toggle', () => {
     await page.goto('/admin/orders');
     const table = page.locator('table');
     await expect(table).toBeVisible({ timeout: 15_000 });
-    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
+    // The three product columns since T-152 Chunk 9 (saved ids tasting/lunch kept, labels renamed, Lunch only added).
+    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Tasting & Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
       await expect(page.getByRole('columnheader', { name: col, exact: true })).toBeVisible();
     }
 
@@ -112,9 +117,9 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // suite (wait for the real state change, not a fixed sleep).
     async function setDateRange(from: string, fromIso: string, to: string, toIso: string) {
       await fromInput.fill(from);
-      await page.waitForURL(new RegExp(`dateFrom=${fromIso}`), { timeout: 10_000 });
+      await page.waitForURL(new RegExp(`dateFrom=${fromIso}`), { timeout: 30_000 });
       await toInput.fill(to);
-      await page.waitForURL(new RegExp(`dateTo=${toIso}`), { timeout: 10_000 });
+      await page.waitForURL(new RegExp(`dateTo=${toIso}`), { timeout: 30_000 });
     }
 
     // 3 & 4. Filter to a range containing zero known orders (a decade before

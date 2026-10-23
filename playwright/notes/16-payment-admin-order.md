@@ -4,6 +4,15 @@ tags: [playwright, test, tier5, payment, admin-order]
 
 # 16. Admin-created order — parity with a guest order, then manual payment (Chunk 5)
 
+> **Update 2026-10-22 (T-152, Chunk 8).** Admin New Order: an individual order has a visit type and one
+> "Number of guests" box; companies fill the four boxes and the total is their sum (no typed party size — P-11).
+> Rates are typed per product ("Tasting only — ₾ per person") only for what the price table does not cover; empty
+> = price later. The spec now finds both boxes by their accessible names.
+>
+> **Update 2026-10-22 (T-152, D-14).** An individual order is priced from the **Individuals price table** by its
+> guest count — no rate box, no "price later". The spec types no rate and expects Staging Winery's table: 4 guests,
+> 3–6 row, Tasting ₾70 → **₾280** (was ₾50 × 4 = ₾200). Step 1 below is history on that point.
+
 **Status:** ✅ Passing (1/1)
 **Tier:** 5 — real staging E2E (`playwright.staging.config.ts`, targets `https://staging.vineworks.ge`, dev DB).
 **File:** `tests/tier5-payment-e2e/payment-admin-order.spec.ts`

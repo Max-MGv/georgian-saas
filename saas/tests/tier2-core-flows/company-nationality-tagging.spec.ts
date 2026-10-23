@@ -90,7 +90,7 @@ async function deleteTestOrderOnAdminPage(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
@@ -121,7 +121,7 @@ test.describe.serial('Company booking nationality tagging', () => {
     // companies-crud.spec.ts already use for their own multi-round-trip
     // flows, following this suite's established pattern of sizing the
     // budget to the step count rather than guessing.
-    test.setTimeout(150_000);
+    test.setTimeout(300_000); // was 150 s — slow dev DB, 2026-10-22
 
     const admin = await context.newPage();
     const superAdmin = await context.newPage();
@@ -185,9 +185,9 @@ test.describe.serial('Company booking nationality tagging', () => {
 
     // 4. Fill the rest of the required fields and reach the confirm-review sheet. Real finding:
     // Staging Winery has "enhanced company booking" permanently on (per booking-enhanced.spec.ts),
-    // so a Company booking here shows split Tasting/Free guest-count spinbuttons (defaulting to
-    // "0") instead of a single Guest Count field — must fill Tasting to at least minGuests (4) or
-    // the confirm sheet never opens.
+    // so a Company booking here shows one box per product (a Tasting visit: Tasting only + Free, T-152 D-9,
+    // defaulting to "0") instead of a single Guest Count field — must fill Tasting only to at least
+    // minGuests (4) or the confirm sheet never opens.
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));

@@ -54,7 +54,7 @@ function labelFor(locale: string, code: string | null): string {
   return cfg ? adminT(locale, cfg.labelKey) : code
 }
 
-import { COLUMN_DEFS, defaultVisibleFor, COLUMNS_STORAGE_KEY, type ColumnId } from './columnDefs'
+import { COLUMN_DEFS, defaultVisibleFor, readVisibleColumns, type ColumnId } from './columnDefs'
 
 const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
@@ -81,11 +81,18 @@ type Order = {
   date: Date
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
   guestCount: number
+  /** The boxes (T-152): Tasting only / Tasting & Lunch keep their old prop names; Lunch only is new. */
   tastingGuestCount: number
+  lunchOnlyGuestCount: number
   lunchGuestCount: number
   freeGuestCount: number
+  /** Frozen per-person rates (tetri) — the invoice prints one line per product from these. */
+  tastingOnlyRate: number | null
+  lunchOnlyRate: number | null
+  tastingLunchRate: number | null
+  registrationFeeSnapshot: number | null
   name: string
   surname: string
   email: string | null
@@ -272,7 +279,7 @@ function OneLine({ title, children }: { title: string; children: React.ReactNode
 }
 
 function visitLabel(locale: string, v: string) {
-  return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : adminT(locale, 'orders.visit.tastingLunch')
+  return v === 'TASTING' ? adminT(locale, 'orders.visit.tasting') : v === 'LUNCH' ? adminT(locale, 'orders.visit.lunch') : adminT(locale, 'orders.visit.tastingLunch')
 }
 
 // ── Phone order card ───────────────────────────────────────────────────
@@ -701,15 +708,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   useEffect(() => {
     function readCols() {
-      try {
-        const saved = localStorage.getItem(COLUMNS_STORAGE_KEY)
-        if (saved) setVisibleCols(new Set(JSON.parse(saved) as ColumnId[]))
-      } catch {}
+      const saved = readVisibleColumns(tenantId)
+      if (saved) setVisibleCols(saved)
     }
     readCols()
     window.addEventListener('ordersColumnsChanged', readCols)
     return () => window.removeEventListener('ordersColumnsChanged', readCols)
-  }, [])
+  }, [tenantId])
 
   // Status menu — menu itself renders in a portal (see bottom of component) so it
   // can't be clipped by an ancestor's overflow (the table's sticky columns / scroll
@@ -745,7 +750,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // Edit form state
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
-  const [editGuests, setEditGuests] = useState('')
   const [editName, setEditName] = useState('')
   const [editSurname, setEditSurname] = useState('')
   const [editPhone, setEditPhone] = useState('')
@@ -935,7 +939,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setEditingOrder(order)
     setEditDate(toInputDate(order.date))
     setEditTime(order.timeSlot)
-    setEditGuests(String(order.guestCount))
     setEditName(order.name)
     setEditSurname(order.surname)
     setEditPhone(order.phone ?? '')
@@ -964,7 +967,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     const result = await updateOrder(editingOrder.id, {
       date: editDate,
       timeSlot: editTime,
-      guestCount: Number(editGuests),
       name: editName,
       surname: editSurname,
       phone: editPhone,
@@ -980,7 +982,6 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       ...o,
       date: new Date(editDate),
       timeSlot: editTime,
-      guestCount: Number(editGuests),
       name: editName,
       surname: editSurname,
       phone: editPhone || null,
@@ -1120,19 +1121,17 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   </td>
                 )}
 
-                {/* Tasting guests */}
-                {col('tasting') && (
-                  <td className="px-4 py-3 text-center" style={{ color: order.tastingGuestCount > 0 ? C.text : C.faint }}>
-                    {order.tastingGuestCount > 0 ? order.tastingGuestCount : '—'}
+                {/* The guest boxes, in COLUMN_DEFS order: Tasting only, Lunch only, Tasting & Lunch, Free */}
+                {([
+                  ['tasting', order.tastingGuestCount],
+                  ['lunchOnly', order.lunchOnlyGuestCount],
+                  ['lunch', order.lunchGuestCount],
+                  ['free', order.freeGuestCount],
+                ] as const).map(([id, n]) => col(id) && (
+                  <td key={id} className="px-4 py-3 text-center" style={{ color: n > 0 ? C.text : C.faint }}>
+                    {n > 0 ? n : '—'}
                   </td>
-                )}
-
-                {/* Lunch guests */}
-                {col('lunch') && (
-                  <td className="px-4 py-3 text-center" style={{ color: order.lunchGuestCount > 0 ? C.text : C.faint }}>
-                    {order.lunchGuestCount > 0 ? order.lunchGuestCount : '—'}
-                  </td>
-                )}
+                ))}
 
                 {/* Total guests */}
                 {col('guests') && (
@@ -1572,8 +1571,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 </Field>
               </div>
 
+              {/* Read-only (T-152): the total is the sum of the guest boxes and picks the price, so it is changed on
+                  the order page, where the boxes and the price move together — never typed on its own here. */}
               <Field label={at('orders.editPanel.guests')}>
-                <input type="number" min={1} value={editGuests} onChange={e => setEditGuests(e.target.value)} style={inputStyle} />
+                <div className="text-sm py-1.5" style={{ color: C.text }}>
+                  {editingOrder.guestCount}{' '}
+                  <a href={`/admin/orders/${editingOrder.id}`} className="text-xs underline" style={{ color: C.muted }}>{at('orders.editPanel.guestsOnOrderPage')}</a>
+                </div>
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1641,7 +1645,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const left = hoverPos.x + 20 + cardW > vw - pad ? hoverPos.x - cardW - 12 : hoverPos.x + 20
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
         const cfg = styleFor(o.stage)
-        const hasSplit = o.tastingGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
+        const hasSplit = o.tastingGuestCount > 0 || o.lunchOnlyGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
         const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
         const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
         const bookingAmt = (o.totalPrice ?? 0) - mcAmt - extrasAmt
@@ -1685,6 +1689,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 {hasSplit ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {o.tastingGuestCount > 0 && <PRow label={at('orders.col.tasting')} value={`${o.tastingGuestCount}`} />}
+                    {o.lunchOnlyGuestCount > 0 && <PRow label={at('orders.col.lunchOnly')} value={`${o.lunchOnlyGuestCount}`} />}
                     {o.lunchGuestCount > 0 && <PRow label={at('orders.col.lunch')} value={`${o.lunchGuestCount}`} />}
                     {o.freeGuestCount > 0 && <PRow label={at('orders.preview.guide')} value={`${o.freeGuestCount}`} />}
                     <PRow label={at('orders.col.total')} value={`${o.guestCount}`} bold />
@@ -1699,7 +1704,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               {/* Amounts */}
               <div>
                 <div style={{ color: C.faint, fontSize: 11, marginBottom: 4 }}>{at('orders.preview.amount')}</div>
-                <PRow label={o.visitType === 'TASTING_LUNCH' ? at('orders.visit.tastingLunch') : at('orders.col.tasting')} value={formatTetri(asTetri(bookingAmt))} />
+                <PRow label={visitLabel(locale, o.visitType)} value={formatTetri(asTetri(bookingAmt))} />
                 {o.masterclassLines.map((l, i) => (
                   <PRow key={i} label={`${l.name} ×${l.quantity}`} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity))} />
                 ))}

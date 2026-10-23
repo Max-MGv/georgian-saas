@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { PartyPopper } from 'lucide-react'
 import { launchTenant } from '@/app/actions/onboarding'
 import { adminT } from '@/lib/adminT'
+import { formatDayMonthYear } from '@/lib/emails/templates/dateFormat'
 import { C, StatusIcon, type StepKey } from './shared'
 
 export default function ReviewStep({ locale, items, onJump, initialLaunchedAt, readyToLaunch, onLaunched }: {
@@ -66,7 +67,7 @@ export default function ReviewStep({ locale, items, onJump, initialLaunchedAt, r
           <>
             <PartyPopper size={24} className="mx-auto mb-2" style={{ color: C.wine }} />
             <p className="text-sm mb-4" style={{ color: C.muted }}>
-              {at('onboarding.review.launchedAt', { date: new Date(launchedAt).toLocaleDateString(locale === 'ka' ? 'ka-GE' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) })}
+              {at('onboarding.review.launchedAt', { date: formatDayMonthYear(new Date(launchedAt), locale === 'ka' ? 'ka' : 'en') })}
             </p>
           </>
         ) : null}

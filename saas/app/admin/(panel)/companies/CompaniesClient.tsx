@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createCompany, updateCompany, deleteCompany, regenerateAccessCode, setAccessCode } from '@/app/actions/companies'
-import { createPrice, updatePrice, deletePrice, setDisplayPrice } from '@/app/actions/prices'
+import { createPrice, updatePrice, deletePrice, setDisplayPrice, setRegistrationFee } from '@/app/actions/prices'
 import { asTetri, fromMajor, toMajor, formatTetri, parseMajor, type Tetri } from '@/lib/money'
 import {
   createPerson, updatePerson, deletePerson, regeneratePersonCode,
@@ -11,7 +11,6 @@ import { createAddress, updateAddress, deleteAddress } from '@/app/actions/compa
 import { setCompanyWinePrice } from '@/app/actions/companyWinePrices'
 import { adminT } from '@/lib/adminT'
 import HelpHint from '@/components/HelpHint'
-import { comboRatePerPerson } from '@/lib/pricingUtils'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -23,10 +22,11 @@ type Price = {
   minGuests: number
   maxGuests: number
   // TETRI. These come straight off the DB row; the tier form converts to and
-  // from GEL at its inputs (chunk 3).
-  pricePerPerson: Tetri
-  tastingLunchPricePerPerson: Tetri
-  registrationPrice: Tetri
+  // from GEL at its inputs (chunk 3). Product model (T-152): null = not offered;
+  // tastingLunchPrice is the ALL-IN price for tasting and lunch.
+  tastingOnlyPrice: Tetri | null
+  lunchOnlyPrice: Tetri | null
+  tastingLunchPrice: Tetri | null
   isDisplayPrice: boolean
 }
 /** One person at this company, in one role. Replaces the separate Guide/Representative types. */
@@ -59,6 +59,8 @@ type Company = {
   isBookingCompany: boolean
   isWineOrderCompany: boolean
   wineDiscountPercent: number | null
+  /** Flat fee per booking, TETRI (T-152 D-6). Always 0 on the Individuals row — individuals are never charged one. */
+  registrationFee: Tetri
   /** T-12 — label + filter only. */
   isExporter: boolean
   /** T-12 — negotiated price per vintage id (tetri). Exceptions only. */
@@ -115,40 +117,113 @@ function SmallInput({ label, value, onChange, type = 'text', width = 80 }: {
   )
 }
 
+/** The price columns of a tier row, in display order. Individuals have no Lunch only (Plan-PricingModel D-5). */
+function tierPriceLabels(isIndividual: boolean): [string, 'tastingOnlyPrice' | 'lunchOnlyPrice' | 'tastingLunchPrice'][] {
+  return [
+    ['companies.priceTiers.tastingOnly', 'tastingOnlyPrice'],
+    ...(isIndividual ? [] : [['companies.priceTiers.lunchOnly', 'lunchOnlyPrice'] as [string, 'lunchOnlyPrice']]),
+    ['companies.priceTiers.tastingLunch', 'tastingLunchPrice'],
+  ]
+}
+
 function PriceForm({
-  initial, onSave, onCancel, loading, locale,
+  initial, onSave, onCancel, loading, locale, isIndividual,
 }: {
   initial?: Price; onSave: (data: Omit<Price, 'id' | 'isDisplayPrice'>) => void; onCancel: () => void; loading: boolean; locale: string
+  /** Individuals have no Lunch only price (Plan-PricingModel D-5), so its box is not shown. */
+  isIndividual: boolean
 }) {
   const at = (key: string) => adminT(locale, key)
   const [minGuests, setMinGuests] = useState(String(initial?.minGuests ?? 1))
   const [maxGuests, setMaxGuests] = useState(String(initial?.maxGuests ?? 10))
-  // The inputs hold GEL, because that is what an admin types. Everything
-  // below this component is tetri; fromMajor/toMajor are the boundary.
-  const [pricePerPerson, setPricePerPerson] = useState(initial ? String(toMajor(asTetri(initial.pricePerPerson))) : '')
-  const [tastingLunchPrice, setTastingLunchPrice] = useState(initial ? String(toMajor(asTetri(initial.tastingLunchPricePerPerson))) : '')
-  const [registrationPrice, setRegistrationPrice] = useState(initial ? String(toMajor(asTetri(initial.registrationPrice))) : '0')
+  // The inputs hold GEL, because that is what an admin types. Everything below this component is tetri;
+  // parseMajor/toMajor are the boundary. Three ALL-IN prices per row (T-152): an empty box is "not offered"
+  // (null), which only Lunch only may be for now — see tierPricesProblem() in app/actions/prices.ts.
+  const majorOf = (v: Tetri | null | undefined) => (v == null ? '' : String(toMajor(asTetri(v))))
+  const [tastingOnly, setTastingOnly] = useState(majorOf(initial?.tastingOnlyPrice))
+  const [lunchOnly, setLunchOnly] = useState(majorOf(initial?.lunchOnlyPrice))
+  const [tastingLunch, setTastingLunch] = useState(majorOf(initial?.tastingLunchPrice))
+  const [formError, setFormError] = useState('')
+
+  function save() {
+    const t = parseMajor(tastingOnly), tl = parseMajor(tastingLunch)
+    if (t == null || tl == null) { setFormError(at('companies.priceForm.required')); return }
+    setFormError('')
+    onSave({
+      minGuests: Number(minGuests), maxGuests: Number(maxGuests),
+      tastingOnlyPrice: t,
+      lunchOnlyPrice: isIndividual ? null : parseMajor(lunchOnly),
+      tastingLunchPrice: tl,
+    })
+  }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 mt-3">
-      <SmallInput label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} type="number" width={72} />
-      <SmallInput label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
-      <SmallInput label={at('companies.priceForm.tastingPP')} value={pricePerPerson} onChange={setPricePerPerson} type="number" width={110} />
-      <SmallInput label={at('companies.priceForm.tastingLunchPP')} value={tastingLunchPrice} onChange={setTastingLunchPrice} type="number" width={140} />
-      <SmallInput label={at('companies.priceForm.flatFee')} value={registrationPrice} onChange={setRegistrationPrice} type="number" width={120} />
-      <div className="flex gap-2 pb-0.5">
-        <button
-          onClick={() => onSave({
-            minGuests: Number(minGuests), maxGuests: Number(maxGuests),
-            pricePerPerson: fromMajor(Number(pricePerPerson)),
-            tastingLunchPricePerPerson: fromMajor(tastingLunchPrice === '' ? 0 : Number(tastingLunchPrice)),
-            registrationPrice: fromMajor(registrationPrice === '' ? 0 : Number(registrationPrice)),
-          })}
-          disabled={loading}
-          className="btn-wine text-xs px-3 py-2 rounded-lg font-medium"
-        >{at('settings.common.save')}</button>
-        <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+    <div className="mt-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <SmallInput label={at('companies.priceForm.minGuests')} value={minGuests} onChange={setMinGuests} type="number" width={72} />
+        <SmallInput label={at('companies.priceForm.maxGuests')} value={maxGuests} onChange={setMaxGuests} type="number" width={72} />
+        <SmallInput label={at('companies.priceForm.tastingOnlyPP')} value={tastingOnly} onChange={setTastingOnly} type="number" width={130} />
+        {!isIndividual && (
+          <SmallInput label={at('companies.priceForm.lunchOnlyPP')} value={lunchOnly} onChange={setLunchOnly} type="number" width={130} />
+        )}
+        <SmallInput label={at('companies.priceForm.tastingLunchAllInPP')} value={tastingLunch} onChange={setTastingLunch} type="number" width={150} />
+        <div className="flex gap-2 pb-0.5">
+          <button onClick={save} disabled={loading} className="btn-wine text-xs px-3 py-2 rounded-lg font-medium">{at('settings.common.save')}</button>
+          <button onClick={onCancel} className="text-xs px-3 py-2 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.cancel')}</button>
+        </div>
       </div>
+      {!isIndividual && <p className="text-xs mt-1.5" style={{ color: C.faint }}>{at('companies.priceForm.lunchOnlyHint')}</p>}
+      {formError && <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>{formError}</p>}
+    </div>
+  )
+}
+
+/**
+ * The company's flat registration fee per booking (T-152 D-6) — one number for the company, not per tier.
+ * Shown under the tiers for companies only; individuals are never charged one.
+ */
+function RegistrationFeeRow({ company, locale, onSaved }: {
+  company: Company; locale: string; onSaved: (companyId: string, fee: Tetri) => void
+}) {
+  const at = (key: string) => adminT(locale, key)
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(String(toMajor(company.registrationFee)))
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function save() {
+    const fee = value.trim() === '' ? asTetri(0) : parseMajor(value)
+    if (fee == null || fee < 0) { setErr(at('companies.registrationFee.hint')); return }
+    setSaving(true); setErr('')
+    const result = await setRegistrationFee(company.id, fee)
+    setSaving(false)
+    if ('error' in result) { setErr(result.error ?? ''); return }
+    onSaved(company.id, fee)
+    setEditing(false)
+  }
+
+  return (
+    <div className="mt-3 pt-3 flex flex-wrap items-center gap-3" style={{ borderTop: `1px dashed ${C.border}` }}>
+      <span className="text-xs" style={{ color: C.muted }}>{at('companies.registrationFee.label')}</span>
+      {editing ? (
+        <>
+          <input type="number" min="0" value={value} onChange={e => setValue(e.target.value)} style={{ ...inputStyle, width: 100 }} />
+          <button onClick={save} disabled={saving} className="btn-wine text-xs px-3 py-1.5 rounded-lg font-medium">{at('settings.common.save')}</button>
+          <button
+            onClick={() => { setEditing(false); setErr(''); setValue(String(toMajor(company.registrationFee))) }}
+            className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: C.border, color: C.muted }}
+          >{at('settings.common.cancel')}</button>
+          <span className="text-xs w-full" style={{ color: C.faint }}>{at('companies.registrationFee.hint')}</span>
+        </>
+      ) : (
+        <>
+          <span className="text-xs font-semibold" style={{ color: C.wine }}>
+            {company.registrationFee > 0 ? formatTetri(company.registrationFee) : at('companies.registrationFee.none')}
+          </span>
+          <button onClick={() => setEditing(true)} className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('companies.priceTiers.edit')}</button>
+        </>
+      )}
+      {err && <span className="text-xs w-full" style={{ color: '#b91c1c' }}>{err}</span>}
     </div>
   )
 }
@@ -869,6 +944,7 @@ function PriceTiersSection({
   onUpdateTier,
   onDeleteTier,
   onSetDisplayPrice,
+  onRegistrationFeeSaved,
   setAddingPriceFor,
   setEditingPriceId,
   setDeletingPriceId,
@@ -885,6 +961,7 @@ function PriceTiersSection({
   onUpdateTier: (companyId: string, priceId: string, data: Omit<Price, 'id' | 'isDisplayPrice'>) => void
   onDeleteTier: (companyId: string, priceId: string) => void
   onSetDisplayPrice: (priceId: string) => void
+  onRegistrationFeeSaved: (companyId: string, fee: Tetri) => void
   setAddingPriceFor: (id: string | null) => void
   setEditingPriceId: (id: string | null) => void
   setDeletingPriceId: (id: string | null) => void
@@ -918,6 +995,7 @@ function PriceTiersSection({
               onCancel={() => setEditingPriceId(null)}
               loading={loading}
               locale={locale}
+              isIndividual={isIndividual}
             />
           ) : deletingPriceId === price.id ? (
             <div className="flex items-center gap-3 text-sm">
@@ -928,9 +1006,14 @@ function PriceTiersSection({
           ) : (
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-sm" style={{ color: C.text }}>{price.minGuests}–{price.maxGuests} {at('companies.priceTiers.guests')}</span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.tasting')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(price.pricePerPerson))}/pp</span></span>
-              <span className="text-xs" style={{ color: C.faint }}>{at('companies.priceTiers.lunch')} <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(asTetri(comboRatePerPerson(price)))}/pp</span></span>
-              {price.registrationPrice > 0 && <span className="text-xs" style={{ color: C.faint }}>+{formatTetri(asTetri(price.registrationPrice))} {at('companies.priceTiers.flatFeeSuffix')}</span>}
+              {tierPriceLabels(isIndividual).map(([label, field]) => (
+                <span key={label} className="text-xs" style={{ color: C.faint }}>
+                  {at(label)}{' '}
+                  {price[field] == null
+                    ? <span style={{ fontStyle: 'italic' }}>{at('companies.priceTiers.notOffered')}</span>
+                    : <span className="font-semibold" style={{ color: C.wine }}>{formatTetri(price[field]!)}/pp</span>}
+                </span>
+              ))}
 
               {isIndividual && (
                 <button
@@ -962,6 +1045,7 @@ function PriceTiersSection({
           onCancel={() => setAddingPriceFor(null)}
           loading={loading}
           locale={locale}
+          isIndividual={isIndividual}
         />
       ) : (
         <button
@@ -972,6 +1056,8 @@ function PriceTiersSection({
           {at('companies.priceTiers.addTier')}
         </button>
       )}
+
+      {!isIndividual && <RegistrationFeeRow company={company} locale={locale} onSaved={onRegistrationFeeSaved} />}
     </div>
   )
 }
@@ -1147,6 +1233,8 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
     onUpdateTier: handleUpdatePrice,
     onDeleteTier: handleDeletePrice,
     onSetDisplayPrice: handleSetDisplayPrice,
+    onRegistrationFeeSaved: (companyId: string, fee: Tetri) =>
+      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, registrationFee: fee } : c)),
     setAddingPriceFor, setEditingPriceId, setDeletingPriceId,
     locale,
   }
@@ -1191,7 +1279,7 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
                 </span>
                 {displayTier ? (
                   <span className="text-xs" style={{ color: '#b45309' }}>
-                    {formatTetri(asTetri(displayTier.pricePerPerson))} / {formatTetri(asTetri(comboRatePerPerson(displayTier)))} {at('companies.individuals.shownOnSite')}
+                    {displayTier.tastingOnlyPrice != null ? formatTetri(displayTier.tastingOnlyPrice) : '—'} / {displayTier.tastingLunchPrice != null ? formatTetri(displayTier.tastingLunchPrice) : '—'} {at('companies.individuals.shownOnSite')}
                   </span>
                 ) : (
                   <span className="text-xs" style={{ color: C.faint }}>

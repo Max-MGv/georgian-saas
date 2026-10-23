@@ -88,6 +88,9 @@ model Company {
   isIndividual        Boolean         @default(false)
   isBookingCompany    Boolean         @default(true)
   isWineOrderCompany  Boolean         @default(false)
+  // Flat fee, tetri, charged once per booking (Plan-PricingModel D-6, T-152). Replaces
+  // Price.registrationPrice, which sat on each tier row. Never charged to individuals.
+  registrationFee     Int             @default(0)
   wineDiscountPercent Float?
   // Per-company override of the tenant's Companies section toggle (#148).
   // null = follow paymentEnabledCompanies; true = always skip (trusted,
@@ -332,9 +335,11 @@ model InvoiceSent {
   companyName       String?
   totalPrice        Int
   guestCount        Int
-  tastingGuestCount Int
-  lunchGuestCount   Int
   freeGuestCount    Int
+  // Product model (T-152): Tasting only / Lunch only / Tasting & Lunch guests as billed.
+  tastingOnlyGuests  Int @default(0)
+  lunchOnlyGuests    Int @default(0)
+  tastingLunchGuests Int @default(0)
   visitType         String
   masterclassLines  Json
   extras            Json
@@ -379,10 +384,12 @@ model Order {
   date                    DateTime
   timeSlot                String
   guestCount              Int
-  // Enhanced guest counts (v1.2) — 0 means not set (pre-enhancement order)
-  lunchGuestCount         Int                @default(0)
-  tastingGuestCount       Int                @default(0)
+  // Product model (Plan-PricingModel, T-152): every guest is in exactly one box, or free.
+  // Every order stores them — individual and simple-form bookings too (A-4). guestCount = all four.
   freeGuestCount          Int                @default(0)
+  tastingOnlyGuests       Int                @default(0)
+  lunchOnlyGuests         Int                @default(0)
+  tastingLunchGuests      Int                @default(0)
   // Hot dish selections (v1.2)
   hotDishVegetable        String?
   hotDishMeat             String?
@@ -432,9 +439,11 @@ model Order {
   // registrationFeeSnapshot is 0 for individuals: that path never applied the
   // tier's registration fee, and the snapshot records what was *used*, not what
   // the tier happened to hold.
-  tastingRateSnapshot     Int?
-  lunchRateSnapshot       Int?
   registrationFeeSnapshot Int?
+  // Product model (T-152): the per-person rate each product was sold at (null = product unused / not frozen).
+  tastingOnlyRate         Int?
+  lunchOnlyRate           Int?
+  tastingLunchRate        Int?
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @default(now()) @updatedAt
   masterclassLines        OrderMasterclass[]
@@ -534,9 +543,12 @@ model Price {
   company                    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   minGuests                  Int
   maxGuests                  Int
-  pricePerPerson             Int
-  tastingLunchPricePerPerson Int      @default(0)
-  registrationPrice          Int      @default(0)
+  // Product model (Plan-PricingModel, T-152). Tetri per person; null = not offered on this row (D-7).
+  // tastingLunchPrice is the ALL-IN price for tasting and lunch, not an add-on. Never all three null.
+  // The registration fee is per company (Company.registrationFee), not per row.
+  tastingOnlyPrice           Int?
+  lunchOnlyPrice             Int?
+  tastingLunchPrice          Int?
   isDisplayPrice             Boolean  @default(false)
   // Pricing is edited in place, so without these there is no record of when a
   // company's rates changed — and every booking is priced from them. Chunk 4
@@ -945,6 +957,9 @@ enum BookingType {
 enum VisitType {
   TASTING
   TASTING_LUNCH
+  // Company simple form only (Plan-PricingModel D-10, T-152): the whole group has lunch, no tasting.
+  // Follows the Tasting + Lunch rules for lead time, visit length, max/min guests and the hot-dish question (A-5).
+  LUNCH
 }
 
 enum WineType {

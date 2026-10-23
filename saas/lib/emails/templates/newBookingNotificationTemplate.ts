@@ -1,3 +1,4 @@
+import { guestSplitText } from '@/lib/invoiceLines'
 import { asTetri, formatTetri } from '@/lib/money'
 /**
  * Pure HTML-building half of newBookingNotification.ts — see
@@ -14,7 +15,9 @@ export type NewBookingNotificationData = {
   date: string
   timeSlot: string
   guestCount: number
-  visitType: 'TASTING' | 'TASTING_LUNCH'
+  visitType: 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
+  /** The guest boxes (T-152) — the kitchen needs the split, not just the total. */
+  boxes?: { tastingOnly: number; lunchOnly: number; tastingLunch: number; free: number }
   totalPrice: number
   bookingType: 'INDIVIDUAL' | 'COMPANY'
   /** True once payment actually settled (sent from settle.ts, not createBooking.ts). */
@@ -28,7 +31,8 @@ export type NewBookingNotificationData = {
 }
 
 export function renderNewBookingNotificationEmail(data: NewBookingNotificationData): { subject: string; html: string } {
-  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : 'Wine Tasting + Lunch'
+  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : data.visitType === 'LUNCH' ? 'Lunch' : 'Wine Tasting + Lunch'
+  const split = data.boxes ? guestSplitText(data.boxes, 'en') : null
 
   const html = `
       <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; color: #1c1008; padding: 32px;">
@@ -42,7 +46,7 @@ export function renderNewBookingNotificationEmail(data: NewBookingNotificationDa
           <tr><td style="padding: 8px 0; color: #6b5a47;">Visit type</td><td style="padding: 8px 0;">${visitLabel}</td></tr>
           <tr><td style="padding: 8px 0; color: #6b5a47;">Date</td><td style="padding: 8px 0;">${data.date}</td></tr>
           <tr><td style="padding: 8px 0; color: #6b5a47;">Time</td><td style="padding: 8px 0;">${data.timeSlot}</td></tr>
-          <tr><td style="padding: 8px 0; color: #6b5a47;">Guests</td><td style="padding: 8px 0;">${data.guestCount}</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b5a47;">Guests</td><td style="padding: 8px 0;">${data.guestCount}${split ? ` <span style="color: #6b5a47;">(${split})</span>` : ''}</td></tr>
           <tr><td style="padding: 8px 0; color: #6b5a47;">${data.paid ? 'Paid' : 'Estimated total'}</td><td style="padding: 8px 0; font-weight: 600;">${formatTetri(asTetri(data.totalPrice))}</td></tr>
         </table>
         <p style="margin: 24px 0 0; font-size: 13px; color: #6b5a47;">${data.requestedCompanyName

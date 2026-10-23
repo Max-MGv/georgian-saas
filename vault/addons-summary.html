@@ -1,0 +1,175 @@
+<title>Add-ons and Table Wine Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a single reading column (review memo) — sections separated by heavy rules, confirm-items as flagged blocks, the build order as a real numbered sequence. */
+:root {
+  --paper: #EEF0EF; --ink: #1D2321; --ink-soft: #5A6560; --rule: #CDD3D0; --card: #FFFFFF;
+  --pick: #1F6F5C; --pick-soft: #DCEDE7; --ask: #8A5A00; --ask-soft: #F6EBD2; --wine: #7C1D23;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32; --ask: #E3B45C; --ask-soft: #3A2E15; --wine: #E08A90; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32; --ask: #E3B45C; --ask-soft: #3A2E15; --wine: #E08A90; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 72px; }
+.wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 44px; }
+header { display: grid; gap: 12px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+h1 { font-family: var(--display); font-size: clamp(30px, 5vw, 42px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-size: 24px; line-height: 1.2; margin: 0; text-wrap: balance; }
+h3 { font-size: 17px; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--ink-soft); }
+section { display: grid; gap: 16px; border-top: 2px solid var(--ink); padding-top: 18px; }
+ul, ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.three { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.three div { background: var(--card); border: 1px solid var(--rule); padding: 14px; display: grid; gap: 6px; align-content: start; }
+.three b { font-family: var(--display); font-size: 18px; }
+.three p { font-size: 15px; color: var(--ink-soft); }
+.who { display: grid; gap: 14px; }
+.who > div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.who > div:first-child { border-top: 0; padding-top: 0; }
+.who h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); padding-top: 3px; }
+.who ul { padding-left: 18px; gap: 4px; font-size: 16px; }
+@media (max-width: 520px) { .who > div { grid-template-columns: 1fr; gap: 4px; } }
+.ask { background: var(--ask-soft); border-left: 4px solid var(--ask); padding: 14px 16px; display: grid; gap: 6px; }
+.ask .id { font-family: var(--mono); font-size: 12px; color: var(--ask); letter-spacing: .06em; }
+.ask p { font-size: 16px; }
+.ask .sug { font-size: 15px; color: var(--ink-soft); }
+.asks { display: grid; gap: 12px; }
+ol.steps { list-style: none; padding: 0; gap: 0; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--rule); }
+ol.steps li:first-child { border-top: 0; }
+ol.steps li::before { content: counter(s, decimal-leading-zero); font-family: var(--mono); font-size: 14px; color: var(--ink-soft); padding-top: 2px; }
+ol.steps li[data-n]::before { content: attr(data-n); }
+ol.steps b { display: block; }
+ol.steps span { color: var(--ink-soft); font-size: 15px; }
+ol.steps li.prod::before { color: var(--wine); }
+ol.steps li.prod b { color: var(--wine); }
+.edge { display: grid; gap: 10px; }
+.edge div { display: grid; gap: 2px; }
+.edge b { font-size: 16px; }
+.edge span { color: var(--ink-soft); font-size: 15px; }
+.note { font-size: 15px; color: var(--ink-soft); }
+code { font-family: var(--mono); font-size: 13px; }
+a { color: var(--pick); }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">T-7 + T-22 · plan for review · 19 Oct 2026 · nothing built yet</div>
+  <h1>Add-ons and wine for the table</h1>
+  <p class="lede">What we're building, what changes for whom, the order of work, and five things I need you to confirm. If anything looks wrong, comment on it here or reply in chat. The detailed version for building is <code>vault/Plan-AddOnsAndWine.md</code>.</p>
+</header>
+
+<section>
+  <h2>What we're building</h2>
+  <div class="three">
+    <div><b>Add-ons</b><p>Masterclass becomes one group of add-ons. You create others (Food, …), name them in English and Georgian, and choose who sees each group and for which visit type.</p></div>
+    <div><b>Wine for the table</b><p>Guests add bottles when booking, or staff add them later from the booking page. The bottles go on the bill and count as wine sold, in the same place as every other bottle.</p></div>
+    <div><b>Guest purchases</b><p>A guest buying wine for themselves gets their own pickup order, linked to the visit so you can see what the visit brought in. It never goes on the company's invoice.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What changes for whom</h2>
+  <div class="who">
+    <div><h3>Guests</h3><ul>
+      <li>One row per add-on group on the booking form, collapsed by default like the masterclass row today.</li>
+      <li>"Per person" items are multiplied by the number of guests automatically. Flat fees have no quantity box.</li>
+      <li>A "Wine for the table" row with +/− per bottle. Companies see their own wine prices once their code is accepted.</li>
+      <li>Private guests get add-ons too, if you switch a group on for them.</li></ul></div>
+    <div><h3>Admin setup</h3><ul>
+      <li>Admin → <b>Add-ons</b> (renamed from Masterclass): groups, items, names in both languages, who sees what. Your existing masterclass items move into a "Masterclass" group automatically.</li>
+      <li>Wines: an "Offer on bookings" switch per wine.</li>
+      <li>Companies: booking companies get a "Table wine prices" section (a % and/or agreed prices). Empty means website prices.</li></ul></div>
+    <div><h3>Booking page</h3><ul>
+      <li>Cards for Add-ons, Wine for the table, Extras, and <b>Sales from this visit</b> (not on the invoice).</li>
+      <li>Add wine during the dinner. If it's added after payment, a balance due appears and the existing payment link works. If it's removed after payment, a credit shows.</li>
+      <li>Change the guest count and per-person add-ons follow, noted in the booking's history.</li>
+      <li>The staff booking sheet lists add-ons and table wine.</li></ul></div>
+    <div><h3>Invoice</h3><ul>
+      <li>Sections: visit · each add-on group · wine for the table · extras. Each wine line shows its price and why ("agreed", "−10%").</li>
+      <li>Invoices already sent stay exactly as they were.</li></ul></div>
+    <div><h3>Statistics</h3><ul>
+      <li>Wine: one view of every bottle sold, with a source filter: wine orders / table wine / guest purchases. Table wine counts on the visit day.</li>
+      <li>Bookings: a switch between visit only · + table wine · + guest purchases.</li>
+      <li>Fixes on the way: one wine no longer splits in two by language, and per-wine revenue includes discounts.</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>Please confirm</h2>
+  <div class="asks">
+    <div class="ask"><span class="id">C-1 · rounding</span>
+      <p>You chose to show the discount inside each invoice line. Each line then gets rounded on its own. To make wine orders calculate exactly the same way, I'd switch them to per-line rounding too.</p>
+      <p class="sug">Suggest: yes. Future wine-order totals can move by at most 1 tetri per line. Past orders don't change.</p></div>
+    <div class="ask"><span class="id">C-2 · companies that are both</span>
+      <p>The system lets one company be ticked as both a booking company and a wine-order company. That company would have one set of wine prices used for both.</p>
+      <p class="sug">Suggest: fine, since you treat them as separate companies anyway.</p></div>
+    <div class="ask"><span class="id">C-3 · "per person"</span>
+      <p>"Per person" always means every paying guest. A masterclass that only part of the group takes would be set up as "per piece", with the number typed in.</p>
+      <p class="sug">Suggest: yes.</p></div>
+    <div class="ask"><span class="id">C-4 · guest purchase phone</span>
+      <p>When staff record a guest purchase, should the phone number be optional? The admin wine-order form requires it today.</p>
+      <p class="sug">Suggest: optional, for these pickup orders only.</p></div>
+    <div class="ask"><span class="id">C-5 · booking sheet</span>
+      <p>The printed staff booking sheet shows no add-ons today. I'd add add-ons and table wine so the kitchen and cellar see them.</p>
+      <p class="sug">Suggest: yes.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Order of work</h2>
+  <p class="note">Each step is finished and checked on the test setup before the next one starts. Only the last step touches the live site, one action at a time, each with your go.</p>
+  <ol class="steps">
+    <li data-n="00"><b>Groundwork</b><span>The negative-quantity fix (#93) goes in first. Then one shared calculation for all booking line totals, replacing about 10 copies, with proof that no existing total moves. Plus read-only counts on the live database, with your go.</span></li>
+    <li data-n="01"><b>Database changes</b><span>Additions only. Existing masterclass data moves into a "Masterclass" group, and every total is checked to the tetri before and after.</span></li>
+    <li data-n="02"><b>Pricing rules</b><span>Units, company wine prices, per-person following the guest count, booking history entries.</span></li>
+    <li data-n="03"><b>Admin → Add-ons page</b></li>
+    <li data-n="04"><b>Wines switch and Companies table-wine prices</b></li>
+    <li data-n="05"><b>Public booking form</b><span>Company and private guests. The server re-checks every price.</span></li>
+    <li data-n="06"><b>Booking page, New booking, Orders list and CSV, staff sheet</b></li>
+    <li data-n="07"><b>Invoice: print and email</b></li>
+    <li data-n="08"><b>Statistics</b></li>
+    <li data-n="09"><b>Record guest purchase</b></li>
+    <li data-n="10"><b>Everything around it</b><span>Onboarding wizard, demo, staging wipe, translations, content editor preview, release note draft.</span></li>
+    <li data-n="11"><b>Full testing and a blind review</b><span>Then you test on staging with a checklist on T-7 / T-22.</span></li>
+    <li data-n="12" class="prod"><b>Live site (each step on your go)</b><span>Backup, then the database change, then the code, then a check on Nikalas Marani, then the release note.</span></li>
+  </ol>
+</section>
+
+<section>
+  <h2>Edge cases, and what happens</h2>
+  <div class="edge">
+    <div><b>A wine or add-on is renamed, switched off or deleted after it was booked</b><span>The booking and its invoice keep the name and price it was sold at. It just disappears from the form.</span></div>
+    <div><b>The visit type changes after add-ons were picked</b><span>On the form, add-ons that no longer fit are cleared. On the admin page they stay, with a warning, and staff decide.</span></div>
+    <div><b>A booking is cancelled</b><span>Its table wine leaves the statistics with it. Guest purchases are their own orders and stay.</span></div>
+    <div><b>A company booking has no price yet ("confirmed after submission")</b><span>Same as today. The total waits for staff to set the rates and no card payment is taken. The invoice can't show a negative visit amount any more.</span></div>
+    <div><b>Wine module switched off</b><span>No wine on the form or in setup. Past table wine still shows on its bookings and invoices.</span></div>
+    <div><b>Booking revenue + wine revenue</b><span>They overlap on purpose (table wine is in both), so nothing will ever add the two together.</span></div>
+    <div><b>Nikalas Marani sees the change</b><span>The menu says "Add-ons" instead of "Masterclass", and per-person items on the public form are now charged per guest, as the admin screen always said. Both go in the release note.</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Not in this plan</h2>
+  <ul>
+    <li>Guests linking their own later online orders to a visit. Only purchases recorded at the winery are supported.</li>
+    <li>Stock counts. Keeping all wine in one table makes this easy to add later.</li>
+    <li>A refund flow. Credits are settled by hand, as today.</li>
+    <li>Changes to extras. They stay as they are.</li>
+    <li>Table wine on the packing list.</li>
+  </ul>
+  <p class="note">Mockups you picked from: <a href="https://claude.ai/artifact/N5JNWe76EUyqEY9ghbkbbf">Add-ons Layout Options</a> (A, A, A, A).</p>
+</section>
+</div>

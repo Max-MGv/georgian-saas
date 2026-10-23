@@ -18,7 +18,7 @@ let companyId = ''
 test.beforeAll(async () => {
   const c = await db.company.create({ data: {
     tenantId: TENANT, name: COMPANY, isBookingCompany: true, isWineOrderCompany: false, accessCode: CODE,
-    prices: { create: { minGuests: 1, maxGuests: 50, pricePerPerson: 4321, tastingLunchPricePerPerson: 2000 } }, // 4321: easy to spot
+    prices: { create: { minGuests: 1, maxGuests: 50, tastingOnlyPrice: 4321, tastingLunchPrice: 6321 } }, // 4321: easy to spot
   } })
   companyId = c.id
 })
@@ -78,7 +78,7 @@ test('a company with no code is not offered, and a booking naming it is refused 
   // Booking tiers but no access code: an unknown company — "otherwise the code loses meaning".
   const bare = await db.company.create({ data: {
     tenantId: TENANT, name: `ZZ No Code ${RUN}`, isBookingCompany: true, isWineOrderCompany: false,
-    prices: { create: { minGuests: 1, maxGuests: 50, pricePerPerson: 100, tastingLunchPricePerPerson: 200 } },
+    prices: { create: { minGuests: 1, maxGuests: 50, tastingOnlyPrice: 100, tastingLunchPrice: 300 } },
   } })
   try {
     let tampered = false
@@ -101,9 +101,10 @@ test('a company with no code is not offered, and a booking naming it is refused 
     // The page source no longer carries any company's price tiers. The public (Individuals) tiers
     // ARE there — proof this check can see a tier in whatever escaping the page uses.
     const html = await page.content()
-    expect(html).toMatch(/pricePerPerson[^:]{0,3}:/)
-    expect(html, "the coded company's tier is not in the page before its code").not.toMatch(/pricePerPerson[^:]{0,3}: *4321[^0-9]/)
-    expect(html, "nor the code-less company's").not.toMatch(/pricePerPerson[^:]{0,3}: *100[^0-9]/)
+    // (The tier's field was `pricePerPerson` until T-152; it is `tastingOnlyPrice` now.)
+    expect(html).toMatch(/tastingOnlyPrice[^:]{0,3}:/)
+    expect(html, "the coded company's tier is not in the page before its code").not.toMatch(/tastingOnlyPrice[^:]{0,3}: *4321[^0-9]/)
+    expect(html, "nor the code-less company's").not.toMatch(/tastingOnlyPrice[^:]{0,3}: *100[^0-9]/)
 
     await page.getByRole('combobox').first().selectOption({ label: COMPANY })
     await page.getByRole('textbox', { name: 'e.g. MARANI42' }).fill(CODE)

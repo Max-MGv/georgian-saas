@@ -10,7 +10,8 @@
 // - simple:   single "Number of Guests" field; no hot dish / masterclass / food notes
 //             (the real form only renders Food Notes inside the isEnhanced block — never
 //             in simple mode, so it must not appear here either)
-// - detailed: split guest counts (Tasting/Lunch/Free-Guide), Hot Dish Selection, Masterclass
+// - simple also shows the company-only "Lunch only" visit tile (T-152 D-10)
+// - detailed: one guest box per product (Tasting only / Lunch only / Tasting & Lunch) + Free/Guide, Hot Dish Selection, Masterclass
 //             Add-ons, then Food Notes. Only the 3 new section headers are tenant-editable
 //             here (see FIELDS.form in ContentClient.tsx) — the guest sub-labels, dropdown
 //             option text, masterclass item row and contact-type block are illustrative
@@ -19,6 +20,7 @@
 //             and Settings → Contact Types, not from SiteContent.
 
 import EditableText from '@/components/EditableText'
+import GuestIcon from '@/components/GuestIcon'
 
 const C = {
   bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
@@ -59,15 +61,26 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
       {/* Visit type */}
       <div>
         <label style={labelStyle}><ET k="form_visit_type" fb="Visit Type" /></label>
-        <div className="grid grid-cols-2 gap-3">
+        {/* Simple variant: the third tile is what a tour company sees (T-152 D-10) — individuals and the detailed
+            form get two tiles, and it is hidden for a company whose price table has no Lunch only price. */}
+        <div className={isDetailed ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 sm:grid-cols-3 gap-3'}>
           <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))', borderColor: C.wine }}>
             <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_tasting" fb="Wine Tasting" /></div>
+            {/* T-272: an individual sees the row their guest count falls in (sample values) */}
+            <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}><GuestIcon />3–6 guests</div>
             <div className="text-sm mt-0.5" style={{ color: C.wine }}>50₾ / pp</div>
           </div>
           <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: C.bg, borderColor: C.border }}>
             <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_tasting_lunch" fb="Tasting + Lunch" /></div>
+            <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}><GuestIcon />3–6 guests</div>
             <div className="text-sm mt-0.5" style={{ color: C.wine }}>100₾ / pp</div>
           </div>
+          {!isDetailed && (
+            <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: C.bg, borderColor: C.border }}>
+              <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_lunch_only" fb="Lunch" /></div>
+              <div className="text-xs mt-0.5" style={{ color: C.faint }}>Tour companies only</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -83,15 +96,17 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         </div>
       </div>
 
-      {/* Guest count — simple: single field / detailed: split Tasting+Lunch+Free-Guide */}
+      {/* Guest count — simple: single field / detailed: one box per product + Free (T-152 D-9; a Tasting visit
+          shows only Tasting only + Free, and a product the company has no price for has no box) */}
       {isDetailed ? (
         <div>
           <label style={labelStyle}><ET k="form_guest_counts_header" fb="Guest Counts" /></label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Tasting', value: '2' },
-              { label: 'Lunch', value: '2' },
-              { label: 'Free / Guide', value: '0' },
+              { label: 'Lunch', value: '1' },
+              { label: 'Tasting & Lunch', value: '4' },
+              { label: 'Free / Guide', value: '1' },
             ].map(g => (
               <div key={g.label}>
                 <p className="text-xs mb-1" style={{ color: C.faint }}>{g.label}</p>

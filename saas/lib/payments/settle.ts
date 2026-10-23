@@ -1,4 +1,5 @@
 import { db, withTenantDb } from '@/lib/db'
+import { countsOf } from '@/lib/pricingUtils'
 import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
@@ -339,6 +340,7 @@ export async function sendSettlementEmail(
         timeSlot: order.timeSlot,
         guestCount: order.guestCount,
         visitType: order.visitType,
+        boxes: countsOf(order),
         totalPrice: order.totalPrice ?? 0,
         // This is the confirmation createBooking deliberately withheld — it only
         // becomes true here, once the money actually arrived.
@@ -362,6 +364,7 @@ export async function sendSettlementEmail(
       timeSlot: order.timeSlot,
       guestCount: order.guestCount,
       visitType: order.visitType,
+      boxes: countsOf(order),
       totalPrice: order.totalPrice ?? 0,
       bookingType: order.bookingType,
       paid: true,

@@ -12,6 +12,7 @@
 
 import { headers } from 'next/headers'
 import type { Tetri } from '@/lib/money'
+import type { TierPrices } from '@/lib/pricingUtils'
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { requireAdmin } from '@/lib/requireAdmin'
@@ -368,14 +369,8 @@ export async function setWorksWithCompanies(value: 'yes' | 'no') {
   return { success: true }
 }
 
-export type OnboardingTier = {
-  minGuests: number
-  maxGuests: number
-  /** TETRI, all three — the wizard converts what the admin typed (chunk 3). */
-  pricePerPerson: Tetri
-  tastingLunchPricePerPerson: Tetri
-  registrationPrice: Tetri
-}
+/** A starting tier: guest range + the three product prices (TETRI, null = not offered) — see TierPrices. */
+export type OnboardingTier = { minGuests: number; maxGuests: number } & TierPrices
 
 /**
  * Wizard's Company creation, one step atomic with a starting price tier.

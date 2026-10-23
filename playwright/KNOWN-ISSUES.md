@@ -140,7 +140,7 @@ These come from running this suite (or the app in general) hard, not from any si
 **Symptom:** a route that exists and worked before (`/api/releases`, `/api/tickets`, `/super-admin/releases/[id]`) returns Next's
 HTML **404 "This page could not be found"** — the log shows `proxy.ts` and application time, then 404. It does not go away with
 retries or warm-up. Seen after adding new route folders, after creating git worktrees elsewhere, and once on a plain restart.
-**Fix:** stop the dev server, `rm -rf saas/.next`, start again; check `curl localhost:3000/api/releases` answers **401** (needs
+**Fix:** stop the dev server, `cd saas && node scripts/clear-next-cache.cjs` (never a plain `rm -rf .next` — see below), start again; check `curl localhost:3000/api/releases` answers **401** (needs
 a token), not 404, before running specs. Not an app bug — nothing changes on staging/production builds.
 
 ### First run after a dev-server start times out on cold-compiled routes (2026-10-07)
@@ -154,6 +154,21 @@ a token), not 404, before running specs. Not an app bug — nothing changes on s
 **Cause:** a stray `next dev` / node process still holds the engine file (ClaudeInstructions Rule 10).
 **Fix:** stop the project's node processes, then rebuild.
 
+### `/admin` itself takes 7–29 s — the login helper's 25 s wait runs out (2026-10-22)
+
+> Same root (2026-10-22, later): **deleting an order** re-renders `/admin/orders` before the row disappears —
+> 9–12 s on the dev DB although `deleteOrder` itself takes ~1–2 s. Every "row is gone" wait after Delete → Yes now
+> allows 30 s (tiers 1–4). Also warm `/admin/orders/[id]` by hand after a restart — the warmup spec can hit its own
+> 600 s limit before reaching it, and a cold compile there took 16.5 s.
+
+**Symptom:** `loginAsTenantAdmin` fails with the URL stuck at `http://localhost:3000/admin`; admin specs with 30 s budgets
+time out on ordinary clicks; the server log shows `GET /admin 200 in 7–29s` and P2028 "transaction already closed".
+**Cause:** `/admin` only redirects, but the admin layout's banners (`OnboardingBanner`, `FinishDetailsBanner`,
+`PaymentSetupBanner`) fire many parallel `withTenantDb` transactions, and the dev DB answers in ~0.33–0.53 s per round
+trip (measured 2026-10-22, `scripts/_qa/db-latency.ts`). With 73 tests now (35 on 2026-10-02) the suite hits it reliably.
+**Not a regression of the pricing work** (T-152 added no queries there). Proposed (needs Max's OK, recovery item P4):
+login helper wait 25 → 60 s, admin specs' 30 s budgets → 60–90 s.
+
 ### Dev database connection pool exhaustion
 
 **Symptom:** `PrismaClientKnownRequestError` with code `P1001` ("Can't reach database server") or `P2028` ("Transaction already closed" / "Unable to start a transaction in the given time"), appearing even on ordinary `/admin/*` page loads — including immediately on a *freshly restarted* dev server.
@@ -162,13 +177,20 @@ a token), not 404, before running specs. Not an app bug — nothing changes on s
 
 **Fix:** there isn't a fast one. A restart of the local `next dev` process does **not** help — the pool exhaustion is on the database/pooler side, not the app process. Recovery requires the pool to actually drain, which means genuinely reducing load and waiting — confirmed via polling an ordinary page load (or `pg_stat_activity`'s idle-connection count) every 30–60s until it's clean, not just waiting an arbitrary amount of time or assuming a restart fixed it. `pg_terminate_backend` to force-close connections is correctly off-limits (a destructive action against shared infrastructure).
 
+**Seen 2026-10-22 — the other way round, worth knowing:** during runs 7–8 (same `next dev` process, > 1 h of
+runs) the server log was full of P2028 / P1017 and `/admin/orders` took up to 2.4 min, while a *separate* process
+measured the dev DB at a normal 0.33–0.75 s per round trip. A restart + cache clear then gave clean results again
+(run 6 before it: 78/78 on a fresh server; runs 9–11 after it: green once budgets matched). So on that day the
+bottleneck was the long-lived dev server's own pool, not the database — measure from a separate process
+(`scripts/_qa/db-latency.ts`) before deciding which of these two entries applies.
+
 ### Dev server process bloat over a long session
 
 **Symptom:** pages that are normally fast start hanging or timing out; `page.goto()` occasionally aborts with `net::ERR_ABORTED`; an otherwise-unrelated test times out mid-suite.
 
 **Cause:** after many hours and dozens of test runs in one session, the `next dev` process itself can grow very large (observed once at ~1.8GB resident) and degrade.
 
-**Fix:** `Stop-Process` the dev server, `rm -rf .next` (Turbopack's dev cache — a forceful `-Force` kill has corrupted this once, manifesting as `/admin/login` returning a stale 404), then `npm run dev` fresh. Cheap and reliably fixes this specific pattern — distinguish it from the DB pool issue above (that one a restart does *not* fix).
+**Fix:** `Stop-Process` the dev server, `node scripts/clear-next-cache.cjs` (link-safe; it replaces `rm -rf .next`) (Turbopack's dev cache — a forceful `-Force` kill has corrupted this once, manifesting as `/admin/login` returning a stale 404), then `npm run dev` fresh. Cheap and reliably fixes this specific pattern — distinguish it from the DB pool issue above (that one a restart does *not* fix).
 
 **Reconfirmed 2026-09-30, a second real instance, different route:** after a ~90-minute session
 running the full suite plus several isolated reruns, `/admin/orders/new` started returning a
@@ -534,3 +556,16 @@ Because of standing bug #3 above, every run of `06-wine-catalogue-order.spec.ts`
 ## The one process lesson worth calling out explicitly
 
 Most of the real findings above were caught by **independently re-verifying every "done" claim** — re-running the full suite from a clean shell and spot-checking real data via direct SQL, rather than trusting a summary (including this suite's own earlier self-reports, which overclaimed completion twice before a background run had actually finished). If you're extending this suite or reviewing someone else's addition to it: don't skip this step. It found a premature "14/14 passing" claim that was actually 5 failures, an accidental edit to live production-adjacent data, and 14 rows of accumulated test debris — none of which would have surfaced from reading a summary alone.
+
+### `playwright test` first takes a database backup (~30 s) (2026-10-20)
+
+**Symptom:** a test command pauses ~30 s before Playwright starts, with the status "Backing up the database before a write".
+**Cause:** by design — the suite writes to the dev DB, so the hook `.claude/hooks/require-db-backup.cjs` saves dev to
+`C:\Users\Max\Downloads\DB_Backups\` first (ClaudeInstructions Rule 0b). A backup younger than 10 minutes is reused.
+If the backup fails the run is **blocked** — fix the backup (`cd saas && npx tsx scripts/backup-db.ts --env=dev`), don't bypass it.
+Also from the 2026-10-20 audit: run long suites on AC power with sleep blocked (Modern Standby killed a run with
+`ERR_NETWORK_IO_SUSPENDED`), and on a dev server you started yourself after `rm -rf saas/.next` — `.next` contains
+junctions into `node_modules` (`sharp`, `@prisma/client`): remove those links first, never recurse through them.
+**Use `cd saas && node scripts/clear-next-cache.cjs`** (2026-10-21): it unlinks every link, checks they are gone, then deletes `.next`.
+Every `rm -rf .next` mentioned in this file means that script. (2026-10-21 a plain `rm -rf .next` was run by mistake; the links
+were removed without touching node_modules — `npm ls` clean — but that was luck.)

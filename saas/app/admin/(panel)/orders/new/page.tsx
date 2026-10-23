@@ -12,7 +12,7 @@ export default async function NewOrderPage() {
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
   const contactRoles = await orderRolesFor(tenantId, 'BOOKING')
-  const [companies, menuItems, masterclassItems, tenantFlags] = await Promise.all([
+  const [companies, menuItems, masterclassItems, tenantFlags, individuals] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({
       // Same list the public booking form offers: booking companies only. Without this the
       // dropdown also listed the internal "Individuals" price container and wine-only companies.
@@ -25,7 +25,17 @@ export default async function NewOrderPage() {
     // Read through `db` directly, like the public page does: Tenant has RLS enabled with no
     // policies, so withTenantDb would silently return null (MaintenanceNotes §27).
     db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
+    // What an individual order is priced from (D-14) — the same row the public form reads.
+    withTenantDb(tenantId, tx => tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })),
   ])
+  const tier = (p: { id: string; minGuests: number; maxGuests: number; tastingOnlyPrice: number | null; lunchOnlyPrice: number | null; tastingLunchPrice: number | null }) => ({
+    id: p.id,
+    minGuests: p.minGuests,
+    maxGuests: p.maxGuests,
+    tastingOnlyPrice: p.tastingOnlyPrice,
+    lunchOnlyPrice: p.lunchOnlyPrice,
+    tastingLunchPrice: p.tastingLunchPrice,
+  })
 
   return (
     <div className="max-w-2xl">
@@ -48,15 +58,10 @@ export default async function NewOrderPage() {
         companies={companies.map(c => ({
           id: c.id,
           name: c.name,
-          prices: c.prices.map(p => ({
-            id: p.id,
-            minGuests: p.minGuests,
-            maxGuests: p.maxGuests,
-            pricePerPerson: p.pricePerPerson,
-            tastingLunchPricePerPerson: p.tastingLunchPricePerPerson,
-            registrationPrice: p.registrationPrice,
-          })),
+          prices: c.prices.map(tier),
+          registrationFee: c.registrationFee,
         }))}
+        individualsPrices={(individuals?.prices ?? []).map(tier)}
         menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
         masterclassItems={masterclassItems.map(i => ({
           id: i.id,

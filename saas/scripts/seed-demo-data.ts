@@ -103,11 +103,13 @@ async function main() {
   console.log(`Wine orders: ${r.created.wineOrders}`)
 
   console.log('\n--- what the admin panel will show ---')
-  console.log(`Total bookings: ${r.totals.bookings}   ·   lifetime revenue: ${r.totals.revenue.toLocaleString()} GEL`)
-  console.log(`Upcoming bookings: ${r.totals.upcoming}   ·   future revenue: ${r.totals.futureRevenue.toLocaleString()} GEL`)
+  // The report's sums are tetri (the money refactor); print lari.
+  const gel = (tetri: number) => (tetri / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })
+  console.log(`Total bookings: ${r.totals.bookings}   ·   lifetime revenue: ${gel(r.totals.revenue)} GEL`)
+  console.log(`Upcoming bookings: ${r.totals.upcoming}   ·   future revenue: ${gel(r.totals.futureRevenue)} GEL`)
   console.log('Statistics chart (last 6 months):')
   for (const m of r.monthly) {
-    console.log(`  ${m.label}  ${String(m.bookings).padStart(3)} bookings  ${String(m.revenue).padStart(7)} GEL`)
+    console.log(`  ${m.label}  ${String(m.bookings).padStart(3)} bookings  ${gel(m.revenue).padStart(9)} GEL`)
   }
 }
 

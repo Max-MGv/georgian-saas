@@ -8,6 +8,107 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-23 (eve) — T-152: tier-5 wine test solved (7/7), production step 1 done (read-only)
+
+- New session from the handoff (`vault/Handoff-T152-Production.md`). The wine-order tier-5 failure was a **stale test**:
+  since T-13 a company with one saved address gets a "Delivering to" card, not the address box; the reported
+  `/admin/companies` hang was only the `finally` cleanup after the budget ran out. Found with `--trace on` (the tier-5
+  config only traces on retry). Spec fixed (keeps a saved address) → rerun passed → **tier 5 7/7**. Toggles at resting values.
+- **Production step 1 (Max's go, read-only):** backup `2026-10-23_200652_prod_t152-step1-preflight` verified (1,302 rows);
+  baseline: 395 orders, Nikalas 2 orders ₾2,800 + ₾250, 9 price rows, 1 invoice — nothing new or changed since 10-19.
+- **Production otherwise untouched.** **Next:** step 2 (expand migration only, expand-only config) — on Max's explicit go.
+
+---
+
+## 2026-10-22 — T-152 Chunk 11 hand-over: blind-review fixes, Free cap, D-14, review card (staging only)
+
+- Blind review fixes `acfa3f3`. Max: #6 → **cap Free guests at the paying guests** (public form) `70adfbf`; test budgets
+  raised for the slow dev DB; #2 → **D-14** "scrap custom rates for individuals" — three follow-up questions "agreed with all".
+- Playwright tiers 1–4: **run 6 78/78** on a fresh server. Runs 7–8 on the same long-lived server stalled (P2028/P1001/
+  P1017, `/admin/orders` up to 2.4 min) while a separate process measured the DB normal → KNOWN-ISSUES entry. Real spec
+  gaps fixed: contact-orphan never filled a guest box; order-delete waits 5 s vs a 9–12 s re-render → 30 s.
+- **D-14 `dcad3f4`**: individual admin orders priced from the Individuals table (no typed rates / price later; refused
+  without a table; food notes still save). 115/115 pricing tests; runs 9–11 green; checked on localhost + live staging
+  (4 guests → 4 × ₾70 = ₾280). MaintenanceNotes §32, Feature 237, FeatureLog #237, Plan Chunk 11/11b.
+- **T-152 → Ready to test** with Max's steps (`tix review`). Dev debris: ZZ/Playwright test orders + wine orders from
+  failed cleanups (2× "Nationality TestGuest", "ZZPaymentIntegrity On").
+- **Next:** Max tests on staging; release note draft with before/after shots; tier 5 (real Flitt) on staging;
+  then Chunk 12 production runbook — each step only on Max's explicit go.
+
+---
+
+## 2026-10-21 (eve) — T-152 pricing: Chunk 6 done, Chunk 7 built in 3 sections (all on staging, not production)
+
+- Max: Q-1 yes, Q-2 correct, Q-3 "0 lunch guests on Tasting + Lunch must be refused"; "start step 6"; "after each section
+  use Brave to do easy-win QA checks". Plan: `vault/Plan-PricingModel.md` (Chunk 7 QA log has every check + finding).
+- Chunk 6 `4bd077a`: company per-product minimums, `LUNCH` visit type (migration committed unchanged), one rules helper.
+- Chunk 7: `7c18dcb` re-pricing + assign-company on `priceCounts`; `a4cb3bc` public form + `createBooking` (four boxes,
+  Lunch only on the simple company form, Q-3 refusal, #93 tamper refusals — spec 9/9 on localhost); `05df9d9` content
+  editor mirror, 5 new editable error messages, findings 3–5, and a **stopgap for finding 6**: a linked Lunch only order's
+  page crashed and Save would have moved Lunch only guests into Free — now read-only priced, re-price refused (Chunk 8
+  replaces it). Only staging/dev ever held such orders.
+- Dev tidy-up later: "ZZ QA" bookings, Silk Road's Lunch only ₾45 test price. `seed-ka.ts` not run (would overwrite KA edits).
+- 2026-10-22: Chunk 7 staging QA passed. Max: Lunch only *is* a visit type (D-10, simple company form); new rule **A-11 "no hot
+  dish without a lunch guest"**. **Chunk 8 `539483c`**: admin New Order + order page on the four boxes (P-11 fixed — no typed
+  party size), visit type editable, re-price only on a real change, A-11 on every path, quick-edit panel no longer writes
+  guestCount, addMasterclassLine validates quantity. Localhost + staging QA in the plan. 96/96 pricing tests.
+- 2026-10-22: **Chunk 9 `089a802`** — orders table (Lunch only + Free columns, saved column choices get new columns
+  once), kitchen sheet with kitchen total, invoices print + email per product (`lib/invoiceLines.ts`), booking emails
+  ("Lunch only" label, guest split), statistics (three visit types, guests by product; raw-tetri legend fixed).
+  **Chunk 10** — demo seed on three products + dev demo reseeded, fixtures get Lunch only prices, old party-size pricing
+  removed, specs/notes updated (not run), docs (MaintenanceNotes §22 rewritten, Feature 237, FeatureLog #237).
+- **Next:** Chunk 11 — fresh dev server, Playwright tiers 1–4, blind review, fixes, hand-over (then Chunk 12 runbook).
+
+---
+
+## 2026-10-20 — Dev DB wiped by a shadow-database command → recovery (full record: `vault/Recovery-2026-10-20-DevDb.md`; Rule 0b, backup-before-write hooks)
+
+---
+
+## 2026-10-21 — Dev-DB recovery: staging tickets restored from transcripts (R6 done)
+
+- Max: "recover what that process could not". Read-only inventory first (Recovery-2026-10-20-DevDb.md §10), then on
+  "recover what you can" the restore (§10b): **24 real tickets back with original numbers** (merged `tix show` snapshots +
+  Claude's own `tix` commands from 258 transcripts, pre-wipe evidence only, wipe pinned to 10-19 ~22:07Z), 9 screenshots
+  re-attached, P-2…P-5/P-13/P-14 re-closed, P-7→T-151 and P-11→T-152 linked, **T-215** filed (Max's unsent 10-19 report:
+  everything editable from the order page). Dev backup `2026-10-21_113133_dev` taken by the hook first; re-run = no-op.
+- Finding: T-137…T-150 were the P-ticket copies, not lost tickets; T-151/T-152 had full text. ~110 numbers = test debris.
+- Tools (untracked): `saas/scripts/_qa/recovery-tickets/`. `vault/Tickets.md` re-exported (39 tickets).
+- **Backup protocol (Max: local only, before commands that change something):** backups now also before pushes (prod
+  before master), ticket-tool writes and Supabase MCP SQL; Storage files included (hard-linked when unchanged); restore
+  drill passed (`restore-db.ts`, `vault/Restore-Guide.md`). Accepted risks: no schedule, one copy on the laptop.
+
+---
+
+## 2026-10-18/19 — T-7 + T-22 planning: booking add-ons + wine for the table (PLAN ONLY, nothing built)
+
+- Max: "explore T-22", then "work on T-7 together with this", then "spend a lot of time on planning".
+- **Plan:** `vault/Plan-AddOnsAndWine.md` — decisions log D-1..D-16, design, dependencies, edge cases E1–E20, chunks 0–12.
+  Key design: masterclass → add-on groups (`@@map`, no table renames); table wine stored in `WineOrderItem` with a
+  booking OR wine-order parent (one table of wine sold, per-line `lineTotal`); guest purchases = pickup wine orders
+  with `sourceOrderId`; one line-sum helper (`lib/orderLines.ts`) and one wine-sold reader (`lib/wineSales.ts`).
+- **Blind review** (fenced from vault/git): agreed on almost everything, preferred a separate booking-wine table (kept
+  one table — Max wants wine sold in one place); found **KnownBugs #93** (public booking accepts negative quantities —
+  live money bug), #94, #95 and R2–R8, all verified in code.
+- **Mockups:** `vault/addons-layout-options.html` → https://claude.ai/artifact/N5JNWe76EUyqEY9ghbkbbf — Max picked A/A/A/A.
+- **Summary for Max's review:** `vault/addons-summary.html` → https://claude.ai/artifact/9m5Foocbhy4Q9UwYtrSs7r
+  (5 items to confirm, C-1..C-5).
+- #93 fix runs in its own session (reproduced on dev; waiting for Max's OK on the fix).
+- **Next:** Max reviews the summary + answers C-1..C-5 → approve chunk 0.
+
+---
+
+## 2026-10-18 — T-136: "Finish setting up your account" stuck on Nikalas Marani — ON PRODUCTION (`8a54f88`)
+
+- **Cause (read-only prod check):** NM has payment (IBAN + Flitt), 4 individual price tiers, 7 wines, 2 companies, launched 2026-10-07 — but no `onboarding_works_with_companies` Setting row. `companiesStepDone` needed an explicit "yes", so the wizard banner never cleared. The wizard question was skipped and companies were added from the Companies page; `launchTenant` is a record, not a gate.
+- **Fix `356ee8c` (pushed to `staging`):** `getOnboardingStatus` treats any non-individual company as "yes"; `createCompany` upserts the setting to "yes" in the same tx; CompaniesStep hides "change answer → no" while companies exist. No production data write needed — the derived rule clears NM once released.
+- Verified locally on dev DB (`scripts/_qa/onboarding-banner-check.ts`: removes the staging tenant's setting, checks banner + wizard, restores it). Prod read-only helper: `scripts/_qa/onboarding-status-check.ts`. The supabase MCP has no access to the prod project — use `.env.prod.backup` + a read-only tx instead.
+- Staging tested in Brave (dev-DB setting removed to copy NM state → no banner, wizard shows list, adding a company saved "yes"; test company deleted, setting restored — `scripts/_qa/wwc-toggle.ts`).
+- **On production** — merged staging → master `8a54f88` on Max's go, Vercel deploy green. NM `/admin/orders` checked in Brave: setup banner gone. It now shows the post-setup "A few records could use more detail — 7 wines still need full details" nudge, which by design only appears once `readyToLaunch` is true (onboarding.ts:224). T-136 marked live on production.
+- Gotcha: the auto-mode classifier blocked the master merge even after Max's chat go; Max granted permission and the rerun went through.
+
+---
+
 ## 2026-10-16 (later) — Post-release safety check + finishing up
 
 Max: "nikalas marani now contains live data, was our push to prod safe? and what's left? finish that up too".

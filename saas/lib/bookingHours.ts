@@ -5,7 +5,17 @@ import { tbilisiInstant } from '@/lib/tbilisiTime'
  * See vault/features/Feature 177 - Booking Lead Time and Working Hours.md.
  */
 
-export type VisitType = 'TASTING' | 'TASTING_LUNCH'
+/** 'LUNCH' = the company simple form's "Lunch only" (Plan-PricingModel D-10, T-152). */
+export type VisitType = 'TASTING' | 'TASTING_LUNCH' | 'LUNCH'
+
+/**
+ * Which visit type's RULES a booking follows — lead time, visit length, minimum and maximum guests, the
+ * hot-dish question. "Lunch only" follows Tasting + Lunch (Plan-PricingModel A-5): the kitchen rules are about
+ * lunch. Every reader of those settings goes through this, so a fourth visit type is one line here.
+ */
+export function rulesVisitType(visitType: VisitType): 'TASTING' | 'TASTING_LUNCH' {
+  return visitType === 'TASTING' ? 'TASTING' : 'TASTING_LUNCH'
+}
 
 export type DayHours = { open: string; close: string; closed: boolean }
 
@@ -67,16 +77,16 @@ export function getLeadHours(
   tastingLunchHours: number
 ): number {
   if (!split) return singleHours
-  return visitType === 'TASTING' ? tastingHours : tastingLunchHours
+  return rulesVisitType(visitType) === 'TASTING' ? tastingHours : tastingLunchHours
 }
 
-/** Expected visit length in minutes, by visit type (Feature 184's confirm-step duration line). */
+/** Expected visit length in minutes, by visit type (Feature 184's confirm-step duration line). Lunch only = Tasting + Lunch. */
 export function getVisitDurationMinutes(
   visitType: VisitType,
   tastingMinutes: number,
   tastingLunchMinutes: number
 ): number {
-  return visitType === 'TASTING' ? tastingMinutes : tastingLunchMinutes
+  return rulesVisitType(visitType) === 'TASTING' ? tastingMinutes : tastingLunchMinutes
 }
 
 /** Adds `minutes` to a "HH:MM" slot, wrapping past midnight if needed (e.g. "17:00" + 180 → "20:00"). */

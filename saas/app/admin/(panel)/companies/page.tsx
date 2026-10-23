@@ -112,11 +112,12 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
           wineOrderCount: c._count.wineOrders,
           // Prisma hands these back as plain numbers; re-brand at the boundary
           // so the client's Price type keeps its Tetri guarantee (chunk 3).
+          registrationFee: asTetri(c.registrationFee),
           prices: c.prices.map(pr => ({
-            ...pr,
-            pricePerPerson: asTetri(pr.pricePerPerson),
-            tastingLunchPricePerPerson: asTetri(pr.tastingLunchPricePerPerson),
-            registrationPrice: asTetri(pr.registrationPrice),
+            id: pr.id, minGuests: pr.minGuests, maxGuests: pr.maxGuests, isDisplayPrice: pr.isDisplayPrice,
+            tastingOnlyPrice: pr.tastingOnlyPrice == null ? null : asTetri(pr.tastingOnlyPrice),
+            lunchOnlyPrice: pr.lunchOnlyPrice == null ? null : asTetri(pr.lunchOnlyPrice),
+            tastingLunchPrice: pr.tastingLunchPrice == null ? null : asTetri(pr.tastingLunchPrice),
           })),
           // Inactive people are hidden from the panel; deactivating is how a person is
           // retired without erasing them from past orders.

@@ -4,6 +4,11 @@ tags: [playwright, test, tier5, payment, known-bug]
 
 # 17. Edit after the fact — the stale-money check (Chunk 6)
 
+> **Update 2026-10-22 (T-152, Chunk 8).** The order page no longer has "Total guests in the party" /
+> "Tasting-only guests" / "Tasting+Lunch guests". An individual order shows the visit type and one "Number of
+> guests" box (+ its sold rate); a company order shows the four boxes with a derived total. The page re-prices only
+> when the visit type, a box or a typed rate changes. Field names below are history.
+
 **Status: 🪦 RETIRED 2026-10-02** (`Plan-PlaywrightSuiteHardening` Chunk 6). The spec file
 (`tests/tier5-payment-e2e/payment-edit-after-payment.spec.ts`) has been deleted. This note is
 kept as history, not as a currently-runnable test's documentation.

@@ -114,6 +114,15 @@ so a booking submitted through the popup carries it too — a field added only t
 
 ---
 
+**Since T-152 (2026-10-21/22):** the detailed variant has **one box per product** — Tasting only / Lunch only /
+Tasting & Lunch + Free / Guide (a Tasting visit shows only Tasting only + Free; a product the proven company's
+price table does not price has no box). The simple company form has a third visit tile, **Lunch only**
+(`form_lunch_only` in `FIELDS.form` + `seed-ka.ts` — the seed row exists but `seed-ka.ts` was not re-run: it
+upserts every KA label and would overwrite wineries' edits). The box sub-labels are fixed `t()` labels, not
+SiteContent (same rule as before). Six new booking errors are on the Messages tab (`onsite_err_product_min`,
+`_visit_mismatch`, `_not_offered`, `_guest_counts`, `_masterclass`, `_hot_dish`). A hot dish is only sent while
+a guest has lunch (A-11). `BookingFormVisualPanel.tsx` mirrors all of this.
+
 ---
 
 ## 2. Admin route group structure — `(panel)` vs root
@@ -133,6 +142,9 @@ If you add a new auth-related page (e.g. forgot-password, magic-link callback) t
 ---
 
 ## 3. `prisma db push` on Windows — stop dev server first
+
+> **2026-10-20:** `prisma db push` and `prisma migrate dev` are now **blocked** (ClaudeInstructions Rule 0b, safety hook). The
+> EPERM advice below still applies to `npx prisma generate`. Schema-change workflow: `Plan-DevProdEnvironments.md` → Daily workflow.
 
 **What the dependency is:**
 On Windows, Node locks `.dll.node` binary files while they are in use. `prisma generate` (which runs automatically at the end of `prisma db push`) writes a temp file then renames it over the existing Prisma client binary. That rename fails with `EPERM` if the dev server is running, because the server has the binary loaded and locked.
@@ -659,7 +671,44 @@ left the ref null. Query the DOM for the attribute the component itself renders
 
 ---
 
-## 22. ~~Nine places compute a booking price~~ — DONE 2026-09-19, there is now one
+## 22. Booking prices — one rule set, the product model (T-152, rewritten 2026-10-22)
+
+**The model (Max, 2026-10-20 — Plan-PricingModel).** Companies sell three products: **Tasting only, Lunch only,
+Tasting & Lunch** (all-in, not tasting + an add-on). Every guest is in exactly one box, or **Free**, and the
+order's `guestCount` is the sum of the four boxes — never typed (D-3). **Each product finds its price row by its
+own guest count** (D-2): one booking can use different rows. A product with no price on a row is "not offered"
+(null, never ₾0, D-7); no exact row → the highest-priced row that offers it (A-7). The registration fee is one
+flat fee per company (D-6). Individuals: same model, one product for the whole group (A-4). This **retires the
+2026-09-19 "party size picks the tier" rule** described in the history below.
+
+**Where the rules live — and only there:**
+- `lib/pricingUtils.ts`: `findProductTier`, `ratesForCounts` (table), `ratesFromProductSnapshot` (frozen on the
+  order), `adminQuote` (admin screens: table first, typed rate for what it does not price, "unpriced" when
+  nothing is set), `notOffered`, and the one arithmetic function `priceCounts(rates, counts, lines)`.
+- `lib/bookingInput.ts`: `checkBookingCounts` (public), `checkAdminOrder` (admin), `checkMasterclassLines`,
+  `hotDishWithoutLunch` (A-11), `countRulesFromSettings`.
+- `lib/adminOrderView.ts` + `orders/OrderGuestFields.tsx`: what New Order and the order page preview — the same
+  functions the server runs, so a preview cannot disagree with a Save.
+- `lib/invoiceLines.ts`: invoice print + email lines (per product when the frozen rates explain the total, else
+  one booking line) and the booking emails' guest split.
+
+**Callers:** `createBooking`, `createOrderAdmin`, `updateOrderEnhanced` (re-prices only when the visit type, a box
+or a typed rate changed), `assignOrderCompany`, `recalcOrderTotal` (frozen rates only — a line change never moves
+the agreed rates), `BookingForm`, `NewOrderForm`, `OrderDetail`, `demoSeed`.
+
+**Retired 2026-10-22 (Chunk 10):** `priceBooking`, `ratesForParty`, `ratesFromTier`, `ratesFromSnapshot`,
+`ratesFromManual`, `headcountOf`. `countsFromLegacy` stays as the migration's TypeScript twin (the production
+equivalence check uses it). `findTier`/`comboRatePerPerson` stay **only** for the home page's display price and
+the payment-setup banner.
+
+**Watch for:** a new path that prices by party size, reads `tastingLunchPrice` as an add-on, or computes its own
+total in a form instead of calling the shared functions; a write path that skips `checkBookingCounts` /
+`checkAdminOrder` (KnownBugs #93 was exactly that). **Tests:** `saas/scripts/test-pricing-model.ts` (worked
+examples, #93 refusals, every real order re-pricing to its stored total), `tests/tier2-core-flows/
+booking-tampered-quantities.spec.ts`.
+
+### History — 2026-09-19 "Nine places compute a booking price", then `priceBooking()` (superseded above)
+
 
 **What the dependency is:** `createBooking.ts` (new booking), `updateOrderEnhanced()` (editing
 an existing order's guest counts), and `assignOrderCompany()` (Feature 180 — linking a
@@ -1060,6 +1109,12 @@ reasoning and the field-by-field rationale: [[DataModel/Reference-SnapshotVsLive
 (`sendOrderInvoice`), `saas/app/admin/(panel)/orders/[id]/page.tsx` and `OrderDetail.tsx` (the
 Invoice History card), `saas/scripts/setup-rls.ts`.
 
+**Since T-152 (2026-10-22):** `InvoiceSent` stores the boxes as billed (`tastingOnlyGuests`, `lunchOnlyGuests`,
+`tastingLunchGuests`, `freeGuestCount`) but **not** the per-product rates the invoice now prints from
+`lib/invoiceLines.ts`. Nothing reads them back today; keeping them would need a migration (noted in
+Plan-PricingModel Chunk 9). The invoice print and the invoice email share `invoiceLines.ts`, so they cannot
+describe one order two ways.
+
 ---
 
 ## 32. Admin New Order mirrors the public form's contact blocks — what is shared, what is deliberately not
@@ -1105,6 +1160,21 @@ of **36 000 s (10 h)** — this app does not set one (`lib/payments/flitt.ts`).
 `saas/app/actions/orders.ts` (`createOrderAdmin`), `OrderDetail.tsx`, `QrCodeDialog.tsx`, `adminT.ts`.
 
 ---
+
+**Since T-152 Chunk 8 (2026-10-22):** New Order and the order page share their guest/price controls
+(`orders/OrderGuestFields.tsx`) and their preview logic (`lib/adminOrderView.ts`), which runs the same
+`checkAdminOrder` + `adminQuote` as `createOrderAdmin` / `updateOrderEnhanced`. Companies fill the four boxes
+(total derived — P-11); individuals one guest count. The orders-table quick-edit panel no longer edits the guest
+count at all (it changed the total without the boxes or the price) — it links to the order page.
+
+**Since D-14 (2026-10-22): an individual order is priced from the Individuals table on both screens.** Individual
+orders carry `companyId: null`, so four places must each load the `isIndividual: true` company's prices and keep
+in step: `orders/new/page.tsx` + `orders/[id]/page.tsx` (pass `individualsPrices` down), and `createOrderAdmin` +
+`updateOrderEnhanced` (`individualsTable()` in `orders.ts`). `adminOrderView` ignores typed rates, the registration
+fee and `hadRates` for an individual and shows no rate boxes; no table → `orderForm.err.noIndividualsTable`
+(refused, never "price later"); a product the table lacks → `orderForm.err.individualsMissing`. Typed rates and
+"price later" remain for **companies** only (no table / product not on it). The public form reads the same row
+(`createBooking.ts`) but still prices an individual at ₾0 when the table is empty — that path was not changed.
 
 ---
 
@@ -1227,6 +1297,9 @@ has no Georgian ICU data, so it prints an English shape while the browser prints
 a React hydration error. Use the fixed tables: `formatIsoDay` / `formatPreferredDate` (`lib/wineOrderDate.ts`)
 or `lib/emails/templates/dateFormat.ts`. "Today" for the winery is `tbilisiDateIso(new Date())`, not
 `toISOString()` (that is UTC).
+**2026-10-23:** browsers lack it too — Brave printed the invoice date as `11.25.2026`. The last three screens
+that still called it (`InvoicePrint.tsx`, the wine packing sheet, the onboarding review) now use `formatShortDate` /
+`formatDayMonthYear` from `dateFormat.ts`. Day-month-year everywhere (Max).
 
 **Order lines are named by the server** (KnownBugs #83): `submitWineOrder` takes the wine name / year snapshot
 from the vintage row it priced, and only active vintages of active wines. The browser's `name`/`year`/`price`
@@ -1285,3 +1358,33 @@ full-screen fixed element (e.g. a page background layer) would hide the button e
 Related, same day: Settings → Closed days formats dates from the `YYYY-MM-DD` string (`formatClosedDay`), not with
 `toLocaleDateString` — server and browser ICU differ (KnownBugs #91). Use the same approach for any date rendered in a
 client component that is also server-rendered.
+
+## 38. Database backups: script, verifier and hook share one folder layout (2026-10-20)
+
+**Coupled:** `saas/scripts/backup-db.ts` (writes), `saas/scripts/backup-verify.ts` (`--latest`), and
+`.claude/hooks/require-db-backup.cjs` (decides whether a fresh backup exists) all assume the same root and naming:
+`%USERPROFILE%\Downloads\DB_Backups\<YYYY-MM-DD_HHmmss>_<env>[_<reason>]\`, finished = has `MANIFEST.json`
+(overridable with env `DB_BACKUP_ROOT`). Change the root or the folder pattern in **all three** and re-run
+`node .claude/hooks/test-require-db-backup.cjs`.
+
+**Coupled:** the hook's read-only script list (`READ_ONLY_SCRIPT`) — a new script that only reads should be named
+`*-check` / `*-verify` / `*-facts` / `*-report` (or be added to the list), otherwise every run triggers a backup.
+A new script that writes should take `--write` and dry-run by default.
+
+**Coupled:** both hooks are registered in the **user** settings (`C:\Users\Max\.claude\settings.json`, absolute
+paths). Moving the repo folder breaks them silently (node cannot find the file → the hook errors, the command runs) —
+update the two paths there if the repo moves. The matcher there (`Bash|PowerShell|mcp__.*__execute_sql|mcp__.*__apply_migration`,
+2026-10-21) must keep the MCP part, or Supabase-connection SQL runs with no backup and no safety lock.
+
+**Coupled (2026-10-21):** `restore-db.ts` reads exactly what `backup-db.ts` writes (`tables/*.jsonl` encoding,
+`schema.json` keys, `_prisma_migrations`) and proves the restore by re-exporting with **the same query** as
+`backup-db.ts` (row_to_json, UTC, bigint/numeric as text, PK order) and comparing sha256. Change the export format in
+`backup-db.ts` → change the proof in `restore-db.ts` (and bump `formatVersion`) → re-run the drill in
+`vault/Restore-Guide.md`. Storage files: `backup-db.ts` hard-links unchanged files to the previous backup and
+`backup-verify.ts` (format 3+) checks one file per `storage-objects.jsonl` line.
+
+**Related:** `scripts/clone-nm-to-staging.ts` copies Nikalas Marani's settings to Staging Winery **including the real
+contact, bank and personal-number values**. After any re-clone, scrub them (2026-10-20 scrub: test phone
+`+995 555 00 00 00`, IBAN `GE00XX…`, personal number `00000000000`, Max's own contact email), or staging emails and
+invoices expose the real client. `scripts/rebrand-demo-tenant.ts` does the same for the demo tenant (since `6425b24`
+also the recipient name and personal number).

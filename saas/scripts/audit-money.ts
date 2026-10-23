@@ -58,12 +58,21 @@ async function main() {
     else if (v < 500) findings.push({ table: 'WineOrder', column: 'totalAmount', id: w.id, value: v, note: 'under ₾5' })
   }
 
-  const prices = await db.price.findMany({ select: { id: true, pricePerPerson: true, tastingLunchPricePerPerson: true, registrationPrice: true } })
-  stat('Price.pricePerPerson', prices.map(p => p.pricePerPerson), 500)
-  stat('Price.tastingLunchPricePerPerson', prices.map(p => p.tastingLunchPricePerPerson), 100)
-  stat('Price.registrationPrice', prices.map(p => p.registrationPrice), 100)
+  // Product model (T-152): three per-person prices, null = not offered (skipped); the fee is per company.
+  const prices = await db.price.findMany({ select: { id: true, tastingOnlyPrice: true, lunchOnlyPrice: true, tastingLunchPrice: true } })
+  const offered = (vs: (number | null)[]) => vs.filter((v): v is number => v != null)
+  stat('Price.tastingOnlyPrice', offered(prices.map(p => p.tastingOnlyPrice)), 500)
+  stat('Price.lunchOnlyPrice', offered(prices.map(p => p.lunchOnlyPrice)), 500)
+  stat('Price.tastingLunchPrice', offered(prices.map(p => p.tastingLunchPrice)), 500)
+  const fees = await db.company.findMany({ select: { id: true, registrationFee: true } })
+  stat('Company.registrationFee', fees.map(c => c.registrationFee), 100)
+  for (const c of fees) {
+    if (!Number.isInteger(c.registrationFee)) findings.push({ table: 'Company', column: 'registrationFee', id: c.id, value: c.registrationFee, note: 'fractional tetri' })
+    else if (c.registrationFee > 0 && c.registrationFee < 100) findings.push({ table: 'Company', column: 'registrationFee', id: c.id, value: c.registrationFee, note: `under ${formatTetri(asTetri(100))}` })
+  }
   for (const p of prices) {
-    for (const [col, v, floor] of [['pricePerPerson', p.pricePerPerson, 500], ['tastingLunchPricePerPerson', p.tastingLunchPricePerPerson, 100], ['registrationPrice', p.registrationPrice, 100]] as [string, number, number][]) {
+    for (const [col, v, floor] of ([['tastingOnlyPrice', p.tastingOnlyPrice, 500], ['lunchOnlyPrice', p.lunchOnlyPrice, 500], ['tastingLunchPrice', p.tastingLunchPrice, 500]] as [string, number | null, number][])
+      .filter((r): r is [string, number, number] => r[1] != null)) {
       if (!Number.isInteger(v)) findings.push({ table: 'Price', column: col, id: p.id, value: v, note: 'fractional tetri' })
       else if (v > 0 && v < floor) findings.push({ table: 'Price', column: col, id: p.id, value: v, note: `under ${formatTetri(asTetri(floor))}` })
     }
@@ -83,8 +92,8 @@ async function main() {
   const pays = await db.payment.findMany({ select: { id: true, amount: true } })
   stat('Payment.amount', pays.map(p => p.amount), 500)
 
-  const snaps = await db.order.findMany({ where: { companyId: { not: null } }, select: { id: true, tastingRateSnapshot: true } })
-  const missing = snaps.filter(o => o.tastingRateSnapshot == null).length
+  const snaps = await db.order.findMany({ where: { companyId: { not: null } }, select: { id: true, tastingOnlyRate: true, lunchOnlyRate: true, tastingLunchRate: true } })
+  const missing = snaps.filter(o => o.tastingOnlyRate == null && o.lunchOnlyRate == null && o.tastingLunchRate == null).length
   console.log(`\n  Company orders with NO rate snapshot (bug #47 shape): ${missing} of ${snaps.length}`)
 
   console.log(`\n${'='.repeat(60)}`)

@@ -50,6 +50,7 @@ const rows = [
   { key: 'form_visit_type',             section: 'form', label: 'Visit Type label',           locale: 'ka', value: 'ვიზიტის ტიპი' },
   { key: 'form_tasting',                section: 'form', label: 'Wine Tasting option',        locale: 'ka', value: 'ღვინის დეგუსტაცია' },
   { key: 'form_tasting_lunch',          section: 'form', label: 'Tasting + Lunch option',     locale: 'ka', value: 'დეგუსტაცია + სადილი' },
+  { key: 'form_lunch_only',             section: 'form', label: 'Lunch only option (tour companies)', locale: 'ka', value: 'მხოლოდ სადილი' },
   { key: 'form_date',                   section: 'form', label: 'Date label',                 locale: 'ka', value: 'თარიღი' },
   { key: 'form_time_slot',              section: 'form', label: 'Time Slot label',            locale: 'ka', value: 'დრო' },
   { key: 'form_num_guests',             section: 'form', label: 'Number of Guests label',     locale: 'ka', value: 'სტუმრების რაოდენობა' },

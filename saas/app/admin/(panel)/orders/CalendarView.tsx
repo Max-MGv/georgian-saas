@@ -85,7 +85,7 @@ export default function CalendarView({ ordersByDate, initialYear, initialMonth, 
           <span className="text-xs" style={{ color: C.faint }}>{o.guestCount} {at('orders.guest.plural')}</span>
           <span className="text-xs" style={{ color: C.faint }}>·</span>
           <span className="text-xs" style={{ color: C.faint }}>
-            {o.visitType === 'TASTING' ? at('orders.col.tasting') : at('orders.visit.tastingLunch')}
+            {at(o.visitType === 'TASTING' ? 'orders.visit.tasting' : o.visitType === 'LUNCH' ? 'orders.visit.lunch' : 'orders.visit.tastingLunch')}
           </span>
         </div>
         {o.companyName && (

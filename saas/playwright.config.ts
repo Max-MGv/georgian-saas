@@ -27,6 +27,9 @@ export default defineConfig({
   // vault/Plan-PlaywrightSuiteHardening.md Chunk 0.
   testIgnore: ['tests/tier5-payment-e2e/**'],
   outputDir: '../playwright/test-results',
+  /* Per-test budget, 30 s by default. Raised to 90 s on 2026-10-22 (Max): the dev DB answers in ~0.3–0.5 s per round trip and GET /admin took 7–29 s (playwright/KNOWN-ISSUES.md, "`/admin` itself takes 7–29 s"). A spec's own
+     test.setTimeout still wins. */
+  timeout: 90_000,
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

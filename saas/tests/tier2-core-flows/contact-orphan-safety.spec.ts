@@ -8,7 +8,7 @@
 // that actually proves the replacement holds.
 import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
-import { clickUntil } from '../helpers/payments';
+import { clickUntil, readPersonCodesToggle, setPersonCodesToggle } from '../helpers/payments';
 
 // Kakheti Wine Routes — a real booking company with existing Guide/Contact Person rows
 // already on it, confirmed live against the dev DB while writing this spec (2026-09-23).
@@ -118,11 +118,31 @@ async function deleteOrderIfPresent(page: Page, marker: string) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: marker })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: marker })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
 test.describe('Deleting a person must not erase their name from a past order (F2)', () => {
+  // The company code / New Order picker only lists a company's people while "Personal access codes"
+  // (person_codes_enabled) is OFF — ON hides the list by design. Staging Winery's real resting value is ON
+  // (a staging-only setting restored after the 2026-10-20 dev-DB recovery), so this spec sets OFF for itself and
+  // puts back whatever it found, like contact-role-picker.spec.ts does. It used to assume OFF.
+  let personCodesWas = false;
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    personCodesWas = await readPersonCodesToggle(page);
+    if (personCodesWas) await setPersonCodesToggle(page, false);
+    await page.close();
+  });
+  test.afterAll(async ({ browser }) => {
+    if (!personCodesWas) return;
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    await setPersonCodesToggle(page, true);
+    await page.close();
+  });
+
   test.afterEach(async ({ context }, testInfo) => {
     // Safety net for a body that failed partway through — the passing path already cleans up
     // both the order and the guide itself as its own last steps.
@@ -134,7 +154,7 @@ test.describe('Deleting a person must not erase their name from a past order (F2
   });
 
   test('deleting the guide leaves the order showing their name from the snapshot', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     // 1. Add a throwaway guide to a real, already-populated test company.
     await ensureAdminLoggedIn(page);
@@ -155,6 +175,9 @@ test.describe('Deleting a person must not erase their name from a past order (F2
 
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     await page.getByText('Date', { exact: true }).locator('xpath=following-sibling::*[1]').fill(tomorrow);
+    // A company order needs a paying guest (T-152 Chunk 8: the four boxes start at 0 and Create stays off until
+    // one is filled — there is no typed party size any more).
+    await page.getByRole('textbox', { name: 'Tasting', exact: true }).fill('4');
 
     await page.getByRole('button', { name: 'Create order', exact: true }).click();
     // Not /[a-zA-Z0-9]+$/ alone — that also matches the literal ".../orders/new" this page

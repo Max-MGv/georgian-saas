@@ -10,9 +10,12 @@ import { createBooking, type BookingFormData } from '@/app/actions/createBooking
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { comboRatePerPerson, findTier, priceBooking, ratesForParty } from '@/lib/pricingUtils'
+import { countsFromVisit, findProductTier, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { checkBookingCounts, countRulesFromSettings, type CountRuleKey, type CountsError } from '@/lib/bookingInput'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
+import GuestIcon from '@/components/GuestIcon'
+import { tierRangeLabel } from '@/lib/tierRange'
 import NationalityPicker from '@/components/NationalityPicker'
 import { splitFullName } from '@/lib/splitFullName'
 import { countryName } from '@/lib/countries'
@@ -25,9 +28,10 @@ import BookingConfirmPopupView, { type ReviewRow } from '@/components/BookingCon
 import { dispatchDemoBooked } from '@/lib/demoEvents'
 import { parseWeeklyHours, getDayHours, generateHourlySlots, getLeadHours, minBookableInstant, slotMeetsLeadTime, getVisitDurationMinutes, addMinutesToSlot } from '@/lib/bookingHours'
 
+/** A tier row, tetri per person; null = not offered; tastingLunchPrice is all-in (T-152). */
 type Price = {
   id: string; minGuests: number; maxGuests: number
-  pricePerPerson: number; tastingLunchPricePerPerson: number; registrationPrice: number
+  tastingOnlyPrice: number | null; lunchOnlyPrice: number | null; tastingLunchPrice: number | null
 }
 /**
  * A company in the public list: its name, nothing else (Max, 2026-10-14: no code = unknown
@@ -39,6 +43,8 @@ type Company = { id: string; name: string }
 /** What the resolver tells the form about a company proven by its code. */
 type ProvenCompany = {
   prices: ResolvedPriceTier[]
+  /** The company's flat registration fee per booking, tetri (T-152 D-6). */
+  registrationFee: number
   // Per-company payment override (#148). null = follow the Companies section default; true =
   // always skip; false = always require. Label-only — the real gate is shouldTakePayment().
   skipPayment: boolean | null
@@ -112,6 +118,12 @@ type Props = {
   displayPriceLunch?: number | null
   individualPrices?: Price[]
   /**
+   * The count-rule settings (`min/max_guests_*` + the three company minimums), raw strings. The form runs the
+   * SAME checkBookingCounts() the server does (Plan-PricingModel §4.3) so it can say what is wrong before
+   * submitting; the server still decides.
+   */
+  countRuleSettings?: Partial<Record<CountRuleKey, string>>
+  /**
    * Drives the submit button's "…& Pay" label and whether it redirects to
    * checkout when the server returns a checkoutUrl. The server decides
    * authoritatively (shouldTakePayment(), in createBooking.ts) — these props
@@ -131,7 +143,7 @@ const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: f
 // splitFullName now lives in lib/splitFullName.ts so the admin New Order form
 // splits a single Name box the same way (see that file for the convention).
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], countRuleSettings = {}, onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
     let str = messagesContent[key] || t(locale, tKey)
@@ -139,7 +151,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     return str
   }
   const [bookingType, setBookingType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL')
-  const [visitType, setVisitType] = useState<'TASTING' | 'TASTING_LUNCH'>('TASTING')
+  // The guest's choice; `visitType` below is what applies (Lunch only exists on the company simple form only).
+  const [visitChoice, setVisitChoice] = useState<BookingVisitType>('TASTING')
   const [guestInput, setGuestInput] = useState('4')
   const [guestWarning, setGuestWarning] = useState('')
   const [companyId, setCompanyId] = useState('')
@@ -271,15 +284,33 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [newCompanyIncludesBooking, setNewCompanyIncludesBooking] = useState(false)
 
   // Enhanced company form state
-  const [tastingGuestsStr, setTastingGuestsStr] = useState('0')
-  const [lunchGuestsStr, setLunchGuestsStr] = useState('0')
+  // The detailed company form's four boxes (T-152 D-3): every guest is in exactly one.
+  const [tastingOnlyStr, setTastingOnlyStr] = useState('0')
+  const [lunchOnlyStr, setLunchOnlyStr] = useState('0')
+  const [tastingLunchStr, setTastingLunchStr] = useState('0')
   const [freeGuestsStr, setFreeGuestsStr] = useState('0')
   const [hotDishVeg, setHotDishVeg] = useState('')
   const [hotDishMeat, setHotDishMeat] = useState('')
   const [foodNotes, setFoodNotes] = useState('')
   const [mcSelections, setMcSelections] = useState<Record<string, { checked: boolean; qtyStr: string }>>({})
 
-  const minGuests = visitType === 'TASTING' ? minGuestsTasting : minGuestsTastingLunch
+  const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
+  // Only a proven company counts for pricing and the payment label — never one merely picked.
+  const selectedCompany = bookingType === 'COMPANY' && companyId ? proven : null
+  // A box is shown only for a product the proven company's ladder offers (D-7); before the code, all of them.
+  const offers = (pr: Product) => !selectedCompany || selectedCompany.prices.length === 0 || selectedCompany.prices.some(row => productPrice(row, pr) != null)
+  // Individuals and the detailed company form: Tasting / Tasting + Lunch. The company simple form adds Lunch only (D-10),
+  // unless the proven company's ladder has no Lunch only price — then a Lunch only choice falls back to Tasting.
+  const visitOptions: BookingVisitType[] = bookingType === 'COMPANY' && !isEnhanced && offers('lunchOnly') ?['TASTING', 'TASTING_LUNCH', 'LUNCH'] : ['TASTING', 'TASTING_LUNCH']
+  const visitType: BookingVisitType = visitOptions.includes(visitChoice) ? visitChoice : 'TASTING'
+  function setVisitType(v: BookingVisitType) {
+    setVisitChoice(v)
+    // A tasting visit has no lunch boxes (D-9) — clear them so nothing hidden is sent or priced.
+    if (v === 'TASTING') { setLunchOnlyStr('0'); setTastingLunchStr('0') }
+  }
+  // One reading of the count-rule settings, the server's (Lunch only follows Tasting + Lunch, A-5).
+  const countRules = countRulesFromSettings(k => countRuleSettings[k] ?? (k === 'min_guests_tasting' ? String(minGuestsTasting) : k === 'min_guests_tasting_lunch' ? String(minGuestsTastingLunch) : ''), visitType, bookingType)
+  const minGuests = countRules.groupMin ?? (visitType === 'TASTING' ? minGuestsTasting : minGuestsTastingLunch)
   const guestCount = Math.max(parseInt(guestInput) || minGuests, minGuests)
   const today = new Date().toISOString().split('T')[0]
 
@@ -315,12 +346,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     if (slots.length > 0 && !slots.includes(timeSlot)) setTimeSlot(slots[0])
   }
 
-  const isEnhanced = !!enhancedEnabled && bookingType === 'COMPANY'
   // Independent of isEnhanced by design (Plan-CompanyNationality Chunk 1) — shows for any
   // COMPANY booking once the tenant flag is on, enhanced mode or not.
   const showNationalityPicker = !!nationalityBreakdownEnabled && bookingType === 'COMPANY'
-  // Only a proven company counts for pricing and the payment label — never one merely picked.
-  const selectedCompany = bookingType === 'COMPANY' && companyId ? proven : null
   // Label-only mirror of shouldTakePayment()'s precedence (#148): hard block
   // (configured) first — nothing beats it — then, for COMPANY bookings, the
   // selected company's override, then the section default. INDIVIDUAL bookings
@@ -391,7 +419,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
-    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
     if (typeof window !== 'undefined' && 'PasswordCredential' in window) {
       try {
@@ -430,7 +458,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setProven({ prices: result.company.bookingPrices, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
   }
 
   function clearDirectCode() {
@@ -548,28 +576,55 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       date: selectedDate,
       timeSlot,
       guestCount: isEnhanced ? totalGuests : guestCount,
+      // The four boxes on the detailed company form; the server ignores them anywhere else (A-4).
+      ...(isEnhanced ? { boxes: counts } : {}),
       ...splitFullName(fullName),
       email,
       phone,
       ...(isEnhanced ? {
-        tastingGuestCount: tastingGuests,
-        lunchGuestCount: lunchGuests,
-        freeGuestCount: freeGuests,
-        hotDishVegetable: hotDishVeg || null,
-        hotDishMeat: hotDishMeat || null,
+        // A dish picked before switching to a Tasting visit stays in state but is not sent — no lunch guest, no dish (A-11).
+        hotDishVegetable: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishVeg || null : null,
+        hotDishMeat: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishMeat || null : null,
         foodNotes: foodNotes || null,
         masterclassLines: activeMcLines,
       } : {}),
     }
   }
 
-  // Enhanced guest counts
-  const tastingGuests = Math.max(parseInt(tastingGuestsStr) || 0, 0)
-  const lunchGuests = Math.max(parseInt(lunchGuestsStr) || 0, 0)
-  const freeGuests = Math.max(parseInt(freeGuestsStr) || 0, 0)
-  const totalGuests = isEnhanced ? tastingGuests + lunchGuests + freeGuests : guestCount
-  const payingGuests = tastingGuests + lunchGuests
-  const enhancedGuestsHaveError = attemptedSubmit && isEnhanced && totalGuests < minGuests
+  // Who is coming. Detailed company form: the four boxes. Everyone else: one count, all on the visit type's
+  // product (A-4) — exactly the counts the server will build.
+  // Only a box on screen counts: a number typed before the code was proven stays in state but is neither priced
+  // nor sent once the proven company turns out not to sell that product — otherwise the guest is stuck behind a
+  // "not offered" error whose box they can no longer see (blind review, Chunk 11).
+  const boxNum = (v: string) => Math.max(parseInt(v) || 0, 0)
+  const lunchVisit = visitType !== 'TASTING'
+  const counts: Counts = isEnhanced
+    ? {
+        tastingOnly: offers('tastingOnly') ? boxNum(tastingOnlyStr) : 0,
+        lunchOnly: lunchVisit && offers('lunchOnly') ? boxNum(lunchOnlyStr) : 0,
+        tastingLunch: lunchVisit && offers('tastingLunch') ? boxNum(tastingLunchStr) : 0,
+        free: boxNum(freeGuestsStr),
+      }
+    : countsFromVisit(visitType, guestCount)
+  const totalGuests = totalOf(counts)
+  const payingGuests = payingOf(counts)
+  const freeGuests = counts.free
+
+  // The server's own check, mirrored (KnownBugs #93 / Q-3): shown under the guest boxes, blocks submit.
+  const countCheck = checkBookingCounts({
+    bookingType, layout: isEnhanced ? 'boxes' : 'single', form: 'public', visitType,
+    guestCount, tastingOnly: counts.tastingOnly, lunchOnly: counts.lunchOnly, tastingLunch: counts.tastingLunch, free: counts.free,
+  }, countRules)
+  const productName = (pr: Product) => t(locale, pr === 'tastingOnly' ? 'form.product_tasting_only' : pr === 'lunchOnly' ? 'form.product_lunch_only' : 'form.product_tasting_lunch')
+  function countErrorText(e: CountsError): string {
+    if (e.code === 'below_group_min') return mc('onsite_err_min_guests', 'form.err_min_guests', { min: e.min })
+    if (e.code === 'below_product_min') return mc('onsite_err_product_min', 'form.err_product_min', { min: e.min, product: productName(e.product) })
+    if (e.code === 'too_many_free') return mc('onsite_err_too_many_free', 'form.err_too_many_free', { max: e.max })
+    if (e.code === 'visit_mismatch' && visitType === 'TASTING_LUNCH') return mc('onsite_err_visit_mismatch', 'form.err_visit_mismatch')
+    return mc('onsite_err_guest_counts', 'form.err_guest_counts')
+  }
+  const countError = !countCheck.ok ? countErrorText(countCheck.error) : null
+  const enhancedGuestsHaveError = attemptedSubmit && isEnhanced && !!countError
 
   // Masterclass selections
   const activeMcLines = masterclassItems
@@ -581,45 +636,37 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }))
   const masterclassAmt = activeMcLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
 
-  // Price preview
-  // Party size picks the tier (2026-09-19), and priceBooking is the same
-  // function the server prices with — this preview cannot drift from it.
-  const enhancedRates = isEnhanced && selectedCompany
-    ? ratesForParty(selectedCompany.prices, totalGuests)
+  // ── Price preview: priceCounts(), the server's own arithmetic (§4.2) — it cannot drift from it ──
+  // Individuals price off the Individuals ladder; a company only once proven by its code. Each product looks up
+  // its own row by its own count (D-2). A product with guests that the ladder does not offer is "not offered"
+  // (D-7): the server refuses it, so the form says so and blocks submit.
+  const priceLadder: Price[] = bookingType === 'INDIVIDUAL' ? individualPrices : (selectedCompany?.prices ?? [])
+  const previewRates: ProductRates | null = priceLadder.length
+    ? ratesForCounts(priceLadder, counts, bookingType === 'INDIVIDUAL' ? 0 : (selectedCompany?.registrationFee ?? 0))
     : null
-  const enhancedTier = isEnhanced && selectedCompany
-    ? findTier(selectedCompany.prices, totalGuests)
+  const missingProducts: Product[] = previewRates && payingGuests > 0 ? notOffered(previewRates, counts) : []
+  const previewTotal: number | null = previewRates && payingGuests > 0 && missingProducts.length === 0
+    ? priceCounts(previewRates, counts, { masterclass: isEnhanced ? masterclassAmt : 0, extras: 0 })
     : null
-  const enhancedTotal = enhancedRates
-    ? priceBooking(
-        enhancedRates,
-        { guestCount: totalGuests, tastingGuests, lunchGuests },
-        visitType as 'TASTING' | 'TASTING_LUNCH',
-        { masterclass: masterclassAmt, extras: 0 },
-      )
-    : masterclassAmt
-
-  // Simple form price preview
-  const matchedTier = !isEnhanced && selectedCompany
-    ? selectedCompany.prices.find(p => guestCount >= p.minGuests && guestCount <= p.maxGuests) ?? null
-    : bookingType === 'INDIVIDUAL'
-      ? findTier(individualPrices, guestCount) ?? null
-      : null
-  const tierGap = !isEnhanced && selectedCompany && selectedCompany.prices.length > 0 && !matchedTier
-  // No invented default rates — when the tenant has no display price set,
-  // the estimate is unknown and the form says "price confirmed after submission"
+  // Individuals with no ladder: the home page's display price, as before (an estimate, never stored).
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
-  const matchedTierRate = matchedTier
-    ? (visitType === 'TASTING' ? matchedTier.pricePerPerson : comboRatePerPerson(matchedTier))
+  const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount : null)
+  const individualRate: number | null = bookingType === 'INDIVIDUAL'
+    ? (previewRates ? previewRates[visitType === 'TASTING' ? 'tastingOnly' : 'tastingLunch'] : basePrice)
     : null
-  // Both branches price off matchedTierRate, which already picks
-  // comboRatePerPerson for TASTING_LUNCH. The COMPANY branch used
-  // matchedTier.pricePerPerson directly until 2026-09-18, so a company
-  // TASTING_LUNCH quote dropped the lunch add-on and under-stated the total
-  // the server then stored (bug #48). createBooking.ts is the authority here.
-  const estimatedTotal = matchedTier
-    ? (bookingType === 'INDIVIDUAL' ? matchedTierRate! * guestCount : matchedTierRate! * guestCount + matchedTier.registrationPrice)
-    : basePrice != null ? basePrice * guestCount : null
+  const enhancedTotal = previewTotal ?? masterclassAmt
+
+  // T-272 (Max, 2026-10-23): an individual's visit tile shows the Individuals row that prices the current guest
+  // count — its range ("3–6 guests"; the last row "7+ guests"; a one-number row "1 guest") and that row's price —
+  // instead of the starred display price. Same row lookup as the price preview (findProductTier, A-7). No ladder →
+  // null, and the tile keeps the display price. The home page's package cards are a preview and stay as they are.
+  const individualTileTier = (visit: 'TASTING' | 'TASTING_LUNCH'): { range: string; price: number | null } | null => {
+    const product: Product = visit === 'TASTING' ? 'tastingOnly' : 'tastingLunch'
+    const row = findProductTier(individualPrices, product, guestCount)
+    if (!row) return null
+    const range = tierRangeLabel(locale, row, individualPrices.filter(p => productPrice(p, product) != null))
+    return { range, price: productPrice(row, product) }
+  }
 
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
   const meatItems = menuItems.filter(m => m.type === 'MEAT')
@@ -647,7 +694,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : []
 
   const confirmVisitRows: ReviewRow[] = [
-    { label: fc('form_visit_type', 'form.visit_type'), value: fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
+    { label: fc('form_visit_type', 'form.visit_type'), value: visitType === 'LUNCH' ? fc('form_lunch_only', 'form.lunch_only') : fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
     { label: fc('form_date', 'form.date'), value: confirmDateLabel },
     { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
     ...masterclassReviewRows,
@@ -671,8 +718,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
 
   const confirmGuestRows: ReviewRow[] = isEnhanced
     ? [
-        ...(tastingGuests > 0 ? [{ label: t(locale, 'form.guests_tasting'), value: String(tastingGuests) }] : []),
-        ...(lunchGuests > 0 ? [{ label: t(locale, 'form.guests_lunch'), value: String(lunchGuests) }] : []),
+        ...PRODUCTS.filter(pr => counts[pr] > 0).map(pr => ({ label: productName(pr), value: String(counts[pr]) })),
         ...(freeGuests > 0 ? [{ label: t(locale, 'form.guests_free'), value: String(freeGuests) }] : []),
         { label: t(locale, 'form.total'), value: String(totalGuests) },
         { label: contactPersonTitle, value: fullName.trim() },
@@ -693,10 +739,10 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // known, tier-matched total is shown; an unresolved company rate or unset
   // display price hides the row entirely rather than showing a guess.
   const confirmTotalValue = isEnhanced
-    ? (payingGuests > 0 && enhancedTier ? formatTetri(asTetri(enhancedTotal)) : null)
+    ? (previewTotal != null ? formatTetri(asTetri(previewTotal)) : null)
     : bookingType === 'INDIVIDUAL'
       ? (estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
-      : (showCompanyPrice && matchedTier && estimatedTotal != null ? formatTetri(asTetri(estimatedTotal)) : null)
+      : (showCompanyPrice && previewTotal != null ? formatTetri(asTetri(previewTotal)) : null)
 
   function toggleMc(id: string, checked: boolean) {
     setMcSelections(prev => ({ ...prev, [id]: { checked, qtyStr: prev[id]?.qtyStr ?? '1' } }))
@@ -731,7 +777,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       timeSlotRef.current?.focus()
       return
     }
-    if (isEnhanced && totalGuests < minGuests) {
+    // The shared count check (boxes, visit type vs boxes, minimums) and "not offered" products — the server refuses both.
+    if ((isEnhanced && countError) || missingProducts.length > 0) {
       guestsWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
@@ -1034,22 +1081,37 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {/* Visit type */}
         <div>
           <label style={labelStyle}>{fc('form_visit_type', 'form.visit_type')}</label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={visitOptions.length === 3 ? 'grid grid-cols-1 sm:grid-cols-3 gap-3' : 'grid grid-cols-2 gap-3'}>
             {([
               { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: displayPriceTasting },
               { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: displayPriceLunch },
-            ] as const).map(opt => (
-              <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
-                className="py-3 px-4 rounded-lg border text-left transition-colors"
-                style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
-                <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
-                {(bookingType === 'COMPANY' || opt.price != null) && (
-                  <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price != null ? formatTetri(asTetri(opt.price)) : ''} ${t(locale, 'form.per_pp')}`}
+              { value: 'LUNCH',         contentKey: 'form_lunch_only',    labelKey: 'form.lunch_only',    price: null },
+            ] as const).filter(opt => visitOptions.includes(opt.value)).map(opt => {
+              // T-272: an individual sees the row their guest count falls in, not the starred display price.
+              const tier = bookingType === 'INDIVIDUAL' && opt.value !== 'LUNCH' ? individualTileTier(opt.value) : null
+              const price = tier ? tier.price : opt.price
+              return (
+                // flex-col + mt-auto: the name sits at the top and the guests/price lines at the bottom, so two tiles
+                // line up even when one name wraps (Georgian on a phone — T-272, 2026-10-23).
+                <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
+                  className="py-3 px-4 rounded-lg border text-left transition-colors flex flex-col"
+                  style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
+                  <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
+                  <div className="mt-auto">
+                    {tier && (
+                      <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}>
+                        <GuestIcon />{tier.range}
+                      </div>
+                    )}
+                    {(bookingType === 'COMPANY' || price != null) && (
+                      <div className="text-sm mt-0.5" style={{ color: C.wine }}>
+                        {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${price != null ? formatTetri(asTetri(price)) : ''} ${t(locale, 'form.per_pp')}`}
+                      </div>
+                    )}
                   </div>
-                )}
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1097,11 +1159,14 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         {isEnhanced ? (
           <div ref={guestsWrapRef}>
             <label style={labelStyle}>{fc('form_guest_counts_header', 'form.guest_counts')}</label>
-            <div className="grid grid-cols-3 gap-3">
+            {/* T-152 D-9: Tasting → Tasting only + Free; Tasting + Lunch → all three products + Free. A product the
+                company does not offer has no box (D-7). Every guest is in exactly one box (D-3). */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {([
-                { labelKey: 'form.guests_tasting', value: tastingGuestsStr, set: setTastingGuestsStr, hidden: false },
-                { labelKey: 'form.guests_lunch',   value: lunchGuestsStr,   set: setLunchGuestsStr,   hidden: visitType === 'TASTING' },
-                { labelKey: 'form.guests_free',    value: freeGuestsStr,    set: setFreeGuestsStr,    hidden: false },
+                { labelKey: 'form.product_tasting_only',  value: tastingOnlyStr,  set: setTastingOnlyStr,  hidden: !offers('tastingOnly') },
+                { labelKey: 'form.product_lunch_only',    value: lunchOnlyStr,    set: setLunchOnlyStr,    hidden: visitType === 'TASTING' || !offers('lunchOnly') },
+                { labelKey: 'form.product_tasting_lunch', value: tastingLunchStr, set: setTastingLunchStr, hidden: visitType === 'TASTING' || !offers('tastingLunch') },
+                { labelKey: 'form.guests_free',           value: freeGuestsStr,   set: setFreeGuestsStr,   hidden: false },
               ] as { labelKey: string; value: string; set: (v: string) => void; hidden: boolean }[]).map(({ labelKey, value, set, hidden }) => hidden ? null : (
                 <div key={labelKey}>
                   <p className="text-xs mb-1" style={{ color: C.faint }}>{t(locale, labelKey)}</p>
@@ -1118,8 +1183,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 {t(locale, 'form.total')}: {totalGuests} {totalGuests !== 1 ? t(locale, 'form.guest_plural') : t(locale, 'form.guest_singular')}{payingGuests > 0 ? ` (${payingGuests} ${t(locale, 'form.paying')})` : ''}
               </p>
             )}
-            {enhancedGuestsHaveError && (
-              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{mc('onsite_err_min_guests', 'form.err_min_guests', { min: minGuests })}</p>
+            {enhancedGuestsHaveError && countError && (
+              <p className="text-xs mt-1" style={{ color: STATUS.errorText }}>{countError}</p>
             )}
           </div>
         ) : (
@@ -1346,23 +1411,26 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           )}
         </div>
 
-        {/* Price preview */}
-        {isEnhanced ? (
-          payingGuests > 0 && enhancedTier ? (
+        {/* Price preview — priceCounts(), the server's arithmetic (T-152) */}
+        {missingProducts.length > 0 ? (
+          <div className="rounded-lg border p-4" style={{ backgroundColor: STATUS.errorBg, borderColor: STATUS.errorBorder }}>
+            <p className="text-sm font-medium" style={{ color: STATUS.errorText }}>
+              {mc('onsite_err_not_offered', 'form.err_not_offered', { product: missingProducts.map(productName).join(', ') })}
+            </p>
+          </div>
+        ) : isEnhanced ? (
+          payingGuests > 0 && previewRates ? (
             <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
                 <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(enhancedTotal))}</p>
               </div>
               <div className="space-y-0.5">
-                {tastingGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{tastingGuests} {t(locale, 'form.guests_tasting')} × {formatTetri(asTetri(enhancedTier.pricePerPerson))}</p>
-                )}
-                {lunchGuests > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{lunchGuests} {t(locale, 'form.guests_lunch')} × {formatTetri(asTetri(comboRatePerPerson(enhancedTier)))}</p>
-                )}
-                {enhancedTier.registrationPrice > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(enhancedTier.registrationPrice))}</p>
+                {PRODUCTS.filter(pr => counts[pr] > 0).map(pr => (
+                  <p key={pr} className="text-xs" style={{ color: C.faint }}>{counts[pr]} × {productName(pr)} {formatTetri(asTetri(previewRates[pr] ?? 0))}</p>
+                ))}
+                {previewRates.registration > 0 && (
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(previewRates.registration))}</p>
                 )}
                 {masterclassAmt > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {formatTetri(asTetri(masterclassAmt))}</p>
@@ -1379,7 +1447,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri((matchedTierRate ?? basePrice) ?? 0))} × {guestCount} {t(locale, 'form.guest_plural')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri(individualRate ?? 0))} × {guestCount} {t(locale, guestCount === 1 ? 'form.guest_singular' : 'form.guest_plural')}</p>
               </div>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>
@@ -1388,13 +1456,6 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               <p className="text-sm" style={{ color: C.muted }}>{t(locale, 'form.price_after_submit')}</p>
             </div>
           )
-        ) : tierGap ? (
-          <div className="rounded-lg border p-4" style={{ backgroundColor: STATUS.errorBg, borderColor: STATUS.errorBorder }}>
-            <p className="text-sm font-medium" style={{ color: STATUS.errorText }}>{t(locale, 'form.no_rate', { n: guestCount })}</p>
-            <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-              {mc('onsite_no_rate_detail', 'form.no_rate_detail', { n: guestCount })}
-            </p>
-          </div>
         ) : (
           <div className="rounded-lg border p-4" style={{ backgroundColor: C.bg, borderColor: C.border }}>
             <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.company_rate_applies')}</p>
@@ -1407,9 +1468,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         )}
 
         <button type="submit"
-          disabled={status === 'loading' || (!isEnhanced && !!tierGap)}
+          disabled={status === 'loading' || missingProducts.length > 0}
           className="w-full font-semibold py-3 rounded-lg transition-colors text-white"
-          style={{ backgroundColor: (status === 'loading' || (!isEnhanced && tierGap)) ? 'color-mix(in srgb, var(--color-brand) 60%, var(--site-muted))' : C.wine }}>
+          style={{ backgroundColor: (status === 'loading' || missingProducts.length > 0) ? 'color-mix(in srgb, var(--color-brand) 60%, var(--site-muted))' : C.wine }}>
           {status === 'loading'
             ? t(locale, 'form.submitting')
             : paymentLabelActive

@@ -2,6 +2,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { loginAsTenantAdmin } from '../helpers/auth';
 import { openReviewSheet, confirmButton } from '../helpers/bookingForm';
+import { readPersonCodesToggle, setPersonCodesToggle } from '../helpers/payments';
 
 // Repointed (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): "Test
 // Company # 1" was deleted from Staging Winery weeks ago (KNOWN-ISSUES.md
@@ -16,14 +17,10 @@ import { openReviewSheet, confirmButton } from '../helpers/bookingForm';
 // touching the company's guides/prices/access code — so sharing one company
 // between them is safe, per Max's standing call to repoint at seeded demo
 // companies rather than recreate deleted fixtures (KNOWN-ISSUES.md #4).
-// Its real price tiers (lib/demoSeed.ts, confirmed live via
-// /admin/companies): 1–10 guests: Tasting 60₾/pp, Lunch add-on 40₾/pp (a
-// combo guest pays pricePerPerson + tastingLunchPricePerPerson = 100₾, per
-// lib/pricingUtils.ts's comboRatePerPerson — Tbilisi's add-on is NOT zero,
-// unlike Test Company # 1's old tier, so every downstream total below is
-// genuinely different, not just the company name). 11–30 guests: Tasting
-// 48₾/pp, Lunch add-on 40₾/pp. It also has a real access code and one real
-// guide (read fresh from admin below rather than hardcoded either way).
+// Its real price table (lib/demoSeed.ts — the product model since T-152): 1–10 guests: Tasting only 60₾,
+// Tasting & Lunch 100₾ (all-in); 11–30 guests: Tasting only 48₾, Tasting & Lunch 88₾; NO Lunch only price
+// (blank = not offered, D-7), so its Lunch only box must stay hidden. Each product finds its row by its own
+// guest count (D-2). It also has a real access code and one real guide (read fresh from admin below).
 const COMPANY_NAME = 'Tbilisi Tour Collective';
 const TEST_EMAIL = `playwright-booking-enhanced-${Date.now()}@example.com`;
 
@@ -54,11 +51,31 @@ async function deleteTestOrderOnAdminPage(page: Page) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click();
     await row.getByRole('button', { name: 'Yes' }).click();
-    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0);
+    await expect(page.locator('tr', { hasText: TEST_EMAIL })).toHaveCount(0, { timeout: 30_000 }); // the delete re-renders /admin/orders: 9–12 s on the dev DB (2026-10-22)
   }
 }
 
 test.describe('Booking form — enhanced/company variant', () => {
+  // The company code / New Order picker only lists a company's people while "Personal access codes"
+  // (person_codes_enabled) is OFF — ON hides the list by design. Staging Winery's real resting value is ON
+  // (a staging-only setting restored after the 2026-10-20 dev-DB recovery), so this spec sets OFF for itself and
+  // puts back whatever it found, like contact-role-picker.spec.ts does. It used to assume OFF.
+  let personCodesWas = false;
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    personCodesWas = await readPersonCodesToggle(page);
+    if (personCodesWas) await setPersonCodesToggle(page, false);
+    await page.close();
+  });
+  test.afterAll(async ({ browser }) => {
+    if (!personCodesWas) return;
+    const page = await browser.newPage();
+    await ensureAdminLoggedIn(page);
+    await setPersonCodesToggle(page, true);
+    await page.close();
+  });
+
   test.afterEach(async ({ context }, testInfo) => {
     // The test body's own step 9 already deletes the order it created — this
     // hook is a safety net for a body that failed before reaching that step.
@@ -77,7 +94,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     // verify + cleanup, on top of the public form itself), each of which
     // can hit a slow first-visit dev-server compile (see booking-simple's
     // "Real finding" comment on the same root cause).
-    test.setTimeout(90_000);
+    test.setTimeout(180_000); // was 90 s — slow dev DB, 2026-10-22
 
     // 1. Confirm `enable_enhanced_company_booking` is on. Real finding: on
     // Staging Winery it's already permanently on (confirmed live via the
@@ -215,17 +232,21 @@ test.describe('Booking form — enhanced/company variant', () => {
     const nameInput = page.getByRole('textbox', { name: 'Name', exact: true });
     await expect(nameInput).not.toHaveValue('');
 
-    // Switch to Tasting + Lunch so the Lunch guest field and Hot Dish
-    // Selection block render (both are conditional on visitType === 'TASTING_LUNCH').
+    // Switch to Tasting + Lunch so the lunch boxes and Hot Dish Selection render (a Tasting visit shows only
+    // Tasting only + Free — T-152 D-9).
     await page.getByRole('button', { name: 'Tasting + Lunch Company rate' }).click();
 
-    // 4. The single "Number of Guests" field is replaced by split fields.
-    const tastingGuests = page.getByText('Tasting', { exact: true }).locator('xpath=following-sibling::*[1]');
-    const lunchGuests = page.getByText('Lunch', { exact: true }).locator('xpath=following-sibling::*[1]');
-    const freeGuests = page.getByText('Free / Guide', { exact: true }).locator('xpath=following-sibling::*[1]');
-    await expect(tastingGuests).toBeVisible();
-    await expect(lunchGuests).toBeVisible();
+    // 4. One box per product instead of the single "Number of Guests" field (T-152 D-3). The boxes have no
+    // accessible name of their own — each sits right after its label.
+    const box = (label: string) => page.getByText(label, { exact: true }).locator('xpath=following-sibling::*[1]');
+    const tastingOnly = box('Tasting'); // product names lost their "only" on 2026-10-23
+    const tastingLunch = box('Tasting & Lunch');
+    const freeGuests = box('Free / Guide');
+    await expect(tastingOnly).toBeVisible();
+    await expect(tastingLunch).toBeVisible();
     await expect(freeGuests).toBeVisible();
+    // Tbilisi has no Lunch only price → no Lunch only box (D-7).
+    await expect(page.getByText('Lunch', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */)).toHaveCount(0);
 
     // 5. Hot Dish Selection and Masterclass Add-ons blocks are present (the
@@ -234,26 +255,17 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(page.getByText('Hot Dish Selection', { exact: true })).toBeVisible();
     await expect(page.getByText('Masterclass Add-ons', { exact: true })).toBeVisible();
 
-    // 6. Enter a guest count outside the company's defined tiers (1–10 and
-    // 11–30 guests — confirmed live). Real finding, differs from the note's
-    // assumption of a blocking "no rate for this guest count" alert: that
-    // alert only exists on the *simple* company-booking path. The enhanced
-    // path's `findTier()` (lib/pricingUtils.ts) deliberately falls back to
-    // the highest-pricePerPerson tier for any out-of-range count — by design
-    // ("protects against under-charging very small groups", per its own
-    // doc comment) — so it never blocks. This checks that fallback instead:
-    // a guest count of 31 (above both tiers) should still show a price
-    // estimate using tier 1's rate (60₾/pp, the higher of 60 vs 48), not an
-    // error state. (25 no longer works as the out-of-range probe now that
-    // tier 2 runs up to 30 guests, not 20 — bumped to 31.)
-    await tastingGuests.fill('31');
+    // 6. A count above every row (31 > 30): the product falls back to the highest-priced row that offers it
+    // (A-7 — "never under-charge a gap"), so Tasting only is quoted at 60₾, not refused. A Tasting & Lunch
+    // guest goes in first: a Tasting + Lunch visit with nobody at lunch is refused (Q-3).
+    await tastingLunch.fill('3');
+    await tastingOnly.fill('31');
     await expect(page.getByText('no rate', { exact: false })).not.toBeVisible();
-    await expect(page.getByText('31 Tasting × 60₾', { exact: false })).toBeVisible();
+    await expect(page.getByText('31 × Tasting 60₾', { exact: false })).toBeVisible();
 
     // 7. Correct to an in-range guest count, select one hot dish option and
     // one masterclass add-on, fill required contact fields, submit.
-    await tastingGuests.fill('5');
-    await lunchGuests.fill('3');
+    await tastingOnly.fill('5');
 
     // Real finding (Chunk 3, Plan-PlaywrightSuiteHardening, 2026-10-01): these
     // menu/masterclass items are ad-hoc test fixtures on Staging Winery, as
@@ -290,10 +302,9 @@ test.describe('Booking form — enhanced/company variant', () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
 
-    // expect: the estimated total reflects tier 1's rate
-    // (5×60 + 3×(60+40) = 300 + 300 = 600) plus the masterclass add-on
-    // already selected above (35, Khinkali folding class × qty 1) = 635,
-    // before submitting
+    // expect: each product on its own row by its own count (D-2): 5 Tasting only × 60₾ (1–10) + 3 Tasting &
+    // Lunch × 100₾ (1–10) = 600, plus the masterclass add-on already selected above (35, Khinkali folding
+    // class × qty 1) = 635, before submitting
     await expect(page.getByText('635₾', { exact: false })).toBeVisible();
 
     // Real finding, differs from the note's assumption: company bookings
@@ -324,13 +335,15 @@ test.describe('Booking form — enhanced/company variant', () => {
     const cells = row.locator('td');
     await expect(cells.nth(3)).toHaveText('Company'); // Type
     await expect(cells.nth(4)).toContainText(COMPANY_NAME); // Company
+    // Default columns since T-152 Chunk 9: … Company, Tasting only, Lunch only, Tasting & Lunch, Visit, …
     await expect(cells.nth(5)).toHaveText('5'); // Tasting
-    await expect(cells.nth(6)).toHaveText('3'); // Lunch
-    await expect(cells.nth(7)).toHaveText('Tasting + Lunch'); // Visit
-    await expect(cells.nth(8)).toContainText('Khinkali'); // Masterclass
-    await expect(cells.nth(9)).toContainText('Badrijani nigvzit'); // Food (hot dish)
-    await expect(cells.nth(9)).toContainText('Playwright test notes');
-    await expect(cells.nth(10)).toHaveText('635₾'); // Total
+    await expect(cells.nth(6)).toHaveText('—'); // Lunch
+    await expect(cells.nth(7)).toHaveText('3'); // Tasting & Lunch
+    await expect(cells.nth(8)).toHaveText('Tasting + Lunch'); // Visit
+    await expect(cells.nth(9)).toContainText('Khinkali'); // Masterclass
+    await expect(cells.nth(10)).toContainText('Badrijani nigvzit'); // Food (hot dish)
+    await expect(cells.nth(10)).toContainText('Playwright test notes');
+    await expect(cells.nth(11)).toHaveText('635₾'); // Total
 
     // 9. Cleanup: delete the test order. (No company/price tier was created
     // by this test, so there's nothing else to remove, and the settings

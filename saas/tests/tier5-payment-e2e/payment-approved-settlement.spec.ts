@@ -326,7 +326,7 @@ test.describe('Company booking — approved settlement, light check (shares star
 
 test.describe('Wine order — approved settlement, light check (shares startCheckout with individual)', () => {
   test('settles and shows paid on the wine-orders board', async ({ page, context }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(300_000) // was 120 s — setup alone loads 4 slow admin pages on the dev DB (2026-10-23)
     await loginAsTenantAdmin(page)
 
     const originalToggle = await readPaymentSectionToggle(page, 'Wine orders')
@@ -369,7 +369,22 @@ test.describe('Wine order — approved settlement, light check (shares startChec
       const orderPayBtn = formPage.getByRole('button', { name: 'Order & Pay', exact: true })
       await expect(orderPayBtn).toBeVisible({ timeout: 10_000 })
       await formPage.getByRole('textbox', { name: 'Bar, restaurant, or individual name' }).fill(businessName)
-      await formPage.getByRole('textbox', { name: 'Actual address of bar / restaurant' }).fill('1 Test Street')
+      // Real finding (2026-10-23, from a trace — four earlier failures were
+      // misread as a hang on /admin/companies, which was only the finally
+      // block running after the budget ran out): since T-13 (saved delivery
+      // addresses, 2026-10-12) a company with ONE saved address gets a
+      // "Delivering to …" card instead of the free-text address box, so the
+      // fill below waited until the test timed out. Sighnaghi Wine Bar has one
+      // ("Sighnaghi, Kakheti"). Keep the saved address when it is offered —
+      // that is the real customer path — and type one only when the box is there.
+      const addressBox = formPage.getByRole('textbox', { name: 'Actual address of bar / restaurant' })
+      const savedAddressCard = formPage.getByText('Delivering to', { exact: true })
+      await expect(addressBox.or(savedAddressCard).first()).toBeVisible({ timeout: 10_000 })
+      if (await addressBox.isVisible()) {
+        await addressBox.fill('1 Test Street')
+      } else {
+        await expect(formPage.getByRole('button', { name: 'Use another address', exact: true })).toBeVisible()
+      }
       await formPage.getByRole('textbox', { name: 'Contact person full name' }).fill('ZZ Wine Contact')
       await formPage.getByRole('textbox', { name: 'Contact person phone number' }).fill('+995500000043')
       await fillPreferredWineDate(formPage) // T-14: the form requires a preferred date

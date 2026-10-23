@@ -5,9 +5,12 @@ type Order = {
   id: string
   date: Date
   timeSlot: string
+  // The boxes (T-152): Tasting only / Lunch only / Tasting & Lunch / Free, and their sum — the kitchen count (D-4).
   tastingGuestCount: number
+  lunchOnlyGuestCount: number
   lunchGuestCount: number
   freeGuestCount: number
+  guestCount: number
   name: string
   surname: string
   phone: string | null
@@ -53,8 +56,10 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
   const headers = [
     at('orders.col.date'),
     at('orders.sheet.tastingGuests'),
+    at('orders.sheet.lunchOnlyGuests'),
     at('orders.sheet.lunchGuests'),
     at('orders.sheet.extraGuests'),
+    at('orders.sheet.kitchenTotal'),
     at('orders.sheet.hotDishVeg'),
     at('orders.sheet.hotDishMeat'),
     at('orders.sheet.foodNotes'),
@@ -100,8 +105,10 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
                 <tr key={o.id} style={{ backgroundColor: i % 2 === 1 ? '#fbf6ec' : '#fff' }}>
                   <Cell bold>{formatDate(o.date)} · {o.timeSlot}</Cell>
                   <Cell bold>{o.tastingGuestCount > 0 ? o.tastingGuestCount : '—'}</Cell>
+                  <Cell bold>{o.lunchOnlyGuestCount > 0 ? o.lunchOnlyGuestCount : '—'}</Cell>
                   <Cell bold>{o.lunchGuestCount > 0 ? o.lunchGuestCount : '—'}</Cell>
                   <Cell bold>{o.freeGuestCount > 0 ? o.freeGuestCount : '—'}</Cell>
+                  <Cell bold>{o.guestCount}</Cell>
                   <Cell>{o.hotDishVegetable}</Cell>
                   <Cell>{o.hotDishMeat}</Cell>
                   <Cell>{o.foodNotes}</Cell>

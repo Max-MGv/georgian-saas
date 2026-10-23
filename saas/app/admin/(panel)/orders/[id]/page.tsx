@@ -18,7 +18,7 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage] = await Promise.all([
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -69,6 +69,8 @@ export default async function OrderDetailPage({
     getSetting('payment_iban'),
     getSetting('invoice_detailed'),
     getSetting('admin_language'),
+    // What an individual order is re-priced from when its guests or visit change (D-14).
+    withTenantDb(tenantId, tx => tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })),
   ])
 
   if (!order) notFound()
@@ -94,6 +96,14 @@ export default async function OrderDetailPage({
         displayName={displayName}
         locale={locale}
         companies={companies}
+        individualsPrices={(individuals?.prices ?? []).map(p => ({
+          id: p.id,
+          minGuests: p.minGuests,
+          maxGuests: p.maxGuests,
+          tastingOnlyPrice: p.tastingOnlyPrice,
+          lunchOnlyPrice: p.lunchOnlyPrice,
+          tastingLunchPrice: p.tastingLunchPrice,
+        }))}
         order={{
           id: order.id,
           stage: order.stage,
@@ -117,8 +127,11 @@ export default async function OrderDetailPage({
           bookingType: order.bookingType,
           visitType: order.visitType,
           guestCount: order.guestCount,
-          tastingGuestCount: order.tastingGuestCount,
-          lunchGuestCount: order.lunchGuestCount,
+          // The detail screen's own names until Plan-PricingModel Chunk 8: "tasting" = Tasting only,
+          // "lunch" = Tasting & Lunch.
+          tastingGuestCount: order.tastingOnlyGuests ?? 0,
+          lunchGuestCount: order.tastingLunchGuests ?? 0,
+          lunchOnlyGuestCount: order.lunchOnlyGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           hotDishVegetable: order.hotDishVegetable,
           hotDishMeat: order.hotDishMeat,
@@ -133,8 +146,9 @@ export default async function OrderDetailPage({
           // The rates this order was sold at. Fetched all along (the query uses
           // `include`) but never passed down, which is why OrderDetail could not
           // tell what the order cost and invented ₾50 instead (#50/#52).
-          tastingRateSnapshot: order.tastingRateSnapshot,
-          lunchRateSnapshot: order.lunchRateSnapshot,
+          tastingOnlyRate: order.tastingOnlyRate,
+          lunchOnlyRate: order.lunchOnlyRate,
+          tastingLunchRate: order.tastingLunchRate,
           registrationFeeSnapshot: order.registrationFeeSnapshot,
           requestedCompanyName: order.requestedCompanyName,
           company: order.company
@@ -146,10 +160,11 @@ export default async function OrderDetailPage({
                   id: p.id,
                   minGuests: p.minGuests,
                   maxGuests: p.maxGuests,
-                  pricePerPerson: p.pricePerPerson,
-                  tastingLunchPricePerPerson: p.tastingLunchPricePerPerson,
-                  registrationPrice: p.registrationPrice,
+                  tastingOnlyPrice: p.tastingOnlyPrice,
+                  lunchOnlyPrice: p.lunchOnlyPrice,
+                  tastingLunchPrice: p.tastingLunchPrice,
                 })),
+                registrationFee: order.company.registrationFee,
               }
             : null,
           masterclassLines: order.masterclassLines.map(l => ({

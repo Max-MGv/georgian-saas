@@ -101,9 +101,11 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
     const email = `zz-payment-e2e-admin-order-${Date.now()}@example.invalid`
     const firstName = 'ZZPaymentE2E'
     const phone = '+995500000063'
-    const tastingRate = '50'
     const guestCount = 4
-    const expectedTotal = guestCount * parseInt(tastingRate, 10) // 200 — individual, TASTING visit, manual rate
+    // D-14 (2026-10-22): an individual admin order is priced from the Individuals table, no typed rate. Staging
+    // Winery's table: 3–6 guests, Tasting = ₾70 → 4 × 70. Change this if that table changes.
+    const individualsTastingRate = 70
+    const expectedTotal = guestCount * individualsTastingRate // 280
 
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -127,20 +129,14 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
       // immediately before submit.
       await expect(dateInput).toBeVisible({ timeout: 15_000 })
       await dateInput.fill(dateIso)
-      await page.getByRole('textbox').nth(1).fill(String(guestCount)) // Party size / guest count
+      // An individual order: one guest count (T-152 D-5), found by its name since Chunk 8.
+      await page.getByRole('textbox', { name: 'Number of guests' }).fill(String(guestCount))
       // One Name box (split into first word / rest at submit): first name, then the unique marker.
       await page.getByPlaceholder('Name', { exact: true }).fill(`${firstName} ${marker}`)
       await page.locator('input[type="tel"]').fill(phone)
       await page.locator('input[type="email"]').fill(email)
-      // Manual tasting rate — an individual order always shows this (no
-      // company tier to fall back on). Located by its label rather than a
-      // positional textbox index, since several more text inputs sit between
-      // the contact fields and this one (notes textarea) that a plain nth()
-      // chain would have to account for.
-      await page
-        .locator('label', { hasText: 'Tasting only ₾/pp' })
-        .locator('xpath=following-sibling::input[1]')
-        .fill(tastingRate)
+      // No rate to type: the Individuals table prices it (D-14), and the box is gone.
+      await expect(page.getByRole('textbox', { name: 'Tasting — ₾ per person' })).toHaveCount(0)
       await dateInput.fill(dateIso)
       await expect(dateInput).toHaveValue(dateIso)
       await page.getByRole('button', { name: 'Create order', exact: true }).click()

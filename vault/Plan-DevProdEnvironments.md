@@ -17,7 +17,7 @@ All 7 steps executed 2026-07-23 (one session). This doc is now the **reference f
 2. **Staging auto-deploys** to `staging.vineworks.ge` (a custom domain added 2026-09-15, pinned to the `staging` git branch — see below), reading the **dev** database — safe to break, no real customer ever sees it.
 3. **Check it on the staging URL.** Only once it looks right does the change move on.
 4. **Merge `staging` → `master` → push.** This is the one step that reaches real customers on `nikalasmarani.vercel.app` — always with Max's explicit go-ahead, same as any other production-affecting action.
-5. **If the change included a database/schema change**, it runs through the same shape: `prisma migrate dev` against dev first → verified on staging → `prisma migrate deploy` against prod as its own separate, deliberate step (never automatic, never bundled silently into the code push).
+5. **If the change included a database/schema change**, it runs through the same shape: a hand-reviewed migration applied to dev with `prisma migrate deploy` first (never `migrate dev` — Rule 0b) → verified on staging → `prisma migrate deploy` against prod as its own separate, deliberate step (never automatic, never bundled silently into the code push).
 
 **Local development always points at the dev database** — that's what makes step 1 safe to just dive into.
 
@@ -52,8 +52,12 @@ The **old** auto-generated alias, `georgian-saas-git-staging-mg-productions-proj
 
 ## Daily workflow
 
-1. Develop locally (against dev DB — safe to break).
-2. Schema change? `npx prisma migrate dev --name <change>` (dev server stopped — Rule 10). This records a migration file AND applies it to dev.
+1. Develop locally (against the dev DB — **not** a scratch DB: it holds the staging ticket board, release drafts and test fixtures; ClaudeInstructions Rule 0b).
+2. Schema change? **Since 2026-10-20 `prisma migrate dev` and `prisma db push` are blocked** by the safety hook (Rule 0b — `migrate dev` uses a shadow database, and a shadow pointed at dev wiped it). Instead:
+   edit `schema.prisma` → create `prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql` from the read-only diff
+   `npx prisma migrate diff --from-url "$DIRECT_URL" --to-schema-datamodel prisma/schema.prisma --script` (review it by hand) →
+   `npx prisma migrate deploy` (applies it to dev; the backup hook saves dev to `Downloads\DB_Backups` first) →
+   stop the dev server, `npx prisma generate` (Rule 10). Never edit a migration that is already applied anywhere — write a follow-up migration.
 3. Commit to `staging` branch → push → check the staging URL.
 4. Happy? Merge `staging` → `master` → push → prod deploys.
 5. If the change had a migration: `npx prisma migrate deploy` **with prod URLs** (put prod DATABASE_URL/DIRECT_URL from credentials.txt into the command env or temporarily into .env — deploy does NOT run migrations automatically; build is only `prisma generate && next build`).

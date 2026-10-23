@@ -63,6 +63,9 @@ async function main() {
     payment_iban: 'GE00XX0000000000000000',
     payment_bank_code: 'XXXXGE00',
     payment_bank_name: 'Demo Bank',
+    // Missed by the first sweep and found 2026-10-20: the invoice/order page shows these to demo visitors.
+    payment_recipient_name: 'Vineworks Demo',
+    payment_personal_number: '00000000000',
   }
   for (const [key, value] of Object.entries(settingUpdates)) {
     const row = await db.setting.findFirst({ where: { tenantId: DEMO_ID, key } })

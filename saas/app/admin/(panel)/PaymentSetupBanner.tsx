@@ -46,13 +46,13 @@ export default async function PaymentSetupBanner({
     // i.e. the condition that makes totalPrice 0 (see lib/pricingUtils findTier).
     withTenantDb(tenantId, tx => tx.company.findFirst({
       where: { tenantId, isIndividual: true },
-      select: { prices: { select: { pricePerPerson: true, tastingLunchPricePerPerson: true } } },
+      select: { prices: { select: { tastingOnlyPrice: true, lunchOnlyPrice: true, tastingLunchPrice: true } } },
     })),
     getSetting('admin_language'),
   ])
 
   const pricingOk = (individuals?.prices ?? []).some(
-    p => p.pricePerPerson > 0 || p.tastingLunchPricePerPerson > 0
+    p => (p.tastingOnlyPrice ?? 0) > 0 || (p.lunchOnlyPrice ?? 0) > 0 || (p.tastingLunchPrice ?? 0) > 0
   )
 
   const showCredentials = checks.includes('credentials') && !credentialsOk

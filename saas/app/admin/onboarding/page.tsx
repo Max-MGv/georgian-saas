@@ -47,7 +47,7 @@ export default async function OnboardingPage() {
           id: true,
           name: true,
           accessCode: true,
-          prices: { select: { pricePerPerson: true } },
+          prices: { select: { tastingOnlyPrice: true } },
           people: { select: { id: true } },
           addresses: { select: { id: true } },
           identificationCode: true,
@@ -57,7 +57,7 @@ export default async function OnboardingPage() {
     withTenantDb(tenantId, tx =>
       tx.price.findMany({
         where: { company: { tenantId, isIndividual: true } },
-        select: { pricePerPerson: true },
+        select: { tastingOnlyPrice: true },
       })
     ),
     db.tenant.findUnique({ where: { id: tenantId }, select: { wineDetailLevel: true } }),
@@ -97,7 +97,7 @@ export default async function OnboardingPage() {
     id: c.id,
     name: c.name,
     accessCode: c.accessCode,
-    prices: c.prices,
+    prices: c.prices.map(p => ({ tastingOnlyPrice: p.tastingOnlyPrice ?? 0 })),
     contactInfoSet: Boolean(c.people.length > 0 || c.addresses.length > 0 || c.identificationCode),
   }))
 
@@ -118,7 +118,7 @@ export default async function OnboardingPage() {
     wineDetailLevel: tenant?.wineDetailLevel ?? 'VINTAGE',
     companies: companiesForWizard,
     individualsCompanyId: individualsCompany.id,
-    individualsPrices,
+    individualsPrices: individualsPrices.map(p => ({ tastingOnlyPrice: p.tastingOnlyPrice ?? 0 })),
     wines: winesForWizard,
     menuItems: menuItemsForWizard,
     masterclassItems: masterclassItemsForWizard,

@@ -32,6 +32,66 @@ Full reference, environment map, and the exact commands: `vault/Plan-DevProdEnvi
 
 ---
 
+## 0b. DATABASE SAFETY — never run anything that can reset, drop or wipe a real database (since 2026-10-20)
+
+**What happened (2026-10-20, T-152 Chunk 6):** to check a new migration, Claude ran
+`prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <DEV DATABASE URL> --script`.
+A **shadow database is treated by Prisma as disposable: it is reset (every table dropped) and all migrations are
+replayed into it.** Pointing it at the real dev database **wiped every row in the dev `public` schema** — all
+tenants, companies, orders, wines, settings, site content, **the whole staging ticket board** (T-tickets, comments,
+history, P-ticket copies) and the staging release-note drafts — and its migration history. Production was not
+touched (different database). Logins (`auth`) and Storage files survived. Nothing in the command's output warned.
+
+**The rules:**
+1. **Never pass a real database URL (dev, staging, production) to `--shadow-database-url`, `shadowDatabaseUrl`, or
+   anything called "shadow".** A shadow database must be a throwaway database created for that purpose — or skip
+   the shadow altogether: `prisma migrate diff --from-url <db> --to-schema-datamodel …` compares against a live
+   database **read-only** and needs no shadow.
+2. **Never run on a real database:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`,
+   `prisma migrate dev` when it offers a reset, `DROP`/`TRUNCATE` of a table or schema, or any script whose job is
+   to wipe or reseed — unless Max has said yes **to that exact command on that exact database**.
+3. **Before running any Prisma/database command you have not used in this session, read what it does to its
+   inputs** (`npx prisma <cmd> --help` + the docs) — especially any flag that takes a database URL. If a flag can
+   write to, reset or drop a database, treat it as destructive until proven otherwise.
+4. **The dev database is not a scratch database.** It holds the staging ticket board, release-note drafts and
+   Max's test setup, not only fake orders. Treat it with the same care as production for anything destructive;
+   the only difference is that routine *additive* migrations (`prisma migrate deploy` of a reviewed migration) are
+   allowed there without asking.
+5. **If something destructive happens anyway: stop immediately, check with read-only queries what is left, and tell
+   Max plainly** — what was lost, what survived, and the recovery options (Supabase → Database → Backups first) —
+   before running anything else against that database.
+6. **A full local backup runs before every database write** (Max, 2026-10-20: "if we lose something, its saved
+   locally on this laptop"). Backups live in **`C:\Users\Max\Downloads\DB_Backups\`**, **one folder per backup**,
+   named `<YYYY-MM-DD_HHmmss>_<env>[_<reason>]` (env = `prod` or `dev`), so old ones can be deleted one at a time.
+   Each holds every `public` table, the schema metadata, storage file list and logins (no passwords) — see
+   `saas/scripts/backup-db.ts`; check one with `npx tsx scripts/backup-verify.ts "<folder>"`.
+   - **Automatic:** the hook `.claude/hooks/require-db-backup.cjs` runs before every Bash/PowerShell command that can
+     write to a database: any `--write`/`--apply`, `prisma migrate deploy|resolve`, `prisma db execute|seed`,
+     `playwright test`, inline SQL writes, and any `scripts/…` file not on its read-only list (checks, verify,
+     audits). It backs up **dev**, plus **prod** when the command mentions production; a backup younger than
+     10 minutes is reused. **A failed backup blocks the command** — fix the backup, never work around it.
+   - **Since 2026-10-21 also** (Max: "keep local backups on my device, before the commands for changing stuff
+     execute"): **`git push` to `master`** (or `gh pr merge`) → **production + dev** backup, because it deploys the
+     live site; `git push` to any other branch → dev; **ticket-tool writes** (`tix add|comment|move|review|…`) → dev
+     (prod with `--prod`); **Supabase MCP** `execute_sql` (unless read-only) / `apply_migration` → the env of its
+     `project_id`. The safety lock also inspects MCP SQL. Matcher in user settings: `Bash|PowerShell|mcp__.*__execute_sql|mcp__.*__apply_migration`.
+   - **Every backup now includes the uploaded Storage files** (`storage/<bucket>/…`). Unchanged files are hard-linked
+     to the previous backup (stored once on disk; every folder still complete and deletable on its own).
+   - **Manual (the hook cannot see these):** writes through the app's own pages, other HTTP APIs, or Max's own
+     terminal → run `cd saas && npx tsx scripts/backup-db.ts --env=dev|prod --reason=<what>` first.
+   - **Restoring:** `vault/Restore-Guide.md` (drill on a throwaway local PostgreSQL + emergency steps). First drill
+     2026-10-21 passed. Accepted risks (Max, 2026-10-21): no scheduled backups, one copy on this laptop only.
+   - Writing a file whose text contains `--write` or `.env.prod` via a Bash heredoc also triggers a (harmless)
+     backup — use the Write tool for script files.
+   - **Both hooks** (this one and `block-destructive-db.cjs`) are registered in the **user** settings
+     `C:\Users\Max\.claude\settings.json` with absolute paths, so they run in every session wherever it was started
+     (a session started from `C:\Users\Max` did not load project settings). `georgian-saas/.claude/settings.json` is
+     deliberately empty — do not re-add them there (they would run twice). Tests:
+     `node .claude/hooks/test-block-destructive-db.cjs`, `node .claude/hooks/test-require-db-backup.cjs`.
+   - Use `--write` (and a dry run by default) for every new script that changes data, so the hook recognises it.
+
+---
+
 ## 1. Always update the vault
 
 After any meaningful work (feature built, decision made, architecture changed), update the relevant vault file:
@@ -175,4 +235,5 @@ Max and Claude manage small features, bugs and ideas in **Super Admin → Ticket
 - **Test steps live on the ticket, not in `MyToDo.md`** (Max, 2026-10-15). After handing over work, point Max to "Waiting for me";
   `MyToDo.md` is only for manual chores that aren't tickets.
 - `vault/Tickets.md` is an **auto-generated read-only snapshot** — never edit it; change tickets in the tool.
+- **Multi-line text (analysis/solution/comment): don't use `npx tsx`** — on Windows `npx` goes through cmd.exe, which silently cuts the argument at the first newline (only paragraph 1 is saved). Use `node node_modules/tsx/dist/cli.mjs scripts/tix.ts …` from `saas/` instead (found 2026-10-18 on T-114).
 

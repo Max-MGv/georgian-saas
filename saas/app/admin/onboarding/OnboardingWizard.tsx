@@ -25,7 +25,7 @@ export type OnboardingData = {
   wineDetailLevel: 'PRODUCT' | 'VINTAGE'
   companies: Company[]
   individualsCompanyId: string
-  individualsPrices: { pricePerPerson: number }[]
+  individualsPrices: { tastingOnlyPrice: number }[]
   wines: WizardWine[]
   menuItems: WizardMenuItem[]
   masterclassItems: WizardMasterclassItem[]
