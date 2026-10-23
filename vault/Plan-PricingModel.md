@@ -636,6 +636,14 @@ draft with before/after shots; tier 5 on staging.
       contact-orphan-safety, booking-enhanced, company-nationality-tagging, companies-crud, booking-simple,
       booking-tampered-quantities (every spec whose labels changed). Then independent acceptance round 2 on staging
       (T-152 + T-272 cards; dev backup `2026-10-23_114101_dev_before-agent-acceptance-2` first).
+- [~] **Tier 5 on staging (2026-10-23, `dc0d79a`): 6/7 pass** — admin order (₾280, no rate box), individual + company
+      approved settlement, book-later, declined, post-payment extras. **Wine order — approved settlement FAILS 4×** at
+      `helpers/payments.ts:167` `page.goto('/admin/companies')` (hangs until the test budget, 120 s and 300 s alike),
+      after login + reading the Wine orders toggle on Settings (video: still on Settings). NOT reproduced by
+      `tests/_qa/probe-wine-setup.spec.ts` (same helpers, same company, passes in ~22 s; staging admin pages load in ~1 s).
+      Payment settings untouched by the failures. **Open — investigate before production** (Playwright trace:
+      `--trace on`; compare with the probe; wine orders are not changed by T-152, but confirm whether this is a test
+      or an app problem). Budget raised to 300 s in the spec.
 - [ ] Draft the release note with before/after shots (`scripts/release-shots.ts`, Plan-ReleaseNotes).
 - [ ] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box).
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).

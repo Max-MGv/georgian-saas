@@ -326,7 +326,7 @@ test.describe('Company booking — approved settlement, light check (shares star
 
 test.describe('Wine order — approved settlement, light check (shares startCheckout with individual)', () => {
   test('settles and shows paid on the wine-orders board', async ({ page, context }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(300_000) // was 120 s — setup alone loads 4 slow admin pages on the dev DB (2026-10-23)
     await loginAsTenantAdmin(page)
 
     const originalToggle = await readPaymentSectionToggle(page, 'Wine orders')
