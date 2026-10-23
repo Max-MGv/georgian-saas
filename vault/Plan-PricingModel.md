@@ -42,7 +42,7 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ✅ 2026-10-22 |
 | 10 | Demo seed, test fixtures, scripts, docs | ✅ 2026-10-22 |
 | 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ⬜ |
-| 12 | Production runbook (DRAFT — Max's go per step) | ⬜ |
+| 12 | Production runbook (DRAFT — Max's go per step) | 🚧 step 1 ✅ 2026-10-23 |
 
 ---
 
@@ -641,11 +641,18 @@ draft with before/after shots; tier 5 on staging.
       `helpers/payments.ts:167` `page.goto('/admin/companies')` (hangs until the test budget, 120 s and 300 s alike),
       after login + reading the Wine orders toggle on Settings (video: still on Settings). NOT reproduced by
       `tests/_qa/probe-wine-setup.spec.ts` (same helpers, same company, passes in ~22 s; staging admin pages load in ~1 s).
-      Payment settings untouched by the failures. **Open — investigate before production** (Playwright trace:
-      `--trace on`; compare with the probe; wine orders are not changed by T-152, but confirm whether this is a test
-      or an app problem). Budget raised to 300 s in the spec.
+      Payment settings untouched by the failures. Budget raised to 300 s in the spec.
+      **Solved 2026-10-23 evening — a stale test, not an app bug, not T-152.** A run alone with `--trace on` (the tier-5
+      config only traces on retry, and local runs never retry — so no earlier run had a trace) showed admin pages at
+      ~1 s and the test waiting 255 s on the public wine form for the "Actual address of bar / restaurant" box. Since
+      T-13 (saved addresses, 2026-10-12, on production) a company with one saved address gets a "Delivering to …" card
+      instead; Sighnaghi Wine Bar has one ("Sighnaghi, Kakheti"). The `/admin/companies` goto was only the `finally`
+      cleanup starting after the budget had run out — every report pointed at the wrong line. The probe passed because
+      it never opened the form. Spec now keeps a saved address when offered (types one only when the box is there).
+      **Rerun alone: passed (1.6 min) → tier 5 = 7/7.** Toggles/overrides checked afterwards at resting values.
 - [ ] Draft the release note with before/after shots (`scripts/release-shots.ts`, Plan-ReleaseNotes).
-- [ ] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box).
+- [x] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box). 7/7
+      (6 on 2026-10-23 afternoon + the fixed wine test that evening).
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
 **Resume point (2026-10-23, paused by Max — "continue or restart them at my go"):** the D-15…D-17 + acceptance fixes are
@@ -702,7 +709,15 @@ and fall back to typed rates / "price later"; only the public form loads the Ind
 **Resume point:** —
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)
-**Status:** ⬜ — rehearsal passed 2026-10-23; production steps not started.
+**Status:** 🚧 — rehearsal passed 2026-10-23; **step 1 ✅ 2026-10-23 evening** (Max's go); step 2 not started.
+
+**Step results:**
+- [x] **1. Pre-flight (read-only), 2026-10-23 ~20:07 Georgian time.** Backup `2026-10-23_200652_prod_t152-step1-preflight`
+      (1,302 rows, 36 tables, 36 migrations; `backup-verify` OK). `pricing-baseline.ts --prod`: 395 orders, Nikalas 2
+      orders (TASTING_LUNCH split, ₾2,800 and ₾250 — stored in tetri 280000 / 25000), 9 Nikalas price rows, 1
+      `InvoiceSent`; **no new orders and no order changed** since the 2026-10-19 baseline (old file kept as
+      `scripts/_qa/pricing-baseline-prod.chunk0-copy.json`). Matches the rehearsal.
+- [ ] 2. Expand migration only (`--config .rehearsal/expand-only.config.ts`) — needs Max's go.
 **Resume point (2026-10-23 afternoon):** staging = `4e89018` (T-152 + D-15…D-17 + T-272), run 13 15/15. Acceptance
 round 2 hit a usage limit mid-cleanup; checked against its pre-test backup: prices, companies, settings, site content
 all identical; its one leftover order ("ZZ Acceptance 1") deleted. Round 3 (fresh agent, same steps, keeps a running

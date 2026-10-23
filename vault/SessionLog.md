@@ -8,6 +8,18 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-23 (eve) — T-152: tier-5 wine test solved (7/7), production step 1 done (read-only)
+
+- New session from the handoff (`vault/Handoff-T152-Production.md`). The wine-order tier-5 failure was a **stale test**:
+  since T-13 a company with one saved address gets a "Delivering to" card, not the address box; the reported
+  `/admin/companies` hang was only the `finally` cleanup after the budget ran out. Found with `--trace on` (the tier-5
+  config only traces on retry). Spec fixed (keeps a saved address) → rerun passed → **tier 5 7/7**. Toggles at resting values.
+- **Production step 1 (Max's go, read-only):** backup `2026-10-23_200652_prod_t152-step1-preflight` verified (1,302 rows);
+  baseline: 395 orders, Nikalas 2 orders ₾2,800 + ₾250, 9 price rows, 1 invoice — nothing new or changed since 10-19.
+- **Production otherwise untouched.** **Next:** step 2 (expand migration only, expand-only config) — on Max's explicit go.
+
+---
+
 ## 2026-10-22 — T-152 Chunk 11 hand-over: blind-review fixes, Free cap, D-14, review card (staging only)
 
 - Blind review fixes `acfa3f3`. Max: #6 → **cap Free guests at the paying guests** (public form) `70adfbf`; test budgets
