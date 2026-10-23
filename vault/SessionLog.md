@@ -23,6 +23,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   production (EN + KA, hidden); **screenshots added** after Max asked (11 images, before/after on every entry — see
   Plan-ReleaseNotes "Before shots when the old code can't run"). P-11 checked → review card (Ready to test); T-215 analysed
   (the order page still lacks date / time / contact / notes editing — written on the ticket).
+- **T-215 built (staging `0be1aea`, Max: "edit this form inside the order"):** Booking Info → Edit on the order page (date,
+  time, contact, notes via `updateOrder`); side-panel note links to the order page; shared `orders/timeSlots.ts` also fixes a
+  09:00 public booking being moved to 11:00 by the side panel. QA spec 2/2 + admin-orders green. T-215 → Ready to test.
+  FeatureLog #238, MaintenanceNotes §37. "After" shots for the next release note: `saas/tests/_qa/shots/t215/`.
 - **ON PRODUCTION: T-152 + T-272.** **For Max:** check the production admin screens (New Order, an order, an invoice view —
   Claude can't sign in there); demo.vineworks.ge after tonight's 03:00 reseed (or Reset Demo); review + publish the release
   note; tell Nikalas (mixed groups can cost more, product names changed, Lunch prices optional).
