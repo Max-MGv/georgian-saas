@@ -70,8 +70,8 @@ const VISIT_TYPES: readonly BookingVisitType[] = ['TASTING', 'TASTING_LUNCH', 'L
  *   enter lunch guests or switch to Tasting only"; the 2026-10-07 production order was this mistake).
  * - Individuals never book Lunch only (D-5).
  * - Public only: the group minimum (as today) and any per-product company minimum.
- * - Public only: no more Free guests than paying guests (Max, 2026-10-22 — the Free box had no limit, so a
- *   company could book 1 paying + 200 free; the max-guest cap only counts paying guests). Admin screens are exempt.
+ * - No more Free guests than paying guests, on every form (Max, 2026-10-22 public form; 2026-10-23 admin screens too —
+ *   the Free box had no limit, so a company could book 1 paying + 200 free; the max-guest cap only counts paying guests).
  */
 export function checkBookingCounts(input: CountsInput, rules: CountRules): CountsResult {
   const visitType = input.visitType as BookingVisitType
@@ -117,10 +117,12 @@ export function checkBookingCounts(input: CountsInput, rules: CountRules): Count
         }
       }
     }
-    // Last, so a group that is simply too small hears about the minimum first.
-    if (counts.free > payingGuests(counts)) {
-      return { ok: false, error: { code: 'too_many_free', max: payingGuests(counts) } }
-    }
+  }
+  // Never more Free guests than paying guests — the public form and the admin screens alike (Max, 2026-10-23:
+  // "why allow admin to enter more free guests than paying guests? block that too"). Last, so a group that is
+  // simply too small hears about the minimum first.
+  if (counts.free > payingGuests(counts)) {
+    return { ok: false, error: { code: 'too_many_free', max: payingGuests(counts) } }
   }
 
   return { ok: true, counts, visitType, warnings }
@@ -213,6 +215,7 @@ export function checkAdminOrder(input: {
   if (!r.ok) {
     const e = r.error
     if (e.code === 'not_whole_number') return { ok: false, problem: { key: 'orderForm.err.wholeNumbers' } }
+    if (e.code === 'too_many_free') return { ok: false, problem: { key: 'orderForm.err.tooManyFree', vars: { max: e.max } } }
     if (e.code === 'no_paying_guests') return { ok: false, problem: { key: 'orderForm.err.noPaying' } }
     if (e.code === 'visit_mismatch') {
       const v = input.visitType

@@ -239,14 +239,14 @@ test.describe('Booking form — enhanced/company variant', () => {
     // 4. One box per product instead of the single "Number of Guests" field (T-152 D-3). The boxes have no
     // accessible name of their own — each sits right after its label.
     const box = (label: string) => page.getByText(label, { exact: true }).locator('xpath=following-sibling::*[1]');
-    const tastingOnly = box('Tasting only');
+    const tastingOnly = box('Tasting'); // product names lost their "only" on 2026-10-23
     const tastingLunch = box('Tasting & Lunch');
     const freeGuests = box('Free / Guide');
     await expect(tastingOnly).toBeVisible();
     await expect(tastingLunch).toBeVisible();
     await expect(freeGuests).toBeVisible();
     // Tbilisi has no Lunch only price → no Lunch only box (D-7).
-    await expect(page.getByText('Lunch only', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Lunch', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('spinbutton', { name: /^Number of Guests \(minimum \d+\)$/ } /* the minimum is tenant data, not a constant */)).toHaveCount(0);
 
     // 5. Hot Dish Selection and Masterclass Add-ons blocks are present (the
@@ -261,7 +261,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     await tastingLunch.fill('3');
     await tastingOnly.fill('31');
     await expect(page.getByText('no rate', { exact: false })).not.toBeVisible();
-    await expect(page.getByText('31 × Tasting only 60₾', { exact: false })).toBeVisible();
+    await expect(page.getByText('31 × Tasting 60₾', { exact: false })).toBeVisible();
 
     // 7. Correct to an in-range guest count, select one hot dish option and
     // one masterclass add-on, fill required contact fields, submit.
@@ -336,8 +336,8 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(cells.nth(3)).toHaveText('Company'); // Type
     await expect(cells.nth(4)).toContainText(COMPANY_NAME); // Company
     // Default columns since T-152 Chunk 9: … Company, Tasting only, Lunch only, Tasting & Lunch, Visit, …
-    await expect(cells.nth(5)).toHaveText('5'); // Tasting only
-    await expect(cells.nth(6)).toHaveText('—'); // Lunch only
+    await expect(cells.nth(5)).toHaveText('5'); // Tasting
+    await expect(cells.nth(6)).toHaveText('—'); // Lunch
     await expect(cells.nth(7)).toHaveText('3'); // Tasting & Lunch
     await expect(cells.nth(8)).toHaveText('Tasting + Lunch'); // Visit
     await expect(cells.nth(9)).toContainText('Khinkali'); // Masterclass

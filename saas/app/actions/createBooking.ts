@@ -427,7 +427,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     if (gate.takePayment) {
       const locale = (await cookies()).get('site_locale')?.value
       // order_desc from the actual order, not a hardcoded site name.
-      const typeLabel = visitType === 'TASTING' ? 'Tasting' : visitType === 'LUNCH' ? 'Lunch only' : 'Tasting + Lunch'
+      const typeLabel = visitType === 'TASTING' ? 'Tasting' : visitType === 'LUNCH' ? 'Lunch' : 'Tasting + Lunch'
       const checkoutUrl = await startCheckout({
         tenantId,
         merchantId: gate.merchantId,

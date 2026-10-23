@@ -143,7 +143,7 @@ export function PriceLines({ at, view }: { at: At; view: AdminOrderView }) {
         <div key={l.product} className="flex justify-between text-sm">
           <span style={{ color: MUTED }}>
             {at(PRODUCT_AT[l.product])} ({l.count} × {formatTetri(asTetri(l.rate))})
-            {l.row && <span className="text-xs" style={{ color: FAINT }}> · {at('orderForm.rowRange', { min: l.row.min, max: l.row.max })}</span>}
+            {l.row && <span className="text-xs" style={{ color: FAINT }}> · {at(l.row.outside ? 'orderForm.rowFallback' : 'orderForm.rowRange', { min: l.row.min, max: l.row.max, count: l.count })}</span>}
           </span>
           <span style={{ color: TEXT }}>{formatTetri(asTetri(l.amount), { decimals: true })}</span>
         </div>

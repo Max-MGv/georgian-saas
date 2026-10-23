@@ -5,7 +5,7 @@ tags: [feature, pricing, bookings, companies, admin]
 # Feature 237 — Pricing model: three products (T-152, fixes #93 + production P-11)
 
 Built 2026-10-19 → 2026-10-22 on `staging` + the dev database. **Not on production** — the production runbook is
-[[Plan-PricingModel]] Chunk 12 (each step on Max's explicit go). Plan, decisions (D-1…D-14, A-1…A-11, Q-1…Q-3) and
+[[Plan-PricingModel]] Chunk 12 (each step on Max's explicit go). Plan, decisions (D-1…D-17, A-1…A-11, Q-1…Q-3) and
 per-chunk QA logs: [[Plan-PricingModel]]. FeatureLog #237.
 
 ## What it does (for a winery)
@@ -27,7 +27,11 @@ per-chunk QA logs: [[Plan-PricingModel]]. FeatureLog #237.
 - **Individual orders on the admin screens (D-14, 2026-10-22):** priced from the Individuals price table by the
   guest count, like a company — no typed rates, no "price later" (refused with a message until the table exists).
   To charge more, add an extra. Changing the guests or the visit re-prices at today's table; paid orders stay locked.
-- **Free guests capped** at the paying guests on the public form (Max, 2026-10-22); admin screens exempt.
+- **Free guests capped** at the paying guests — public form (2026-10-22) and admin screens (2026-10-23, D-17).
+- **Names (D-15, 2026-10-23):** the products are shown as **Tasting / Lunch / Tasting & Lunch** (KA დეგუსტაცია / სადილი /
+  დეგუსტაცია და სადილი) — no "only". Earlier notes and screenshots say "Tasting only" / "Lunch only"; same products.
+- **No row covers the count** → the highest-priced row that offers the product (A-7, kept 2026-10-23: overcharge
+  rather than undercharge); the admin price line says so.
 - **Everywhere a booking is shown:** orders table (Tasting only / Lunch only / Tasting & Lunch / Free columns),
   kitchen sheet with a kitchen total, invoices (print + email: a line per product), booking emails (Lunch only
   label, per-product guest line), statistics (three visit types, guests by product).

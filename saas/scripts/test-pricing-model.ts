@@ -306,7 +306,7 @@ console.log('Rules from settings (Chunk 6)')
   check("no rates → one booking line on the visit's product", [invoiceView({ ...base, lunchOnlyRate: null }).lines, invoiceView({ ...base, lunchOnlyRate: null }).visitProduct], [null, 'tastingLunch'])
   check('masterclass and extras stay outside the booking amount', invoiceView({ ...base, totalPrice: 69500, masterclassAmt: 8000, extrasAmt: 2000 }).lines?.length, 2)
   check('registration fee counted in', invoiceView({ ...base, registrationFeeSnapshot: 3000, totalPrice: 62500 }).registration, 3000)
-  check('guest split: mixed booking', guestSplitText({ tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 }, 'en'), '1 Tasting only · 2 Tasting & Lunch · 1 free')
+  check('guest split: mixed booking', guestSplitText({ tastingOnly: 1, lunchOnly: 0, tastingLunch: 2, free: 1 }, 'en'), '1 Tasting · 2 Tasting & Lunch · 1 free') // no "only" since 2026-10-23
   check('guest split: one product, no free → nothing extra to say', guestSplitText({ tastingOnly: 0, lunchOnly: 0, tastingLunch: 4, free: 0 }, 'en'), null)
 }
 
@@ -341,7 +341,7 @@ console.log('Rules from settings (Chunk 6)')
     adminOrderView({ bookingType: 'INDIVIDUAL', visitType: o.visitType ?? 'TASTING', guests: o.guests, boxes: noBoxes, prices: o.prices ?? individuals,
       registration: o.registration ?? 0, manual: { tastingOnly: o.manual ?? '', lunchOnly: '', tastingLunch: o.manual ?? '' }, masterclassAmt: 0, extrasAmt: 0, hadRates: o.hadRates })
   const four = ind({ guests: '4' })
-  check('4 guests, Tasting → the 3–6 row, ₾70 × 4 = ₾280', [four.quote?.kind, four.total, four.lines.map(l => [l.rate, l.row])], ['priced', 28000, [[7000, { min: 3, max: 6 }]]])
+  check('4 guests, Tasting → the 3–6 row, ₾70 × 4 = ₾280', [four.quote?.kind, four.total, four.lines.map(l => [l.rate, l.row])], ['priced', 28000, [[7000, { min: 3, max: 6, outside: false }]]])
   check('8 guests, Tasting + Lunch → the 7–100 row, ₾105 × 8', ind({ visitType: 'TASTING_LUNCH', guests: '8' }).total, 84000)
   const typed = ind({ guests: '4', manual: '50' })
   check('a typed rate is ignored — the table price stands, no rate inputs', [typed.total, typed.rateInputs], [28000, []])
@@ -353,14 +353,30 @@ console.log('Rules from settings (Chunk 6)')
   check('an order that had rates still prices from the table (hadRates is a company rule)', ind({ guests: '4', hadRates: true }).total, 28000)
 }
 
-// Max 2026-10-22: no more Free guests than paying guests on the public form (admin exempt).
+// A-7 kept (Max 2026-10-23: overcharge rather than undercharge) — the admin line says when no row covers the count.
+{
+  console.log('\nA-7 fallback label')
+  const tbl: ProductTier[] = [
+    { minGuests: 1, maxGuests: 12, tastingOnlyPrice: 5800, lunchOnlyPrice: 4500, tastingLunchPrice: 9800 },
+    { minGuests: 13, maxGuests: 100, tastingOnlyPrice: 4600, lunchOnlyPrice: null, tastingLunchPrice: 8600 },
+  ]
+  const v = (lo: string) => adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING_LUNCH', guests: '0', boxes: { tastingOnly: '0', lunchOnly: lo, tastingLunch: '1', free: '0' },
+    prices: tbl, registration: 0, manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' }, masterclassAmt: 0, extrasAmt: 0 })
+  const line = (lo: string) => v(lo).lines.find(l => l.product === 'lunchOnly')
+  check('13 Lunch only, no row 13+ offers it → ₾45 from row 1–12, flagged outside', [line('13')?.rate, line('13')?.row], [4500, { min: 1, max: 12, outside: true }])
+  check('5 Lunch only → its own row, not flagged', line('5')?.row, { min: 1, max: 12, outside: false })
+}
+
+// Max 2026-10-22/23: no more Free guests than paying guests — public form and admin screens.
 {
   console.log('\nFree-guest cap')
   const none = { groupMin: null, productMins: { tastingOnly: null, lunchOnly: null, tastingLunch: null } }
   const r = (form: 'public' | 'admin', to: number, free: number) => { const x = checkBookingCounts({ bookingType: 'COMPANY', layout: 'boxes', form, visitType: 'TASTING', tastingOnly: to, free }, none); return x.ok ? 'ok' : x.error }
   check('public: 1 paying + 200 free → refused, max 1', r('public', 1, 200), { code: 'too_many_free', max: 1 })
   check('public: 4 paying + 4 free → ok', r('public', 4, 4), 'ok')
-  check('admin screens exempt (phone bookings)', r('admin', 1, 3), 'ok')
+  check('admin screens refuse it too (Max 2026-10-23)', r('admin', 1, 3), { code: 'too_many_free', max: 1 })
+  check('admin: 9 paying + 9 free → ok', r('admin', 9, 9), 'ok')
+  check('admin order: 9 paying + 12 free → tooManyFree, max 9', (() => { const x = checkAdminOrder({ bookingType: 'COMPANY', visitType: 'TASTING', boxes: { tastingOnly: 9, lunchOnly: 0, tastingLunch: 0, free: 12 } }); return x.ok ? 'ok' : x.problem })(), { key: 'orderForm.err.tooManyFree', vars: { max: 9 } })
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

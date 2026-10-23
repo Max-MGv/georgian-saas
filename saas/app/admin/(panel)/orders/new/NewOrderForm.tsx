@@ -475,7 +475,7 @@ export default function NewOrderForm({
         <Card title={at('orderDetail.guestBreakdown.title')}>
           {/* A hot dish needs a lunch guest (A-11): the selects are off until there is one. */}
           {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
-            <p className="text-xs mb-3" style={{ color: C.faint }}>{at('orderForm.hotDishNeedsLunch')}</p>
+            <p className="text-xs mb-3" style={{ color: C.faint }}>{at(isCompany ? 'orderForm.hotDishNeedsLunch' : 'orderForm.hotDishNeedsLunchIndividual')}</p>
           )}
           {vegItems.length > 0 && (
             <Field label={at('orderDetail.guestBreakdown.hotDishVeg')}>

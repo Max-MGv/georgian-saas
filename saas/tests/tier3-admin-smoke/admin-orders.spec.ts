@@ -80,7 +80,7 @@ test.describe('Orders admin — filtering and view toggle', () => {
     // An individual order: one guest count (T-152 D-5), named since Chunk 8 — not found by position any more.
     await page.getByRole('textbox', { name: 'Number of guests' }).fill('4');
     // D-14 (2026-10-22): priced from Staging Winery's Individuals table (3–6 guests, Tasting ₾70), no rate box.
-    await expect(page.getByText('Tasting only (4 × 70₾)', { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Tasting (4 × 70₾)', { exact: false })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('textbox', { name: /— ₾ per person$/ })).toHaveCount(0);
     // One Name box now (like the public form) — split into first word / rest at submit,
     // so this still stores name "Playwright", surname "AdminOrdersTest".
@@ -100,7 +100,7 @@ test.describe('Orders admin — filtering and view toggle', () => {
     const table = page.locator('table');
     await expect(table).toBeVisible({ timeout: 15_000 });
     // The three product columns since T-152 Chunk 9 (saved ids tasting/lunch kept, labels renamed, Lunch only added).
-    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting only', 'Lunch only', 'Tasting & Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
+    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Tasting & Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
       await expect(page.getByRole('columnheader', { name: col, exact: true })).toBeVisible();
     }
 

@@ -17,6 +17,8 @@ import EditModeSuppressor from '@/components/EditModeSuppressor'
 import { isPaymentConfigured } from '@/lib/payments/shouldTakePayment'
 import { comboRatePerPerson } from '@/lib/pricingUtils'
 import { orderRolesFor, listableCompaniesFor } from '@/lib/contactResolution'
+import GuestIcon from '@/components/GuestIcon'
+import { tierRangeLabel } from '@/lib/tierRange'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,6 +124,12 @@ export default async function Home({ searchParams }: PageProps) {
   const displayTier = individualsRow?.prices.find(p => p.isDisplayPrice)
   const displayPriceTasting = displayTier?.tastingOnlyPrice ?? null
   const displayPriceTastingLunch = displayTier ? comboRatePerPerson(displayTier) : null
+  // T-272 (Max 2026-10-23): the card says the guest range of the row whose price it shows ("7+ guests"), not the
+  // booking minimum. No starred row → no price and the minimum line as before.
+  const individualsLadder = individualsRow?.prices ?? []
+  const displayRange = (product: 'tastingOnlyPrice' | 'tastingLunchPrice') => displayTier && displayTier[product] != null
+    ? tierRangeLabel(locale, displayTier, individualsLadder.filter(p => p[product] != null))
+    : null
 
   const logoUrl = h.get('x-tenant-logo') ?? null
   const logoAlt = h.get('x-tenant-logo-alt') ?? ''
@@ -366,13 +374,13 @@ export default async function Home({ searchParams }: PageProps) {
             tk: 'home_package1_title', dk: 'home_package1_desc',
             tFb: t(locale, 'form.tasting'),
             dFb: 'A guided tasting of our house wines.',
-            price: displayPriceTasting, min: parseInt(minGuestsTasting) || 4,
+            price: displayPriceTasting, min: parseInt(minGuestsTasting) || 4, range: displayRange('tastingOnlyPrice'),
           },
           {
             tk: 'home_package2_title', dk: 'home_package2_desc',
             tFb: t(locale, 'form.tasting_lunch'),
             dFb: 'Wine tasting followed by a full traditional meal.',
-            price: displayPriceTastingLunch, min: parseInt(minGuestsTastingLunch) || 4,
+            price: displayPriceTastingLunch, min: parseInt(minGuestsTastingLunch) || 4, range: displayRange('tastingLunchPrice'),
           },
         ].map(pkg => (
           <div key={pkg.tk} className="rounded-xl p-6 border" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)' }}>
@@ -386,11 +394,8 @@ export default async function Home({ searchParams }: PageProps) {
               </p>
             )}
             <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--site-secondary)' }}>
-              <svg width="10" height="13" viewBox="0 0 10 13" fill="none" aria-hidden="true">
-                <circle cx="5" cy="3.5" r="2.5" fill="var(--color-brand)" opacity="0.75" />
-                <path d="M1 12.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="var(--color-brand)" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.75" />
-              </svg>
-              {locale === 'ka' ? `${pkg.min} ან მეტი სტუმარი` : `${pkg.min} or more guests`}
+              <GuestIcon />
+              {pkg.range ?? (locale === 'ka' ? `${pkg.min} ან მეტი სტუმარი` : `${pkg.min} or more guests`)}
             </p>
           </div>
         ))}

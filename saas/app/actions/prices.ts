@@ -40,8 +40,8 @@ const MAX_TETRI = 100_000_000
 function tierPricesProblem(p: TierPrices, isIndividual: boolean): string | null {
   const all = [p.tastingOnlyPrice, p.lunchOnlyPrice, p.tastingLunchPrice]
   if (all.some(v => v != null && (!Number.isInteger(v) || v < 0 || v > MAX_TETRI))) return 'Prices must be whole amounts of 0 or more.'
-  if (p.tastingOnlyPrice == null || p.tastingLunchPrice == null) return 'Tasting only and Tasting & Lunch prices are required.'
-  if (isIndividual && p.lunchOnlyPrice != null) return 'Individuals have no Lunch only price.'
+  if (p.tastingOnlyPrice == null || p.tastingLunchPrice == null) return 'Tasting and Tasting & Lunch prices are required.'
+  if (isIndividual && p.lunchOnlyPrice != null) return 'Individuals have no Lunch price.'
   return null
 }
 

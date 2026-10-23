@@ -64,6 +64,9 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | D-12 | Add-ons plan (`Plan-AddOnsAndWine.md`) is **parked**; handled after this lands. |
 | D-13 | Full E2E tests **last**; screenshots along the way. Caution over speed. |
 | D-14 | **Individual bookings on admin screens are priced from the Individuals price table, like companies — no typed custom rates for individuals** (Max, 2026-10-22, after the review finding #2 example: *"scrap these custom rates, have it work like the company one does, look up the rate according to the number of guests; if they ever want to add money they have other ways such as add flat fee"*). Applies to New Order and the order page. **Recorded, not built yet** — see Chunk 11b. |
+| D-15 | **Product names lose "only":** Tasting / Lunch / Tasting & Lunch; KA დეგუსტაცია / სადილი / დეგუსტაცია და სადილი; the simple form's third visit type is "Lunch" (Max, 2026-10-23: *"remove only and მხოლოდ … when they are considered alongside tasting + lunch it's clear that lunch guest means lunch only guest"*). Code names (`tastingOnly`, `lunchOnly`, `form_lunch_only`) unchanged. |
+| D-16 | **A-7 kept** — no row covers the count → the highest-priced row that offers it (Max 2026-10-23: *"keep the overcharge rather than undercharge"*); admin price lines now say so (`orderForm.rowFallback`). Kitchen total = all guests incl. Tasting and Free, as specified (Max: *"total guests is fine"*). |
+| D-17 | **Free guests ≤ paying guests on the admin screens too** (Max 2026-10-23: *"why allow admin to enter more free guests than paying guests? block that too"*) — `orderForm.err.tooManyFree`. |
 
 ### Defaults I chose — Max may change any of these on review
 
@@ -618,11 +621,35 @@ draft with before/after shots; tier 5 on staging.
       **Run 11: 3/3 ✅**, no retries. Server log: `createOrderAdmin` ok for an individual (3.2 s) and a company (2.8 s).
 - [x] `tix review T-152` with test steps for Max (staging) — posted 2026-10-22, commit `dcad3f4`, D-14 checked on live
       staging first (4 guests → "Tasting only (4 × 70₾) · row 3–6", ₾280, no rate box).
+- [x] **Independent acceptance test 2026-10-22/23** (subagent in Brave on staging, context-free; backup
+      `2026-10-22_232311_dev_before-agent-t152-acceptance` first): 7/8 steps pass (step 4 skipped — needs the enhanced
+      form off), no blockers, cleanup verified in the DB. 43 shots in `Features/Feature 237 screens/acceptance-2026-10-22/`.
+      Findings → Max's answers D-15…D-17 and these fixes (2026-10-23, localhost): product rename (D-15); A-7 label; admin
+      free cap; individual hot-dish hint ("switch the visit to Tasting + Lunch"); free-cap message reworded (no
+      "1 free guests"); **revenue chart Y axis 100× too high** (raw tetri since the tetri migration — confirmed by a blind
+      check; `tickFormatter`); **invoice / packing sheet / onboarding dates built by hand, day-month-year** (Brave printed
+      11.25.2026 — no Georgian ICU data, same trap the emails already avoid); **individuals as one group** (demo seed
+      had linked individual orders to the Individuals price row since 2026-09-10 → split "Individuals"/"Individual"
+      on Statistics; seed fixed, 519 dev orders unlinked after a backup, Statistics counts companies only). Not
+      changed: Free column sliding under the pinned Status/actions columns (normal horizontal scroll).
 - [ ] Draft the release note with before/after shots (`scripts/release-shots.ts`, Plan-ReleaseNotes).
 - [ ] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box).
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
 **Verify:** tiers 1–4 green; review findings closed or listed for Max.
-**Resume point:** Max tests on staging (review card on T-152). Meanwhile: release note draft, tier 5 on staging.
+**Resume point (2026-10-23, paused by Max — "continue or restart them at my go"):** the D-15…D-17 + acceptance fixes are
+on localhost, **uncommitted** (tsc 0, `test-pricing-model` 119/119). Run 12 was stopped during warmup — no spec had
+started, nothing left half-done. On Max's go: restart dev server + `clear-next-cache`, warm (incl. `/admin/orders/[id]` by
+hand), `restore-suite-state`, then run admin-orders, contact-orphan-safety, booking-enhanced,
+company-nationality-tagging, companies-crud, booking-simple, booking-tampered-quantities (the specs whose labels changed).
+**T-272 batched in (Max 2026-10-23, mockup approved, "7+ guests"):** an individual's two visit tiles on the public
+form show the Individuals row for the current guest count ("3–6 guests" + that row's price; last row "7+ guests";
+one-number row "1 guest") with the person icon (shared `components/GuestIcon.tsx`, also on the home cards); the top
+preview cards now say the range of the starred row whose price they show ("7+ guests" instead of the minimum "1 or
+more guests" — Max, same day); one label function for both, `lib/tierRange.ts`; companies keep "Company rate". Tiles are flex-col so names top / prices bottom line up when
+a Georgian name wraps. Checked headless at 1280 / 390 / 360 px, EN + KA, no horizontal overflow — shots in
+`Features/T-272 screens/`. Admin Content mirror shows a sample range line.
+Then: browser check (Statistics axis, invoice date, A-7 line, renamed labels), commit, push **staging**, update the
+T-152 review card (steps still say "Tasting only"), release note, tier 5. Production only on Max's go per step.
 
 ### Chunk 11b — D-14: individuals priced from the Individuals table on admin screens (NOT STARTED — Max: "record, don't start")
 **Status:** ✅ 2026-10-22 on localhost, committed + pushed to staging (see git log); tsc 0, `test-pricing-model` **115/115** (7 new D-14

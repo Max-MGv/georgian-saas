@@ -31,7 +31,7 @@ export type NewBookingNotificationData = {
 }
 
 export function renderNewBookingNotificationEmail(data: NewBookingNotificationData): { subject: string; html: string } {
-  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : data.visitType === 'LUNCH' ? 'Lunch only' : 'Wine Tasting + Lunch'
+  const visitLabel = data.visitType === 'TASTING' ? 'Wine Tasting' : data.visitType === 'LUNCH' ? 'Lunch' : 'Wine Tasting + Lunch'
   const split = data.boxes ? guestSplitText(data.boxes, 'en') : null
 
   const html = `

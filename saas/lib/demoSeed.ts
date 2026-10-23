@@ -549,7 +549,7 @@ export async function seedDemoTenant(
   const roleIdFor = (role: 'contact_person' | 'guide') => role === 'guide' ? guideRole.id : contactPersonRole.id
 
   // --- Cast ---
-  const individuals = await db.company.create({
+  await db.company.create({
     data: {
       name: 'Individuals', tenantId: tid, isIndividual: true, isBookingCompany: true,
       prices: { create: INDIVIDUALS_TIERS.map(t => tierToTetri(t)) },
@@ -791,7 +791,9 @@ export async function seedDemoTenant(
           surname: company ? company.contactName.split(' ')[1] : last,
           email: company ? company.contactEmail : `${first.toLowerCase()}.${last.toLowerCase()}@example.com`,
           phone: company ? company.contactPhone : `+995 5${rand(50, 99)} ${rand(10, 99)} ${rand(10, 99)} ${rand(10, 99)}`,
-          companyId: company ? company.id : individuals.id,
+          // An individual booking has no company — the same as the public form and admin New Order store it. Pointing
+          // it at the "Individuals" price row split individuals in two on Statistics and the orders list (2026-10-23).
+          companyId: company ? company.id : null,
           totalPrice, createdAt,
           // Carry the rates this order was sold at, so recalc uses its snapshot
           // branch rather than repricing off live tiers (#49).

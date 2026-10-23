@@ -20,6 +20,7 @@
 //             and Settings → Contact Types, not from SiteContent.
 
 import EditableText from '@/components/EditableText'
+import GuestIcon from '@/components/GuestIcon'
 
 const C = {
   bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
@@ -65,15 +66,18 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         <div className={isDetailed ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 sm:grid-cols-3 gap-3'}>
           <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))', borderColor: C.wine }}>
             <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_tasting" fb="Wine Tasting" /></div>
+            {/* T-272: an individual sees the row their guest count falls in (sample values) */}
+            <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}><GuestIcon />3–6 guests</div>
             <div className="text-sm mt-0.5" style={{ color: C.wine }}>50₾ / pp</div>
           </div>
           <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: C.bg, borderColor: C.border }}>
             <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_tasting_lunch" fb="Tasting + Lunch" /></div>
+            <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}><GuestIcon />3–6 guests</div>
             <div className="text-sm mt-0.5" style={{ color: C.wine }}>100₾ / pp</div>
           </div>
           {!isDetailed && (
             <div className="py-3 px-4 rounded-lg border text-left" style={{ backgroundColor: C.bg, borderColor: C.border }}>
-              <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_lunch_only" fb="Lunch only" /></div>
+              <div className="font-medium text-sm" style={{ color: C.text }}><ET k="form_lunch_only" fb="Lunch" /></div>
               <div className="text-xs mt-0.5" style={{ color: C.faint }}>Tour companies only</div>
             </div>
           )}
@@ -99,8 +103,8 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
           <label style={labelStyle}><ET k="form_guest_counts_header" fb="Guest Counts" /></label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: 'Tasting only', value: '2' },
-              { label: 'Lunch only', value: '1' },
+              { label: 'Tasting', value: '2' },
+              { label: 'Lunch', value: '1' },
               { label: 'Tasting & Lunch', value: '4' },
               { label: 'Free / Guide', value: '1' },
             ].map(g => (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { adminT } from '@/lib/adminT'
+import { formatDayMonthYear } from '@/lib/emails/templates/dateFormat'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -134,7 +135,8 @@ function computeSummary(orders: PackingOrder[], mode: BoxMode, locale: string): 
 function printPackingSheet(orders: PackingOrder[], mode: BoxMode, locale: string) {
   const at = (key: string) => adminT(locale, key)
   const { wineMap, totalBottles, totalBoxes, perCompany } = computeSummary(orders, mode, locale)
-  const date = new Date().toLocaleDateString(locale === 'ka' ? 'ka-GE' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  // Day month year, built by hand for Georgian (no reliance on the browser's ka-GE locale data — 2026-10-23).
+  const date = formatDayMonthYear(new Date(), locale === 'ka' ? 'ka' : 'en')
   const modeLabel = at(BOX_MODE_KEYS[mode].labelKey)
   const orderWord = orders.length !== 1 ? at('packing.order.plural') : at('packing.order.singular')
 

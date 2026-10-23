@@ -212,7 +212,9 @@ export default function StatisticsClient({
                 <BarChart data={byMonth} barSize={28} margin={{ top: 20 }}>
                   <CartesianGrid vertical={false} stroke={C.border} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={48} />
+                  {/* The data is tetri — without a formatter the axis printed it raw, 100× the lari on the bars (2026-10-23). */}
+                  <YAxis tick={{ fontSize: 11, fill: C.muted }} axisLine={false} tickLine={false} width={56}
+                    tickFormatter={v => formatTetri(asTetri(Math.round(Number(v))), { grouping: true })} />
                   <Tooltip {...tooltipStyle} formatter={(v) => [formatTetri(asTetri(Number(v ?? 0)), { grouping: true }), at('statistics.tooltip.revenue')]} />
                   <Bar dataKey="revenue" fill="#a0392a" radius={[4, 4, 0, 0]}>
                     <LabelList dataKey="revenue" position="top" style={{ fill: C.muted, fontSize: 11, fontWeight: 500 }} formatter={(v: unknown) => Number(v) > 0 ? formatTetri(asTetri(Number(v)), { grouping: true }) : ''} />

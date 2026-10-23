@@ -181,7 +181,7 @@ export default function OrdersActivityClient({ bookings, wineOrders }: { booking
                     {b.name} {b.surname}
                     {b.companyName && <span style={{ color: C.faint }}> · {b.companyName}</span>}
                   </td>
-                  <td className="px-4 py-3" style={{ color: C.muted }}>{b.visitType === 'TASTING' ? 'Tasting' : b.visitType === 'LUNCH' ? 'Lunch only' : 'Tasting + Lunch'}</td>
+                  <td className="px-4 py-3" style={{ color: C.muted }}>{b.visitType === 'TASTING' ? 'Tasting' : b.visitType === 'LUNCH' ? 'Lunch' : 'Tasting + Lunch'}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{b.guestCount}</td>
                   <td className="px-4 py-3" style={{ color: C.text }}>{formatTetriOrDash(asTetriOrNull(b.totalPrice))}</td>
                   <td className="px-4 py-3" style={{ color: C.muted }}>{BOOKING_STATUS_LABEL[b.stage] ?? b.stage}<PaymentMark payment={b.payment} /></td>

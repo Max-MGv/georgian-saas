@@ -1297,6 +1297,9 @@ has no Georgian ICU data, so it prints an English shape while the browser prints
 a React hydration error. Use the fixed tables: `formatIsoDay` / `formatPreferredDate` (`lib/wineOrderDate.ts`)
 or `lib/emails/templates/dateFormat.ts`. "Today" for the winery is `tbilisiDateIso(new Date())`, not
 `toISOString()` (that is UTC).
+**2026-10-23:** browsers lack it too — Brave printed the invoice date as `11.25.2026`. The last three screens
+that still called it (`InvoicePrint.tsx`, the wine packing sheet, the onboarding review) now use `formatShortDate` /
+`formatDayMonthYear` from `dateFormat.ts`. Day-month-year everywhere (Max).
 
 **Order lines are named by the server** (KnownBugs #83): `submitWineOrder` takes the wine name / year snapshot
 from the vintage row it priced, and only active vintages of active wines. The browser's `name`/`year`/`price`

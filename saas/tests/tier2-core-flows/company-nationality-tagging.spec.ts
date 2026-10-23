@@ -192,7 +192,7 @@ test.describe.serial('Company booking nationality tagging', () => {
     tomorrow.setDate(tomorrow.getDate() + 1);
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
     await page.getByRole('combobox').last().selectOption({ index: 1 });
-    await page.getByText('Tasting only', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
+    await page.getByText('Tasting', { exact: true }).locator('xpath=following-sibling::*[1]').fill('4');
     // Contact Person merged First/Last Name into one Name field 2026-09-30
     // (MaintenanceNotes.md §1); exact: true since Tbilisi Tour Collective has
     // a guide on file, which also renders "Guide — Name"/"Guide — Phone"/

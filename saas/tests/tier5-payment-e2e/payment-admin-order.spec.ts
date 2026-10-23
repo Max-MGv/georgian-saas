@@ -136,7 +136,7 @@ test.describe('Admin-created order — parity with a guest order, then manual pa
       await page.locator('input[type="tel"]').fill(phone)
       await page.locator('input[type="email"]').fill(email)
       // No rate to type: the Individuals table prices it (D-14), and the box is gone.
-      await expect(page.getByRole('textbox', { name: 'Tasting only — ₾ per person' })).toHaveCount(0)
+      await expect(page.getByRole('textbox', { name: 'Tasting — ₾ per person' })).toHaveCount(0)
       await dateInput.fill(dateIso)
       await expect(dateInput).toHaveValue(dateIso)
       await page.getByRole('button', { name: 'Create order', exact: true }).click()

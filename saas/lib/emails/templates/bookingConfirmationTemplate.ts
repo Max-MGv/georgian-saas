@@ -45,13 +45,13 @@ const LABELS: Record<BookingEmailLocale, {
     summary: 'Booking Summary', visitType: 'Visit type', date: 'Date', time: 'Time', guests: 'Guests',
     paid: 'Paid', estimatedTotal: 'Estimated total',
     cancellationPolicy: '48-hour cancellation policy applies. Please notify us at least 48 hours before your visit if you need to cancel or reschedule.',
-    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch', lunch: 'Lunch only',
+    tasting: 'Wine Tasting', tastingLunch: 'Wine Tasting + Lunch', lunch: 'Lunch',
   },
   ka: {
     summary: 'ჯავშნის დეტალები', visitType: 'ვიზიტის ტიპი', date: 'თარიღი', time: 'დრო', guests: 'სტუმრები',
     paid: 'გადახდილია', estimatedTotal: 'სავარაუდო ჯამი',
     cancellationPolicy: 'მოქმედებს გაუქმების 48-საათიანი პოლიტიკა. გთხოვთ, გვაცნობოთ სტუმრობამდე მინიმუმ 48 საათით ადრე, თუ გჭირდებათ გაუქმება ან გადატანა.',
-    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი', lunch: 'მხოლოდ სადილი',
+    tasting: 'ღვინის დეგუსტაცია', tastingLunch: 'ღვინის დეგუსტაცია + სადილი', lunch: 'სადილი',
   },
 }
 

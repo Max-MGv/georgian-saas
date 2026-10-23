@@ -225,7 +225,7 @@ export function countsOf(o: { tastingOnlyGuests: number; lunchOnlyGuests: number
 }
 
 /** Product names as admins and guests read them (English; the forms translate their own copy). */
-export const PRODUCT_LABEL: Record<Product, string> = { tastingOnly: 'Tasting only', lunchOnly: 'Lunch only', tastingLunch: 'Tasting & Lunch' }
+export const PRODUCT_LABEL: Record<Product, string> = { tastingOnly: 'Tasting', lunchOnly: 'Lunch', tastingLunch: 'Tasting & Lunch' }
 
 /** The Order / InvoiceSent columns that hold the boxes. guestCount stays as the caller sets it. */
 export function boxColumns(c: Counts) {

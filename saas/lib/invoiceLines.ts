@@ -47,8 +47,8 @@ export type InvoiceView = {
 }
 
 export const INVOICE_PRODUCT_LABEL: Record<InvoiceLocale, Record<Product, string>> = {
-  ka: { tastingOnly: 'დეგუსტაცია', lunchOnly: 'მხოლოდ სადილი', tastingLunch: 'სადილი + დეგუსტაცია' },
-  en: { tastingOnly: 'Tasting only', lunchOnly: 'Lunch only', tastingLunch: 'Tasting & Lunch' },
+  ka: { tastingOnly: 'დეგუსტაცია', lunchOnly: 'სადილი', tastingLunch: 'დეგუსტაცია და სადილი' },
+  en: { tastingOnly: 'Tasting', lunchOnly: 'Lunch', tastingLunch: 'Tasting & Lunch' },
 }
 export const INVOICE_REGISTRATION_LABEL: Record<InvoiceLocale, string> = { ka: 'რეგისტრაციის საფასური', en: 'Registration fee' }
 

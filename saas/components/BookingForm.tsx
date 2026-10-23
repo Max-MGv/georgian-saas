@@ -10,10 +10,12 @@ import { createBooking, type BookingFormData } from '@/app/actions/createBooking
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
-import { countsFromVisit, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { countsFromVisit, findProductTier, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkBookingCounts, countRulesFromSettings, type CountRuleKey, type CountsError } from '@/lib/bookingInput'
 import { t } from '@/lib/t'
 import DateInput from '@/components/DateInput'
+import GuestIcon from '@/components/GuestIcon'
+import { tierRangeLabel } from '@/lib/tierRange'
 import NationalityPicker from '@/components/NationalityPicker'
 import { splitFullName } from '@/lib/splitFullName'
 import { countryName } from '@/lib/countries'
@@ -654,6 +656,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : null
   const enhancedTotal = previewTotal ?? masterclassAmt
 
+  // T-272 (Max, 2026-10-23): an individual's visit tile shows the Individuals row that prices the current guest
+  // count — its range ("3–6 guests"; the last row "7+ guests"; a one-number row "1 guest") and that row's price —
+  // instead of the starred display price. Same row lookup as the price preview (findProductTier, A-7). No ladder →
+  // null, and the tile keeps the display price. The home page's package cards are a preview and stay as they are.
+  const individualTileTier = (visit: 'TASTING' | 'TASTING_LUNCH'): { range: string; price: number | null } | null => {
+    const product: Product = visit === 'TASTING' ? 'tastingOnly' : 'tastingLunch'
+    const row = findProductTier(individualPrices, product, guestCount)
+    if (!row) return null
+    const range = tierRangeLabel(locale, row, individualPrices.filter(p => productPrice(p, product) != null))
+    return { range, price: productPrice(row, product) }
+  }
+
   const vegItems = menuItems.filter(m => m.type === 'VEGETABLE')
   const meatItems = menuItems.filter(m => m.type === 'MEAT')
 
@@ -1072,18 +1086,32 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               { value: 'TASTING',       contentKey: 'form_tasting',       labelKey: 'form.tasting',       price: displayPriceTasting },
               { value: 'TASTING_LUNCH', contentKey: 'form_tasting_lunch', labelKey: 'form.tasting_lunch', price: displayPriceLunch },
               { value: 'LUNCH',         contentKey: 'form_lunch_only',    labelKey: 'form.lunch_only',    price: null },
-            ] as const).filter(opt => visitOptions.includes(opt.value)).map(opt => (
-              <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
-                className="py-3 px-4 rounded-lg border text-left transition-colors"
-                style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
-                <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
-                {(bookingType === 'COMPANY' || opt.price != null) && (
-                  <div className="text-sm mt-0.5" style={{ color: C.wine }}>
-                    {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${opt.price != null ? formatTetri(asTetri(opt.price)) : ''} ${t(locale, 'form.per_pp')}`}
+            ] as const).filter(opt => visitOptions.includes(opt.value)).map(opt => {
+              // T-272: an individual sees the row their guest count falls in, not the starred display price.
+              const tier = bookingType === 'INDIVIDUAL' && opt.value !== 'LUNCH' ? individualTileTier(opt.value) : null
+              const price = tier ? tier.price : opt.price
+              return (
+                // flex-col + mt-auto: the name sits at the top and the guests/price lines at the bottom, so two tiles
+                // line up even when one name wraps (Georgian on a phone — T-272, 2026-10-23).
+                <button key={opt.value} type="button" onClick={() => setVisitType(opt.value)}
+                  className="py-3 px-4 rounded-lg border text-left transition-colors flex flex-col"
+                  style={{ backgroundColor: visitType === opt.value ? 'color-mix(in srgb, var(--color-brand) 8%, var(--site-surface))' : C.bg, borderColor: visitType === opt.value ? C.wine : C.border, color: C.text }}>
+                  <div className="font-medium text-sm">{fc(opt.contentKey, opt.labelKey)}</div>
+                  <div className="mt-auto">
+                    {tier && (
+                      <div className="text-xs mt-1 flex items-center gap-1.5" style={{ color: C.faint }}>
+                        <GuestIcon />{tier.range}
+                      </div>
+                    )}
+                    {(bookingType === 'COMPANY' || price != null) && (
+                      <div className="text-sm mt-0.5" style={{ color: C.wine }}>
+                        {bookingType === 'COMPANY' ? t(locale, 'form.company_rate') : `${price != null ? formatTetri(asTetri(price)) : ''} ${t(locale, 'form.per_pp')}`}
+                      </div>
+                    )}
                   </div>
-                )}
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         </div>
 

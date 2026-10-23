@@ -1,6 +1,7 @@
 import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView } from '@/lib/invoiceLines'
 import type { Product } from '@/lib/pricingUtils'
+import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 const KA = INVOICE_PRODUCT_LABEL.ka
 
@@ -66,8 +67,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function InvoicePrint({ order, payment, detailed = false, displayName = 'Your Winery' }: Props) {
   const d = new Date(order.date)
-  const dateStr = d.toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.')
-  const nowStr = new Date().toLocaleString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  // Day.month.year built by hand, not toLocaleDateString('ka-GE'): a browser without Georgian locale data falls back to
+  // month-first (11.25.2026 seen in Brave, 2026-10-23) — the same trap the email templates already avoid.
+  const dateStr = formatShortDate(d, 'ka')
+  const now = new Date()
+  const nowStr = `${formatShortDate(now, 'ka')}, ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
   const totalPrice = order.totalPrice ?? 0
   const companyName = order.company?.name ?? `${order.name} ${order.surname}`

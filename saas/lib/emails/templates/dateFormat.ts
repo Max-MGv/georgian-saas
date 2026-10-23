@@ -23,6 +23,12 @@ export function formatLongDate(date: Date, locale: 'en' | 'ka'): string {
   return date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+/** e.g. "14 September 2026" / "14 სექტემბერი 2026" — day, month, year in both (screens that used ka-GE ICU, 2026-10-23). */
+export function formatDayMonthYear(date: Date, locale: 'en' | 'ka'): string {
+  if (locale === 'ka') return `${date.getDate()} ${MONTHS_KA[date.getMonth()]} ${date.getFullYear()}`
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 /** e.g. "14/09/2026" (en) / "14.09.2026" (ka) — day-first in both, separator only differs. */
 export function formatShortDate(date: Date, locale: 'en' | 'ka'): string {
   const day = String(date.getDate()).padStart(2, '0')

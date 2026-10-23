@@ -93,7 +93,9 @@ export default async function StatisticsPage() {
   }
 
   const companyMap: Record<string, { name: string; orders: number; revenue: number }> = {}
-  for (const o of rawOrders.filter(o => o.company)) {
+  // Companies only: an individual booking is never a company, even one (older demo data) linked to the
+  // "Individuals" price row — it is counted under By booking type instead (2026-10-23).
+  for (const o of rawOrders.filter(o => o.bookingType === 'COMPANY' && o.company)) {
     const name = o.company!.name
     if (!companyMap[name]) companyMap[name] = { name, orders: 0, revenue: 0 }
     companyMap[name].orders++
@@ -108,8 +110,9 @@ export default async function StatisticsPage() {
     id: o.id,
     date: o.date.toISOString(),
     totalPrice: o.totalPrice ?? 0,
-    companyId: o.companyId,
-    companyName: o.company?.name ?? null,
+    // Individuals are one group ("Individual"), whatever row older demo data links them to (2026-10-23).
+    companyId: o.bookingType === 'INDIVIDUAL' ? null : o.companyId,
+    companyName: o.bookingType === 'INDIVIDUAL' ? null : o.company?.name ?? null,
   }))
 
   // Wine order stats — line items carry price snapshots from order time
