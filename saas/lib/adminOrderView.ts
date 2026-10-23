@@ -49,9 +49,10 @@ export const manualFromStrings = (m: Record<Product, string>): ManualRates =>
 export const NO_TYPED_RATES: ManualRates = { tastingOnly: null, lunchOnly: null, tastingLunch: null }
 const NO_TYPED_STRINGS: Record<Product, string> = { tastingOnly: '', lunchOnly: '', tastingLunch: '' }
 
-/** `row` = the price-table row the rate came from; `outside` = no row covers this count, so the highest-priced row that
- *  offers the product was used (A-7 — Max 2026-10-23: "keep the overcharge rather than undercharge"). */
-export type PriceLine = { product: Product; count: number; rate: number; amount: number; row: { min: number; max: number; outside: boolean } | null }
+/** `row` = the price-table row the rate came from. `outside`: false = the row covers the count; 'above' = more guests than
+ *  the last row, so the last row (Max 2026-10-23); 'gap' = no row covers it, so the highest-priced row that offers the
+ *  product (A-7 — "keep the overcharge rather than undercharge"). */
+export type PriceLine = { product: Product; count: number; rate: number; amount: number; row: { min: number; max: number; outside: false | 'above' | 'gap' } | null }
 
 export type AdminOrderView = {
   /** Null while the boxes cannot be read (the problem says why). */
@@ -120,7 +121,7 @@ export function adminOrderView(input: {
     ? PRODUCTS.filter(p => counts[p] > 0).map(p => {
         const rate = quote.rates[p]!
         const tier = quote.typed.includes(p) ? undefined : findProductTier(input.prices, p, counts[p])
-        return { product: p, count: counts[p], rate, amount: rate * counts[p], row: tier && productPrice(tier, p) === rate ? { min: tier.minGuests, max: tier.maxGuests, outside: counts[p] < tier.minGuests || counts[p] > tier.maxGuests } : null }
+        return { product: p, count: counts[p], rate, amount: rate * counts[p], row: tier && productPrice(tier, p) === rate ? { min: tier.minGuests, max: tier.maxGuests, outside: counts[p] >= tier.minGuests && counts[p] <= tier.maxGuests ? false : counts[p] > tier.maxGuests && !input.prices.some(r => productPrice(r, p) != null && r.maxGuests > tier.maxGuests) ? 'above' : 'gap' } : null }
       })
     : []
   const lineTotals = { masterclass: input.masterclassAmt, extras: input.extrasAmt }

@@ -82,10 +82,14 @@ export const totalGuests = (c: Counts) => payingGuests(c) + c.free
 /**
  * The row of the ladder that prices `count` guests of `product`.
  *
- * Only rows that offer the product are considered. Exact range match first;
- * otherwise the highest-priced row that offers it — the same protection the
- * old `findTier` gave against an unpriced gap (A-7). Undefined when the count
- * is 0 or no row offers the product at all ("not offered").
+ * Only rows that offer the product are considered. Exact range match first.
+ * Above the last row (more guests than any row's max) → the last row: its max is a
+ * cap, not a limit, and the guest was shown "7+ guests" (Max, 2026-10-23: "if 101
+ * guests and max is 100 it should take the 100 tier price"). Otherwise — a gap
+ * between rows, or fewer than the first row's min — the highest-priced row that
+ * offers it, the same protection the old `findTier` gave (A-7: overcharge rather
+ * than undercharge). Undefined when the count is 0 or no row offers the product
+ * at all ("not offered").
  */
 export function findProductTier<T extends ProductTier>(prices: T[], product: Product, count: number): T | undefined {
   if (count <= 0) return undefined
@@ -93,6 +97,8 @@ export function findProductTier<T extends ProductTier>(prices: T[], product: Pro
   if (offering.length === 0) return undefined
   const exact = offering.find(p => count >= p.minGuests && count <= p.maxGuests)
   if (exact) return exact
+  const last = offering.reduce((top, p) => (p.maxGuests > top.maxGuests ? p : top))
+  if (count > last.maxGuests) return last
   return offering.reduce((best, p) => (productPrice(p, product)! > productPrice(best, product)! ? p : best))
 }
 

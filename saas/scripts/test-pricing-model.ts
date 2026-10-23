@@ -88,8 +88,15 @@ console.log('Pricing — worked examples')
   check('not offered → listed', notOffered(rlo, lo), ['lunchOnly'])
   throws('not offered → priceCounts refuses rather than charging ₾0', () => priceCounts(rlo, lo, NO_LINES))
 
-  // Fallback (A-7): no row covers 60 → the highest-priced row that offers the product. 0 guests → no row.
-  check('fallback: 60 tasting guests → highest tasting price', findProductTier(GEORGICA, 'tastingOnly', 60)?.tastingOnlyPrice, 10000)
+  // Above the last row → the last row (Max 2026-10-23: 101 guests on a 100-max table takes the 100-row price).
+  // A gap between rows keeps A-7: the highest-priced row that offers the product. 0 guests → no row.
+  check('above the last row: 60 tasting guests → the last row', findProductTier(GEORGICA, 'tastingOnly', 60)?.tastingOnlyPrice, 3000)
+  const GAPPY: ProductTier[] = [
+    { minGuests: 1, maxGuests: 5, tastingOnlyPrice: 10000, lunchOnlyPrice: null, tastingLunchPrice: 15000 },
+    { minGuests: 10, maxGuests: 20, tastingOnlyPrice: 8000, lunchOnlyPrice: null, tastingLunchPrice: 12000 },
+  ]
+  check('gap between rows (7 guests, rows 1–5 and 10–20) → the highest price (A-7)', findProductTier(GAPPY, 'tastingOnly', 7)?.tastingOnlyPrice, 10000)
+  check('above the last row (25 guests) → the last row, not the highest price', findProductTier(GAPPY, 'tastingOnly', 25)?.tastingOnlyPrice, 8000)
   check('fallback: 0 guests → no row', findProductTier(GEORGICA, 'tastingOnly', 0), undefined)
   // A row that does not offer lunch only is skipped even when its range matches.
   const gap: ProductTier[] = [
@@ -116,7 +123,7 @@ console.log('Pricing — individuals and the company simple form are unchanged (
   ]
   let diffs = 0
   for (const visit of ['TASTING', 'TASTING_LUNCH'] as const) {
-    for (let n = 1; n <= 120; n++) {
+    for (let n = 1; n <= 100; n++) {
       // The retired party-size rule for one visit type: the row for n guests, everyone on that visit's price.
       const row = findTier(NEW_IND, n)!
       const oldTotal = n * ((visit === 'TASTING_LUNCH' ? row.tastingLunchPrice : row.tastingOnlyPrice) ?? 0)
@@ -125,7 +132,9 @@ console.log('Pricing — individuals and the company simple form are unchanged (
       if (oldTotal !== newTotal) { diffs++; if (diffs < 4) console.error(`  ${visit} × ${n}: old ${oldTotal} new ${newTotal}`) }
     }
   }
-  check('individuals: 240 cases (1–120 guests × 2 visit types) identical, incl. beyond the top row', diffs, 0)
+  check('individuals: 200 cases (1–100 guests × 2 visit types) identical to the old party-size rule', diffs, 0)
+  // Above the top row the rule changed on purpose (Max 2026-10-23): 101–120 guests use the 4–100 row, not the 1–2 row.
+  check('individuals: 101 guests, Tasting → the last row (₾50), not the highest price', ratesForCounts(NEW_IND, countsFromVisit('TASTING', 101), 0).tastingOnly, 5000)
 }
 
 console.log('Input checks (#93)')
@@ -363,7 +372,7 @@ console.log('Rules from settings (Chunk 6)')
   const v = (lo: string) => adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING_LUNCH', guests: '0', boxes: { tastingOnly: '0', lunchOnly: lo, tastingLunch: '1', free: '0' },
     prices: tbl, registration: 0, manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' }, masterclassAmt: 0, extrasAmt: 0 })
   const line = (lo: string) => v(lo).lines.find(l => l.product === 'lunchOnly')
-  check('13 Lunch only, no row 13+ offers it → ₾45 from row 1–12, flagged outside', [line('13')?.rate, line('13')?.row], [4500, { min: 1, max: 12, outside: true }])
+  check('13 Lunch only, no row 13+ offers it → ₾45 from row 1–12 (the last row offering it), flagged above', [line('13')?.rate, line('13')?.row], [4500, { min: 1, max: 12, outside: 'above' }])
   check('5 Lunch only → its own row, not flagged', line('5')?.row, { min: 1, max: 12, outside: false })
   // Acceptance test 2026-10-23: another problem (too many free) must not zero the lunch guests the dish selects follow.
   const tooFree = adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING_LUNCH', guests: '0', boxes: { tastingOnly: '11', lunchOnly: '2', tastingLunch: '12', free: '26' },
