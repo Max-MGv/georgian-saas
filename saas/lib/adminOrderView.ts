@@ -102,7 +102,11 @@ export function adminOrderView(input: {
     boxes: { tastingOnly: box('tastingOnly'), lunchOnly: box('lunchOnly'), tastingLunch: box('tastingLunch'), free: box('free') },
   })
   const empty: AdminOrderView = { counts: null, problem: null, quote: null, rateInputs: [], lines: [], registration: 0, total: null, lunchGuests: 0, missing: [] }
-  if (!checked.ok) return { ...empty, problem: checked.problem }
+  // The lunch guests as entered, even while the boxes can't be saved: a different problem (too many free guests, a
+  // visit mismatch) must not blank the hot-dish selects and say "add a lunch guest" (acceptance test 2026-10-23).
+  // Individuals: their one count is lunch on Tasting + Lunch.
+  const typedLunch = company ? box('lunchOnly') + box('tastingLunch') : input.visitType === 'TASTING_LUNCH' ? num(input.guests) : 0
+  if (!checked.ok) return { ...empty, problem: checked.problem, lunchGuests: typedLunch }
   const counts: Counts = checked.counts
 
   const lunchGuests = counts.lunchOnly + counts.tastingLunch

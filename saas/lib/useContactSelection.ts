@@ -242,15 +242,18 @@ export function useContactSelection({ module, onApply, asAdmin = false }: Option
         const { [roleId]: _drop, ...rest } = prev
         return rest
       }
+      // Stored exactly as typed — the inputs render from this entry, so trimming here ate every space the moment it
+      // was typed ("ZZ Acceptance Guide" became "ZZAcceptanceGuide", acceptance test 2026-10-23). Trimming happens at
+      // write time instead (buildOrderContactRows: name/phone/email .trim()).
       return {
         ...prev,
         [roleId]: {
           roleId,
           // Keep the link if one was picked and then edited; the snapshot still wins.
           personId: prev[roleId]?.personId,
-          name,
-          phone: facts.phone?.trim() || null,
-          email: facts.email?.trim() || null,
+          name: facts.name,
+          phone: facts.phone || null,
+          email: facts.email || null,
         },
       }
     })

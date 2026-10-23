@@ -77,7 +77,7 @@ const en: Translations = {
   'form.guest_plural': 'guests',
   'form.num_guests': 'Number of Guests',
   'form.minimum': 'minimum',
-  'form.guest_min_warn': 'Minimum is {min} guests — reset to {min}.',
+  'form.guest_min_warn': 'The minimum is {min} — reset to {min}.',
   'form.hot_dish': 'Hot Dish Selection',
   'form.veg_dish': 'Vegetable dish',
   'form.meat_dish': 'Meat dish',

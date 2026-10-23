@@ -632,6 +632,10 @@ draft with before/after shots; tier 5 on staging.
       had linked individual orders to the Individuals price row since 2026-09-10 → split "Individuals"/"Individual"
       on Statistics; seed fixed, 519 dev orders unlinked after a backup, Statistics counts companies only). Not
       changed: Free column sliding under the pinned Status/actions columns (normal horizontal scroll).
+- [x] **Run 13 (2026-10-23, after D-15…D-17 + T-272, commit `4e89018`): 15/15 passed, no retries** — admin-orders,
+      contact-orphan-safety, booking-enhanced, company-nationality-tagging, companies-crud, booking-simple,
+      booking-tampered-quantities (every spec whose labels changed). Then independent acceptance round 2 on staging
+      (T-152 + T-272 cards; dev backup `2026-10-23_114101_dev_before-agent-acceptance-2` first).
 - [ ] Draft the release note with before/after shots (`scripts/release-shots.ts`, Plan-ReleaseNotes).
 - [ ] Tier 5 (real Flitt, `playwright.staging.config.ts`) — two specs changed for D-14 (₾280 / no rate box).
 - [~] Vault: KnownBugs #93 → fixed on staging ✅, Roadmap v1.18 ✅, FeatureLog #237 ✅, SessionLog (at close).
@@ -690,7 +694,33 @@ and fall back to typed rates / "price later"; only the public form loads the Ind
 **Resume point:** —
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)
-**Status:** ⬜
+**Status:** ⬜ — rehearsal passed 2026-10-23; production steps not started.
+**Resume point (2026-10-23 afternoon):** staging = `4e89018` (T-152 + D-15…D-17 + T-272), run 13 15/15. Acceptance
+round 2 hit a usage limit mid-cleanup; checked against its pre-test backup: prices, companies, settings, site content
+all identical; its one leftover order ("ZZ Acceptance 1") deleted. Round 3 (fresh agent, same steps, keeps a running
+ledger in `Features/Feature 237 screens/acceptance-2026-10-23/ledger.md`; dev backup
+`2026-10-23_130243_dev_before-agent-acceptance-3`) is running. Then: tier 5 on staging → Max reviews → production
+step 1 on his go. `saas/.rehearsal/` (untracked) holds the expand-only config needed for step 2 — keep it.
+
+**Rehearsal 2026-10-23 — PASSED** on a local copy of production (backup `2026-10-23_111715_prod_t152-rehearsal-source`,
+1,302 rows; restored byte-identical; the copy was deleted afterwards). Baseline → expand only → expand-check (395
+orders against the baseline, Nikalas's 2 re-price to their stored totals, 0 problems) → a simulated old-code "gap"
+order was flagged, then fixed by the backfill re-run (1 row) → contract + Lunch → old columns gone, `LUNCH` in the
+enum, 0 problems; Nikalas ₾250 / ₾2,800 unchanged, demo total unchanged (₾228,122).
+**Finding that changes step 2:** `prisma.config.ts` hard-wires `prisma/migrations`, so `--schema` does NOT limit what
+`migrate deploy` applies — the first attempt applied all three (contract too). Step 2 must use
+`saas/.rehearsal/expand-only.config.ts` (untracked; an expand-only copy of the folder, no dotenv), and `migrate status`
+with it must list ONLY the expand migration first. (The safety hook also refuses to drop even a local copy — the
+rehearsal restored into a second database instead.)
+
+**Exact commands** (from `saas/`, DATABASE_URL + DIRECT_URL from `.env.prod.backup` set in the shell for that one
+command only — `.env` is dev):
+- step 2: `npx prisma migrate status --config .rehearsal/expand-only.config.ts` → only
+  `20261019210217_pricing_model_expand` pending → `npx prisma migrate deploy --config .rehearsal/expand-only.config.ts`
+  → `npx tsx scripts/_qa/pricing-expand-check.ts --prod` → 0 problems.
+- step 4: `npx tsx scripts/_qa/pricing-rerun-backfill.ts --prod` → `pricing-expand-check.ts --prod` → 0 problems.
+- step 6: `npx prisma migrate status` → only contract + visit_type_lunch pending → `npx prisma migrate deploy` →
+  `pricing-expand-check.ts --prod` (old columns absent) → 0 problems.
 1. **Pre-flight, read-only:** re-run Chunk 0's production counts; confirm still 2 Nikalas orders (or list new
    ones); save a JSON export of Nikalas's `Price`, `Company` fee inputs, `Order` and `InvoiceSent` rows locally.
 2. `prisma migrate deploy` → **expand** only (old production code keeps working — it ignores new columns).

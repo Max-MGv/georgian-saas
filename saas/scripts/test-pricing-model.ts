@@ -365,6 +365,10 @@ console.log('Rules from settings (Chunk 6)')
   const line = (lo: string) => v(lo).lines.find(l => l.product === 'lunchOnly')
   check('13 Lunch only, no row 13+ offers it → ₾45 from row 1–12, flagged outside', [line('13')?.rate, line('13')?.row], [4500, { min: 1, max: 12, outside: true }])
   check('5 Lunch only → its own row, not flagged', line('5')?.row, { min: 1, max: 12, outside: false })
+  // Acceptance test 2026-10-23: another problem (too many free) must not zero the lunch guests the dish selects follow.
+  const tooFree = adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING_LUNCH', guests: '0', boxes: { tastingOnly: '11', lunchOnly: '2', tastingLunch: '12', free: '26' },
+    prices: tbl, registration: 0, manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' }, masterclassAmt: 0, extrasAmt: 0 })
+  check('too many free: problem shown, lunch guests still 14', [tooFree.problem?.key, tooFree.lunchGuests], ['orderForm.err.tooManyFree', 14])
 }
 
 // Max 2026-10-22/23: no more Free guests than paying guests — public form and admin screens.

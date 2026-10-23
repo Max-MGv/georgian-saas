@@ -1447,7 +1447,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
             <div className="rounded-lg border p-4 flex items-center justify-between" style={{ backgroundColor: C.bg, borderColor: C.border }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
-                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri(individualRate ?? 0))} × {guestCount} {t(locale, 'form.guest_plural')}</p>
+                <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri(individualRate ?? 0))} × {guestCount} {t(locale, guestCount === 1 ? 'form.guest_singular' : 'form.guest_plural')}</p>
               </div>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>

@@ -1115,7 +1115,7 @@ export default function OrderDetail({
 
         {/* A hot dish needs a lunch guest (A-11). */}
         {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
-          <p className="text-xs mb-3" style={{ color: C.faint }}>{at(isCompanyOrder ? 'orderForm.hotDishNeedsLunch' : 'orderForm.hotDishNeedsLunchIndividual')}</p>
+          <p className="text-xs mb-3" style={{ color: C.faint }}>{at(isCompanyOrder && visitType !== 'TASTING' ? 'orderForm.hotDishNeedsLunch' : 'orderForm.hotDishSwitchVisit')}</p>
         )}
 
         {/* Hot dishes */}
