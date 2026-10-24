@@ -229,9 +229,32 @@ export function checkAdminOrder(input: {
 
 // ─── Masterclass lines ───────────────────────────────────────────────────────
 
-export type MasterclassCatalogueRow = { id: string; unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'; active: boolean; pricePerUnit: number }
+/** One catalogue row. `name` / `nameKa` / `group` are only needed by callers that STORE the line (they become its snapshot). */
+export type MasterclassCatalogueRow = {
+  id: string
+  unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
+  active: boolean
+  pricePerUnit: number
+  name?: string
+  nameKa?: string | null
+  group?: { id: string; nameEn: string; nameKa: string | null } | null
+}
+/** The Prisma `select` every caller that stores add-on lines uses, so the snapshot can never be half-filled. */
+export const MASTERCLASS_CATALOGUE_SELECT = {
+  id: true, name: true, nameKa: true, unitType: true, active: true, pricePerUnit: true,
+  group: { select: { id: true, nameEn: true, nameKa: true } },
+} as const
 export type MasterclassLineIn = { masterclassItemId?: unknown; quantity?: unknown }
-export type MasterclassLineOut = { masterclassItemId: string; quantity: number; pricePerUnit: number }
+/** What is copied onto a stored line so renaming / deleting the item or group later never changes an invoice (E5, #94). */
+export type MasterclassLineSnapshot = {
+  nameSnapshot: string | null
+  nameKaSnapshot: string | null
+  unitSnapshot: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
+  groupId: string | null
+  groupNameSnapshot: string | null
+  groupNameKaSnapshot: string | null
+}
+export type MasterclassLineOut = { masterclassItemId: string; quantity: number; pricePerUnit: number } & MasterclassLineSnapshot
 
 export type MasterclassError =
   | { code: 'not_a_list' }
@@ -264,7 +287,17 @@ export function checkMasterclassLines(
     if (seen.has(id)) return { ok: false, error: { code: 'duplicate_item' } }
     seen.add(id)
     if (!isCount(raw.quantity) || raw.quantity < 1) return { ok: false, error: { code: 'bad_quantity' } }
-    out.push({ masterclassItemId: id, quantity: item.unitType === 'FLAT' ? 1 : raw.quantity, pricePerUnit: item.pricePerUnit })
+    out.push({
+      masterclassItemId: id,
+      quantity: item.unitType === 'FLAT' ? 1 : raw.quantity,
+      pricePerUnit: item.pricePerUnit,
+      nameSnapshot: item.name ?? null,
+      nameKaSnapshot: item.nameKa ?? null,
+      unitSnapshot: item.unitType,
+      groupId: item.group?.id ?? null,
+      groupNameSnapshot: item.group?.nameEn ?? null,
+      groupNameKaSnapshot: item.group?.nameKa ?? null,
+    })
   }
   return { ok: true, lines: out }
 }

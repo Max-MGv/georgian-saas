@@ -570,32 +570,76 @@ model MenuItem {
   @@index([tenantId])
 }
 
+/// An add-on a guest can add to a booking (T-7, vault/Plan-AddOnsAndWine.md). Still called MasterclassItem in
+/// the code and the database — "Masterclass" is now just the first GROUP of add-ons; the admin screens and the
+/// public form say "Add-ons". Renaming the model would touch ~25 files for no user-visible gain, so it waits.
 model MasterclassItem {
   id           String             @id @default(cuid())
   name         String
+  /// Georgian name; null → the English name is shown (Plan-AddOnsAndWine D-2).
+  nameKa       String?
   unitType     MasterclassUnit    @default(PER_PIECE)
   pricePerUnit Int
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
   tenantId     String?
+  /// Which group it belongs to. Null only for an item that predates the groups and has no tenant to
+  /// give one to; every screen treats a groupless item as "ungrouped".
+  groupId      String?
+  group        AddOnGroup?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
   createdAt    DateTime           @default(now())
   orderLines   OrderMasterclass[]
 
   @@index([tenantId])
+  @@index([groupId])
 }
 
+/// A group of add-ons — "Masterclass", "Food", … (T-7). The admin decides who sees the group (companies,
+/// individuals) and for which visit types; each group is one row on the booking form.
+model AddOnGroup {
+  id                String            @id @default(cuid())
+  tenantId          String
+  nameEn            String
+  /// Georgian name; null → the English name is shown.
+  nameKa            String?
+  showToCompanies   Boolean           @default(true)
+  showToIndividuals Boolean           @default(false)
+  /// Visit types this group is offered on. EMPTY = every visit type (Plan-AddOnsAndWine D-4 / D-22).
+  visitTypes        VisitType[]
+  active            Boolean           @default(true)
+  sortOrder         Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @default(now()) @updatedAt
+  items             MasterclassItem[]
+  orderLines        OrderMasterclass[]
+
+  @@index([tenantId])
+}
+
+/// One add-on on one booking. The line is a SNAPSHOT: name, unit and group are copied onto it when it is added,
+/// so renaming or deleting the item or the group later never changes what an invoice said (Plan-AddOnsAndWine
+/// E5, KnownBugs #94). The item link is only a link — it goes null if the item is deleted.
 model OrderMasterclass {
-  id                String          @id @default(cuid())
-  orderId           String
-  masterclassItemId String
-  quantity          Int
-  pricePerUnit      Int // price snapshot at time of booking
+  id                  String           @id @default(cuid())
+  orderId             String
+  masterclassItemId   String?
+  quantity            Int
+  pricePerUnit        Int // price snapshot at time of booking
+  // Null only on a line that nothing has re-saved since the T-7 migration backfilled them — readers fall back to
+  // the item's own fields. New lines always carry all of them.
+  nameSnapshot        String?
+  nameKaSnapshot      String?
+  unitSnapshot        MasterclassUnit?
+  groupId             String?
+  group               AddOnGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupNameSnapshot   String?
+  groupNameKaSnapshot String?
   // Line tables carried no timestamps at all until 2026-09-18, so "when was this
   // added to the order" was unanswerable — and admins do add lines days after a
   // booking is made.
-  createdAt         DateTime        @default(now())
-  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
+  createdAt           DateTime         @default(now())
+  order               Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  masterclassItem     MasterclassItem? @relation(fields: [masterclassItemId], references: [id], onDelete: SetNull)
 }
 
 model OrderExtra {

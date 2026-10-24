@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { checkMasterclassLines } from '@/lib/bookingInput'
-import { lineAmount } from '@/lib/orderLines'
+import { checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT } from '@/lib/bookingInput'
+import { lineAmount, lineIdentity } from '@/lib/orderLines'
 
 export async function addMasterclassLine(
   orderId: string,
@@ -18,7 +18,7 @@ export async function addMasterclassLine(
   const result = await withTenantDb(tenantId, async (tx) => {
     const [order, item] = await Promise.all([
       tx.order.findFirst({ where: { id: orderId, tenantId } }),
-      tx.masterclassItem.findFirst({ where: { id: data.masterclassItemId, tenantId } }),
+      tx.masterclassItem.findFirst({ where: { id: data.masterclassItemId, tenantId }, select: MASTERCLASS_CATALOGUE_SELECT }),
     ])
     if (!order) return { error: 'Order not found.' } as const
     if (!item) return { error: 'Masterclass item not found' } as const
@@ -29,14 +29,7 @@ export async function addMasterclassLine(
       return { error: checked.error.code === 'inactive_item' ? 'This masterclass item is switched off.' : 'Quantity must be a whole number from 1 to 999.' } as const
     }
     const line = checked.lines[0]!
-    const created = await tx.orderMasterclass.create({
-      data: {
-        orderId,
-        masterclassItemId: line.masterclassItemId,
-        quantity: line.quantity,
-        pricePerUnit: line.pricePerUnit,
-      },
-    })
+    const created = await tx.orderMasterclass.create({ data: { orderId, ...line } })
     return { success: true as const, lineId: created.id, amount: lineAmount(line) }
   })
   if ('error' in result) return result
@@ -67,7 +60,7 @@ export async function updateMasterclassLine(
     const line = await tx.orderMasterclass.findFirst({ where: { id: lineId, orderId }, include: { masterclassItem: true } })
     if (!line) return { error: 'This line is no longer on the order.' } as const
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) return { error: 'Quantity must be a whole number from 1 to 999.' } as const
-    const newQty = line.masterclassItem.unitType === 'FLAT' ? 1 : quantity
+    const newQty = lineIdentity(line).unit === 'FLAT' ? 1 : quantity
     if (newQty === line.quantity) return { success: true as const, delta: 0 }
     await tx.orderMasterclass.update({ where: { id: lineId }, data: { quantity: newQty } })
     return { success: true as const, delta: lineAmount({ quantity: newQty, pricePerUnit: line.pricePerUnit }) - lineAmount(line) }

@@ -47,6 +47,8 @@ async function main() {
     'CompanyWinePrice',
     // Delivery zones (T-8). Own tenantId → also in tenantedTables below (H18: both lists).
     'DeliveryZone',
+    // Add-on groups (T-7). Own tenantId → also in tenantedTables below (H18: both lists).
+    'AddOnGroup',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
     // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
     // child of Order. See MaintenanceNotes on why this exists.
@@ -103,6 +105,8 @@ async function main() {
     'ContactRole', 'OrderContact', 'InvoiceSent',
     // Delivery zones (T-8) — also in writableTables above; its migration creates the same policy.
     'DeliveryZone',
+    // Add-on groups (T-7) — also in writableTables above; its migration creates the same policy.
+    'AddOnGroup',
   ]
 
   for (const t of tenantedTables) {

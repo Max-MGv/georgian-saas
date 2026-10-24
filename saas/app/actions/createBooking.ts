@@ -11,7 +11,7 @@ import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type BookingVisitType, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { sumQuantityLines } from '@/lib/orderLines'
-import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, type CountRuleKey } from '@/lib/bookingInput'
+import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, MASTERCLASS_CATALOGUE_SELECT, type CountRuleKey } from '@/lib/bookingInput'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -271,7 +271,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     // Offered on the detailed company form only, as before; anything sent from another layout is ignored.
     const catalogue = layout === 'boxes' && (data.masterclassLines ?? []).length > 0
       ? await withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
-          where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true },
+          where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT,
         }))
       : []
     const checkedLines = checkMasterclassLines(layout === 'boxes' ? data.masterclassLines : undefined, catalogue)

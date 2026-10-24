@@ -12,8 +12,8 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
-import { checkAdminOrder, checkMasterclassLines, type AdminOrderProblem } from '@/lib/bookingInput'
-import { lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
+import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
+import { lineIdentity, lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
@@ -474,7 +474,7 @@ export async function createOrderAdmin(data: {
     if (data.companyId && !company) return { error: 'Company not found.' } as const
 
     const catalogue = data.masterclassLines.length > 0
-      ? await tx.masterclassItem.findMany({ where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true } })
+      ? await tx.masterclassItem.findMany({ where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT })
       : []
     const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue)
     if (!checkedLines.ok) {
@@ -527,7 +527,7 @@ export async function createOrderAdmin(data: {
         ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
         masterclassLines: masterclassLines.length
-          ? { create: masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
+          ? { create: masterclassLines }
           : undefined,
         extras: data.extras.length
           ? { create: data.extras.map(e => ({ label: e.label.trim(), amount: e.amount })) }
@@ -656,7 +656,7 @@ export async function sendOrderInvoice(
       companyName: order.company?.name ?? null,
       identificationCode: order.company?.identificationCode ?? null,
       masterclassLines: order.masterclassLines.map(l => ({
-        name: l.masterclassItem.name,
+        name: lineIdentity(l).name,
         quantity: l.quantity,
         pricePerUnit: l.pricePerUnit,
       })),
@@ -690,7 +690,7 @@ export async function sendOrderInvoice(
           freeGuestCount: order.freeGuestCount,
           visitType: order.visitType,
           masterclassLines: order.masterclassLines.map(l => ({
-            name: l.masterclassItem.name,
+            name: lineIdentity(l).name,
             quantity: l.quantity,
             pricePerUnit: l.pricePerUnit,
           })),

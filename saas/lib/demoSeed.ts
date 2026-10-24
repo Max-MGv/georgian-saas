@@ -532,6 +532,7 @@ export async function seedDemoTenant(
   await db.company.deleteMany({ where: { tenantId: tid } })
   await db.menuItem.deleteMany({ where: { tenantId: tid } })
   await db.masterclassItem.deleteMany({ where: { tenantId: tid } })
+  await db.addOnGroup.deleteMany({ where: { tenantId: tid } }) // after its items (the item → group FK is RESTRICT)
 
   // Every tenant has exactly these two system roles, seeded once
   // (Plan-ContactRoles Chunk 0/1) and never deleted by this reseed — the wipe
@@ -658,8 +659,11 @@ export async function seedDemoTenant(
   await db.menuItem.createMany({
     data: MENU_ITEMS.map((m, i) => ({ ...m, tenantId: tid, active: true, sortOrder: i })),
   })
+  const mcGroup = await db.addOnGroup.create({
+    data: { tenantId: tid, nameEn: 'Masterclass', nameKa: 'მასტერკლასი', showToCompanies: true, showToIndividuals: false, sortOrder: 0 },
+  })
   await db.masterclassItem.createMany({
-    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, pricePerUnit: fromMajor(m.pricePerUnit), tenantId: tid, active: true, sortOrder: i })),
+    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, pricePerUnit: fromMajor(m.pricePerUnit), tenantId: tid, groupId: mcGroup.id, active: true, sortOrder: i })),
   })
   const mcItems = await db.masterclassItem.findMany({ where: { tenantId: tid } })
   const vegItems = MENU_ITEMS.filter(m => m.type === 'VEGETABLE').map(m => m.name)
@@ -718,7 +722,7 @@ export async function seedDemoTenant(
 
       // ~1 in 5 bookings adds a masterclass, so the order-detail expansion
       // isn't empty either.
-      const mcLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[] = []
+      const mcLines: Prisma.OrderMasterclassUncheckedCreateWithoutOrderInput[] = []
       let masterclassAmt = 0
       if (rng() < 0.2 && mcItems.length) {
         const item = pick(mcItems)
@@ -726,7 +730,11 @@ export async function seedDemoTenant(
         const qty = item.unitType === 'FLAT' ? 1
           : item.unitType === 'PER_PERSON' ? payingGuests(counts)
           : rand(10, 40)
-        mcLines.push({ masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit })
+        mcLines.push({
+          masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit,
+          nameSnapshot: item.name, nameKaSnapshot: item.nameKa, unitSnapshot: item.unitType,
+          groupId: mcGroup.id, groupNameSnapshot: mcGroup.nameEn, groupNameKaSnapshot: mcGroup.nameKa,
+        })
         masterclassAmt = sumQuantityLines(mcLines)
       }
 

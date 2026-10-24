@@ -1,5 +1,6 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { lineIdentity } from '@/lib/orderLines'
 import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
 import Link from 'next/link'
@@ -174,19 +175,23 @@ export default async function OrderDetailPage({
                 registrationFee: order.company.registrationFee,
               }
             : null,
-          masterclassLines: order.masterclassLines.map(l => ({
-            id: l.id,
-            masterclassItemId: l.masterclassItemId,
-            quantity: l.quantity,
-            pricePerUnit: l.pricePerUnit,
-            masterclassItem: {
-              id: l.masterclassItem.id,
-              name: l.masterclassItem.name,
-              unitType: l.masterclassItem.unitType,
-              pricePerUnit: l.masterclassItem.pricePerUnit,
-              active: l.masterclassItem.active,
-            },
-          })),
+          // The line's own snapshot first: an item deleted since (or renamed) must not change what this order says.
+          masterclassLines: order.masterclassLines.map(l => {
+            const who = lineIdentity(l)
+            return {
+              id: l.id,
+              masterclassItemId: l.masterclassItemId ?? '',
+              quantity: l.quantity,
+              pricePerUnit: l.pricePerUnit,
+              masterclassItem: {
+                id: l.masterclassItem?.id ?? '',
+                name: who.name,
+                unitType: who.unit,
+                pricePerUnit: l.masterclassItem?.pricePerUnit ?? l.pricePerUnit,
+                active: l.masterclassItem?.active ?? false,
+              },
+            }
+          }),
           extras: order.extras.map(e => ({
             id: e.id,
             label: e.label,

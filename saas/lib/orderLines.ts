@@ -27,6 +27,37 @@ export const sumQuantityLines = (lines: readonly QuantityLine[]): number =>
 export const sumAmountLines = (lines: readonly AmountLine[]): number =>
   lines.reduce((sum, e) => sum + e.amount, 0)
 
+/** A stored add-on line as the database returns it: its own snapshots, plus the (possibly deleted) item. */
+export type StoredAddOnLine = {
+  nameSnapshot?: string | null
+  nameKaSnapshot?: string | null
+  unitSnapshot?: 'PER_PERSON' | 'PER_PIECE' | 'FLAT' | null
+  groupNameSnapshot?: string | null
+  groupNameKaSnapshot?: string | null
+  masterclassItem?: { name: string; nameKa?: string | null; unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT' } | null
+}
+
+/**
+ * What a stored add-on line was called and how it is charged — read from the line's own snapshot first (so renaming
+ * or deleting the item later never rewrites an invoice, Plan-AddOnsAndWine E5 / KnownBugs #94), then from the item.
+ * A line that has neither (written by pre-T-7 code after its item was deleted) reads as "Removed add-on".
+ */
+export function lineIdentity(l: StoredAddOnLine): {
+  name: string
+  nameKa: string | null
+  unit: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
+  groupName: string | null
+  groupNameKa: string | null
+} {
+  return {
+    name: l.nameSnapshot ?? l.masterclassItem?.name ?? 'Removed add-on',
+    nameKa: l.nameKaSnapshot ?? l.masterclassItem?.nameKa ?? null,
+    unit: l.unitSnapshot ?? l.masterclassItem?.unitType ?? 'PER_PIECE',
+    groupName: l.groupNameSnapshot ?? null,
+    groupNameKa: l.groupNameKaSnapshot ?? null,
+  }
+}
+
 /** The lines of an order (or of a draft that looks like one), added up the way `priceCounts` wants them. */
 export function lineTotals(o: { masterclassLines: readonly QuantityLine[]; extras: readonly AmountLine[] }): LineTotals {
   return { masterclass: sumQuantityLines(o.masterclassLines), extras: sumAmountLines(o.extras) }
