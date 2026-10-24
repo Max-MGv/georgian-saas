@@ -1,7 +1,7 @@
 'use server'
 
 import { db, withTenantDb, type TxClient } from '@/lib/db'
-import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
+import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type OrderContactView } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
@@ -20,6 +20,8 @@ import { sendInvoiceEmail } from '@/lib/emails/invoiceEmail'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import type { BookingStage } from '@prisma/client'
 import { COUNTRIES, countryName } from '@/lib/countries'
+import { splitFullName } from '@/lib/splitFullName'
+import { isIsoDate } from '@/lib/isoDate'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -58,8 +60,11 @@ export async function updateOrder(id: string, data: {
   notes: string
 }) {
   await requireAdmin()
-  if (!data.name.trim()) return { error: 'First name is required.' }
-  if (!data.surname.trim()) return { error: 'Last name is required.' }
+  // One Name box, like both booking forms (T-215): the surname is whatever follows the first word, possibly empty.
+  if (!data.name.trim()) return { error: 'Name is required.' }
+  // A cleared date input sends '' (Invalid Date).
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
+  if (!/^\d{1,2}:\d{2}$/.test(data.timeSlot)) return { error: 'Please choose a time.' }
 
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
@@ -97,7 +102,152 @@ export async function updateOrder(id: string, data: {
   })
   if (result.count === 0) return { error: 'Order not found.' }
   revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${id}`)
   return { success: true }
+}
+
+/**
+ * The order page's Booking Info card (T-215 part 2, Plan-OrderPageMirror): date, time, internal notes, the company
+ * (or none = an individual booking) and the nationality tags — what the booking forms take in that section.
+ *
+ * Changing the company re-prices the order from the new company's price table (an individual: the Individuals
+ * table, no registration fee — D-14), with the same `adminQuote` as New Order, and only before payment (bug #64 —
+ * the same lock as the guests). The contacts are not carried across: the people picked belonged to the old company,
+ * so their links are cleared (snapshots kept); an individual booking keeps no contact rows at all.
+ */
+export async function updateOrderBooking(id: string, data: {
+  date: string
+  timeSlot: string
+  notes: string
+  /** null = an individual booking. */
+  companyId: string | null
+  /** ISO codes; company bookings only — dropped for an individual, unknown codes ignored (as in createOrderAdmin). */
+  nationalities: string[]
+}): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
+  if (!/^\d{1,2}:\d{2}$/.test(data.timeSlot)) return { error: 'Please choose a time.' }
+  const tenantId = await getTenantId()
+  const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
+
+  const result = await withTenantDb(tenantId, async tx => {
+    const order = await tx.order.findFirst({ where: { id, tenantId }, include: { masterclassLines: true, extras: true } })
+    if (!order) return { error: 'Order not found.' } as const
+
+    const newCompanyId = data.companyId || null
+    const companyChanged = newCompanyId !== order.companyId
+    let pricing: Record<string, unknown> = {}
+    if (companyChanged) {
+      if (order.paidAt) {
+        return { error: 'This order has already been paid, so its company can no longer be changed — the price would no longer match what the guest paid.' } as const
+      }
+      const company = newCompanyId
+        ? await tx.company.findFirst({ where: { id: newCompanyId, tenantId, isBookingCompany: true, isIndividual: false }, include: { prices: true } })
+        : null
+      if (newCompanyId && !company) return { error: 'Company not found.' } as const
+      const individual = !company
+      const counts = countsOf(order)
+      if (individual) {
+        // An individual books one product, no free guests, never Lunch only (D-5) — the same shape New Order allows.
+        const nonZero = PRODUCTS.filter(p => counts[p] > 0).length
+        if (order.visitType === 'LUNCH' || counts.lunchOnly > 0 || counts.free > 0 || nonZero > 1) {
+          return { error: 'An individual booking has one product and no free guests. Change the guests in the Guest breakdown first, then switch it to Individual.' } as const
+        }
+      }
+      const prices = individual ? await individualsTable(tx, tenantId) : company.prices
+      if (individual && prices.length === 0) return { error: en({ key: 'orderForm.err.noIndividualsTable' }) } as const
+      const quote = adminQuote(prices, individual ? 0 : company.registrationFee, counts, NO_TYPED_RATES)
+      if (quote.kind === 'missing') {
+        const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
+        return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
+      }
+      const lines = {
+        masterclass: order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0),
+        extras: order.extras.reduce((s, e) => s + e.amount, 0),
+      }
+      // A company with no price table yet: priced later on the Guest breakdown (typed rates), as on New Order.
+      pricing = quote.kind === 'unpriced'
+        ? { totalPrice: lines.masterclass + lines.extras, tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
+        : {
+            totalPrice: priceCounts(quote.rates, counts, lines),
+            tastingOnlyRate: quote.rates.tastingOnly, lunchOnlyRate: quote.rates.lunchOnly,
+            tastingLunchRate: quote.rates.tastingLunch, registrationFeeSnapshot: quote.rates.registration,
+          }
+      if (individual) await tx.orderContact.deleteMany({ where: { orderId: id, tenantId } })
+      else await tx.orderContact.updateMany({ where: { orderId: id, tenantId }, data: { personId: null } })
+    }
+
+    const isCompany = !!newCompanyId
+    await tx.order.update({
+      where: { id },
+      data: {
+        date: new Date(data.date),
+        timeSlot: data.timeSlot,
+        notes: data.notes.trim() || null,
+        companyId: newCompanyId,
+        bookingType: isCompany ? 'COMPANY' : 'INDIVIDUAL',
+        nationalities: isCompany ? Array.from(new Set((data.nationalities ?? []).filter(c => VALID_COUNTRY_CODES.has(c)))) : [],
+        ...pricing,
+      },
+    })
+    return { success: true as const }
+  })
+  if ('error' in result) return result
+  revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${id}`)
+  return { success: true }
+}
+
+/**
+ * The order page's Contacts card (T-215 part 2): the contact person (one Name box, like both booking forms) and every
+ * other contact type (Guide…), each possibly picked from the order's company's people. The order's contact rows are
+ * rewritten through `writeOrderContacts` — the same checks as every order-creation path (role valid for bookings,
+ * person really in this company in that role, else the link is dropped and the typed facts kept) — and the contact
+ * person is copied into `Order.name/surname/phone/email`. An individual booking has no contact rows: only the four
+ * columns change.
+ */
+export async function updateOrderContacts(id: string, data: {
+  fullName: string
+  phone: string
+  email: string
+  contacts?: IncomingContact[]
+}): Promise<{ success: true; contacts: OrderContactView[] } | { error: string }> {
+  await requireAdmin()
+  const fullName = data.fullName.trim()
+  if (!fullName) return { error: 'Name is required.' }
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async tx => {
+    const order = await tx.order.findFirst({ where: { id, tenantId }, select: { id: true, companyId: true } })
+    if (!order) return { error: 'Order not found.' } as const
+    await tx.order.update({
+      where: { id },
+      data: { ...splitFullName(fullName), phone: data.phone.trim() || null, email: data.email.trim() || null },
+    })
+    if (order.companyId) {
+      await tx.orderContact.deleteMany({ where: { orderId: id, tenantId } })
+      await writeOrderContacts(tx, {
+        tenantId,
+        target: { orderId: id },
+        companyId: order.companyId,
+        module: 'BOOKING',
+        contacts: data.contacts,
+        fallbackContactPerson: { name: fullName, phone: data.phone.trim() || null, email: data.email.trim() || null },
+      })
+    }
+    // What is now recorded, read back — the page shows this at once instead of waiting for router.refresh(), which
+    // lags several seconds; opening the editor in that gap used to prefill the old contacts (QA T-215, case C4).
+    const rows = await tx.orderContact.findMany({ where: { orderId: id, tenantId }, include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } })
+    const contacts: OrderContactView[] = rows.map(c => ({
+      roleId: c.roleId, roleKey: c.role.key, personId: c.personId, roleLabelEn: c.role.labelEn, roleLabelKa: c.role.labelKa,
+      name: c.nameSnapshot, phone: c.phoneSnapshot, email: c.emailSnapshot,
+    }))
+    return { success: true as const, contacts }
+  })
+  if ('error' in result) return result
+  revalidatePath('/admin/orders')
+  revalidatePath(`/admin/orders/${id}`)
+  return result
 }
 
 /**
@@ -301,6 +451,7 @@ export async function createOrderAdmin(data: {
   // splits it with splitFullName(), so a one-word name arrives with an empty surname.
   if (!data.name.trim()) return { error: 'Name is required.' }
   if (!data.date) return { error: 'Date is required.' }
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
   if (!Array.isArray(data.masterclassLines) || !Array.isArray(data.extras)) return { error: 'The order could not be read — please reload and try again.' }
   if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' }
   const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)

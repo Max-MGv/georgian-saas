@@ -159,7 +159,7 @@ async function main() {
       await call('PATCH', `/api/tickets/${num(rest[0])}`, { live: 'PRODUCTION' })
       console.log(`${rest[0]} marked live on production (${env.label})`)
       const d = await call('GET', `/api/tickets/${num(rest[0])}`) as { externalRef?: string | null; clientReply?: string; ref?: string }
-      const prod = d.externalRef ? /^prod:(d+)$/.exec(d.externalRef) : null
+      const prod = d.externalRef ? /^prod:(\d+)$/.exec(d.externalRef) : null
       if (!prod) break
       if (!flags['yes-prod']) {
         console.log(`${d.ref} is a client report: re-run with --yes-prod (and Max's go) to mark production ticket #${prod[1]} live${d.clientReply ? ' and copy the reply' : ''} - the client then sees "Resolved".`)

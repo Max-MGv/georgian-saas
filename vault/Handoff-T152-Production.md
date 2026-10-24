@@ -44,8 +44,8 @@ production yet.** Every production step needs Max's explicit "go" for THAT step,
   three times while the same setup replayed fine in ~22 s and staging pages load in ~1 s; its budget was raised to
   300 s and re-run: still failed (4×). **Solved the same evening:** a stale test (since T-13 a company with a saved
   address gets a "Delivering to" card, not the address box) — spec fixed, rerun passed → **tier 5 7/7** (Plan Chunk 11).
-- **Production step 1 done 2026-10-23 evening** (backup + read-only baseline, matches the rehearsal — Plan Chunk 12).
-  Next: step 2, on Max's go.
+- **DONE — on production since 2026-10-23 evening** (master `497bdc7`; steps 1–6 + 8, demo reset left to the nightly
+  reseed). Results per step in Plan Chunk 12. This handoff is now history.
 - Independent acceptance test (black-box agent on staging, 2026-10-23): T-152 + T-272 **12/13 pass, nothing blocking**;
   its findings are fixed or listed in the plan. Screenshots: `vault/Features/Feature 237 screens/acceptance-2026-10-23/`.
 - **Rehearsal of the production migrations on a copy of production: PASSED** (Chunk 12). It found that

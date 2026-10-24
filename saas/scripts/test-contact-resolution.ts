@@ -175,6 +175,12 @@ async function main() {
   check('…but the picker is suppressed (nobody sees colleagues)',
     'success' in byCompanyOn && byCompanyOn.roleChoices.length === 0)
 
+  // T-215 part 2: an admin screen (trusted) still gets the list — admins see these people on the Companies page.
+  const adminOn = await resolveCompanyContactsFor(T, { module: 'BOOKING', companyId: company.id, trusted: true })
+  check('An admin screen still gets the pickable people with person codes on',
+    'success' in adminOn && adminOn.roleChoices.length === 2,
+    'success' in adminOn ? adminOn.roleChoices.map(r => r.key).join(',') : 'errored')
+
   const scoped = await resolveCompanyContactsFor(T,
     { module: 'BOOKING', companyId: company.id, code: 'ZZCONTACT' })
   check('Dropdown-then-code: a person code for THAT company matches',

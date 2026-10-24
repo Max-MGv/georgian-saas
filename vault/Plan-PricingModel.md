@@ -41,8 +41,8 @@ Rule 10 (stop the dev server before `prisma migrate dev`).
 | 8 | Admin New Order + Order Detail (fixes P-11) | ✅ 2026-10-22 |
 | 9 | Everything that shows a booking: lists, sheet, invoices, emails, stats | ✅ 2026-10-22 |
 | 10 | Demo seed, test fixtures, scripts, docs | ✅ 2026-10-22 |
-| 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ⬜ |
-| 12 | Production runbook (DRAFT — Max's go per step) | 🚧 step 1 ✅ 2026-10-23 |
+| 11 | Full verification: E2E tiers 1–4, blind review, fixes, hand-over | ✅ 2026-10-23 |
+| 12 | Production runbook (DRAFT — Max's go per step) | ✅ 2026-10-23 on production (demo reset → nightly) |
 
 ---
 
@@ -709,7 +709,7 @@ and fall back to typed rates / "price later"; only the public form loads the Ind
 **Resume point:** —
 
 ### Chunk 12 — Production runbook (DRAFT — each step needs Max's explicit go)
-**Status:** 🚧 — rehearsal passed 2026-10-23; **step 1 ✅ 2026-10-23 evening** (Max's go); step 2 not started.
+**Status:** ✅ **ON PRODUCTION 2026-10-23** (master `497bdc7`) — steps 1–6 + 8 done; step 7 (demo reset) left to the nightly reseed.
 
 **Step results:**
 - [x] **1. Pre-flight (read-only), 2026-10-23 ~20:07 Georgian time.** Backup `2026-10-23_200652_prod_t152-step1-preflight`
@@ -717,7 +717,28 @@ and fall back to typed rates / "price later"; only the public form loads the Ind
       orders (TASTING_LUNCH split, ₾2,800 and ₾250 — stored in tetri 280000 / 25000), 9 Nikalas price rows, 1
       `InvoiceSent`; **no new orders and no order changed** since the 2026-10-19 baseline (old file kept as
       `scripts/_qa/pricing-baseline-prod.chunk0-copy.json`). Matches the rehearsal.
-- [ ] 2. Expand migration only (`--config .rehearsal/expand-only.config.ts`) — needs Max's go.
+- [x] **2. Expand only** (Max: "execute the push to production workflow per our process", 2026-10-23 ~20:10). Prod URLs
+      checked to carry ref `dshsfkffcsgerdqinqst`; expand-only folder = the committed migrations; `migrate status` listed
+      ONLY the expand → deployed → `pricing-expand-check --prod` **0 problems** (395 orders, Nikalas's 2 re-price to stored).
+      Backup = step 1's (hook reused it, < 10 min, no writes in between).
+- [x] **3. Merge `staging` → `master`** `497bdc7`, pushed 20:11 (build = `prisma generate && next build`, no migrations).
+      Vercel `dpl_ABs26AaBx56tjqREVTKDMyacf7Po` READY on all production domains. Rollback target was `dpl_3SjKm6…` (`8a54f88`).
+- [x] **4. Backfill re-run** right after READY: Price / Order / InvoiceSent **0 rows** (no bookings in the gap) → check 0 problems.
+- [x] **5. Live checks (read-only):** Nikalas's public form quotes **identical to the old prices** for 1/2/3/4/10 guests (Tasting
+      150/120/70/50₾, Tasting + Lunch 300/200/140/110₾ = old per-person + lunch add-on), T-272 tiles show the range; demo
+      quotes sane (3–6: 70₾ / 120₾); Nikalas's orders in the new columns: 5 Tasting × ₾50 = ₾250, 40 T&L × ₾70 = ₾2,800 (+2
+      free each); 0 runtime errors/warnings since the deploy. **Not checked:** admin screens (New Order, order page, invoice
+      view) — no production sign-in in Claude's browser, and passwords are not typed by Claude → Max/Nikalas.
+- [x] **6. Contract + LUNCH** ~20:18: hook backup `2026-10-23_201843_prod_auto-prisma-migrate-deploy-resolve` (verified, 1,304
+      rows = +1 migration row, +1 DemoEvent from my demo visit); `migrate status` (normal config, prod env) listed ONLY the two;
+      deployed; check: old columns absent, **0 problems**. Done the same evening so the 03:00 demo reseed (new code) has `LUNCH`.
+- [ ] **7. Demo reset** — left to the nightly reseed (03:00); Claude can't sign in as super-admin on production. Max: check
+      demo.vineworks.ge tomorrow, or press Reset Demo.
+- [x] **8. Close-out:** `tix ship` T-152, T-272, T-211 (= P-11) `--yes-prod` → production report #11 live, Nikalas sees
+      "Resolved" (no reply text attached). Fixed a `tix ship` bug first: `/^prod:(d+)$/` lacked the backslash, so `--yes-prod`
+      never reached production. Draft release `cmvl6hsjk0002jr08h8fbzp46` on production (4 entries, EN + KA, **11
+      screenshots** added later that evening, before/after on every entry; Draft, hidden) — Max reviews/publishes in Super Admin → Releases. Tell Nikalas: mixed groups can cost
+      more (each product on its own row), product names changed, Lunch prices optional.
 **Resume point (2026-10-23 afternoon):** staging = `4e89018` (T-152 + D-15…D-17 + T-272), run 13 15/15. Acceptance
 round 2 hit a usage limit mid-cleanup; checked against its pre-test backup: prices, companies, settings, site content
 all identical; its one leftover order ("ZZ Acceptance 1") deleted. Round 3 (fresh agent, same steps, keeps a running

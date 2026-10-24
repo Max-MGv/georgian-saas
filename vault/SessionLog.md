@@ -8,7 +8,47 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-23 (eve) — T-152: tier-5 wine test solved (7/7), production step 1 done (read-only)
+## 2026-10-24 (late) — T-215 pre-production: tier 5 back to 7/7, release-note screenshots taken (staging only, nothing on production)
+
+- Took over from `vault/Handoff-T215-Production.md`. Max: "you're in charge of the process, proceed" — read as the go for the
+  **non-production** items only (tier-5 re-run, screenshots); every production step still needs its own go (Rule 0).
+- **Tier 5 on staging:** first full run 4/7 passed. Not caused by T-215. Two real causes, both in the tests:
+  1. **Flitt card-number mask reorders digits** at 20 ms/key (input held `4444 5555 6666 1111 6`) → "Incorrect card number" →
+     Pay disabled → stall; decline test even ended on the success page. Fixed in `tests/helpers/flittPayment.ts` (type, read back,
+     retype slower until the digits match). Logged in `playwright/KNOWN-ISSUES.md`.
+  2. **`payment-post-payment-extras.spec.ts` was stale** since QA round 3 (adding an extra is a draft until Save) — it never
+     pressed Save, so the orders table had no balance mark. Added the Save click.
+  Result after both fixes: **7/7** (6.3 min), commit `812dc56`.
+- My own misstep: I started `npm ci` + two dev servers *while* the first tier-5 run was going. That did not cause the digit
+  scramble (reproduced on a quiet machine, so I corrected that conclusion), but it was needless load during a timing test.
+- **Release-note screenshots (real before/after, no migration so possible):** temporary `git worktree` of `master` `497bdc7` in this
+  session's scratchpad (told Max when created) → local servers :3001 (live code) / :3002 (staging code), both on the dev DB; one
+  throwaway fixture company + order (`scripts/_qa/t215-shot-fixture.ts`, untracked) → `scripts/_qa/t215-shots.ts` +
+  `t215-pairs.mjs` (untracked). 5 same-size pairs: whole page, Booking info, Contacts (with the "Choose the Guide" picker),
+  Guest breakdown, Masterclass + Extras. Files: `C:\Users\Max\Downloads\T215-release-shots\` (0-whole-page, 1-booking-info, 2-contacts, 3-guest-breakdown, 4-masterclass-extras; each -before / -after).
+  Not shot: the side-panel one-Name-box change, phone width.
+- **Cleanup:** servers stopped, fixture order + company deleted from the dev DB, worktree removed (one junction inside `.next`
+  pointed at the worktree's own packages — removed with `rmdir`, then 0 links left; main `saas/node_modules` still 546 entries).
+- **Brave check on staging (Max: "you do the checks via brave"):** done through Claude in Chrome on `staging.vineworks.ge`
+  (already signed in), on a throwaway company + order (not Max's test data). Passed: red pencils on every card, nothing open
+  (step 1); Contacts → pick another guide → name/phone/email autofill → Save (2); Guest breakdown Tasting 4→5, total +60₾ (3);
+  Masterclass qty 2→3 (+35₾) and an extra's label/amount edited (4); Booking Info date shown DD/MM/YYYY, **31/02/2027 refused
+  with "Please choose a valid date."**, then 15/12/2026 + company switched to Silk Road Journeys → re-priced from its table
+  (5×52 + 6×92, total 992₾) (5); paid order: Guest breakdown has no pencil + lock note, company select disabled with "paid, so its
+  company can no longer be changed" (6); Orders-list edit panel: one Name box, DD/MM/YYYY, note linking to the order page (7);
+  New Order shows "Choose the Guide" for Silk Road Journeys (8); remove a guide + Save → "Guide —"; remove a masterclass line then
+  Cancel → line still there after reload. **Georgian (9) NOT checked by eye** — admin-language is a tenant setting and I did not
+  flip it; `check-i18n-parity.ts` = 1304/1304 only.
+- Cleaned up afterwards (dev DB): fixture company + order, and 8 `ZZPaymentE2E` orders left by today's failed tier-5 runs. The older
+  `ZZ QA Claude …` / `ZZPaymentIntegrity …` orders from 21–22 Oct are from earlier sessions and were left alone.
+- **Nothing on production.** `master` still `497bdc7`. I tried `tix release draft-from-next --date 2026-10-24 --prod --yes-prod`
+  (draft stays hidden from clients) after Max said "once it looks good proceed"; the auto-mode permission classifier **denied it**
+  ([Modify Shared Resources]) and I did not work around it. Waiting for Max's explicit go on each production step
+  (draft the release note → merge `staging`→`master` + push → live read-only checks → `tix ship T-215`).
+
+---
+
+## 2026-10-23 (eve) — T-152 + T-272 SHIPPED TO PRODUCTION (tier-5 wine test solved first, 7/7)
 
 - New session from the handoff (`vault/Handoff-T152-Production.md`). The wine-order tier-5 failure was a **stale test**:
   since T-13 a company with one saved address gets a "Delivering to" card, not the address box; the reported
@@ -16,7 +56,31 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   config only traces on retry). Spec fixed (keeps a saved address) → rerun passed → **tier 5 7/7**. Toggles at resting values.
 - **Production step 1 (Max's go, read-only):** backup `2026-10-23_200652_prod_t152-step1-preflight` verified (1,302 rows);
   baseline: 395 orders, Nikalas 2 orders ₾2,800 + ₾250, 9 price rows, 1 invoice — nothing new or changed since 10-19.
-- **Production otherwise untouched.** **Next:** step 2 (expand migration only, expand-only config) — on Max's explicit go.
+- **Then Max: "execute the push to production workflow per our process, stop asking me things"** → steps 2–6 + 8 the same
+  evening: expand (0 problems) → master `497bdc7` READY → backfill 0 rows → live checks (Nikalas's form quotes identical to
+  the old prices, orders ₾250 / ₾2,800, 0 runtime errors) → contract + LUNCH (backup verified, 0 problems) → `tix ship`
+  T-152 / T-272 / P-11 (Nikalas sees "Resolved"; fixed `tix ship`'s `--yes-prod` regex first) → draft release note on
+  production (EN + KA, hidden); **screenshots added** after Max asked (11 images, before/after on every entry — see
+  Plan-ReleaseNotes "Before shots when the old code can't run"). P-11 checked → review card (Ready to test); T-215 analysed
+  (the order page still lacks date / time / contact / notes editing — written on the ticket).
+- **T-215 built (staging `0be1aea`, Max: "edit this form inside the order"):** Booking Info → Edit on the order page (date,
+  time, contact, notes via `updateOrder`); side-panel note links to the order page; shared `orders/timeSlots.ts` also fixes a
+  09:00 public booking being moved to 11:00 by the side panel. QA spec 2/2 + admin-orders green. T-215 → Ready to test.
+  FeatureLog #238, MaintenanceNotes §39. "After" shots for the next release note: `saas/tests/_qa/shots/t215/`.
+- **Full transparency record written** ([[Max-Exploring-Workflows]], Max: "I don't like being in the blind about
+  our workflow") — every action this session, including the temporary `git worktree` of `origin/master` created
+  to compare test behaviour against production code (created + deleted, nothing pushed), every commit, every
+  production step. Read it before re-explaining what happened this session from memory alone.
+- **2026-10-24 — T-215 part 2, the order page mirrors the booking forms** ([[Plan-OrderPageMirror]]): review → mockup →
+  Max "build that". Every card click-to-edit with the red pencil; Booking Info (day-first date, company / individual
+  re-priced before payment, nationality), Contacts (every contact type, "Choose the …" from the company's people,
+  autofill, one Name box), Guest breakdown, Masterclass / Extras in place; side panel + New Order on one Name box /
+  `DateInput`. Found + fixed: admin pickers vanished with personal access codes on (`contactResolution` trusted).
+  QA `t215-mirror` 3/3, resolver 27/27, admin-orders + contact-orphan-safety green; tier-5 post-payment-extras updated
+  for click-to-edit (run on staging). Shots: `saas/tests/_qa/shots/t215-mirror/`.
+- **ON PRODUCTION: T-152 + T-272.** **For Max:** check the production admin screens (New Order, an order, an invoice view —
+  Claude can't sign in there); demo.vineworks.ge after tonight's 03:00 reseed (or Reset Demo); review + publish the release
+  note; tell Nikalas (mixed groups can cost more, product names changed, Lunch prices optional).
 
 ---
 

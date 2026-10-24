@@ -21,6 +21,18 @@ export type IncomingContact = {
   email: string | null
 }
 
+/** An order's contact as the order page shows it — what `updateOrderContacts` hands back after a save (T-215). */
+export type OrderContactView = {
+  roleId: string
+  roleKey: string
+  personId: string | null
+  roleLabelEn: string
+  roleLabelKa: string
+  name: string
+  phone: string | null
+  email: string | null
+}
+
 /** What actually gets written, once verified. */
 export type OrderContactRow = {
   tenantId: string

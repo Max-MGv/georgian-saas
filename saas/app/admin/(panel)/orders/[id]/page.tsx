@@ -6,6 +6,7 @@ import Link from 'next/link'
 import OrderDetail from './OrderDetail'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
+import { orderRolesFor } from '@/lib/contactResolution'
 
 const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
 
@@ -18,7 +19,7 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals] = await Promise.all([
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -52,7 +53,7 @@ export default async function OrderDetailPage({
     withTenantDb(tenantId, tx => tx.company.findMany({
       where: { tenantId, isIndividual: false },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, isBookingCompany: true },
     })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({
       where: { active: true, tenantId },
@@ -71,6 +72,10 @@ export default async function OrderDetailPage({
     getSetting('admin_language'),
     // What an individual order is re-priced from when its guests or visit change (D-14).
     withTenantDb(tenantId, tx => tx.company.findFirst({ where: { tenantId, isIndividual: true }, include: { prices: true } })),
+    // The Contacts editor (T-215 part 2): the same contact types New Order shows, and its nationality gate.
+    orderRolesFor(tenantId, 'BOOKING'),
+    // Through `db`: Tenant has RLS with no policies, so withTenantDb would return null (MaintenanceNotes §27).
+    db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
   ])
 
   if (!order) notFound()
@@ -96,6 +101,8 @@ export default async function OrderDetailPage({
         displayName={displayName}
         locale={locale}
         companies={companies}
+        contactRoles={contactRoles}
+        nationalityEnabled={tenantFlags?.enableCompanyNationalityBreakdown ?? false}
         individualsPrices={(individuals?.prices ?? []).map(p => ({
           id: p.id,
           minGuests: p.minGuests,
@@ -185,7 +192,11 @@ export default async function OrderDetailPage({
             label: e.label,
             amount: e.amount,
           })),
+          nationalities: order.nationalities,
           contacts: order.contacts.map(c => ({
+            roleId: c.roleId,
+            roleKey: c.role.key,
+            personId: c.personId,
             roleLabelEn: c.role.labelEn,
             roleLabelKa: c.role.labelKa,
             name: c.nameSnapshot,

@@ -383,8 +383,10 @@ export async function resolveCompanyContactsFor(tenantId: string, input: {
 
     // ── 3. Who can be picked ─────────────────────────────────────────────────
     // Empty when person codes are on: the guest proves identity instead of choosing it, and
-    // nobody gets shown a list of their colleagues.
-    const roleChoices = codesOn
+    // nobody gets shown a list of their colleagues. Admin screens (`trusted`) always get the list
+    // (T-215 part 2): an admin sees these people on the Companies page anyway, and with person codes
+    // on the "Choose the Guide" pickers on New Order and the order page silently vanished.
+    const roleChoices = codesOn && !input.trusted
       ? []
       : await pickableRoles(tx, tenantId, company.id, input.module)
 

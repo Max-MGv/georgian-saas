@@ -47,6 +47,37 @@ export async function addMasterclassLine(
   return result
 }
 
+/**
+ * Change an existing line's quantity in place (T-215 part 2) — instead of remove + re-add. The line keeps the price it
+ * was sold at (`pricePerUnit`); the quantity follows the same rule as adding one (whole 1…999, FLAT stays 1). Only the
+ * difference reaches the total, exactly like add / remove.
+ */
+export async function updateMasterclassLine(
+  lineId: string,
+  orderId: string,
+  quantity: number
+): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId, tenantId } })
+    if (!order) return { error: 'Order not found.' } as const
+    const line = await tx.orderMasterclass.findFirst({ where: { id: lineId, orderId }, include: { masterclassItem: true } })
+    if (!line) return { error: 'This line is no longer on the order.' } as const
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) return { error: 'Quantity must be a whole number from 1 to 999.' } as const
+    const newQty = line.masterclassItem.unitType === 'FLAT' ? 1 : quantity
+    if (newQty === line.quantity) return { success: true as const, delta: 0 }
+    await tx.orderMasterclass.update({ where: { id: lineId }, data: { quantity: newQty } })
+    return { success: true as const, delta: (newQty - line.quantity) * line.pricePerUnit }
+  })
+  if ('error' in result) return result
+  if (result.delta !== 0) await recalcOrderTotal(orderId, tenantId, result.delta)
+  revalidatePath(`/admin/orders/${orderId}`)
+  revalidatePath('/admin/orders')
+  return { success: true }
+}
+
 export async function removeMasterclassLine(
   lineId: string,
   orderId: string

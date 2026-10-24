@@ -174,7 +174,9 @@ test.describe('Deleting a person must not erase their name from a past order (F2
     await page.getByPlaceholder('Name', { exact: true }).first().fill(`${ADMIN_FIRST} ${ADMIN_LAST}`);
 
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    await page.getByText('Date', { exact: true }).locator('xpath=following-sibling::*[1]').fill(tomorrow);
+    // New Order's date is the day-first DateInput since T-215 part 2: a DD/MM/YYYY text box with a native date input
+    // underneath for the calendar — filled through the native one, as admin-orders.spec.ts does.
+    await page.locator('input[type="date"]').first().fill(tomorrow);
     // A company order needs a paying guest (T-152 Chunk 8: the four boxes start at 0 and Create stays off until
     // one is filled — there is no typed party size any more).
     await page.getByRole('textbox', { name: 'Tasting', exact: true }).fill('4');

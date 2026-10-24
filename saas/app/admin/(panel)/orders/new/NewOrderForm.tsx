@@ -15,13 +15,14 @@ import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { splitFullName } from '@/lib/splitFullName'
 import ContactRoleFields from '@/components/ContactRoleFields'
 import NationalityPicker from '@/components/NationalityPicker'
+import { ADMIN_TIME_SLOTS as TIME_SLOTS } from '../timeSlots'
+import DateInput from '@/components/DateInput'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
   border: 'var(--site-border)', bg: 'var(--site-surface)', wine: 'var(--color-brand)',
 }
 
-const TIME_SLOTS = ['11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00']
 
 const inputStyle: React.CSSProperties = {
   backgroundColor: 'var(--site-surface)',
@@ -361,12 +362,9 @@ export default function NewOrderForm({
       <Card title={at('newOrder.bookingDetails.title')}>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <Field label={at('orderDetail.bookingInfo.date')} half>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              style={inputStyle}
-            />
+            {/* Day-first, like the public form and every other order screen (T-215 part 2) — keeps a native date
+                input underneath for the calendar, which is also what the specs fill. */}
+            <DateInput value={date} onChange={setDate} style={inputStyle} />
           </Field>
           <Field label={at('orderDetail.bookingInfo.time')} half>
             <select value={timeSlot} onChange={e => setTimeSlot(e.target.value)} style={inputStyle}>

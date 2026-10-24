@@ -237,3 +237,25 @@ Max and Claude manage small features, bugs and ideas in **Super Admin → Ticket
 - `vault/Tickets.md` is an **auto-generated read-only snapshot** — never edit it; change tickets in the tool.
 - **Multi-line text (analysis/solution/comment): don't use `npx tsx`** — on Windows `npx` goes through cmd.exe, which silently cuts the argument at the first newline (only paragraph 1 is saved). Use `node node_modules/tsx/dist/cli.mjs scripts/tix.ts …` from `saas/` instead (found 2026-10-18 on T-114).
 
+
+---
+
+## 12. Review before building, QA before handing over, screenshots in release notes (Max, 2026-10-24)
+
+From the T-215 hindsight (Max: "this whole process was wildly inefficient" — three builds and ~12 test runs where one
+build and two runs would have done). Full story: `vault/Plan-OrderPageMirror.md`.
+
+1. **Review before building a UI change.** Compare the screen with its siblings — the other forms that enter the same
+   data (public booking form, New Order, side panel…) and the app's own patterns (edit icon, click-to-edit, empty values
+   shown as "—", day-first dates). Show Max a short gap list and a mockup, get his decisions, then build once. Don't copy
+   the nearest existing shape and patch it later.
+2. **QA before handing over.** Besides the main-path tests, run an edge-case pass through the real UI: add / remove,
+   empty and invalid values (dates like 31/02, quantities 0 / 2.5 / 1000), Cancel, paid / locked states, phone width.
+   Reproduce every failure step by step before fixing it.
+3. **Test harness hygiene.** Read locators from the real page first; size waits to the dev server (saves can take 7 s
+   locally); reset the page after a failed case so one failure can't cascade; **never edit app code while a test run is
+   going** (recompiles spoil the run — `playwright/KNOWN-ISSUES.md`).
+4. **Every release note entry gets screenshots** (before/after where something visibly changed), drafted with the
+   release, not afterwards. The draft lives on the **production** board. Routine: `vault/Plan-ReleaseNotes.md`.
+5. **Edit files with the editor tool**, not `node -e` / `sed` string patches — CRLF line endings and escaping broke
+   those repeatedly.

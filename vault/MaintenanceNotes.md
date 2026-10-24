@@ -1388,3 +1388,23 @@ contact, bank and personal-number values**. After any re-clone, scrub them (2026
 `+995 555 00 00 00`, IBAN `GE00XX…`, personal number `00000000000`, Max's own contact email), or staging emails and
 invoices expose the real client. `scripts/rebrand-demo-tenant.ts` does the same for the demo tenant (since `6425b24`
 also the recipient name and personal number).
+
+## 39. The order page mirrors the booking forms — click-to-edit cards, shared rules (T-215, 2026-10-23/24)
+
+Plan: `vault/Plan-OrderPageMirror.md`. **Rule (Max): everything that can be entered when booking must be editable on the order page, and the order page mirrors the booking section.** Every card on `orders/[id]/OrderDetail.tsx` is read-only until its **red pencil** (the Settings icon, `#9b090c`, no text) is clicked; one card at a time; Save / Cancel. A new editable thing gets a card or joins one — never an always-open field.
+
+Which action each card uses — keep them the single write path:
+- **Booking Info** (date, time, company / individual, nationality, notes) → `updateOrderBooking`. A company change is refused once paid and re-prices with the same `adminQuote` as `createOrderAdmin` (Individuals table for an individual). Picked contact links are cleared on a company change.
+- **Contacts** (contact person + every contact type, picked from the company's people) → `updateOrderContacts` → `writeOrderContacts` (the same checks as every create path). Uses `useContactSelection` (asAdmin) + `prefill()` and `ContactRoleFields`, exactly like New Order — change one, change the other (§32).
+- **Guest breakdown** → `updateOrderEnhanced` (paid → pencil hidden).
+- **Masterclass / Extras** lines → `updateMasterclassLine` / `updateOrderExtra` (in place), `add…` / `remove…` (at once).
+
+The **Orders side panel** (`OrdersTable.tsx`) still edits date, time, contact person and notes through `updateOrder` — one Name box (`splitFullName`) and `DateInput` like the order page. If a field is added to the order page that the panel also shows, keep them in step or drop it from the panel.
+
+**Card behaviour (QA, 2026-10-24) — keep it when adding a card:** Save keeps the card on "Saving…" until
+`router.refresh()` has landed (`useTransition` in `OrderDetail.tsx`), so a closed card never shows old values; Cancel
+throws away *everything* in the card — Masterclass / Extras add and remove are drafts against a snapshot until Save.
+Contacts open from `contactsNow` (the save's own answer), not from props that lag the refresh.
+
+**Dates:** validate with `lib/isoDate.ts` (`isIsoDate`) on every write — `new Date('2027-02-31')` silently becomes 3 March.
+Every order screen uses `components/DateInput.tsx` (DD/MM/YYYY, a native date input underneath — specs fill `input[type="date"]`). **Time slots** come from `orders/timeSlots.ts`; every `<select>` for an existing order must use `slotOptions(order.timeSlot)` — public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list; a select without it shows 11:00 and Save moves the booking.
