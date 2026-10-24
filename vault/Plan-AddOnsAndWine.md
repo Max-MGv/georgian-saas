@@ -42,6 +42,23 @@ Refreshed mockup on today's order page: `vault/addons-order-page.html` → https
 - Layout change inside the card: the Unit column folds into the item's second line so the table fits a 390 px phone
   (to be checked on the real page in Chunk 6 QA).
 
+### 0c. Build log (localhost only until Max says "push to staging"; nothing on staging or production)
+
+Max, 2026-10-24: *"build it on localhost, I'll tell you what to change before we push to staging."* Dev server for it:
+`saas-3100` entry in `C:\Users\Max\.claude\launch.json` (port 3000 is the MaxFinances app). Build order changed from §7 to
+show screens early: **Part A = add-ons (T-7) end to end, then Part B = wine (T-22)**. Model names are NOT renamed
+(`MasterclassItem` / `OrderMasterclass` stay in code; screens say Add-ons) — saves touching ~25 files for no visible gain.
+
+- ✅ **Chunk 0** `657f5c2` — `lib/orderLines.ts`: every hand-written line sum goes through it (14 copies). tsc 0, pricing tests 123/123.
+- ✅ **Chunk 1 (Part A)** `dea57c3` — migration `20261024200000_addon_groups` on the **dev DB**: `AddOnGroup` (RLS), item `groupId`/`nameKa`,
+  line snapshots, item FK RESTRICT → SET NULL (#94 fixed). Backfill: one "Masterclass" group per winery with items; 172 lines
+  snapshotted, ₾36,000 line total unchanged. `test-ordermasterclass-rls` 14/14. Not yet on production.
+- ✅ **Chunk 3 (admin page)** — `/admin/add-ons` (old `/admin/masterclass` redirects): groups with EN/KA names, who sees them
+  (companies / individuals), visit types (Tasting · Tasting + Lunch · Lunch, all three = "every type"), items with KA name,
+  move-to-group for ungrouped items. Verified in the browser pane: create group, edit group, add item.
+- ⏭ **Next:** public booking form (group rows, per-person × paying guests, individuals + simple form), then the order page
+  and New Order cards, invoice, then Part B (wine).
+
 ### 0b. Questions for Max — ✅ ALL ANSWERED 2026-10-24: "all as recommended"
 
 C-1…C-5 and Q-A are **decided as recommended** below (they are now decisions D-17…D-22). Text kept for the record.

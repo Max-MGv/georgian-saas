@@ -595,7 +595,7 @@ export default function NewOrderForm({
         ) : (
           <p className="text-xs" style={{ color: C.faint }}>
             {at('orderDetail.masterclass.noActiveItems')}{' '}
-            <a href="/admin/masterclass" style={{ color: C.wine }}>{at('orderDetail.masterclass.addSomeLink')}</a>.
+            <a href="/admin/add-ons" style={{ color: C.wine }}>{at('orderDetail.masterclass.addSomeLink')}</a>.
           </p>
         )}
       </Card>

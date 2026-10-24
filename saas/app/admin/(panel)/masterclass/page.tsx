@@ -1,30 +1,7 @@
-import { db, withTenantDb } from '@/lib/db'
-import { getTenantId } from '@/lib/tenant'
-import { requireBookingModule } from '@/lib/requireModule'
-import { getSetting } from '@/app/actions/settings'
-import { adminT } from '@/lib/adminT'
-import MasterclassClient from './MasterclassClient'
+import { redirect } from 'next/navigation'
 
-export default async function MasterclassPage() {
-  await requireBookingModule()
-  const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
-  const locale = adminLanguage || 'en'
-  const items = await withTenantDb(tenantId, tx =>
-    tx.masterclassItem.findMany({
-      where: { tenantId },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    })
-  )
-
-  return (
-    <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{adminT(locale, 'nav.masterclass')}</h1>
-        <span className="text-sm" style={{ color: 'var(--site-secondary)' }}>
-          {items.length} {items.length !== 1 ? adminT(locale, 'menuItems.item.plural') : adminT(locale, 'menuItems.item.singular')}
-        </span>
-      </div>
-      <MasterclassClient items={items} locale={locale} />
-    </div>
-  )
+// "Masterclass" became "Add-ons" (T-7, Plan-AddOnsAndWine): masterclass is now one group of add-ons. Old bookmarks,
+// emails and the onboarding wizard's links keep working.
+export default function MasterclassRedirect() {
+  redirect('/admin/add-ons')
 }

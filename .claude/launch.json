@@ -8,6 +8,12 @@
       "port": 3000
     },
     {
+      "name": "saas-3100",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "./saas", "run", "dev", "--", "-p", "3100"],
+      "port": 3100
+    },
+    {
       "name": "dashboard",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "./dashboard", "run", "dev", "--", "--port", "3001"],
