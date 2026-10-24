@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
+import { lineTotals } from '@/lib/orderLines'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 import { countryName } from '@/lib/countries'
@@ -1640,8 +1641,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
         const cfg = styleFor(o.stage)
         const hasSplit = o.tastingGuestCount > 0 || o.lunchOnlyGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
-        const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-        const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
+        const { masterclass: mcAmt, extras: extrasAmt } = lineTotals(o)
         const bookingAmt = (o.totalPrice ?? 0) - mcAmt - extrasAmt
         return (
           <div

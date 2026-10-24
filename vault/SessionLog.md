@@ -8,6 +8,23 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-24 (evening) — T-7 + T-22 restarted: plan re-based on the three-product pricing (docs only, no code)
+
+- Max moved T-7 and T-22 to In progress and asked whether plan + mockups already exist. They do: `vault/Plan-AddOnsAndWine.md`,
+  mockups `vault/addons-layout-options.html` (Max chose A/A/A/A), summary `vault/addons-summary.html`. No code built.
+- Plan was written 19 Oct, before T-152 (three products) and T-215 (order page). Added **§0** to the plan: what changed
+  (visit types now include `LUNCH`; `priceBooking` → `priceCounts`; #93 fixed; per-person follow-guests is new behaviour;
+  order page is click-to-edit) and **§0b**: C-1…C-5 + Q-A with recommendations. No answers from Max yet.
+- **Max answered C-1…C-5 + Q-A: "all as recommended"** → plan D-17…D-22; `tix decide` on T-7 and T-22.
+- **Rule 12 review done:** compared public form, New Order, order page, New Wine Order, Orders list. Gap list G-1…G-8 in plan §0a.
+  Refreshed interactive mockup `vault/addons-order-page.html` → https://claude.ai/artifact/PDr9prJjGNtC2uxVYZyJ4B (checked in the
+  browser pane: totals add up, per-person line follows the guest stepper, pencil/draft/Save work). Finding worth knowing: the public
+  form charges a per-person masterclass × the quantity the guest types (default 1) — see G-2.
+- **Next:** Max answers G-1 (do companies on the simple form also see add-on rows? recommended yes) → Chunk 0 (groundwork,
+  starts with a read-only production count — needs Max's go).
+
+---
+
 ## 2026-10-24 (late) — T-215 pre-production: tier 5 back to 7/7, release-note screenshots taken (staging only, nothing on production)
 
 - Took over from `vault/Handoff-T215-Production.md`. Max: "you're in charge of the process, proceed" — read as the go for the

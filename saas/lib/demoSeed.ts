@@ -20,6 +20,7 @@
  */
 import type { Prisma, PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type Counts } from '@/lib/pricingUtils'
+import { sumQuantityLines } from '@/lib/orderLines'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -726,7 +727,7 @@ export async function seedDemoTenant(
           : item.unitType === 'PER_PERSON' ? payingGuests(counts)
           : rand(10, 40)
         mcLines.push({ masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit })
-        masterclassAmt = qty * item.pricePerUnit
+        masterclassAmt = sumQuantityLines(mcLines)
       }
 
       const priced = computeTotal(tiers, counts, masterclassAmt)

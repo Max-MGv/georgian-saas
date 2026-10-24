@@ -5,6 +5,7 @@ import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
 import type { BookingVisitType, Product } from '@/lib/pricingUtils'
+import { lineTotals } from '@/lib/orderLines'
 import { adminOrderView, manualFromStrings, NO_TYPED_RATES, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -187,8 +188,7 @@ export default function NewOrderForm({
   const prices = isCompany ? selectedCompany?.prices ?? [] : individualsPrices
   const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
-  const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
+  const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals({ masterclassLines: lines, extras })
 
   // Everything the preview shows comes from the same check and pricing createOrderAdmin runs (Chunk 8), so the
   // total here is the total that will be stored — it drifted from the server until 2026-09-19 (#51).

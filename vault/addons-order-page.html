@@ -1,0 +1,330 @@
+<title>Add-ons and Table Wine Screens</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a review sheet. Outer page = neutral paper. Frames inside = the winery's real theme (Cream & wine; Midnight cellar in dark).
+   Section 1 is the interactive order page (desktop frame + phone frame share one state); section 2 is a table; section 3 is the gap list. */
+:root {
+  --paper: #EEF0EF; --ink: #1D2321; --ink-soft: #5A6560; --rule: #CDD3D0; --card: #FFFFFF;
+  --pick: #1F6F5C; --pick-soft: #DCEDE7; --warn: #8A4B00; --warn-soft: #FBEBD3;
+  --m-bg: #F5EFE6; --m-surface: #FFF9F3; --m-text: #1C1008; --m-muted: #6B5A47;
+  --m-border: #E0D4C0; --m-faint: #A89070; --m-brand: #7C1D23; --m-on-brand: #FFF9F3; --m-danger: #B91C1C;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32; --warn: #F0B866; --warn-soft: #3A2A12;
+  --m-bg: #1E1B18; --m-surface: #262220; --m-text: #F1E9DD; --m-muted: #A99A87;
+  --m-border: #3A332C; --m-faint: #A88B5C; --m-brand: #C9A227; --m-on-brand: #1E1B18; --m-danger: #F08A8A;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #161A19; --ink: #E6EBE8; --ink-soft: #9AA6A0; --rule: #2E3532; --card: #1E2321;
+  --pick: #6CC3A8; --pick-soft: #1F3A32; --warn: #F0B866; --warn-soft: #3A2A12;
+  --m-bg: #1E1B18; --m-surface: #262220; --m-text: #F1E9DD; --m-muted: #A99A87;
+  --m-border: #3A332C; --m-faint: #A88B5C; --m-brand: #C9A227; --m-on-brand: #1E1B18; --m-danger: #F08A8A;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 52px; }
+header { display: grid; gap: 12px; max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+h1 { font-family: var(--display); font-size: clamp(30px, 5vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-size: clamp(22px, 3vw, 28px); line-height: 1.15; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--ink-soft); font-size: 17px; }
+section.band { display: grid; gap: 20px; border-top: 2px solid var(--ink); padding-top: 20px; min-width: 0; }
+.dhead { display: grid; gap: 8px; max-width: 75ch; }
+.dhead .q { color: var(--ink-soft); }
+.rec { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--pick); padding: 14px 16px; max-width: 75ch; font-size: 15px; }
+.rec strong { color: var(--pick); }
+.rec.ask { border-left-color: var(--warn); }
+.rec.ask strong { color: var(--warn); }
+.hint { font-size: 14px; color: var(--ink-soft); max-width: 75ch; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 28px; align-items: start; }
+@media (max-width: 960px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.cap { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 8px; }
+
+/* ── frames ── */
+.screen { background: var(--m-bg); color: var(--m-text); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: grid; gap: 12px; font-size: 14px; min-width: 0; }
+.phone { width: 100%; max-width: 372px; background: var(--m-bg); color: var(--m-text); border: 8px solid var(--ink); border-radius: 30px; padding: 16px 12px; display: grid; gap: 12px; font-size: 14px; min-width: 0; }
+.card { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 10px; overflow: hidden; min-width: 0; }
+.card.off { border-style: dashed; }
+.card > h5 { margin: 0; padding: 9px 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--m-border); }
+.card > h5 small { font-weight: 400; color: var(--m-muted); margin-left: 6px; }
+.card .body { padding: 10px 12px; display: grid; gap: 8px; }
+.pencil { border: 0; background: none; cursor: pointer; color: var(--m-brand); padding: 2px 4px; border-radius: 4px; line-height: 0; }
+.pencil:hover { opacity: .7; }
+.pencil svg { width: 17px; height: 17px; }
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-top: 1px solid var(--m-border); vertical-align: top; }
+th { font-weight: 600; color: var(--m-muted); font-size: 12px; border-top: 0; white-space: nowrap; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+tr.grp td { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--m-faint); padding-top: 9px; background: var(--m-bg); }
+td small { display: block; color: var(--m-muted); font-size: 12px; }
+td .tag { display: inline-block; font-size: 11px; border: 1px solid var(--m-border); border-radius: 999px; padding: 0 7px; color: var(--m-muted); margin-left: 4px; white-space: nowrap; }
+.auto { color: var(--m-muted); font-size: 12px; }
+.num { width: 60px; border: 1px solid var(--m-border); background: var(--m-bg); color: var(--m-text); border-radius: 6px; padding: 4px 6px; font: inherit; text-align: right; }
+select { border: 1px solid var(--m-border); background: var(--m-bg); color: var(--m-text); border-radius: 6px; padding: 5px 8px; font: inherit; max-width: 100%; }
+.btn { border: 1px solid var(--m-border); background: var(--m-bg); color: var(--m-text); border-radius: 6px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.btn.brand { background: var(--m-brand); color: var(--m-on-brand); border-color: var(--m-brand); font-weight: 600; }
+.btn.rm { color: var(--m-danger); border-color: color-mix(in srgb, var(--m-danger) 45%, transparent); padding: 3px 8px; font-size: 12px; }
+.btn:focus-visible, .pencil:focus-visible, select:focus-visible, .num:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.link { color: var(--m-brand); font-weight: 600; background: none; border: 0; font: inherit; cursor: pointer; padding: 0; }
+.note { font-size: 12px; color: var(--m-muted); }
+.draft { font-size: 12px; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; }
+.flash { font-size: 12px; color: var(--pick); background: var(--pick-soft); border-radius: 6px; padding: 4px 8px; }
+.strip { display: grid; gap: 4px; padding: 10px 12px; background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 10px; font-variant-numeric: tabular-nums; }
+.strip div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.strip .t { border-top: 1px solid var(--m-border); padding-top: 5px; margin-top: 3px; font-weight: 700; font-size: 15px; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--m-border); border-radius: 6px; overflow: hidden; }
+.stepper button { width: 28px; height: 28px; border: 0; background: var(--m-bg); color: var(--m-text); font: inherit; font-size: 16px; cursor: pointer; }
+.stepper output { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ── who sees what ── */
+.tbl { overflow-x: auto; background: var(--card); border: 1px solid var(--rule); border-radius: 8px; }
+.tbl table { font-size: 14px; }
+.tbl th, .tbl td { border-top: 1px solid var(--rule); padding: 9px 14px; white-space: normal; }
+.tbl th { color: var(--ink-soft); }
+.tbl td.y { color: var(--pick); font-weight: 600; }
+.tbl td.x { color: var(--ink-soft); }
+.tbl td.c { color: var(--warn); font-weight: 600; }
+
+/* ── gaps ── */
+.gaps { display: grid; gap: 12px; max-width: 80ch; }
+.gap { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.gap b { font-family: var(--display); font-size: 17px; }
+.gap .k { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+.gap .k.ask { color: var(--warn); }
+.gap p { font-size: 15px; color: var(--ink-soft); }
+.gap p strong { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">T-7 + T-22 · Plan-AddOnsAndWine · refreshed 24 Oct 2026 · mockups, not built</div>
+  <h1>Add-ons and table wine on the order page</h1>
+  <p class="lede">The first mockups (you picked A/A/A/A) were drawn before the click-to-edit order page and the three-product pricing. This is the same design redrawn on today's screens. Example booking: <b>Caucasus Travel</b>, 4 Tasting + 6 Tasting &amp; Lunch + 2 Free guests. They have an agreed price on Saperavi and 10% off other wines.</p>
+</header>
+
+<section class="band">
+  <div class="dhead">
+    <div class="eyebrow">1 · admin booking page</div>
+    <h2>The order page, working</h2>
+    <p class="q">Click the red pencil on a card to edit it, as on every card today. Changes are drafts until <b>Save</b>. Use − / + on the guests card: the per-person masterclass follows the paying guests on its own. The same page is drawn twice (desktop and phone) from one state, so edit in either.</p>
+  </div>
+  <div class="stage">
+    <div><div class="cap">Desktop</div><div class="screen" id="desk"></div></div>
+    <div><div class="cap">Phone (390 px)</div><div class="phone" id="phone"></div></div>
+  </div>
+  <p class="hint">What is new against today's page: the Masterclass card becomes <b>Add-ons</b> and is grouped by the admin's groups; <b>Wine for the table</b> is a new card; <b>Sales from this visit</b> is a new dashed card that is never billed. The Unit column is folded into the item name so the card fits a phone. The add-line pickers copy the ones already used on New Wine Order and today's Masterclass card.</p>
+</section>
+
+<section class="band">
+  <div class="dhead">
+    <div class="eyebrow">2 · public booking form</div>
+    <h2>Which visitors see add-ons</h2>
+    <p class="q">Today only the <b>detailed company form</b> shows masterclass. Individuals and companies on the simple form never see it. Your decision D-3 says individuals can have add-ons too, and each group has its own "companies / individuals" switches.</p>
+  </div>
+  <div class="tbl"><table>
+    <tr><th>Visitor</th><th>Add-ons today</th><th>Proposed</th></tr>
+    <tr><td>Company, detailed form</td><td class="y">Masterclass row</td><td class="y">One row per group the admin shows to companies</td></tr>
+    <tr><td>Company, simple form</td><td class="x">Nothing</td><td class="c">Same rows — needs your OK (G-1)</td></tr>
+    <tr><td>Individual</td><td class="x">Nothing</td><td class="y">One row per group the admin shows to individuals</td></tr>
+  </table></div>
+  <p class="rec ask"><strong>G-1, needs your decision.</strong> Should a company on the <em>simple</em> form also see the add-on and wine rows? I recommend <b>yes</b>: the admin already chooses per group who sees it, so a hidden second rule ("only on the detailed form") would be confusing. A winery that wants the simple form to stay bare just doesn't tick "companies" on those groups.</p>
+</section>
+
+<section class="band">
+  <div class="dhead">
+    <div class="eyebrow">3 · gap list</div>
+    <h2>What differs between the screens that enter this data</h2>
+    <p class="q">Checked against the public form, New Order, the order page, New Wine Order and the Orders list.</p>
+  </div>
+  <div class="gaps">
+    <div class="gap"><span class="k ask">Decide</span><b>G-1 · Simple company form</b><p>See section 2. <strong>Recommended: yes, show the rows.</strong></p></div>
+    <div class="gap"><span class="k">Customer-visible change</span><b>G-2 · Per-person items on the public form</b><p>Today the guest types a quantity, default <strong>1</strong>, even for a per-person item, so "35 ₾ per person" is charged once unless they type the guest count. Flat items also show a quantity box. The plan fixes both (per person × paying guests, flat has no box), so a real Nikalas Marani booking with a per-person masterclass will cost more than it would today. This goes in the release note. Chunk 0 first counts, read-only on production, how many real lines this touches.</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-3 · Per-person lines on the order page</b><p>Today the quantity is typed and stays put when guests change. New: it is read-only ("= paying guests") and follows the guest card on Save, with a line in the booking history. A masterclass for only part of the group is a per-piece item (your C-3).</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-4 · Same edit pattern on both new cards</b><p>Pencil → edit → draft → Save / Cancel, adding and removing are drafts too (T-215). New Order keeps its lines in the browser until you press Create, as the Masterclass card does today.</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-5 · Wine picker = New Wine Order's</b><p>Wine → vintage → quantity, with the company price and its reason shown ("38.00 −10%" or "agreed"). The public form uses the +/− list from the first mockup, because guests don't have vintages to choose between.</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-6 · Empty states</b><p>No active add-ons: the same "add some in Add-ons admin" link as today. No wine marked "Offer on bookings": the card says so and links to Wines. Empty values show "—", dates day-first.</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-7 · Orders list and print sheet</b><p>The Masterclass column keeps its saved id (columns picked in browsers survive) and is renamed Add-ons; a new Table wine column is added. The print sheet lists both (your C-5).</p></div>
+    <div class="gap"><span class="k">Follows the page</span><b>G-8 · Content editor preview</b><p>The booking-form preview in the content editor must mirror the group rows (MaintenanceNotes §1). Built in the same chunk as the public form.</p></div>
+  </div>
+</section>
+</div>
+
+<script>
+(function () {
+  const fmt = n => (Math.round(n * 100) / 100).toFixed(2);
+  const RATES = { to: 52, lo: 45, tl: 78 };               // tier rates for this example, GEL per person
+  const CATALOGUE = [
+    { id: 'khi', group: 'Masterclass', name: 'Khinkali folding class', unit: 'PP', price: 35 },
+    { id: 'chu', group: 'Masterclass', name: 'Churchkhela making', unit: 'PP', price: 25 },
+    { id: 'cel', group: 'Masterclass', name: 'Private cellar tour', unit: 'FLAT', price: 150 },
+    { id: 'kha', group: 'Food', name: 'Extra khachapuri', unit: 'PC', price: 18 },
+    { id: 'che', group: 'Food', name: 'Cheese platter', unit: 'PC', price: 40 }
+  ];
+  const WINES = [
+    { id: 'sap', name: 'Saperavi 2021', std: 45, agreed: 40 },
+    { id: 'rka', name: 'Rkatsiteli 2022', std: 38 },
+    { id: 'mts', name: 'Mtsvane 2022', std: 42 },
+    { id: 'kis', name: 'Kisi 2021', std: 55 },
+    { id: 'tav', name: 'Tavkveri rosé 2023', std: 35 }
+  ];
+  const DISCOUNT = 10;
+  const UNIT = { PP: 'per person', PC: 'per piece', FLAT: 'flat, once' };
+  const S = {
+    to: 4, lo: 0, tl: 6, free: 2,
+    addons: [{ id: 'khi', qty: 0 }, { id: 'kha', qty: 4 }],     // PP qty is never stored here: it is the paying guests
+    wine: [{ id: 'sap', qty: 2 }, { id: 'rka', qty: 1 }],
+    editing: null, draft: null, pickAddon: '', pickWine: '', pickQty: '1', flash: ''
+  };
+  const paying = () => S.to + S.lo + S.tl;
+  const cat = id => CATALOGUE.find(c => c.id === id);
+  const wn = id => WINES.find(w => w.id === id);
+  const qtyOf = l => (cat(l.id).unit === 'PP' ? paying() : cat(l.id).unit === 'FLAT' ? 1 : l.qty);
+  const addonTotal = l => qtyOf(l) * cat(l.id).price;
+  const unitWine = w => (w.agreed != null ? { p: w.agreed, why: 'agreed' } : { p: Math.round(w.std * (100 - DISCOUNT)) / 100, why: '−' + DISCOUNT + '%' });
+  const wineTotal = l => l.qty * unitWine(wn(l.id)).p;
+  const visit = () => S.to * RATES.to + S.lo * RATES.lo + S.tl * RATES.tl;
+  const EXTRAS = 200;
+
+  const pencil = card => '<button class="pencil" type="button" data-act="edit" data-card="' + card + '" aria-label="Edit"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 4h6M4 4v12h12v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M16.5 3.5l-7 7-.6 2.6 2.6-.6 7-7a1.4 1.4 0 00-2-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>';
+  const actions = '<div class="row"><button class="btn brand" type="button" data-act="save">Save</button><button class="btn" type="button" data-act="cancel">Cancel</button><span class="draft">Draft — nothing is saved until you press Save</span></div>';
+
+  function guestsCard() {
+    const st = (key, label) => '<tr><td>' + label + '</td><td class="n"><span class="stepper">' +
+      (key === 'tl' ? '<button type="button" data-act="g" data-d="-1" aria-label="Fewer">−</button>' : '') +
+      '<output>' + S[key] + '</output>' +
+      (key === 'tl' ? '<button type="button" data-act="g" data-d="1" aria-label="More">+</button>' : '') + '</span></td></tr>';
+    return '<div class="card"><h5>Guest breakdown ' + '</h5><div class="tw"><table>' +
+      st('to', 'Tasting') + st('lo', 'Lunch') + st('tl', 'Tasting &amp; Lunch') +
+      '<tr><td>Free</td><td class="n">' + S.free + '</td></tr>' +
+      '<tr><td><b>Paying guests</b></td><td class="n"><b>' + paying() + '</b></td></tr></table></div>' +
+      (S.flash ? '<div class="body"><span class="flash">' + S.flash + '</span></div>' : '') + '</div>';
+  }
+
+  function addonsCard() {
+    const ed = S.editing === 'addons';
+    const lines = ed ? S.draft : S.addons;
+    const groups = [...new Set(lines.map(l => cat(l.id).group))];
+    let rows = '';
+    groups.forEach(g => {
+      rows += '<tr class="grp"><td colspan="' + (ed ? 4 : 3) + '">' + g + '</td></tr>';
+      lines.forEach((l, i) => {
+        const c = cat(l.id); if (c.group !== g) return;
+        const q = ed && c.unit === 'PC'
+          ? '<input class="num" type="number" min="1" max="999" value="' + l.qty + '" data-act="qty" data-i="' + i + '" aria-label="Quantity — ' + c.name + '">'
+          : qtyOf(l);
+        rows += '<tr><td>' + c.name + '<small>' + fmt(c.price) + ' ' + UNIT[c.unit] + (c.unit === 'PP' ? ' · <span class="auto">= paying guests</span>' : '') + '</small></td>' +
+          '<td class="n">' + q + '</td><td class="n">' + fmt(addonTotal(l)) + '</td>' +
+          (ed ? '<td class="n"><button class="btn rm" type="button" data-act="rm" data-i="' + i + '">Remove</button></td>' : '') + '</tr>';
+      });
+    });
+    const head = '<tr><th>Item</th><th class="n">Qty</th><th class="n">Total</th>' + (ed ? '<th></th>' : '') + '</tr>';
+    const empty = lines.length === 0 ? '<div class="body"><span class="note">No add-ons added yet.</span></div>' : '';
+    let add = '';
+    if (ed) {
+      const opts = ['Masterclass', 'Food'].map(g => '<optgroup label="' + g + '">' + CATALOGUE.filter(c => c.group === g).map(c =>
+        '<option value="' + c.id + '"' + (S.pickAddon === c.id ? ' selected' : '') + '>' + c.name + ' (' + UNIT[c.unit] + ')</option>').join('') + '</optgroup>').join('');
+      add = '<div class="body"><div class="row"><select data-act="pickAddon" aria-label="Add-on"><option value="">Select item…</option>' + opts + '</select>' +
+        '<button class="btn brand" type="button" data-act="addAddon"' + (S.pickAddon ? '' : ' disabled') + '>Add</button></div>' + actions + '</div>';
+    }
+    return '<div class="card"><h5>Add-ons ' + (ed ? '' : pencil('addons')) + '</h5>' + (lines.length ? '<div class="tw"><table>' + head + rows + '</table></div>' : '') + empty + add + '</div>';
+  }
+
+  function wineCard() {
+    const ed = S.editing === 'wine';
+    const lines = ed ? S.draft : S.wine;
+    let rows = lines.map((l, i) => {
+      const w = wn(l.id), u = unitWine(w);
+      const q = ed ? '<input class="num" type="number" min="1" max="999" value="' + l.qty + '" data-act="qty" data-i="' + i + '" aria-label="Quantity — ' + w.name + '">' : l.qty;
+      return '<tr><td>' + w.name + '<small>' + (w.agreed != null ? fmt(u.p) + ' agreed' : fmt(w.std) + ' ' + u.why + ' = ' + fmt(u.p)) + '</small></td><td class="n">' + q + '</td><td class="n">' + fmt(l.qty * u.p) + '</td>' +
+        (ed ? '<td class="n"><button class="btn rm" type="button" data-act="rm" data-i="' + i + '">Remove</button></td>' : '') + '</tr>';
+    }).join('');
+    const head = '<tr><th>Wine</th><th class="n">Qty</th><th class="n">Total</th>' + (ed ? '<th></th>' : '') + '</tr>';
+    let add = '';
+    if (ed) {
+      const w = wn(S.pickWine), q = Math.max(parseInt(S.pickQty) || 1, 1);
+      const opts = WINES.map(x => '<option value="' + x.id + '"' + (S.pickWine === x.id ? ' selected' : '') + '>' + x.name + '</option>').join('');
+      add = '<div class="body"><div class="row"><select data-act="pickWine" aria-label="Wine"><option value="">Select wine…</option>' + opts + '</select>' +
+        '<input class="num" type="number" min="1" value="' + S.pickQty + '" data-act="pickQty" aria-label="Quantity">' +
+        (w ? '<span class="note">= ' + fmt(q * unitWine(w).p) + ' (' + (w.agreed != null ? 'agreed price' : fmt(w.std) + ' ' + unitWine(w).why) + ')</span>' : '') +
+        '<button class="btn brand" type="button" data-act="addWine"' + (S.pickWine ? '' : ' disabled') + '>Add</button></div>' + actions + '</div>';
+    }
+    return '<div class="card"><h5>Wine for the table ' + (ed ? '' : pencil('wine')) + '</h5>' +
+      (lines.length ? '<div class="tw"><table>' + head + rows + '</table></div>' : '<div class="body"><span class="note">No wine added yet.</span></div>') + add + '</div>';
+  }
+
+  function extrasCard() {
+    return '<div class="card"><h5>Extras ' + pencil('x').replace('data-act="edit"', 'data-act="noop"') + '</h5><div class="tw"><table><tr><td>Transport from Tbilisi</td><td class="n">' + fmt(EXTRAS) + '</td></tr></table></div></div>';
+  }
+
+  function salesCard() {
+    return '<div class="card off"><h5>Sales from this visit <small>guests\' own purchases · not on the invoice</small></h5><div class="tw"><table>' +
+      '<tr><td>Nino K. · 3 bottles</td><td class="n">126.00</td><td class="n"><span class="tag">Paid</span></td></tr>' +
+      '<tr><td>David M. · 6 bottles</td><td class="n">234.00</td><td class="n"><span class="tag">Paid</span></td></tr></table></div>' +
+      '<div class="body"><div class="row"><button class="btn" type="button" data-act="noop">Record guest purchase</button></div></div></div>';
+  }
+
+  function strip() {
+    const a = S.addons.reduce((s, l) => s + addonTotal(l), 0), w = S.wine.reduce((s, l) => s + wineTotal(l), 0);
+    const total = visit() + a + w + EXTRAS;
+    return '<div class="strip"><div><span>Visit</span><span>' + fmt(visit()) + '</span></div><div><span>Add-ons</span><span>' + fmt(a) + '</span></div>' +
+      '<div><span>Wine for the table</span><span>' + fmt(w) + '</span></div><div><span>Extras</span><span>' + fmt(EXTRAS) + '</span></div>' +
+      '<div class="t"><span>Invoice total</span><span>' + fmt(total) + ' ₾</span></div></div>';
+  }
+
+  function render() {
+    const html = strip() + guestsCard() + addonsCard() + wineCard() + extrasCard() + salesCard();
+    document.getElementById('desk').innerHTML = html;
+    document.getElementById('phone').innerHTML = html;
+  }
+
+  function begin(card) { S.editing = card; S.draft = JSON.parse(JSON.stringify(card === 'addons' ? S.addons : S.wine)); S.pickAddon = ''; S.pickWine = ''; S.pickQty = '1'; render(); }
+  function end(save) {
+    if (save) { if (S.editing === 'addons') S.addons = S.draft; else S.wine = S.draft; S.flash = ''; }
+    S.editing = null; S.draft = null; render();
+  }
+
+  function onClick(e) {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'edit') begin(b.dataset.card);
+    else if (act === 'save') end(true);
+    else if (act === 'cancel') end(false);
+    else if (act === 'rm') { S.draft.splice(+b.dataset.i, 1); render(); }
+    else if (act === 'addAddon' && S.pickAddon) { if (!S.draft.some(l => l.id === S.pickAddon)) S.draft.push({ id: S.pickAddon, qty: 1 }); S.pickAddon = ''; render(); }
+    else if (act === 'addWine' && S.pickWine) {
+      const q = Math.max(parseInt(S.pickQty) || 1, 1), ex = S.draft.find(l => l.id === S.pickWine);
+      if (ex) ex.qty += q; else S.draft.push({ id: S.pickWine, qty: q });
+      S.pickWine = ''; S.pickQty = '1'; render();
+    }
+    else if (act === 'g') {
+      const next = S.tl + (+b.dataset.d);
+      if (next < 0 || S.to + S.lo + next < 1) return;
+      const before = paying(); S.tl = next;
+      S.flash = 'Paying guests ' + before + ' → ' + paying() + '. Per-person add-ons follow; history: "Add-on quantities updated to match guests".';
+      render();
+    }
+  }
+  function onChange(e) {
+    const t = e.target, act = t.dataset && t.dataset.act; if (!act) return;
+    if (act === 'pickAddon') { S.pickAddon = t.value; render(); }
+    else if (act === 'pickWine') { S.pickWine = t.value; render(); }
+    else if (act === 'pickQty') { S.pickQty = t.value; render(); }
+    else if (act === 'qty') { const q = Math.min(Math.max(parseInt(t.value) || 1, 1), 999); S.draft[+t.dataset.i].qty = q; render(); }
+  }
+  ['desk', 'phone'].forEach(id => { const el = document.getElementById(id); el.addEventListener('click', onClick); el.addEventListener('change', onChange); });
+  render();
+})();
+</script>

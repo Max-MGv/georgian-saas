@@ -1,11 +1,71 @@
 ---
 tags: [plan, booking, wine, add-ons]
-status: 📋 Plan complete — awaiting Max's review of the summary; nothing built
+status: 📋 Plan re-based on the three-product pricing model 2026-10-24 — awaiting Max's answers (§0b); nothing built
 tickets: T-7, T-22
 ---
 
 # Plan — Booking add-ons (T-7) + wine on bookings (T-22)
 
+## 0. Update 2026-10-24 — what changed since 19 Oct (read this before the rest)
+
+T-7 and T-22 went to **In progress** on 2026-10-24. Since this plan was written, **T-152 (three products) is on
+production** (`Plan-PricingModel.md`, D-1…D-17) and T-215 rebuilt the order page. The plan below is still right
+about *what* to build; these are the places where its *wording* no longer matches the code. **Read every
+"visit type", "per person" and `priceBooking` below through this table.**
+
+| Plan says | Code / decision today | Effect on this plan |
+|---|---|---|
+| Visit types "tasting / tasting + lunch" (D-4, `AddOnGroup.visitTypes`) | `VisitType` = `TASTING` · `TASTING_LUNCH` · **`LUNCH`** (company simple form, shown as "Lunch"). Companies' detailed form has 3 product boxes + Free. | `AddOnGroup.visitTypes` takes all three values (empty = all). A group limited to "Tasting + Lunch" does **not** show on a Lunch-only visit — see **Q-A**. |
+| "Per person" = all paying guests (D-11 / C-3), "tasting + lunch on detailed bookings, else guest count" | Paying guests = Tasting + Lunch + Tasting & Lunch (`payingGuests(counts)`, `lib/pricingUtils.ts:79`); Free guests never pay. The admin screens already pre-fill a PER_PERSON line with that number (`NewOrderForm.tsx:215`, `OrderDetail.tsx:926`) but store a fixed quantity — it does **not** follow later guest changes today. | C-3 stays "all paying guests", now = the three boxes. "Follow automatically" (D-11) is therefore **new behaviour**, not a fix. A masterclass for only one product's guests = a per-piece item. |
+| `priceBooking({ addOns, wine, extras })` (§4.5) | `priceBooking` is gone. Pricing is `priceCounts(rates, counts, lines: { masterclass, extras })` (`pricingUtils.ts:183`), `adminQuote()` for the admin screens, `lib/adminOrderView.ts` for what they show. Add-on lines are checked by `checkMasterclassLines()` (`lib/bookingInput.ts:250`) — #93 is **fixed**. | `LineTotals` becomes `{ addOns, wine, extras }`; `checkMasterclassLines` becomes `checkAddOnLines`. Same plan, new names. |
+| "Line sums hand-written in ~10 places" | Still true, plus `adminOrderView.ts:127` and `lib/demoSeed.ts:726` — **re-count in Chunk 0** (grep `masterclass` + `extras` in `lib/` and `app/`). | Chunk 0 unchanged. |
+| E1 "company with no price tier" | A-9: admins type three rates; `adminQuote` returns `unpriced` when nothing is typed. | Same outcome — confirm in Chunk 0 that add-ons on an `unpriced` order stay the only stored total. |
+| Order page / New Order screens (§5) | T-215: click-to-edit order page (`1a34c4e`), mirrors the public form (Plan-OrderPageMirror). | Chunk 6 builds the add-on / wine cards **on the new order page**; the 19 Oct mockup (A) shows the old layout. Rule 12: re-check the screen against its siblings first. |
+| KnownBugs #93 "fixed separately first" | Fixed by T-152 (Chunks 7–8). | Chunk 0 first bullet is done. |
+
+### 0a. Review before building (ClaudeInstructions Rule 12) — 2026-10-24
+
+Refreshed mockup on today's order page: `vault/addons-order-page.html` → https://claude.ai/artifact/PDr9prJjGNtC2uxVYZyJ4B
+(interactive: pencil → draft → Save/Cancel; guests card drives per-person lines). Gap list G-1…G-8:
+
+- **G-1 (needs Max):** only the detailed company form shows masterclass today; individuals and the simple company form see
+  nothing. Proposal: every form shows each group the admin ticked for that audience. Recommended: yes.
+- **G-2 (customer-visible, release note):** public form today charges a per-person item × the quantity the guest typed
+  (default 1); flat items show a quantity box. New: per person × paying guests, flat has no box. Chunk 0 counts real
+  production lines first (read-only, Max's go).
+- **G-3:** order page — per-person quantity read-only, follows the guest card on Save, history event.
+- **G-4:** both new cards use T-215's pencil → draft → Save/Cancel; New Order keeps lines in the browser until Create.
+- **G-5:** wine add-line = wine → vintage → qty like New Wine Order, price reason shown; public form uses the +/− list.
+- **G-6:** empty states link to Add-ons admin / Wines; empty values "—".
+- **G-7:** Orders list — column id `masterclass` kept (saved in browsers), renamed Add-ons; new Table wine column; print sheet lists both.
+- **G-8:** content-editor booking-form preview mirrors the group rows (MaintenanceNotes §1).
+- Layout change inside the card: the Unit column folds into the item's second line so the table fits a 390 px phone
+  (to be checked on the real page in Chunk 6 QA).
+
+### 0b. Questions for Max — ✅ ALL ANSWERED 2026-10-24: "all as recommended"
+
+C-1…C-5 and Q-A are **decided as recommended** below (they are now decisions D-17…D-22). Text kept for the record.
+
+| # | Decision (Max, 2026-10-24) |
+|---|---|
+| D-17 = C-1 | Wine orders switch to per-line rounding too. |
+| D-18 = C-2 | A company that is both booking + wine company shares one set of wine terms. |
+| D-19 = C-3 | "Per person" = all paying guests (the three boxes, never Free); partial-group items = per piece. |
+| D-20 = C-4 | Phone optional on guest-purchase pickup orders. |
+| D-21 = C-5 | Print booking sheet lists add-ons + table wine. |
+| D-22 = Q-A | Visit-type choices per group: Tasting · Tasting + Lunch · Lunch (own tick box, default ticked wherever Tasting + Lunch is). |
+
+Original wording:
+
+- **C-1** Wine orders also round per line (so table wine and wine orders calculate alike; totals may move ≤ 1 tetri per line, past orders unchanged). *Recommend: yes.*
+- **C-2** A company ticked as **both** booking and wine-order company shares one set of wine terms. *Recommend: yes — simplest; split later if a winery asks.*
+- **C-3** "Per person" = all paying guests (the three boxes, not Free); a masterclass for only some guests = a "per piece" item. *Recommend: yes.*
+- **C-4** Phone number optional when staff record a guest purchase. *Recommend: yes — these are people standing at the winery.*
+- **C-5** The staff booking sheet (print) lists add-ons and table wine (it shows neither today). *Recommend: yes.*
+- **Q-A (new)** A group limited to a visit type: should "Tasting + Lunch" groups show on a **Lunch** visit? Lunch follows the Tasting + Lunch rules for lead time / hot dish (A-5 of the pricing plan). *Recommend: yes — the group's visit-type choices stay "Tasting", "Tasting + Lunch" and "Lunch", and Lunch is its own tick box, default ticked wherever Tasting + Lunch is.*
+
+
+> **Status 2026-10-24: see §0 first** (re-based on the three-product pricing; T-7/T-22 now In progress).
 > **Status 2026-10-19:** design settled with Max over three rounds of questions, one blind review
 > and one round of mockups. **No code written. Nothing approved to build yet** — Max is reviewing
 > the summary page (`vault/addons-summary.html`). Chunks are strictly sequential; each one is
@@ -38,7 +98,7 @@ tickets: T-7, T-22
 | D-1 | Build T-7 and T-22 together? | Yes. |
 | D-2 | Group names translated? | Yes, EN + KA. Item names too (KA optional, falls back to EN). |
 | D-3 | Add-ons for individuals? | Yes — per group: companies and/or individuals. |
-| D-4 | Groups limited by visit type? | Yes — per group: tasting / tasting + lunch / both. |
+| D-4 | Groups limited by visit type? | Yes — per group, any of the visit types (Tasting / Tasting + Lunch / Lunch since T-152; empty = all). See §0 / Q-A. |
 | D-5 | Table-wine price | Website price by default. A **booking company** can have its own table-wine terms on the Companies tab: a % discount and/or agreed per-wine prices (the same mechanism wine-order companies already use). Max: booking companies and wine companies are separate entities. |
 | D-6 | Does table wine count as wine sold? | Yes — "they are indeed wine orders"; one system, the source differs. |
 | D-7 | Where is it stored? | In the one existing wine-line table; each line belongs to a wine order **or** a booking (§4.3). |

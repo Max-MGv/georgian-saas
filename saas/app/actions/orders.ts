@@ -13,6 +13,7 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkAdminOrder, checkMasterclassLines, type AdminOrderProblem } from '@/lib/bookingInput'
+import { lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
@@ -161,10 +162,7 @@ export async function updateOrderBooking(id: string, data: {
         const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
         return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
       }
-      const lines = {
-        masterclass: order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0),
-        extras: order.extras.reduce((s, e) => s + e.amount, 0),
-      }
+      const lines = lineTotals(order)
       // A company with no price table yet: priced later on the Guest breakdown (typed rates), as on New Order.
       pricing = quote.kind === 'unpriced'
         ? { totalPrice: lines.masterclass + lines.extras, tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
@@ -358,8 +356,7 @@ export async function updateOrderEnhanced(
 
     let pricing: { totalPrice: number; rates: ProductRates | null } | null = null
     if (changed) {
-      const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
-      const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
+      const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals(order)
       // The company's table at today's rows (each product by its own count), typed rates for the rest — the
       // same adminQuote the page previews with, so the stored total is the one the admin saw. An individual
       // order: the Individuals table, no registration fee (D-14).
@@ -468,7 +465,7 @@ export async function createOrderAdmin(data: {
   }
 
   const tenantId = await getTenantId()
-  const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
+  const extrasAmt = sumAmountLines(data.extras)
 
   const created = await withTenantDb(tenantId, async (tx) => {
     const company = data.companyId
@@ -484,7 +481,7 @@ export async function createOrderAdmin(data: {
       return { error: 'A masterclass line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
     }
     const masterclassLines = checkedLines.lines
-    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+    const masterclassAmt = sumQuantityLines(masterclassLines)
 
     // The company's table by each product's own count, the admin's typed rate for anything it does not price;
     // no table and nothing typed = priced later (total = the lines), as before. An individual order: the
@@ -892,8 +889,7 @@ export async function assignOrderCompany(
     })
     if (!company) return { error: 'Company not found.' } as const
 
-    const masterclassAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-    const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
+    const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals(order)
 
     // The three snapshots record the tier rates this order was actually sold
     // at, exactly as createBooking.ts does. They were NOT written here until

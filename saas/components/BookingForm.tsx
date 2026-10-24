@@ -10,6 +10,7 @@ import { createBooking, type BookingFormData } from '@/app/actions/createBooking
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
+import { lineAmount, sumQuantityLines } from '@/lib/orderLines'
 import { countsFromVisit, findProductTier, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkBookingCounts, countRulesFromSettings, type CountRuleKey, type CountsError } from '@/lib/bookingInput'
 import { t } from '@/lib/t'
@@ -634,7 +635,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       quantity: Math.max(parseInt(mcSelections[m.id]?.qtyStr || '1') || 1, 1),
       pricePerUnit: m.pricePerUnit,
     }))
-  const masterclassAmt = activeMcLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+  const masterclassAmt = sumQuantityLines(activeMcLines)
 
   // ── Price preview: priceCounts(), the server's own arithmetic (§4.2) — it cannot drift from it ──
   // Individuals price off the Individuals ladder; a company only once proven by its code. Each product looks up
@@ -688,7 +689,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         const item = masterclassItems.find(m => m.id === l.masterclassItemId)
         return {
           label: `${item?.name ?? fc('form_masterclass_header', 'form.masterclass')}${l.quantity > 1 ? ` × ${l.quantity}` : ''}`,
-          value: formatTetri(asTetri(l.quantity * l.pricePerUnit)),
+          value: formatTetri(asTetri(lineAmount(l))),
         }
       })
     : []

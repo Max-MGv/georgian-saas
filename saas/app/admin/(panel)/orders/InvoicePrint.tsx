@@ -1,6 +1,7 @@
 import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
 import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView } from '@/lib/invoiceLines'
 import type { Product } from '@/lib/pricingUtils'
+import { lineTotals } from '@/lib/orderLines'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 const KA = INVOICE_PRODUCT_LABEL.ka
@@ -78,8 +79,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
   const idCode = order.company?.identificationCode ?? '—'
 
   // Detailed calculations
-  const mcAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
+  const { masterclass: mcAmt, extras: extrasAmt } = lineTotals(order)
   const bookingAmt = totalPrice - mcAmt - extrasAmt
 
   // Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only shown

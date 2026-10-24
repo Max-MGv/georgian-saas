@@ -1,6 +1,7 @@
 import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceLocale } from '@/lib/invoiceLines'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { asTetri, balanceDue, formatTetri, multiplyTetri } from '@/lib/money'
+import { lineTotals } from '@/lib/orderLines'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 /**
@@ -141,8 +142,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   const dateStr = formatShortDate(new Date(data.date), locale)
 
   const companyDisplay = data.companyName ?? `${data.name} ${data.surname}`
-  const mcAmt = data.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
+  const { masterclass: mcAmt, extras: extrasAmt } = lineTotals(data)
   // The booking per product — the same lines the printed invoice shows (Plan-PricingModel Chunk 9).
   const view = invoiceView({
     visitType: data.visitType, guestCount: data.guestCount,

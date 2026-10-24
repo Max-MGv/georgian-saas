@@ -10,6 +10,7 @@ import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type BookingVisitType, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { sumQuantityLines } from '@/lib/orderLines'
 import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, type CountRuleKey } from '@/lib/bookingInput'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
@@ -276,7 +277,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     const checkedLines = checkMasterclassLines(layout === 'boxes' ? data.masterclassLines : undefined, catalogue)
     if (!checkedLines.ok) return { success: false, error: await mc('onsite_err_masterclass', 'form.err_masterclass') }
     const masterclassLines = checkedLines.lines
-    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+    const masterclassAmt = sumQuantityLines(masterclassLines)
     const lines = { masterclass: masterclassAmt, extras: 0 }
 
     // ── Price (Plan-PricingModel §4.2): each product looks up its own row by its own count (D-2) ──

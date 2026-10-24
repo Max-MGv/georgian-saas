@@ -12,6 +12,7 @@ import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { countryName } from '@/lib/countries'
 import { updateOrderBooking, updateOrderContacts, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
+import { lineTotals } from '@/lib/orderLines'
 import { adminOrderView, manualFromStrings, NO_TYPED_RATES, PRODUCT_AT, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { slotOptions } from '../timeSlots'
@@ -861,8 +862,7 @@ export default function OrderDetail({
   // An individual order is priced from the Individuals table, never typed rates (D-14).
   const prices = isCompanyOrder ? order.company?.prices ?? [] : individualsPrices
   const companyRegistrationFee = order.company?.registrationFee ?? 0
-  const masterclassAmt = lines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  const extrasAmt = extras.reduce((s, e) => s + e.amount, 0)
+  const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals({ masterclassLines: lines, extras })
 
   // The same check and pricing updateOrderEnhanced runs, so a Save stores exactly what is previewed.
   const view = adminOrderView({

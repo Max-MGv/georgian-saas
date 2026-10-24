@@ -6,6 +6,7 @@ import { recalcOrderTotal } from '@/lib/pricing'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { checkMasterclassLines } from '@/lib/bookingInput'
+import { lineAmount } from '@/lib/orderLines'
 
 export async function addMasterclassLine(
   orderId: string,
@@ -36,7 +37,7 @@ export async function addMasterclassLine(
         pricePerUnit: line.pricePerUnit,
       },
     })
-    return { success: true as const, lineId: created.id, amount: line.quantity * line.pricePerUnit }
+    return { success: true as const, lineId: created.id, amount: lineAmount(line) }
   })
   if ('error' in result) return result
 
@@ -69,7 +70,7 @@ export async function updateMasterclassLine(
     const newQty = line.masterclassItem.unitType === 'FLAT' ? 1 : quantity
     if (newQty === line.quantity) return { success: true as const, delta: 0 }
     await tx.orderMasterclass.update({ where: { id: lineId }, data: { quantity: newQty } })
-    return { success: true as const, delta: (newQty - line.quantity) * line.pricePerUnit }
+    return { success: true as const, delta: lineAmount({ quantity: newQty, pricePerUnit: line.pricePerUnit }) - lineAmount(line) }
   })
   if ('error' in result) return result
   if (result.delta !== 0) await recalcOrderTotal(orderId, tenantId, result.delta)
@@ -93,7 +94,7 @@ export async function removeMasterclassLine(
     const line = await tx.orderMasterclass.findFirst({ where: { id: lineId, orderId } })
     if (!line) return null
     await tx.orderMasterclass.delete({ where: { id: lineId } })
-    return line.quantity * line.pricePerUnit
+    return lineAmount(line)
   })
   if (found != null) await recalcOrderTotal(orderId, tenantId, -found)
   revalidatePath(`/admin/orders/${orderId}`)
