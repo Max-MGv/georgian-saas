@@ -535,6 +535,7 @@ const en: Translations = {
 
   'orderDetail.contacts.title': 'Contacts',
   'orderDetail.contacts.none': 'No contacts recorded.',
+  'orderDetail.contacts.booker': 'Contact Person',
 
   'orderDetail.invoiceHistory.title': 'Invoice History',
   'orderDetail.invoiceHistory.none': 'No invoices sent yet.',
@@ -1975,6 +1976,7 @@ const ka: Translations = {
   // Drafted, not native-reviewed (Plan-ContactRoles) — flag for Max.
   'orderDetail.contacts.title': 'კონტაქტები',
   'orderDetail.contacts.none': 'კონტაქტები არ არის ჩაწერილი.',
+  'orderDetail.contacts.booker': 'საკონტაქტო პირი',
 
   // Drafted, not native-reviewed — flag for Max.
   'orderDetail.invoiceHistory.title': 'ინვოისის ისტორია',

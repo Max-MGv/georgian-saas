@@ -343,11 +343,15 @@ export default function OrderDetail({
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const router = useRouter()
 
-  // ── Booking details: date, time, contact, notes (T-215) ────────────────────
+  // ── Booking details + contact person (T-215) ───────────────────────────────
   // The same fields and the same action (updateOrder) as the Orders side panel, so the order page can change
-  // everything the panel can. For a company booking the name/phone/email are the Contact Person (updateOrder keeps
-  // the Contacts card's row in step).
-  const [editingInfo, setEditingInfo] = useState(false)
+  // everything the panel can — split by card: Booking Info edits date, time and notes; Contacts edits the contact
+  // person's name, phone and email (for a company booking updateOrder keeps the Contacts card's row in step). One
+  // card is edited at a time; the save sends the other card's values unchanged.
+  const [editingCard, setEditingCard] = useState<'info' | 'contact' | null>(null)
+  const editingInfo = editingCard === 'info'
+  const editingContact = editingCard === 'contact'
+  const [msgCard, setMsgCard] = useState<'info' | 'contact'>('info')
   const [infoDate, setInfoDate] = useState('')
   const [infoTime, setInfoTime] = useState('')
   const [infoName, setInfoName] = useState('')
@@ -359,7 +363,7 @@ export default function OrderDetail({
   const [infoMsg, setInfoMsg] = useState('')
   const [infoError, setInfoError] = useState(false)
 
-  function startInfoEdit() {
+  function startEdit(card: 'info' | 'contact') {
     setInfoDate(toInputDate(order.date))
     setInfoTime(order.timeSlot)
     setInfoName(order.name)
@@ -369,7 +373,8 @@ export default function OrderDetail({
     setInfoNotes(order.notes ?? '')
     setInfoMsg('')
     setInfoError(false)
-    setEditingInfo(true)
+    setMsgCard(card)
+    setEditingCard(card)
   }
 
   async function handleInfoSave() {
@@ -386,11 +391,48 @@ export default function OrderDetail({
       return
     }
     setInfoError(false)
-    setEditingInfo(false)
+    setEditingCard(null)
     setInfoMsg(at('orderDetail.bookingInfo.savedOk'))
     router.refresh()
     setTimeout(() => setInfoMsg(''), 3000)
   }
+
+  // Plain render helpers (no inputs inside, so calling them doesn't remount a field and lose focus).
+  const editButton = (card: 'info' | 'contact') => editingCard === null && (
+    <button
+      onClick={() => startEdit(card)}
+      className="text-xs font-medium px-2.5 py-1 rounded-lg border"
+      style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+    >
+      {at('orderDetail.bookingInfo.edit')}
+    </button>
+  )
+  const editActions = () => (
+    <>
+      {infoMsg && infoError && <p className="text-sm" style={{ color: '#b91c1c' }}>{infoMsg}</p>}
+      <div className="flex gap-3">
+        <button
+          onClick={handleInfoSave}
+          disabled={infoSaving}
+          className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+          style={{ backgroundColor: C.wine, opacity: infoSaving ? 0.6 : 1 }}
+        >
+          {infoSaving ? at('orders.editPanel.saving') : at('orders.editPanel.save')}
+        </button>
+        <button
+          onClick={() => { setEditingCard(null); setInfoMsg('') }}
+          className="px-4 py-2 rounded-lg border text-sm"
+          style={{ borderColor: C.border, color: C.muted }}
+        >
+          {at('orders.editPanel.cancel')}
+        </button>
+      </div>
+    </>
+  )
+  // Any change clears a refused save's message (input events bubble from every field, the select too).
+  const clearRefusal = () => { if (infoError) { setInfoError(false); setInfoMsg('') } }
+  const savedNote = (card: 'info' | 'contact') =>
+    editingCard === null && msgCard === card && infoMsg && !infoError && <p className="text-xs mt-2" style={{ color: '#166534' }}>{infoMsg}</p>
 
   // ── Link to a real company (Feature 180) ───────────────────────────────────
   // Only relevant for an order that came in with no companyId at all — see
@@ -1024,23 +1066,11 @@ export default function OrderDetail({
         document.body
       )}
 
-      {/* ── Booking Info — date, time, contact and notes editable here (T-215); visit type, guests and price in
-          the Guest Breakdown card below ── */}
-      <Card
-        title={at('orderDetail.bookingInfo.title')}
-        action={!editingInfo && (
-          <button
-            onClick={startInfoEdit}
-            className="text-xs font-medium px-2.5 py-1 rounded-lg border"
-            style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
-          >
-            {at('orderDetail.bookingInfo.edit')}
-          </button>
-        )}
-      >
+      {/* ── Booking Info — date, time and notes editable here (T-215); the contact person in the Contacts card;
+          visit type, guests and price in the Guest Breakdown card below ── */}
+      <Card title={at('orderDetail.bookingInfo.title')} action={editButton('info')}>
         {editingInfo ? (
-          // Any change clears a refused save's message (input events bubble from every field, the select too).
-          <div className="flex flex-col gap-3 mb-3" onInput={() => { if (infoError) { setInfoError(false); setInfoMsg('') } }}>
+          <div className="flex flex-col gap-3 mb-3" onInput={clearRefusal}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.date')}</span>
@@ -1051,22 +1081,6 @@ export default function OrderDetail({
                 <select value={infoTime} onChange={e => setInfoTime(e.target.value)} style={inputStyle}>
                   {slotOptions(order.timeSlot).map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.firstName')}</span>
-                <input value={infoName} onChange={e => setInfoName(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.lastName')}</span>
-                <input value={infoSurname} onChange={e => setInfoSurname(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.phone')}</span>
-                <input type="tel" value={infoPhone} onChange={e => setInfoPhone(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.email')}</span>
-                <input type="email" value={infoEmail} onChange={e => setInfoEmail(e.target.value)} style={inputStyle} />
               </label>
             </div>
             <label className="flex flex-col gap-1">
@@ -1079,24 +1093,7 @@ export default function OrderDetail({
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </label>
-            {infoMsg && infoError && <p className="text-sm" style={{ color: '#b91c1c' }}>{infoMsg}</p>}
-            <div className="flex gap-3">
-              <button
-                onClick={handleInfoSave}
-                disabled={infoSaving}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-                style={{ backgroundColor: C.wine, opacity: infoSaving ? 0.6 : 1 }}
-              >
-                {infoSaving ? at('orders.editPanel.saving') : at('orders.editPanel.save')}
-              </button>
-              <button
-                onClick={() => { setEditingInfo(false); setInfoMsg('') }}
-                className="px-4 py-2 rounded-lg border text-sm"
-                style={{ borderColor: C.border, color: C.muted }}
-              >
-                {at('orders.editPanel.cancel')}
-              </button>
-            </div>
+            {editActions()}
           </div>
         ) : (
           <>
@@ -1161,22 +1158,44 @@ export default function OrderDetail({
           </div>
         )}
         <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
-        {/* Plan-ContactRoles Chunk 11a: for company bookings these are a synced copy of the
-            Contacts card's Contact Person row (decision 4) — showing both duplicated the same
-            person. Individuals have no OrderContact row at all, so they still need these here. */}
-        {!editingInfo && order.bookingType !== 'COMPANY' && (
-          <>
-            <InfoRow label={at('orderDetail.bookingInfo.phone')} value={order.phone} />
-            <InfoRow label={at('orderDetail.bookingInfo.email')} value={order.email} />
-          </>
-        )}
+        {/* Phone / email live in the Contacts card for every booking (T-215): a company's Contact Person row, or an
+            individual's booker — where Contacts → Edit changes them. */}
         {!editingInfo && order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
-        {!editingInfo && infoMsg && !infoError && <p className="text-xs mt-2" style={{ color: '#166534' }}>{infoMsg}</p>}
+        {savedNote('info')}
       </Card>
 
       {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1) ── */}
-      <Card title={at('orderDetail.contacts.title')}>
-        {order.contacts.length === 0 ? (
+      {/* Edit = the contact person (the booker, for an individual) — the same four fields as the side panel (T-215). */}
+      <Card title={at('orderDetail.contacts.title')} action={editButton('contact')}>
+        {editingContact ? (
+          <div className="flex flex-col gap-3 mb-3" onInput={clearRefusal}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.firstName')}</span>
+                <input value={infoName} onChange={e => setInfoName(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.lastName')}</span>
+                <input value={infoSurname} onChange={e => setInfoSurname(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.phone')}</span>
+                <input type="tel" value={infoPhone} onChange={e => setInfoPhone(e.target.value)} style={inputStyle} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.email')}</span>
+                <input type="email" value={infoEmail} onChange={e => setInfoEmail(e.target.value)} style={inputStyle} />
+              </label>
+            </div>
+            {editActions()}
+          </div>
+        ) : order.contacts.length === 0 && order.bookingType !== 'COMPANY' ? (
+          // An individual has no OrderContact rows — the booker on the order is the contact person.
+          <InfoRow
+            label={at('orderDetail.contacts.booker')}
+            value={[`${order.name} ${order.surname}`.trim(), order.phone, order.email].filter(Boolean).join(' · ')}
+          />
+        ) : order.contacts.length === 0 ? (
           <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.contacts.none')}</p>
         ) : (
           order.contacts.map((c, i) => (
@@ -1187,6 +1206,7 @@ export default function OrderDetail({
             />
           ))
         )}
+        {savedNote('contact')}
       </Card>
 
       {/* ── Invoice history — a permanent record of what was actually billed, since the
