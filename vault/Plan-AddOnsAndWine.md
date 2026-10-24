@@ -56,8 +56,43 @@ show screens early: **Part A = add-ons (T-7) end to end, then Part B = wine (T-2
 - ✅ **Chunk 3 (admin page)** — `/admin/add-ons` (old `/admin/masterclass` redirects): groups with EN/KA names, who sees them
   (companies / individuals), visit types (Tasting · Tasting + Lunch · Lunch, all three = "every type"), items with KA name,
   move-to-group for ungrouped items. Verified in the browser pane: create group, edit group, add item.
-- ⏭ **Next:** public booking form (group rows, per-person × paying guests, individuals + simple form), then the order page
-  and New Order cards, invoice, then Part B (wine).
+- ✅ **Chunk 5 (public form, add-ons)** `242617b` — group rows on every form, per person × paying guests, flat once, server re-checks
+  visibility + forces quantities. QA `tests/_qa/addons-public.spec.ts` 5/5.
+- ✅ **Chunk 6a (order page + New Order, add-ons)** `a566a76` — grouped Add-ons card, per-person follows guests (`lib/addOnLines.ts`),
+  history events (migration `20261025090000_addon_events`). QA `tests/_qa/addons-admin.spec.ts` 4/4 (incl. New Order UI).
+- ✅ **Chunk 7 (invoices, add-ons)** `c1fe565` + `3504cc6` — per-group sections on print + email, staff sheet column, content-editor mirror, specs updated.
+- ✅ **PART A (T-7) COMPLETE on localhost** — nothing pushed.
+- ✅ **Part B schema** `e793d77` — migrations `20261025120000_wine_on_bookings` + `20261025120100_wine_events` on the dev DB: `WineVintage.bookable`,
+  `WineOrderItem` booking parent (`orderId`, CHECK one parent) + `negotiated/discountPercent/lineTotal` (all 256 existing lines backfilled, each
+  order's lines add up to its stored total), `WineOrder.sourceOrderId`, `AddOnGroup.kind` (+ one WINE group per winery), RLS through Order.
+  `priceWineOrder` rounds per line (C-1). `test-wine-pricing` 24/24, `test-wineorderitem-rls` 15/15.
+- ✅ **Part B admin + server** `23aa133` (+ migration `20261025123000_invoice_sent_wine_lines`): "On bookings" switch on Wines (`setWineBookable` /
+  `setVintageBookable`, creates the group via `lib/wineGroup.ts`), wine group card on Add-ons (no items, count, can't delete), company wine
+  terms section also for booking companies, `lib/tableWine.ts` (ONE pricing function for every write path), `createBooking` + `createOrderAdmin`
+  store wine, `app/actions/orderWine.ts` (add/update/remove + events), all re-pricing paths include wine (`LineTotals.wine`), order page
+  "Wine for the table" card (draft until Save), New Order wine card, invoice print + email + `InvoiceSent.wineLines`.
+- 🚧 **IN PROGRESS (uncommitted, not compiled): public booking form wine row** — `app/(site)/page.tsx` loads `wineGroup` (done); `BookingForm.tsx`:
+  props/types/state/pricing/payload/review rows/`wineRowEl` JSX are written. STILL TO DO there: (1) `import { Fragment, useState, ... } from 'react'`
+  (line 7 lacks Fragment), (2) t.ts keys EN+KA: `form.wine_agreed`, `form.bottle_singular`, `form.bottle_plural`, `form.wine_less`, `form.wine_more`,
+  (3) show a "Wine: X" line in the two price-summary blocks (like the add-ons line), (4) `npx tsc --noEmit`, (5) QA spec `tests/_qa/wine-public.spec.ts`
+  (individual website price; company with agreed price + % after code; tamper: unbookable wine / forged qty / hidden group refused).
+- ⏭ **STILL TO BUILD (Part B):** orders list "Table wine" column + CSV columns (`columnDefs.ts`, `exportOrdersCsv`), staff sheet wine, statistics
+  (`lib/wineSales.ts` = the only reader of wine sold across sources; wine statistics Source filter; booking revenue 3-level switch; fix #95 name split
+  — group by vintage id and sum `lineTotal`), guest purchases ("Record guest purchase" → pickup `WineOrder` with `sourceOrderId`, phone optional C-4,
+  "Sales from this visit" dashed card, link both ways, `GUEST_PURCHASE_LINKED` event), onboarding wizard copy, demo seed table wine, QA specs
+  (order page wine: add/change/remove + terms; New Order wine; invoice), update `Playwright` specs that mention masterclass elsewhere, MaintenanceNotes §40
+  addendum (wine: `tableWine.ts`, `lineTotal`, one parent), FeatureLog row, KnownBugs #94/#95 status, release-note draft, `tix review` cards on T-7/T-22.
+
+**Resume checklist for a fresh session:** (1) `cd georgian-saas && git status` — branch `staging`, ~12 local commits unpushed, NEVER push without Max's go;
+(2) dev server: `preview_start saas-3100` (entry lives in `C:\Users\Max\.claude\launch.json`, port 3100 — 3000 is MaxFinances); it is STOPPED now;
+stop it before any `prisma generate`; (3) run `cd saas && npx tsc --noEmit`, `node node_modules/tsx/dist/cli.mjs scripts/test-pricing-model.ts` (152),
+`scripts/test-wine-pricing.ts` (24), `scripts/test-wineorderitem-rls.ts` (15), `scripts/test-ordermasterclass-rls.ts` (14), `scripts/check-i18n-parity.ts`;
+(4) QA specs run with `npx playwright test -c tests/_qa/playwright.qa3100.config.ts <spec> --workers=1`; (5) dev-DB state: groups Masterclass + Food (Food:
+companies + individuals, not Lunch), item "Extra khachapuri" is ACTIVE (staging old code would show it inside the Masterclass row — switch it off
+before Max looks at staging); no bookable wines yet (switch one on in Admin → Wines to see wine for the table).
+**Gotchas:** files here have CRLF — multi-line `node -e` string patches silently miss (use the Edit tool or normalise newlines); never put backticks/`$` in
+PowerShell/bash heredoc code (JSX template literals got eaten — write files with the Write tool); `git commit -m @'…'@` breaks on embedded double quotes
+— use `git commit -F <file>`; `tsc` is the safety net (LineTotals.wine / lineTotals({wineLines}) are required on purpose).
 
 ### 0b. Questions for Max — ✅ ALL ANSWERED 2026-10-24: "all as recommended"
 

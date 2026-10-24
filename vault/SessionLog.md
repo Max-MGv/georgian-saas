@@ -8,6 +8,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-25 — T-7 + T-22 build status (READ THIS FIRST; full detail + resume checklist in `Plan-AddOnsAndWine.md` §0c)
+
+- **All on localhost + the shared dev DB. NOTHING pushed to staging, NOTHING on production.** ~12 local commits on branch `staging`.
+- **Part A (add-ons, T-7) is complete and tested** (admin page, public form, order page, New Order, invoices, staff sheet, content-editor mirror).
+- **Part B (wine for the table, T-22) is mostly built:** schema + 3 migrations on dev, per-line wine pricing, wines switch, company terms, `lib/tableWine.ts`,
+  createBooking / New Order / order-page actions, order page + New Order cards, invoice. `23aa133` is the last commit.
+- **In progress, uncommitted & not compiled:** the public booking form's "Wine for the table" row (`components/BookingForm.tsx`, `app/(site)/page.tsx`).
+  Remaining: Fragment import, 5 t.ts keys (EN+KA), summary line, tsc, QA spec.
+- **Still to build:** orders-list/CSV table-wine column, statistics (`lib/wineSales.ts`, source filter, 3-level revenue, fix #95), guest purchases,
+  demo seed, QA specs for wine, docs (MaintenanceNotes §40 addendum, FeatureLog, KnownBugs), release-note draft, `tix review` on T-7/T-22.
+- **Dev server is stopped** (`preview_start saas-3100`); the dev item "Extra khachapuri" is active (shows up inside the Masterclass row on the OLD staging code —
+  switch it off before Max checks staging).
+- Max's rules for this build: he reviews on localhost:3100 and tells me what to change BEFORE any push; nothing to master/production without his explicit go.
+
+---
+
 ## 2026-10-24 (evening) — T-7 + T-22 restarted: plan re-based on the three-product pricing (docs only, no code)
 
 - Max moved T-7 and T-22 to In progress and asked whether plan + mockups already exist. They do: `vault/Plan-AddOnsAndWine.md`,
@@ -20,8 +36,23 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   Refreshed interactive mockup `vault/addons-order-page.html` → https://claude.ai/artifact/PDr9prJjGNtC2uxVYZyJ4B (checked in the
   browser pane: totals add up, per-person line follows the guest stepper, pencil/draft/Save work). Finding worth knowing: the public
   form charges a per-person masterclass × the quantity the guest types (default 1) — see G-2.
-- **Next:** Max answers G-1 (do companies on the simple form also see add-on rows? recommended yes) → Chunk 0 (groundwork,
-  starts with a read-only production count — needs Max's go).
+- **Max (2026-10-24/25): "build it on localhost, I'll tell you what to change before we push to staging"** → built Part A
+  (add-ons, T-7) end to end on localhost + the shared dev DB. **Nothing pushed to staging, nothing on production.** Commits on the
+  local `staging` branch (unpushed): `657f5c2` chunk 0 (`lib/orderLines.ts`), `dea57c3` schema (migration `20261024200000_addon_groups`
+  applied to dev), `476da25` Add-ons admin page, `242617b` public form, `a566a76` order page + New Order + history events
+  (migration `20261025090000_addon_events` applied to dev), `c1fe565` invoices + staff sheet, `3504cc6` content-editor mirror + specs.
+- **Verified:** tsc 0 · `test-pricing-model` 152/152 · i18n parity OK · `test-ordermasterclass-rls` 14/14 · QA specs (untracked,
+  `tests/_qa/addons-public|admin.spec.ts`, config `playwright.qa3100.config.ts` — localhost:3100 because MaxFinances holds 3000) 9/9 ·
+  `booking-tampered-quantities` 9/9 · `booking-enhanced` pass · `admin-orders` pass. Screenshots `saas/tests/_qa/shots/addons/`.
+- **Decisions taken while building:** model names not renamed (screens say Add-ons); G-1 built as "yes" (every form shows the groups
+  the admin ticked for that audience); per-person is charged per paying guest on EVERY path (the old public form charged the typed
+  quantity, default 1 — release-note item, customer-visible); individuals with no price table keep their add-ons in the total.
+- **Mistake of mine, fixed:** my test item "Extra khachapuri" would have shown up inside the old Masterclass row on staging (shared DB,
+  old code lists every active item) — switched it off at once; it is back on now because the new code groups it (staging old code would
+  show it again until the push). Dev DB backups: automatic before each write command + one manual before the UI tests.
+- **Next:** Part B (wine on bookings, T-22) — schema (bookable switch, wine lines on a booking, `lineTotal`, guest-purchase link), company
+  table-wine terms, public "Wine for the table" row, order page card, invoice, statistics, guest purchases. Then a hand-over review
+  card on T-7/T-22 and Max's click-through on localhost:3100.
 
 ---
 

@@ -1408,3 +1408,31 @@ Contacts open from `contactsNow` (the save's own answer), not from props that la
 
 **Dates:** validate with `lib/isoDate.ts` (`isIsoDate`) on every write — `new Date('2027-02-31')` silently becomes 3 March.
 Every order screen uses `components/DateInput.tsx` (DD/MM/YYYY, a native date input underneath — specs fill `input[type="date"]`). **Time slots** come from `orders/timeSlots.ts`; every `<select>` for an existing order must use `slotOptions(order.timeSlot)` — public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list; a select without it shows 11:00 and Save moves the booking.
+
+## 40. Add-ons (T-7) and table wine (T-22): what must stay in sync (2026-10-25)
+
+Plan: [[Plan-AddOnsAndWine]]. **Not on staging or production yet** — built on localhost + the shared dev DB.
+
+1. **Line sums — only `saas/lib/orderLines.ts`.** `lineTotals()` / `sumQuantityLines()` / `sumAmountLines()`. The 14 hand-written
+   `quantity × pricePerUnit` sums are gone; a new kind of line (table wine) is added there **and** to `LineTotals` in `pricingUtils.ts`,
+   or invoices / totals / lists will miss it.
+2. **Per person = paying guests, set by the server.** `checkMasterclassLines(lines, catalogue, { payingGuests, shownOn })`
+   (`lib/bookingInput.ts`) forces a PER_PERSON line's quantity, FLAT = 1, and (public form only) refuses an item whose group is not
+   offered to this kind of guest on this visit type. Never trust a quantity from the browser for those two units.
+3. **Per-person lines follow the guests.** Every write path that changes guest counts must call `lib/addOnLines.ts`
+   (`withSyncedQuantities` to price, `writeSyncedQuantities` to write + history). Today: `updateOrderEnhanced`. A future import /
+   duplicate / "change guests" path has to call it too.
+4. **Visibility is one function.** `groupShownOn()` in `lib/addOns.ts` is used by the public form AND the server check. Empty
+   `AddOnGroup.visitTypes` = every visit type; the admin screen stores all-three-ticked as `[]` (`normalizeVisitTypes`).
+5. **Lines are snapshots.** `OrderMasterclass` carries name / Georgian name / unit / group at the time it was sold; read it with
+   `lineIdentity()`. The item link is `ON DELETE SET NULL` (KnownBugs #94 fixed). Every writer takes the snapshot from
+   `MASTERCLASS_CATALOGUE_SELECT` — a new writer must too. Invoice lines are `invoiceAddOnLine()`; `InvoiceSent.masterclassLines` JSON
+   now also holds `nameKa` / `groupName` / `groupNameKa` (older rows only `name` — readers accept both).
+6. **Group deletion:** a group with items cannot be deleted (`ON DELETE RESTRICT`); wipes (`demoSeed`, `stagingWipe`) delete items
+   first, then groups. New tenants get no group until the admin makes one (or the first `createMasterclassItem` creates "Masterclass").
+7. **Screens that mirror each other:** public `BookingForm` group rows ↔ `BookingFormVisualPanel` (content editor preview, illustrative)
+   ↔ order page Add-ons card ↔ New Order Add-ons card ↔ `adminOrderView` (prices add-on lines at the guests being typed, `addOnLines`).
+8. **Names in code stay `MasterclassItem` / `OrderMasterclass`** (no model rename); screens say Add-ons. The Orders list column id stays
+   `masterclass` (saved in browsers' localStorage), only its label changed.
+9. `OrderEventType` gained `ADDON_ADDED` / `ADDON_REMOVED` / `ADDON_QTY_SYNCED` (migration `20261025090000_addon_events`). Nothing reads
+   the event list yet, so an old build on the shared dev DB is unaffected.
