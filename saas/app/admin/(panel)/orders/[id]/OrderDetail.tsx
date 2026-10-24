@@ -358,6 +358,7 @@ export default function OrderDetail({
   masterclassItems,
   wineOptions = [],
   wineTerms = null,
+  guestSales = null,
   companies = [],
   individualsPrices = [],
   contactRoles = [],
@@ -374,6 +375,8 @@ export default function OrderDetail({
   wineOptions?: WineOption[]
   /** This order's company's wine terms — its % off and agreed prices — that price new wine lines. Null for an individual booking. */
   wineTerms?: { discountPercent: number | null; prices: Record<string, number> } | null
+  /** The "Sales from this visit" card (guest purchases), shown last; null when the wine module is off. */
+  guestSales?: React.ReactNode
   /** Real companies to link a no-company order to (Feature 180). Excludes
    * the isIndividual pricing-container row — see page.tsx's fetch. */
   companies?: { id: string; name: string; isBookingCompany: boolean }[]
@@ -2426,6 +2429,10 @@ export default function OrderDetail({
           </div>
         )}
       </Card>
+
+      {/* Sales from this visit (T-22): bottles guests bought on the day — their own wine orders, deliberately NOT on this
+          booking's invoice or total. Rendered by the page (a card of its own), last, so nothing above reads as including it. */}
+      {guestSales}
     </div>
   )
 }

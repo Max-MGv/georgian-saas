@@ -6,6 +6,8 @@ import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
+import GuestSales from './GuestSales'
+import { wineLineAmount } from '@/lib/winePricing'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import { orderRolesFor } from '@/lib/contactResolution'
@@ -22,7 +24,7 @@ export default async function OrderDetailPage({
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
   const wineOn = h.get('x-tenant-modules-wine-orders') === 'true'
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags, bookableWines] = await Promise.all([
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags, bookableWines, guestPurchases, sellableWines] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
@@ -86,6 +88,22 @@ export default async function OrderDetailPage({
     wineOn
       ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
           where: { tenantId, bookable: true, active: true, wine: { active: true } },
+          orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+          select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true } } },
+        }))
+      : Promise.resolve([]),
+    // Sales from this visit (T-22): wine orders linked to this booking. Abandoned checkouts are not sales.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
+          where: { tenantId, sourceOrderId: id, abandonedAt: null },
+          include: { wineItems: true },
+          orderBy: { createdAt: 'asc' },
+        }))
+      : Promise.resolve([]),
+    // A guest buys anything the winery sells, not only what is offered on bookings.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+          where: { tenantId, active: true, wine: { active: true } },
           orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
           select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true } } },
         }))
@@ -246,6 +264,21 @@ export default async function OrderDetailPage({
           type: i.type,
         }))}
         wineOptions={bookableWines.map(v => ({ vintageId: v.id, name: localName(v.wine.name, v.wine.nameKa, locale), year: v.year, price: v.price }))}
+        guestSales={wineOn ? (
+          <GuestSales
+            orderId={order.id}
+            defaultName={`${order.name} ${order.surname}`.trim()}
+            locale={locale}
+            purchases={guestPurchases.map(p => ({
+              id: p.id,
+              name: p.businessName,
+              stage: p.stage,
+              amount: p.totalAmount ?? p.wineItems.reduce((s, i) => s + wineLineAmount(i, p.discountPercent), 0),
+              lines: p.wineItems.map(i => ({ name: i.wineNameSnapshot, year: i.vintageYearSnapshot, quantity: i.quantity })),
+            }))}
+            wines={sellableWines.map(v => ({ vintageId: v.id, name: localName(v.wine.name, v.wine.nameKa, locale), year: v.year, price: v.price }))}
+          />
+        ) : null}
         wineTerms={order.bookingType === 'COMPANY' && order.company
           ? { discountPercent: order.company.wineDiscountPercent, prices: Object.fromEntries(order.company.winePrices.map(p => [p.wineVintageId, p.price])) }
           : null}

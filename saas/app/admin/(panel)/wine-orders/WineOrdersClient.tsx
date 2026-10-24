@@ -115,6 +115,8 @@ type WineOrder = {
   isExporter: boolean
   /** T-9 — ordered by a private person (no company) or a business. */
   customerType: 'INDIVIDUAL' | 'COMPANY'
+  /** T-22 — bought by a guest during this booking's visit (a guest purchase); null for an ordinary wine order. */
+  visit: { id: string; date: string; label: string } | null
   contactName: string
   contactPhone: string
   wineItems: WineOrderItem[]
@@ -443,6 +445,19 @@ function IndividualMark({ locale }: { locale: string }) {
   )
 }
 
+/** T-22 — "From the visit of 24 Oct · Caucasus Travel" on a guest purchase, linking to that booking (and back from the booking). */
+function VisitBadge({ visit, locale }: { visit: WineOrder['visit']; locale: string }) {
+  if (!visit) return null
+  const day = new Date(visit.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  return (
+    <a href={`/admin/orders/${visit.id}`} onClick={e => e.stopPropagation()}
+      className="ml-2 align-middle inline-flex items-center rounded-full font-semibold whitespace-nowrap"
+      style={{ fontSize: '0.65rem', padding: '0.05rem 0.45rem', lineHeight: 1.5, backgroundColor: '#fdf4ff', color: '#86198f', border: '1px solid #f0abfc' }}>
+      {adminT(locale, 'wineOrders.fromVisit', { date: day })}{visit.label ? ` · ${visit.label}` : ''}
+    </a>
+  )
+}
+
 /** T-12 — "Exporter" next to a company name. */
 function ExporterMark({ locale }: { locale: string }) {
   return (
@@ -576,6 +591,7 @@ function CompactWineCard({ order, locale, dim, onOpen }: { order: WineOrder; loc
             {order.isExporter && <span className="flex-shrink-0"><ExporterMark locale={locale} /></span>}
             {order.customerType === 'INDIVIDUAL' && <span className="flex-shrink-0"><IndividualMark locale={locale} /></span>}
           </p>
+          {order.visit && <p className="mt-0.5"><VisitBadge visit={order.visit} locale={locale} /></p>}
           <p className="text-sm truncate" style={{ color: C.faint }}>{order.contactName}</p>
         </div>
         <span className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
@@ -992,7 +1008,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
               >
                 {/* Company + wines */}
                 <td className="px-4 py-3">
-                  <p className="font-semibold" style={{ color: C.text }}>{order.businessName}</p>
+                  <p className="font-semibold" style={{ color: C.text }}>{order.businessName}<VisitBadge visit={order.visit} locale={locale} /></p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {order.wineItems.map(item => (
                       <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
@@ -1433,7 +1449,7 @@ function PackingTable({ orders, selected, onToggle, onToggleAll, locale }: {
                   <input type="checkbox" checked={isSelected} onChange={() => onToggle(order.id)} className="cursor-pointer" />
                 </td>
                 <td className="px-4 py-3">
-                  <p className="font-semibold" style={{ color: C.text }}>{order.businessName}</p>
+                  <p className="font-semibold" style={{ color: C.text }}>{order.businessName}<VisitBadge visit={order.visit} locale={locale} /></p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {order.wineItems.map(item => (
                       <span key={item.id} className="text-xs px-1.5 py-0.5 rounded border"
@@ -1718,6 +1734,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                       {order.businessName}
                       {order.isExporter && <ExporterMark locale={locale} />}
                       {order.customerType === 'INDIVIDUAL' && <IndividualMark locale={locale} />}
+                      <VisitBadge visit={order.visit} locale={locale} />
                     </p>
                     <p className="text-sm mb-3" style={{ color: C.muted, minHeight: '1.25rem' }}>
                       {order.llcName ? `${order.llcName}${order.llcId ? ` · ${order.llcId}` : ''}` : ''}
