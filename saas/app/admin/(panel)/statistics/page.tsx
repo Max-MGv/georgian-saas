@@ -4,7 +4,9 @@ import { headers } from 'next/headers'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import StatisticsClient from './StatisticsClient'
+import type { WineOrderStat } from './WineStatistics'
 import { NOT_ABANDONED, NOT_CANCELLED } from '@/lib/orderFilters'
+import { loadWineSales, type WineSale } from '@/lib/wineSales'
 
 export default async function StatisticsPage() {
   const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
@@ -33,17 +35,12 @@ export default async function StatisticsPage() {
         }))
       : Promise.resolve([]),
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
+    // Wine sold, from every source (wine orders, guest purchases, table wine on bookings) — lib/wineSales.ts is the only reader.
+    // The same exclusions as the bookings above apply to each parent: abandoned and cancelled are not sales (the old page summed
+    // cancelled wine orders into revenue while leaving them out of its active count, so the two contradicted each other).
     wineOrdersOn
-      ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
-          // Same exclusions, same reasoning — WineStatistics.tsx summed
-          // cancelled wine orders into its revenue total while already
-          // excluding them from its "active orders" count, so the two
-          // contradicted each other on one screen.
-          where: { tenantId, ...NOT_ABANDONED, ...NOT_CANCELLED },
-          include: { wineItems: true },
-          orderBy: { createdAt: 'desc' },
-        }))
-      : Promise.resolve([]),
+      ? withTenantDb(tenantId, tx => loadWineSales(tx, tenantId, { wineOrders: true, bookings: bookingOn, individualLabel: adminT(locale, 'orders.type.individual') }))
+      : Promise.resolve([] as WineSale[]),
   ])
 
   const now = new Date()
@@ -115,26 +112,16 @@ export default async function StatisticsPage() {
     companyName: o.bookingType === 'INDIVIDUAL' ? null : o.company?.name ?? null,
   }))
 
-  // Wine order stats — line items carry price snapshots from order time
-  const wineOrders = rawWineOrders.map(o => {
-    const items = o.wineItems.map(i => ({
-      id: i.wineVintageId ?? i.id,
-      name: i.wineNameSnapshot,
-      quantity: i.quantity,
-      price: i.priceSnapshot,
-    }))
-    const displayTotal = o.totalAmount != null
-      ? o.totalAmount
-      : items.reduce((sum, w) => sum + w.quantity * w.price, 0)
-    return {
-      id: o.id,
-      businessName: o.businessName,
-      wines: items,
-      displayTotal: Math.round(displayTotal),
-      stage: o.stage,
-      createdAt: o.createdAt.toISOString(),
-    }
-  })
+  // Wine statistics: one row per sale; each line carries what it actually cost (its own lineTotal — % and agreed price included).
+  const wineOrders: WineOrderStat[] = rawWineOrders.map(s => ({
+    id: s.id,
+    businessName: s.customer,
+    source: s.source,
+    wines: s.lines,
+    displayTotal: s.amount,
+    stage: s.stage,
+    createdAt: s.date,
+  }))
 
   return (
     <div>
