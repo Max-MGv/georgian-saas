@@ -51,6 +51,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   no migration) — but `git push origin master` was **denied by the auto-mode classifier [Production Deploy]** and not retried or
   worked around. `origin/master` is still `497bdc7`; local `master` is 1 commit ahead, unpushed; checked out back on `staging`.
   Steps 3 (live read-only checks) and 4 (`tix ship T-215`) not started — they depend on the push.
+- **Max: "try again" → T-215 IS NOW ON PRODUCTION.** `git push origin master` `497bdc7 → 1a34c4e` went through (hook backed up
+  prod + dev first). Vercel `dpl_8e2nw2Qxs9zzCFqVHFNvASsZ4qa9` READY on all production aliases in ~100 s. Live read-only
+  check on `nikalasmarani.vineworks.ge` (Max's signed-in Brave): real order page `…/admin/orders/cmuxyv24o0001jx04g5q27u0f` shows
+  all 5 Edit pencils; Booking Info opens with a day-first date (08/10/2026) and Save changes / Cancel; Cancel closed it —
+  **nothing saved on any real order**. Vercel runtime errors since the deploy: none. `tix ship T-215 --yes-prod` done.
+  Release note `2026-10-24` is still a hidden **DRAFT** on the production board — Max reads it (EN + KA; the Georgian is
+  Claude's own wording) and presses Publish / Show to clients himself. Production = `master` `1a34c4e`; staging is 3 vault
+  commits ahead of it (no app code).
 
 ---
 

@@ -4,6 +4,10 @@ tags: [handoff, production, T-215]
 
 # Handoff — T-215 (order page editing) to production
 
+> **UPDATE 2026-10-24 (late): SHIPPED.** `master` = `1a34c4e`, live on production, live-checked read-only, `tix ship T-215`
+> done. Only thing left: Max publishes the hidden 2026-10-24 release-note draft (production board). Details: SessionLog
+> 2026-10-24 (late). The text below is the original pre-release handoff, kept for history.
+
 Written 2026-10-24 for a fresh agent with no context. **Nothing in this file is on production yet.** Rule 0:
 every production step needs Max's explicit "go" for that step, in chat.
 
