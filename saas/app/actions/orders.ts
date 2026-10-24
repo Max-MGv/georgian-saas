@@ -13,7 +13,7 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { adminQuote, boxColumns, countsOf, notOffered, payingGuests, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
-import { lineIdentity, lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
+import { invoiceAddOnLine, lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
 import { withSyncedQuantities, writeSyncedQuantities } from '@/lib/addOnLines'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
@@ -664,11 +664,7 @@ export async function sendOrderInvoice(
       paymentsSettledTotal: order.payments.reduce((sum, p) => sum + p.amount, 0),
       companyName: order.company?.name ?? null,
       identificationCode: order.company?.identificationCode ?? null,
-      masterclassLines: order.masterclassLines.map(l => ({
-        name: lineIdentity(l).name,
-        quantity: l.quantity,
-        pricePerUnit: l.pricePerUnit,
-      })),
+      masterclassLines: order.masterclassLines.map(invoiceAddOnLine),
       extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
       payment: { recipientName, personalNumber, bankName, bankCode, iban },
       customMessage,
@@ -698,11 +694,8 @@ export async function sendOrderInvoice(
           tastingLunchGuests: order.tastingLunchGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           visitType: order.visitType,
-          masterclassLines: order.masterclassLines.map(l => ({
-            name: lineIdentity(l).name,
-            quantity: l.quantity,
-            pricePerUnit: l.pricePerUnit,
-          })),
+          // What the invoice said, kept as sold: name + group in both languages (an older row has only `name`).
+          masterclassLines: order.masterclassLines.map(invoiceAddOnLine),
           extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
           customMessage,
           locale,

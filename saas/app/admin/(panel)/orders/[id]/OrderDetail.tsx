@@ -1276,7 +1276,7 @@ export default function OrderDetail({
               totalPrice: order.totalPrice,
               paymentsSettledTotal: order.paymentsSettledTotal,
               company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
-              masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
+              masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, groupName: l.groupName ?? null, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
               extras: extras.map(e => ({ label: e.label, amount: e.amount })),
             }}
             payment={payment}

@@ -20,7 +20,7 @@ import {
   ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
-import { guestSplitText, invoiceView } from '../lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, guestSplitText, invoiceView } from '../lib/invoiceLines'
 import { adminOrderView, visibleBoxes } from '../lib/adminOrderView'
 import { checkAdminOrder, checkBookingCounts, checkMasterclassLines, countRulesFromSettings, hotDishWithoutLunch, type CountRules, type CountRuleKey } from '../lib/bookingInput'
 import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
@@ -257,6 +257,20 @@ console.log('Input checks (#93)')
     addOnLines: [{ quantity: 1, pricePerUnit: 3500, unit: 'PER_PERSON' }, { quantity: 4, pricePerUnit: 1800, unit: 'PER_PIECE' }, { quantity: 1, pricePerUnit: 6000, unit: 'FLAT' }], extrasAmt: 0 })
   check('admin preview: per person is charged at the guests being typed', [preview('10').addOnAmt, preview('12').addOnAmt], [10 * 3500 + 4 * 1800 + 6000, 12 * 3500 + 4 * 1800 + 6000])
   check('admin preview: the total includes them', preview('10').total, 10 * 5000 + 10 * 3500 + 4 * 1800 + 6000)
+
+  // Invoices: one section per group, names as sold, Georgian where the winery gave one, old rows still readable.
+  const inv = [
+    { name: 'Khinkali class', nameKa: 'ხინკლის კლასი', groupName: 'Masterclass', groupNameKa: 'მასტერკლასი', quantity: 12, pricePerUnit: 3500 },
+    { name: 'Khachapuri', nameKa: null, groupName: 'Food', groupNameKa: null, quantity: 4, pricePerUnit: 1800 },
+    { name: 'Cellar tour', nameKa: null, groupName: 'Masterclass', groupNameKa: 'მასტერკლასი', quantity: 1, pricePerUnit: 6000 },
+    { name: 'Old row', quantity: 1, pricePerUnit: 100 },
+  ]
+  const en = groupInvoiceAddOns(inv, 'en', 'Add-ons')
+  check('invoice: groups in order of first appearance', en.map(g => [g.title, g.lines.length]), [['Masterclass', 2], ['Food', 1], ['Add-ons', 1]])
+  const ka = groupInvoiceAddOns(inv, 'ka', 'დამატებითი სერვისები')
+  check('invoice (Georgian): group and item names in Georgian where given, English otherwise', [ka[0].title, addOnLabel(inv[0], 'ka'), addOnLabel(inv[1], 'ka'), ka[1].title], ['მასტერკლასი', 'ხინკლის კლასი × 12', 'Khachapuri × 4', 'Food'])
+  check('invoice: the English invoice never shows Georgian', addOnLabel(inv[0], 'en'), 'Khinkali class × 12')
+  check('invoice: a line with no group (old invoice) goes under the fallback title', en[2].lines[0].name, 'Old row')
 }
 
 console.log('Equivalence — every real order keeps its money after conversion (A-2)')

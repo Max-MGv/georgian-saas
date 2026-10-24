@@ -52,6 +52,44 @@ export const INVOICE_PRODUCT_LABEL: Record<InvoiceLocale, Record<Product, string
 }
 export const INVOICE_REGISTRATION_LABEL: Record<InvoiceLocale, string> = { ka: 'რეგისტრაციის საფასური', en: 'Registration fee' }
 
+// ─── Add-on lines (T-7): one section per group, on every invoice ──────────────────────────────────────────────
+//
+// An invoice shows each add-on under the group the winery filed it in ("Masterclass", "Food", …), named as it was when
+// it was sold: the line's snapshot, never today's catalogue. The Georgian name is used on Georgian invoices when the
+// winery gave one. Old stored invoices (InvoiceSent rows) carry only `name` — they read as one untitled group.
+
+export type InvoiceAddOnLine = {
+  name: string
+  nameKa?: string | null
+  groupName?: string | null
+  groupNameKa?: string | null
+  quantity: number
+  pricePerUnit: number
+}
+
+const pick = (en: string, ka: string | null | undefined, locale: InvoiceLocale) => (locale === 'ka' && ka && ka.trim() ? ka : en)
+
+/** "Khinkali folding class × 12" — or just the name for a single one. */
+export function addOnLabel(l: InvoiceAddOnLine, locale: InvoiceLocale, withQty = true): string {
+  const name = pick(l.name, l.nameKa, locale)
+  return withQty ? `${name} × ${l.quantity}` : name
+}
+
+/**
+ * The lines under their group's name, groups in the order they first appear. A line with no group (an old invoice, or
+ * an item whose group was removed before the snapshot existed) goes under `fallbackTitle`.
+ */
+export function groupInvoiceAddOns<T extends InvoiceAddOnLine>(lines: readonly T[], locale: InvoiceLocale, fallbackTitle: string): { title: string; lines: T[] }[] {
+  const titles: string[] = []
+  const byTitle = new Map<string, T[]>()
+  for (const l of lines) {
+    const title = l.groupName ? pick(l.groupName, l.groupNameKa, locale) : fallbackTitle
+    if (!byTitle.has(title)) { byTitle.set(title, []); titles.push(title) }
+    byTitle.get(title)!.push(l)
+  }
+  return titles.map(title => ({ title, lines: byTitle.get(title)! }))
+}
+
 export function invoiceView(o: InvoiceOrderInput): InvoiceView {
   const counts: Record<Product, number> = { tastingOnly: o.tastingOnlyGuests, lunchOnly: o.lunchOnlyGuests, tastingLunch: o.tastingLunchGuests }
   const rates: Record<Product, number | null> = { tastingOnly: o.tastingOnlyRate, lunchOnly: o.lunchOnlyRate, tastingLunch: o.tastingLunchRate }

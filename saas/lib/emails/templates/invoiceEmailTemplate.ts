@@ -1,4 +1,4 @@
-import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceLocale } from '@/lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceAddOnLine, type InvoiceLocale } from '@/lib/invoiceLines'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { asTetri, balanceDue, formatTetri, multiplyTetri } from '@/lib/money'
 import { lineTotals } from '@/lib/orderLines'
@@ -36,7 +36,7 @@ const LABELS: Record<InvoiceLocale, {
   ka: {
     invoice: 'ინვოისი', company: 'კომპანია', name: 'დასახელება', idCode: 'საიდენტიფიკაციო კოდი',
     guests: 'სტუმრები', tasting: 'დეგუსტაცია', lunch: 'სადილი', free: 'თავისუფალი (გიდი/მძღოლი)', total: 'სულ', lunchTasting: 'სადილი + დეგუსტაცია',
-    masterclass: 'მასტერკლასი', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
+    masterclass: 'დამატებითი სერვისები', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
     paidSoFar: 'უკვე გადახდილი', balanceDue: 'გადასახდელი ნაშთი', credit: 'ზედმეტად გადახდილი',
     paymentDetails: 'გადახდის რეკვიზიტები', recipientName: 'მიმღების სახელი', personalNumber: 'პირადი ნომერი', bank: 'მიმღები ბანკი', bankCode: 'ბანკის კოდი', account: 'მიმღების ანგარიში',
     person: 'კაცი',
@@ -45,7 +45,7 @@ const LABELS: Record<InvoiceLocale, {
   en: {
     invoice: 'Invoice', company: 'Company', name: 'Name', idCode: 'ID code',
     guests: 'Guests', tasting: 'Tasting', lunch: 'Lunch', free: 'Free (guide/driver)', total: 'Total', lunchTasting: 'Lunch + Tasting',
-    masterclass: 'Masterclass', amount: 'Amount', totalAmount: 'Total amount',
+    masterclass: 'Add-ons', amount: 'Amount', totalAmount: 'Total amount',
     paidSoFar: 'Paid so far', balanceDue: 'Balance due', credit: 'Credit (overpaid)',
     paymentDetails: 'Payment Details', recipientName: 'Recipient name', personalNumber: 'Personal number', bank: 'Bank', bankCode: 'Bank code', account: 'Account (IBAN)',
     person: 'guest',
@@ -88,7 +88,8 @@ export type InvoiceEmailData = {
   paymentsSettledTotal?: number
   companyName: string | null
   identificationCode: string | null
-  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  /** The add-on lines, with their group (T-7). `nameKa` / `groupName(Ka)` are optional: an older stored invoice has only `name`. */
+  masterclassLines: InvoiceAddOnLine[]
   extras: { label: string; amount: number }[]
   payment: {
     recipientName: string
@@ -168,7 +169,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
     : tableRow(th, P[view.visitProduct], money(view.bookingAmt))
   if (view.registration > 0) amountContent += tableRow(th, INVOICE_REGISTRATION_LABEL[locale], money(view.registration))
   for (const l of data.masterclassLines) {
-    amountContent += tableRow(th, l.name, formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
+    amountContent += tableRow(th, addOnLabel(l, locale, false), formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
   }
   for (const e of data.extras) {
     amountContent += tableRow(th, e.label, formatTetri(asTetri(e.amount), { space: true, decimals: true }))
@@ -193,11 +194,12 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
     ? `<p style="font-size:15px;color:${th.text} !important;margin:0 0 24px;line-height:1.7;white-space:pre-line;">${data.customMessage.trim()}</p>`
     : ''
 
-  const masterclassSection = data.masterclassLines.length > 0
-    ? section(th, L.masterclass, data.masterclassLines.map(l =>
-        tableRow(th, `${l.name} × ${l.quantity}`, formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
-      ).join(''))
-    : ''
+  // One section per add-on group, titled with the group's own name (L.masterclass is only the fallback for a line with none).
+  const masterclassSection = groupInvoiceAddOns(data.masterclassLines, locale, L.masterclass).map(g =>
+    section(th, g.title, g.lines.map(l =>
+      tableRow(th, addOnLabel(l, locale), formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
+    ).join(''))
+  ).join('')
 
   const html = `
     <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:${th.text} !important;background-color:${th.bg} !important;">

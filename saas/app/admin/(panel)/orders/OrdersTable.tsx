@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
 import { lineTotals } from '@/lib/orderLines'
+import type { InvoiceAddOnLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 import { countryName } from '@/lib/countries'
@@ -110,7 +111,7 @@ type Order = {
   nationalities: string[]
   company: { name: string; identificationCode: string | null } | null
   requestedCompanyName: string | null
-  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  masterclassLines: InvoiceAddOnLine[]
   extras: { label: string; amount: number }[]
   contacts: { roleKey: string; roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
   /** People eligible to receive this order's invoice email — see lib/contactResolution.ts's

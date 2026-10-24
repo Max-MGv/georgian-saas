@@ -58,6 +58,12 @@ export function lineIdentity(l: StoredAddOnLine): {
   }
 }
 
+/** A stored line as an invoice states it: name and group as sold (both languages), quantity, price. */
+export function invoiceAddOnLine(l: StoredAddOnLine & QuantityLine) {
+  const who = lineIdentity(l)
+  return { name: who.name, nameKa: who.nameKa, groupName: who.groupName, groupNameKa: who.groupNameKa, quantity: l.quantity, pricePerUnit: l.pricePerUnit }
+}
+
 /** The lines of an order (or of a draft that looks like one), added up the way `priceCounts` wants them. */
 export function lineTotals(o: { masterclassLines: readonly QuantityLine[]; extras: readonly AmountLine[] }): LineTotals {
   return { masterclass: sumQuantityLines(o.masterclassLines), extras: sumAmountLines(o.extras) }

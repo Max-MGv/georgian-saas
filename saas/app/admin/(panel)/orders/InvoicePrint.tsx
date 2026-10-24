@@ -1,5 +1,5 @@
 import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
-import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView } from '@/lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceAddOnLine } from '@/lib/invoiceLines'
 import type { Product } from '@/lib/pricingUtils'
 import { lineTotals } from '@/lib/orderLines'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
@@ -32,7 +32,8 @@ type Order = {
    *  the full total as if nothing had been collected yet. */
   paymentsSettledTotal: number
   company: { name: string; identificationCode: string | null } | null
-  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  /** Add-on lines with their group (T-7), as sold — names are the line's snapshot. */
+  masterclassLines: InvoiceAddOnLine[]
   extras: { label: string; amount: number }[]
 }
 
@@ -174,7 +175,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           {simpleProducts.map(p => <Row key={p} label={KA[p]} value={money(amountOf(p))} />)}
           {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
           <Row label="დამ. სტუმრების კვება" value={money(0)} />
-          {mcAmt + extrasAmt > 0 && <Row label="მასტერკლასი და დამატებები" value={money(mcAmt + extrasAmt)} />}
+          {mcAmt + extrasAmt > 0 && <Row label="დამატებითი სერვისები და ხარჯები" value={money(mcAmt + extrasAmt)} />}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
             <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
           </div>
@@ -229,18 +230,18 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         <Row label="სულ" value={`${view.totalGuests} კაცი`} />
       </Section>
 
-      {/* Masterclass lines */}
-      {order.masterclassLines.length > 0 && (
-        <Section title="მასტერკლასი">
-          {order.masterclassLines.map((l, i) => (
+      {/* Add-on lines — one section per group, titled with the winery's own group name (T-7) */}
+      {groupInvoiceAddOns(order.masterclassLines, 'ka', 'დამატებითი სერვისები').map(g => (
+        <Section key={g.title} title={g.title}>
+          {g.lines.map((l, i) => (
             <Row
               key={i}
-              label={`${l.name} × ${l.quantity}`}
+              label={addOnLabel(l, 'ka')}
               value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })}
             />
           ))}
         </Section>
-      )}
+      ))}
 
       {/* Extras */}
       {order.extras.length > 0 && (
@@ -260,7 +261,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           : <Row label={KA[view.visitProduct]} value={money(bookingAmt)} />}
         {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
         {order.masterclassLines.map((l, i) => (
-          <Row key={i} label={l.name} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
+          <Row key={i} label={addOnLabel(l, 'ka', false)} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
         ))}
         {order.extras.map((e, i) => (
           <Row key={i} label={e.label} value={formatTetri(asTetri(e.amount), { space: true, decimals: true })} />
