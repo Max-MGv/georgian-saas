@@ -216,6 +216,10 @@ test.describe('Wine catalogue → order', () => {
     // the way back out — the path that exists because a customer who abandons
     // card checkout and then pays by transfer must not have to be re-entered.
     await incomplete.getByRole('button', { name: 'Restore without payment' }).click();
+    // Wait for the restore to land before opening the board — on the slow dev DB the board otherwise loaded while
+    // the order was still incomplete, and never reloads (2026-10-24: the order was restored in the DB, the test
+    // just looked too early).
+    await expect(incomplete).toHaveCount(0, { timeout: 30_000 });
     await admin.goto('/admin/wine-orders');
     const card = admin.getByText(TEST_BUSINESS_NAME, { exact: true }).locator('xpath=../../..');
     await expect(card).toBeVisible({ timeout: 20_000 });

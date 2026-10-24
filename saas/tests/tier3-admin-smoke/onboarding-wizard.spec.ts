@@ -10,6 +10,9 @@
 import { test, expect } from '@playwright/test';
 import { loginAsSuperAdmin } from '../helpers/auth';
 
+/** "Launched 24 October 2026" — day-first since the T-152 acceptance fixes (2026-10-23). */
+const LAUNCHED = /Launched \d{1,2} [A-Z][a-z]+ \d{4}/;
+
 // ── How this reaches a second tenant without DEFAULT_TENANT_ID ─────────────
 //
 // On localhost every OTHER request resolves to whichever tenant
@@ -233,8 +236,9 @@ test.describe('Onboarding wizard walkthrough', () => {
     const launchButton = page.getByRole('button', { name: /^Launch/ });
     await expect(launchButton).toHaveText('Launch', { timeout: 5_000 });
     await launchButton.click();
-    await expect(page.getByText(/Launched [A-Z][a-z]+ \d{1,2}, \d{4}/)).toBeVisible({ timeout: 10_000 });
-    const firstLaunchedText = await page.getByText(/Launched [A-Z][a-z]+ \d{1,2}, \d{4}/).textContent();
+    // Day-first since the T-152 acceptance fixes (2026-10-23: invoice / packing / onboarding dates day-month-year).
+    await expect(page.getByText(LAUNCHED)).toBeVisible({ timeout: 10_000 });
+    const firstLaunchedText = await page.getByText(LAUNCHED).textContent();
 
     // 11. Click Launch again. Check: no error, still shows a valid launched
     // confirmation.
@@ -251,12 +255,12 @@ test.describe('Onboarding wizard walkthrough', () => {
     const relaunchButton = page.getByRole('button', { name: 'Launch again', exact: true });
     await expect(relaunchButton).toBeVisible();
     await relaunchButton.click();
-    await expect(page.getByText(/Launched [A-Z][a-z]+ \d{1,2}, \d{4}/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(LAUNCHED)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Launch again', exact: true })).toBeVisible();
     // Same day, since both clicks happen back-to-back in this one test run —
     // the date-level display wouldn't change even though the underlying ISO
     // timestamp did.
-    const secondLaunchedText = await page.getByText(/Launched [A-Z][a-z]+ \d{1,2}, \d{4}/).textContent();
+    const secondLaunchedText = await page.getByText(LAUNCHED).textContent();
     expect(secondLaunchedText).toBe(firstLaunchedText);
   });
 });

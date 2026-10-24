@@ -255,13 +255,14 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(page.getByText('Hot Dish Selection', { exact: true })).toBeVisible();
     await expect(page.getByText('Masterclass Add-ons', { exact: true })).toBeVisible();
 
-    // 6. A count above every row (31 > 30): the product falls back to the highest-priced row that offers it
-    // (A-7 — "never under-charge a gap"), so Tasting only is quoted at 60₾, not refused. A Tasting & Lunch
-    // guest goes in first: a Tasting + Lunch visit with nobody at lunch is refused (Q-3).
+    // 6. A count above every row (31 > 30): the product takes the LAST row that offers it (Max 2026-10-23, dc0d79a —
+    // "101 guests and max 100 → the 100 tier price"; gaps between rows keep A-7), so Tasting only is quoted at the
+    // 11–30 row's 48₾, not refused. A Tasting & Lunch guest goes in first: a Tasting + Lunch visit with nobody at
+    // lunch is refused (Q-3).
     await tastingLunch.fill('3');
     await tastingOnly.fill('31');
+    await expect(page.getByText('31 × Tasting 48₾', { exact: false })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('no rate', { exact: false })).not.toBeVisible();
-    await expect(page.getByText('31 × Tasting 60₾', { exact: false })).toBeVisible();
 
     // 7. Correct to an in-range guest count, select one hot dish option and
     // one masterclass add-on, fill required contact fields, submit.
