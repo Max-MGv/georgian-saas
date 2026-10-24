@@ -181,13 +181,17 @@ test.describe('Post-payment extras end-to-end (KnownBugs #64, Plan-PostPaymentEx
 
       // ── 5. Chunk 2 — add a real extra, confirm balance-due appears
       // correctly on the order detail page AND the admin orders table. ───────
-      // Extras are click-to-edit too (T-215 part 2): open the card with its pencil, then add — adding still saves at once.
+      // Extras are click-to-edit too (T-215 part 2): open the card with its pencil, add the line (a draft until Save —
+      // QA round 3 made add / remove obey Cancel), then press Save changes.
       const extrasCard = page.locator('div.rounded-xl').filter({ has: page.getByRole('heading', { name: 'Extra Charges', exact: true }) })
       await extrasCard.getByRole('button', { name: 'Edit', exact: true }).click()
       await page.getByRole('button', { name: '+ Add extra charge', exact: true }).click()
       await page.getByPlaceholder('e.g. Additional wine').fill('2 additional guests')
       await page.locator('label', { hasText: 'Amount (₾)' }).first().locator('xpath=following-sibling::input[1]').fill(String(extraAmountMajor))
       await page.getByRole('button', { name: 'Add', exact: true }).click()
+      await extrasCard.getByRole('button', { name: 'Save changes', exact: true }).click()
+      // The card stays on "Saving…" until the refresh lands, then closes and shows its pencil again.
+      await expect(extrasCard.getByRole('button', { name: 'Edit', exact: true })).toBeVisible({ timeout: 30_000 })
       // Renders in TWO places once added — the Extra Charges card's own list
       // AND the Total card's line-item breakdown (both map over the same
       // `extras` array) — `.first()` avoids a strict-mode violation on the

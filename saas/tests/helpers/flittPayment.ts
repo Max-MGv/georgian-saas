@@ -55,9 +55,17 @@ const THREE_DS_OTP = '111111';
  * keydown events, not from a single programmatic value assignment.
  */
 async function clearAndType(locator: Locator, value: string): Promise<void> {
-  await locator.click();
-  await locator.fill('');
-  await locator.pressSequentially(value, { delay: 20 });
+  // 2026-10-24: Flitt's mask intermittently reorders digits when keys arrive 20 ms apart (observed "4444 5555 6666 1111 6"
+  // for 4444555511116666, then "Incorrect card number" and a dead Pay button) - the old note above that the card
+  // graphic never reflects typing is outdated. So type, read the field back, and retype more slowly until the digits match.
+  const wanted = value.replace(/\D/g, '');
+  for (const delay of [20, 60, 120, 200]) {
+    await locator.click();
+    await locator.fill('');
+    await locator.pressSequentially(value, { delay });
+    if ((await locator.inputValue()).replace(/\D/g, '') === wanted) return;
+  }
+  throw new Error(`Flitt field never held ${wanted} after 4 attempts (last value: "${await locator.inputValue()}")`);
 }
 
 export interface FlittTestCard {
