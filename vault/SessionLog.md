@@ -45,6 +45,26 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   (draft stays hidden from clients) after Max said "once it looks good proceed"; the auto-mode permission classifier **denied it**
   ([Modify Shared Resources]) and I did not work around it. Waiting for Max's explicit go on each production step
   (draft the release note → merge `staging`→`master` + push → live read-only checks → `tix ship T-215`).
+- **Max then said "go" (all four steps).** Done: **(1)** release `cmvmltcwc0000l708okdq2eu7` (2026-10-24) drafted on the
+  **production** board, hidden: 1 entry `cmvmltdf70002l708u88a311t` (EN + KA text, link `/admin/orders`, 10 images = 5 before/after
+  pairs). **(2) partly:** `master` merged locally with `staging` (merge commit `1a34c4e`, tree identical to staging, 15 app files,
+  no migration) — but `git push origin master` was **denied by the auto-mode classifier [Production Deploy]** and not retried or
+  worked around. `origin/master` is still `497bdc7`; local `master` is 1 commit ahead, unpushed; checked out back on `staging`.
+  Steps 3 (live read-only checks) and 4 (`tix ship T-215`) not started — they depend on the push.
+- **Max: "try again" → T-215 IS NOW ON PRODUCTION.** `git push origin master` `497bdc7 → 1a34c4e` went through (hook backed up
+  prod + dev first). Vercel `dpl_8e2nw2Qxs9zzCFqVHFNvASsZ4qa9` READY on all production aliases in ~100 s. Live read-only
+  check on `nikalasmarani.vineworks.ge` (Max's signed-in Brave): real order page `…/admin/orders/cmuxyv24o0001jx04g5q27u0f` shows
+  all 5 Edit pencils; Booking Info opens with a day-first date (08/10/2026) and Save changes / Cancel; Cancel closed it —
+  **nothing saved on any real order**. Vercel runtime errors since the deploy: none. `tix ship T-215 --yes-prod` done.
+  Release note `2026-10-24` is still a hidden **DRAFT** on the production board — Max reads it (EN + KA; the Georgian is
+  Claude's own wording) and presses Publish / Show to clients himself. Production = `master` `1a34c4e`; staging is 3 vault
+  commits ahead of it (no app code).
+- **T-297 (Max: "i want a real easy toggle from outside to mark them as published or not"):** Max couldn't find Publish — it was
+  only inside a release under View → Edit. Max chose **two switches per row** (Published + Shown to clients). Built in
+  `app/super-admin/releases/ReleaseTimeline.tsx` only (reuses `updateReleaseAction`; server rules unchanged). Tested through the
+  real UI on the local dev server (`scripts/_qa/t297-switches.ts`, untracked): 10/10, incl. phone width — the first version put
+  the switches in the date row and overflowed at 390 px; moved to their own wrapping row. Dev backup taken first
+  (`2026-10-24_205805_dev_t297-release-switches`). **On staging only; not on production** (needs Max's go + the release steps).
 
 ---
 

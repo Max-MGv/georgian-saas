@@ -7,10 +7,12 @@
  * Internal changes are left out (as clients would see it) but counted.
  */
 
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, useTransition, type CSSProperties } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowRight, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Eye, Image as ImageIcon, Search, X } from 'lucide-react'
 import type { ReleaseDetail, ReleaseEntryView } from '@/lib/releaseService'
+import { updateReleaseAction } from '@/app/actions/releases'
 import { ChangeCard, ReleaseHeading, WHATS_NEW_LABELS, pick } from '@/components/WhatsNew'
 
 type Lang = 'en' | 'ka'
@@ -24,9 +26,41 @@ const chip = (on: boolean): CSSProperties => ({
   fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 999, cursor: 'pointer',
   border: `1px solid ${on ? '#7a2e2e' : '#e6d9c6'}`, backgroundColor: on ? '#7a2e2e' : '#fffaf3', color: on ? '#fff' : '#6b5a47',
 })
-const pill: CSSProperties = { fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, backgroundColor: '#e6d9c6', color: '#6b5a47' }
+function Switch({ on, label, disabled, title, onChange }: { on: boolean; label: string; disabled?: boolean; title?: string; onChange: (next: boolean) => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} disabled={disabled} title={title} onClick={() => onChange(!on)}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: disabled ? '#b3a592' : '#1c1008', cursor: disabled ? 'not-allowed' : 'pointer' }}>
+      <span aria-hidden style={{ position: 'relative', width: 34, height: 20, borderRadius: 999, backgroundColor: on ? '#2f7d4f' : '#cdbfa9', opacity: disabled ? 0.55 : 1, flex: 'none' }}>
+        <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 16, height: 16, borderRadius: '50%', backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)' }} />
+      </span>
+      {label}
+    </button>
+  )
+}
 
 export default function ReleaseTimeline({ details, lang }: { details: ReleaseDetail[]; lang: Lang }) {
+  const router = useRouter()
+  const [, startRefresh] = useTransition()
+  // What the switches show until the refreshed list arrives (so a click moves at once), and the last error per release.
+  const [override, setOverride] = useState<Record<string, { published?: boolean; shown?: boolean }>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<Record<string, string>>({})
+  useEffect(() => { setOverride({}) }, [details])
+
+  async function flip(r: ReleaseDetail, kind: 'published' | 'shown', next: boolean) {
+    setBusyId(r.id)
+    setSwitchError(e => ({ ...e, [r.id]: '' }))
+    setOverride(o => ({ ...o, [r.id]: kind === 'published' ? { published: next, shown: next ? o[r.id]?.shown ?? r.clientVisible : false } : { ...o[r.id], shown: next } }))
+    const res = await updateReleaseAction(r.id, kind === 'published' ? { status: next ? 'PUBLISHED' : 'DRAFT' } : { clientVisible: next })
+    setBusyId(null)
+    if ('error' in res) {
+      setOverride(o => { const { [r.id]: _gone, ...rest } = o; return rest })
+      setSwitchError(e => ({ ...e, [r.id]: res.error }))
+      return
+    }
+    startRefresh(() => router.refresh())
+  }
+
   const [status, setStatus] = useState<StatusFilter>('all')
   const [shownOnly, setShownOnly] = useState(false)
   const [q, setQ] = useState('')
@@ -103,12 +137,12 @@ export default function ReleaseTimeline({ details, lang }: { details: ReleaseDet
       <div className="flex flex-col" style={{ gap: 26 }}>
         {visible.map(({ r, changes, internal }) => {
           const open = openReleases.has(r.id)
+          const published = override[r.id]?.published ?? r.status === 'PUBLISHED'
+          const shown = published && (override[r.id]?.shown ?? r.clientVisible)
           return (
             <section key={r.id} style={{ borderLeft: '3px solid #e6d9c6', paddingLeft: 16 }}>
               <ReleaseHeading releasedOn={r.releasedOn} summary={pick(r.summary, r.summaryKa, lang)} locale={lang}
                 action={<>
-                  {r.status === 'DRAFT' && <span style={pill}>Draft</span>}
-                  {r.status === 'PUBLISHED' && !r.clientVisible && <span style={pill}>Not shown to clients</span>}
                   <span style={{ marginLeft: 'auto' }} className="flex items-center gap-3">
                     <button onClick={() => toggle(openReleases, r.id, setOpenReleases)} aria-expanded={open}
                       style={{ fontSize: 13, color: '#6b5a47', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -117,6 +151,15 @@ export default function ReleaseTimeline({ details, lang }: { details: ReleaseDet
                     <Link href={`/super-admin/releases/${r.id}`} style={{ fontSize: 13, color: '#7a2e2e', display: 'inline-flex', alignItems: 'center', gap: 4 }}>Open <ArrowRight size={14} aria-hidden /></Link>
                   </span>
                 </>} />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1" style={{ margin: '4px 0 10px' }}>
+                <Switch on={published} label="Published" disabled={busyId === r.id || (!published && r.entries.length === 0)}
+                  title={!published && r.entries.length === 0 ? 'Add at least one change first' : published ? 'Back to draft (also hides it from clients)' : 'Publish this release'}
+                  onChange={next => void flip(r, 'published', next)} />
+                <Switch on={shown} label="Shown to clients" disabled={busyId === r.id || !published}
+                  title={published ? 'Clients can read it on their What’s new page when this is on' : 'Publish first'}
+                  onChange={next => void flip(r, 'shown', next)} />
+                {switchError[r.id] && <span role="alert" style={{ fontSize: 12, color: '#b91c1c' }}>{switchError[r.id]}</span>}
+              </div>
 
               {open ? (
                 <div className="flex flex-col gap-4">
