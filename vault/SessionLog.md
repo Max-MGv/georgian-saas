@@ -27,6 +27,10 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   time, contact, notes via `updateOrder`); side-panel note links to the order page; shared `orders/timeSlots.ts` also fixes a
   09:00 public booking being moved to 11:00 by the side panel. QA spec 2/2 + admin-orders green. T-215 → Ready to test.
   FeatureLog #238, MaintenanceNotes §39. "After" shots for the next release note: `saas/tests/_qa/shots/t215/`.
+- **Full transparency record written** ([[Max-Exploring-Workflows]], Max: "I don't like being in the blind about
+  our workflow") — every action this session, including the temporary `git worktree` of `origin/master` created
+  to compare test behaviour against production code (created + deleted, nothing pushed), every commit, every
+  production step. Read it before re-explaining what happened this session from memory alone.
 - **2026-10-24 — T-215 part 2, the order page mirrors the booking forms** ([[Plan-OrderPageMirror]]): review → mockup →
   Max "build that". Every card click-to-edit with the red pencil; Booking Info (day-first date, company / individual
   re-priced before payment, nationality), Contacts (every contact type, "Choose the …" from the company's people,
