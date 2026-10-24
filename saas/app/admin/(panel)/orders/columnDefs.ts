@@ -15,6 +15,8 @@ export const COLUMN_DEFS = [
   { id: 'guests',      labelKey: 'orders.col.guests',      defaultVisible: false },
   { id: 'visit',       labelKey: 'orders.col.visit',       defaultVisible: true  },
   { id: 'masterclass', labelKey: 'orders.col.masterclass', defaultVisible: true  },
+  // Wine for the table (T-22) — the saved id of the add-ons column above stays 'masterclass'; this one is new.
+  { id: 'tableWine',   labelKey: 'orders.col.tableWine',   defaultVisible: true  },
   { id: 'food',        labelKey: 'orders.col.food',        defaultVisible: true  },
   { id: 'total',       labelKey: 'orders.col.total',       defaultVisible: true  },
   { id: 'additional',  labelKey: 'orders.col.additional',  defaultVisible: false },
@@ -27,7 +29,7 @@ export const COLUMNS_STORAGE_KEY = 'orders-columns'
 /** Every column id this browser has been offered — so a column added later still shows by default once. */
 export const COLUMNS_SEEN_KEY = 'orders-columns-seen'
 /** Columns added after browsers began saving their choices; a saved choice with no "seen" list predates them. */
-const ADDED_LATER: ColumnId[] = ['lunchOnly', 'free']
+const ADDED_LATER: ColumnId[] = ['lunchOnly', 'free', 'tableWine']
 
 export const DEFAULT_VISIBLE = new Set<ColumnId>(
   COLUMN_DEFS.filter(c => c.defaultVisible).map(c => c.id as ColumnId)
@@ -57,6 +59,7 @@ export function defaultVisibleFor(tenantId?: string | null): Set<ColumnId> {
   const demo = new Set(DEFAULT_VISIBLE)
   demo.delete('food')
   demo.delete('masterclass')
+  demo.delete('tableWine')
   return demo
 }
 

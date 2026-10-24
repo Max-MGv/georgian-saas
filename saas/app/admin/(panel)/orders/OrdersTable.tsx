@@ -1162,6 +1162,23 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   </td>
                 )}
 
+                {/* Wine for the table (T-22) */}
+                {col('tableWine') && (
+                  <td className="px-4 py-3" style={{ color: C.muted, fontSize: 12 }}>
+                    {order.wineLines.length > 0
+                      ? <OneLine title={order.wineLines.map(l => `${l.name} ${l.year} ×${l.quantity}`).join(', ')}>
+                          {order.wineLines.map((l, idx) => (
+                            <span key={idx}>
+                              {idx > 0 && <span style={{ color: C.faint }}> · </span>}
+                              {l.name} {l.year} <span style={{ color: C.faint }}>×{l.quantity}</span>
+                            </span>
+                          ))}
+                        </OneLine>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
+
                 {/* Food */}
                 {col('food') && (
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>

@@ -13,7 +13,7 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { adminQuote, boxColumns, countsOf, notOffered, payingGuests, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
-import { invoiceAddOnLine, invoiceWineLine, lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
+import { invoiceAddOnLine, invoiceWineLine, lineTotals, sumAmountLines, sumQuantityLines, sumWineLines } from '@/lib/orderLines'
 import { withSyncedQuantities, writeSyncedQuantities } from '@/lib/addOnLines'
 import { priceTableWine } from '@/lib/tableWine'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
@@ -795,6 +795,9 @@ export async function exportOrdersCsv(filters: {
     },
     include: {
       company: true,
+      // Add-ons and wine for the table: their own CSV columns (T-7 / T-22).
+      masterclassLines: true,
+      wineLines: true,
       // Every live (settled, not reversed) payment — Balance Due (GEL) below
       // needs the true collected total, per Plan-PostPaymentExtras Chunk 2 /
       // KnownBugs #64: a CSV that only ever showed "Total (GEL)" is exactly
@@ -813,7 +816,7 @@ export async function exportOrdersCsv(filters: {
   // exports as indistinguishable from a paid one. Invoice Sent gets its own
   // date rather than collapsing into Payment, since an order can be both
   // invoiced and paid — which the old payment ladder could not represent.
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Add-ons (GEL)', 'Table wine (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => {
     // Only populated once the order has actually been paid something —
     // otherwise "balance due" is just the whole total, which the Total (GEL)
@@ -836,6 +839,9 @@ export async function exportOrdersCsv(filters: {
     // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
     // it text and break the column's arithmetic.
     o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
+    // Included in the total above, shown on their own so a bookkeeper can split visit / add-ons / wine.
+    toMajor(asTetri(sumQuantityLines(o.masterclassLines))),
+    toMajor(asTetri(sumWineLines(o.wineLines))),
     o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',

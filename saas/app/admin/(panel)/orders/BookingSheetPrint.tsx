@@ -20,6 +20,8 @@ type Order = {
   foodNotes: string | null
   /** The add-ons booked (T-7, C-5: the staff sheet lists them — it showed neither add-ons nor extras before). */
   masterclassLines?: { name: string; nameKa?: string | null; quantity: number }[]
+  /** Wine for the table (T-22): shown for staff so the cellar knows what to bring (it is not on the packing list — that is wine orders only). */
+  wineLines?: { name: string; year: number; quantity: number }[]
   company: { name: string } | null
   // Company bookings only (Plan-CompanyNationality) — shown here, not gated on the tenant's
   // enableCompanyNationalityBreakdown flag, since this just renders whatever the order already
@@ -66,6 +68,7 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
     at('orders.sheet.hotDishMeat'),
     at('orders.sheet.foodNotes'),
     at('orders.sheet.addOns'),
+    at('orders.sheet.tableWine'),
     at('orders.sheet.notes'),
     at('orders.col.company'),
     at('orders.sheet.nationality'),
@@ -116,6 +119,7 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
                   <Cell>{o.hotDishMeat}</Cell>
                   <Cell>{o.foodNotes}</Cell>
                   <Cell>{o.masterclassLines && o.masterclassLines.length > 0 ? o.masterclassLines.map(l => `${locale === 'ka' && l.nameKa ? l.nameKa : l.name} × ${l.quantity}`).join(', ') : null}</Cell>
+                  <Cell>{o.wineLines && o.wineLines.length > 0 ? o.wineLines.map(l => `${l.name} ${l.year} × ${l.quantity}`).join(', ') : null}</Cell>
                   <Cell>{o.notes}</Cell>
                   <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
                   <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
