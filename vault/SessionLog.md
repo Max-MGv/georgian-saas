@@ -73,6 +73,15 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   `nikalasmarani.vineworks.ge/super-admin/releases` (PRODUCTION pill): both releases (24 Oct, 23 Oct) show Published = off and
   Shown to clients = off + disabled; **nothing toggled** (real notes stay drafts until Max flips them). No runtime errors;
   `tix ship T-297 --yes-prod` done. Production = `master` `a668954`.
+- **T-298 (Max: "why doesn't vineworks.ge/super-admin work? … just make vineworks.ge/admin work okay"):** `vineworks.ge` →
+  308 → `www.vineworks.ge` → `/admin/login` = **HTTP 500** "No tenant resolved — missing x-tenant-id header" (same Vercel error group
+  since 2026-06-22, so old, not from today's releases). Cause: `www.vineworks.ge` has no tenant on purpose (platform HQ; `proxy.ts`
+  lets `/super-admin` + `/admin/login` through) but `app/admin/login/page.tsx` called `getTenantId()` (throws) just to feed
+  `DemoLoginShortcut`. Fix: read `x-tenant-id` with `?? ''` (shortcut renders nothing for it). Reproduced locally first with the
+  made-up no-tenant host `nohq.localhost` (500), then `scripts/_qa/hq-login-check.ts` (untracked) 10/10: login page 200, `/admin`
+  logged out → login, super-admin sign-in → `/super-admin`, releases/tenants/tickets 200, winery-domain login still 200.
+  Workaround until shipped: use `nikalasmarani.vineworks.ge/super-admin`. **On staging only** — production needs Max's go.
+  Note: sessions are per domain, so signing in on `www.vineworks.ge` is a separate login from `nikalasmarani.vineworks.ge`.
 
 ---
 
