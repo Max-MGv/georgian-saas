@@ -29,8 +29,22 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   Not shot: the side-panel one-Name-box change, phone width.
 - **Cleanup:** servers stopped, fixture order + company deleted from the dev DB, worktree removed (one junction inside `.next`
   pointed at the worktree's own packages — removed with `rmdir`, then 0 links left; main `saas/node_modules` still 546 entries).
-- **Nothing on production.** `master` still `497bdc7`. The release-note draft on the production board is a production write —
-  waiting for Max's go (see the handoff doc, step 5).
+- **Brave check on staging (Max: "you do the checks via brave"):** done through Claude in Chrome on `staging.vineworks.ge`
+  (already signed in), on a throwaway company + order (not Max's test data). Passed: red pencils on every card, nothing open
+  (step 1); Contacts → pick another guide → name/phone/email autofill → Save (2); Guest breakdown Tasting 4→5, total +60₾ (3);
+  Masterclass qty 2→3 (+35₾) and an extra's label/amount edited (4); Booking Info date shown DD/MM/YYYY, **31/02/2027 refused
+  with "Please choose a valid date."**, then 15/12/2026 + company switched to Silk Road Journeys → re-priced from its table
+  (5×52 + 6×92, total 992₾) (5); paid order: Guest breakdown has no pencil + lock note, company select disabled with "paid, so its
+  company can no longer be changed" (6); Orders-list edit panel: one Name box, DD/MM/YYYY, note linking to the order page (7);
+  New Order shows "Choose the Guide" for Silk Road Journeys (8); remove a guide + Save → "Guide —"; remove a masterclass line then
+  Cancel → line still there after reload. **Georgian (9) NOT checked by eye** — admin-language is a tenant setting and I did not
+  flip it; `check-i18n-parity.ts` = 1304/1304 only.
+- Cleaned up afterwards (dev DB): fixture company + order, and 8 `ZZPaymentE2E` orders left by today's failed tier-5 runs. The older
+  `ZZ QA Claude …` / `ZZPaymentIntegrity …` orders from 21–22 Oct are from earlier sessions and were left alone.
+- **Nothing on production.** `master` still `497bdc7`. I tried `tix release draft-from-next --date 2026-10-24 --prod --yes-prod`
+  (draft stays hidden from clients) after Max said "once it looks good proceed"; the auto-mode permission classifier **denied it**
+  ([Modify Shared Resources]) and I did not work around it. Waiting for Max's explicit go on each production step
+  (draft the release note → merge `staging`→`master` + push → live read-only checks → `tix ship T-215`).
 
 ---
 
