@@ -19,6 +19,7 @@ const COMPANY = `ZZ Tamper ${RUN}`
 const CODE = `ZZTMP${String(RUN).slice(-6)}`
 let companyId = ''
 let mcItemId = ''
+let groupId = ''
 
 test.describe.configure({ mode: 'serial' })
 
@@ -29,8 +30,12 @@ test.beforeAll(async () => {
     prices: { create: { minGuests: 1, maxGuests: 50, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 8000 } },
   } })
   companyId = c.id
-  const mc = await db.masterclassItem.findFirst({ where: { tenantId: TENANT, active: true }, orderBy: { sortOrder: 'asc' } })
-  if (!mc) throw new Error('no active masterclass item on the dev tenant')
+  // Its own throwaway add-on: a PER-PIECE item in a group offered to companies on every visit type. A per-person item
+  // would not do for the quantity attack any more — since T-7 the server sets a per-person quantity itself (the paying
+  // guests) and ignores whatever the request says, so only a typed (per-piece) quantity can be forged.
+  const g = await db.addOnGroup.create({ data: { tenantId: TENANT, nameEn: `ZZ Tamper group ${RUN}`, showToCompanies: true, showToIndividuals: false } })
+  groupId = g.id
+  const mc = await db.masterclassItem.create({ data: { tenantId: TENANT, groupId, name: `ZZ Tamper piece ${RUN}`, unitType: 'PER_PIECE', pricePerUnit: 1000, active: true } })
   mcItemId = mc.id
 })
 
@@ -38,6 +43,8 @@ test.afterAll(async () => {
   await db.order.deleteMany({ where: { tenantId: TENANT, email: { contains: `zz-tamper-${RUN}` } } })
   await db.order.deleteMany({ where: { companyId } })
   await db.company.deleteMany({ where: { id: companyId } })
+  await db.masterclassItem.deleteMany({ where: { id: mcItemId } })
+  await db.addOnGroup.deleteMany({ where: { id: groupId } })
 })
 
 const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 2); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` }

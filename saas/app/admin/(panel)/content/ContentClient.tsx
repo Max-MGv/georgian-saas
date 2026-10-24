@@ -94,7 +94,8 @@ const FIELDS: Record<SectionKey, FieldDef[]> = {
     // See vault/MaintenanceNotes.md §1: keep in sync with BookingForm.tsx's isEnhanced block.
     { key: 'form_guest_counts_header',   label: 'Guest Counts header',        fallback: 'Guest Counts' },
     { key: 'form_hot_dish_header',       label: 'Hot Dish Selection header',  fallback: 'Hot Dish Selection' },
-    { key: 'form_masterclass_header',    label: 'Masterclass Add-ons header', fallback: 'Masterclass Add-ons' },
+    // form_masterclass_header is retired (T-7): each add-on group is named on the Add-ons page. Existing content rows stay
+    // in the database (they seeded the first group's name) and are simply no longer read.
   ],
   about: [
     { key: 'about_eyebrow',        label: 'Eyebrow text',              fallback: 'Our Story' },

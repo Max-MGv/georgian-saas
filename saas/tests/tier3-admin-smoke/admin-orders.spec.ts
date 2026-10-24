@@ -100,7 +100,7 @@ test.describe('Orders admin — filtering and view toggle', () => {
     const table = page.locator('table');
     await expect(table).toBeVisible({ timeout: 15_000 });
     // The three product columns since T-152 Chunk 9 (saved ids tasting/lunch kept, labels renamed, Lunch only added).
-    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Tasting & Lunch', 'Visit', 'Masterclass', 'Food', 'Total', 'Status']) {
+    for (const col of ['Date', 'Time', 'Contact', 'Type', 'Company', 'Tasting', 'Lunch', 'Tasting & Lunch', 'Visit', 'Add-ons', 'Food', 'Total', 'Status']) {
       await expect(page.getByRole('columnheader', { name: col, exact: true })).toBeVisible();
     }
 

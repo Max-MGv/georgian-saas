@@ -139,19 +139,19 @@ export default function BookingFormVisualPanel({ c, locale, adminLocale, variant
         </div>
       )}
 
-      {/* Detailed only: Masterclass Add-ons */}
-      {isDetailed && (
-        <div>
-          <label style={labelStyle}><ET k="form_masterclass_header" fb="Masterclass Add-ons" /></label>
-          {/* Mirrors the public form's collapsed summary row (T-21) — the list opens on tap there. */}
-          <div className="rounded-lg border flex items-center justify-between gap-3 px-4 py-3 text-sm" style={{ borderColor: C.border, backgroundColor: C.bg, color: C.muted }}>
-            <span>Add a masterclass (3 available)</span>
-            <svg className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+      {/* Add-on groups (T-7): one row per group, on every variant — which group shows to whom (companies / individuals, which
+          visit types) is set on the Add-ons page, so the heading is the group's own name: other admin data, not SiteContent
+          (MaintenanceNotes §1's test), and shown here as an illustration only. */}
+      <div>
+        <label style={labelStyle}>Masterclass <span style={{ color: C.faint, fontWeight: 400 }}>(an add-on group — named on the Add-ons page)</span></label>
+        {/* Mirrors the public form's collapsed summary row (T-21) — the list opens on tap there. */}
+        <div className="rounded-lg border flex items-center justify-between gap-3 px-4 py-3 text-sm" style={{ borderColor: C.border, backgroundColor: C.bg, color: C.muted }}>
+          <span>Add Masterclass (3 available)</span>
+          <svg className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
-      )}
+      </div>
 
       {/* Detailed only: per-role contact details (Plan-ContactRoles Chunk 7).
           One block per contact type other than Contact Person, which already owns the
