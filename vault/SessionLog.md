@@ -26,7 +26,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - **T-215 built (staging `0be1aea`, Max: "edit this form inside the order"):** Booking Info → Edit on the order page (date,
   time, contact, notes via `updateOrder`); side-panel note links to the order page; shared `orders/timeSlots.ts` also fixes a
   09:00 public booking being moved to 11:00 by the side panel. QA spec 2/2 + admin-orders green. T-215 → Ready to test.
-  FeatureLog #238, MaintenanceNotes §37. "After" shots for the next release note: `saas/tests/_qa/shots/t215/`.
+  FeatureLog #238, MaintenanceNotes §39. "After" shots for the next release note: `saas/tests/_qa/shots/t215/`.
+- **2026-10-24 — T-215 part 2, the order page mirrors the booking forms** ([[Plan-OrderPageMirror]]): review → mockup →
+  Max "build that". Every card click-to-edit with the red pencil; Booking Info (day-first date, company / individual
+  re-priced before payment, nationality), Contacts (every contact type, "Choose the …" from the company's people,
+  autofill, one Name box), Guest breakdown, Masterclass / Extras in place; side panel + New Order on one Name box /
+  `DateInput`. Found + fixed: admin pickers vanished with personal access codes on (`contactResolution` trusted).
+  QA `t215-mirror` 3/3, resolver 27/27, admin-orders + contact-orphan-safety green; tier-5 post-payment-extras updated
+  for click-to-edit (run on staging). Shots: `saas/tests/_qa/shots/t215-mirror/`.
 - **ON PRODUCTION: T-152 + T-272.** **For Max:** check the production admin screens (New Order, an order, an invoice view —
   Claude can't sign in there); demo.vineworks.ge after tonight's 03:00 reseed (or Reset Demo); review + publish the release
   note; tell Nikalas (mixed groups can cost more, product names changed, Lunch prices optional).

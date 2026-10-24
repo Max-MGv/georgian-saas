@@ -1389,8 +1389,16 @@ contact, bank and personal-number values**. After any re-clone, scrub them (2026
 invoices expose the real client. `scripts/rebrand-demo-tenant.ts` does the same for the demo tenant (since `6425b24`
 also the recipient name and personal number).
 
-## 37. Two screens edit an order's date, time, contact and notes — one action
+## 39. The order page mirrors the booking forms — click-to-edit cards, shared rules (T-215, 2026-10-23/24)
 
-Since T-215 (2026-10-23) the Orders **side panel** (`OrdersTable.tsx`, Edit Order) and the **order page** (`orders/[id]/OrderDetail.tsx`: Booking Info → Edit for date / time / notes, Contacts → Edit for the contact person; one card at a time, the save sends the other card's values unchanged) both save date, time slot, name, surname, phone, email and notes through **`updateOrder`** (`app/actions/orders.ts`), which validates and keeps the Contacts card's contact_person row in step (`syncOrderContactPerson`). Add a field to one → add it to the other, or move it to the order page only. Visit type, guest boxes and price are changed **only** on the order page (`updateOrderEnhanced`).
+Plan: `vault/Plan-OrderPageMirror.md`. **Rule (Max): everything that can be entered when booking must be editable on the order page, and the order page mirrors the booking section.** Every card on `orders/[id]/OrderDetail.tsx` is read-only until its **red pencil** (the Settings icon, `#9b090c`, no text) is clicked; one card at a time; Save / Cancel. A new editable thing gets a card or joins one — never an always-open field.
 
-Time slot lists come from `orders/timeSlots.ts` (`ADMIN_TIME_SLOTS`, `slotOptions(current)`): every admin `<select>` for an existing order must use `slotOptions(order.timeSlot)`, because public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list — a select without it shows 11:00 and Save moves the booking.
+Which action each card uses — keep them the single write path:
+- **Booking Info** (date, time, company / individual, nationality, notes) → `updateOrderBooking`. A company change is refused once paid and re-prices with the same `adminQuote` as `createOrderAdmin` (Individuals table for an individual). Picked contact links are cleared on a company change.
+- **Contacts** (contact person + every contact type, picked from the company's people) → `updateOrderContacts` → `writeOrderContacts` (the same checks as every create path). Uses `useContactSelection` (asAdmin) + `prefill()` and `ContactRoleFields`, exactly like New Order — change one, change the other (§32).
+- **Guest breakdown** → `updateOrderEnhanced` (paid → pencil hidden).
+- **Masterclass / Extras** lines → `updateMasterclassLine` / `updateOrderExtra` (in place), `add…` / `remove…` (at once).
+
+The **Orders side panel** (`OrdersTable.tsx`) still edits date, time, contact person and notes through `updateOrder` — one Name box (`splitFullName`) and `DateInput` like the order page. If a field is added to the order page that the panel also shows, keep them in step or drop it from the panel.
+
+**Dates:** every order screen uses `components/DateInput.tsx` (DD/MM/YYYY, a native date input underneath — specs fill `input[type="date"]`). **Time slots** come from `orders/timeSlots.ts`; every `<select>` for an existing order must use `slotOptions(order.timeSlot)` — public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list; a select without it shows 11:00 and Save moves the booking.

@@ -532,6 +532,10 @@ const en: Translations = {
   'orderDetail.bookingInfo.notes': 'Notes',
   'orderDetail.bookingInfo.edit': 'Edit',
   'orderDetail.bookingInfo.savedOk': 'Saved',
+  'orderDetail.bookingInfo.companyRepriceHint': 'Changing the company, or switching to Individual, re-prices the order from the new price table.',
+  'orderDetail.bookingInfo.companyLockedPaid': 'This order has been paid, so its company can no longer be changed.',
+  'orderDetail.contacts.pickHint': "Pick one of the company's saved people to fill in their details, or type someone new.",
+  'orderDetail.guestBreakdown.guestsLabel': 'Guests',
 
   'orderDetail.contacts.title': 'Contacts',
   'orderDetail.contacts.none': 'No contacts recorded.',
@@ -1972,6 +1976,10 @@ const ka: Translations = {
   'orderDetail.bookingInfo.notes': 'შენიშვნები',
   'orderDetail.bookingInfo.edit': 'რედაქტირება',
   'orderDetail.bookingInfo.savedOk': 'შენახულია',
+  'orderDetail.bookingInfo.companyRepriceHint': 'კომპანიის შეცვლა ან ინდივიდუალურზე გადართვა შეკვეთის ფასს ახალი ფასების ცხრილით გადაითვლის.',
+  'orderDetail.bookingInfo.companyLockedPaid': 'ეს შეკვეთა გადახდილია, ამიტომ მისი კომპანია ვეღარ შეიცვლება.',
+  'orderDetail.contacts.pickHint': 'აირჩიეთ კომპანიის შენახული ადამიანი, რომ მისი მონაცემები შეივსოს, ან ჩაწერეთ ახალი.',
+  'orderDetail.guestBreakdown.guestsLabel': 'სტუმრები',
 
   // Drafted, not native-reviewed (Plan-ContactRoles) — flag for Max.
   'orderDetail.contacts.title': 'კონტაქტები',

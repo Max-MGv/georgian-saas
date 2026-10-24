@@ -170,28 +170,20 @@ test.describe('Post-payment extras end-to-end (KnownBugs #64, Plan-PostPaymentEx
 
       // ── 4. Chunk 1 — attempt an edit, confirm it's rejected/disabled. ───────
       await expect(page.getByText('This order is already paid.', { exact: false })).toBeVisible()
-      // An individual order since T-152 Chunk 8: one guest count, locked. No rate box at all since D-14 (2026-10-22) —
-      // an individual is priced from the Individuals table.
-      const partySizeInput = page.getByRole('textbox', { name: 'Number of guests' })
-      const rateInput = page.getByRole('textbox', { name: /— ₾ per person$/ })
-      const saveButton = page.getByRole('button', { name: 'Save changes', exact: true })
-      await expect(partySizeInput).toBeDisabled()
-      await expect(rateInput).toHaveCount(0)
-      await expect(saveButton).toBeDisabled()
-      // A genuine attempt, not just a state check: Playwright's own
-      // actionability wait for `.fill()` blocks on the element becoming
-      // enabled, and with no timeout of its own that wait inherits the
-      // WHOLE TEST's remaining budget rather than failing in a few seconds
-      // (the exact hang documented in 17-payment-edit-after-payment.md) — a
-      // short explicit timeout is required so a genuinely disabled field
-      // fails FAST, which is itself the proof the lock works, not a hang to
-      // be waited out.
-      await partySizeInput.fill(String(guestCount + 50), { timeout: 3_000 }).catch(() => {})
-      await expect(partySizeInput).toHaveValue(String(guestCount))
-      mark('4: Chunk 1 lock confirmed — fields disabled, edit attempt had no effect')
+      // Since T-215 part 2 the Guest breakdown card is click-to-edit, and a paid order shows no pencil on it at all —
+      // the lock is that the fields never open (no guest box, no rate box, no Save). No rate box at all since D-14.
+      const guestsCard = page.locator('div.rounded-xl').filter({ has: page.getByRole('heading', { name: 'Guest Breakdown & Dishes', exact: true }) })
+      await expect(guestsCard.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0)
+      await expect(guestsCard.getByRole('textbox')).toHaveCount(0)
+      await expect(page.getByRole('textbox', { name: /— ₾ per person$/ })).toHaveCount(0)
+      await expect(guestsCard.getByText(String(guestCount), { exact: true })).toBeVisible()
+      mark('4: Chunk 1 lock confirmed — the paid order offers no way to edit its guests')
 
       // ── 5. Chunk 2 — add a real extra, confirm balance-due appears
       // correctly on the order detail page AND the admin orders table. ───────
+      // Extras are click-to-edit too (T-215 part 2): open the card with its pencil, then add — adding still saves at once.
+      const extrasCard = page.locator('div.rounded-xl').filter({ has: page.getByRole('heading', { name: 'Extra Charges', exact: true }) })
+      await extrasCard.getByRole('button', { name: 'Edit', exact: true }).click()
       await page.getByRole('button', { name: '+ Add extra charge', exact: true }).click()
       await page.getByPlaceholder('e.g. Additional wine').fill('2 additional guests')
       await page.locator('label', { hasText: 'Amount (₾)' }).first().locator('xpath=following-sibling::input[1]').fill(String(extraAmountMajor))

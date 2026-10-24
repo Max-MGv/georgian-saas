@@ -51,6 +51,41 @@ export async function addOrderExtra(
   return result
 }
 
+/**
+ * Change an existing extra's label or amount in place (T-215 part 2) — instead of remove + re-add. Same checks as
+ * adding one; only the difference reaches the total. The history records it as the old line removed and the new one
+ * added (`edited: true`), so "₾40 X became ₾60 Y" stays readable without a new event type (that would need a migration).
+ */
+export async function updateOrderExtra(
+  extraId: string,
+  orderId: string,
+  data: { label: string; amount: Tetri }
+): Promise<{ success: true } | { error: string }> {
+  const actor = await requireAdmin()
+  if (!data.label.trim()) return { error: 'Label is required' }
+  if (!Number.isInteger(data.amount) || data.amount <= 0) return { error: 'Amount must be greater than 0' }
+  const tenantId = await getTenantId()
+
+  const result = await withTenantDb(tenantId, async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId, tenantId } })
+    if (!order) return { error: 'Order not found.' } as const
+    const extra = await tx.orderExtra.findFirst({ where: { id: extraId, orderId } })
+    if (!extra) return { error: 'This extra is no longer on the order.' } as const
+    const label = data.label.trim()
+    if (label === extra.label && data.amount === extra.amount) return { success: true as const, delta: 0 }
+    await tx.orderExtra.update({ where: { id: extraId }, data: { label, amount: data.amount } })
+    const base = { tenantId, orderId, actorType: 'ADMIN' as const, actorId: actor?.id ?? null }
+    await recordOrderEvent(tx, { ...base, type: 'EXTRA_REMOVED', payload: { label: extra.label, amount: extra.amount, edited: true } })
+    await recordOrderEvent(tx, { ...base, type: 'EXTRA_ADDED', payload: { label, amount: data.amount, edited: true } })
+    return { success: true as const, delta: data.amount - extra.amount }
+  })
+  if ('error' in result) return result
+  if (result.delta !== 0) await recalcOrderTotal(orderId, tenantId, result.delta)
+  revalidatePath(`/admin/orders/${orderId}`)
+  revalidatePath('/admin/orders')
+  return { success: true }
+}
+
 export async function removeOrderExtra(
   extraId: string,
   orderId: string

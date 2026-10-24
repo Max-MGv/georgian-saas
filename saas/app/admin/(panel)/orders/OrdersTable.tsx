@@ -56,6 +56,8 @@ function labelFor(locale: string, code: string | null): string {
 
 import { COLUMN_DEFS, defaultVisibleFor, readVisibleColumns, type ColumnId } from './columnDefs'
 import { slotOptions } from './timeSlots'
+import DateInput from '@/components/DateInput'
+import { splitFullName } from '@/lib/splitFullName'
 
 // Actions column (print/email/edit/delete) is pinned to the right edge. Status is
 // pinned right next to it, so both stay visible while scrolling a wide table —
@@ -749,8 +751,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // Edit form state
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
-  const [editName, setEditName] = useState('')
-  const [editSurname, setEditSurname] = useState('')
+  // One Name box, like both booking forms and the order page (T-215 part 2) — split into name / surname on save.
+  const [editFullName, setEditFullName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
@@ -938,8 +940,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setEditingOrder(order)
     setEditDate(toInputDate(order.date))
     setEditTime(order.timeSlot)
-    setEditName(order.name)
-    setEditSurname(order.surname)
+    setEditFullName(`${order.name} ${order.surname}`.trim())
     setEditPhone(order.phone ?? '')
     setEditEmail(order.email ?? '')
     setEditNotes(order.notes ?? '')
@@ -966,8 +967,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     const result = await updateOrder(editingOrder.id, {
       date: editDate,
       timeSlot: editTime,
-      name: editName,
-      surname: editSurname,
+      ...splitFullName(editFullName),
       phone: editPhone,
       email: editEmail,
       notes: editNotes,
@@ -981,8 +981,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       ...o,
       date: new Date(editDate),
       timeSlot: editTime,
-      name: editName,
-      surname: editSurname,
+      ...splitFullName(editFullName),
       phone: editPhone || null,
       email: editEmail || null,
       notes: editNotes || null,
@@ -1561,7 +1560,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-3">
                 <Field label={at('orders.editPanel.date')}>
-                  <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} style={inputStyle} />
+                  <DateInput value={editDate} onChange={setEditDate} style={inputStyle} />
                 </Field>
                 <Field label={at('orders.editPanel.time')}>
                   <select value={editTime} onChange={e => setEditTime(e.target.value)} style={inputStyle}>
@@ -1579,14 +1578,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 </div>
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={at('orders.editPanel.firstName')}>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} />
-                </Field>
-                <Field label={at('orders.editPanel.lastName')}>
-                  <input value={editSurname} onChange={e => setEditSurname(e.target.value)} style={inputStyle} />
-                </Field>
-              </div>
+              <Field label={at('newOrder.contact.name')}>
+                <input value={editFullName} onChange={e => setEditFullName(e.target.value)} style={inputStyle} />
+              </Field>
 
               <Field label={at('orders.editPanel.phone')}>
                 <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} style={inputStyle} />

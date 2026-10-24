@@ -259,6 +259,16 @@ export function useContactSelection({ module, onApply, asAdmin = false }: Option
     })
   }, [])
 
+  /**
+   * Start from an order's existing contacts — the order page's Contacts editor (T-215 part 2), which edits what was
+   * recorded rather than starting empty. Call after `resolve`, which clears the selection. Rows keep their `personId`
+   * so an untouched pick stays linked; `buildOrderContactRows` re-verifies every link on save anyway.
+   */
+  const prefill = useCallback((rows: ContactSelection[]) => {
+    setSelected(Object.fromEntries(rows.map(r => [r.roleId, r])))
+    setPending([])
+  }, [])
+
   return {
     /** roleId → selection, for rendering "you picked X" state. */
     selected,
@@ -275,5 +285,6 @@ export function useContactSelection({ module, onApply, asAdmin = false }: Option
     reopenRole,
     setTyped,
     reset,
+    prefill,
   }
 }

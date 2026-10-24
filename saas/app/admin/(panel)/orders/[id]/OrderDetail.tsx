@@ -1,16 +1,22 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
-import { updateOrder, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
+import ContactRoleFields from '@/components/ContactRoleFields'
+import NationalityPicker from '@/components/NationalityPicker'
+import DateInput from '@/components/DateInput'
+import { useContactSelection } from '@/lib/useContactSelection'
+import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
+import { countryName } from '@/lib/countries'
+import { updateOrderBooking, updateOrderContacts, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
-import { adminOrderView, manualFromStrings, NO_TYPED_RATES, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
+import { adminOrderView, manualFromStrings, NO_TYPED_RATES, PRODUCT_AT, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { slotOptions } from '../timeSlots'
-import { addMasterclassLine, removeMasterclassLine } from '@/app/actions/orderMasterclass'
-import { addOrderExtra, removeOrderExtra } from '@/app/actions/orderExtras'
+import { addMasterclassLine, removeMasterclassLine, updateMasterclassLine } from '@/app/actions/orderMasterclass'
+import { addOrderExtra, removeOrderExtra, updateOrderExtra } from '@/app/actions/orderExtras'
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
@@ -262,7 +268,9 @@ type OrderProp = {
   } | null
   masterclassLines: MasterclassLine[]
   extras: ExtraRow[]
-  contacts: { roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
+  /** ISO codes — company bookings only (Plan-CompanyNationality). */
+  nationalities: string[]
+  contacts: { roleId: string; roleKey: string; personId: string | null; roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
   invoicesSent: { id: string; sentAt: Date | string; recipientEmail: string; totalPrice: number }[]
 }
 
@@ -325,6 +333,8 @@ export default function OrderDetail({
   masterclassItems,
   companies = [],
   individualsPrices = [],
+  contactRoles = [],
+  nationalityEnabled = false,
   locale = 'en',
 }: {
   order: OrderProp
@@ -335,59 +345,145 @@ export default function OrderDetail({
   masterclassItems: MasterclassItemRow[]
   /** Real companies to link a no-company order to (Feature 180). Excludes
    * the isIndividual pricing-container row — see page.tsx's fetch. */
-  companies?: { id: string; name: string }[]
+  companies?: { id: string; name: string; isBookingCompany: boolean }[]
   /** The tenant's Individuals price table — what an individual order is re-priced from (D-14). */
   individualsPrices?: Price[]
+  /** The contact types a booking records, Contact Person first among them — as New Order shows (T-215 part 2). */
+  contactRoles?: OrderRole[]
+  /** The tenant's nationality-tag switch (Plan-CompanyNationality) — New Order's gate for the picker. */
+  nationalityEnabled?: boolean
   locale?: string
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const router = useRouter()
 
-  // ── Booking details + contact person (T-215) ───────────────────────────────
-  // The same fields and the same action (updateOrder) as the Orders side panel, so the order page can change
-  // everything the panel can — split by card: Booking Info edits date, time and notes; Contacts edits the contact
-  // person's name, phone and email (for a company booking updateOrder keeps the Contacts card's row in step). One
-  // card is edited at a time; the save sends the other card's values unchanged.
-  const [editingCard, setEditingCard] = useState<'info' | 'contact' | null>(null)
+  // ── Click-to-edit cards (T-215 part 2, Plan-OrderPageMirror D-1/D-2) ───────
+  // Every editable card is read-only until its red pencil is clicked; one card at a time; Save / Cancel. The cards
+  // mirror the booking forms: Booking Info = date, time, company (or none = individual), nationality, internal notes
+  // (updateOrderBooking); Contacts = the contact person + every contact type, picked from the company's people like
+  // New Order (updateOrderContacts); Guest breakdown (updateOrderEnhanced); Masterclass and Extras lines edited in
+  // place (updateMasterclassLine / updateOrderExtra — adding and removing a line still act at once).
+  type EditCard = 'info' | 'contact' | 'guests' | 'mc' | 'ex'
+  const [editingCard, setEditingCard] = useState<EditCard | null>(null)
   const editingInfo = editingCard === 'info'
   const editingContact = editingCard === 'contact'
-  const [msgCard, setMsgCard] = useState<'info' | 'contact'>('info')
+  const [msgCard, setMsgCard] = useState<EditCard>('info')
   const [infoDate, setInfoDate] = useState('')
   const [infoTime, setInfoTime] = useState('')
-  const [infoName, setInfoName] = useState('')
-  const [infoSurname, setInfoSurname] = useState('')
+  const [infoNotes, setInfoNotes] = useState('')
+  const [infoCompanyId, setInfoCompanyId] = useState('')
+  const [infoNationalities, setInfoNationalities] = useState<string[]>([])
+  const [contactName, setContactName] = useState('')
   const [infoPhone, setInfoPhone] = useState('')
   const [infoEmail, setInfoEmail] = useState('')
-  const [infoNotes, setInfoNotes] = useState('')
+  const [lineQty, setLineQty] = useState<Record<string, string>>({})
+  const [extraEdits, setExtraEdits] = useState<Record<string, { label: string; amount: string }>>({})
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoMsg, setInfoMsg] = useState('')
   const [infoError, setInfoError] = useState(false)
 
-  function startEdit(card: 'info' | 'contact') {
-    setInfoDate(toInputDate(order.date))
-    setInfoTime(order.timeSlot)
-    setInfoName(order.name)
-    setInfoSurname(order.surname)
-    setInfoPhone(order.phone ?? '')
-    setInfoEmail(order.email ?? '')
-    setInfoNotes(order.notes ?? '')
+  // Contact types and the company's people — the same hook and rules as New Order (Plan-ContactRoles §4b).
+  const contactPersonRole = contactRoles.find(r => r.key === 'contact_person') ?? null
+  const extraRoles = contactRoles.filter(r => r.key !== 'contact_person')
+  const roleLabel = (role: OrderRole) => (locale === 'ka' ? role.labelKa : role.labelEn) || role.labelEn
+  const applyPickedPerson = useCallback((person: ContactChoice, role: OrderRole) => {
+    if (contactPersonRole && role.roleId !== contactPersonRole.roleId) return
+    setContactName(person.name.trim())
+    if (person.phone) setInfoPhone(person.phone)
+    if (person.email) setInfoEmail(person.email)
+  }, [contactPersonRole])
+  const {
+    selected: selectedContacts, contacts: pickedContacts, roleChoices,
+    resolve: resolveContacts, pickFor, clearRole, setTyped: setTypedContact, prefill: prefillContacts,
+  } = useContactSelection({ module: 'BOOKING', onApply: applyPickedPerson, asAdmin: true })
+
+  function startEdit(card: EditCard) {
     setInfoMsg('')
     setInfoError(false)
     setMsgCard(card)
     setEditingCard(card)
+    if (card === 'info') {
+      setInfoDate(toInputDate(order.date))
+      setInfoTime(order.timeSlot)
+      setInfoNotes(order.notes ?? '')
+      setInfoCompanyId(order.company?.id ?? '')
+      setInfoNationalities(order.nationalities)
+    } else if (card === 'contact') {
+      setContactName(`${order.name} ${order.surname}`.trim())
+      setInfoPhone(order.phone ?? '')
+      setInfoEmail(order.email ?? '')
+      // A company order: load the company's people for the pickers, then start from what the order recorded
+      // (resolve clears the selection, so prefill comes after it).
+      const recorded = order.contacts.map(c => ({ roleId: c.roleId, personId: c.personId ?? undefined, name: c.name, phone: c.phone, email: c.email }))
+      if (order.company) void resolveContacts({ companyId: order.company.id }).then(() => prefillContacts(recorded))
+    } else if (card === 'guests') {
+      resetGuests()
+    } else if (card === 'mc') {
+      setLineQty(Object.fromEntries(lines.map(l => [l.id, String(l.quantity)])))
+    } else {
+      setExtraEdits(Object.fromEntries(extras.map(e => [e.id, { label: e.label, amount: String(toMajor(asTetri(e.amount))) }])))
+    }
   }
 
-  async function handleInfoSave() {
+  function cancelEdit() {
+    if (editingCard === 'guests') resetGuests()
+    setEditingCard(null)
+    setInfoMsg('')
+    setInfoError(false)
+  }
+
+  /** contact_person rebuilt from the live fields (keeping its pick), then every other type — as New Order does. */
+  function buildContacts() {
+    const others = pickedContacts.filter(c => c.roleId !== contactPersonRole?.roleId)
+    const name = contactName.trim()
+    return contactPersonRole && name
+      ? [{ roleId: contactPersonRole.roleId, personId: selectedContacts[contactPersonRole.roleId]?.personId, name, phone: infoPhone.trim() || null, email: infoEmail.trim() || null }, ...others]
+      : others
+  }
+
+  async function saveCard(): Promise<{ error: string } | null> {
+    if (editingCard === 'info') {
+      const r = await updateOrderBooking(order.id, { date: infoDate, timeSlot: infoTime, notes: infoNotes, companyId: infoCompanyId || null, nationalities: infoNationalities })
+      return 'error' in r ? r : null
+    }
+    if (editingCard === 'contact') {
+      const r = await updateOrderContacts(order.id, { fullName: contactName, phone: infoPhone, email: infoEmail, contacts: order.company ? buildContacts() : undefined })
+      return 'error' in r ? r : null
+    }
+    if (editingCard === 'guests') return saveGuests()
+    if (editingCard === 'mc') {
+      for (const l of lines) {
+        const q = parseInt(lineQty[l.id] ?? '')
+        if (l.masterclassItem.unitType === 'FLAT' || q === l.quantity) continue
+        const r = await updateMasterclassLine(l.id, order.id, Number.isNaN(q) ? 0 : q)
+        if ('error' in r) return r
+        setLines(prev => prev.map(x => (x.id === l.id ? { ...x, quantity: q } : x)))
+      }
+      return null
+    }
+    if (editingCard === 'ex') {
+      for (const e of extras) {
+        const ed = extraEdits[e.id]
+        if (!ed) continue
+        const amount = fromMajor(parseFloat(ed.amount) || 0)
+        if (ed.label.trim() === e.label && amount === e.amount) continue
+        const r = await updateOrderExtra(e.id, order.id, { label: ed.label, amount })
+        if ('error' in r) return r
+        setExtras(prev => prev.map(x => (x.id === e.id ? { ...x, label: ed.label.trim(), amount } : x)))
+      }
+      return null
+    }
+    return null
+  }
+
+  async function handleCardSave() {
     setInfoSaving(true)
     setInfoMsg('')
-    const result = await updateOrder(order.id, {
-      date: infoDate, timeSlot: infoTime, name: infoName, surname: infoSurname,
-      phone: infoPhone, email: infoEmail, notes: infoNotes,
-    })
+    const failed = await saveCard()
     setInfoSaving(false)
-    if ('error' in result) {
+    if (failed) {
       setInfoError(true)
-      setInfoMsg(result.error ?? '')
+      setInfoMsg(failed.error)
       return
     }
     setInfoError(false)
@@ -398,29 +494,36 @@ export default function OrderDetail({
   }
 
   // Plain render helpers (no inputs inside, so calling them doesn't remount a field and lose focus).
-  const editButton = (card: 'info' | 'contact') => editingCard === null && (
+  // The red pencil is the Settings one (SettingsClient.tsx) — D-2: an icon, never the word "Edit".
+  const editButton = (card: EditCard, hidden = false) => editingCard === null && !hidden && (
     <button
+      type="button"
       onClick={() => startEdit(card)}
-      className="text-xs font-medium px-2.5 py-1 rounded-lg border"
-      style={{ borderColor: C.border, color: C.muted, backgroundColor: C.bg }}
+      title={at('orderDetail.bookingInfo.edit')}
+      aria-label={at('orderDetail.bookingInfo.edit')}
+      className="flex-shrink-0 p-3 -m-2 md:p-1 md:m-0 rounded hover:opacity-70 transition-opacity"
+      style={{ color: '#9b090c' }}
     >
-      {at('orderDetail.bookingInfo.edit')}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
     </button>
   )
-  const editActions = () => (
+  const editActions = (blocked = false) => (
     <>
       {infoMsg && infoError && <p className="text-sm" style={{ color: '#b91c1c' }}>{infoMsg}</p>}
       <div className="flex gap-3">
         <button
-          onClick={handleInfoSave}
-          disabled={infoSaving}
+          onClick={handleCardSave}
+          disabled={infoSaving || blocked}
           className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ backgroundColor: C.wine, opacity: infoSaving ? 0.6 : 1 }}
+          style={{ backgroundColor: C.wine, opacity: infoSaving || blocked ? 0.6 : 1 }}
         >
           {infoSaving ? at('orders.editPanel.saving') : at('orders.editPanel.save')}
         </button>
         <button
-          onClick={() => { setEditingCard(null); setInfoMsg('') }}
+          onClick={cancelEdit}
           className="px-4 py-2 rounded-lg border text-sm"
           style={{ borderColor: C.border, color: C.muted }}
         >
@@ -431,8 +534,37 @@ export default function OrderDetail({
   )
   // Any change clears a refused save's message (input events bubble from every field, the select too).
   const clearRefusal = () => { if (infoError) { setInfoError(false); setInfoMsg('') } }
-  const savedNote = (card: 'info' | 'contact') =>
+  const savedNote = (card: EditCard) =>
     editingCard === null && msgCard === card && infoMsg && !infoError && <p className="text-xs mt-2" style={{ color: '#166534' }}>{infoMsg}</p>
+
+  // Contact blocks — the same labels, layout and "Choose the …" dropdown as New Order (NewOrderForm.tsx rolePicker).
+  const roleLabels = {
+    name: at('newOrder.contact.name'),
+    phone: at('orderDetail.bookingInfo.phone'),
+    email: at('newOrder.contact.email'),
+  }
+  const roleTitleStyle: React.CSSProperties = { color: C.faint, marginBottom: 6 }
+  function rolePicker(role: OrderRole) {
+    const choices = roleChoices.find(r => r.roleId === role.roleId)
+    if (!choices || choices.people.length === 0) return undefined
+    return (
+      <select
+        aria-label={at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}
+        value={selectedContacts[role.roleId]?.personId ?? ''}
+        onChange={e => {
+          const person = choices.people.find(pp => pp.id === e.target.value)
+          if (person) pickFor(person, choices)
+          else clearRole(role.roleId)
+        }}
+        style={inputStyle}
+      >
+        <option value="">{at('newWineOrder.contact.pickPerson', { role: roleLabel(role) })}</option>
+        {choices.people.map(pp => (
+          <option key={pp.id} value={pp.id}>{pp.name}{pp.phone ? ` — ${pp.phone}` : ''}</option>
+        ))}
+      </select>
+    )
+  }
 
   // ── Link to a real company (Feature 180) ───────────────────────────────────
   // Only relevant for an order that came in with no companyId at all — see
@@ -490,8 +622,6 @@ export default function OrderDetail({
   const [hotDishVeg, setHotDishVeg] = useState(order.hotDishVegetable ?? '')
   const [hotDishMeat, setHotDishMeat] = useState(order.hotDishMeat ?? '')
   const [foodNotes, setFoodNotes] = useState(order.foodNotes ?? '')
-  const [saving, setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState('')
 
   // ── Top action bar state ───────────────────────────────────────────────────
   // Both axes are local state now, so the flow-line and the pill move on click
@@ -729,10 +859,19 @@ export default function OrderDetail({
     else setNewLineQty('1')
   }
 
-  // ── Save enhanced fields ───────────────────────────────────────────────────
-  async function handleSave() {
-    setSaving(true)
-    setSaveMsg('')
+  // ── Guest breakdown: Cancel puts the fields back to what the order stores ──────
+  function resetGuests() {
+    setVisitType(order.visitType as BookingVisitType)
+    setGuestCountStr(String(order.guestCount))
+    setBoxes(storedBoxes)
+    setManualRates(storedManual)
+    setHotDishVeg(order.hotDishVegetable ?? '')
+    setHotDishMeat(order.hotDishMeat ?? '')
+    setFoodNotes(order.foodNotes ?? '')
+  }
+
+  // ── Save enhanced fields (the Guest breakdown card's Save) ─────────────────
+  async function saveGuests(): Promise<{ error: string } | null> {
     const result = await updateOrderEnhanced(order.id, {
       visitType,
       ...(isCompanyOrder ? { boxes: view.counts ?? undefined } : { guestCount: parseInt(guestCountStr) || 0 }),
@@ -744,14 +883,7 @@ export default function OrderDetail({
       // Companies only — an individual order has no typed rates (D-14).
       manualRates: isCompanyOrder ? manualFromStrings(manualRates) : NO_TYPED_RATES,
     })
-    setSaving(false)
-    if ('error' in result) {
-      setSaveMsg(result.error)
-    } else {
-      setSaveMsg(at('orderDetail.guestBreakdown.savedOk'))
-      router.refresh()
-      setTimeout(() => setSaveMsg(''), 3000)
-    }
+    return 'error' in result ? result : null
   }
 
   // ── Add / remove masterclass line ─────────────────────────────────────────
@@ -1066,15 +1198,15 @@ export default function OrderDetail({
         document.body
       )}
 
-      {/* ── Booking Info — date, time and notes editable here (T-215); the contact person in the Contacts card;
-          visit type, guests and price in the Guest Breakdown card below ── */}
+      {/* ── Booking Info — mirrors the booking forms' booking section (T-215 part 2): date, time, company (none = an
+          individual), nationality, internal notes. Visit type and guests are in the Guest breakdown card below. ── */}
       <Card title={at('orderDetail.bookingInfo.title')} action={editButton('info')}>
         {editingInfo ? (
           <div className="flex flex-col gap-3 mb-3" onInput={clearRefusal}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.date')}</span>
-                <input type="date" value={infoDate} onChange={e => setInfoDate(e.target.value)} style={inputStyle} />
+                <DateInput value={infoDate} onChange={v => { setInfoDate(v); clearRefusal() }} style={inputStyle} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.time')}</span>
@@ -1083,6 +1215,26 @@ export default function OrderDetail({
                 </select>
               </label>
             </div>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs" style={{ color: C.faint }}>{at('newOrder.bookingDetails.company')}</span>
+              <select value={infoCompanyId} onChange={e => setInfoCompanyId(e.target.value)} disabled={isPaid} style={isPaid ? lockedInputStyle : inputStyle}>
+                <option value="">{at('newOrder.bookingDetails.individual')}</option>
+                {companies.filter(c => c.isBookingCompany || c.id === order.company?.id).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+            {infoCompanyId && nationalityEnabled && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs" style={{ color: C.faint }}>{at('newOrder.contact.nationality')}</span>
+                <NationalityPicker
+                  value={infoNationalities}
+                  onChange={v => { setInfoNationalities(v); clearRefusal() }}
+                  placeholder={at('newOrder.contact.nationalityPlaceholder')}
+                  emptyText={at('newOrder.contact.nationalityEmpty')}
+                />
+              </div>
+            )}
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.notes')}</span>
               <textarea
@@ -1093,34 +1245,40 @@ export default function OrderDetail({
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </label>
+            <p className="text-xs" style={{ color: C.faint }}>
+              {at(isPaid ? 'orderDetail.bookingInfo.companyLockedPaid' : 'orderDetail.bookingInfo.companyRepriceHint')}
+            </p>
             {editActions()}
           </div>
         ) : (
           <>
             <InfoRow label={at('orderDetail.bookingInfo.date')} value={formatDate(order.date)} />
             <InfoRow label={at('orderDetail.bookingInfo.time')} value={order.timeSlot} />
+            <InfoRow
+              label={at('orderDetail.bookingInfo.visitType')}
+              value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : order.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.visit.tastingLunch')}
+            />
+            <InfoRow
+              label={at('orderDetail.bookingInfo.bookingType')}
+              value={
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full"
+                  style={{
+                    backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
+                    color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
+                  }}
+                >
+                  {order.bookingType === 'COMPANY' ? at('orders.type.company') : at('orders.type.individual')}
+                </span>
+              }
+            />
+            {order.company && <InfoRow label={at('orderDetail.bookingInfo.company')} value={order.company.name} />}
+            {order.bookingType === 'COMPANY' && order.nationalities.length > 0 && (
+              <InfoRow label={at('newOrder.contact.nationality')} value={order.nationalities.map(code => countryName(code)).join(', ')} />
+            )}
           </>
         )}
-        <InfoRow
-          label={at('orderDetail.bookingInfo.visitType')}
-          value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : order.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.visit.tastingLunch')}
-        />
-        <InfoRow
-          label={at('orderDetail.bookingInfo.bookingType')}
-          value={
-            <span
-              className="text-xs px-2 py-0.5 rounded-full"
-              style={{
-                backgroundColor: order.bookingType === 'COMPANY' ? '#fef3c7' : '#f0fdf4',
-                color: order.bookingType === 'COMPANY' ? '#92400e' : '#166534',
-              }}
-            >
-              {order.bookingType === 'COMPANY' ? at('orders.type.company') : at('orders.type.individual')}
-            </span>
-          }
-        />
-        {order.company && <InfoRow label={at('orderDetail.bookingInfo.company')} value={order.company.name} />}
-        {!order.company && order.bookingType === 'COMPANY' && (
+        {!order.company && order.bookingType === 'COMPANY' && !editingInfo && (
           <div className="mt-2 mb-1 rounded-lg border p-3" style={{ borderColor: '#fbbf24', backgroundColor: '#fffbeb' }}>
             <p className="text-xs font-semibold mb-1" style={{ color: '#92400e' }}>
               {order.requestedCompanyName
@@ -1157,36 +1315,58 @@ export default function OrderDetail({
             )}
           </div>
         )}
-        <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />
+        {!editingInfo && <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />}
         {/* Phone / email live in the Contacts card for every booking (T-215): a company's Contact Person row, or an
             individual's booker — where Contacts → Edit changes them. */}
         {!editingInfo && order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
         {savedNote('info')}
       </Card>
 
-      {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1) ── */}
-      {/* Edit = the contact person (the booker, for an individual) — the same four fields as the side panel (T-215). */}
+      {/* ── Contacts, by role (Plan-ContactRoles Chunk 10 — finding F1). Edit = New Order's contact block: the contact
+          person and every contact type, each with "Choose the …" from the company's people, which fills the boxes
+          (T-215 part 2). An individual booking: just the booker. ── */}
       <Card title={at('orderDetail.contacts.title')} action={editButton('contact')}>
         {editingContact ? (
-          <div className="flex flex-col gap-3 mb-3" onInput={clearRefusal}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.firstName')}</span>
-                <input value={infoName} onChange={e => setInfoName(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.lastName')}</span>
-                <input value={infoSurname} onChange={e => setInfoSurname(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.phone')}</span>
-                <input type="tel" value={infoPhone} onChange={e => setInfoPhone(e.target.value)} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: C.faint }}>{at('orders.editPanel.email')}</span>
-                <input type="email" value={infoEmail} onChange={e => setInfoEmail(e.target.value)} style={inputStyle} />
-              </label>
-            </div>
+          <div className="flex flex-col gap-4 mb-3" onInput={clearRefusal}>
+            <ContactRoleFields
+              title={contactPersonRole ? roleLabel(contactPersonRole) : at('orderDetail.contacts.booker')}
+              titleStyle={roleTitleStyle}
+              picker={contactPersonRole && order.company ? rolePicker(contactPersonRole) : undefined}
+              name={contactName}
+              phone={infoPhone}
+              email={infoEmail}
+              onChange={(field, value) => {
+                if (field === 'name') setContactName(value)
+                else if (field === 'phone') setInfoPhone(value)
+                else setInfoEmail(value)
+              }}
+              labels={roleLabels}
+              inputStyle={inputStyle}
+            />
+            {order.company && extraRoles.map(role => {
+              const chosen = selectedContacts[role.roleId]
+              return (
+                <ContactRoleFields
+                  key={role.roleId}
+                  title={roleLabel(role)}
+                  titleStyle={roleTitleStyle}
+                  picker={rolePicker(role)}
+                  name={chosen?.name ?? ''}
+                  phone={chosen?.phone ?? ''}
+                  email={chosen?.email ?? ''}
+                  onChange={(field, value) => setTypedContact(role.roleId, {
+                    name: field === 'name' ? value : (chosen?.name ?? ''),
+                    phone: field === 'phone' ? value : chosen?.phone,
+                    email: field === 'email' ? value : chosen?.email,
+                  })}
+                  labels={roleLabels}
+                  inputStyle={inputStyle}
+                />
+              )
+            })}
+            {order.company && roleChoices.some(r => r.people.length > 0) && (
+              <p className="text-xs" style={{ color: C.faint }}>{at('orderDetail.contacts.pickHint')}</p>
+            )}
             {editActions()}
           </div>
         ) : order.contacts.length === 0 && order.bookingType !== 'COMPANY' ? (
@@ -1225,8 +1405,8 @@ export default function OrderDetail({
         )}
       </Card>
 
-      {/* ── Guest Breakdown & Dishes ── */}
-      <Card title={at('orderDetail.guestBreakdown.title')}>
+      {/* ── Guest Breakdown & Dishes — read-only until the pencil (D-1); locked once paid (bug #64) ── */}
+      <Card title={at('orderDetail.guestBreakdown.title')} action={editButton('guests', isPaid)}>
         {isPaid && (
           <div
             className="text-xs rounded-lg p-3 mb-4"
@@ -1251,115 +1431,118 @@ export default function OrderDetail({
           </div>
         )}
 
-        {/* Visit type and guests (Plan-PricingModel Chunk 8): a company's four boxes add up to the total — there
-            is no typed party size any more (P-11) — and an individual keeps one guest count (D-5). */}
-        <GuestFields
-          at={at} isCompany={isCompanyOrder} visitType={visitType} onVisitType={setVisitType}
-          guests={guestCountStr} onGuests={setGuestCountStr} boxes={boxes} onBox={setBox}
-          view={view} disabled={isPaid} inputStyle={inputStyle}
-        />
+        {editingCard !== 'guests' ? (
+          <>
+            <InfoRow
+              label={at('orderDetail.bookingInfo.visitType')}
+              value={order.visitType === 'TASTING' ? at('orders.visit.tasting') : order.visitType === 'LUNCH' ? at('orders.visit.lunch') : at('orders.visit.tastingLunch')}
+            />
+            <InfoRow
+              label={at('orderDetail.guestBreakdown.guestsLabel')}
+              value={isCompanyOrder
+                ? [
+                    ...PRODUCTS.filter(p => storedCounts[p] > 0).map(p => `${at(PRODUCT_AT[p])} ${storedCounts[p]}`),
+                    ...(order.freeGuestCount > 0 ? [`${at('orderDetail.guestBreakdown.freeGuests')} ${order.freeGuestCount}`] : []),
+                  ].join(' · ') || '0'
+                : String(order.guestCount)}
+            />
+            <InfoRow label={at('orderDetail.guestBreakdown.hotDishVeg')} value={order.hotDishVegetable || at('orderDetail.guestBreakdown.none')} />
+            <InfoRow label={at('orderDetail.guestBreakdown.hotDishMeat')} value={order.hotDishMeat || at('orderDetail.guestBreakdown.none')} />
+            {order.foodNotes && <InfoRow label={at('orderDetail.guestBreakdown.foodNotes')} value={order.foodNotes} />}
+            {savedNote('guests')}
+          </>
+        ) : (
+          <div onInput={clearRefusal}>
+            {/* Visit type and guests (Plan-PricingModel Chunk 8): a company's four boxes add up to the total — there
+                is no typed party size any more (P-11) — and an individual keeps one guest count (D-5). */}
+            <GuestFields
+              at={at} isCompany={isCompanyOrder} visitType={visitType} onVisitType={setVisitType}
+              guests={guestCountStr} onGuests={setGuestCountStr} boxes={boxes} onBox={setBox}
+              view={view} disabled={isPaid} inputStyle={inputStyle}
+            />
 
-        {/* Typed rates for what the price table does not cover, or for an order with no table (A-9, E-3). */}
-        <RateFields
-          at={at} view={view} hasTable={prices.length > 0} companyName={order.company?.name ?? ''}
-          manual={manualRates} onManual={(p, v) => setManualRates(prev => ({ ...prev, [p]: v }))}
-          disabled={isPaid} inputStyle={inputStyle}
-        />
+            {/* Typed rates for what the price table does not cover, or for an order with no table (A-9, E-3). */}
+            <RateFields
+              at={at} view={view} hasTable={prices.length > 0} companyName={order.company?.name ?? ''}
+              manual={manualRates} onManual={(p, v) => setManualRates(prev => ({ ...prev, [p]: v }))}
+              disabled={isPaid} inputStyle={inputStyle}
+            />
 
-        {/* A hot dish needs a lunch guest (A-11). */}
-        {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
-          <p className="text-xs mb-3" style={{ color: C.faint }}>{at(isCompanyOrder && visitType !== 'TASTING' ? 'orderForm.hotDishNeedsLunch' : 'orderForm.hotDishSwitchVisit')}</p>
-        )}
+            {/* A hot dish needs a lunch guest (A-11). */}
+            {view.lunchGuests === 0 && (vegItems.length > 0 || meatItems.length > 0) && (
+              <p className="text-xs mb-3" style={{ color: C.faint }}>{at(isCompanyOrder && visitType !== 'TASTING' ? 'orderForm.hotDishNeedsLunch' : 'orderForm.hotDishSwitchVisit')}</p>
+            )}
 
-        {/* Hot dishes */}
-        {vegItems.length > 0 && (
-          <div className="mb-3">
-            <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.hotDishVeg')}
-            </label>
-            <select
-              value={view.lunchGuests > 0 ? hotDishVeg : ''}
-              onChange={e => setHotDishVeg(e.target.value)}
-              disabled={isPaid || view.lunchGuests === 0}
-              style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
-            >
-              <option value="">{at('orderDetail.guestBreakdown.none')}</option>
-              {vegItems.map(i => (
-                <option key={i.id} value={i.name}>{i.name}</option>
-              ))}
-            </select>
+            {vegItems.length > 0 && (
+              <div className="mb-3">
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                  {at('orderDetail.guestBreakdown.hotDishVeg')}
+                </label>
+                <select
+                  value={view.lunchGuests > 0 ? hotDishVeg : ''}
+                  onChange={e => setHotDishVeg(e.target.value)}
+                  disabled={isPaid || view.lunchGuests === 0}
+                  style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
+                >
+                  <option value="">{at('orderDetail.guestBreakdown.none')}</option>
+                  {vegItems.map(i => (
+                    <option key={i.id} value={i.name}>{i.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {meatItems.length > 0 && (
+              <div className="mb-3">
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                  {at('orderDetail.guestBreakdown.hotDishMeat')}
+                </label>
+                <select
+                  value={view.lunchGuests > 0 ? hotDishMeat : ''}
+                  onChange={e => setHotDishMeat(e.target.value)}
+                  disabled={isPaid || view.lunchGuests === 0}
+                  style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
+                >
+                  <option value="">{at('orderDetail.guestBreakdown.none')}</option>
+                  {meatItems.map(i => (
+                    <option key={i.id} value={i.name}>{i.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {vegItems.length === 0 && meatItems.length === 0 && (
+              <p className="text-xs mb-3" style={{ color: C.faint }}>
+                {at('orderDetail.guestBreakdown.noMenuItems')}{' '}
+                <a href="/admin/menu-items" style={{ color: C.wine }}>
+                  {at('orderDetail.guestBreakdown.menuItemsAdminLink')}
+                </a>
+                .
+              </p>
+            )}
+
+            <div className="mb-4">
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>
+                {at('orderDetail.guestBreakdown.foodNotes')}
+              </label>
+              <textarea
+                value={foodNotes}
+                onChange={e => setFoodNotes(e.target.value)}
+                rows={2}
+                disabled={isPaid}
+                placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
+                style={{ ...(isPaid ? lockedInputStyle : inputStyle), resize: 'vertical' }}
+              />
+            </div>
+
+            {problem && <p className="text-xs mb-2" style={{ color: '#b91c1c' }}>{problem}</p>}
+            {editActions(!!problem)}
           </div>
-        )}
-
-        {meatItems.length > 0 && (
-          <div className="mb-3">
-            <label className="text-xs block mb-1" style={{ color: C.faint }}>
-              {at('orderDetail.guestBreakdown.hotDishMeat')}
-            </label>
-            <select
-              value={view.lunchGuests > 0 ? hotDishMeat : ''}
-              onChange={e => setHotDishMeat(e.target.value)}
-              disabled={isPaid || view.lunchGuests === 0}
-              style={isPaid || view.lunchGuests === 0 ? lockedInputStyle : inputStyle}
-            >
-              <option value="">{at('orderDetail.guestBreakdown.none')}</option>
-              {meatItems.map(i => (
-                <option key={i.id} value={i.name}>{i.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {vegItems.length === 0 && meatItems.length === 0 && (
-          <p className="text-xs mb-3" style={{ color: C.faint }}>
-            {at('orderDetail.guestBreakdown.noMenuItems')}{' '}
-            <a href="/admin/menu-items" style={{ color: C.wine }}>
-              {at('orderDetail.guestBreakdown.menuItemsAdminLink')}
-            </a>
-            .
-          </p>
-        )}
-
-        {/* Food notes */}
-        <div className="mb-4">
-          <label className="text-xs block mb-1" style={{ color: C.faint }}>
-            {at('orderDetail.guestBreakdown.foodNotes')}
-          </label>
-          <textarea
-            value={foodNotes}
-            onChange={e => setFoodNotes(e.target.value)}
-            rows={2}
-            disabled={isPaid}
-            placeholder={at('orderDetail.guestBreakdown.foodNotesPlaceholder')}
-            style={{ ...(isPaid ? lockedInputStyle : inputStyle), resize: 'vertical' }}
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving || isPaid || !!problem}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: C.wine, opacity: isPaid ? 0.5 : 1, cursor: isPaid ? 'not-allowed' : 'pointer' }}
-          >
-            {saving ? at('orderDetail.guestBreakdown.saving') : at('orderDetail.guestBreakdown.saveChanges')}
-          </button>
-          {saveMsg && (
-            <span
-              className="text-sm"
-              style={{ color: saveMsg.includes('✓') ? '#16a34a' : '#b91c1c' }}
-            >
-              {saveMsg}
-            </span>
-          )}
-        </div>
-        {problem && !isPaid && (
-          <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>{problem}</p>
         )}
       </Card>
 
-      {/* ── Masterclass Add-ons ── */}
-      <Card title={at('orderDetail.masterclass.title')}>
+      {/* ── Masterclass Add-ons — read-only until the pencil (D-1); quantities edited in place, add / remove at once ── */}
+      <Card title={at('orderDetail.masterclass.title')} action={editButton('mc')}>
         {lines.length > 0 && (
           <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
             <table className="w-full text-sm">
@@ -1370,7 +1553,7 @@ export default function OrderDetail({
                     borderBottom: `1px solid ${C.border}`,
                   }}
                 >
-                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ''].map(h => (
+                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ...(editingCard === 'mc' ? [''] : [])].map(h => (
                     <th
                       key={h}
                       className="text-left px-3 py-2 text-xs font-medium"
@@ -1403,7 +1586,17 @@ export default function OrderDetail({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>
-                      {l.quantity}
+                      {editingCard === 'mc' && l.masterclassItem.unitType !== 'FLAT' ? (
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          aria-label={`${at('orderDetail.masterclass.colQty')} — ${l.masterclassItem.name}`}
+                          value={lineQty[l.id] ?? String(l.quantity)}
+                          onChange={e => { setLineQty(prev => ({ ...prev, [l.id]: e.target.value })); clearRefusal() }}
+                          style={{ ...inputStyle, width: 72 }}
+                        />
+                      ) : l.quantity}
                     </td>
                     <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>
                       {formatTetri(asTetri(l.pricePerUnit))}
@@ -1411,16 +1604,18 @@ export default function OrderDetail({
                     <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
                       {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}
                     </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => handleRemoveLine(l.id)}
-                        disabled={lineLoading}
-                        className="text-xs px-2 py-1 rounded border"
-                        style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
-                      >
-                        {at('orderDetail.masterclass.remove')}
-                      </button>
-                    </td>
+                    {editingCard === 'mc' && (
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => handleRemoveLine(l.id)}
+                          disabled={lineLoading}
+                          className="text-xs px-2 py-1 rounded border"
+                          style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
+                        >
+                          {at('orderDetail.masterclass.remove')}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1434,8 +1629,8 @@ export default function OrderDetail({
           </p>
         )}
 
-        {/* Add line form */}
-        {addingLine ? (
+        {/* Add line form — edit mode only */}
+        {editingCard === 'mc' && (addingLine ? (
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 160px' }}>
               <label className="text-xs block mb-1" style={{ color: C.faint }}>
@@ -1512,29 +1707,52 @@ export default function OrderDetail({
             </a>
             .
           </p>
-        )}
+        ))}
+        {editingCard === 'mc' ? <div className="mt-4 flex flex-col gap-3">{editActions()}</div> : savedNote('mc')}
       </Card>
 
-      {/* ── Extra Charges ── */}
-      <Card title={at('orderDetail.extras.title')}>
+      {/* ── Extra Charges — read-only until the pencil (D-1); label / amount edited in place, add / remove at once ── */}
+      <Card title={at('orderDetail.extras.title')} action={editButton('ex')}>
         {extras.length > 0 && (
           <div className="space-y-2 mb-3">
             {extras.map(e => (
               <div key={e.id} className="flex items-center gap-2">
-                <span className="flex-1 text-sm" style={{ color: C.text }}>
-                  {e.label}
-                </span>
-                <span className="text-sm font-medium" style={{ color: C.wine }}>
-                  {formatTetri(asTetri(e.amount), { decimals: true })}
-                </span>
-                <button
-                  onClick={() => handleRemoveExtra(e.id)}
-                  disabled={extraLoading}
-                  className="text-xs px-2 py-1 rounded border"
-                  style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
-                >
-                  {at('orderDetail.extras.remove')}
-                </button>
+                {editingCard === 'ex' ? (
+                  <>
+                    <input
+                      aria-label={at('orderDetail.extras.description')}
+                      value={extraEdits[e.id]?.label ?? e.label}
+                      onChange={ev => { const v = ev.target.value; setExtraEdits(prev => ({ ...prev, [e.id]: { label: v, amount: prev[e.id]?.amount ?? String(toMajor(asTetri(e.amount))) } })); clearRefusal() }}
+                      style={{ ...inputStyle, flex: '1 1 auto' }}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      aria-label={at('orderDetail.extras.amount')}
+                      value={extraEdits[e.id]?.amount ?? String(toMajor(asTetri(e.amount)))}
+                      onChange={ev => { const v = ev.target.value; setExtraEdits(prev => ({ ...prev, [e.id]: { label: prev[e.id]?.label ?? e.label, amount: v } })); clearRefusal() }}
+                      style={{ ...inputStyle, width: 110 }}
+                    />
+                    <button
+                      onClick={() => handleRemoveExtra(e.id)}
+                      disabled={extraLoading}
+                      className="text-xs px-2 py-1 rounded border flex-shrink-0"
+                      style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
+                    >
+                      {at('orderDetail.extras.remove')}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm" style={{ color: C.text }}>
+                      {e.label}
+                    </span>
+                    <span className="text-sm font-medium" style={{ color: C.wine }}>
+                      {formatTetri(asTetri(e.amount), { decimals: true })}
+                    </span>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -1546,8 +1764,8 @@ export default function OrderDetail({
           </p>
         )}
 
-        {/* Add extra form */}
-        {addingExtra ? (
+        {/* Add extra form — edit mode only */}
+        {editingCard === 'ex' && (addingExtra ? (
           <div className="flex items-end gap-2 flex-wrap">
             <div style={{ flex: '1 1 140px' }}>
               <label className="text-xs block mb-1" style={{ color: C.faint }}>
@@ -1603,7 +1821,8 @@ export default function OrderDetail({
           >
             {at('orderDetail.extras.addBtn')}
           </button>
-        )}
+        ))}
+        {editingCard === 'ex' ? <div className="mt-4 flex flex-col gap-3">{editActions()}</div> : savedNote('ex')}
       </Card>
 
       {/* ── Order Total ── */}
