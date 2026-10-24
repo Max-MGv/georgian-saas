@@ -840,15 +840,20 @@ export async function seedDemoTenant(
         const v = pick(vintages)
         if (!chosen.some(c => c.id === v.id)) chosen.push(v)
       }
-      const items = chosen.map(v => ({
-        wineVintageId: v.id,
-        wineNameSnapshot: v.wine.name,
-        vintageYearSnapshot: v.year,
-        priceSnapshot: v.price,
-        quantity: pick([12, 24, 36, 48, 60, 72, 96, 120]),
-      }))
-      const gross = items.reduce((s, it) => s + it.quantity * it.priceSnapshot, 0)
-      const totalAmount = Math.round(gross * (1 - buyer.discount / 100))
+      // Each line carries what it cost, rounded on its own (T-22 / C-1); the order's total is their sum.
+      const items = chosen.map(v => {
+        const quantity = pick([12, 24, 36, 48, 60, 72, 96, 120])
+        return {
+          wineVintageId: v.id,
+          wineNameSnapshot: v.wine.name,
+          vintageYearSnapshot: v.year,
+          priceSnapshot: v.price,
+          quantity,
+          discountPercent: buyer.discount > 0 ? buyer.discount : null,
+          lineTotal: Math.round(quantity * v.price * (1 - buyer.discount / 100)),
+        }
+      })
+      const totalAmount = items.reduce((s, it) => s + it.lineTotal, 0)
       const isAbandoned = rng() < 0.08
       const stage: WineOrderStage = isAbandoned
         ? 'NEW'

@@ -224,6 +224,7 @@ export async function createWineOrderAdmin(input: {
     company?.wineDiscountPercent ?? null,
   )
   const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
+  const pricedLine = new Map(pricing.lines.map(l => [l.vintageId, l]))
   const discountPercent = pricing.discountPercent
   const totalAmount = pricing.total
 
@@ -258,6 +259,9 @@ export async function createWineOrderAdmin(input: {
         vintageYearSnapshot: vintageMap[w.vintageId].year,
         priceSnapshot: unitPrice[w.vintageId],
         quantity: w.quantity,
+        negotiated: pricedLine.get(w.vintageId)!.negotiated,
+        discountPercent: pricedLine.get(w.vintageId)!.discountPercent,
+        lineTotal: pricedLine.get(w.vintageId)!.lineTotal,
       })),
     })
     // Same rows the public wine path writes — one write path per order type, shared

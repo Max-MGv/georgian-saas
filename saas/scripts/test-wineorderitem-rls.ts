@@ -42,7 +42,8 @@ function check(label: string, ok: boolean, detail = '') {
 async function cleanup() {
   // WineOrderItem cascades from WineOrder (onDelete: Cascade), but delete it
   // explicitly first anyway in case a previous run died mid-way.
-  await db.wineOrderItem.deleteMany({ where: { wineOrder: { tenantId: { in: [A, B] } } } })
+  await db.wineOrderItem.deleteMany({ where: { OR: [{ wineOrder: { tenantId: { in: [A, B] } } }, { order: { tenantId: { in: [A, B] } } }] } })
+  await db.order.deleteMany({ where: { tenantId: { in: [A, B] } } })
   await db.wineOrder.deleteMany({ where: { tenantId: { in: [A, B] } } })
   await db.tenant.deleteMany({ where: { id: { in: [A, B] } } })
 }
@@ -115,6 +116,30 @@ async function main() {
   check("Tenant A cannot delete tenant B's WineOrderItem via deleteMany (RLS)", deleted.count === 0, `deleted ${deleted.count}`)
   const bStillExists = await db.wineOrderItem.findUnique({ where: { id: itemB.id } })
   check("Tenant B's WineOrderItem still exists after the rejected cross-tenant delete attempt", bStillExists !== null)
+
+  // ── T-22: a wine line can belong to a BOOKING (wine for the table) — same isolation through Order ──
+  const bookingA = await withTenantDb(A, tx => tx.order.create({ data: { visitType: 'TASTING', date: new Date(), timeSlot: '10:00', guestCount: 2, name: 'ZZ', surname: 'A', tenantId: A } }))
+  const bookingB = await withTenantDb(B, tx => tx.order.create({ data: { visitType: 'TASTING', date: new Date(), timeSlot: '10:00', guestCount: 2, name: 'ZZ', surname: 'B', tenantId: B } }))
+  const tableA = await withTenantDb(A, tx => tx.wineOrderItem.create({ data: { orderId: bookingA.id, wineNameSnapshot: 'ZZ Table A', vintageYearSnapshot: 2020, priceSnapshot: 10, quantity: 2, lineTotal: 20 } }))
+  const tableB = await withTenantDb(B, tx => tx.wineOrderItem.create({ data: { orderId: bookingB.id, wineNameSnapshot: 'ZZ Table B', vintageYearSnapshot: 2021, priceSnapshot: 20, quantity: 3, lineTotal: 60 } }))
+  check('A booking-parent WineOrderItem can be created and read by its own tenant', (await withTenantDb(A, tx => tx.wineOrderItem.findUnique({ where: { id: tableA.id } })))?.lineTotal === 20)
+  check("Tenant B's booking wine line is invisible to tenant A (RLS through Order)", (await withTenantDb(A, tx => tx.wineOrderItem.findUnique({ where: { id: tableB.id } }))) === null)
+  const tWrote = await withTenantDb(A, tx => tx.wineOrderItem.updateMany({ where: { id: tableB.id }, data: { quantity: 999 } }))
+  check("Tenant A cannot update tenant B's booking wine line", tWrote.count === 0 && (await db.wineOrderItem.findUnique({ where: { id: tableB.id } }))?.quantity === 3)
+  let tableCrossRejected = false
+  try {
+    await withTenantDb(A, tx => tx.wineOrderItem.create({ data: { orderId: bookingB.id, wineNameSnapshot: 'Cross', vintageYearSnapshot: 2022, priceSnapshot: 1, quantity: 1, lineTotal: 1 } }))
+  } catch { tableCrossRejected = true }
+  check("A wine line on another tenant's booking is rejected by WITH CHECK", tableCrossRejected)
+  // The database refuses a line with no parent or two parents.
+  let noParent = false, twoParents = false
+  try { await db.wineOrderItem.create({ data: { wineNameSnapshot: 'Orphan', vintageYearSnapshot: 2020, priceSnapshot: 1, quantity: 1 } }) } catch { noParent = true }
+  try { await db.wineOrderItem.create({ data: { wineOrderId: wineOrderA.id, orderId: bookingA.id, wineNameSnapshot: 'Both', vintageYearSnapshot: 2020, priceSnapshot: 1, quantity: 1 } }) } catch { twoParents = true }
+  check('A wine line with no parent is refused (CHECK)', noParent)
+  check('A wine line with two parents is refused (CHECK)', twoParents)
+  // Deleting the booking takes its table wine with it (cascade).
+  await db.order.delete({ where: { id: bookingA.id } })
+  check('Deleting a booking deletes its table-wine lines', (await db.wineOrderItem.findUnique({ where: { id: tableA.id } })) === null)
 
   await cleanup()
   console.log('\n──────────────────────────────────────────────────')

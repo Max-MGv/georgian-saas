@@ -447,6 +447,11 @@ model Order {
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @default(now()) @updatedAt
   masterclassLines        OrderMasterclass[]
+  /// Wine for the table (T-22) — bottles added to this booking and charged on its invoice.
+  wineLines               WineOrderItem[]
+  /// Wine bought by this booking's guests for themselves (T-22 part 2): separate pickup wine orders linked to the visit,
+  /// never on its invoice.
+  guestPurchases          WineOrder[]        @relation("GuestPurchases")
   extras                  OrderExtra[]
   payments                Payment[]
   orderEvents             OrderEvent[]
@@ -534,6 +539,11 @@ enum OrderEventType {
   ADDON_REMOVED
   // A per-person line followed a change of paying guests (D-11). Payload: lines [{ name, from, to }].
   ADDON_QTY_SYNCED
+  // Wine for the table on a booking (T-22). Payload: wine, year, quantity, amount.
+  WINE_ADDED
+  WINE_REMOVED
+  // "Record guest purchase" created a pickup wine order linked to this visit. Payload: wineOrderId, customer, amount.
+  GUEST_PURCHASE_LINKED
 }
 
 enum ActorType {
@@ -605,6 +615,10 @@ model MasterclassItem {
 model AddOnGroup {
   id                String            @id @default(cuid())
   tenantId          String
+  /// ITEMS = a group of add-on items. WINE = the one "Wine for the table" row (T-22): its contents are the winery's bookable
+  /// wines, not items — the group only carries its name, who sees it, which visits and its place in the order. At most one
+  /// per winery (partial unique index in the migration).
+  kind              AddOnGroupKind    @default(ITEMS)
   nameEn            String
   /// Georgian name; null → the English name is shown.
   nameKa            String?
@@ -620,6 +634,11 @@ model AddOnGroup {
   orderLines        OrderMasterclass[]
 
   @@index([tenantId])
+}
+
+enum AddOnGroupKind {
+  ITEMS
+  WINE
 }
 
 /// One add-on on one booking. The line is a SNAPSHOT: name, unit and group are copied onto it when it is added,
@@ -727,6 +746,10 @@ model WineOrder {
   /// taken on the business-shaped form. An INDIVIDUAL order has no company, and its
   /// `businessName` holds the person's name so every list keeps something to show.
   customerType       BookingType    @default(COMPANY)
+  /// T-22 part 2 — the visit this order came out of ("Record guest purchase"): a guest of a booking bought wine for
+  /// themselves. A link only; SET NULL if the booking is deleted. Never touches the booking's total or invoice.
+  sourceOrderId      String?
+  sourceOrder        Order?         @relation("GuestPurchases", fields: [sourceOrderId], references: [id], onDelete: SetNull)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
@@ -744,6 +767,8 @@ model WineOrder {
   @@index([tenantId, abandonedAt])
   // The Wine Orders calendar groups by this (T-14, Plan-WineOrderFeatures Chunk 8).
   @@index([tenantId, preferredDate])
+  // "Sales from this visit" (T-22).
+  @@index([tenantId, sourceOrderId])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -912,6 +937,9 @@ model WineVintage {
   sparkling    Boolean?
   alcoholLevel Float?
   wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  /// Offered as wine for the table on bookings (T-22). One flag per vintage; on a PRODUCT-level winery the admin switch sets
+  /// all of a wine's vintages together.
+  bookable     Boolean         @default(false)
   orderItems   WineOrderItem[]
   companyPrices CompanyWinePrice[]
 
@@ -919,17 +947,33 @@ model WineVintage {
   @@index([wineId])
 }
 
+/// One line of wine SOLD. Belongs to a wine order (wineOrderId) OR to a booking (orderId — wine for the table, T-22,
+/// vault/Plan-AddOnsAndWine.md), exactly one (CHECK in the migration). One table of wine sold, whatever the source
+/// (Max, D-6/D-7): statistics read `lineTotal`, never `priceSnapshot × quantity` again.
 model WineOrderItem {
   id                  String       @id @default(cuid())
-  wineOrderId         String
+  wineOrderId         String?
+  /// Wine for the table on a booking. Cascades with the booking.
+  orderId             String?
   wineVintageId       String?
   wineNameSnapshot    String
   vintageYearSnapshot Int
+  /// Per bottle BEFORE this line's % — the negotiated price when `negotiated`, else the standard price.
   priceSnapshot       Int
   quantity            Int
+  /// True when the company's agreed price replaced the standard one (no % on top).
+  negotiated          Boolean      @default(false)
+  /// The % taken off THIS line (null = none). Standard lines of a discounted company only.
+  discountPercent     Float?
+  /// Tetri actually charged for this line, rounded per line (C-1). Null only on a row nothing has written since the
+  /// T-22 migration backfilled every existing line — readers fall back to quantity × priceSnapshot less the order's %.
+  lineTotal           Int?
   createdAt           DateTime     @default(now())
-  wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  wineOrder           WineOrder?   @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  order               Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
 }
 
 /// A bug report or feature request submitted via the floating report widget on
