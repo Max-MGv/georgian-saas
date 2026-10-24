@@ -539,6 +539,14 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [x] Chunk 11: Playwright tiers 1–4 on localhost, blind review + fixes, tix review card, tier 5 7/7, release note draft with before/after screenshots
 - [x] **Production** 2026-10-23 — Chunk 12 runbook (migrations, data check against the production baseline, merge) — demo reset left to the nightly reseed
 
+## v1.19 — Order page editing + release switches + platform login ✅ ON PRODUCTION 2026-10-24 (master `1a34c4e` → `a668954` → `dd90e93`)
+[[Plan-OrderPageMirror]] · [[Max-Exploring-Workflows]] · FeatureLog #238–#239 · MaintenanceNotes §39 · SessionLog 2026-10-24 (late).
+- [x] **T-215** Order page mirrors the booking forms: every card click-to-edit (red pencil), contacts with "Choose the Guide" autofill, company change re-prices, paid orders lock; 5 QA bugs fixed; tier 5 7/7 (Flitt typing helper fixed); no migration
+- [x] **T-297** Published / Shown-to-clients switches on every release row (Super Admin → Releases)
+- [x] **T-298** `/admin/login` no longer 500s on the platform domain (`vineworks.ge` / `www.vineworks.ge`, no winery); super admin can sign in there
+- [ ] **Max: publish the release notes on the production board** — drafts 2026-10-24 (T-215, 5 before/after pairs; Georgian text is Claude's own wording, read it first) and 2026-10-23 (T-152) → use the new switches. Optional: retake the 24 Oct shots (they show the test company name "ZZ Demo Tours (T-215 shots)")
+- [ ] Not done: side-panel / phone-width screenshots for the T-215 note; Georgian order page checked only by i18n parity, not by eye
+
 ---
 
 ## Draft Ideas / Backlog (not planned yet — notes only)

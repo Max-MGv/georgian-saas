@@ -82,6 +82,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   logged out → login, super-admin sign-in → `/super-admin`, releases/tenants/tickets 200, winery-domain login still 200.
   Workaround until shipped: use `nikalasmarani.vineworks.ge/super-admin`. **On staging only** — production needs Max's go.
   Note: sessions are per domain, so signing in on `www.vineworks.ge` is a separate login from `nikalasmarani.vineworks.ge`.
+  **T-298 IS NOW ON PRODUCTION** (Max: "push too if its a simple fix why not push to prod"): `master` `a668954 → dd90e93`
+  (`dpl_A62hWyz1L1kUGCLAXemD3uUzUTm2`). Live check by curl: `vineworks.ge/admin`, `vineworks.ge/super-admin`,
+  `www.vineworks.ge/admin/login` all end on `www.vineworks.ge/admin/login` = **200** with the password form (was 500); winery login
+  still 200; no new runtime errors on the new deployment (the old error group only grew from Claude's own polling before the deploy
+  went live). `tix ship T-298 --yes-prod` done. Not signed in on the live platform domain by Claude (Max's own login). Vault also
+  updated for a context clear: Roadmap v1.19, Plan-OrderPageMirror status, FeatureLog #238/#239, MEMORY.md "State at the end of 2026-10-24".
 
 ---
 
