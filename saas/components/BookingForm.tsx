@@ -4,7 +4,7 @@
 // FIELDS.form inside saas/app/admin/content/ContentClient.tsx so the admin panel stays in sync.
 // See vault/MaintenanceNotes.md §1 for full details.
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { asTetri, formatTetri } from '@/lib/money'
 import { createBooking, type BookingFormData } from '@/app/actions/createBooking'
 import { useContactSelection } from '@/lib/useContactSelection'
@@ -12,6 +12,7 @@ import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactR
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { lineAmount, sumQuantityLines } from '@/lib/orderLines'
 import { groupShownOn, localName } from '@/lib/addOns'
+import { priceWineOrder } from '@/lib/winePricing'
 import { countsFromVisit, findProductTier, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkBookingCounts, countRulesFromSettings, type CountRuleKey, type CountsError } from '@/lib/bookingInput'
 import { t } from '@/lib/t'
@@ -50,14 +51,23 @@ type ProvenCompany = {
   // Per-company payment override (#148). null = follow the Companies section default; true =
   // always skip; false = always require. Label-only — the real gate is shouldTakePayment().
   skipPayment: boolean | null
+  /** The company's wine terms (T-22) — its % off and agreed prices per vintage — that price the wine added to the booking. Only ever here once the code is proven. */
+  wineDiscountPercent: number | null
+  winePrices: Record<string, number>
 }
 type MenuItem = { id: string; name: string; type: string }
 /** One add-on (still `MasterclassItem` in the database) and the group the winery put it in (T-7). */
 type AddOnItem = { id: string; name: string; nameKa: string | null; unitType: string; pricePerUnit: number }
 type AddOnGroupView = {
-  id: string; nameEn: string; nameKa: string | null
+  id: string; sortOrder: number; nameEn: string; nameKa: string | null
   showToCompanies: boolean; showToIndividuals: boolean; visitTypes: string[]
   items: AddOnItem[]
+}
+/** The wine group and its bottles (T-22). `price` is the WEBSITE price; a proven company's own terms are applied on top, client-side and again on the server. */
+type WineGroupView = {
+  id: string; sortOrder: number; nameEn: string; nameKa: string | null
+  showToCompanies: boolean; showToIndividuals: boolean; visitTypes: string[]
+  wines: { vintageId: string; name: string; nameKa: string | null; year: number; price: number; color: string }[]
 }
 
 const C = {
@@ -105,6 +115,8 @@ type Props = {
   menuItems?: MenuItem[]
   /** Active groups that have active items, in the winery's order. Which one a guest sees: `groupShownOn()`. */
   addOnGroups?: AddOnGroupView[]
+  /** The "Wine for the table" row (T-22): the group and the winery's bookable wines at their WEBSITE price (no company terms in page props). Null = not offered. */
+  wineGroup?: WineGroupView | null
   minGuestsTasting?: number
   minGuestsTastingLunch?: number
   blockedDates?: string[]
@@ -152,7 +164,7 @@ const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: f
 // splitFullName now lives in lib/splitFullName.ts so the admin New Order form
 // splits a single Name box the same way (see that file for the convention).
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], addOnGroups = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], countRuleSettings = {}, onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], addOnGroups = [], wineGroup = null, minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], countRuleSettings = {}, onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
     let str = messagesContent[key] || t(locale, tKey)
@@ -211,6 +223,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [contactCompact, setContactCompact] = useState(false)
   // T-21: every add-on group starts collapsed to one summary row (T-7: one row per group).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  // Wine for the table (T-22): bottles per vintage id.
+  const [wineQty, setWineQty] = useState<Record<string, number>>({})
   /** Which company the four fields above were last filled from — see the effect below. */
   const prevCompanyIdRef = useRef('')
 
@@ -428,7 +442,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       setCodeError(mc('onsite_access_code_error', 'form.access_code_error'))
       return
     }
-    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment, wineDiscountPercent: result.company.wineDiscountPercent, winePrices: result.company.winePrices })
     // Ask the browser to save the credential natively (triggers "Save password?" prompt)
     if (typeof window !== 'undefined' && 'PasswordCredential' in window) {
       try {
@@ -467,7 +481,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
     setCompanyId(result.company.id)
     setDirectCompanyName(result.company.name)
-    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment })
+    setProven({ prices: result.company.bookingPrices, registrationFee: result.company.bookingRegistrationFee, skipPayment: result.company.skipPayment, wineDiscountPercent: result.company.wineDiscountPercent, winePrices: result.company.winePrices })
   }
 
   function clearDirectCode() {
@@ -598,6 +612,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
       } : {}),
       // Any form can carry add-ons now (T-7): the groups decide who is offered what, and the server checks it again.
       masterclassLines: activeMcLines,
+      // Wine for the table (T-22): only ids and bottle counts — the server reads the names, the prices and the company's terms itself.
+      wineLines: wineChosen.map(w => ({ vintageId: w.vintageId, quantity: wineQty[w.vintageId]! })),
     }
   }
 
@@ -651,6 +667,82 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const groupTitle = (g: AddOnGroupView) => localName(g.nameEn, g.nameKa, locale)
   const itemTitle = (m: AddOnItem) => localName(m.name, m.nameKa, locale)
 
+  // ── Wine for the table (T-22) ──
+  // Offered like any group (audience + visit type). Prices: the website price, or — once the company is PROVEN by its code — its own
+  // agreed prices and % (the resolver sent them with the proof; before that nothing about the company is known). Each line is rounded
+  // on its own; the server prices it again.
+  const wineVisible = !!wineGroup && wineGroup.wines.length > 0
+    && groupShownOn({ active: true, showToCompanies: wineGroup.showToCompanies, showToIndividuals: wineGroup.showToIndividuals, visitTypes: wineGroup.visitTypes }, bookingType, visitType)
+  const wineTerms = bookingType === 'COMPANY' && selectedCompany ? selectedCompany : null
+  const wineChosen = wineVisible ? wineGroup!.wines.filter(w => (wineQty[w.vintageId] ?? 0) > 0) : []
+  const winePricing = priceWineOrder(
+    wineChosen.map(w => ({ vintageId: w.vintageId, quantity: wineQty[w.vintageId]!, standardPrice: w.price })),
+    wineTerms?.winePrices ?? {}, wineTerms?.wineDiscountPercent ?? null,
+  )
+  const wineAmt = winePricing.total
+  const wineBottles = wineChosen.reduce((n, w) => n + wineQty[w.vintageId]!, 0)
+  const wineTitle = wineGroup ? localName(wineGroup.nameEn, wineGroup.nameKa, locale) : ''
+  /** One bottle of this wine as this guest would pay for it — shows the reason (agreed / −10%) before anything is added. */
+  const winePriceNote = (w: WineGroupView['wines'][number]) => {
+    const one = priceWineOrder([{ vintageId: w.vintageId, quantity: 1, standardPrice: w.price }], wineTerms?.winePrices ?? {}, wineTerms?.wineDiscountPercent ?? null).lines[0]!
+    const std = formatTetri(asTetri(one.unitPrice))
+    return one.negotiated ? `${std} · ${t(locale, 'form.wine_agreed')}`
+      : one.discountPercent ? `${std} −${one.discountPercent}% = ${formatTetri(asTetri(one.lineTotal))}`
+      : std
+  }
+  function setWineBottles(id: string, q: number) {
+    setWineQty(prev => ({ ...prev, [id]: Math.max(0, Math.min(99, q)) }))
+  }
+  // Where the wine row sits among the groups: the winery's own order (Admin → Add-ons).
+  const firstAfterWine = wineVisible ? visibleGroups.find(g => g.sortOrder > wineGroup!.sortOrder) : undefined
+  // A function, not a value: it uses labelStyle, which is declared further down this component.
+  const renderWineRow = () => wineVisible ? (
+    <div key={wineGroup!.id}>
+      <label style={labelStyle}>{wineTitle}</label>
+      <div className="rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
+        <button type="button" aria-expanded={!!openGroups[wineGroup!.id]} aria-controls={`wine-list-${wineGroup!.id}`}
+          onClick={() => setOpenGroups(prev => ({ ...prev, [wineGroup!.id]: !prev[wineGroup!.id] }))}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-left"
+          style={{ backgroundColor: C.bg, color: wineBottles > 0 ? C.text : C.muted }}>
+          <span>
+            {wineBottles > 0
+              ? `${wineBottles} ${t(locale, wineBottles === 1 ? 'form.bottle_singular' : 'form.bottle_plural')} · ${formatTetri(asTetri(wineAmt))}`
+              : t(locale, 'form.addon_choose', { name: wineTitle, n: wineGroup!.wines.length })}
+          </span>
+          <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: openGroups[wineGroup!.id] ? 'rotate(180deg)' : undefined }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {openGroups[wineGroup!.id] && (
+          <div id={`wine-list-${wineGroup!.id}`} className="divide-y border-t" style={{ borderColor: C.border }}>
+            {wineGroup!.wines.map(w => {
+              const q = wineQty[w.vintageId] ?? 0
+              const name = `${localName(w.name, w.nameKa, locale)} ${w.year}`
+              return (
+                <div key={w.vintageId} className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: C.bg }}>
+                  <span aria-hidden className="flex-shrink-0 rounded-sm" style={{ width: 8, height: 26, backgroundColor: w.color }} />
+                  <div className="flex-1 min-w-0 text-sm" style={{ color: C.text }}>
+                    {name}
+                    <span className="block text-xs" style={{ color: C.faint }}>{winePriceNote(w)}</span>
+                  </div>
+                  <div className="flex items-center rounded-md border overflow-hidden flex-shrink-0" style={{ borderColor: C.border }}>
+                    <button type="button" onClick={() => setWineBottles(w.vintageId, q - 1)} disabled={q === 0}
+                      aria-label={`${t(locale, 'form.wine_less')} — ${name}`}
+                      className="w-8 h-8 text-base disabled:opacity-40" style={{ color: C.text, backgroundColor: C.bg }}>−</button>
+                    <output aria-label={`${name}`} className="min-w-[2rem] text-center text-sm tabular-nums" style={{ color: C.text }}>{q}</output>
+                    <button type="button" onClick={() => setWineBottles(w.vintageId, q + 1)}
+                      aria-label={`${t(locale, 'form.wine_more')} — ${name}`}
+                      className="w-8 h-8 text-base" style={{ color: C.text, backgroundColor: C.bg }}>+</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null
+
   // ── Price preview: priceCounts(), the server's own arithmetic (§4.2) — it cannot drift from it ──
   // Individuals price off the Individuals ladder; a company only once proven by its code. Each product looks up
   // its own row by its own count (D-2). A product with guests that the ladder does not offer is "not offered"
@@ -661,15 +753,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : null
   const missingProducts: Product[] = previewRates && payingGuests > 0 ? notOffered(previewRates, counts) : []
   const previewTotal: number | null = previewRates && payingGuests > 0 && missingProducts.length === 0
-    ? priceCounts(previewRates, counts, { masterclass: masterclassAmt, extras: 0 })
+    ? priceCounts(previewRates, counts, { masterclass: masterclassAmt, extras: 0, wine: wineAmt })
     : null
   // Individuals with no ladder: the home page's display price, as before (an estimate, never stored).
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
-  const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount + masterclassAmt : null)
+  const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount + masterclassAmt + wineAmt : null)
   const individualRate: number | null = bookingType === 'INDIVIDUAL'
     ? (previewRates ? previewRates[visitType === 'TASTING' ? 'tastingOnly' : 'tastingLunch'] : basePrice)
     : null
-  const enhancedTotal = previewTotal ?? masterclassAmt
+  const enhancedTotal = previewTotal ?? masterclassAmt + wineAmt
 
   // T-272 (Max, 2026-10-23): an individual's visit tile shows the Individuals row that prices the current guest
   // count — its range ("3–6 guests"; the last row "7+ guests"; a one-number row "1 guest") and that row's price —
@@ -706,11 +798,18 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     }
   })
 
+  // Wine for the table: one row per wine, "name year × bottles" and what it costs.
+  const wineReviewRows: ReviewRow[] = winePricing.lines.map(l => {
+    const w = wineGroup?.wines.find(x => x.vintageId === l.vintageId)
+    return { label: `${w ? localName(w.name, w.nameKa, locale) : ""} ${w?.year ?? ""} × ${l.quantity}`.trim(), value: formatTetri(asTetri(l.lineTotal)) }
+  })
+
   const confirmVisitRows: ReviewRow[] = [
     { label: fc('form_visit_type', 'form.visit_type'), value: visitType === 'LUNCH' ? fc('form_lunch_only', 'form.lunch_only') : fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
     { label: fc('form_date', 'form.date'), value: confirmDateLabel },
     { label: t(locale, 'form.confirm_arrive'), value: timeSlot },
     ...masterclassReviewRows,
+    ...wineReviewRows,
   ]
 
   // The other contact roles (Guide, …) the guest filled in — shown like Contact Person. (F7)
@@ -1255,7 +1354,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           const chosen = activeMcLines.filter(l => g.items.some(m => m.id === l.masterclassItemId))
           const chosenAmt = sumQuantityLines(chosen)
           return (
-          <div key={g.id}>
+          <Fragment key={g.id}>
+          {firstAfterWine === g && renderWineRow()}
+          <div>
             <label style={labelStyle}>{groupTitle(g)}</label>
             {/* T-21: collapsed to one summary row by default — the full list was
                 always open and took a lot of room for an optional extra. */}
@@ -1310,8 +1411,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               )}
             </div>
           </div>
+          </Fragment>
           )
         })}
+        {/* The wine row after the last add-on group (or alone), when it is not placed before one above. */}
+        {!firstAfterWine && renderWineRow()}
 
         {/* Enhanced: Food notes */}
         {isEnhanced && (
@@ -1460,6 +1564,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 {masterclassAmt > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.add_ons')}: {formatTetri(asTetri(masterclassAmt))}</p>
                 )}
+                {wineAmt > 0 && (<p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.wine')}: {formatTetri(asTetri(wineAmt))}</p>)}
               </div>
             </div>
           ) : payingGuests === 0 ? null : (
@@ -1476,6 +1581,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                 {masterclassAmt > 0 && (
                   <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.add_ons')}: {formatTetri(asTetri(masterclassAmt))}</p>
                 )}
+                {wineAmt > 0 && (<p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.wine')}: {formatTetri(asTetri(wineAmt))}</p>)}
               </div>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>

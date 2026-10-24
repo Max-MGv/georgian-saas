@@ -71,17 +71,20 @@ show screens early: **Part A = add-ons (T-7) end to end, then Part B = wine (T-2
   terms section also for booking companies, `lib/tableWine.ts` (ONE pricing function for every write path), `createBooking` + `createOrderAdmin`
   store wine, `app/actions/orderWine.ts` (add/update/remove + events), all re-pricing paths include wine (`LineTotals.wine`), order page
   "Wine for the table" card (draft until Save), New Order wine card, invoice print + email + `InvoiceSent.wineLines`.
-- 🚧 **IN PROGRESS (uncommitted, not compiled): public booking form wine row** — `app/(site)/page.tsx` loads `wineGroup` (done); `BookingForm.tsx`:
-  props/types/state/pricing/payload/review rows/`wineRowEl` JSX are written. STILL TO DO there: (1) `import { Fragment, useState, ... } from 'react'`
-  (line 7 lacks Fragment), (2) t.ts keys EN+KA: `form.wine_agreed`, `form.bottle_singular`, `form.bottle_plural`, `form.wine_less`, `form.wine_more`,
-  (3) show a "Wine: X" line in the two price-summary blocks (like the add-ons line), (4) `npx tsc --noEmit`, (5) QA spec `tests/_qa/wine-public.spec.ts`
-  (individual website price; company with agreed price + % after code; tamper: unbookable wine / forged qty / hidden group refused).
-- ⏭ **STILL TO BUILD (Part B):** orders list "Table wine" column + CSV columns (`columnDefs.ts`, `exportOrdersCsv`), staff sheet wine, statistics
-  (`lib/wineSales.ts` = the only reader of wine sold across sources; wine statistics Source filter; booking revenue 3-level switch; fix #95 name split
-  — group by vintage id and sum `lineTotal`), guest purchases ("Record guest purchase" → pickup `WineOrder` with `sourceOrderId`, phone optional C-4,
-  "Sales from this visit" dashed card, link both ways, `GUEST_PURCHASE_LINKED` event), onboarding wizard copy, demo seed table wine, QA specs
-  (order page wine: add/change/remove + terms; New Order wine; invoice), update `Playwright` specs that mention masterclass elsewhere, MaintenanceNotes §40
-  addendum (wine: `tableWine.ts`, `lineTotal`, one parent), FeatureLog row, KnownBugs #94/#95 status, release-note draft, `tix review` cards on T-7/T-22.
+- ✅ **Public booking form wine row** `7be4e8c` — one collapsible "Wine for the table" row (+/- per bottle), website price for individuals, a company's agreed
+  price / % only after its code is proved, review rows + totals. QA `tests/_qa/wine-public.spec.ts` 4/4 (incl. forged / unbookable / negative quantity refused).
+- ✅ **Orders list / CSV / staff sheet** `841fc7f` — Add-ons + Table wine columns (hidden for demo), CSV "Add-ons (GEL)" + "Table wine (GEL)", staff sheet lists both.
+- ✅ **Wine statistics** `61a8c3b` — `lib/wineSales.ts` is the only reader of wine sold (sources `order` / `guest` / `table`), **Where it was sold** filter, grouped by
+  vintage id, revenue = each line's own amount (**fixes KnownBugs #95**).
+- ✅ **Guest purchases** `b517b4b` — order page "Sales from this visit" (dashed card, "not on the invoice", + Record guest purchase) creates a pickup wine order
+  through `createWineOrderAdmin({ sourceOrderId })` (INDIVIDUAL, website price, phone optional, `GUEST_PURCHASE_LINKED` event); wine-orders list shows
+  "From the visit of <date> · <company>" linking back; the booking total/invoice never change. QA `tests/_qa/guest-sales.spec.ts` 4/4.
+- ✅ **Booking revenue 3-level switch** `3687355` — `lib/revenueLevel.ts`: visit only · + wine for the table · + guest purchases on the Orders revenue strip (`?rev=`)
+  and booking statistics; default = the invoiced total so no existing number moves; only shows once a booking has wine around it.
+- ⏭ **STILL TO DO before hand-over:** demo seed table wine, onboarding wizard copy (T-7 step name), an edge-case pass (390px phone, wine module off, deactivated
+  wine, paid-order balance with wine), remaining committed Playwright specs that mention masterclass names, `tix review` cards on T-7 / T-22 (Max tests on
+  localhost:3100 first), release-note draft WITH screenshots (do it when it is on staging — Georgian wording is Claude's, flag it). **Open questions for Max:** G-1
+  (simple-form companies see add-on rows — built as "yes"); what "i uploaded 2" meant (nothing found on disk).
 
 **Resume checklist for a fresh session:** (1) `cd georgian-saas && git status` — branch `staging`, ~12 local commits unpushed, NEVER push without Max's go;
 (2) dev server: `preview_start saas-3100` (entry lives in `C:\Users\Max\.claude\launch.json`, port 3100 — 3000 is MaxFinances); it is STOPPED now;

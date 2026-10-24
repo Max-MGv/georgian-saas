@@ -1436,3 +1436,32 @@ Plan: [[Plan-AddOnsAndWine]]. **Not on staging or production yet** — built on 
    `masterclass` (saved in browsers' localStorage), only its label changed.
 9. `OrderEventType` gained `ADDON_ADDED` / `ADDON_REMOVED` / `ADDON_QTY_SYNCED` (migration `20261025090000_addon_events`). Nothing reads
    the event list yet, so an old build on the shared dev DB is unaffected.
+
+**Wine for the table, guest purchases, wine statistics (T-22)**
+
+10. **A bottle line has one parent.** `WineOrderItem` belongs to a wine order OR a booking (`wineOrderId` / `orderId`, CHECK exactly one,
+    RLS policy covers both). Anything that reads or deletes bottle lines must handle both parents. `lineTotal` is each line's own price,
+    rounded per line (D-17); nothing multiplies `priceSnapshot × quantity` again — use `wineLineAmount()` / `wineLineTotalFor()`.
+11. **One pricing function for wine, everywhere.** `lib/winePricing.ts` (`priceWineOrder`) prices wine orders AND table wine;
+    `lib/tableWine.ts` (`priceTableWine`) is the one validator/pricer for every booking write path (public `createBooking`, admin
+    `createOrderAdmin`, order page `orderWine.ts`, and the re-pricing paths `updateOrderEnhanced` / `assignOrderCompany` / `updateOrderBooking`
+    — all of which must keep `wineLines` in the total; a destructuring that drops it silently prices a booking without its wine).
+12. **Company wine terms reach a booking only after the code is proven** (§35). The public form gets them via the code-gated resolver
+    (`ProvenCompany.wineDiscountPercent / winePrices`); `priceTableWine` takes `termsCompanyId` only from a server-proven company.
+    A guest purchase never has a company: INDIVIDUAL pickup at website prices (D-20, phone optional).
+13. **Wine sold — one reader.** `lib/wineSales.ts`: `loadWineSales()` (sources `order` / `guest` / `table`, each parent's own cancelled /
+    abandoned rule, table wine dated by the VISIT day, grouped by vintage id) feeds the wine statistics; `BOOKING_WINE_SELECT` +
+    `bookingWine()` give a booking's table wine (inside its total) and guest purchases (outside it). Do not query `WineOrderItem` for
+    statistics anywhere else. KnownBugs #95 (top wines ignored the % and split by name) is fixed by this.
+14. **Booking revenue and wine revenue overlap by design** (table wine is in the booking total and in the wine statistics) — never add the
+    two statistics. The only place they meet is the 3-level switch (`lib/revenueLevel.ts`: visit only · + wine for the table · + guest
+    purchases) on the Orders revenue strip (`?rev=`) and booking statistics; default = the invoiced total.
+15. **Guest purchases are ordinary wine orders** created through `createWineOrderAdmin({ sourceOrderId })` (forces INDIVIDUAL + PICKUP,
+    phone optional, verifies the booking under the tenant, writes `GUEST_PURCHASE_LINKED` on the booking). They never touch the booking
+    total or invoice; the order page's "Sales from this visit" card and the wine-orders "From the visit of …" badge link both ways. A
+    future wine-order write path must keep `sourceOrderId` intact (`ON DELETE SET NULL`).
+16. **Wine module off ⇒ table wine and guest purchases are off everywhere** (public row, admin card, columns, statistics). Table wine on
+    existing bookings stays stored and counted in their totals.
+17. `OrderEventType` also gained `WINE_ADDED` / `WINE_REMOVED` / `GUEST_PURCHASE_LINKED` (`20261025120100_wine_events`) and
+    `InvoiceSent.wineLines` (`20261025123000_invoice_sent_wine_lines`). Event values are written only once this code is live (an old
+    Prisma client crashes on an unknown enum value → rollback safety).

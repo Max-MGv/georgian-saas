@@ -10,16 +10,19 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ## 2026-10-25 — T-7 + T-22 build status (READ THIS FIRST; full detail + resume checklist in `Plan-AddOnsAndWine.md` §0c)
 
-- **All on localhost + the shared dev DB. NOTHING pushed to staging, NOTHING on production.** ~12 local commits on branch `staging`.
-- **Part A (add-ons, T-7) is complete and tested** (admin page, public form, order page, New Order, invoices, staff sheet, content-editor mirror).
-- **Part B (wine for the table, T-22) is mostly built:** schema + 3 migrations on dev, per-line wine pricing, wines switch, company terms, `lib/tableWine.ts`,
-  createBooking / New Order / order-page actions, order page + New Order cards, invoice. `23aa133` is the last commit.
-- **In progress, uncommitted & not compiled:** the public booking form's "Wine for the table" row (`components/BookingForm.tsx`, `app/(site)/page.tsx`).
-  Remaining: Fragment import, 5 t.ts keys (EN+KA), summary line, tsc, QA spec.
-- **Still to build:** orders-list/CSV table-wine column, statistics (`lib/wineSales.ts`, source filter, 3-level revenue, fix #95), guest purchases,
-  demo seed, QA specs for wine, docs (MaintenanceNotes §40 addendum, FeatureLog, KnownBugs), release-note draft, `tix review` on T-7/T-22.
-- **Dev server is stopped** (`preview_start saas-3100`); the dev item "Extra khachapuri" is active (shows up inside the Masterclass row on the OLD staging code —
-  switch it off before Max checks staging).
+- **All on localhost + the shared dev DB. NOTHING pushed to staging, NOTHING on production.** ~17 local commits on branch `staging` (last: `5d84454`).
+- **BUILD COMPLETE on localhost (Part A add-ons T-7 + Part B wine T-22):** add-ons admin/public form/order page/New Order/invoices/staff sheet; wine for the table
+  (admin switch, company terms, public form, order page, New Order, invoice); orders list Add-ons + Table wine columns, CSV, staff sheet; guest purchases
+  ("Sales from this visit", badge on wine orders); `lib/wineSales.ts` + wine statistics Source filter (fixes #95); booking revenue 3-level switch;
+  demo seed table wine (type-checked only — NOT run, it wipes a tenant); onboarding copy. Docs: MaintenanceNotes §40 (items 10–17), FeatureLog #240, KnownBugs #94/#95.
+- **Tests (all green 2026-10-25):** unit 152 + 24 + 15 + 14; QA specs (untracked, `saas/tests/_qa/`): addons-public 5, addons-admin 4, wine-public 4, wine-admin 3,
+  guest-sales 4, edge-wine 3 (390px no sideways scroll, cancelled booking refuses guest sale, empty purchase refused, deactivated wine stays readable).
+- **`tix review` cards posted on T-7 and T-22 (now Ready to test, test steps on the tickets).** Waiting for Max to test on localhost:3100 and say what to change.
+- **Not done / for later:** release-note draft with screenshots (do when it is on staging; Georgian wording is Claude's), production read-only counts + runbook
+  (need Max's explicit go), committed Playwright specs that mention masterclass names elsewhere were not re-run as a full suite, demo seed untested.
+- **Open for Max:** G-1 (simple-form companies see add-on rows — built as "yes"); his message "i uploaded 2" — nothing found on disk; dev item
+  "Extra khachapuri" is active (shows in the old Masterclass row on staging until this is pushed); no wine is switched on "On bookings" in dev (specs restore it) — he
+  switches two on in Admin → Wines to see the wine row. Dev server `saas-3100` is running.
 - Max's rules for this build: he reviews on localhost:3100 and tells me what to change BEFORE any push; nothing to master/production without his explicit go.
 
 ---
