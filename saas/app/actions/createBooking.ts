@@ -267,14 +267,18 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return { success: false, error: await mc('onsite_err_hot_dish', 'form.err_hot_dish') }
     }
 
-    // ── Masterclass lines (#93): this tenant's items, active, whole quantities, FLAT = 1, price from the DB ──
-    // Offered on the detailed company form only, as before; anything sent from another layout is ignored.
-    const catalogue = layout === 'boxes' && (data.masterclassLines ?? []).length > 0
+    // ── Add-on lines (#93, T-7): this tenant's items, active, in a group offered to this kind of guest on this visit
+    // type; per person = the paying guests, FLAT = 1, a typed quantity whole 1…999; price from the DB ──
+    // Any form can send them now (the groups decide who is offered what); before T-7 only the detailed company form did.
+    const catalogue = (data.masterclassLines ?? []).length > 0
       ? await withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
           where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT,
         }))
       : []
-    const checkedLines = checkMasterclassLines(layout === 'boxes' ? data.masterclassLines : undefined, catalogue)
+    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue, {
+      payingGuests: effectiveGuestCount,
+      shownOn: { bookingType: data.bookingType, visitType },
+    })
     if (!checkedLines.ok) return { success: false, error: await mc('onsite_err_masterclass', 'form.err_masterclass') }
     const masterclassLines = checkedLines.lines
     const masterclassAmt = sumQuantityLines(masterclassLines)
@@ -302,7 +306,9 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         if (missing.length) return await notOfferedError(missing)
         totalPrice = priceCounts(rates, counts, lines)
       } else {
-        totalPrice = 0 // no pricing configured: the winery confirms the price by hand, as before
+        // No pricing configured: the winery confirms the visit price by hand, as before. Add-ons the guest chose are
+        // already priced, so they are the total until then (the same rule as a company with no price table).
+        totalPrice = masterclassAmt
       }
     } else if (data.companyId) {
       // The browser names the company; the server decides whether this guest may book as it.

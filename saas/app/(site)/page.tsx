@@ -52,7 +52,7 @@ export default async function Home({ searchParams }: PageProps) {
   // boolean per booking type would make it impossible to tell "module off" apart
   // from "COMPANY section merely off by default" client-side — the former must
   // never be overridable, the latter must be (see Feature 148's build-time notes).
-  const [individualsRow, companies, bookingRoles, menuItems, masterclassItems, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
+  const [individualsRow, companies, bookingRoles, menuItems, addOnGroups, blockedDates, content, paymentConfigured, individualsPaymentReady, companiesPaymentReady, tenantFlags] = await Promise.all([
     // The public price tiers (the Individuals company). An explicit select, not `include`, so
     // adding a column to Company doesn't silently widen what this page loads (H17).
     withTenantDb(tenantId, tx => tx.company.findFirst({
@@ -74,7 +74,13 @@ export default async function Home({ searchParams }: PageProps) {
     // resolveCompanyContacts().
     orderRolesFor(tenantId, 'BOOKING'),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
-    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
+    // Add-on groups (T-7): only active groups, with their active items. The form decides which group a guest sees
+    // (audience + visit type — lib/addOns.ts groupShownOn); the server checks every submitted line again.
+    withTenantDb(tenantId, tx => tx.addOnGroup.findMany({
+      where: { tenantId, active: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { items: { where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] } },
+    })),
     getBlockedDates(),
     // Was two getContentMap() calls (home + form) = two transactions; now one.
     getAllContent(tenantId, locale),
@@ -421,7 +427,11 @@ export default async function Home({ searchParams }: PageProps) {
             hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
             bookingRoles={bookingRoles}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
-            masterclassItems={masterclassItems.map(i => ({ id: i.id, name: i.name, unitType: i.unitType, pricePerUnit: i.pricePerUnit }))}
+            addOnGroups={addOnGroups.filter(g => g.items.length > 0).map(g => ({
+              id: g.id, nameEn: g.nameEn, nameKa: g.nameKa,
+              showToCompanies: g.showToCompanies, showToIndividuals: g.showToIndividuals, visitTypes: g.visitTypes,
+              items: g.items.map(i => ({ id: i.id, name: i.name, nameKa: i.nameKa, unitType: i.unitType, pricePerUnit: i.pricePerUnit })),
+            }))}
             minGuestsTasting={parseInt(minGuestsTasting) || 4}
             minGuestsTastingLunch={parseInt(minGuestsTastingLunch) || 4}
             bookingLeadSplit={bookingLeadSplit === 'true'}
