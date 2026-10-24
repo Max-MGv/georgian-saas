@@ -43,6 +43,26 @@ export default async function Home({ searchParams }: PageProps) {
 
   const isAdmin = isEditMode ? (await getSiteContext()).isAdmin : false
 
+  // Wine for the table (T-22): the one WINE group (active) and the winery's bookable wines at their WEBSITE price. A company's own
+  // terms never travel in this page's props — they arrive through the code-gated resolver after the code is proven (E13).
+  const wineGroup = wineOrdersOn
+    ? await withTenantDb(tenantId, async tx => {
+        const group = await tx.addOnGroup.findFirst({ where: { tenantId, kind: 'WINE', active: true } })
+        if (!group) return null
+        const vintages = await tx.wineVintage.findMany({
+          where: { tenantId, bookable: true, active: true, wine: { active: true } },
+          orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+          select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true, color: true, wineType: true } } },
+        })
+        if (vintages.length === 0) return null
+        return {
+          id: group.id, sortOrder: group.sortOrder, nameEn: group.nameEn, nameKa: group.nameKa,
+          showToCompanies: group.showToCompanies, showToIndividuals: group.showToIndividuals, visitTypes: group.visitTypes,
+          wines: vintages.map(v => ({ vintageId: v.id, name: v.wine.name, nameKa: v.wine.nameKa, year: v.year, price: v.price, color: v.wine.color })),
+        }
+      })
+    : null
+
   // Booleans only cross to the client — never the credentials themselves.
   // Three separate calls (#148), not one: `paymentConfigured` is the hard-block
   // half (module + credentials) — nothing, not even a company's skipPayment:false
@@ -427,8 +447,9 @@ export default async function Home({ searchParams }: PageProps) {
             hideCompanyDropdown={hideCompanyDropdownStr === 'true'}
             bookingRoles={bookingRoles}
             menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
-            addOnGroups={addOnGroups.filter(g => g.items.length > 0).map(g => ({
-              id: g.id, nameEn: g.nameEn, nameKa: g.nameKa,
+            wineGroup={wineGroup}
+            addOnGroups={addOnGroups.filter(g => g.kind === 'ITEMS' && g.items.length > 0).map(g => ({
+              id: g.id, sortOrder: g.sortOrder, nameEn: g.nameEn, nameKa: g.nameKa,
               showToCompanies: g.showToCompanies, showToIndividuals: g.showToIndividuals, visitTypes: g.visitTypes,
               items: g.items.map(i => ({ id: i.id, name: i.name, nameKa: i.nameKa, unitType: i.unitType, pricePerUnit: i.pricePerUnit })),
             }))}
