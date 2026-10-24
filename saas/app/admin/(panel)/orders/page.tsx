@@ -1,7 +1,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { asTetri, formatTetri } from '@/lib/money'
 import { getTenantId } from '@/lib/tenant'
-import { invoiceAddOnLine } from '@/lib/orderLines'
+import { invoiceAddOnLine, invoiceWineLine } from '@/lib/orderLines'
 import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 import { BOOKING_STAGES } from '@/lib/statusFlow'
 import { getSetting } from '@/app/actions/settings'
@@ -174,6 +174,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     include: {
       company: { select: { id: true, name: true, identificationCode: true } },
       masterclassLines: { include: { masterclassItem: true } },
+      wineLines: true,
       extras: true,
       contacts: { include: { role: true } },
       // Every live (settled, not reversed) payment — the balance-due figure
@@ -324,6 +325,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               ?.map(r => ({ id: r.id, name: r.name, email: r.email })) ?? [],
             requestedCompanyName: o.requestedCompanyName,
             masterclassLines: o.masterclassLines.map(invoiceAddOnLine),
+            wineLines: o.wineLines.map(invoiceWineLine),
             extras: o.extras.map(e => ({ label: e.label, amount: e.amount })),
             contacts: o.contacts.map(c => ({
               roleKey: c.role.key,

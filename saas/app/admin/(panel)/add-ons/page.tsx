@@ -9,7 +9,7 @@ export default async function AddOnsPage() {
   await requireBookingModule()
   const [tenantId, adminLanguage] = await Promise.all([getTenantId(), getSetting('admin_language')])
   const locale = adminLanguage || 'en'
-  const { groups, ungrouped } = await withTenantDb(tenantId, async tx => {
+  const { groups, ungrouped, wineCount } = await withTenantDb(tenantId, async tx => {
     const groups = await tx.addOnGroup.findMany({
       where: { tenantId },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -21,7 +21,9 @@ export default async function AddOnsPage() {
       where: { tenantId, groupId: null },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     })
-    return { groups, ungrouped }
+    // The "Wine for the table" group has no items: its contents are the wines switched on for bookings (Admin → Wines).
+    const wineCount = await tx.wineVintage.count({ where: { tenantId, bookable: true, active: true, wine: { active: true } } })
+    return { groups, ungrouped, wineCount }
   })
   const itemCount = groups.reduce((n, g) => n + g.items.length, 0) + ungrouped.length
 
@@ -35,8 +37,9 @@ export default async function AddOnsPage() {
       </div>
       <AddOnsClient
         locale={locale}
+        wineCount={wineCount}
         groups={groups.map(g => ({
-          id: g.id, nameEn: g.nameEn, nameKa: g.nameKa, showToCompanies: g.showToCompanies,
+          id: g.id, kind: g.kind, nameEn: g.nameEn, nameKa: g.nameKa, showToCompanies: g.showToCompanies,
           showToIndividuals: g.showToIndividuals, visitTypes: g.visitTypes, active: g.active, sortOrder: g.sortOrder,
           items: g.items.map(i => ({ id: i.id, name: i.name, nameKa: i.nameKa, unitType: i.unitType, pricePerUnit: i.pricePerUnit, active: i.active, sortOrder: i.sortOrder })),
         }))}

@@ -13,6 +13,8 @@ import { countryName } from '@/lib/countries'
 import { updateOrderBooking, updateOrderContacts, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
 import { lineTotals } from '@/lib/orderLines'
+import { priceWineOrder, wineLineTotalFor } from '@/lib/winePricing'
+import { addOrderWineLine, removeOrderWineLine, updateOrderWineLine } from '@/app/actions/orderWine'
 import { adminOrderView, manualFromStrings, NO_TYPED_RATES, PRODUCT_AT, typedTetri, type AdminOrderView, type BoxField, type BoxStrings, type PriceLine } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { slotOptions } from '../timeSlots'
@@ -216,6 +218,22 @@ type MasterclassLine = {
   masterclassItem: MasterclassItemRow
 }
 
+/** One line of wine for the table, as stored (T-22). `id` is `new-…` for a line added on screen and not saved yet. */
+type WineLineRow = {
+  id: string
+  wineVintageId: string | null
+  name: string
+  year: number
+  quantity: number
+  /** Per bottle before the % — the agreed price when `negotiated`. */
+  priceSnapshot: number
+  negotiated: boolean
+  discountPercent: number | null
+  lineTotal: number
+}
+/** A wine switched on for bookings, at its website price. */
+type WineOption = { vintageId: string; name: string; year: number; price: number }
+
 type ExtraRow = { id: string; label: string; amount: number }
 type MenuItemRow = { id: string; name: string; type: string }
 
@@ -272,6 +290,8 @@ type OrderProp = {
     registrationFee: number
   } | null
   masterclassLines: MasterclassLine[]
+  /** Wine for the table (T-22). */
+  wineLines: WineLineRow[]
   extras: ExtraRow[]
   /** ISO codes — company bookings only (Plan-CompanyNationality). */
   nationalities: string[]
@@ -336,6 +356,8 @@ export default function OrderDetail({
   displayName = 'Your Winery',
   menuItems,
   masterclassItems,
+  wineOptions = [],
+  wineTerms = null,
   companies = [],
   individualsPrices = [],
   contactRoles = [],
@@ -348,6 +370,10 @@ export default function OrderDetail({
   displayName?: string
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  /** The wines switched on for bookings (Admin → Wines → On bookings), at their website price; empty when the wine module is off. */
+  wineOptions?: WineOption[]
+  /** This order's company's wine terms — its % off and agreed prices — that price new wine lines. Null for an individual booking. */
+  wineTerms?: { discountPercent: number | null; prices: Record<string, number> } | null
   /** Real companies to link a no-company order to (Feature 180). Excludes
    * the isIndividual pricing-container row — see page.tsx's fetch. */
   companies?: { id: string; name: string; isBookingCompany: boolean }[]
@@ -368,7 +394,7 @@ export default function OrderDetail({
   // (updateOrderBooking); Contacts = the contact person + every contact type, picked from the company's people like
   // New Order (updateOrderContacts); Guest breakdown (updateOrderEnhanced); Masterclass and Extras lines edited in
   // place (updateMasterclassLine / updateOrderExtra — adding and removing a line still act at once).
-  type EditCard = 'info' | 'contact' | 'guests' | 'mc' | 'ex'
+  type EditCard = 'info' | 'contact' | 'guests' | 'mc' | 'wine' | 'ex'
   const [editingCard, setEditingCard] = useState<EditCard | null>(null)
   const editingInfo = editingCard === 'info'
   const editingContact = editingCard === 'contact'
@@ -385,6 +411,8 @@ export default function OrderDetail({
   // What the Masterclass / Extras cards held when they opened — Save applies the difference, Cancel restores it.
   const mcSnap = useRef<MasterclassLine[]>([])
   const exSnap = useRef<ExtraRow[]>([])
+  const wineSnap = useRef<WineLineRow[]>([])
+  const [wineQty, setWineQty] = useState<Record<string, string>>({})
   const [extraEdits, setExtraEdits] = useState<Record<string, { label: string; amount: string }>>({})
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoMsg, setInfoMsg] = useState('')
@@ -441,6 +469,9 @@ export default function OrderDetail({
     } else if (card === 'mc') {
       mcSnap.current = lines
       setLineQty(Object.fromEntries(lines.map(l => [l.id, String(l.quantity)])))
+    } else if (card === 'wine') {
+      wineSnap.current = wineLines
+      setWineQty(Object.fromEntries(wineLines.map(l => [l.id, String(l.quantity)])))
     } else {
       exSnap.current = extras
       setExtraEdits(Object.fromEntries(extras.map(e => [e.id, { label: e.label, amount: String(toMajor(asTetri(e.amount))) }])))
@@ -451,6 +482,7 @@ export default function OrderDetail({
     if (editingCard === 'guests') resetGuests()
     // Draft lines (added / removed on screen) go back to what was saved.
     if (editingCard === 'mc') { setLines(mcSnap.current); setAddingLine(false) }
+    if (editingCard === 'wine') { setWineLines(wineSnap.current); setAddingWine(false); setNewWineId(''); setNewWineQty('1') }
     if (editingCard === 'ex') { setExtras(exSnap.current); setAddingExtra(false) }
     setEditingCard(null)
     setInfoMsg('')
@@ -509,6 +541,34 @@ export default function OrderDetail({
         if ('error' in r) return r
         setLines(prev => prev.map(x => (x.id === l.id ? { ...x, quantity: q } : x)))
         mcSnap.current = mcSnap.current.map(s => (s.id === l.id ? { ...s, quantity: q } : s))
+      }
+      return null
+    }
+    if (editingCard === 'wine') {
+      // Each step that succeeds is written into the snapshot at once, so a second Save after a refusal never repeats it.
+      for (const l of wineSnap.current.filter(s => !wineLines.some(x => x.id === s.id))) {
+        await removeOrderWineLine(l.id, order.id)
+        wineSnap.current = wineSnap.current.filter(s => s.id !== l.id)
+      }
+      for (const l of wineLines) {
+        if (l.id.startsWith('new-')) {
+          if (!l.wineVintageId) continue
+          const r = await addOrderWineLine(order.id, { vintageId: l.wineVintageId, quantity: l.quantity })
+          if ('error' in r) return r
+          const saved = { ...l, id: r.lineId, lineTotal: r.lineTotal }
+          setWineLines(prev => prev.map(x => (x.id === l.id ? saved : x)))
+          wineSnap.current = [...wineSnap.current, saved]
+          continue
+        }
+        // Number(), not parseInt: "2.5" must reach the server's whole-number rule and be refused, not become 2.
+        const raw = (wineQty[l.id] ?? String(l.quantity)).trim()
+        const q = raw === '' ? NaN : Number(raw)
+        if (q === l.quantity) continue
+        const r = await updateOrderWineLine(l.id, order.id, Number.isFinite(q) ? q : 0)
+        if ('error' in r) return r
+        const lineTotal = wineLineTotalFor(l, q)
+        setWineLines(prev => prev.map(x => (x.id === l.id ? { ...x, quantity: q, lineTotal } : x)))
+        wineSnap.current = wineSnap.current.map(s => (s.id === l.id ? { ...s, quantity: q, lineTotal } : s))
       }
       return null
     }
@@ -836,6 +896,12 @@ export default function OrderDetail({
   const [lineLoading, setLineLoading] = useState(false)
 
   // ── Extras state ───────────────────────────────────────────────────────────
+  // ── Wine for the table state (T-22) ────────────────────────────────────────
+  const [wineLines, setWineLines] = useState<WineLineRow[]>(order.wineLines)
+  const [addingWine, setAddingWine] = useState(false)
+  const [newWineId, setNewWineId] = useState('')
+  const [newWineQty, setNewWineQty] = useState('1')
+
   const [extras, setExtras] = useState<ExtraRow[]>(order.extras)
   const [addingExtra, setAddingExtra] = useState(false)
   const [newExtraLabel, setNewExtraLabel] = useState('')
@@ -869,7 +935,16 @@ export default function OrderDetail({
   const prices = isCompanyOrder ? order.company?.prices ?? [] : individualsPrices
   const companyRegistrationFee = order.company?.registrationFee ?? 0
   // The add-ons as stored (what a not-yet-edited order was sold with) and extras.
-  const { masterclass: storedAddOnAmt, extras: extrasAmt } = lineTotals({ masterclassLines: lines, extras })
+  const { masterclass: storedAddOnAmt, extras: extrasAmt, wine: storedWineAmt } = lineTotals({ masterclassLines: lines, extras, wineLines })
+  // Wine as it stands on screen: a line whose quantity is being edited is re-rounded on the terms it was sold on; a line added
+  // on screen was priced when it was added (this company's terms).
+  const wineQtyOf = (l: WineLineRow) => {
+    if (editingCard !== 'wine' || l.id.startsWith('new-')) return l.quantity
+    const q = Number((wineQty[l.id] ?? String(l.quantity)).trim())
+    return Number.isInteger(q) && q >= 1 && q <= 999 ? q : l.quantity
+  }
+  const wineCostNow = (l: WineLineRow) => (wineQtyOf(l) === l.quantity ? l.lineTotal : wineLineTotalFor(l, wineQtyOf(l)))
+  const wineAmtNow = wineLines.reduce((s, l) => s + wineCostNow(l), 0)
 
   // The same check and pricing updateOrderEnhanced runs, so a Save stores exactly what is previewed. A per-person
   // add-on is priced at the paying guests being typed, so the preview already shows what the guests card will store.
@@ -877,7 +952,7 @@ export default function OrderDetail({
     bookingType: isCompanyOrder ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
     prices, registration: companyRegistrationFee, manual: manualRates,
     addOnLines: lines.map(l => ({ quantity: l.quantity, pricePerUnit: l.pricePerUnit, unit: l.masterclassItem.unitType as MasterclassUnit })),
-    extrasAmt,
+    wineAmt: wineAmtNow, extrasAmt,
     hadRates: ratesFromProductSnapshot(order) != null,
   })
   const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
@@ -918,7 +993,7 @@ export default function OrderDetail({
         .map(p => ({ product: p, count: storedCounts[p], rate: snapshot[p]!, amount: snapshot[p]! * storedCounts[p], row: null }))
     : []
   const soldTotal = snapshot && notOffered(snapshot, storedCounts).length === 0
-    ? priceCounts(snapshot, storedCounts, { masterclass: storedAddOnAmt, extras: extrasAmt })
+    ? priceCounts(snapshot, storedCounts, { masterclass: storedAddOnAmt, extras: extrasAmt, wine: storedWineAmt })
     : null
   const shown: AdminOrderView = edited ? view : { ...view, lines: soldLines, registration: snapshot?.registration ?? 0, total: soldTotal }
   // null means "this screen cannot derive a total" — the display then shows the stored order.totalPrice (#52).
@@ -1016,6 +1091,33 @@ export default function OrderDetail({
 
   function handleRemoveLine(lineId: string) {
     setLines(prev => prev.filter(l => l.id !== lineId))
+  }
+
+  // A wine picked for the card, priced as the server will price it: this company's terms, this line rounded on its own.
+  const newWineOption = wineOptions.find(w => w.vintageId === newWineId)
+  const newWineQtyN = Number(newWineQty.trim())
+  const newWinePriced = newWineOption && Number.isInteger(newWineQtyN) && newWineQtyN >= 1
+    ? priceWineOrder([{ vintageId: newWineOption.vintageId, quantity: newWineQtyN, standardPrice: newWineOption.price }], wineTerms?.prices ?? {}, wineTerms?.discountPercent ?? null).lines[0]!
+    : null
+  function handleAddWine() {
+    if (!newWineOption || !newWinePriced) {
+      setInfoError(true)
+      setInfoMsg('Quantity must be a whole number from 1 to 999.')
+      return
+    }
+    if (newWineQtyN > 999) {
+      setInfoError(true)
+      setInfoMsg('Quantity must be a whole number from 1 to 999.')
+      return
+    }
+    setWineLines(prev => [...prev, {
+      id: `new-${Date.now()}`, wineVintageId: newWineOption.vintageId, name: newWineOption.name, year: newWineOption.year,
+      quantity: newWineQtyN, priceSnapshot: newWinePriced.unitPrice, negotiated: newWinePriced.negotiated,
+      discountPercent: newWinePriced.discountPercent, lineTotal: newWinePriced.lineTotal,
+    }])
+    setNewWineId('')
+    setNewWineQty('1')
+    setAddingWine(false)
   }
 
   function handleAddExtra() {
@@ -1277,6 +1379,7 @@ export default function OrderDetail({
               paymentsSettledTotal: order.paymentsSettledTotal,
               company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
               masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, groupName: l.groupName ?? null, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
+              wineLines: wineLines.map(l => ({ name: l.name, year: l.year, quantity: l.quantity, unitPrice: l.priceSnapshot, negotiated: l.negotiated, discountPercent: l.discountPercent, lineTotal: l.lineTotal })),
               extras: extras.map(e => ({ label: e.label, amount: e.amount })),
             }}
             payment={payment}
@@ -1824,6 +1927,117 @@ export default function OrderDetail({
         ))}
         {editingCard === 'mc' ? <div className="mt-4 flex flex-col gap-3">{editActions()}</div> : savedNote('mc')}
       </Card>
+
+      {/* ── Wine for the table (T-22) — read-only until the pencil; bottles are priced with this company's own terms and each
+          line is rounded on its own. Add / remove / change quantity are drafts until Save, like the other cards. ── */}
+      {(wineOptions.length > 0 || wineLines.length > 0) && (
+      <Card title={at('orderDetail.wine.title')} action={editButton('wine')}>
+        {wineLines.length > 0 && (
+          <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
+                  {[at('orderDetail.wine.colWine'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colTotal'), ...(editingCard === 'wine' ? [''] : [])].map((h, i) => (
+                    <th key={i} className="text-left px-3 py-2 text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {wineLines.map(l => (
+                  <tr key={l.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.text }}>
+                      {l.name} {l.year}
+                      <span className="block text-xs" style={{ color: C.faint }}>
+                        {l.negotiated ? `${formatTetri(asTetri(l.priceSnapshot), { decimals: true })} ${at('orderDetail.wine.agreed')}`
+                          : l.discountPercent ? `${formatTetri(asTetri(l.priceSnapshot), { decimals: true })} −${l.discountPercent}%`
+                          : formatTetri(asTetri(l.priceSnapshot), { decimals: true })}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>
+                      {editingCard === 'wine' ? (
+                        <input
+                          type="number" min={1} max={999}
+                          aria-label={`${at('orderDetail.masterclass.colQty')} — ${l.name} ${l.year}`}
+                          value={wineQty[l.id] ?? String(l.quantity)}
+                          onChange={e => { setWineQty(prev => ({ ...prev, [l.id]: e.target.value })); clearRefusal() }}
+                          style={{ ...inputStyle, width: 72 }}
+                        />
+                      ) : l.quantity}
+                    </td>
+                    <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
+                      {formatTetri(asTetri(wineCostNow(l)), { decimals: true })}
+                    </td>
+                    {editingCard === 'wine' && (
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => setWineLines(prev => prev.filter(x => x.id !== l.id))}
+                          className="text-xs px-2 py-1 rounded border"
+                          style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
+                        >
+                          {at('orderDetail.masterclass.remove')}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        )}
+
+        {wineLines.length === 0 && !addingWine && (
+          <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.wine.none')}</p>
+        )}
+
+        {editingCard === 'wine' && (addingWine ? (
+          <div className="flex items-end gap-2 flex-wrap">
+            <div style={{ flex: '1 1 160px' }}>
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.wine.colWine')}</label>
+              <select value={newWineId} onChange={e => setNewWineId(e.target.value)} style={inputStyle}>
+                <option value="">{at('orderDetail.wine.selectWine')}</option>
+                {wineOptions.filter(w => !wineLines.some(l => l.wineVintageId === w.vintageId)).map(w => (
+                  <option key={w.vintageId} value={w.vintageId}>{w.name} {w.year}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ width: 80 }}>
+              <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colQty')}</label>
+              <input type="number" min={1} max={999} value={newWineQty} onChange={e => setNewWineQty(e.target.value)} style={inputStyle} />
+            </div>
+            {newWinePriced && (
+              <div className="text-sm pb-2" style={{ color: C.muted }}>= {formatTetri(asTetri(newWinePriced.lineTotal), { decimals: true })}</div>
+            )}
+            <button
+              onClick={handleAddWine}
+              disabled={!newWineId}
+              className="px-3 py-2 rounded-lg text-sm font-medium text-white"
+              style={{ backgroundColor: C.wine }}
+            >
+              {at('orderDetail.masterclass.add')}
+            </button>
+            <button
+              onClick={() => { setAddingWine(false); setNewWineId(''); setNewWineQty('1') }}
+              className="px-3 py-2 rounded-lg text-sm border"
+              style={{ borderColor: C.border, color: C.muted }}
+            >
+              {at('orderDetail.masterclass.cancel')}
+            </button>
+          </div>
+        ) : wineOptions.some(w => !wineLines.some(l => l.wineVintageId === w.vintageId)) ? (
+          <button onClick={() => setAddingWine(true)} className="text-sm font-medium" style={{ color: C.wine }}>
+            {at('orderDetail.wine.addBtn')}
+          </button>
+        ) : (
+          <p className="text-xs" style={{ color: C.faint }}>
+            {at('addons.wine.none')}{' '}
+            <a href="/admin/wines" style={{ color: C.wine }}>{at('addons.wine.manage')}</a>.
+          </p>
+        ))}
+        {editingCard === 'wine' ? <div className="mt-4 flex flex-col gap-3">{editActions()}</div> : savedNote('wine')}
+      </Card>
+      )}
 
       {/* ── Extra Charges — read-only until the pencil (D-1); label / amount edited in place, add / remove at once ── */}
       <Card title={at('orderDetail.extras.title')} action={editButton('ex')}>

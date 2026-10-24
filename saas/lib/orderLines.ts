@@ -64,7 +64,34 @@ export function invoiceAddOnLine(l: StoredAddOnLine & QuantityLine) {
   return { name: who.name, nameKa: who.nameKa, groupName: who.groupName, groupNameKa: who.groupNameKa, quantity: l.quantity, pricePerUnit: l.pricePerUnit }
 }
 
-/** The lines of an order (or of a draft that looks like one), added up the way `priceCounts` wants them. */
-export function lineTotals(o: { masterclassLines: readonly QuantityLine[]; extras: readonly AmountLine[] }): LineTotals {
-  return { masterclass: sumQuantityLines(o.masterclassLines), extras: sumAmountLines(o.extras) }
+/** One line of wine for the table (T-22): what it cost is its own `lineTotal`, rounded per line when it was added. */
+export type WineLine = {
+  quantity: number
+  lineTotal?: number | null
+  /** The stored row's bottle price … */
+  priceSnapshot?: number
+  /** … or the invoice shape's (InvoiceWineLine) — either is only a fallback for a line with no lineTotal. */
+  unitPrice?: number
+}
+
+/** What a wine line cost: its stored `lineTotal`; the bottle price × quantity only for a line that somehow has none. */
+export const wineLineCost = (l: WineLine): number => l.lineTotal ?? l.quantity * (l.priceSnapshot ?? l.unitPrice ?? 0)
+
+/** A stored booking wine line as an invoice states it. */
+export function invoiceWineLine(l: { wineNameSnapshot: string; vintageYearSnapshot: number; quantity: number; priceSnapshot: number; negotiated: boolean; discountPercent: number | null; lineTotal: number | null }) {
+  return {
+    name: l.wineNameSnapshot, year: l.vintageYearSnapshot, quantity: l.quantity, unitPrice: l.priceSnapshot,
+    negotiated: l.negotiated, discountPercent: l.discountPercent, lineTotal: wineLineCost(l),
+  }
+}
+
+/** Sum of the wine lines on a booking, tetri. */
+export const sumWineLines = (lines: readonly WineLine[]): number => lines.reduce((sum, l) => sum + wineLineCost(l), 0)
+
+/**
+ * The lines of an order (or of a draft that looks like one), added up the way `priceCounts` wants them.
+ * `wineLines` is REQUIRED on purpose: a caller that forgot to load them would silently leave table wine out of a total.
+ */
+export function lineTotals(o: { masterclassLines: readonly QuantityLine[]; extras: readonly AmountLine[]; wineLines: readonly WineLine[] }): LineTotals {
+  return { masterclass: sumQuantityLines(o.masterclassLines), extras: sumAmountLines(o.extras), wine: sumWineLines(o.wineLines) }
 }

@@ -32,6 +32,7 @@ export async function recalcOrderTotal(orderId: string, tenantId: string, linesD
       include: {
         company: { include: { prices: true } },
         masterclassLines: true,
+        wineLines: true,
         extras: true,
       },
     })

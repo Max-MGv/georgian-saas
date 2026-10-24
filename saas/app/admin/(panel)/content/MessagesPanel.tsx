@@ -324,6 +324,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_err_not_offered: c.onsite_err_not_offered ?? t(locale, 'form.err_not_offered'),
     onsite_err_guest_counts: c.onsite_err_guest_counts ?? t(locale, 'form.err_guest_counts'),
     onsite_err_masterclass: c.onsite_err_masterclass ?? t(locale, 'form.err_masterclass'),
+    onsite_err_wine: c.onsite_err_wine ?? t(locale, 'form.err_wine'),
     onsite_err_hot_dish: c.onsite_err_hot_dish ?? t(locale, 'form.err_hot_dish'),
     onsite_err_too_many_free: c.onsite_err_too_many_free ?? t(locale, 'form.err_too_many_free'),
     onsite_no_rate_detail: c.onsite_no_rate_detail ?? t(locale, 'form.no_rate_detail'),
@@ -408,6 +409,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     companyName: SAMPLE_COMPANY,
     identificationCode: '123456789',
     masterclassLines: [{ name: 'Wine Blending Masterclass', quantity: 2, pricePerUnit: 4000 }],
+    wineLines: [],
     extras: [],
     payment: {
       recipientName: winery.name || 'Winery LLC',
@@ -871,6 +873,8 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           <EditField label={at('messages.onsiteErrors.guestCounts')} draftKey="onsite_err_guest_counts"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsiteErrors.masterclass')} draftKey="onsite_err_masterclass"
+            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          <EditField label={at('messages.onsiteErrors.wine')} draftKey="onsite_err_wine"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <EditField label={at('messages.onsiteErrors.hotDish')} draftKey="onsite_err_hot_dish"
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />

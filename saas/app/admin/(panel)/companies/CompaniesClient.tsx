@@ -620,9 +620,11 @@ function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages, wineOn }: {
   zones: ZoneLite[]
   vintages: VintageLite[]
+  /** The tenant's wine module is on — a booking company then has wine terms too (T-22). */
+  wineOn: boolean
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
@@ -776,12 +778,14 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
 
           <div className="h-px" style={{ backgroundColor: C.border }} />
 
-          {/* Wine discount — only relevant when isWineOrderCompany */}
-          {isWineOrder && (
+          {/* Wine terms (% off + agreed prices) — for a wine-order company, and since T-22 also for a booking company when the
+              wine module is on: the same terms price the wine added to its bookings ("wine for the table", Plan D-5 / D-18). */}
+          {(isWineOrder || (isBooking && wineOn)) && (
             <>
               <div className="flex flex-col gap-3">
                 <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.wineDiscount')}</p>
                 <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.wineDiscountHint')}</p>
+                {isBooking && <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.tableWineHint')}</p>}
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -795,10 +799,12 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
                   />
                   <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
-                  <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
-                </label>
+                {isWineOrder && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
+                    <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
+                  </label>
+                )}
               </div>
               <div className="h-px" style={{ backgroundColor: C.border }} />
               <WinePricesSection companyId={company.id} vintages={vintages} prices={winePrices} setPrices={setWinePrices} locale={locale} />
@@ -1252,6 +1258,7 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
           paymentModuleOn={paymentModuleOn}
           zones={zones}
           vintages={vintages}
+          wineOn={wineOrdersOn}
         />
       )}
 

@@ -65,6 +65,15 @@ export function priceWineOrder(
 }
 
 /**
+ * What a stored line costs at another quantity, on the terms it was sold on (its own bottle price, agreed or not, and its %),
+ * rounded exactly as when it was added. Used where a quantity is changed in place (order page, T-22).
+ */
+export function wineLineTotalFor(l: { priceSnapshot: number; negotiated: boolean; discountPercent: number | null }, quantity: number): number {
+  const gross = asTetri(quantity * l.priceSnapshot)
+  return !l.negotiated && l.discountPercent ? applyPercent(gross, l.discountPercent) : gross
+}
+
+/**
  * What a stored wine line cost: its own `lineTotal` when it has one, else bottle price × quantity less the order's % (a line
  * nothing has written since the T-22 migration — every existing line was backfilled, so this is only a safety net).
  */

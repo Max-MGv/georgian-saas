@@ -1,4 +1,4 @@
-import { addOnLabel, groupInvoiceAddOns, INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, type InvoiceAddOnLine, type InvoiceLocale } from '@/lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, wineLineLabel, type InvoiceAddOnLine, type InvoiceLocale, type InvoiceWineLine } from '@/lib/invoiceLines'
 import { resolveTenantTheme, type ResolvedTheme } from '@/lib/themePresets'
 import { asTetri, balanceDue, formatTetri, multiplyTetri } from '@/lib/money'
 import { lineTotals } from '@/lib/orderLines'
@@ -26,7 +26,7 @@ export type { InvoiceLocale }
 const LABELS: Record<InvoiceLocale, {
   invoice: string; company: string; name: string; idCode: string
   guests: string; tasting: string; lunch: string; free: string; total: string; lunchTasting: string
-  masterclass: string; amount: string; totalAmount: string
+  masterclass: string; wine: string; amount: string; totalAmount: string
   paidSoFar: string; balanceDue: string; credit: string
   paymentDetails: string; recipientName: string; personalNumber: string; bank: string; bankCode: string; account: string
   person: string
@@ -36,7 +36,7 @@ const LABELS: Record<InvoiceLocale, {
   ka: {
     invoice: 'ინვოისი', company: 'კომპანია', name: 'დასახელება', idCode: 'საიდენტიფიკაციო კოდი',
     guests: 'სტუმრები', tasting: 'დეგუსტაცია', lunch: 'სადილი', free: 'თავისუფალი (გიდი/მძღოლი)', total: 'სულ', lunchTasting: 'სადილი + დეგუსტაცია',
-    masterclass: 'დამატებითი სერვისები', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
+    masterclass: 'დამატებითი სერვისები', wine: 'ღვინო მაგიდისთვის', amount: 'თანხა', totalAmount: 'ჯამური თანხა',
     paidSoFar: 'უკვე გადახდილი', balanceDue: 'გადასახდელი ნაშთი', credit: 'ზედმეტად გადახდილი',
     paymentDetails: 'გადახდის რეკვიზიტები', recipientName: 'მიმღების სახელი', personalNumber: 'პირადი ნომერი', bank: 'მიმღები ბანკი', bankCode: 'ბანკის კოდი', account: 'მიმღების ანგარიში',
     person: 'კაცი',
@@ -45,7 +45,7 @@ const LABELS: Record<InvoiceLocale, {
   en: {
     invoice: 'Invoice', company: 'Company', name: 'Name', idCode: 'ID code',
     guests: 'Guests', tasting: 'Tasting', lunch: 'Lunch', free: 'Free (guide/driver)', total: 'Total', lunchTasting: 'Lunch + Tasting',
-    masterclass: 'Add-ons', amount: 'Amount', totalAmount: 'Total amount',
+    masterclass: 'Add-ons', wine: 'Wine for the table', amount: 'Amount', totalAmount: 'Total amount',
     paidSoFar: 'Paid so far', balanceDue: 'Balance due', credit: 'Credit (overpaid)',
     paymentDetails: 'Payment Details', recipientName: 'Recipient name', personalNumber: 'Personal number', bank: 'Bank', bankCode: 'Bank code', account: 'Account (IBAN)',
     person: 'guest',
@@ -90,6 +90,8 @@ export type InvoiceEmailData = {
   identificationCode: string | null
   /** The add-on lines, with their group (T-7). `nameKa` / `groupName(Ka)` are optional: an older stored invoice has only `name`. */
   masterclassLines: InvoiceAddOnLine[]
+  /** Wine for the table as billed (T-22), with the reason for any non-standard price. */
+  wineLines: InvoiceWineLine[]
   extras: { label: string; amount: number }[]
   payment: {
     recipientName: string
@@ -143,7 +145,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   const dateStr = formatShortDate(new Date(data.date), locale)
 
   const companyDisplay = data.companyName ?? `${data.name} ${data.surname}`
-  const { masterclass: mcAmt, extras: extrasAmt } = lineTotals(data)
+  const { masterclass: mcAmt, extras: extrasAmt, wine: wineAmt } = lineTotals(data)
   // The booking per product — the same lines the printed invoice shows (Plan-PricingModel Chunk 9).
   const view = invoiceView({
     visitType: data.visitType, guestCount: data.guestCount,
@@ -151,7 +153,7 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
     freeGuestCount: data.freeGuestCount,
     tastingOnlyRate: data.tastingOnlyRate ?? null, lunchOnlyRate: data.lunchOnlyRate ?? null, tastingLunchRate: data.tastingLunchRate ?? null,
     registrationFeeSnapshot: data.registrationFeeSnapshot ?? null,
-    totalPrice: data.totalPrice, masterclassAmt: mcAmt, extrasAmt,
+    totalPrice: data.totalPrice, masterclassAmt: mcAmt, wineAmt, extrasAmt,
   })
   const P = INVOICE_PRODUCT_LABEL[locale]
   const people = (n: number) => `${n} ${n === 1 ? L.person : L.persons}`
@@ -170,6 +172,9 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
   if (view.registration > 0) amountContent += tableRow(th, INVOICE_REGISTRATION_LABEL[locale], money(view.registration))
   for (const l of data.masterclassLines) {
     amountContent += tableRow(th, addOnLabel(l, locale, false), formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
+  }
+  for (const l of data.wineLines) {
+    amountContent += tableRow(th, wineLineLabel(l, locale), money(l.lineTotal))
   }
   for (const e of data.extras) {
     amountContent += tableRow(th, e.label, formatTetri(asTetri(e.amount), { space: true, decimals: true }))
@@ -200,6 +205,10 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
       tableRow(th, addOnLabel(l, locale), formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true }))
     ).join(''))
   ).join('')
+  // Wine for the table: its own section after the add-ons, each line with the reason for a non-standard price (D-16).
+  const wineSection = data.wineLines.length > 0
+    ? section(th, L.wine, data.wineLines.map(l => tableRow(th, wineLineLabel(l, locale), money(l.lineTotal))).join(''))
+    : ''
 
   const html = `
     <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:${th.text} !important;background-color:${th.bg} !important;">
@@ -224,6 +233,8 @@ export function renderInvoiceEmail(data: InvoiceEmailData): { subject: string; h
         ${section(th, L.guests, guestContent)}
 
         ${masterclassSection}
+
+        ${wineSection}
 
         ${section(th, L.amount, amountContent)}
 

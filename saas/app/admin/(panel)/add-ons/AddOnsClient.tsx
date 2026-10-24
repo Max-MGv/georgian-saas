@@ -29,12 +29,12 @@ const inputStyle: CSSProperties = {
 
 type Item = { id: string; name: string; nameKa: string | null; unitType: string; pricePerUnit: number; active: boolean; sortOrder: number }
 type Group = {
-  id: string; nameEn: string; nameKa: string | null; showToCompanies: boolean; showToIndividuals: boolean
+  id: string; kind: 'ITEMS' | 'WINE'; nameEn: string; nameKa: string | null; showToCompanies: boolean; showToIndividuals: boolean
   visitTypes: string[]; active: boolean; sortOrder: number; items: Item[]
 }
 type Result = { error: string } | { success: true } | { success: true; group: unknown }
 
-export default function AddOnsClient({ groups, ungrouped, locale = 'en' }: { groups: Group[]; ungrouped: Item[]; locale?: string }) {
+export default function AddOnsClient({ groups, ungrouped, wineCount, locale = 'en' }: { groups: Group[]; ungrouped: Item[]; wineCount: number; locale?: string }) {
   const at = (key: string) => adminT(locale, key)
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -95,7 +95,7 @@ export default function AddOnsClient({ groups, ungrouped, locale = 'en' }: { gro
 
       <div className="space-y-5">
         {groups.map(g => (
-          <GroupCard key={g.id} group={g} groups={groups} at={at} busy={busy} run={run} setError={setError} />
+          <GroupCard key={g.id} group={g} groups={groups} wineCount={wineCount} at={at} busy={busy} run={run} setError={setError} />
         ))}
 
         {ungrouped.length > 0 && (
@@ -134,7 +134,8 @@ export default function AddOnsClient({ groups, ungrouped, locale = 'en' }: { gro
 
 type Common = { at: (k: string) => string; busy: boolean; run: (a: () => Promise<Result | void>) => Promise<boolean>; setError: (s: string) => void }
 
-function GroupCard({ group, groups, at, busy, run, setError }: Common & { group: Group; groups: Group[] }) {
+function GroupCard({ group, groups, wineCount, at, busy, run, setError }: Common & { group: Group; groups: Group[]; wineCount: number }) {
+  const isWine = group.kind === 'WINE'
   const [editing, setEditing] = useState(false)
   const [nameEn, setNameEn] = useState(group.nameEn)
   const [nameKa, setNameKa] = useState(group.nameKa ?? '')
@@ -228,8 +229,8 @@ function GroupCard({ group, groups, at, busy, run, setError }: Common & { group:
               ) : (
                 <>
                   <button onClick={open} className="text-xs px-2 py-1 rounded border" style={{ borderColor: C.border, color: C.muted }}>{at('settings.common.edit')}</button>
-                  <button onClick={() => setConfirmDelete(true)} disabled={group.items.length > 0}
-                    title={group.items.length > 0 ? at('addons.group.hasItems') : at('addons.group.delete')}
+                  <button onClick={() => setConfirmDelete(true)} disabled={group.items.length > 0 || isWine}
+                    title={isWine ? at('addons.wine.noDelete') : group.items.length > 0 ? at('addons.group.hasItems') : at('addons.group.delete')}
                     className="text-xs px-2 py-1 rounded border disabled:opacity-40" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>{at('companies.priceTiers.delete')}</button>
                 </>
               )}
@@ -238,13 +239,23 @@ function GroupCard({ group, groups, at, busy, run, setError }: Common & { group:
         )}
       </div>
 
-      {group.items.length === 0 && !adding && (
-        <div className="px-5 py-4 text-sm" style={{ color: C.faint }}>{at('addons.group.empty')}</div>
+      {isWine ? (
+        // The wine group has no items: it offers the wines switched on in Admin → Wines.
+        <div className="px-5 py-4 text-sm" style={{ color: C.muted }}>
+          {wineCount > 0 ? at('addons.wine.count').replace('{n}', String(wineCount)) : at('addons.wine.none')}{' '}
+          <a href="/admin/wines" style={{ color: C.wine }}>{at('addons.wine.manage')}</a>
+        </div>
+      ) : (
+        <>
+          {group.items.length === 0 && !adding && (
+            <div className="px-5 py-4 text-sm" style={{ color: C.faint }}>{at('addons.group.empty')}</div>
+          )}
+          {group.items.map((item, i) => (
+            <ItemRow key={item.id} item={item} groups={groups} showMove={false} last={i === group.items.length - 1 && !adding} at={at} busy={busy} run={run} setError={setError} />
+          ))}
+          <AddItemRow groupId={group.id} adding={adding} setAdding={setAdding} at={at} busy={busy} run={run} setError={setError} />
+        </>
       )}
-      {group.items.map((item, i) => (
-        <ItemRow key={item.id} item={item} groups={groups} showMove={false} last={i === group.items.length - 1 && !adding} at={at} busy={busy} run={run} setError={setError} />
-      ))}
-      <AddItemRow groupId={group.id} adding={adding} setAdding={setAdding} at={at} busy={busy} run={run} setError={setError} />
     </div>
   )
 }

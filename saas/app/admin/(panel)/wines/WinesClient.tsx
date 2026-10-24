@@ -5,6 +5,7 @@ import { asTetri, fromMajor, toMajor, formatTetri } from '@/lib/money'
 import {
   createWine, updateWine, deleteWine, assignWineImage,
   createVintage, updateVintage, deleteVintage, assignVintageImage, toggleVintageActive,
+  setWineBookable, setVintageBookable,
 } from '@/app/actions/wines'
 import { uploadWineImage, deleteWineImage } from '@/app/actions/uploadImage'
 import { adminT } from '@/lib/adminT'
@@ -32,6 +33,8 @@ const SWEETNESS_LEVELS: SweetnessValue[] = ['DRY', 'SEMI_DRY', 'SEMI_SWEET', 'SW
 type Vintage = {
   id: string; year: number; price: number; imagePath: string | null
   active: boolean; sortOrder: number
+  /** Offered as wine for the table on bookings (T-22). */
+  bookable: boolean
   wineType: WineTypeValue | null; sweetness: SweetnessValue | null
   sparkling: boolean | null; alcoholLevel: number | null
 }
@@ -397,6 +400,31 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     })
   }
 
+  // "Offer on bookings" (T-22). The product switch moves all of a wine's vintages together; a vintage switch (vintage-level
+  // wineries) moves one. Both ask the server, which creates the "Wine for the table" group the first time one goes on.
+  const [bookableError, setBookableError] = useState('')
+  function handleToggleBookable(wine: Wine) {
+    const allOn = wine.vintages.length > 0 && wine.vintages.every(v => v.bookable)
+    setSaving(wine.id)
+    setBookableError('')
+    startTransition(async () => {
+      const r = await setWineBookable(wine.id, !allOn)
+      if ('error' in r) setBookableError(r.error)
+      else setWines(prev => prev.map(w => w.id === wine.id ? { ...w, vintages: w.vintages.map(v => ({ ...v, bookable: !allOn })) } : w))
+      setSaving(null)
+    })
+  }
+  function handleToggleVintageBookable(wineId: string, v: Vintage) {
+    setSaving(v.id)
+    setBookableError('')
+    startTransition(async () => {
+      const r = await setVintageBookable(v.id, !v.bookable)
+      if ('error' in r) setBookableError(r.error)
+      else setWines(prev => prev.map(w => w.id === wineId ? { ...w, vintages: w.vintages.map(x => x.id === v.id ? { ...x, bookable: !v.bookable } : x) } : w))
+      setSaving(null)
+    })
+  }
+
   function handleDeleteProduct(id: string) {
     setSaving(id)
     startTransition(async () => {
@@ -693,6 +721,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
 
   return (
     <div className="space-y-3">
+      {bookableError && <p role="alert" className="text-sm" style={{ color: '#b91c1c' }}>{bookableError}</p>}
 
       {wines.map(wine => {
         const isExpanded = expandedId === wine.id
@@ -737,6 +766,23 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                 <span className="text-xs whitespace-nowrap" style={{ color: C.faint }}>
                   {wine.vintages.length} {wine.vintages.length !== 1 ? at('wines.vintage.plural') : at('wines.vintage.singular')}
                 </span>
+                {/* Offer on bookings (T-22): a switch — on only when every vintage is. A vintage-level winery sees "2/3" while partly on. */}
+                {(() => {
+                  const on = wine.vintages.filter(v => v.bookable).length
+                  const all = wine.vintages.length > 0 && on === wine.vintages.length
+                  return (
+                    <button type="button" role="switch" aria-checked={all}
+                      onClick={() => handleToggleBookable(wine)} disabled={isSaving || wine.vintages.length === 0}
+                      title={at('wines.bookable.title')} aria-label={at('wines.bookable.label')}
+                      className="flex items-center gap-1.5 text-xs whitespace-nowrap rounded-full border pl-1.5 pr-2.5 py-0.5 disabled:opacity-40"
+                      style={{ borderColor: all ? '#86efac' : C.border, color: all ? '#15803d' : C.faint, backgroundColor: all ? '#f0fdf4' : 'transparent' }}>
+                      <span aria-hidden className="inline-block w-6 h-3.5 rounded-full relative" style={{ backgroundColor: all ? '#16a34a' : on > 0 ? '#facc15' : '#d1c4b0' }}>
+                        <span className="absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all" style={{ left: all ? 12 : 2 }} />
+                      </span>
+                      {at('wines.bookable.label')}{isVintageMode && on > 0 && !all ? ` ${on}/${wine.vintages.length}` : ''}
+                    </button>
+                  )
+                })()}
                 <button onClick={() => handleToggleProductActive(wine)} disabled={isSaving}
                   title={wine.active ? at('wines.hideFromCatalogue') : at('wines.showInCatalogue')}
                   className="p-1 rounded border"
@@ -924,6 +970,18 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>
                               )}
                               <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+                                {isVintageMode && (
+                                  <button type="button" role="switch" aria-checked={v.bookable}
+                                    onClick={() => handleToggleVintageBookable(wine.id, v)} disabled={isVSaving}
+                                    title={at('wines.bookable.title')} aria-label={`${at('wines.bookable.label')} — ${v.year}`}
+                                    className="flex items-center gap-1.5 text-xs whitespace-nowrap rounded-full border pl-1.5 pr-2.5 py-0.5"
+                                    style={{ borderColor: v.bookable ? '#86efac' : C.border, color: v.bookable ? '#15803d' : C.faint, backgroundColor: v.bookable ? '#f0fdf4' : 'transparent' }}>
+                                    <span aria-hidden className="inline-block w-6 h-3.5 rounded-full relative" style={{ backgroundColor: v.bookable ? '#16a34a' : '#d1c4b0' }}>
+                                      <span className="absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all" style={{ left: v.bookable ? 12 : 2 }} />
+                                    </span>
+                                    {at('wines.bookable.label')}
+                                  </button>
+                                )}
                                 <button onClick={() => handleToggleVintageActive(wine.id, v)} disabled={isVSaving}
                                   title={v.active ? at('wines.hideFromCatalogue') : at('wines.showInCatalogue')}
                                   className="p-1 rounded border"

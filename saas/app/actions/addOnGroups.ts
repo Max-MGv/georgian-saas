@@ -78,8 +78,10 @@ export async function deleteAddOnGroup(id: string) {
   await requireAdmin()
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
-    const group = await tx.addOnGroup.findFirst({ where: { id, tenantId }, select: { id: true } })
+    const group = await tx.addOnGroup.findFirst({ where: { id, tenantId }, select: { id: true, kind: true } })
     if (!group) return { error: 'This group no longer exists.' } as const
+    // "Wine for the table" is created by switching a wine on; deleting it would leave bookable wines with no row to appear in.
+    if (group.kind === 'WINE') return { error: 'The wine group cannot be deleted — switch it off instead.' } as const
     const items = await tx.masterclassItem.count({ where: { groupId: id, tenantId } })
     if (items > 0) return { error: 'This group still has items. Move or delete them first.' } as const
     await tx.addOnGroup.deleteMany({ where: { id, tenantId } })

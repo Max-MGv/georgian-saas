@@ -93,6 +93,8 @@ export function adminOrderView(input: {
    */
   masterclassAmt?: number
   addOnLines?: readonly { quantity: number; pricePerUnit: number; unit: 'PER_PERSON' | 'PER_PIECE' | 'FLAT' }[]
+  /** Wine for the table (T-22), tetri — already priced by the caller with the company's terms (lib/winePricing.ts). */
+  wineAmt?: number
   extrasAmt: number
   /** The order already carries frozen rates (order page) — clearing every typed rate is then refused, not "price later". */
   hadRates?: boolean
@@ -137,9 +139,10 @@ export function adminOrderView(input: {
       })
     : []
   const addOnAmt = addOnAmtFor(counts.tastingOnly + counts.lunchOnly + counts.tastingLunch)
-  const lineTotals = { masterclass: addOnAmt, extras: input.extrasAmt }
+  const wineAmt = input.wineAmt ?? 0
+  const lineTotals = { masterclass: addOnAmt, wine: wineAmt, extras: input.extrasAmt }
   const total = quote.kind === 'priced' ? priceCounts(quote.rates, counts, lineTotals)
-    : quote.kind === 'unpriced' ? addOnAmt + input.extrasAmt
+    : quote.kind === 'unpriced' ? addOnAmt + wineAmt + input.extrasAmt
     : null
   // updateOrderEnhanced's rule: an order that already has a price never drops back to "price later" (review 8a).
   const unpricedButWasPriced = quote.kind === 'unpriced' && input.hadRates === true

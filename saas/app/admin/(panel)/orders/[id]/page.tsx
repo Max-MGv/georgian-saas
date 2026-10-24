@@ -1,6 +1,6 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
-import { lineIdentity } from '@/lib/orderLines'
+import { lineIdentity, wineLineCost } from '@/lib/orderLines'
 import { localName } from '@/lib/addOns'
 import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
@@ -21,15 +21,18 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags] = await Promise.all([
+  const wineOn = h.get('x-tenant-modules-wine-orders') === 'true'
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags, bookableWines] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
-        company: { include: { prices: true } },
+        // winePrices: the company's agreed wine prices, which price any bottle added to this booking (T-22).
+        company: { include: { prices: true, winePrices: true } },
         masterclassLines: {
           include: { masterclassItem: true },
           orderBy: { id: 'asc' },
         },
+        wineLines: { orderBy: { createdAt: 'asc' } },
         extras: { orderBy: { id: 'asc' } },
         contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
         invoicesSent: { orderBy: { sentAt: 'desc' } },
@@ -79,6 +82,14 @@ export default async function OrderDetailPage({
     orderRolesFor(tenantId, 'BOOKING'),
     // Through `db`: Tenant has RLS with no policies, so withTenantDb would return null (MaintenanceNotes §27).
     db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
+    // Wines switched on for bookings (T-22) — only when the wine module is on.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+          where: { tenantId, bookable: true, active: true, wine: { active: true } },
+          orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+          select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true } } },
+        }))
+      : Promise.resolve([]),
   ])
 
   if (!order) notFound()
@@ -195,6 +206,17 @@ export default async function OrderDetailPage({
               },
             }
           }),
+          wineLines: order.wineLines.map(l => ({
+            id: l.id,
+            wineVintageId: l.wineVintageId,
+            name: l.wineNameSnapshot,
+            year: l.vintageYearSnapshot,
+            quantity: l.quantity,
+            priceSnapshot: l.priceSnapshot,
+            negotiated: l.negotiated,
+            discountPercent: l.discountPercent,
+            lineTotal: wineLineCost(l),
+          })),
           extras: order.extras.map(e => ({
             id: e.id,
             label: e.label,
@@ -223,6 +245,10 @@ export default async function OrderDetailPage({
           name: i.name,
           type: i.type,
         }))}
+        wineOptions={bookableWines.map(v => ({ vintageId: v.id, name: localName(v.wine.name, v.wine.nameKa, locale), year: v.year, price: v.price }))}
+        wineTerms={order.bookingType === 'COMPANY' && order.company
+          ? { discountPercent: order.company.wineDiscountPercent, prices: Object.fromEntries(order.company.winePrices.map(p => [p.wineVintageId, p.price])) }
+          : null}
         masterclassItems={masterclassItems.map(i => ({
           id: i.id,
           name: localName(i.name, i.nameKa, locale),

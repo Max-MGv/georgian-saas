@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
 import type { BookingVisitType, Product } from '@/lib/pricingUtils'
 import { lineTotals } from '@/lib/orderLines'
+import { priceWineOrder } from '@/lib/winePricing'
 import { adminOrderView, manualFromStrings, NO_TYPED_RATES, type BoxField, type BoxStrings } from '@/lib/adminOrderView'
 import { GuestFields, PriceLines, problemText, RateFields } from '../OrderGuestFields'
 import { UNIT_LABELS } from '@/lib/masterclass'
@@ -49,7 +50,14 @@ type Price = {
 }
 
 /** registrationFee: the company's flat fee per booking (T-152 D-6). */
-type CompanyOption = { id: string; name: string; prices: Price[]; registrationFee: number }
+type CompanyOption = {
+  id: string; name: string; prices: Price[]; registrationFee: number
+  /** The company's wine terms (T-22): its % off and its agreed prices per vintage — they price the wine added to the booking. */
+  wineTerms?: { discountPercent: number | null; prices: Record<string, number> }
+}
+/** A wine switched on for bookings (Admin → Wines → On bookings). */
+type WineOption = { vintageId: string; name: string; year: number; price: number }
+type WineLineDraft = { tempId: number; vintageId: string; quantity: number }
 type MenuItemRow = { id: string; name: string; type: string }
 type MasterclassItemRow = { id: string; name: string; unitType: string; pricePerUnit: number; groupName?: string | null }
 type LineItem = { tempId: number; itemId: string; quantity: number; pricePerUnit: number; name: string; unitType: string; groupName?: string | null }
@@ -88,6 +96,7 @@ export default function NewOrderForm({
   individualsPrices,
   menuItems,
   masterclassItems,
+  wineOptions = [],
   contactRoles = [],
   nationalityEnabled = false,
   locale = 'en',
@@ -97,6 +106,8 @@ export default function NewOrderForm({
   individualsPrices: Price[]
   menuItems: MenuItemRow[]
   masterclassItems: MasterclassItemRow[]
+  /** Wines offered on bookings (empty when the wine module is off or none is switched on). */
+  wineOptions?: WineOption[]
   /** Tenant flag `enableCompanyNationalityBreakdown` — the same gate the public form uses. */
   nationalityEnabled?: boolean
   /**
@@ -169,6 +180,12 @@ export default function NewOrderForm({
   const [newLineItemId, setNewLineItemId] = useState('')
   const [newLineQty, setNewLineQty] = useState('1')
 
+  // Wine for the table (T-22) — client-side only until submit; the server prices it again
+  const [wineLines, setWineLines] = useState<WineLineDraft[]>([])
+  const [addingWine, setAddingWine] = useState(false)
+  const [newWineId, setNewWineId] = useState('')
+  const [newWineQty, setNewWineQty] = useState('1')
+
   // Extras
   const [extras, setExtras] = useState<ExtraItem[]>([])
   const [addingExtra, setAddingExtra] = useState(false)
@@ -188,7 +205,18 @@ export default function NewOrderForm({
   const prices = isCompany ? selectedCompany?.prices ?? [] : individualsPrices
   const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
-  const { extras: extrasAmt } = lineTotals({ masterclassLines: [], extras })
+  const { extras: extrasAmt } = lineTotals({ masterclassLines: [], extras, wineLines: [] })
+
+  // Wine for the table: priced exactly as the server will (lib/winePricing.ts) with the chosen company's own terms — an individual
+  // pays the website price. Each line carries what it costs, rounded on its own.
+  const wineByVintage = new Map(wineOptions.map(w => [w.vintageId, w]))
+  const wineTerms = isCompany ? selectedCompany?.wineTerms : undefined
+  const winePricing = priceWineOrder(
+    wineLines.filter(l => wineByVintage.has(l.vintageId)).map(l => ({ vintageId: l.vintageId, quantity: l.quantity, standardPrice: wineByVintage.get(l.vintageId)!.price })),
+    wineTerms?.prices ?? {}, wineTerms?.discountPercent ?? null,
+  )
+  const wineAmt = winePricing.total
+  const pricedWine = new Map(winePricing.lines.map(l => [l.vintageId, l]))
 
   // Everything the preview shows comes from the same check and pricing createOrderAdmin runs (Chunk 8), so the
   // total here is the total that will be stored — it drifted from the server until 2026-09-19 (#51). A per-person
@@ -197,7 +225,7 @@ export default function NewOrderForm({
     bookingType: isCompany ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
     prices, registration: companyRegistrationFee, manual: manualRates,
     addOnLines: lines.map(l => ({ quantity: l.quantity, pricePerUnit: l.pricePerUnit, unit: l.unitType as MasterclassUnit })),
-    extrasAmt,
+    wineAmt, extrasAmt,
   })
   const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
   const problem = problemText(at, view)
@@ -248,6 +276,19 @@ export default function NewOrderForm({
     setNewLineItemId('')
     setNewLineQty('1')
     setAddingLine(false)
+  }
+
+  function handleAddWine() {
+    const q = Math.floor(Number(newWineQty))
+    if (!newWineId || !wineByVintage.has(newWineId) || !Number.isInteger(q) || q < 1 || q > 999) return
+    // The same wine twice is one line: the quantities add up.
+    setWineLines(prev => prev.some(l => l.vintageId === newWineId)
+      ? prev.map(l => l.vintageId === newWineId ? { ...l, quantity: Math.min(999, l.quantity + q) } : l)
+      : [...prev, { tempId: nextTempId, vintageId: newWineId, quantity: q }])
+    setNextTempId(n => n + 1)
+    setNewWineId('')
+    setNewWineQty('1')
+    setAddingWine(false)
   }
 
   function handleAddExtra() {
@@ -324,6 +365,8 @@ export default function NewOrderForm({
       manualRates: isCompany ? manualFromStrings(manualRates) : NO_TYPED_RATES,
       // The server takes each line's price from the catalogue (Q-1); only the item and quantity go up.
       masterclassLines: lines.map(l => ({ masterclassItemId: l.itemId, quantity: l.quantity })),
+      // Wine for the table: the server re-reads the wine, the price and the company's terms.
+      wineLines: wineLines.map(l => ({ vintageId: l.vintageId, quantity: l.quantity })),
       extras: extras.map(e => ({ label: e.label, amount: e.amount })),
       contacts: buildContacts(),
       nationalities: showNationalityPicker && nationalities.length > 0 ? nationalities : undefined,
@@ -634,6 +677,89 @@ export default function NewOrderForm({
         )}
       </Card>
 
+      {/* ── Wine for the table (T-22): bookable wines, the company's own terms, each line rounded on its own ── */}
+      {(wineOptions.length > 0 || wineLines.length > 0) && (
+        <Card title={at('orderDetail.wine.title')}>
+          {wineLines.length > 0 && (
+            <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
+                    {[at('orderDetail.wine.colWine'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colTotal'), ''].map((h, i) => (
+                      <th key={i} className="text-left px-3 py-2 text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {wineLines.map(l => {
+                    const w = wineByVintage.get(l.vintageId)
+                    const p = pricedWine.get(l.vintageId)
+                    if (!w || !p) return null
+                    return (
+                      <tr key={l.tempId} style={{ borderTop: `1px solid ${C.border}` }}>
+                        <td className="px-3 py-2 text-sm" style={{ color: C.text }}>
+                          {w.name} {w.year}
+                          <span className="block text-xs" style={{ color: C.faint }}>
+                            {p.negotiated ? `${formatTetri(asTetri(p.unitPrice), { decimals: true })} ${at('orderDetail.wine.agreed')}`
+                              : p.discountPercent ? `${formatTetri(asTetri(p.unitPrice), { decimals: true })} −${p.discountPercent}%`
+                              : formatTetri(asTetri(p.unitPrice), { decimals: true })}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
+                        <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>{formatTetri(asTetri(p.lineTotal), { decimals: true })}</td>
+                        <td className="px-3 py-2">
+                          <button onClick={() => setWineLines(prev => prev.filter(x => x.tempId !== l.tempId))}
+                            className="text-xs px-2 py-1 rounded border" style={{ borderColor: '#fca5a5', color: '#b91c1c' }}>
+                            {at('orderDetail.masterclass.remove')}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          )}
+          {wineLines.length === 0 && !addingWine && (
+            <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.wine.none')}</p>
+          )}
+          {addingWine ? (
+            <div className="flex items-end gap-2 flex-wrap">
+              <div style={{ flex: '1 1 160px' }}>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.wine.colWine')}</label>
+                <select value={newWineId} onChange={e => setNewWineId(e.target.value)} style={inputStyle}>
+                  <option value="">{at('orderDetail.wine.selectWine')}</option>
+                  {wineOptions.map(w => <option key={w.vintageId} value={w.vintageId}>{w.name} {w.year}</option>)}
+                </select>
+              </div>
+              <div style={{ width: 80 }}>
+                <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colQty')}</label>
+                <input type="number" min={1} max={999} value={newWineQty} onChange={e => setNewWineQty(e.target.value)} style={inputStyle} />
+              </div>
+              {newWineId && wineByVintage.has(newWineId) && (() => {
+                const one = priceWineOrder([{ vintageId: newWineId, quantity: Math.max(parseInt(newWineQty) || 1, 1), standardPrice: wineByVintage.get(newWineId)!.price }], wineTerms?.prices ?? {}, wineTerms?.discountPercent ?? null)
+                return <div className="text-sm pb-2" style={{ color: C.muted }}>= {formatTetri(asTetri(one.total), { decimals: true })}</div>
+              })()}
+              <button onClick={handleAddWine} disabled={!newWineId} className="px-3 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: C.wine }}>
+                {at('orderDetail.masterclass.add')}
+              </button>
+              <button onClick={() => { setAddingWine(false); setNewWineId(''); setNewWineQty('1') }}
+                className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: C.border, color: C.muted }}>
+                {at('orderDetail.masterclass.cancel')}
+              </button>
+            </div>
+          ) : wineOptions.length > 0 ? (
+            <button onClick={() => setAddingWine(true)} className="text-sm font-medium" style={{ color: C.wine }}>{at('orderDetail.wine.addBtn')}</button>
+          ) : (
+            <p className="text-xs" style={{ color: C.faint }}>
+              {at('addons.wine.none')} <a href="/admin/wines" style={{ color: C.wine }}>{at('addons.wine.manage')}</a>.
+            </p>
+          )}
+        </Card>
+      )}
+
       {/* ── Extra Charges ── */}
       <Card title={at('orderDetail.extras.title')}>
         {extras.length > 0 && (
@@ -714,10 +840,19 @@ export default function NewOrderForm({
           <PriceLines at={at} view={view} />
           {lines.map(l => (
             <div key={l.tempId} className="flex justify-between text-sm">
-              <span style={{ color: C.muted }}>{l.name} × {l.quantity}</span>
-              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}</span>
+              <span style={{ color: C.muted }}>{l.name} × {qtyShown(l)}</span>
+              <span style={{ color: C.text }}>{formatTetri(multiplyTetri(asTetri(l.pricePerUnit), qtyShown(l)), { decimals: true })}</span>
             </div>
           ))}
+          {wineLines.map(l => {
+            const w = wineByVintage.get(l.vintageId), p = pricedWine.get(l.vintageId)
+            return w && p ? (
+              <div key={`wine-${l.tempId}`} className="flex justify-between text-sm">
+                <span style={{ color: C.muted }}>{w.name} {w.year} × {l.quantity}</span>
+                <span style={{ color: C.text }}>{formatTetri(asTetri(p.lineTotal), { decimals: true })}</span>
+              </div>
+            ) : null
+          })}
           {extras.map(e => (
             <div key={e.tempId} className="flex justify-between text-sm">
               <span style={{ color: C.muted }}>{e.label}</span>

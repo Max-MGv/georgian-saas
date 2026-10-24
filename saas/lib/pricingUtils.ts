@@ -25,7 +25,8 @@ export function findTier<T extends PriceTier>(prices: T[], guestCount: number): 
   return prices.reduce((best, p) => ((p.tastingOnlyPrice ?? 0) > (best.tastingOnlyPrice ?? 0) ? p : best))
 }
 
-export type LineTotals = { masterclass: number; extras: number }
+/** What sits on top of the visit price, tetri: add-on lines, wine for the table (T-22), extras. One place adds them up — lib/orderLines.ts. */
+export type LineTotals = { masterclass: number; extras: number; wine: number }
 
 // ─── The product model (Plan-PricingModel, T-152, Max 2026-10-20) ────────────
 //
@@ -180,11 +181,11 @@ export function notOffered(rates: ProductRates, counts: Counts): Product[] {
  * Throws when a product with guests has no rate — pricing it at ₾0 would be a
  * silent undercharge; callers check {@link notOffered} first and refuse or warn.
  */
-export function priceCounts(rates: ProductRates, counts: Counts, lines: LineTotals): number {
+export function priceCounts(rates: ProductRates, counts: Counts, lines: Omit<LineTotals, 'wine'> & { wine?: number }): number {
   const missing = notOffered(rates, counts)
   if (missing.length > 0) throw new Error(`priceCounts: no rate for ${missing.join(', ')}`)
   const base = PRODUCTS.reduce((sum, p) => sum + (counts[p] > 0 ? counts[p] * (rates[p] as number) : 0), 0)
-  return base + rates.registration + lines.masterclass + lines.extras
+  return base + rates.registration + lines.masterclass + (lines.wine ?? 0) + lines.extras
 }
 
 /**

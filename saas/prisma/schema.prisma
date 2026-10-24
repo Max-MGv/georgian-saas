@@ -342,6 +342,9 @@ model InvoiceSent {
   tastingLunchGuests Int @default(0)
   visitType         String
   masterclassLines  Json
+  /// Wine for the table as billed (T-22): [{ name, year, quantity, unitPrice, negotiated, discountPercent, lineTotal }]. Rows
+  /// from before T-22 have none ("[]") — their invoice had no wine.
+  wineLines         Json @default("[]")
   extras            Json
   customMessage     String
   locale            String

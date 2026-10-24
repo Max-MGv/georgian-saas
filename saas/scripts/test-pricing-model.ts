@@ -251,7 +251,7 @@ console.log('Input checks (#93)')
   check('sync: only the per-person line moves', synced.lines.map(l => l.quantity), [12, 4, 1])
   check('sync: the change is reported for the history', synced.changed, [{ id: 'a', name: 'Class', from: 10, to: 12 }])
   check('sync: nothing to do when the guests did not change', withSyncedQuantities(stored, 10).changed.length, 0)
-  check('sync: the total follows (10 → 12 guests = +₾70)', lineTotals({ masterclassLines: synced.lines, extras: [] }).masterclass - lineTotals({ masterclassLines: stored, extras: [] }).masterclass, 2 * 3500)
+  check('sync: the total follows (10 → 12 guests = +₾70)', lineTotals({ masterclassLines: synced.lines, extras: [], wineLines: [] }).masterclass - lineTotals({ masterclassLines: stored, extras: [], wineLines: [] }).masterclass, 2 * 3500)
   const preview = (paying: string) => adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING', guests: '0', boxes: { tastingOnly: paying, lunchOnly: '0', tastingLunch: '0', free: '0' },
     prices: [{ minGuests: 1, maxGuests: 99, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 8000 }], registration: 0, manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' },
     addOnLines: [{ quantity: 1, pricePerUnit: 3500, unit: 'PER_PERSON' }, { quantity: 4, pricePerUnit: 1800, unit: 'PER_PIECE' }, { quantity: 1, pricePerUnit: 6000, unit: 'FLAT' }], extrasAmt: 0 })

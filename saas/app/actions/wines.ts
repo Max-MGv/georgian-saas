@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import type { WineType, Sweetness } from '@prisma/client'
+import { ensureWineGroup } from '@/lib/wineGroup'
 
 function revalidateWines() {
   revalidatePath('/wines')
@@ -137,4 +138,41 @@ export async function assignVintageImage(vintageId: string, imagePath: string | 
 
 export async function toggleVintageActive(id: string, active: boolean) {
   return updateVintage(id, { active })
+}
+
+// ── "Offer on bookings" (T-22): wines guests can add to the table on a booking ─────────────────────────────
+
+function revalidateBookable() {
+  revalidateWines()
+  revalidatePath('/') // the public booking form
+  revalidatePath('/admin/add-ons')
+}
+
+/** Switch every vintage of one wine on / off for bookings (the PRODUCT-level switch). The first one on creates the wine group. */
+export async function setWineBookable(wineId: string, bookable: boolean): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const wine = await tx.wine.findFirst({ where: { id: wineId, tenantId }, select: { id: true } })
+    if (!wine) return { error: 'Wine not found.' } as const
+    await tx.wineVintage.updateMany({ where: { wineId, tenantId }, data: { bookable: !!bookable } })
+    if (bookable) await ensureWineGroup(tx, tenantId)
+    return { success: true } as const
+  })
+  if ('success' in result) revalidateBookable()
+  return result
+}
+
+/** One vintage on / off for bookings (the VINTAGE-level switch). */
+export async function setVintageBookable(vintageId: string, bookable: boolean): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const result = await withTenantDb(tenantId, async tx => {
+    const r = await tx.wineVintage.updateMany({ where: { id: vintageId, tenantId }, data: { bookable: !!bookable } })
+    if (r.count === 0) return { error: 'Vintage not found.' } as const
+    if (bookable) await ensureWineGroup(tx, tenantId)
+    return { success: true } as const
+  })
+  if ('success' in result) revalidateBookable()
+  return result
 }
