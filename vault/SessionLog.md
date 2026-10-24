@@ -8,6 +8,32 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-24 (late) — T-215 pre-production: tier 5 back to 7/7, release-note screenshots taken (staging only, nothing on production)
+
+- Took over from `vault/Handoff-T215-Production.md`. Max: "you're in charge of the process, proceed" — read as the go for the
+  **non-production** items only (tier-5 re-run, screenshots); every production step still needs its own go (Rule 0).
+- **Tier 5 on staging:** first full run 4/7 passed. Not caused by T-215. Two real causes, both in the tests:
+  1. **Flitt card-number mask reorders digits** at 20 ms/key (input held `4444 5555 6666 1111 6`) → "Incorrect card number" →
+     Pay disabled → stall; decline test even ended on the success page. Fixed in `tests/helpers/flittPayment.ts` (type, read back,
+     retype slower until the digits match). Logged in `playwright/KNOWN-ISSUES.md`.
+  2. **`payment-post-payment-extras.spec.ts` was stale** since QA round 3 (adding an extra is a draft until Save) — it never
+     pressed Save, so the orders table had no balance mark. Added the Save click.
+  Result after both fixes: **7/7** (6.3 min), commit `812dc56`.
+- My own misstep: I started `npm ci` + two dev servers *while* the first tier-5 run was going. That did not cause the digit
+  scramble (reproduced on a quiet machine, so I corrected that conclusion), but it was needless load during a timing test.
+- **Release-note screenshots (real before/after, no migration so possible):** temporary `git worktree` of `master` `497bdc7` in this
+  session's scratchpad (told Max when created) → local servers :3001 (live code) / :3002 (staging code), both on the dev DB; one
+  throwaway fixture company + order (`scripts/_qa/t215-shot-fixture.ts`, untracked) → `scripts/_qa/t215-shots.ts` +
+  `t215-pairs.mjs` (untracked). 5 same-size pairs: whole page, Booking info, Contacts (with the "Choose the Guide" picker),
+  Guest breakdown, Masterclass + Extras. Files: `C:\Users\Max\Downloads\T215-release-shots\` (0-whole-page, 1-booking-info, 2-contacts, 3-guest-breakdown, 4-masterclass-extras; each -before / -after).
+  Not shot: the side-panel one-Name-box change, phone width.
+- **Cleanup:** servers stopped, fixture order + company deleted from the dev DB, worktree removed (one junction inside `.next`
+  pointed at the worktree's own packages — removed with `rmdir`, then 0 links left; main `saas/node_modules` still 546 entries).
+- **Nothing on production.** `master` still `497bdc7`. The release-note draft on the production board is a production write —
+  waiting for Max's go (see the handoff doc, step 5).
+
+---
+
 ## 2026-10-23 (eve) — T-152 + T-272 SHIPPED TO PRODUCTION (tier-5 wine test solved first, 7/7)
 
 - New session from the handoff (`vault/Handoff-T152-Production.md`). The wine-order tier-5 failure was a **stale test**:

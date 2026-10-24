@@ -53,7 +53,12 @@ switched on, which it had been silently withholding).
   one by one and were **not** T-215 regressions (2 stale tests from the already-shipped T-152 pricing-rule change
   and date-format change, 1 test-timing bug, the rest environmental/process — full breakdown in
   Max-Exploring-Workflows.md Part 9).
-- **Not yet done:**
+- **Update (later 2026-10-24, second session):** items 1 and 2 below are now DONE — tier 5 = **7/7** on staging after two
+  test fixes (commit `812dc56`: Flitt typing retry + extras spec Save click; see SessionLog 2026-10-24 (late) and
+  `playwright/KNOWN-ISSUES.md`), and 5 real before/after pairs are in `C:\Users\Max\Downloads\T215-release-shots\` (see the
+  SessionLog). They are **not uploaded anywhere yet** — uploading + drafting the release note is a production write that needs
+  Max's go. Only item 3 (Max's own staging check) and the production steps remain.
+- **Not yet done (items 1–2 now done, see above):**
   1. **Tier 5 (real Flitt payments) full re-run on staging** — only the one touched spec
      (`payment-post-payment-extras`) was re-run after the QA fixes landed; the other tier-5 specs predate them.
   2. **Release-note screenshots redone properly.** The last release note (for T-152) used 20-Oct dev screenshots

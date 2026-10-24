@@ -129,6 +129,18 @@ seed-owned codes so a hand-created guide is never touched.
 
 These come from running this suite (or the app in general) hard, not from any single test being wrong. Recognize the shape before assuming a regression.
 
+### Tier 5: Flitt's card mask reorders digits → "Incorrect card number", Pay stays disabled, test stalls on pay.flitt.com (2026-10-24)
+
+**Shape:** a tier-5 spec dies at `payAtFlittCheckout` — `waitForURL` (25 s) never leaves `pay.flitt.com`, or a *decline* test
+ends on `/payment/result?status=success`. The Flitt page shows a red "Incorrect card number" tooltip. A trace shows no card-submit
+request at all. 3–4 of 5 files failed in one run, then 7/7 after the fix below; it is intermittent, not load-related (reproduced on a
+quiet machine).
+**Cause (read from the real input, not guessed):** the `f-card_number` mask intermittently reorders digits when keys arrive 20 ms
+apart — typed `4444555511116666`, field held `4444 5555 6666 1111 6`. (The old note in `flittPayment.ts` that the card graphic never
+reflects typing is outdated: it mirrors the input.)
+**Fix:** `clearAndType` in `tests/helpers/flittPayment.ts` reads the field back and retypes at 60 / 120 / 200 ms until the digits
+match; throws with the last value after 4 tries. If it ever throws, Flitt changed the page — look at the real input value first.
+
 ### `wine-catalogue-order` fails because fixture wine "Rkatsiteli" is inactive (2026-10-07)
 
 **Symptom:** the test can't find the wine "Rkatsiteli" in the public catalogue.
