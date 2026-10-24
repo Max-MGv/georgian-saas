@@ -1,5 +1,6 @@
 import { adminT } from '@/lib/adminT'
 import { asTetri, formatTetri } from '@/lib/money'
+import { REVENUE_LEVELS, type RevenueLevel } from '@/lib/revenueLevel'
 
 /**
  * Three numbers above the bookings table: upcoming bookings, the revenue those
@@ -51,12 +52,18 @@ export type RevenueStripData = {
   revenue: number
   /** The soonest upcoming booking's date, or null if there are none. */
   nextDate: Date | null
+  /**
+   * What the revenue counts (T-22, lib/revenueLevel.ts): visit only · + wine for the table · + guest purchases. Null until an
+   * upcoming booking has wine around it — until then there is nothing to switch.
+   */
+  levels?: { current: RevenueLevel; hrefs: Record<RevenueLevel, string> } | null
 }
 
 export default function RevenueStrip({
   count,
   revenue,
   nextDate,
+  levels = null,
   locale = 'en',
 }: RevenueStripData & { locale?: string }) {
   const at = (key: string) => adminT(locale, key)
@@ -86,11 +93,12 @@ export default function RevenueStrip({
   ]
 
   return (
-    // Phone: the three cells stay side by side as one slim row (smaller type, no
-    // sub-line) instead of stacking into three full cards — the bookings list
-    // should start on the first screen, not below the totals. sm+: unchanged.
+    <div className="mb-3 sm:mb-4">
+    {/* Phone: the three cells stay side by side as one slim row (smaller type, no
+        sub-line) instead of stacking into three full cards — the bookings list
+        should start on the first screen, not below the totals. sm+: unchanged. */}
     <div
-      className="rounded-xl border mb-3 sm:mb-4 grid grid-cols-3 divide-x"
+      className="rounded-xl border grid grid-cols-3 divide-x"
       style={{ borderColor: C.border, backgroundColor: C.bg, borderStyle: 'solid' }}
     >
       {cells.map(cell => (
@@ -102,6 +110,28 @@ export default function RevenueStrip({
           <p className="hidden sm:block text-xs mt-0.5" style={{ color: C.faint, minHeight: '1rem' }}>{cell.sub}</p>
         </div>
       ))}
+    </div>
+    {/* What the revenue counts (T-22, D-8). Plain links — the choice rides in the URL like the page's filters, and this stays a server component. */}
+    {levels && (
+      <div className="flex items-center justify-center gap-1 mt-2 flex-wrap" role="group" aria-label={at('statistics.revenueLevel.label')} data-testid="revenue-levels">
+        <span className="text-xs mr-1" style={{ color: C.faint }}>{at('statistics.revenueLevel.label')}:</span>
+        {REVENUE_LEVELS.map(l => (
+          <a
+            key={l}
+            href={levels.hrefs[l]}
+            aria-current={levels.current === l ? 'true' : undefined}
+            className="text-xs px-2.5 py-1 rounded-full"
+            style={{
+              backgroundColor: levels.current === l ? C.wine : 'transparent',
+              color: levels.current === l ? '#fff' : C.muted,
+              border: `1px solid ${levels.current === l ? C.wine : C.border}`,
+            }}
+          >
+            {at(`statistics.revenueLevel.${l}`)}
+          </a>
+        ))}
+      </div>
+    )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import {
 import SearchableSelect from './SearchableSelect'
 import { useContainerWidth } from './useContainerWidth'
 import { adminT } from '@/lib/adminT'
+import { REVENUE_LEVELS, DEFAULT_REVENUE_LEVEL, revenueAt, type RevenueLevel } from '@/lib/revenueLevel'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -23,7 +24,8 @@ const tooltipStyle = {
   itemStyle: { color: C.text },
 }
 
-type Order = { id: string; date: string; totalPrice: number; companyId: string | null; companyName: string | null }
+/** `totalPrice` is the invoiced total (table wine inside); `tableWine` / `guestWine` let the revenue level add or take them out. */
+type Order = { id: string; date: string; totalPrice: number; tableWine: number; guestWine: number; companyId: string | null; companyName: string | null }
 type Company = { id: string; name: string }
 
 type Props = { orders: Order[]; companies: Company[]; locale?: string }
@@ -52,8 +54,12 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
-export default function StatisticsV2({ orders, companies, locale = 'en' }: Props) {
+export default function StatisticsV2({ orders: rawOrders, companies, locale = 'en' }: Props) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
+  // What the revenue figures count (lib/revenueLevel.ts): the invoiced total by default; the switch only appears once there is wine around a visit.
+  const [level, setLevel] = useState<RevenueLevel>(DEFAULT_REVENUE_LEVEL)
+  const hasVisitWine = useMemo(() => rawOrders.some(o => o.tableWine > 0 || o.guestWine > 0), [rawOrders])
+  const orders = useMemo(() => rawOrders.map(o => ({ ...o, totalPrice: revenueAt(level, o) })), [rawOrders, level])
   const MONTH_LABELS = MONTH_KEYS.map(k => at(`statistics.month.${k}`))
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const currentYear = today.getFullYear()
@@ -204,6 +210,14 @@ export default function StatisticsV2({ orders, companies, locale = 'en' }: Props
             locale={locale}
           />
         </div>
+        {hasVisitWine && (
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.revenueLevel.label')}</label>
+            <select value={level} onChange={e => setLevel(e.target.value as RevenueLevel)} style={selectStyle} aria-label={at('statistics.revenueLevel.label')}>
+              {REVENUE_LEVELS.map(l => <option key={l} value={l}>{at(`statistics.revenueLevel.${l}`)}</option>)}
+            </select>
+          </div>
+        )}
         {(selectedMonth !== '' || selectedCompanyId) && (
           <button
             onClick={() => { setSelectedMonth(''); setSelectedCompanyId('') }}

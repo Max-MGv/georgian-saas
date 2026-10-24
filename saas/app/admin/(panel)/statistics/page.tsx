@@ -6,7 +6,7 @@ import { adminT } from '@/lib/adminT'
 import StatisticsClient from './StatisticsClient'
 import type { WineOrderStat } from './WineStatistics'
 import { NOT_ABANDONED, NOT_CANCELLED } from '@/lib/orderFilters'
-import { loadWineSales, type WineSale } from '@/lib/wineSales'
+import { loadWineSales, bookingWine, BOOKING_WINE_SELECT, type WineSale } from '@/lib/wineSales'
 
 export default async function StatisticsPage() {
   const [tenantId, h, adminLanguage] = await Promise.all([getTenantId(), headers(), getSetting('admin_language')])
@@ -30,7 +30,8 @@ export default async function StatisticsPage() {
           // — an average order value computed from a revenue that skips
           // cancellations and a count that does not would be wrong.
           where: { tenantId, ...NOT_ABANDONED, ...NOT_CANCELLED },
-          include: { company: { select: { name: true } } },
+          // BOOKING_WINE_SELECT: the booking's table wine and the guest purchases from its visit, for the revenue-level switch.
+          include: { company: { select: { name: true } }, ...BOOKING_WINE_SELECT },
           orderBy: { date: 'asc' },
         }))
       : Promise.resolve([]),
@@ -107,6 +108,8 @@ export default async function StatisticsPage() {
     id: o.id,
     date: o.date.toISOString(),
     totalPrice: o.totalPrice ?? 0,
+    // Wine around the visit, for the revenue-level switch (lib/revenueLevel.ts): table wine is inside totalPrice, guest purchases are not.
+    ...bookingWine(o),
     // Individuals are one group ("Individual"), whatever row older demo data links them to (2026-10-23).
     companyId: o.bookingType === 'INDIVIDUAL' ? null : o.companyId,
     companyName: o.bookingType === 'INDIVIDUAL' ? null : o.company?.name ?? null,

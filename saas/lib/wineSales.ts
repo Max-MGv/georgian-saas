@@ -42,6 +42,31 @@ export type WineSale = {
   bookingId: string | null
 }
 
+/**
+ * What to select on a booking to know the wine around it — spread into an `include`/`select` of `order.findMany`, then read with
+ * `bookingWine()`. This (with loadWineSales) is the only place that knows a booking's wine comes from two parents.
+ */
+export const BOOKING_WINE_SELECT = {
+  wineLines: { select: { quantity: true, priceSnapshot: true, lineTotal: true } },
+  guestPurchases: {
+    where: { abandonedAt: null, stage: { not: 'CANCELLED' as const } },
+    select: { totalAmount: true, discountPercent: true, wineItems: { select: { quantity: true, priceSnapshot: true, lineTotal: true } } },
+  },
+} as const
+
+type LineAmountInput = { quantity: number; priceSnapshot: number; lineTotal: number | null }
+
+/** Tetri of wine for the table on a booking (inside its total), and of guest purchases from its visit (outside it). */
+export function bookingWine(o: {
+  wineLines: LineAmountInput[]
+  guestPurchases: { totalAmount: number | null; discountPercent: number | null; wineItems: LineAmountInput[] }[]
+}): { tableWine: number; guestWine: number } {
+  return {
+    tableWine: o.wineLines.reduce((s, l) => s + wineLineAmount(l), 0),
+    guestWine: o.guestPurchases.reduce((s, p) => s + (p.totalAmount ?? p.wineItems.reduce((t, l) => t + wineLineAmount(l, p.discountPercent), 0)), 0),
+  }
+}
+
 type Reader = Pick<Prisma.TransactionClient, 'wineOrder' | 'order'>
 
 export async function loadWineSales(

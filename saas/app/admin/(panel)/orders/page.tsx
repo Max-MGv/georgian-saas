@@ -4,6 +4,8 @@ import { getTenantId } from '@/lib/tenant'
 import { invoiceAddOnLine, invoiceWineLine } from '@/lib/orderLines'
 import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 import { BOOKING_STAGES } from '@/lib/statusFlow'
+import { bookingWine, BOOKING_WINE_SELECT } from '@/lib/wineSales'
+import { REVENUE_LEVELS, DEFAULT_REVENUE_LEVEL, parseRevenueLevel, revenueAt, type RevenueLevel } from '@/lib/revenueLevel'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { getDistinctOrderNationalities } from '@/app/actions/orders'
@@ -32,6 +34,8 @@ type SearchParams = {
   payment?: string
   nationality?: string // ISO 3166-1 code (Plan-CompanyNationality)
   view?: 'table' | 'list' | 'calendar' | 'board'
+  /** What the revenue strip counts: visit | table | guest (lib/revenueLevel.ts). */
+  rev?: string
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -227,7 +231,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           today.setHours(0, 0, 0, 0)
           return withTenantDb(tenantId, tx => tx.order.findMany({
             where: { tenantId, ...NOT_ABANDONED, date: { gte: today }, stage: { not: 'CANCELLED' } },
-            select: { date: true, totalPrice: true },
+            select: { date: true, totalPrice: true, ...BOOKING_WINE_SELECT },
             orderBy: { date: 'asc' },
           }))
         })(),
@@ -235,11 +239,25 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       ])
     : [[], false]
 
+  // What the revenue counts (lib/revenueLevel.ts, D-8): the invoiced total by default; "visit only" takes the table wine out,
+  // "+ guest purchases" adds the bottles guests bought on the day. The choice rides in the URL (`rev`) like the page's other filters,
+  // and the switch only appears once an upcoming booking has wine around it.
+  const revLevel = parseRevenueLevel(params.rev)
+  const upcomingPriced = upcoming.map(o => ({ ...o, ...bookingWine(o) }))
+  const hasVisitWine = upcomingPriced.some(o => o.tableWine > 0 || o.guestWine > 0)
+  const revHref = (l: RevenueLevel) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) if (typeof v === 'string' && v && k !== 'rev') q.set(k, v)
+    if (l !== DEFAULT_REVENUE_LEVEL) q.set('rev', l)
+    const s = q.toString()
+    return s ? `/admin/orders?${s}` : '/admin/orders'
+  }
   const revenueStrip = hasAnyOrders
     ? {
         count: upcoming.length,
-        revenue: Math.round(upcoming.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0)),
+        revenue: Math.round(upcomingPriced.reduce((sum, o) => sum + revenueAt(revLevel, { totalPrice: o.totalPrice ?? 0, tableWine: o.tableWine, guestWine: o.guestWine }), 0)),
         nextDate: upcoming[0]?.date ?? null,
+        levels: hasVisitWine ? { current: revLevel, hrefs: Object.fromEntries(REVENUE_LEVELS.map(l => [l, revHref(l)])) as Record<RevenueLevel, string> } : null,
       }
     : null
 
