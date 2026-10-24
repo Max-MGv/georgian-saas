@@ -45,6 +45,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   (draft stays hidden from clients) after Max said "once it looks good proceed"; the auto-mode permission classifier **denied it**
   ([Modify Shared Resources]) and I did not work around it. Waiting for Max's explicit go on each production step
   (draft the release note → merge `staging`→`master` + push → live read-only checks → `tix ship T-215`).
+- **Max then said "go" (all four steps).** Done: **(1)** release `cmvmltcwc0000l708okdq2eu7` (2026-10-24) drafted on the
+  **production** board, hidden: 1 entry `cmvmltdf70002l708u88a311t` (EN + KA text, link `/admin/orders`, 10 images = 5 before/after
+  pairs). **(2) partly:** `master` merged locally with `staging` (merge commit `1a34c4e`, tree identical to staging, 15 app files,
+  no migration) — but `git push origin master` was **denied by the auto-mode classifier [Production Deploy]** and not retried or
+  worked around. `origin/master` is still `497bdc7`; local `master` is 1 commit ahead, unpushed; checked out back on `staging`.
+  Steps 3 (live read-only checks) and 4 (`tix ship T-215`) not started — they depend on the push.
 
 ---
 
