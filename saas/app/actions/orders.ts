@@ -11,9 +11,10 @@ import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { adminQuote, boxColumns, countsOf, notOffered, payingGuests, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
 import { lineIdentity, lineTotals, sumAmountLines, sumQuantityLines } from '@/lib/orderLines'
+import { withSyncedQuantities, writeSyncedQuantities } from '@/lib/addOnLines'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
@@ -286,7 +287,7 @@ export async function updateOrderEnhanced(
     manualRates: ManualRates
   }
 ): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
   const result = await withTenantDb(tenantId, async (tx) => {
@@ -294,7 +295,7 @@ export async function updateOrderEnhanced(
       where: { id, tenantId },
       include: {
         company: { include: { prices: true } },
-        masterclassLines: true,
+        masterclassLines: { include: { masterclassItem: true } },
         extras: true,
       },
     })
@@ -356,7 +357,10 @@ export async function updateOrderEnhanced(
 
     let pricing: { totalPrice: number; rates: ProductRates | null } | null = null
     if (changed) {
-      const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals(order)
+      // A per-person add-on is charged per paying guest, so its quantity follows the new guests (D-11) — priced here
+      // with the quantities it WILL have; they are written below, in this same transaction, once the price is accepted.
+      const synced = withSyncedQuantities(order.masterclassLines, payingGuests(counts)).lines
+      const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals({ masterclassLines: synced, extras: order.extras })
       // The company's table at today's rows (each product by its own count), typed rates for the rest — the
       // same adminQuote the page previews with, so the stored total is the one the admin saw. An individual
       // order: the Individuals table, no registration fee (D-14).
@@ -379,6 +383,9 @@ export async function updateOrderEnhanced(
       }
     }
 
+    if (pricing) {
+      await writeSyncedQuantities(tx, { tenantId, orderId: id, actorId: actor?.id ?? null, lines: order.masterclassLines, payingGuests: payingGuests(counts) })
+    }
     await tx.order.update({
       where: { id },
       data: {
@@ -476,9 +483,11 @@ export async function createOrderAdmin(data: {
     const catalogue = data.masterclassLines.length > 0
       ? await tx.masterclassItem.findMany({ where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT })
       : []
-    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue)
+    // Per person = the paying guests (D-11); admins may add any active item, whatever its group shows (E6), so no
+    // visibility check here — only the public form is bound by it.
+    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue, { payingGuests: payingGuests(counts) })
     if (!checkedLines.ok) {
-      return { error: 'A masterclass line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
+      return { error: 'An add-on line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
     }
     const masterclassLines = checkedLines.lines
     const masterclassAmt = sumQuantityLines(masterclassLines)

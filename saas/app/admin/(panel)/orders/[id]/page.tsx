@@ -1,6 +1,7 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
 import { lineIdentity } from '@/lib/orderLines'
+import { localName } from '@/lib/addOns'
 import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
 import Link from 'next/link'
@@ -62,7 +63,8 @@ export default async function OrderDetailPage({
     })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
       where: { active: true, tenantId },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ group: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+      include: { group: { select: { nameEn: true, nameKa: true, active: true } } },
     })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -183,9 +185,10 @@ export default async function OrderDetailPage({
               masterclassItemId: l.masterclassItemId ?? '',
               quantity: l.quantity,
               pricePerUnit: l.pricePerUnit,
+              groupName: localName(who.groupName ?? '', who.groupNameKa, adminLanguage || 'en') || null,
               masterclassItem: {
                 id: l.masterclassItem?.id ?? '',
-                name: who.name,
+                name: localName(who.name, who.nameKa, adminLanguage || 'en'),
                 unitType: who.unit,
                 pricePerUnit: l.masterclassItem?.pricePerUnit ?? l.pricePerUnit,
                 active: l.masterclassItem?.active ?? false,
@@ -222,10 +225,11 @@ export default async function OrderDetailPage({
         }))}
         masterclassItems={masterclassItems.map(i => ({
           id: i.id,
-          name: i.name,
+          name: localName(i.name, i.nameKa, locale),
           unitType: i.unitType,
           pricePerUnit: i.pricePerUnit,
           active: i.active,
+          groupName: i.group ? localName(i.group.nameEn, i.group.nameKa, locale) : null,
         }))}
       />
     </div>

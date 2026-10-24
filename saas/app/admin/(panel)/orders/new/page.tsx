@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import { orderRolesFor } from '@/lib/contactResolution'
+import { localName } from '@/lib/addOns'
 import NewOrderForm from './NewOrderForm'
 
 const C = { wine: 'var(--color-brand)', faint: 'var(--site-secondary)' }
@@ -21,7 +22,11 @@ export default async function NewOrderPage() {
       orderBy: { name: 'asc' },
     })),
     withTenantDb(tenantId, tx => tx.menuItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
-    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({ where: { active: true, tenantId }, orderBy: { sortOrder: 'asc' } })),
+    withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
+      where: { active: true, tenantId },
+      orderBy: [{ group: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+      include: { group: { select: { nameEn: true, nameKa: true } } },
+    })),
     // Read through `db` directly, like the public page does: Tenant has RLS enabled with no
     // policies, so withTenantDb would silently return null (MaintenanceNotes §27).
     db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
@@ -65,9 +70,10 @@ export default async function NewOrderPage() {
         menuItems={menuItems.map(i => ({ id: i.id, name: i.name, type: i.type }))}
         masterclassItems={masterclassItems.map(i => ({
           id: i.id,
-          name: i.name,
+          name: localName(i.name, i.nameKa, locale),
           unitType: i.unitType,
           pricePerUnit: i.pricePerUnit,
+          groupName: i.group ? localName(i.group.nameEn, i.group.nameKa, locale) : null,
         }))}
       />
     </div>

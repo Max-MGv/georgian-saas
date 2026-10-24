@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { Fragment, useState, useCallback } from 'react'
 import { asTetri, fromMajor, formatTetri, multiplyTetri } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createOrderAdmin } from '@/app/actions/orders'
@@ -51,8 +51,8 @@ type Price = {
 /** registrationFee: the company's flat fee per booking (T-152 D-6). */
 type CompanyOption = { id: string; name: string; prices: Price[]; registrationFee: number }
 type MenuItemRow = { id: string; name: string; type: string }
-type MasterclassItemRow = { id: string; name: string; unitType: string; pricePerUnit: number }
-type LineItem = { tempId: number; itemId: string; quantity: number; pricePerUnit: number; name: string; unitType: string }
+type MasterclassItemRow = { id: string; name: string; unitType: string; pricePerUnit: number; groupName?: string | null }
+type LineItem = { tempId: number; itemId: string; quantity: number; pricePerUnit: number; name: string; unitType: string; groupName?: string | null }
 type ExtraItem = { tempId: number; label: string; amount: number }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -188,24 +188,40 @@ export default function NewOrderForm({
   const prices = isCompany ? selectedCompany?.prices ?? [] : individualsPrices
   const companyRegistrationFee = selectedCompany?.registrationFee ?? 0
 
-  const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals({ masterclassLines: lines, extras })
+  const { extras: extrasAmt } = lineTotals({ masterclassLines: [], extras })
 
   // Everything the preview shows comes from the same check and pricing createOrderAdmin runs (Chunk 8), so the
-  // total here is the total that will be stored — it drifted from the server until 2026-09-19 (#51).
+  // total here is the total that will be stored — it drifted from the server until 2026-09-19 (#51). A per-person
+  // add-on is priced at the paying guests being typed (T-7: it follows them, and the server sets it the same way).
   const view = adminOrderView({
     bookingType: isCompany ? 'COMPANY' : 'INDIVIDUAL', visitType, guests: guestCountStr, boxes,
     prices, registration: companyRegistrationFee, manual: manualRates,
-    masterclassAmt, extrasAmt,
+    addOnLines: lines.map(l => ({ quantity: l.quantity, pricePerUnit: l.pricePerUnit, unit: l.unitType as MasterclassUnit })),
+    extrasAmt,
   })
   const payingGuests = view.counts ? view.counts.tastingOnly + view.counts.lunchOnly + view.counts.tastingLunch : 0
   const problem = problemText(at, view)
+  const qtyShown = (l: LineItem) => l.unitType === 'PER_PERSON' && view.counts ? payingGuests : l.quantity
 
-  // ── Masterclass helpers ───────────────────────────────────────────────────
+  // ── Add-on helpers ────────────────────────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
   const isFlatUnit = selectedMcItem?.unitType === 'FLAT'
   const lineTotal = selectedMcItem
-    ? isFlatUnit ? selectedMcItem.pricePerUnit : (parseInt(newLineQty) || 1) * selectedMcItem.pricePerUnit
+    ? isFlatUnit ? selectedMcItem.pricePerUnit
+      : selectedMcItem.unitType === 'PER_PERSON' ? Math.max(payingGuests, 1) * selectedMcItem.pricePerUnit
+      : (parseInt(newLineQty) || 1) * selectedMcItem.pricePerUnit
     : 0
+  // The picker lists the active items under their group, in the winery's group order; the table groups the chosen lines.
+  const groupBy = <T extends { groupName?: string | null }>(rows: T[]) => {
+    const names: string[] = []
+    const byName = new Map<string, T[]>()
+    for (const r of rows) {
+      const k = r.groupName ?? ''
+      if (!byName.has(k)) { byName.set(k, []); names.push(k) }
+      byName.get(k)!.push(r)
+    }
+    return names.map(name => ({ name, rows: byName.get(name)! }))
+  }
 
   function handleNewLineItemChange(itemId: string) {
     setNewLineItemId(itemId)
@@ -218,7 +234,7 @@ export default function NewOrderForm({
 
   function handleAddLine() {
     if (!selectedMcItem) return
-    const qty = isFlatUnit ? 1 : parseInt(newLineQty) || 1
+    const qty = isFlatUnit ? 1 : selectedMcItem.unitType === 'PER_PERSON' ? Math.max(payingGuests, 1) : parseInt(newLineQty) || 1
     setLines(prev => [...prev, {
       tempId: nextTempId,
       itemId: newLineItemId,
@@ -226,6 +242,7 @@ export default function NewOrderForm({
       pricePerUnit: selectedMcItem.pricePerUnit,
       name: selectedMcItem.name,
       unitType: selectedMcItem.unitType,
+      groupName: selectedMcItem.groupName ?? null,
     }])
     setNextTempId(n => n + 1)
     setNewLineItemId('')
@@ -504,50 +521,63 @@ export default function NewOrderForm({
         </Card>
       )}
 
-      {/* ── Masterclass Add-ons ── */}
-      <Card title={at('orderDetail.masterclass.title')}>
+      {/* ── Add-ons (T-7): grouped like the order page; per person follows the paying guests, flat is once ── */}
+      <Card title={at('orderDetail.addons.title')}>
         {lines.length > 0 && (
           <div className="rounded-lg border overflow-hidden mb-3" style={{ borderColor: C.border }}>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ backgroundColor: 'var(--site-bg)', borderBottom: `1px solid ${C.border}` }}>
-                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colUnit'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colPricePerUnit'), at('orderDetail.masterclass.colTotal'), ''].map(h => (
-                    <th key={h} className="text-left px-3 py-2 text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{h}</th>
+                  {[at('orderDetail.masterclass.colItem'), at('orderDetail.masterclass.colQty'), at('orderDetail.masterclass.colTotal'), ''].map((h, i) => (
+                    <th key={i} className="text-left px-3 py-2 text-xs font-medium" style={{ color: 'var(--site-secondary)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l, i) => (
-                  <tr key={l.tempId} style={{ borderBottom: i < lines.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.text }}>{l.name}</td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
-                        {UNIT_LABELS[l.unitType as MasterclassUnit] ?? l.unitType}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{l.quantity}</td>
-                    <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(l.pricePerUnit))}</td>
-                    <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
-                      {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { decimals: true })}
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => setLines(prev => prev.filter(x => x.tempId !== l.tempId))}
-                        className="text-xs px-2 py-1 rounded border"
-                        style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
-                      >
-                        {at('orderDetail.masterclass.remove')}
-                      </button>
-                    </td>
-                  </tr>
+                {groupBy(lines).map(g => (
+                  <Fragment key={g.name || '_ungrouped'}>
+                    {(g.name || groupBy(lines).length > 1) && (
+                      <tr style={{ backgroundColor: 'var(--site-bg)', borderTop: `1px solid ${C.border}` }}>
+                        <td colSpan={4} className="px-3 py-1 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--site-secondary)' }}>
+                          {g.name || at('addons.ungrouped.title')}
+                        </td>
+                      </tr>
+                    )}
+                    {g.rows.map(l => (
+                      <tr key={l.tempId} style={{ borderTop: `1px solid ${C.border}` }}>
+                        <td className="px-3 py-2 text-sm" style={{ color: C.text }}>
+                          {l.name}
+                          <span className="block text-xs" style={{ color: C.faint }}>
+                            {formatTetri(asTetri(l.pricePerUnit))} {UNIT_LABELS[l.unitType as MasterclassUnit] ?? l.unitType}
+                            {l.unitType === 'PER_PERSON' && ` · ${at('orderDetail.addons.followsGuests')}`}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-sm" style={{ color: C.muted }}>{qtyShown(l)}</td>
+                        <td className="px-3 py-2 text-sm font-medium" style={{ color: C.wine }}>
+                          {formatTetri(multiplyTetri(asTetri(l.pricePerUnit), qtyShown(l)), { decimals: true })}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setLines(prev => prev.filter(x => x.tempId !== l.tempId))}
+                            className="text-xs px-2 py-1 rounded border"
+                            style={{ borderColor: '#fca5a5', color: '#b91c1c' }}
+                          >
+                            {at('orderDetail.masterclass.remove')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
         {lines.length === 0 && !addingLine && (
-          <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.masterclass.none')}</p>
+          <p className="text-sm mb-3" style={{ color: C.faint }}>{at('orderDetail.addons.none')}</p>
         )}
 
         {addingLine ? (
@@ -556,14 +586,18 @@ export default function NewOrderForm({
               <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colItem')}</label>
               <select value={newLineItemId} onChange={e => handleNewLineItemChange(e.target.value)} style={inputStyle}>
                 <option value="">{at('orderDetail.masterclass.selectItem')}</option>
-                {masterclassItems.map(i => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} ({UNIT_LABELS[i.unitType as MasterclassUnit]})
-                  </option>
+                {groupBy(masterclassItems).map(g => (
+                  <optgroup key={g.name || '_ungrouped'} label={g.name || at('addons.ungrouped.title')}>
+                    {g.rows.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({UNIT_LABELS[i.unitType as MasterclassUnit]})
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
-            {!isFlatUnit && (
+            {selectedMcItem?.unitType === 'PER_PIECE' && (
               <div style={{ width: 80 }}>
                 <label className="text-xs block mb-1" style={{ color: C.faint }}>{at('orderDetail.masterclass.colQty')}</label>
                 <input type="number" min={1} value={newLineQty} onChange={e => setNewLineQty(e.target.value)} style={inputStyle} />

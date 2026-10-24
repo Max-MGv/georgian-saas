@@ -528,6 +528,12 @@ enum OrderEventType {
   DELIVERY_FEE_SET
   // An admin changed a wine order's preferred delivery/pickup date (T-14). Payload: from / to.
   PREFERRED_DATE_CHANGED
+  // Add-on lines (T-7, Plan-AddOnsAndWine §4.8). Written by the new code only; nothing in the app reads events as a
+  // list yet, so an old build seeing these values on the shared dev database does no harm.
+  ADDON_ADDED
+  ADDON_REMOVED
+  // A per-person line followed a change of paying guests (D-11). Payload: lines [{ name, from, to }].
+  ADDON_QTY_SYNCED
 }
 
 enum ActorType {

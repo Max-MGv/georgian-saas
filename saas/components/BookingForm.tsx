@@ -11,6 +11,7 @@ import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole, ResolvedPriceTier } from '@/lib/contactResolution'
 import { notifyNewCompany } from '@/app/actions/notifyNewCompany'
 import { lineAmount, sumQuantityLines } from '@/lib/orderLines'
+import { groupShownOn, localName } from '@/lib/addOns'
 import { countsFromVisit, findProductTier, notOffered, payingGuests as payingOf, priceCounts, PRODUCTS, productPrice, ratesForCounts, totalGuests as totalOf, type BookingVisitType, type Counts, type Product, type ProductRates } from '@/lib/pricingUtils'
 import { checkBookingCounts, countRulesFromSettings, type CountRuleKey, type CountsError } from '@/lib/bookingInput'
 import { t } from '@/lib/t'
@@ -51,7 +52,13 @@ type ProvenCompany = {
   skipPayment: boolean | null
 }
 type MenuItem = { id: string; name: string; type: string }
-type MasterclassItem = { id: string; name: string; unitType: string; pricePerUnit: number }
+/** One add-on (still `MasterclassItem` in the database) and the group the winery put it in (T-7). */
+type AddOnItem = { id: string; name: string; nameKa: string | null; unitType: string; pricePerUnit: number }
+type AddOnGroupView = {
+  id: string; nameEn: string; nameKa: string | null
+  showToCompanies: boolean; showToIndividuals: boolean; visitTypes: string[]
+  items: AddOnItem[]
+}
 
 const C = {
   bg: 'var(--site-surface)', border: 'var(--site-border)', text: 'var(--site-text)',
@@ -96,7 +103,8 @@ type Props = {
    */
   bookingRoles?: OrderRole[]
   menuItems?: MenuItem[]
-  masterclassItems?: MasterclassItem[]
+  /** Active groups that have active items, in the winery's order. Which one a guest sees: `groupShownOn()`. */
+  addOnGroups?: AddOnGroupView[]
   minGuestsTasting?: number
   minGuestsTastingLunch?: number
   blockedDates?: string[]
@@ -144,7 +152,7 @@ const DEFAULT_PAYMENT_READY = { configured: false, individual: false, company: f
 // splitFullName now lives in lib/splitFullName.ts so the admin New Order form
 // splits a single Name box the same way (see that file for the convention).
 
-export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], masterclassItems = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], countRuleSettings = {}, onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
+export default function BookingForm({ locale = 'en', companies, showCompanyPrice, enhancedEnabled, nationalityBreakdownEnabled, hideCompanyDropdown = false, bookingRoles = [], menuItems = [], addOnGroups = [], minGuestsTasting = 4, minGuestsTastingLunch = 4, blockedDates = [], formContent = {}, messagesContent = {}, displayPriceTasting = null, displayPriceLunch = null, individualPrices = [], countRuleSettings = {}, onlinePaymentEnabled = DEFAULT_PAYMENT_READY, bookingLeadSplit = false, bookingLeadHours = 3, bookingLeadHoursTasting = 3, bookingLeadHoursTastingLunch = 6, workingHoursCustom = false, workingHoursOpen = '12:00', workingHoursClose = '18:00', workingHoursDaysJson = '', visitDurationTasting = 90, visitDurationTastingLunch = 180 }: Props) {
   const fc = (key: string, tKey: string) => formContent[key] || t(locale, tKey)
   const mc = (key: string, tKey: string, vars?: Record<string, string | number>) => {
     let str = messagesContent[key] || t(locale, tKey)
@@ -201,8 +209,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   // with an Edit button instead of three filled boxes. Set by applyPickedPerson,
   // cleared by Edit and wherever the form empties these fields.
   const [contactCompact, setContactCompact] = useState(false)
-  // T-21: masterclass add-ons start collapsed to one summary row.
-  const [mcOpen, setMcOpen] = useState(false)
+  // T-21: every add-on group starts collapsed to one summary row (T-7: one row per group).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   /** Which company the four fields above were last filled from — see the effect below. */
   const prevCompanyIdRef = useRef('')
 
@@ -587,8 +595,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
         hotDishVegetable: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishVeg || null : null,
         hotDishMeat: counts.lunchOnly + counts.tastingLunch > 0 ? hotDishMeat || null : null,
         foodNotes: foodNotes || null,
-        masterclassLines: activeMcLines,
       } : {}),
+      // Any form can carry add-ons now (T-7): the groups decide who is offered what, and the server checks it again.
+      masterclassLines: activeMcLines,
     }
   }
 
@@ -627,15 +636,20 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const countError = !countCheck.ok ? countErrorText(countCheck.error) : null
   const enhancedGuestsHaveError = attemptedSubmit && isEnhanced && !!countError
 
-  // Masterclass selections
-  const activeMcLines = masterclassItems
+  // ── Add-ons (T-7) ──
+  // The groups this guest is offered: right audience, right visit type (lib/addOns.ts — the server asks the same
+  // question again). A selection in a group that is no longer offered (visit type or booking type changed) stays in
+  // state but is neither priced nor sent, and comes back if the guest switches back.
+  const visibleGroups = addOnGroups.filter(g => g.items.length > 0 && groupShownOn({ active: true, showToCompanies: g.showToCompanies, showToIndividuals: g.showToIndividuals, visitTypes: g.visitTypes }, bookingType, visitType))
+  const visibleItems = visibleGroups.flatMap(g => g.items)
+  // Per person = the paying guests, flat = once, per piece = what the guest typed (the same rule the server applies).
+  const addOnQty = (m: AddOnItem) => m.unitType === 'FLAT' ? 1 : m.unitType === 'PER_PERSON' ? Math.max(payingGuests, 1) : Math.max(parseInt(mcSelections[m.id]?.qtyStr || '1') || 1, 1)
+  const activeMcLines = visibleItems
     .filter(m => mcSelections[m.id]?.checked)
-    .map(m => ({
-      masterclassItemId: m.id,
-      quantity: Math.max(parseInt(mcSelections[m.id]?.qtyStr || '1') || 1, 1),
-      pricePerUnit: m.pricePerUnit,
-    }))
+    .map(m => ({ masterclassItemId: m.id, quantity: addOnQty(m), pricePerUnit: m.pricePerUnit }))
   const masterclassAmt = sumQuantityLines(activeMcLines)
+  const groupTitle = (g: AddOnGroupView) => localName(g.nameEn, g.nameKa, locale)
+  const itemTitle = (m: AddOnItem) => localName(m.name, m.nameKa, locale)
 
   // ── Price preview: priceCounts(), the server's own arithmetic (§4.2) — it cannot drift from it ──
   // Individuals price off the Individuals ladder; a company only once proven by its code. Each product looks up
@@ -647,11 +661,11 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
     : null
   const missingProducts: Product[] = previewRates && payingGuests > 0 ? notOffered(previewRates, counts) : []
   const previewTotal: number | null = previewRates && payingGuests > 0 && missingProducts.length === 0
-    ? priceCounts(previewRates, counts, { masterclass: isEnhanced ? masterclassAmt : 0, extras: 0 })
+    ? priceCounts(previewRates, counts, { masterclass: masterclassAmt, extras: 0 })
     : null
   // Individuals with no ladder: the home page's display price, as before (an estimate, never stored).
   const basePrice = visitType === 'TASTING' ? displayPriceTasting : displayPriceLunch
-  const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount : null)
+  const estimatedTotal: number | null = previewTotal ?? (bookingType === 'INDIVIDUAL' && basePrice != null ? basePrice * guestCount + masterclassAmt : null)
   const individualRate: number | null = bookingType === 'INDIVIDUAL'
     ? (previewRates ? previewRates[visitType === 'TASTING' ? 'tastingOnly' : 'tastingLunch'] : basePrice)
     : null
@@ -682,17 +696,15 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
   const [dateY, dateM, dateD] = selectedDate ? selectedDate.split('-') : ['', '', '']
   const confirmDateLabel = selectedDate ? `${dateD}/${dateM}/${dateY}` : ''
 
-  // Masterclass add-ons are part of the total, so the guest sees them listed — one row each,
-  // "name × qty" and its price. (Max, QA 2026-10-16 F7)
-  const masterclassReviewRows: ReviewRow[] = isEnhanced
-    ? activeMcLines.map(l => {
-        const item = masterclassItems.find(m => m.id === l.masterclassItemId)
-        return {
-          label: `${item?.name ?? fc('form_masterclass_header', 'form.masterclass')}${l.quantity > 1 ? ` × ${l.quantity}` : ''}`,
-          value: formatTetri(asTetri(lineAmount(l))),
-        }
-      })
-    : []
+  // Add-ons are part of the total, so the guest sees them listed — one row each,
+  // "name × qty" and its price. (Max, QA 2026-10-16 F7; every form since T-7)
+  const masterclassReviewRows: ReviewRow[] = activeMcLines.map(l => {
+    const item = visibleItems.find(m => m.id === l.masterclassItemId)
+    return {
+      label: `${item ? itemTitle(item) : t(locale, 'form.add_ons')}${l.quantity > 1 ? ` × ${l.quantity}` : ''}`,
+      value: formatTetri(asTetri(lineAmount(l))),
+    }
+  })
 
   const confirmVisitRows: ReviewRow[] = [
     { label: fc('form_visit_type', 'form.visit_type'), value: visitType === 'LUNCH' ? fc('form_lunch_only', 'form.lunch_only') : fc(visitType === 'TASTING' ? 'form_tasting' : 'form_tasting_lunch', visitType === 'TASTING' ? 'form.tasting' : 'form.tasting_lunch') },
@@ -1236,47 +1248,58 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
           </div>
         )}
 
-        {/* Enhanced: Masterclass add-ons */}
-        {isEnhanced && masterclassItems.length > 0 && (
-          <div>
-            <label style={labelStyle}>{fc('form_masterclass_header', 'form.masterclass')}</label>
+        {/* Add-ons (T-7): one collapsible row per group the winery offers this guest. Shown on every form — the
+            groups carry the rule (Admin → Add-ons: companies / individuals, and which visit types). */}
+        {visibleGroups.map(g => {
+          const open = !!openGroups[g.id]
+          const chosen = activeMcLines.filter(l => g.items.some(m => m.id === l.masterclassItemId))
+          const chosenAmt = sumQuantityLines(chosen)
+          return (
+          <div key={g.id}>
+            <label style={labelStyle}>{groupTitle(g)}</label>
             {/* T-21: collapsed to one summary row by default — the full list was
                 always open and took a lot of room for an optional extra. */}
             <div className="rounded-lg border overflow-hidden" style={{ borderColor: C.border }}>
-              <button type="button" aria-expanded={mcOpen} aria-controls="mc-list"
-                onClick={() => setMcOpen(o => !o)}
+              <button type="button" aria-expanded={open} aria-controls={`addon-list-${g.id}`}
+                onClick={() => setOpenGroups(prev => ({ ...prev, [g.id]: !prev[g.id] }))}
                 className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm text-left"
-                style={{ backgroundColor: C.bg, color: activeMcLines.length > 0 ? C.text : C.muted }}>
+                style={{ backgroundColor: C.bg, color: chosen.length > 0 ? C.text : C.muted }}>
                 <span>
-                  {activeMcLines.length > 0
-                    ? `${t(locale, 'form.mc_selected', { n: activeMcLines.length })} · ${formatTetri(asTetri(masterclassAmt))}`
-                    : t(locale, 'form.mc_choose', { n: masterclassItems.length })}
+                  {chosen.length > 0
+                    ? `${t(locale, 'form.mc_selected', { n: chosen.length })} · ${formatTetri(asTetri(chosenAmt))}`
+                    : t(locale, 'form.addon_choose', { name: groupTitle(g), n: g.items.length })}
                 </span>
-                <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: mcOpen ? 'rotate(180deg)' : undefined }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
+                <svg className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: C.faint, transform: open ? 'rotate(180deg)' : undefined }} fill="none" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
-              {mcOpen && (
-              <div id="mc-list" className="divide-y border-t" style={{ borderColor: C.border }}>
-              {masterclassItems.map(m => {
+              {open && (
+              <div id={`addon-list-${g.id}`} className="divide-y border-t" style={{ borderColor: C.border }}>
+              {g.items.map(m => {
                 const sel = mcSelections[m.id]
+                const price = formatTetri(asTetri(m.pricePerUnit))
                 return (
                   <div key={m.id} className="flex items-center gap-3 px-4 py-3" style={{ backgroundColor: C.bg }}>
                     <input type="checkbox" id={`mc-${m.id}`} checked={!!sel?.checked}
                       onChange={e => toggleMc(m.id, e.target.checked)}
                       className="rounded" />
                     <label htmlFor={`mc-${m.id}`} className="flex-1 text-sm cursor-pointer" style={{ color: C.text }}>
-                      {m.name}
-                      <span className="ml-1 text-xs" style={{ color: C.faint }}>
-                        {formatTetri(asTetri(m.pricePerUnit))}/{m.unitType === 'PER_PERSON' ? t(locale, 'form.pp') : m.unitType === 'FLAT' ? t(locale, 'form.flat') : t(locale, 'form.pc')}
+                      {itemTitle(m)}
+                      {/* Per person: the guest sees what it comes to and never types a number. Flat: once. Per piece: a quantity box. */}
+                      <span className="block text-xs" style={{ color: C.faint }}>
+                        {m.unitType === 'PER_PERSON'
+                          ? t(locale, 'form.addon_per_person', { price, n: Math.max(payingGuests, 1), guests: t(locale, Math.max(payingGuests, 1) === 1 ? 'form.guest_singular' : 'form.guest_plural'), total: formatTetri(asTetri(m.pricePerUnit * Math.max(payingGuests, 1))) })
+                          : m.unitType === 'FLAT'
+                            ? t(locale, 'form.addon_flat', { price })
+                            : t(locale, 'form.addon_per_piece', { price })}
                       </span>
                     </label>
-                    {sel?.checked && (
+                    {sel?.checked && m.unitType === 'PER_PIECE' && (
                       <div className="flex items-center gap-1">
                         <span className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.qty')}</span>
-                        <input type="number" min={1} max={999} value={sel.qtyStr}
+                        <input type="number" min={1} max={999} value={sel.qtyStr} aria-label={`${t(locale, 'form.qty')} — ${itemTitle(m)}`}
                           onChange={e => setMcQty(m.id, e.target.value)}
-                          onBlur={e => setMcQty(m.id, String(Math.max(parseInt(e.target.value) || 1, 1)))}
+                          onBlur={e => setMcQty(m.id, String(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 999)))}
                           className="w-16 rounded border px-2 py-1 text-sm text-center" style={inputStyle} />
                       </div>
                     )}
@@ -1287,7 +1310,8 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               )}
             </div>
           </div>
-        )}
+          )
+        })}
 
         {/* Enhanced: Food notes */}
         {isEnhanced && (
@@ -1434,7 +1458,7 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
                   <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.registration')}: {formatTetri(asTetri(previewRates.registration))}</p>
                 )}
                 {masterclassAmt > 0 && (
-                  <p className="text-xs" style={{ color: C.faint }}>{fc('form_masterclass_header', 'form.masterclass')}: {formatTetri(asTetri(masterclassAmt))}</p>
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.add_ons')}: {formatTetri(asTetri(masterclassAmt))}</p>
                 )}
               </div>
             </div>
@@ -1449,6 +1473,9 @@ export default function BookingForm({ locale = 'en', companies, showCompanyPrice
               <div>
                 <p className="text-sm font-medium" style={{ color: C.muted }}>{t(locale, 'form.est_total')}</p>
                 <p className="text-xs mt-0.5" style={{ color: C.faint }}>{formatTetri(asTetri(individualRate ?? 0))} × {guestCount} {t(locale, guestCount === 1 ? 'form.guest_singular' : 'form.guest_plural')}</p>
+                {masterclassAmt > 0 && (
+                  <p className="text-xs" style={{ color: C.faint }}>{t(locale, 'form.add_ons')}: {formatTetri(asTetri(masterclassAmt))}</p>
+                )}
               </div>
               <p className="font-bold text-2xl" style={{ color: C.wine }}>{formatTetri(asTetri(estimatedTotal))}</p>
             </div>
