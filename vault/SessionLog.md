@@ -59,6 +59,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   Release note `2026-10-24` is still a hidden **DRAFT** on the production board — Max reads it (EN + KA; the Georgian is
   Claude's own wording) and presses Publish / Show to clients himself. Production = `master` `1a34c4e`; staging is 3 vault
   commits ahead of it (no app code).
+- **T-297 (Max: "i want a real easy toggle from outside to mark them as published or not"):** Max couldn't find Publish — it was
+  only inside a release under View → Edit. Max chose **two switches per row** (Published + Shown to clients). Built in
+  `app/super-admin/releases/ReleaseTimeline.tsx` only (reuses `updateReleaseAction`; server rules unchanged). Tested through the
+  real UI on the local dev server (`scripts/_qa/t297-switches.ts`, untracked): 10/10, incl. phone width — the first version put
+  the switches in the date row and overflowed at 390 px; moved to their own wrapping row. Dev backup taken first
+  (`2026-10-24_205805_dev_t297-release-switches`). **On staging only; not on production** (needs Max's go + the release steps).
 
 ---
 
