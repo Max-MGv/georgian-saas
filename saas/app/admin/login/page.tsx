@@ -1,10 +1,12 @@
 import { headers } from 'next/headers'
-import { getTenantId } from '@/lib/tenant'
 import DemoLoginShortcut from '@/components/DemoLoginShortcut'
 import LoginForm from './LoginForm'
 
 export default async function LoginPage() {
-  const [h, tenantId] = await Promise.all([headers(), getTenantId()])
+  const h = await headers()
+  // The platform domain (www.vineworks.ge) resolves to no winery on purpose - it doubles as HQ for /super-admin -
+  // so a missing tenant is normal here, not an error (it used to throw and answer 500).
+  const tenantId = h.get('x-tenant-id') ?? ''
   const logoUrl = h.get('x-platform-logo')
   const logoAlt = h.get('x-platform-logo-alt') ?? ''
 

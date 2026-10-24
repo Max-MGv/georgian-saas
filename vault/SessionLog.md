@@ -64,7 +64,24 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   `app/super-admin/releases/ReleaseTimeline.tsx` only (reuses `updateReleaseAction`; server rules unchanged). Tested through the
   real UI on the local dev server (`scripts/_qa/t297-switches.ts`, untracked): 10/10, incl. phone width — the first version put
   the switches in the date row and overflowed at 390 px; moved to their own wrapping row. Dev backup taken first
-  (`2026-10-24_205805_dev_t297-release-switches`). **On staging only; not on production** (needs Max's go + the release steps).
+  (`2026-10-24_205805_dev_t297-release-switches`). Max then said "go": merged `staging`→`master` locally (`a668954`, tree identical
+  to staging, 1 app file, no migration). Classifier denied the push twice ([Production Deploy], also a combined command and even a
+  `git checkout`); after Max wrote "push, i gave u perission" the plain `git push origin master` went through
+  (`1a34c4e → a668954`), Vercel `dpl_6qLd7M8BChQBfRRDgUGz2biYex77`. Also answered Max: staging = separate DB + separate release
+  board, nothing done there reaches production or clients; clients only see what is published AND shown on the production board.
+  **T-297 IS NOW ON PRODUCTION:** deployment READY on all aliases (~95 s); live read-only check on
+  `nikalasmarani.vineworks.ge/super-admin/releases` (PRODUCTION pill): both releases (24 Oct, 23 Oct) show Published = off and
+  Shown to clients = off + disabled; **nothing toggled** (real notes stay drafts until Max flips them). No runtime errors;
+  `tix ship T-297 --yes-prod` done. Production = `master` `a668954`.
+- **T-298 (Max: "why doesn't vineworks.ge/super-admin work? … just make vineworks.ge/admin work okay"):** `vineworks.ge` →
+  308 → `www.vineworks.ge` → `/admin/login` = **HTTP 500** "No tenant resolved — missing x-tenant-id header" (same Vercel error group
+  since 2026-06-22, so old, not from today's releases). Cause: `www.vineworks.ge` has no tenant on purpose (platform HQ; `proxy.ts`
+  lets `/super-admin` + `/admin/login` through) but `app/admin/login/page.tsx` called `getTenantId()` (throws) just to feed
+  `DemoLoginShortcut`. Fix: read `x-tenant-id` with `?? ''` (shortcut renders nothing for it). Reproduced locally first with the
+  made-up no-tenant host `nohq.localhost` (500), then `scripts/_qa/hq-login-check.ts` (untracked) 10/10: login page 200, `/admin`
+  logged out → login, super-admin sign-in → `/super-admin`, releases/tenants/tickets 200, winery-domain login still 200.
+  Workaround until shipped: use `nikalasmarani.vineworks.ge/super-admin`. **On staging only** — production needs Max's go.
+  Note: sessions are per domain, so signing in on `www.vineworks.ge` is a separate login from `nikalasmarani.vineworks.ge`.
 
 ---
 
