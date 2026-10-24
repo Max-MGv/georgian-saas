@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useTransition } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri, multiplyTetri, balanceDue } from '@/lib/money'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
@@ -377,6 +377,9 @@ export default function OrderDetail({
   const [infoPhone, setInfoPhone] = useState('')
   const [infoEmail, setInfoEmail] = useState('')
   const [lineQty, setLineQty] = useState<Record<string, string>>({})
+  // What the Masterclass / Extras cards held when they opened — Save applies the difference, Cancel restores it.
+  const mcSnap = useRef<MasterclassLine[]>([])
+  const exSnap = useRef<ExtraRow[]>([])
   const [extraEdits, setExtraEdits] = useState<Record<string, { label: string; amount: string }>>({})
   const [infoSaving, setInfoSaving] = useState(false)
   const [infoMsg, setInfoMsg] = useState('')
@@ -394,8 +397,18 @@ export default function OrderDetail({
   }, [contactPersonRole])
   const {
     selected: selectedContacts, contacts: pickedContacts, roleChoices,
-    resolve: resolveContacts, pickFor, clearRole, setTyped: setTypedContact, prefill: prefillContacts,
+    resolve: resolveContacts, pickFor, clearRole, setTyped: setTypedContact, prefill: prefillContacts, reset: resetContacts,
   } = useContactSelection({ module: 'BOOKING', onApply: applyPickedPerson, asAdmin: true })
+
+  // What the order records right now — set from the save's own answer at once, and from every refresh. router.refresh()
+  // lags several seconds, and opening the editor in that gap prefilled the *previous* contacts, which could bring back
+  // a guide that had just been removed (QA T-215, case C4).
+  const [contactsNow, setContactsNow] = useState(order.contacts)
+  useEffect(() => { setContactsNow(order.contacts) }, [order.contacts])
+  const [bookerNow, setBookerNow] = useState({ name: order.name, surname: order.surname, phone: order.phone, email: order.email })
+  useEffect(() => {
+    setBookerNow({ name: order.name, surname: order.surname, phone: order.phone, email: order.email })
+  }, [order.name, order.surname, order.phone, order.email])
 
   function startEdit(card: EditCard) {
     setInfoMsg('')
@@ -409,24 +422,31 @@ export default function OrderDetail({
       setInfoCompanyId(order.company?.id ?? '')
       setInfoNationalities(order.nationalities)
     } else if (card === 'contact') {
-      setContactName(`${order.name} ${order.surname}`.trim())
-      setInfoPhone(order.phone ?? '')
-      setInfoEmail(order.email ?? '')
-      // A company order: load the company's people for the pickers, then start from what the order recorded
-      // (resolve clears the selection, so prefill comes after it).
-      const recorded = order.contacts.map(c => ({ roleId: c.roleId, personId: c.personId ?? undefined, name: c.name, phone: c.phone, email: c.email }))
-      if (order.company) void resolveContacts({ companyId: order.company.id }).then(() => prefillContacts(recorded))
+      setContactName(`${bookerNow.name} ${bookerNow.surname}`.trim())
+      setInfoPhone(bookerNow.phone ?? '')
+      setInfoEmail(bookerNow.email ?? '')
+      // Start from what the order records now — synchronously, so nothing left from an earlier edit survives and
+      // nothing typed before the people list arrives is lost — then load the company's people for the pickers
+      // without touching the selection.
+      resetContacts()
+      prefillContacts(contactsNow.map(c => ({ roleId: c.roleId, personId: c.personId ?? undefined, name: c.name, phone: c.phone, email: c.email })))
+      if (order.company) void resolveContacts({ companyId: order.company.id }, { keepSelection: true })
     } else if (card === 'guests') {
       resetGuests()
     } else if (card === 'mc') {
+      mcSnap.current = lines
       setLineQty(Object.fromEntries(lines.map(l => [l.id, String(l.quantity)])))
     } else {
+      exSnap.current = extras
       setExtraEdits(Object.fromEntries(extras.map(e => [e.id, { label: e.label, amount: String(toMajor(asTetri(e.amount))) }])))
     }
   }
 
   function cancelEdit() {
     if (editingCard === 'guests') resetGuests()
+    // Draft lines (added / removed on screen) go back to what was saved.
+    if (editingCard === 'mc') { setLines(mcSnap.current); setAddingLine(false) }
+    if (editingCard === 'ex') { setExtras(exSnap.current); setAddingExtra(false) }
     setEditingCard(null)
     setInfoMsg('')
     setInfoError(false)
@@ -448,49 +468,97 @@ export default function OrderDetail({
     }
     if (editingCard === 'contact') {
       const r = await updateOrderContacts(order.id, { fullName: contactName, phone: infoPhone, email: infoEmail, contacts: order.company ? buildContacts() : undefined })
-      return 'error' in r ? r : null
+      if ('error' in r) return r
+      const words = contactName.trim().split(' ')
+      setContactsNow(r.contacts)
+      setBookerNow({ name: words[0] ?? '', surname: words.slice(1).join(' '), phone: infoPhone.trim() || null, email: infoEmail.trim() || null })
+      return null
     }
     if (editingCard === 'guests') return saveGuests()
     if (editingCard === 'mc') {
+      // Number(), not parseInt: "2.5" must reach the server's whole-number rule and be refused, not become 2.
+      const qtyOf = (l: MasterclassLine) => {
+        if (l.masterclassItem.unitType === 'FLAT') return 1
+        const raw = (lineQty[l.id] ?? String(l.quantity)).trim()
+        return raw === '' ? NaN : Number(raw)
+      }
+      // Each step that succeeds is written into the snapshot at once, so a second Save after a refusal never repeats it.
+      for (const l of mcSnap.current.filter(s => !lines.some(x => x.id === s.id))) {
+        await removeMasterclassLine(l.id, order.id)
+        mcSnap.current = mcSnap.current.filter(s => s.id !== l.id)
+      }
       for (const l of lines) {
-        const q = parseInt(lineQty[l.id] ?? '')
-        if (l.masterclassItem.unitType === 'FLAT' || q === l.quantity) continue
-        const r = await updateMasterclassLine(l.id, order.id, Number.isNaN(q) ? 0 : q)
+        const q = qtyOf(l)
+        if (l.id.startsWith('new-')) {
+          const r = await addMasterclassLine(order.id, { masterclassItemId: l.masterclassItemId, quantity: Number.isFinite(q) ? q : 0 })
+          if ('error' in r) return r
+          const saved = { ...l, id: r.lineId, quantity: q }
+          setLines(prev => prev.map(x => (x.id === l.id ? saved : x)))
+          mcSnap.current = [...mcSnap.current, saved]
+          continue
+        }
+        if (q === l.quantity) continue
+        const r = await updateMasterclassLine(l.id, order.id, Number.isFinite(q) ? q : 0)
         if ('error' in r) return r
         setLines(prev => prev.map(x => (x.id === l.id ? { ...x, quantity: q } : x)))
+        mcSnap.current = mcSnap.current.map(s => (s.id === l.id ? { ...s, quantity: q } : s))
       }
       return null
     }
     if (editingCard === 'ex') {
+      for (const e of exSnap.current.filter(s => !extras.some(x => x.id === s.id))) {
+        await removeOrderExtra(e.id, order.id)
+        exSnap.current = exSnap.current.filter(s => s.id !== e.id)
+      }
       for (const e of extras) {
-        const ed = extraEdits[e.id]
-        if (!ed) continue
+        const ed = extraEdits[e.id] ?? { label: e.label, amount: String(toMajor(asTetri(e.amount))) }
         const amount = fromMajor(parseFloat(ed.amount) || 0)
+        if (e.id.startsWith('new-')) {
+          const r = await addOrderExtra(order.id, { label: ed.label, amount })
+          if ('error' in r) return r
+          const saved = { id: r.extraId, label: ed.label.trim(), amount }
+          setExtras(prev => prev.map(x => (x.id === e.id ? saved : x)))
+          exSnap.current = [...exSnap.current, saved]
+          continue
+        }
         if (ed.label.trim() === e.label && amount === e.amount) continue
         const r = await updateOrderExtra(e.id, order.id, { label: ed.label, amount })
         if ('error' in r) return r
         setExtras(prev => prev.map(x => (x.id === e.id ? { ...x, label: ed.label.trim(), amount } : x)))
+        exSnap.current = exSnap.current.map(s => (s.id === e.id ? { ...s, label: ed.label.trim(), amount } : s))
       }
       return null
     }
     return null
   }
 
+  // The card stays on "Saving…" until router.refresh() has delivered the saved order, then closes — the view never
+  // shows the old values after a Save (the refresh can take seconds; QA T-215 found 8 s+ of stale values).
+  const [refreshing, startRefresh] = useTransition()
+  const [closeAfterRefresh, setCloseAfterRefresh] = useState(false)
+  useEffect(() => {
+    if (!closeAfterRefresh || refreshing) return
+    setCloseAfterRefresh(false)
+    setInfoSaving(false)
+    setEditingCard(null)
+    setInfoMsg(at('orderDetail.bookingInfo.savedOk'))
+    const t = setTimeout(() => setInfoMsg(''), 3000)
+    return () => clearTimeout(t)
+  }, [closeAfterRefresh, refreshing]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleCardSave() {
     setInfoSaving(true)
     setInfoMsg('')
     const failed = await saveCard()
-    setInfoSaving(false)
     if (failed) {
+      setInfoSaving(false)
       setInfoError(true)
       setInfoMsg(failed.error)
       return
     }
     setInfoError(false)
-    setEditingCard(null)
-    setInfoMsg(at('orderDetail.bookingInfo.savedOk'))
-    router.refresh()
-    setTimeout(() => setInfoMsg(''), 3000)
+    setCloseAfterRefresh(true)
+    startRefresh(() => router.refresh())
   }
 
   // Plain render helpers (no inputs inside, so calling them doesn't remount a field and lose focus).
@@ -887,62 +955,46 @@ export default function OrderDetail({
   }
 
   // ── Add / remove masterclass line ─────────────────────────────────────────
-  async function handleAddLine() {
+  // ── Add / remove masterclass lines and extras — draft until Save (QA T-215, 2026-10-24) ─────────────────────
+  // Inside edit mode adding and removing only change the list on screen (the Order total previews it); Save applies
+  // the difference against the snapshot taken when the card opened, Cancel restores it — so Cancel throws away
+  // everything, like every other card. New rows carry a temporary `new-…` id until saved.
+  function handleAddLine() {
     if (!newLineItemId || !selectedMcItem) return
-    setLineLoading(true)
-    const qty = isFlatUnit ? 1 : parseInt(newLineQty) || 1
-    const result = await addMasterclassLine(order.id, {
-      masterclassItemId: newLineItemId,
-      quantity: qty,
-    })
-    if ('lineId' in result) {
-      setLines(prev => [
-        ...prev,
-        {
-          id: result.lineId,
-          masterclassItemId: newLineItemId,
-          quantity: qty,
-          pricePerUnit: selectedMcItem.pricePerUnit,
-          masterclassItem: selectedMcItem,
-        },
-      ])
+    const raw = newLineQty.trim()
+    const qty = isFlatUnit ? 1 : raw === '' ? NaN : Number(raw)
+    if (!Number.isInteger(qty) || qty < 1 || qty > 999) {
+      setInfoError(true)
+      setInfoMsg('Quantity must be a whole number from 1 to 999.')
+      return
     }
+    setLines(prev => [
+      ...prev,
+      { id: `new-${Date.now()}`, masterclassItemId: newLineItemId, quantity: qty, pricePerUnit: selectedMcItem.pricePerUnit, masterclassItem: selectedMcItem },
+    ])
     setNewLineItemId('')
     setNewLineQty('1')
     setAddingLine(false)
-    setLineLoading(false)
   }
 
-  async function handleRemoveLine(lineId: string) {
-    setLineLoading(true)
-    await removeMasterclassLine(lineId, order.id)
+  function handleRemoveLine(lineId: string) {
     setLines(prev => prev.filter(l => l.id !== lineId))
-    setLineLoading(false)
   }
 
-  // ── Add / remove extra ─────────────────────────────────────────────────────
-  async function handleAddExtra() {
+  function handleAddExtra() {
     if (!newExtraLabel.trim() || !newExtraAmount) return
-    setExtraLoading(true)
     // The field is labelled "Amount (₾)", so what the admin typed is lari.
     // Everything downstream — ExtraRow, extrasAmt, the formatTetri renders —
     // is tetri, so convert here (bug #45; NewOrderForm.tsx has always done it).
     const amount = fromMajor(parseFloat(newExtraAmount) || 0)
-    const result = await addOrderExtra(order.id, { label: newExtraLabel, amount })
-    if ('extraId' in result) {
-      setExtras(prev => [...prev, { id: result.extraId, label: newExtraLabel, amount }])
-    }
+    setExtras(prev => [...prev, { id: `new-${Date.now()}`, label: newExtraLabel, amount }])
     setNewExtraLabel('')
     setNewExtraAmount('')
     setAddingExtra(false)
-    setExtraLoading(false)
   }
 
-  async function handleRemoveExtra(extraId: string) {
-    setExtraLoading(true)
-    await removeOrderExtra(extraId, order.id)
+  function handleRemoveExtra(extraId: string) {
     setExtras(prev => prev.filter(e => e.id !== extraId))
-    setExtraLoading(false)
   }
 
   // ── Record an additional payment ───────────────────────────────────────────
@@ -1273,8 +1325,8 @@ export default function OrderDetail({
               }
             />
             {order.company && <InfoRow label={at('orderDetail.bookingInfo.company')} value={order.company.name} />}
-            {order.bookingType === 'COMPANY' && order.nationalities.length > 0 && (
-              <InfoRow label={at('newOrder.contact.nationality')} value={order.nationalities.map(code => countryName(code)).join(', ')} />
+            {order.bookingType === 'COMPANY' && (nationalityEnabled || order.nationalities.length > 0) && (
+              <InfoRow label={at('newOrder.contact.nationality')} value={order.nationalities.map(code => countryName(code)).join(', ') || undefined} />
             )}
           </>
         )}
@@ -1318,7 +1370,7 @@ export default function OrderDetail({
         {!editingInfo && <InfoRow label={at('orderDetail.bookingInfo.totalGuests')} value={order.guestCount} />}
         {/* Phone / email live in the Contacts card for every booking (T-215): a company's Contact Person row, or an
             individual's booker — where Contacts → Edit changes them. */}
-        {!editingInfo && order.notes && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes} />}
+        {!editingInfo && <InfoRow label={at('orderDetail.bookingInfo.notes')} value={order.notes || undefined} />}
         {savedNote('info')}
       </Card>
 
@@ -1369,22 +1421,38 @@ export default function OrderDetail({
             )}
             {editActions()}
           </div>
-        ) : order.contacts.length === 0 && order.bookingType !== 'COMPANY' ? (
+        ) : contactsNow.length === 0 && order.bookingType !== 'COMPANY' ? (
           // An individual has no OrderContact rows — the booker on the order is the contact person.
           <InfoRow
             label={at('orderDetail.contacts.booker')}
-            value={[`${order.name} ${order.surname}`.trim(), order.phone, order.email].filter(Boolean).join(' · ')}
+            value={[`${bookerNow.name} ${bookerNow.surname}`.trim(), bookerNow.phone, bookerNow.email].filter(Boolean).join(' · ')}
           />
-        ) : order.contacts.length === 0 ? (
-          <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.contacts.none')}</p>
         ) : (
-          order.contacts.map((c, i) => (
-            <InfoRow
-              key={i}
-              label={locale === 'ka' ? c.roleLabelKa : c.roleLabelEn}
-              value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')}
-            />
-          ))
+          // A company booking: every contact type the booking forms ask for, empty ones as "—" — so an admin sees
+          // "no guide yet" instead of the row not existing (Max, 2026-10-24). Then any recorded contact whose type has
+          // since been switched off, so nothing that was recorded disappears.
+          <>
+            {contactRoles.map(role => {
+              const c = contactsNow.find(x => x.roleId === role.roleId)
+              return (
+                <InfoRow
+                  key={role.roleId}
+                  label={roleLabel(role)}
+                  value={c ? [c.name, c.phone, c.email].filter(Boolean).join(' · ') : undefined}
+                />
+              )
+            })}
+            {contactsNow.filter(c => !contactRoles.some(r => r.roleId === c.roleId)).map((c, i) => (
+              <InfoRow
+                key={`old-${i}`}
+                label={locale === 'ka' ? c.roleLabelKa : c.roleLabelEn}
+                value={[c.name, c.phone, c.email].filter(Boolean).join(' · ')}
+              />
+            ))}
+            {contactRoles.length === 0 && contactsNow.length === 0 && (
+              <p className="text-sm" style={{ color: C.faint }}>{at('orderDetail.contacts.none')}</p>
+            )}
+          </>
         )}
         {savedNote('contact')}
       </Card>
@@ -1448,7 +1516,7 @@ export default function OrderDetail({
             />
             <InfoRow label={at('orderDetail.guestBreakdown.hotDishVeg')} value={order.hotDishVegetable || at('orderDetail.guestBreakdown.none')} />
             <InfoRow label={at('orderDetail.guestBreakdown.hotDishMeat')} value={order.hotDishMeat || at('orderDetail.guestBreakdown.none')} />
-            {order.foodNotes && <InfoRow label={at('orderDetail.guestBreakdown.foodNotes')} value={order.foodNotes} />}
+            <InfoRow label={at('orderDetail.guestBreakdown.foodNotes')} value={order.foodNotes || undefined} />
             {savedNote('guests')}
           </>
         ) : (

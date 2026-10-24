@@ -163,7 +163,7 @@ export function useContactSelection({ module, onApply, asAdmin = false }: Option
    * dropdown, the admin screens), `code` alone for a tenant-wide lookup with no company
    * chosen first, or both for the dropdown-then-code path.
    */
-  const resolve = useCallback(async (input: ResolveInput): Promise<ResolveOutcome> => {
+  const resolve = useCallback(async (input: ResolveInput, opts?: { keepSelection?: boolean }): Promise<ResolveOutcome> => {
     setLoading(true)
     const result = asAdmin
       ? await resolveCompanyContactsAsAdmin({ module, ...input })
@@ -171,6 +171,13 @@ export function useContactSelection({ module, onApply, asAdmin = false }: Option
     setLoading(false)
 
     if ('error' in result) return { error: result.error }
+
+    // `keepSelection`: only load the choices — the order page's editor (T-215) has already prefilled what the order
+    // recorded, and anything typed while this call was in flight must not be wiped when it lands.
+    if (opts?.keepSelection) {
+      setRoleChoices(result.roleChoices)
+      return { success: true, company: result.company, matchType: result.matchType, matchedPerson: result.matchedPerson, roleChoices: result.roleChoices }
+    }
 
     setSelected({})
     setRoleChoices(result.roleChoices)

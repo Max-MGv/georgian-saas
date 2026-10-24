@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { isIsoDate } from '@/lib/isoDate'
 
 type Props = {
   value: string          // YYYY-MM-DD or ''
@@ -21,8 +22,9 @@ function displayToIso(display: string) {
   const digits = display.replace(/\D/g, '')
   if (digits.length !== 8) return ''
   const d = digits.slice(0, 2), m = digits.slice(2, 4), y = digits.slice(4, 8)
-  if (parseInt(d) < 1 || parseInt(d) > 31 || parseInt(m) < 1 || parseInt(m) > 12) return ''
-  return `${y}-${m}-${d}`
+  // A real calendar day only — 31/02 used to pass (day ≤ 31) and then rolled over to 3 March (QA T-215).
+  const iso = `${y}-${m}-${d}`
+  return isIsoDate(iso) ? iso : ''
 }
 
 export default function DateInput({ value, onChange, min, max, style, className }: Props) {
@@ -44,7 +46,9 @@ export default function DateInput({ value, onChange, min, max, style, className 
     setText(formatted)
     const iso = displayToIso(formatted)
     if (iso) onChange(iso)
-    else if (digits.length === 0) onChange('')
+    // Empty, or a complete date that does not exist (31/02): report "no valid date" rather than keeping the previous
+    // value behind a box that shows something else — the form then refuses it with a message (QA T-215).
+    else if (digits.length === 0 || digits.length === 8) onChange('')
   }
 
   function handleBlur() {

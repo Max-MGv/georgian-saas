@@ -1,7 +1,7 @@
 'use server'
 
 import { db, withTenantDb, type TxClient } from '@/lib/db'
-import { writeOrderContacts, syncOrderContactPerson, type IncomingContact } from '@/lib/orderContacts'
+import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type OrderContactView } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
@@ -21,6 +21,7 @@ import { resolveTenantTheme } from '@/lib/themePresets'
 import type { BookingStage } from '@prisma/client'
 import { COUNTRIES, countryName } from '@/lib/countries'
 import { splitFullName } from '@/lib/splitFullName'
+import { isIsoDate } from '@/lib/isoDate'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -62,7 +63,7 @@ export async function updateOrder(id: string, data: {
   // One Name box, like both booking forms (T-215): the surname is whatever follows the first word, possibly empty.
   if (!data.name.trim()) return { error: 'Name is required.' }
   // A cleared date input sends '' (Invalid Date).
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || isNaN(new Date(data.date).getTime())) return { error: 'Please choose a valid date.' }
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
   if (!/^\d{1,2}:\d{2}$/.test(data.timeSlot)) return { error: 'Please choose a time.' }
 
   const tenantId = await getTenantId()
@@ -124,7 +125,7 @@ export async function updateOrderBooking(id: string, data: {
   nationalities: string[]
 }): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || isNaN(new Date(data.date).getTime())) return { error: 'Please choose a valid date.' }
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
   if (!/^\d{1,2}:\d{2}$/.test(data.timeSlot)) return { error: 'Please choose a time.' }
   const tenantId = await getTenantId()
   const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
@@ -210,7 +211,7 @@ export async function updateOrderContacts(id: string, data: {
   phone: string
   email: string
   contacts?: IncomingContact[]
-}): Promise<{ success: true } | { error: string }> {
+}): Promise<{ success: true; contacts: OrderContactView[] } | { error: string }> {
   await requireAdmin()
   const fullName = data.fullName.trim()
   if (!fullName) return { error: 'Name is required.' }
@@ -234,12 +235,19 @@ export async function updateOrderContacts(id: string, data: {
         fallbackContactPerson: { name: fullName, phone: data.phone.trim() || null, email: data.email.trim() || null },
       })
     }
-    return { success: true as const }
+    // What is now recorded, read back — the page shows this at once instead of waiting for router.refresh(), which
+    // lags several seconds; opening the editor in that gap used to prefill the old contacts (QA T-215, case C4).
+    const rows = await tx.orderContact.findMany({ where: { orderId: id, tenantId }, include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } })
+    const contacts: OrderContactView[] = rows.map(c => ({
+      roleId: c.roleId, roleKey: c.role.key, personId: c.personId, roleLabelEn: c.role.labelEn, roleLabelKa: c.role.labelKa,
+      name: c.nameSnapshot, phone: c.phoneSnapshot, email: c.emailSnapshot,
+    }))
+    return { success: true as const, contacts }
   })
   if ('error' in result) return result
   revalidatePath('/admin/orders')
   revalidatePath(`/admin/orders/${id}`)
-  return { success: true }
+  return result
 }
 
 /**
@@ -443,6 +451,7 @@ export async function createOrderAdmin(data: {
   // splits it with splitFullName(), so a one-word name arrives with an empty surname.
   if (!data.name.trim()) return { error: 'Name is required.' }
   if (!data.date) return { error: 'Date is required.' }
+  if (!isIsoDate(data.date)) return { error: 'Please choose a valid date.' }
   if (!Array.isArray(data.masterclassLines) || !Array.isArray(data.extras)) return { error: 'The order could not be read — please reload and try again.' }
   if (badManualRates(data.manualRates)) return { error: 'A typed rate must be a whole amount above 0.' }
   const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)

@@ -78,6 +78,27 @@ name / phone / email snapshots) and copies the contact person into `Order.name/s
 4. **Masterclass and extras** lines editable in place (see Q3).
 5. Side panel follows (one Name box) so the two edit screens match; MaintenanceNotes §32/§37 updated; QA spec + screenshots.
 
+## QA pass (2026-10-24, after Max asked "did you test adding and removing stuff, edge cases, like a QA tester?")
+
+Honest answer at the time: no — only scripted happy paths + a few edge cases. Then a 31-case edge-case pass through the
+real UI (`saas/tests/_qa/t215-qa-edge.spec.ts`, untracked; report in `tests/_qa/shots/t215-qa/report.json`), every case
+reproduced step by step before fixing (`t215-debug-*.spec.ts`). **Real findings, all fixed:**
+1. **31/02 saved as 3 March** — `new Date('2027-02-31')` rolls over. Shared `lib/isoDate.ts` (`isIsoDate`) on every admin
+   order-date write (+ wine orders, which had its own copy) and in `DateInput` (a complete impossible date now reports
+   "" → "Please choose a valid date." instead of silently keeping the old date behind the typed text).
+2. **Masterclass quantity 2.5 silently became 2** (`parseInt`) — `Number()` now, refused with the server's message.
+3. **Cancel did not undo adding / removing a masterclass line or extra** (they saved at once) — now drafts until Save;
+   Save applies the difference against a snapshot (each step written into the snapshot, so a retried Save never repeats
+   one); Cancel restores. New line quantity checked before it is added.
+4. **A removed (picked) guide could come back linked** to the old person — the editor prefilled from props that lag the
+   refresh, and the picker hook carried state between edits. `updateOrderContacts` now returns what it wrote; the page
+   keeps `contactsNow`; opening the editor resets + prefills synchronously, then loads the people with
+   `resolve(…, { keepSelection: true })`.
+5. **Cards showed old values for seconds after Save** (router.refresh lag, 7–8 s on the dev DB) — a card now stays on
+   "Saving…" until the refresh has landed (`useTransition`), then closes.
+Also (Max): empty contact types and empty notes / food notes / nationality show "—" before editing.
+Final: QA 31/31, mirror 3/3, admin-orders + contact-orphan-safety green, `test-contact-resolution` 27/27.
+
 ## Max's decisions (2026-10-24)
 
 - **D-1 — click Edit to edit, on every card** (Booking info, Contacts, Guest breakdown, Masterclass, Extras): read-only

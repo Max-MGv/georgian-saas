@@ -1401,4 +1401,10 @@ Which action each card uses — keep them the single write path:
 
 The **Orders side panel** (`OrdersTable.tsx`) still edits date, time, contact person and notes through `updateOrder` — one Name box (`splitFullName`) and `DateInput` like the order page. If a field is added to the order page that the panel also shows, keep them in step or drop it from the panel.
 
-**Dates:** every order screen uses `components/DateInput.tsx` (DD/MM/YYYY, a native date input underneath — specs fill `input[type="date"]`). **Time slots** come from `orders/timeSlots.ts`; every `<select>` for an existing order must use `slotOptions(order.timeSlot)` — public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list; a select without it shows 11:00 and Save moves the booking.
+**Card behaviour (QA, 2026-10-24) — keep it when adding a card:** Save keeps the card on "Saving…" until
+`router.refresh()` has landed (`useTransition` in `OrderDetail.tsx`), so a closed card never shows old values; Cancel
+throws away *everything* in the card — Masterclass / Extras add and remove are drafts against a snapshot until Save.
+Contacts open from `contactsNow` (the save's own answer), not from props that lag the refresh.
+
+**Dates:** validate with `lib/isoDate.ts` (`isIsoDate`) on every write — `new Date('2027-02-31')` silently becomes 3 March.
+Every order screen uses `components/DateInput.tsx` (DD/MM/YYYY, a native date input underneath — specs fill `input[type="date"]`). **Time slots** come from `orders/timeSlots.ts`; every `<select>` for an existing order must use `slotOptions(order.timeSlot)` — public bookings take their slot from the opening hours (`lib/bookingHours.ts`) and can be outside the admin list; a select without it shows 11:00 and Save moves the booking.
