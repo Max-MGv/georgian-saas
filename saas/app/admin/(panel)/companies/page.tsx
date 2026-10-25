@@ -36,8 +36,8 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
     ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
         where: { tenantId, active: true, wine: { active: true } },
         orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
-        select: { id: true, year: true, price: true, wine: { select: { name: true } } },
-      })).then(vs => vs.map(v => ({ id: v.id, label: `${v.wine.name} ${v.year}`, price: v.price })))
+        select: { id: true, year: true, price: true, wine: { select: { id: true, name: true } } },
+      })).then(vs => vs.map(v => ({ id: v.id, label: `${v.wine.name} ${v.year}`, wineId: v.wine.id, wineName: v.wine.name, year: v.year, price: v.price })))
     : Promise.resolve([])
 
   // The Individuals company must exist before the list is read.

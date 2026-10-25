@@ -21,6 +21,7 @@ const CODE = `ZZNEG${String(RUN).slice(-5)}`
 let codedId = ''
 let openId = ''
 let vintageId = ''
+let wineId = ''
 let negotiated = 0
 
 test.beforeAll(async () => {
@@ -30,6 +31,7 @@ test.beforeAll(async () => {
     orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
   })
   vintageId = v.id
+  wineId = v.wineId
   negotiated = Math.max(100, v.price - 500)
   const coded = await db.company.create({ data: { tenantId: TENANT, name: CODED, isBookingCompany: false, isWineOrderCompany: true, accessCode: CODE, wineDiscountPercent: 10 } })
   const open = await db.company.create({ data: { tenantId: TENANT, name: OPEN, isBookingCompany: false, isWineOrderCompany: true,
@@ -65,6 +67,9 @@ test('admin sets and resets a negotiated price on the Companies screen', async (
   await page.goto(`/admin/companies?edit=${codedId}`, { timeout: 90_000 })
   const panel = page.locator('div.fixed.top-0.right-0')
   await panel.getByText(/^Wine prices$/).waitFor({ timeout: 20_000 })
+  // The section starts collapsed and its vintages sit under their wine (2026-10-25): open the section, then this vintage's wine.
+  await panel.getByTestId('wine-prices-toggle').click()
+  await panel.getByTestId(`wine-group-${wineId}`).click()
   const input = panel.getByRole('spinbutton', { name: /negotiated price$/ }).first()
   await input.fill(String(negotiated / 100))
   await input.blur()

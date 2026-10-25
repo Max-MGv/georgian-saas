@@ -58,7 +58,8 @@ export default function HelpHint({ text }: { text: string }) {
 
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
   const vh = typeof window !== 'undefined' ? window.innerHeight : 768
-  const estimatedHeight = 90
+  // Short hints are about 90px; a long multi-line one (wine pricing rules) is taller, so it flips above the "?" near the bottom of the screen.
+  const estimatedHeight = Math.max(90, Math.ceil(text.length / 34) * 17 + 28)
   const left = rect ? Math.min(Math.max(rect.left, 8), vw - POPOVER_WIDTH - 8) : 0
   const top = rect
     ? (rect.bottom + 6 + estimatedHeight > vh ? Math.max(rect.top - estimatedHeight - 6, 8) : rect.bottom + 6)
@@ -95,7 +96,7 @@ export default function HelpHint({ text }: { text: string }) {
           id={popoverId}
           role="tooltip"
           className="rounded-lg border p-3 text-xs leading-relaxed shadow-lg"
-          style={{ position: 'fixed', top, left, width: POPOVER_WIDTH, zIndex: 100, backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', color: 'var(--site-muted)' }}
+          style={{ position: 'fixed', top, left, width: POPOVER_WIDTH, zIndex: 100, whiteSpace: 'pre-line', backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', color: 'var(--site-muted)' }}
         >
           {text}
         </div>,
