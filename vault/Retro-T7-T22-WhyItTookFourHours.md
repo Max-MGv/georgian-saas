@@ -46,7 +46,7 @@ the 30-minute comparison is misleading because those jobs were tiny.* It also fo
 Waste in this session: the two edge-spec re-runs; one file (`BookingForm.tsx`) left out of a commit; demo seed + onboarding copy added unasked;
 commit messages claiming specs that are not in git.
 
-## The gap Rule 12 does not cover — and a proposed Rule 13 (NOT adopted; waiting for Max's wording/go)
+## The gap Rule 12 did not cover — Rule 13 (ADOPTED 2026-10-25, Max: "I agree with your defaults"; now in ClaudeInstructions.md Rule 13)
 
 Rule 12 says how to build; nothing says **how big to build**. Proposed:
 > **Size before building.** Before starting a ticket, state its size (files, schema changes, does it touch money / the public form / invoices). If it is
