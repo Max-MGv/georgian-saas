@@ -23,6 +23,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - **Open for Max:** G-1 (simple-form companies see add-on rows — built as "yes"); his message "i uploaded 2" — nothing found on disk; dev item
   "Extra khachapuri" is active (shows in the old Masterclass row on staging until this is pushed); no wine is switched on "On bookings" in dev (specs restore it) — he
   switches two on in Admin → Wines to see the wine row. Dev server `saas-3100` is running.
+- **Retro (Max asked "why 3+ h vs 30 min?"): `vault/Retro-T7-T22-WhyItTookFourHours.md`** — nothing was ready, scale ≈ 70–80× a quick ship, blind review agrees; proposed Rule 13 (size/slice before building) awaits Max's go.
 - Max's rules for this build: he reviews on localhost:3100 and tells me what to change BEFORE any push; nothing to master/production without his explicit go.
 
 ---
