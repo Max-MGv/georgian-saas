@@ -17,7 +17,7 @@ import {
   safeHttpUrl, type TicketCloseReasonValue, type TicketStatusValue,
 } from '@/lib/tickets'
 import {
-  addTicketLink, answerTicketQuestion, commentOnTicket, emailTicketReporters, forwardTicketAgain, moveTicket, postReviewCard, removeTicketLink,
+  addTicketLink, answerTicketQuestion, commentOnTicket, emailTicketReporters, moveTicket, postReviewCard, removeTicketLink,
   sendTicketBack, setTicketClientReply, setTicketLive,
   updateTicketFields, uploadTicketAttachment, verifyTicket,
 } from '@/app/actions/tickets'
@@ -254,8 +254,7 @@ export default function TicketDetail({ t, tenants, onChanged, onOpenTicket }: {
       {(t.source === 'WIDGET' || t.source === 'PRODUCTION' || t.reports.length > 0) && (
         <ClientSection t={t} busy={busy} onOpenTicket={onOpenTicket}
           onSaveReply={v => run(() => setTicketClientReply(t.number, v))}
-          onEmail={() => run(() => emailTicketReporters(t.number))}
-          onForward={() => run(() => forwardTicketAgain(t.number))} />
+          onEmail={() => run(() => emailTicketReporters(t.number))} />
       )}
 
       {/* ── Images ─────────────────────────────────────────────── */}

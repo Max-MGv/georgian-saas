@@ -17,7 +17,6 @@ import {
   type ReviewCard, type TicketDetail, type TicketListItem, type TicketPatch,
 } from '@/lib/ticketService'
 import { ALLOWED_IMAGE_TYPES, sniffImageType, tenantStatusFor, type LiveStage, type TicketLink, type TicketStatusValue } from '@/lib/tickets'
-import { forwardToStaging } from '@/lib/ticketForward'
 import { clientUpdateEmail } from '@/lib/ticketClientEmail'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
 import type { TicketCloseReason, TicketPriority, TicketType } from '@prisma/client'
@@ -156,14 +155,12 @@ export async function setTicketClientReply(number: number, reply: string): Promi
 
 /**
  * The "Email the reporter" button (Plan-TicketsV2 3.1) - the ONLY way a client is emailed about a ticket.
- * Sends the current status + our reply to everyone who reported it and has an email address. Not for P-tickets:
- * those are copies, the real reporters live on the production board.
+ * Sends the current status + our reply to everyone who reported it and has an email address.
  */
 export async function emailTicketReporters(number: number): Promise<ActionResult<{ sent: number }>> {
   return guard(async () => {
     const t = await db.ticket.findUnique({ where: { number }, include: { reports: true } })
     if (!t) throw new TicketError('Ticket not found.')
-    if (t.source === 'PRODUCTION') throw new TicketError('This is a copy - email the client from the production board.')
     const recipients = [...new Set(t.reports.map(r => r.submitterEmail).filter((e): e is string => !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))]
     if (recipients.length === 0) throw new TicketError('Nobody to email: the reporter was not logged in, so there is no address.')
     const h = await headers()
@@ -175,16 +172,6 @@ export async function emailTicketReporters(number: number): Promise<ActionResult
     }
     await markClientNotified(t.id, recipients, ACTOR)
     return { sent: recipients.length }
-  })
-}
-
-/** Production board: copy a client report to the staging board again (after a failed or missed copy). */
-export async function forwardTicketAgain(number: number): Promise<ActionResult<{ stagingRef: string }>> {
-  return guard(async () => {
-    const h = await headers()
-    const res = await forwardToStaging(await findIdByNumber(number), `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host') ?? ''}`)
-    if (!res.ok) throw new TicketError(res.error)
-    return { stagingRef: res.stagingRef }
   })
 }
 

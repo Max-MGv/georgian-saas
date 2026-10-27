@@ -4,6 +4,8 @@ tags: [plan, super-admin, tickets]
 
 # Plan — Tickets v2: make the ticket tool intuitive, and make it hold our thinking
 
+**⛔ 2026-10-27: the production → staging P-ticket copy (section 3.5 and everything about "forward" / P-tickets below) was CANCELLED by Max — "we tried it and I don't like it; if I want prod tickets I will go to prod". Code removed, all P-tickets deleted from the dev DB. Kept below as history only.**
+
 **Status: ✅ ON PRODUCTION since 2026-10-16** (all three tiers; production → staging P-ticket copy switched on the same day: forward token `production-forward` on the dev DB + Vercel prod env `TICKETS_FORWARD_URL` / `TICKETS_FORWARD_TOKEN`; verified prod T-14 → staging P-14). Approved 2026-10-14.
 - **Tier 1 ✅ built + verified on `staging` 2026-10-14** (FeatureLog #229, T-84 review card). Not on production.
 - **Tier 2 ✅ built + verified on `staging` 2026-10-15** (FeatureLog #230): Request / Analysis / Solution sections, questions with one-tap answers → decisions, links (related tickets link back), test checklist (✓/✗, ✗ fills the send-back note), where-is-it-live marker + "Next release" view, `tix analysis|solution|ask|answer|decide|link|unlink|live`. Migration `20261014203238_tickets_v2_sections` on the dev DB only. Not on production.

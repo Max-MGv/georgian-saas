@@ -1196,7 +1196,7 @@ model Ticket {
   clientReply        String    @default("")
   clientReplyAt      DateTime?
   clientNotifiedAt   DateTime?
-  /// Plan-TicketsV2 3.5 (production only): when this client report was copied to the staging board, or why it was not.
+  /// UNUSED since 2026-10-27: the production -> staging copy (Plan-TicketsV2 3.5) was cancelled. Kept so no migration is needed.
   forwardedAt        DateTime?
   forwardError       String?
   createdAt   DateTime           @default(now())
@@ -1250,8 +1250,8 @@ model TicketAttachment {
 model TicketApiToken {
   id         String    @id @default(cuid())
   name       String
-  /// "full" = Claude's token (lib/ticketApiAuth.ts). "forward" = production's token on the STAGING board: it can only
-  /// create P-tickets through POST /api/tickets/forward (Plan-TicketsV2 3.5), nothing else.
+  /// "full" = Claude's token (lib/ticketApiAuth.ts). "forward" is no longer used (the production -> staging copy was
+  /// cancelled 2026-10-27); a token with that scope is refused everywhere.
   scope      String    @default("full")
   tokenHash  String    @unique
   createdAt  DateTime  @default(now())
@@ -1371,7 +1371,7 @@ enum TicketSource {
   MANUAL
   ASSISTANT
   IMPORT
-  /// A client report copied from the production board (shown as P-<production number>, externalRef "prod:<n>").
+  /// UNUSED since 2026-10-27 (was: a client report copied from the production board, externalRef "prod:<n>"). Kept so no migration is needed.
   PRODUCTION
 }
 

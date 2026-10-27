@@ -386,17 +386,6 @@ export async function markClientNotified(id: string, recipients: string[], actor
   })
 }
 
-/** Production side of the copy to staging: remember whether it worked, so the board can offer "Copy again". */
-export async function markForwarded(id: string, result: { ok: true; stagingRef: string } | { ok: false; error: string }) {
-  await db.$transaction(async tx => {
-    await tx.ticket.update({
-      where: { id },
-      data: result.ok ? { forwardedAt: new Date(), forwardError: null } : { forwardError: result.error.slice(0, 300) },
-    })
-    if (result.ok) await tx.ticketEvent.create({ data: { ticketId: id, kind: 'FIELD', body: 'copied to the staging board', toValue: result.stagingRef, actor: 'system' } })
-  })
-}
-
 export async function verify(id: string, actor: string, note?: string) {
   return changeStatus(id, 'DONE', actor, { kind: 'VERIFIED', note })
 }
@@ -424,7 +413,6 @@ export async function addComment(id: string, body: string, actor: string) {
  * - Merged with duplicates: the others still need the ticket, so only this report leaves it (closed for this
  *   reporter, noted on the timeline) and the ticket stays open.
  * - A ticket already verified Done (fixed, waiting to go live) is not withdrawable - that work is finished.
- * On the production board this does not reach the staging P-ticket copy: the copy is one-way (lib/ticketForward.ts).
  */
 export async function withdrawReport(reportId: string, userId: string) {
   const r = await db.bugReport.findFirst({ where: { id: reportId, submitterUserId: userId }, select: { id: true, status: true, ticketId: true } })
@@ -598,10 +586,6 @@ export type TicketDetail = TicketListItem & {
   clientReply: string
   clientReplyAt: string | null
   clientNotifiedAt: string | null
-  forwardedAt: string | null
-  forwardError: string | null
-  /** True when this environment copies client reports to the staging board (TICKETS_FORWARD_URL is set). */
-  forwardConfigured: boolean
   createdBy: string | null
   externalRef: string | null
   closedAt: string | null
@@ -652,8 +636,7 @@ export async function getTicketByNumber(number: number): Promise<TicketDetail | 
     liveOnStagingAt: t.liveOnStagingAt?.toISOString() ?? null, liveOnProductionAt: t.liveOnProductionAt?.toISOString() ?? null,
     analysis: t.analysis, solution: t.solution, links, linkedTitles: Object.fromEntries(related.map(r => [String(r.number), r.title])),
     ref: displayRef(t), clientStatus: tenantStatusFor(t), clientReply: t.clientReply, clientReplyAt: t.clientReplyAt?.toISOString() ?? null,
-    clientNotifiedAt: t.clientNotifiedAt?.toISOString() ?? null, forwardedAt: t.forwardedAt?.toISOString() ?? null, forwardError: t.forwardError,
-    forwardConfigured: !!process.env.TICKETS_FORWARD_URL && !!process.env.TICKETS_FORWARD_TOKEN,
+    clientNotifiedAt: t.clientNotifiedAt?.toISOString() ?? null,
     description: t.description, createdBy: t.createdBy, externalRef: t.externalRef, closedAt: t.closedAt?.toISOString() ?? null,
     events: t.events.map(e => ({ id: e.id, kind: e.kind, body: e.body, fromValue: e.fromValue, toValue: e.toValue, actor: e.actor, meta: e.meta, createdAt: e.createdAt.toISOString() })),
     attachments,

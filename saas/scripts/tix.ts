@@ -17,8 +17,6 @@
  *   npx tsx scripts/tix.ts link T-12 plan|commit|bug|ticket|url REF [--label "..."]   /   unlink T-12 KIND REF
  *   npx tsx scripts/tix.ts live T-12 staging|production|none
  *   npx tsx scripts/tix.ts reply T-12 "message to the client"                (shown on their My Reports; never emailed from here)
- *   npx tsx scripts/tix.ts ship T-12 [--yes-prod]   after a production merge Max approved: marks it live on production here; for a
- *        P-ticket, --yes-prod also marks the PRODUCTION ticket live (the client then sees "Resolved") and copies the reply there
  *   npx tsx scripts/tix.ts export [--out ../vault/Tickets.md]
  *
  * Environment (default = STAGING, which uses the dev database): --local, --prod.
@@ -68,7 +66,7 @@ async function main() {
   const { flags, pos } = args()
   const [cmd, ...rest] = pos
   const env = flags.prod ? ENVS.prod : flags.local ? ENVS.local : ENVS.staging
-  const isWrite = ['add', 'comment', 'move', 'review', 'analysis', 'solution', 'ask', 'answer', 'decide', 'link', 'unlink', 'live', 'reply', 'ship'].includes(cmd ?? '')
+  const isWrite = ['add', 'comment', 'move', 'review', 'analysis', 'solution', 'ask', 'answer', 'decide', 'link', 'unlink', 'live', 'reply'].includes(cmd ?? '')
     || (cmd === 'release' && !['list', 'show', undefined].includes(rest[0]))
   if (flags.prod && isWrite && !flags['yes-prod']) {
     console.error('Refusing to WRITE to PRODUCTION without --yes-prod (and Max\'s explicit go - ClaudeInstructions Rule 0).')
@@ -155,25 +153,6 @@ async function main() {
       await call('DELETE', `/api/tickets/${num(rest[0])}/links`, { kind: rest[1], ref: rest[2] }); console.log('unlinked'); break
     case 'reply':
       await call('PATCH', `/api/tickets/${num(rest[0])}`, { clientReply: rest[1] ?? '' }); console.log('message to the client saved'); break
-    case 'ship': {
-      await call('PATCH', `/api/tickets/${num(rest[0])}`, { live: 'PRODUCTION' })
-      console.log(`${rest[0]} marked live on production (${env.label})`)
-      const d = await call('GET', `/api/tickets/${num(rest[0])}`) as { externalRef?: string | null; clientReply?: string; ref?: string }
-      const prod = d.externalRef ? /^prod:(\d+)$/.exec(d.externalRef) : null
-      if (!prod) break
-      if (!flags['yes-prod']) {
-        console.log(`${d.ref} is a client report: re-run with --yes-prod (and Max's go) to mark production ticket #${prod[1]} live${d.clientReply ? ' and copy the reply' : ''} - the client then sees "Resolved".`)
-        break
-      }
-      const res = await fetch(`${ENVS.prod.url}/api/tickets/${prod[1]}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token(ENVS.prod.key)}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ live: 'PRODUCTION', ...(d.clientReply ? { clientReply: d.clientReply } : {}) }),
-      })
-      if (!res.ok) { console.error(`PRODUCTION: HTTP ${res.status} ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? ''}`); process.exit(1) }
-      console.log(`PRODUCTION ticket #${prod[1]} marked live${d.clientReply ? ' and the reply copied' : ''} - the client now sees "Resolved". Email them from the production board if you want to.`)
-      break
-    }
     case 'live':
       await call('PATCH', `/api/tickets/${num(rest[0])}`, { live: String(rest[1] ?? '').toUpperCase() }); console.log('live marker set'); break
     case 'release': {
@@ -230,7 +209,7 @@ async function main() {
         console.log(`draft release ${rel.id} on ${env.label} with ${next.length} change(s) from: ${next.map(t => t.ref).join(', ')}`)
         console.log('Next: rewrite each title/text for clients (tix release edit), add screenshots (scripts/release-shots.ts + tix release image).')
       } else {
-        console.log('release list | show <id> | new YYYY-MM-DD [--summary ..] | add <releaseId> "Title" [--body ..] [--howto "a\\nb"] [--link /admin/..] [--tickets T-1,P-2] [--internal] [--title-ka ..] | edit <entryId> ["Title"] [same flags] | image <entryId> <file> [--kind BEFORE|AFTER|IMAGE] [--pair 1] [--viewport phone] | draft-from-next [--date YYYY-MM-DD]')
+        console.log('release list | show <id> | new YYYY-MM-DD [--summary ..] | add <releaseId> "Title" [--body ..] [--howto "a\\nb"] [--link /admin/..] [--tickets T-1,T-2] [--internal] [--title-ka ..] | edit <entryId> ["Title"] [same flags] | image <entryId> <file> [--kind BEFORE|AFTER|IMAGE] [--pair 1] [--viewport phone] | draft-from-next [--date YYYY-MM-DD]')
       }
       break
     }
