@@ -10,6 +10,8 @@ import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
+import { updateSetting } from '@/app/actions/settings'
+import { BOOKING_SHEET_COLUMNS, BOOKING_SHEET_HIDDEN_SETTING, parseHiddenColumns, serializeHiddenColumns } from '@/lib/bookingSheetColumns'
 import { countryName } from '@/lib/countries'
 import {
   bookingStagePatch,
@@ -689,7 +691,7 @@ function OrdersBoardColumns({
   )
 }
 
-export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
+export default function OrdersTable({ orders: initial, payment, detailed, defaultEmailMessageKa, defaultEmailMessageEn, displayName = 'Your Winery', locale = 'en', tenantId = null, view = 'table', sheetHiddenColumns = '' }: { orders: Order[]; payment: Payment; detailed: boolean; defaultEmailMessageKa: string; defaultEmailMessageEn: string; displayName?: string; locale?: string; /** Booking-sheet columns this winery left off (T-151) - the stored setting, comma-separated. */ sheetHiddenColumns?: string; /** Only to pick the first-visit column defaults — see defaultVisibleFor. */ tenantId?: string | null; /** Desktop density — mobile always uses the card list below regardless of this. */ view?: 'table' | 'list' | 'board' }) {
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
@@ -700,6 +702,19 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [printOrder, setPrintOrder] = useState<Order | null>(null)
   const printPending = useRef(false)
   const [showBookingSheet, setShowBookingSheet] = useState(false)
+  // Which booking-sheet columns are left off (T-151): saved per winery, so the whole team gets the same sheet.
+  const [sheetHidden, setSheetHidden] = useState<string[]>(() => parseHiddenColumns(sheetHiddenColumns))
+  const [sheetSaveError, setSheetSaveError] = useState(false)
+  const toggleSheetColumn = (key: string, on: boolean) => {
+    const prev = sheetHidden
+    const next = on ? prev.filter(k => k !== key) : [...prev, key]
+    setSheetHidden(next)
+    setSheetSaveError(false)
+    updateSetting(BOOKING_SHEET_HIDDEN_SETTING, serializeHiddenColumns(next)).catch(() => {
+      setSheetHidden(prev)
+      setSheetSaveError(true)
+    })
+  }
 
   useEffect(() => {
     function openSheet() { setShowBookingSheet(true) }
@@ -1391,8 +1406,21 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               <button onClick={() => setShowBookingSheet(false)} style={{ color: C.faint, fontSize: '1.25rem', lineHeight: 1 }}>×</button>
             </div>
             <div className="px-6 py-5 overflow-auto">
+              <div className="mb-4">
+                <div className="text-sm font-medium" style={{ color: C.text }}>{at('orders.sheet.chooseColumns')}</div>
+                <div className="text-xs mt-0.5" style={{ color: C.faint }}>{at('orders.sheet.chooseColumnsHint')}</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2.5">
+                  {BOOKING_SHEET_COLUMNS.map(c => (
+                    <label key={c.key} className="inline-flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: C.text }}>
+                      <input type="checkbox" checked={!sheetHidden.includes(c.key)} onChange={e => toggleSheetColumn(c.key, e.target.checked)} />
+                      {at(c.label)}
+                    </label>
+                  ))}
+                </div>
+                {sheetSaveError && <p className="text-xs mt-2" style={{ color: '#b91c1c' }}>{at('orders.sheet.chooseColumnsError')}</p>}
+              </div>
               <div className="rounded-lg border overflow-auto" style={{ borderColor: C.border, backgroundColor: '#fff' }}>
-                <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} />
+                <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} hiddenColumns={sheetHidden} />
               </div>
               <div className="flex gap-3 mt-4">
                 <button
@@ -1418,7 +1446,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           window.print() (triggered from the modal above) picks up the same content (#141) */}
       {showBookingSheet && typeof document !== 'undefined' && createPortal(
         <div id="booking-sheet-portal">
-          <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} />
+          <BookingSheetPrint orders={orders} displayName={displayName} locale={locale} hiddenColumns={sheetHidden} />
         </div>,
         document.body
       )}

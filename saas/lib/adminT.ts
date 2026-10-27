@@ -494,7 +494,7 @@ const en: Translations = {
   'orders.sheet.lunchOnlyGuests': 'Lunch',
   'orders.sheet.lunchGuests': 'Tasting & Lunch',
   'orders.sheet.extraGuests': 'Free (guide/driver/under 12)',
-  'orders.sheet.kitchenTotal': 'Kitchen total',
+  'orders.sheet.kitchenTotal': 'Total guests',
   'orders.sheet.hotDishVeg': 'Hot dish — vegetable',
   'orders.sheet.hotDishMeat': 'Hot dish — meat',
   'orders.sheet.foodNotes': 'Food notes',
@@ -512,6 +512,9 @@ const en: Translations = {
   'orders.sheet.individual': 'Individual',
 
   // Orders — view toggle
+  'orders.sheet.chooseColumns': 'Columns to print',
+  'orders.sheet.chooseColumnsHint': 'Untick what you do not need on paper. Your choice is remembered for your whole team.',
+  'orders.sheet.chooseColumnsError': 'Could not save your choice - please try again.',
   'orders.view.table': 'Table',
   'orders.view.list': 'List',
   'orders.view.calendar': 'Calendar',
@@ -2028,7 +2031,7 @@ const ka: Translations = {
   'orders.sheet.lunchOnlyGuests': 'სადილი',
   'orders.sheet.lunchGuests': 'დეგუსტაცია და სადილი',
   'orders.sheet.extraGuests': 'უფასო (გიდი/მძღოლი/12 წლამდე)',
-  'orders.sheet.kitchenTotal': 'სამზარეულოსთვის სულ',
+  'orders.sheet.kitchenTotal': 'სულ სტუმრები',
   'orders.sheet.hotDishVeg': 'ცხელი კერძი — ბოსტნეული',
   'orders.sheet.hotDishMeat': 'ცხელი კერძი — ხორცი',
   'orders.sheet.foodNotes': 'შენიშვნა კვებაზე',
@@ -2053,6 +2056,9 @@ const ka: Translations = {
   'orders.view.calendar': 'კალენდარი',
   'orders.view.board': 'დაფა',
   'orders.board.empty': 'არცერთი',
+  'orders.sheet.chooseColumns': 'დასაბეჭდი სვეტები',
+  'orders.sheet.chooseColumnsHint': 'მოხსენით ის, რაც ქაღალდზე არ გჭირდებათ. თქვენი არჩევანი დაიმახსოვრება მთელი გუნდისთვის.',
+  'orders.sheet.chooseColumnsError': 'არჩევანის შენახვა ვერ მოხერხდა - სცადეთ თავიდან.',
 
   // Order Detail page
   'orderDetail.backToOrders': '← შეკვეთებზე დაბრუნება',
