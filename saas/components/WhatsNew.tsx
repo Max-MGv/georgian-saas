@@ -9,7 +9,7 @@
  */
 
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ChevronDown } from 'lucide-react'
 import Lightbox from '@/components/Lightbox'
 import { formatIsoDay } from '@/lib/wineOrderDate'
 import type { ReleaseDetail, ReleaseEntryView, ReleaseImageView } from '@/lib/releaseService'
@@ -28,24 +28,43 @@ export default function WhatsNew({ releases, locale, labels }: { releases: Relea
     return <div className="rounded-xl border p-6 text-sm" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', color: 'var(--site-muted)' }}>{labels.empty}</div>
   }
   return (
-    <div className="flex flex-col gap-10">
-      {releases.map(r => (
-        <section key={r.id}>
-          <ReleaseHeading releasedOn={r.releasedOn} summary={pick(r.summary, r.summaryKa, locale)} locale={locale} />
-          <div className="flex flex-col gap-4">
-            {r.entries.map(e => <ChangeCard key={e.id} e={e} locale={locale} labels={labels} />)}
-          </div>
-        </section>
-      ))}
+    <div className="flex flex-col gap-8">
+      {releases.map((r, i) => <ReleaseSection key={r.id} r={r} locale={locale} labels={labels} startOpen={i === 0} />)}
     </div>
   )
 }
 
-export function ReleaseHeading({ releasedOn, summary, locale, action }: { releasedOn: string; summary: string; locale: string; action?: ReactNode }) {
+/** One release. The date and summary always show; the changes fold away, and only the newest release starts open (T-301). */
+function ReleaseSection({ r, locale, labels, startOpen }: { r: ReleaseDetail; locale: string; labels: WhatsNewLabels; startOpen: boolean }) {
+  const [open, setOpen] = useState(startOpen)
+  return (
+    <section>
+      <ReleaseHeading releasedOn={r.releasedOn} summary={pick(r.summary, r.summaryKa, locale)} locale={locale} open={open} onToggle={() => setOpen(o => !o)} />
+      {open && (
+        <div className="flex flex-col gap-4">
+          {r.entries.map(e => <ChangeCard key={e.id} e={e} locale={locale} labels={labels} />)}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** `onToggle` (clients' page only) turns the date into a fold/unfold button; the Super Admin editor leaves it out. */
+export function ReleaseHeading({ releasedOn, summary, locale, action, open, onToggle }: { releasedOn: string; summary: string; locale: string; action?: ReactNode; open?: boolean; onToggle?: () => void }) {
+  const date = formatIsoDay(releasedOn, locale)
   return (
     <div className="mb-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{formatIsoDay(releasedOn, locale)}</h2>
+        {onToggle ? (
+          <h2 className="text-xl font-bold">
+            <button type="button" onClick={onToggle} aria-expanded={!!open} className="inline-flex items-center gap-2 text-left" style={{ color: 'var(--site-text)' }}>
+              <ChevronDown size={20} aria-hidden style={{ transform: open ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
+              {date}
+            </button>
+          </h2>
+        ) : (
+          <h2 className="text-xl font-bold" style={{ color: 'var(--site-text)' }}>{date}</h2>
+        )}
         {action}
       </div>
       {summary && <p className="mt-1" style={{ color: 'var(--site-muted)', whiteSpace: 'pre-line', fontSize: 15, lineHeight: 1.5 }}>{summary}</p>}
