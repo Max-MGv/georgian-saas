@@ -34,7 +34,7 @@ export default function WhatsNew({ releases, locale, labels }: { releases: Relea
   )
 }
 
-/** One release. The date and summary always show; the changes fold away, and only the newest release starts open (T-301). */
+/** One release. The date and summary always show; the changes fold away, and only the newest release starts open (T-301). Each change inside is folded to its title too. */
 function ReleaseSection({ r, locale, labels, startOpen }: { r: ReleaseDetail; locale: string; labels: WhatsNewLabels; startOpen: boolean }) {
   const [open, setOpen] = useState(startOpen)
   return (
@@ -42,7 +42,7 @@ function ReleaseSection({ r, locale, labels, startOpen }: { r: ReleaseDetail; lo
       <ReleaseHeading releasedOn={r.releasedOn} summary={pick(r.summary, r.summaryKa, locale)} locale={locale} open={open} onToggle={() => setOpen(o => !o)} />
       {open && (
         <div className="flex flex-col gap-4">
-          {r.entries.map(e => <ChangeCard key={e.id} e={e} locale={locale} labels={labels} />)}
+          {r.entries.map(e => <ChangeCard key={e.id} e={e} locale={locale} labels={labels} collapsible />)}
         </div>
       )}
     </section>
@@ -72,18 +72,31 @@ export function ReleaseHeading({ releasedOn, summary, locale, action, open, onTo
   )
 }
 
-/** One change, as clients see it. `toolbar` (Super Admin only) sits in the top-right corner. */
-export function ChangeCard({ e, locale, labels, toolbar, muted }: { e: ReleaseEntryView; locale: string; labels: WhatsNewLabels; toolbar?: ReactNode; muted?: boolean }) {
+/**
+ * One change, as clients see it. `toolbar` (Super Admin only) sits in the top-right corner. `collapsible` (clients' page
+ * only) starts the card folded to its title; the Super Admin editor shows every card open, as before.
+ */
+export function ChangeCard({ e, locale, labels, toolbar, muted, collapsible }: { e: ReleaseEntryView; locale: string; labels: WhatsNewLabels; toolbar?: ReactNode; muted?: boolean; collapsible?: boolean }) {
   const [viewer, setViewer] = useState<{ images: { src: string; name: string }[]; index: number } | null>(null)
+  const [expanded, setExpanded] = useState(!collapsible)
   const steps = pick(e.howTo, e.howToKa, locale).split(/\r?\n/).map(s => s.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim()).filter(Boolean)
   const groups = groupImages(e.images)
   const body = pick(e.body, e.bodyKa, locale)
+  const title = pick(e.title, e.titleKa, locale)
   return (
     <article className="rounded-xl border" style={{ backgroundColor: 'var(--site-surface)', borderColor: 'var(--site-border)', borderStyle: muted ? 'dashed' : 'solid', opacity: muted ? 0.75 : 1, padding: '18px 20px' }}>
       <div className="flex items-start gap-3">
-        <h3 className="font-semibold flex-1" style={{ color: 'var(--site-text)', fontSize: 17, lineHeight: 1.35 }}>{pick(e.title, e.titleKa, locale)}</h3>
+        <h3 className="font-semibold flex-1" style={{ color: 'var(--site-text)', fontSize: 17, lineHeight: 1.35 }}>
+          {collapsible ? (
+            <button type="button" onClick={() => setExpanded(x => !x)} aria-expanded={expanded} className="inline-flex items-start gap-2 text-left w-full" style={{ color: 'inherit', font: 'inherit' }}>
+              <ChevronDown size={18} aria-hidden style={{ transform: expanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0, marginTop: 3 }} />
+              <span>{title}</span>
+            </button>
+          ) : title}
+        </h3>
         {toolbar}
       </div>
+      {expanded && <>
       {body && <p className="mt-2" style={{ color: 'var(--site-text)', whiteSpace: 'pre-line', lineHeight: 1.6, fontSize: 15 }}>{body}</p>}
 
       {groups.map((g, i) => {
@@ -121,7 +134,8 @@ export function ChangeCard({ e, locale, labels, toolbar, muted }: { e: ReleaseEn
           {labels.takeMeThere} <ArrowRight size={15} aria-hidden />
         </a>
       )}
-      {viewer && <Lightbox images={viewer.images} index={viewer.index} onIndex={i => setViewer(v => (v ? { ...v, index: i } : v))} onClose={() => setViewer(null)} />}
+      </>}
+      {viewer &&<Lightbox images={viewer.images} index={viewer.index} onIndex={i => setViewer(v => (v ? { ...v, index: i } : v))} onClose={() => setViewer(null)} />}
     </article>
   )
 }
