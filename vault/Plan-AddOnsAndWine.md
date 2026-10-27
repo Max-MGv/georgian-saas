@@ -424,7 +424,7 @@ Strictly sequential. Every chunk: dev DB + localhost, verified (specs + screensh
   MaintenanceNotes §38, RLS-Architecture, FeatureLog, Feature note, SessionLog; Max tests on
   staging with a test checklist on T-7/T-22.
 
-**Chunk 12 — Production** — Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
+**Chunk 12 — Production — ✅ DONE 2026-10-27 (master `db1df4a`, deployment READY, 0 runtime errors; see SessionLog) — ** Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
 
 **Pre-flight + rehearsal — ✅ DONE 2026-10-27 (read-only on production; nothing written there)**
 - Backup `2026-10-27_101815_prod_t7-t22-preflight` (1,413 rows, 36 tables, `backup-verify` OK). Prod = master `dd90e93`; exactly the 5 T-7/T-22 migrations pending (prod has 39 applied, repo 44, nothing prod-only).
