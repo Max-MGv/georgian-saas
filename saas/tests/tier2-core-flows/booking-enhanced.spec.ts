@@ -342,6 +342,7 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(cells.nth(7)).toHaveText('3'); // Tasting & Lunch
     await expect(cells.nth(8)).toHaveText('Tasting + Lunch'); // Visit
     await expect(cells.nth(9)).toContainText('Khinkali'); // Masterclass
+    // (The Table wine column of T-22 is off by default, so it is not in this row.)
     await expect(cells.nth(10)).toContainText('Badrijani nigvzit'); // Food (hot dish)
     await expect(cells.nth(10)).toContainText('Playwright test notes');
     await expect(cells.nth(11)).toHaveText('880₾'); // Total (600 + Khinkali 35₾ × 8 paying guests, T-7)

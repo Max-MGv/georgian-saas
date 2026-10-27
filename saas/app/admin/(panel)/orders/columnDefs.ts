@@ -15,8 +15,10 @@ export const COLUMN_DEFS = [
   { id: 'guests',      labelKey: 'orders.col.guests',      defaultVisible: false },
   { id: 'visit',       labelKey: 'orders.col.visit',       defaultVisible: true  },
   { id: 'masterclass', labelKey: 'orders.col.masterclass', defaultVisible: true  },
-  // Wine for the table (T-22) — the saved id of the add-ons column above stays 'masterclass'; this one is new.
-  { id: 'tableWine',   labelKey: 'orders.col.tableWine',   defaultVisible: true  },
+  // Wine for the table (T-22) — the saved id of the add-ons column above stays 'masterclass'; this one is new. Off by default
+  // (2026-10-27): a winery that has never sold table wine would otherwise get one more always-empty column in a table that is
+  // already wide; it is one tick away in the Columns menu (and `exportOrdersCsv` always has the amount).
+  { id: 'tableWine',   labelKey: 'orders.col.tableWine',   defaultVisible: false },
   { id: 'food',        labelKey: 'orders.col.food',        defaultVisible: true  },
   { id: 'total',       labelKey: 'orders.col.total',       defaultVisible: true  },
   { id: 'additional',  labelKey: 'orders.col.additional',  defaultVisible: false },

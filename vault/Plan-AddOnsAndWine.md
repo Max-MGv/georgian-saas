@@ -424,12 +424,36 @@ Strictly sequential. Every chunk: dev DB + localhost, verified (specs + screensh
   MaintenanceNotes §38, RLS-Architecture, FeatureLog, Feature note, SessionLog; Max tests on
   staging with a test checklist on T-7/T-22.
 
-**Chunk 12 — Production (each step on Max's go)**
-1. Read-only checks on Nikalas Marani; backup / restore point.
-2. `prisma migrate deploy` on production (additive — live code unaffected); totals audit = 0 diffs.
-3. Merge `staging` → `master`; verify on production (booking with add-ons + wine, invoice, stats).
-4. Publish release note.
-5. Later, separate: contract migration (`groupId` NOT NULL).
+**Chunk 12 — Production** — Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
+
+**Pre-flight + rehearsal — ✅ DONE 2026-10-27 (read-only on production; nothing written there)**
+- Backup `2026-10-27_101815_prod_t7-t22-preflight` (1,413 rows, 36 tables, `backup-verify` OK). Prod = master `dd90e93`; exactly the 5 T-7/T-22 migrations pending (prod has 39 applied, repo 44, nothing prod-only).
+- Live data that the migrations touch: **Nikalas Marani** 3 orders (1 masterclass line), 7 masterclass items, 5 wine orders / 5 wine lines; **demo tenant** the rest (393 orders, 73 masterclass lines, 45 wine orders / 109 lines). 0 `CompanyWinePrice` rows. No new wine orders without totals.
+- **Rehearsal on a local copy of that backup (PostgreSQL 17.6 port 54331, deleted afterwards):** restore PROOF OK → `prisma migrate deploy` (5 migrations) applied cleanly →
+  **every money fingerprint identical before/after** (Order 396 rows ₾233,732.00; WineOrder 50 rows ₾124,035.20; InvoiceSent, Payment, OrderMasterclass, WineOrderItem — `scripts/_qa/rehearsal-totals.ts`) →
+  `addons-expand-check` 0 problems (one "Masterclass" group per tenant, companies-only = today's behaviour, FK is SET NULL) → `wine-lines-check` 0 problems (all 114 lines have `lineTotal`, each order's lines = its stored total, ₾124,035.20) →
+  tenant isolation as `app_user` OK (Nikalas sees 1 group / 5 wine lines / 3 orders, an unknown tenant 0) → **demo seed ran cleanly with the new code** (388 bookings, 65 with table wine, 45 wine orders, wine group + 3 bookable wines).
+
+**Blind code review of the money paths (2026-10-27, fresh subagent, vault fenced off, read-only) — each finding checked against the code and the production backup:**
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | Order page keeps `lines` / `wineLines` / `extras` in `useState` and never re-syncs them from props after `router.refresh()` — after a guest-count save the server rewrites per-person quantities but the page total / balance / printed invoice use the stale line amounts until reload (`OrderDetail.tsx` ~895; my spec only asserted the DB) | **REAL, fix before production** (re-sync from props when no card is being edited; add a screen-level assertion) |
+| 2 | Per-person lines are forced to the paying guests on any re-price; legacy lines with a typed quantity get re-quantified | Prod impact **none**: Nikalas 0 mismatches; 4 demo lines (guestCount incl. free) are regenerated nightly. Semantics = D-19 (per person = paying guests; a partial group = per piece). Documented. |
+| 3 | Changing / assigning a booking's company does not re-price its wine lines (they keep the terms they were sold with) | **Decision for Max** (re-price vs frozen); prod impact none today (no table wine exists on prod until an admin switches a wine on) |
+| 4 | Individual booking with no Individuals price table now gets total = add-ons + wine (was 0) → online payment could charge only those | Cannot occur on prod (both tenants have an Individuals table, every booking company has prices). Earlier decision E1; note for future wineries. |
+| 5 | `wine_on_bookings` backfill treats every line of a discounted order as a standard line (cannot know a line was negotiated) | Moot on prod: **0 `CompanyWinePrice` rows**, so no negotiated line exists; the per-order sum check passes (rehearsal). |
+| 6 | Add-ons now show on every company form (migration group visible to companies, no layout gate) | No change on prod: `enable_enhanced_company_booking` is true for both tenants. |
+| 7 | Order-page print invoice drops the Georgian add-on / group names when the admin language is English | Real, minor — fixed with #1 |
+| 8 | Low: old code writing orphan lines/items in the migrate→merge window (re-check with `addons-expand-check --prod` right after the deploy); WINE-group id accepted as an item's group by a crafted ADMIN request; first-switch-on race; masked server-action errors; unbounded wine id list | Noted; none block. |
+Checked clean by the reviewer: tenant isolation + RLS, access-code gate for company terms, guest purchases never touch the booking total/invoice, no double counting in statistics, i18n keys.
+
+**Runbook (each step needs Max's go; all additive, so old code keeps working while the schema is ahead):**
+1. Re-check nothing changed on production since the backup (order/wine-order counts and `rehearsal-totals`-style fingerprint, read-only).
+2. `prisma migrate status` with the prod URLs set for that one command only (from `.env.prod.backup`) → must list ONLY the 5 → `prisma migrate deploy` → `addons-expand-check --prod` and `wine-lines-check --prod` = 0 problems. (No expand-only config needed: there is no contract step in this release.)
+3. Merge `staging` → `master`, push (separate commands: merge, push) → Vercel READY on the production domains; note the rollback target (the previous production deployment).
+4. Live read-only checks: public form unchanged for Nikalas (no add-on group visible to individuals, no wine row until switched on); admin Add-ons page; 0 runtime errors since the deploy.
+5. `tix live T-7 production`, `tix live T-22 production` (`--yes-prod`); release-note draft (with screenshots) on the production board; demo reseed (03:00) → check demo.vineworks.ge next morning.
+6. Later, separate: contract migration (`groupId` NOT NULL).
 
 ## 8. Not doing
 Merging extras into add-ons · stock/inventory (one wine table makes it easy later) · guests

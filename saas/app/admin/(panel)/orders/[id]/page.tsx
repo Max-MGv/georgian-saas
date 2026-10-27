@@ -215,6 +215,8 @@ export default async function OrderDetailPage({
               quantity: l.quantity,
               pricePerUnit: l.pricePerUnit,
               groupName: localName(who.groupName ?? '', who.groupNameKa, adminLanguage || 'en') || null,
+              nameKa: who.nameKa,
+              groupNameKa: who.groupNameKa,
               masterclassItem: {
                 id: l.masterclassItem?.id ?? '',
                 name: localName(who.name, who.nameKa, adminLanguage || 'en'),

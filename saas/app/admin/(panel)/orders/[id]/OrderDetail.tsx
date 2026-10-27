@@ -215,6 +215,9 @@ type MasterclassLine = {
   pricePerUnit: number
   /** The group's name as it was when the line was added (snapshot); null for a line that had none. */
   groupName?: string | null
+  /** Georgian names as sold (snapshots) — the printed invoice is Georgian whatever language the admin reads. */
+  nameKa?: string | null
+  groupNameKa?: string | null
   masterclassItem: MasterclassItemRow
 }
 
@@ -906,6 +909,16 @@ export default function OrderDetail({
   const [newWineQty, setNewWineQty] = useState('1')
 
   const [extras, setExtras] = useState<ExtraRow[]>(order.extras)
+  // These three hold the cards' DRAFTS while a card is open, but they start from the server and must follow it again afterwards: a
+  // guest-count Save makes the server rewrite the per-person add-on quantities (writeSyncedQuantities), and without this the Order Total
+  // card, the balance and the printed invoice kept the old lines until a reload (blind review 2026-10-27, finding 1). Not while a card is
+  // open, so a refresh can never wipe someone's draft.
+  useEffect(() => {
+    if (editingCard !== null) return
+    setLines(order.masterclassLines)
+    setWineLines(order.wineLines)
+    setExtras(order.extras)
+  }, [editingCard, order.masterclassLines, order.wineLines, order.extras])
   const [addingExtra, setAddingExtra] = useState(false)
   const [newExtraLabel, setNewExtraLabel] = useState('')
   const [newExtraAmount, setNewExtraAmount] = useState('')
@@ -1381,7 +1394,7 @@ export default function OrderDetail({
               totalPrice: order.totalPrice,
               paymentsSettledTotal: order.paymentsSettledTotal,
               company: order.company ? { name: order.company.name, identificationCode: order.company.identificationCode } : null,
-              masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, groupName: l.groupName ?? null, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
+              masterclassLines: lines.map(l => ({ name: l.masterclassItem.name, nameKa: l.nameKa ?? null, groupName: l.groupName ?? null, groupNameKa: l.groupNameKa ?? null, quantity: l.quantity, pricePerUnit: l.pricePerUnit })),
               wineLines: wineLines.map(l => ({ name: l.name, year: l.year, quantity: l.quantity, unitPrice: l.priceSnapshot, negotiated: l.negotiated, discountPercent: l.discountPercent, lineTotal: l.lineTotal })),
               extras: extras.map(e => ({ label: e.label, amount: e.amount })),
             }}
