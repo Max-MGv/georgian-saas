@@ -417,6 +417,37 @@ export async function addComment(id: string, body: string, actor: string) {
   })
 }
 
+/**
+ * A client closes their own report from My Reports (T-301): they found the answer, or were mistaken.
+ * Only the person who sent it, and only while it is still open for them (New / In progress).
+ * - Alone on its ticket: the ticket is closed as Obsolete, the timeline says the reporter did it.
+ * - Merged with duplicates: the others still need the ticket, so only this report leaves it (closed for this
+ *   reporter, noted on the timeline) and the ticket stays open.
+ * - A ticket already verified Done (fixed, waiting to go live) is not withdrawable - that work is finished.
+ * On the production board this does not reach the staging P-ticket copy: the copy is one-way (lib/ticketForward.ts).
+ */
+export async function withdrawReport(reportId: string, userId: string) {
+  const r = await db.bugReport.findFirst({ where: { id: reportId, submitterUserId: userId }, select: { id: true, status: true, ticketId: true } })
+  if (!r) throw new TicketError('Report not found.')
+  if (r.status !== 'NEW' && r.status !== 'IN_PROGRESS') throw new TicketError('This report is already closed.')
+  if (!r.ticketId) {
+    await db.bugReport.update({ where: { id: r.id }, data: { status: 'CLOSED' } })
+    return
+  }
+  const t = await load(db, r.ticketId)
+  if (t.status === 'DONE') throw new TicketError('This one is already fixed and waiting to go live.')
+  const others = await db.bugReport.count({ where: { ticketId: t.id, id: { not: r.id } } })
+  if (others === 0) {
+    await changeStatus(t.id, 'CLOSED', 'reporter', { closeReason: 'OBSOLETE', note: 'Closed by the reporter from My Reports (found the answer or was mistaken).' })
+    return
+  }
+  await db.$transaction(async tx => {
+    await tx.bugReport.update({ where: { id: r.id }, data: { ticketId: null, status: 'CLOSED' } })
+    await tx.ticketEvent.create({ data: { ticketId: t.id, kind: 'COMMENT', body: 'One of the reporters closed their own report from My Reports. The ticket stays open for the others.', actor: 'reporter' } })
+    await tx.ticket.update({ where: { id: t.id }, data: { updatedAt: new Date() } })
+  })
+}
+
 export type TicketPatch = {
   title?: string
   description?: string

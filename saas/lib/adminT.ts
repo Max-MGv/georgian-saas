@@ -130,6 +130,11 @@ const en: Translations = {
   'whatsNew.takeMeThere': 'Take me there',
   'whatsNew.dragHint': 'Drag to compare',
   'myReports.status.closed': 'Closed',
+  'myReports.close': 'Close this report',
+  'myReports.closeConfirm': 'Close this report? Choose this if you found the answer yourself or sent it by mistake. It will show as Closed.',
+  'myReports.closeYes': 'Yes, close it',
+  'myReports.closeCancel': 'Keep it open',
+  'myReports.closeError': 'Could not close the report - please try again.',
   'myReports.reply': 'Reply from VineWorks',
   'myReports.screenshot': 'Your screenshot - tap to enlarge',
 
@@ -507,14 +512,14 @@ const en: Translations = {
   'orders.sheet.guidePhone': 'Guide Phone',
   'orders.sheet.nationality': 'Nationality',
   'orders.sheet.previewTitle': 'Booking sheet preview',
+  'orders.sheet.chooseColumns': 'Columns to print',
+  'orders.sheet.chooseColumnsHint': 'Untick what you do not need on paper. Your choice is remembered for your whole team.',
+  'orders.sheet.chooseColumnsError': 'Could not save your choice - please try again.',
   'orders.sheet.print': 'Print',
   'orders.sheet.close': 'Close',
   'orders.sheet.individual': 'Individual',
 
   // Orders — view toggle
-  'orders.sheet.chooseColumns': 'Columns to print',
-  'orders.sheet.chooseColumnsHint': 'Untick what you do not need on paper. Your choice is remembered for your whole team.',
-  'orders.sheet.chooseColumnsError': 'Could not save your choice - please try again.',
   'orders.view.table': 'Table',
   'orders.view.list': 'List',
   'orders.view.calendar': 'Calendar',
@@ -1670,6 +1675,11 @@ const ka: Translations = {
   'whatsNew.takeMeThere': 'გადასვლა',
   'whatsNew.dragHint': 'გადაათრიეთ შესადარებლად',
   'myReports.status.closed': 'დახურულია',
+  'myReports.close': 'ამ შეტყობინების დახურვა',
+  'myReports.closeConfirm': 'დავხუროთ ეს შეტყობინება? აირჩიეთ, თუ პასუხი თავად იპოვეთ ან შეცდომით გამოგზავნეთ. ის გამოჩნდება როგორც დახურული.',
+  'myReports.closeYes': 'დიახ, დახურვა',
+  'myReports.closeCancel': 'დარჩეს ღია',
+  'myReports.closeError': 'შეტყობინების დახურვა ვერ მოხერხდა - სცადეთ თავიდან.',
   'myReports.reply': 'VineWorks-ის პასუხი',
   'myReports.screenshot': 'თქვენი სკრინშოტი - შეეხეთ გასადიდებლად',
 
@@ -2046,6 +2056,9 @@ const ka: Translations = {
   // Drafted, not native-reviewed (Plan-CompanyNationality) — flag for Max.
   'orders.sheet.nationality': 'ეროვნება',
   'orders.sheet.previewTitle': 'ჯავშნების ცხრილის გადახედვა',
+  'orders.sheet.chooseColumns': 'დასაბეჭდი სვეტები',
+  'orders.sheet.chooseColumnsHint': 'მოხსენით ის, რაც ქაღალდზე არ გჭირდებათ. თქვენი არჩევანი დაიმახსოვრება მთელი გუნდისთვის.',
+  'orders.sheet.chooseColumnsError': 'არჩევანის შენახვა ვერ მოხერხდა - სცადეთ თავიდან.',
   'orders.sheet.print': 'ბეჭდვა',
   'orders.sheet.close': 'დახურვა',
   'orders.sheet.individual': 'ინდივიდუალური',
@@ -2056,9 +2069,6 @@ const ka: Translations = {
   'orders.view.calendar': 'კალენდარი',
   'orders.view.board': 'დაფა',
   'orders.board.empty': 'არცერთი',
-  'orders.sheet.chooseColumns': 'დასაბეჭდი სვეტები',
-  'orders.sheet.chooseColumnsHint': 'მოხსენით ის, რაც ქაღალდზე არ გჭირდებათ. თქვენი არჩევანი დაიმახსოვრება მთელი გუნდისთვის.',
-  'orders.sheet.chooseColumnsError': 'არჩევანის შენახვა ვერ მოხერხდა - სცადეთ თავიდან.',
 
   // Order Detail page
   'orderDetail.backToOrders': '← შეკვეთებზე დაბრუნება',
