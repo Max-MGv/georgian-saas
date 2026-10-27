@@ -15,7 +15,7 @@ import { adminQuote, boxColumns, countsOf, notOffered, payingGuests, priceCounts
 import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
 import { invoiceAddOnLine, invoiceWineLine, lineTotals, sumAmountLines, sumQuantityLines, sumWineLines } from '@/lib/orderLines'
 import { withSyncedQuantities, writeSyncedQuantities } from '@/lib/addOnLines'
-import { priceTableWine } from '@/lib/tableWine'
+import { priceTableWine, repriceTableWine, writeRepricedWine } from '@/lib/tableWine'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
@@ -140,6 +140,10 @@ export async function updateOrderBooking(id: string, data: {
     const newCompanyId = data.companyId || null
     const companyChanged = newCompanyId !== order.companyId
     let pricing: Record<string, unknown> = {}
+    // The wine on the booking re-priced for the new company (its % / agreed prices, or the website price for an individual) —
+    // worked out with everything else, written only once the whole change is accepted (Max, 2026-10-27: before payment, a change
+    // flows through everything it affects; the same moment the visit itself is re-priced).
+    let wineRe: Awaited<ReturnType<typeof repriceTableWine>> | null = null
     if (companyChanged) {
       if (order.paidAt) {
         return { error: 'This order has already been paid, so its company can no longer be changed — the price would no longer match what the guest paid.' } as const
@@ -164,7 +168,8 @@ export async function updateOrderBooking(id: string, data: {
         const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
         return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
       }
-      const lines = lineTotals(order)
+      wineRe = await repriceTableWine(tx, tenantId, order.wineLines, newCompanyId)
+      const lines = { ...lineTotals(order), wine: wineRe.total }
       // A company with no price table yet: priced later on the Guest breakdown (typed rates), as on New Order.
       pricing = quote.kind === 'unpriced'
         ? { totalPrice: lines.masterclass + lines.wine + lines.extras, tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
@@ -178,6 +183,7 @@ export async function updateOrderBooking(id: string, data: {
     }
 
     const isCompany = !!newCompanyId
+    if (wineRe) await writeRepricedWine(tx, wineRe.updates)
     await tx.order.update({
       where: { id },
       data: {
@@ -910,7 +916,7 @@ export async function assignOrderCompany(
     })
     if (!company) return { error: 'Company not found.' } as const
 
-    const { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt } = lineTotals(order)
+    const { masterclass: masterclassAmt, extras: extrasAmt } = lineTotals(order)
 
     // The three snapshots record the tier rates this order was actually sold
     // at, exactly as createBooking.ts does. They were NOT written here until
@@ -932,8 +938,10 @@ export async function assignOrderCompany(
     }
 
     const counts = countsOf(order)
-    const lines = { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt }
-    let totalPrice = masterclassAmt + wineAmt + extrasAmt
+    // Linking re-prices the visit, so it re-prices the wine too: this company's % / agreed prices, as if the bottles were added now.
+    const wineRe = await repriceTableWine(tx, tenantId, order.wineLines, companyId)
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt, wine: wineRe.total }
+    let totalPrice = masterclassAmt + wineRe.total + extrasAmt
     let snapshot: { tastingOnlyRate: number | null; lunchOnlyRate: number | null; tastingLunchRate: number | null; registrationFeeSnapshot: number | null } =
       { tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
     if (company.prices.length) {
@@ -946,6 +954,7 @@ export async function assignOrderCompany(
       snapshot = { tastingOnlyRate: rates.tastingOnly, lunchOnlyRate: rates.lunchOnly, tastingLunchRate: rates.tastingLunch, registrationFeeSnapshot: rates.registration }
     }
 
+    await writeRepricedWine(tx, wineRe.updates)
     await tx.order.update({
       where: { id: orderId },
       data: { companyId, bookingType: 'COMPANY', totalPrice, ...snapshot },

@@ -1432,6 +1432,11 @@ export default function OrderDetail({
                 ))}
               </select>
             </label>
+            {/* The wine on the booking follows the company too (before payment): Save re-prices it with the new company's % / agreed
+                prices — an individual pays the website price. Said here because the live preview below shows the visit only. */}
+            {wineLines.length > 0 && infoCompanyId !== (order.company?.id ?? '') && (
+              <p className="text-xs" style={{ color: C.muted }}>{at('orderDetail.bookingInfo.wineRepriceNote')}</p>
+            )}
             {infoCompanyId && nationalityEnabled && (
               <div className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: C.faint }}>{at('newOrder.contact.nationality')}</span>
