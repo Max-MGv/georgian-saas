@@ -8,6 +8,18 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-27 (evening) — wine re-pricing on company change: BUILT, COMMITTED LOCALLY, NOT PUSHED (commit `af7f4ca` on branch `staging`)
+
+- **Max's principle (decided in chat):** *before payment, a change an admin makes must flow through everything it affects.* Max asked how wine pricing works today (answer: snapshots — wine lines keep the price they were added at; the visit re-prices only when guests / visit type / typed rate / company change) and approved **option 1: admin-driven re-pricing, not fully live**. Catalogue changes later (a wine price, a company's %, an add-on price) must NOT rewrite existing bookings — the guest was quoted a price.
+- **What changed:** `updateOrderBooking` (company changed) and `assignOrderCompany` (company linked) call `repriceTableWine()` + `writeRepricedWine()` (`lib/tableWine.ts`): the new company's % / agreed prices, or the website price for an individual, at the vintage's price today, per-line rounding, same transaction + total as the visit. Paid bookings still refuse a company change. A line whose vintage was deleted keeps what it was sold at. Guest-count / visit-type edits do not touch wine. The Booking Info card shows a note before Save (EN + KA; Georgian is Claude's wording) because the live preview shows the visit only.
+- **Deliberately NOT done:** no history event (a new `OrderEventType` value is a production enum migration — avoided; small follow-up if Max wants it); no migration at all, so the release is code-only; no change to catalogue-price behaviour.
+- **Tests (all untracked QA, localhost):** `wine-reprice-company.spec.ts` 4/4 (A→B, B→individual, individual→A, paid locked — checks every stored wine line + total), `t215-mirror` + `wine-admin` 6/6, `test-wine-pricing` 24/24, tsc + i18n parity clean. NOT click-tested: `assignOrderCompany` (the "link a company to a booking that had none" path) — same helper, same shape, no UI test of its own.
+- **To ship (Max: "we will push this together with other features"):** needs `git push origin staging` → staging check → `git push origin master` (merge staging into master first), each on Max's explicit go. Code-only; no migration; production = master `db1df4a` + whatever else is bundled.
+- **Still open from today (unchanged):** T-311 (tier 5 Flitt card tests broken on Flitt's hosted page), demo check after the 03:00 reseed, tell Nikalas, publish the release-note draft `cmvqj9k2z0000jp08xg5fzus6` (add the Georgian summary), production admin screens checked by Max/Nikalas, QA specs still untracked (Max's call), "i uploaded 2" never found.
+- **Lessons from this stretch:** a `Locator.selectOption({label})` waits forever if the label is not exact (the company dropdown's first option is "— Individual —", with dashes) — it looks like a hang, not an error; test fixtures written without reading the page first cost two re-runs again (Rule 13.5).
+
+---
+
 ## 2026-10-27 — T-7 + T-22 ON PRODUCTION (master `db1df4a`) — READ THIS FIRST
 
 - **Shipped on Max's explicit go ("start the process, green light on all counts"; "ship first, fix the test after").** Order: read-only prod backup `2026-10-27_101815_prod_t7-t22-preflight` → rehearsal on a local copy (all 5 migrations, money fingerprints identical, demo seed ran) → blind code review (verified; real bug fixed) → 5 migrations applied to production → `addons-expand-check --prod` + `wine-lines-check --prod` 0 problems → merge `staging`→`master` + push → Vercel `dpl_3xekSEaCkiVBGawykfDATj8gURKc` READY → 0 runtime errors/warnings, all production domains 200 → checks re-run after deploy 0 problems → `tix live T-7 / T-22 production`.
