@@ -8,7 +8,11 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-27 (night) — T-151 + T-301 (both halves): BUILT + checked on localhost, NOT COMMITTED, NOT PUSHED
+## 2026-10-27 (night) — T-151 + T-301 (both halves): ON PRODUCTION (master `e37cff2`, deploy READY)
+
+- **Shipped on Max's "go" (2026-10-27 ~18:13):** staging `c1824b5` built READY → Max said go → `git merge staging` into master (merge commit `e37cff2`) → `git push origin master` → production build READY. The merge also carried wine re-pricing on company change (`af7f4ca`, Feature 241), which Max had parked "to ship with other features" — it reached production **without a separate staging test or review card**; Max asked for "push everything". No migration, no env/bucket change. Production + dev backups taken first (`2026-10-27_181333_prod_auto-git-push-to-master-deploys-production`). Smoke: `nikalasmarani.vineworks.ge` and `/admin/login` 200, no runtime errors after deploy. T-151 + T-301 marked live on production on the staging board (`tix live`); they stay in "Ready to test" for Max to verify.
+- **Still to test by Max on production:** the column picker on a real sheet, What's new (needs a published + client-visible release), My Reports close (a client closing a report does not close its staging P-copy), wine re-pricing on a company change.
+- (Entry below was written before the commit/push.)
 
 Max moved T-151 and T-301 from the backlog ("super simple"). Sized first (Rule 13): no schema change, no money, no public form. Max's choices: What's new collapses **per release date** (newest open); a client closing their own report is recorded as **Closed / Obsolete** (no migration).
 
