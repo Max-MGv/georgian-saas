@@ -11,8 +11,6 @@
  */
 
 import { headers } from 'next/headers'
-import { after } from 'next/server'
-import { forwardToStaging, forwardingConfigured } from '@/lib/ticketForward'
 import { db } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
@@ -159,7 +157,6 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
   //    the REST API by migration, KnownBugs #73), so plain db is correct. ──
   let ticketNumber: number
   let ticketTitle: string
-  let ticketId: string
   try {
     const result = await db.$transaction(async tx => {
       const report = await tx.bugReport.create({
@@ -188,20 +185,11 @@ export async function submitBugReport(formData: FormData): Promise<SubmitResult>
       }
       return { id: ticket.id, number: ticket.number, title: ticket.title }
     })
-    ticketId = result.id
     ticketNumber = result.number
     ticketTitle = result.title
   } catch (err) {
     console.error('[submitBugReport] failed to save report/ticket', err)
     return { error: 'Failed to save your report. Please try again.' }
-  }
-
-  // ── Copy to the staging board (Plan-TicketsV2 3.5) - production only (needs TICKETS_FORWARD_URL/TOKEN). It runs
-  //    after the response, so the visitor never waits for staging, and a failure is recorded on the ticket. ──
-  if (forwardingConfigured()) {
-    const host = h.get('host') ?? ''
-    const linkBase = `${h.get('x-forwarded-proto') ?? 'https'}://${host}`
-    after(() => forwardToStaging(ticketId, linkBase).then(() => undefined))
   }
 
   // ── Notify Max via Resend — never fails the submission. Not from local development: every dev

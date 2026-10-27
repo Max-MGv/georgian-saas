@@ -77,10 +77,9 @@ export const TICKET_STATUS_FOR_REPORT: Record<TenantVisibleStatus, TicketStatusV
   CLOSED: 'CLOSED',
 }
 
-/** "T-42" for our own tickets, "P-12" for a client report copied from the production board (externalRef "prod:12"). */
+/** "T-42". (There used to be a "P-12" form for client reports copied from the production board; that copy was cancelled 2026-10-27.) */
 export function displayRef(t: { number: number; externalRef?: string | null }): string {
-  const m = t.externalRef ? /^prod:(\d+)$/.exec(t.externalRef) : null
-  return m ? `P-${m[1]}` : `T-${t.number}`
+  return `T-${t.number}`
 }
 
 // ── Tickets v2 (Plan-TicketsV2 Tier 2) ─────────────────────────────────────

@@ -180,29 +180,15 @@ test.describe('Internal tickets (super-admin)', () => {
   });
 
   // Plan-TicketsV2 Tier 3: what the client sees follows the ticket (Resolved only when live on production; obsolete =
-  // Closed; a duplicate's reporters move to the original), and a client report copied from production becomes a P-ticket.
-  test('Tier 3: client status, duplicate merge, P-ticket copy', async ({ request }) => {
+  // Closed; a duplicate's reporters move to the original). (The production -> staging P-ticket copy was cancelled 2026-10-27.)
+  test('Tier 3: client status and duplicate merge', async ({ request }) => {
     test.setTimeout(120_000);
     const auth = { Authorization: `Bearer ${getTicketsDevToken()}` };
     const mk = async (title: string) => (await (await request.post('/api/tickets', { headers: auth, data: { title, type: 'BUG' } })).json()).number as number;
     const original = await mk(`ZZ Tickets E2E tier3 original ${STAMP}`);
     const dup = await mk(`ZZ Tickets E2E tier3 duplicate ${STAMP}`);
-
-    // A client report copied from production (no screenshot - this environment does not copy).
-    const prodNumber = 900_000_000 + (STAMP % 99_999_999);
-    const payload = { prodNumber, prodUrl: 'https://example.com/super-admin/tickets?t=1', title: `ZZ Tickets E2E tier3 copy ${STAMP}`, description: 'client words', type: 'BUG', priority: 'HIGH', tenant: null, reports: [{ type: 'BUG', surface: 'ADMIN', comment: 'client words', pageUrl: 'https://example.com/x', submitterEmail: 'client@example.com', breadcrumbs: [] }], images: [{ url: 'https://evil.example.com/x.png', fileName: 'x.png' }] };
-    const first = await request.post('/api/tickets/forward', { headers: auth, data: payload });
-    expect(first.status()).toBe(201);
-    const { ref, number: copyNumber } = await first.json();
-    expect(ref).toBe(`P-${prodNumber}`);
-    const second = await request.post('/api/tickets/forward', { headers: auth, data: payload });
-    expect(second.status()).toBe(200); // idempotent
-    const copy = await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json();
-    expect(copy.source).toBe('PRODUCTION');
-    expect(copy.untrustedText).toBe(true);
-    expect(copy.attachments).toHaveLength(0); // an image from anywhere but the production storage is never fetched
-    expect(copy.reports[0].submitterEmail).toBe('client@example.com');
-    expect(copy.clientStatus).toBe('NEW');
+    const copyNumber = await mk(`ZZ Tickets E2E tier3 client ${STAMP}`);
+    expect((await (await request.get(`/api/tickets/${copyNumber}`, { headers: auth })).json()).clientStatus).toBe('NEW');
 
     // Client status: Done is not enough - only live on production reads "Resolved".
     expect((await request.patch(`/api/tickets/${copyNumber}`, { headers: auth, data: { status: 'IN_PROGRESS', clientReply: 'Working on it.' } })).status()).toBe(200);

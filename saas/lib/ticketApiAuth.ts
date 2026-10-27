@@ -23,10 +23,10 @@ const LIMIT = 120
 const hits = new Map<string, { count: number; resetAt: number }>()
 
 /**
- * `scopes`: which kinds of token this endpoint accepts. Claude's tokens are "full"; production's copy-to-staging
- * token is "forward" and is accepted ONLY by POST /api/tickets/forward (Plan-TicketsV2 3.5) - everywhere else it is a 403.
+ * Only "full" tokens (Claude's) are accepted. A "forward" token (the cancelled production -> staging copy, 2026-10-27)
+ * is refused with a 403 should one ever turn up.
  */
-export async function authenticateTicketRequest(request: Request, scopes: readonly string[] = ['full']): Promise<{ name: string; scope: string } | { response: NextResponse }> {
+export async function authenticateTicketRequest(request: Request): Promise<{ name: string; scope: string } | { response: NextResponse }> {
   const header = request.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
   if (!token) return { response: NextResponse.json({ error: 'Missing bearer token.' }, { status: 401 }) }
@@ -34,7 +34,7 @@ export async function authenticateTicketRequest(request: Request, scopes: readon
   const hash = hashToken(token)
   const row = await db.ticketApiToken.findUnique({ where: { tokenHash: hash } })
   if (!row || row.revokedAt) return { response: NextResponse.json({ error: 'Invalid or revoked token.' }, { status: 401 }) }
-  if (!scopes.includes(row.scope)) return { response: NextResponse.json({ error: 'This token is not allowed to do that.' }, { status: 403 }) }
+  if (row.scope !== 'full') return { response: NextResponse.json({ error: 'This token is not allowed to do that.' }, { status: 403 }) }
 
   const now = Date.now()
   const w = hits.get(hash)

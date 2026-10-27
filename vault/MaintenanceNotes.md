@@ -1235,11 +1235,11 @@ Added 2026-10-07 ([[Feature 222 - Internal ticket tool]], [[Plan-Tickets]]).
   `lib/tickets.ts` (status + close reason + **liveOnProductionAt**). `syncTenantVisibleStatus` therefore runs after **status changes AND
   `setLive`** — anything new that changes those three fields must call it too, or My Reports goes stale. `BugReportStatus` gained `CLOSED`
   (My Reports colour + `myReports.status.closed` EN/KA must stay in step). Duplicates: `changeStatus(..., { duplicateOf })` moves the
-  BugReports to the original (`mergeInto`). **Forwarding** (`lib/ticketForward.ts`): production pushes, staging receives at
-  `/api/tickets/forward`; token `scope` "forward" is accepted ONLY there (`authenticateTicketRequest(req, scopes)`, default `['full']`);
-  staging only downloads images from `*.supabase.co/storage/v1/object/sign/` links; P-tickets carry `externalRef "prod:<n>"` and are shown
-  with `displayRef` (use `t.ref`, never `ticketRef(t.number)`, in ticket UI). P-tickets have BugReport rows with `submitterUserId: null`
-  on purpose (never in anyone's My Reports on staging). `backfill-tickets.ts` sets `liveOnProductionAt` for already-Resolved reports.
+  BugReports to the original (`mergeInto`). **Forwarding — CANCELLED 2026-10-27 (Max: "I'd rather go to prod to see prod tickets")**: the
+  production → staging P-ticket copy is removed (`lib/ticketForward.ts`, `/api/tickets/forward`, `tix ship`, the "Copy now / Copy again"
+  row, the "forward" token scope — `authenticateTicketRequest` now accepts "full" only). Left in place on purpose, unused, to avoid a
+  production migration: columns `Ticket.forwardedAt` / `forwardError`, enum value `TicketSource.PRODUCTION`. `displayRef` is now always
+  `T-<n>`. `backfill-tickets.ts` sets `liveOnProductionAt` for already-Resolved reports.
 
 ---
 
